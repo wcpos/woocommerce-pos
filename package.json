@@ -1,0 +1,38 @@
+{
+  "name": "wcpos-plugin",
+  "version": "0.5.0-beta",
+  "description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
+  "main": "index.js",
+  "scripts": {
+    "wp-env": "wp-env",
+    "start": "wp-env start",
+    "stop": "wp-env stop",
+    "cli": "wp-env run cli",
+    "wp": "wp-env run cli wp",
+    "pretest": "wp-env start && wp-env run composer 'install --no-interaction'",
+    "test:lint:php": "wp-env run composer run-script lint",
+    "test:lint": "run-s test:lint:*",
+    "test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
+    "test:unit": "run-s test:unit:*",
+    "test": "run-s test:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wcpos/wcpos-plugin.git"
+  },
+  "keywords": [
+    "wordpress",
+    "woocommerce",
+    "ecommerce",
+    "point-of-sale"
+  ],
+  "author": "kilbot",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wcpos/wcpos-plugin/issues"
+  },
+  "homepage": "https://wcpos.com",
+  "dependencies": {
+    "@wordpress/env": "^3.0.2"
+  }
+}
