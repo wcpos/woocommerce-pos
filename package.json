@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "wp-env": "wp-env",
-    "start": "wp-env start",
+    "start": "wp-env start --xdebug=debug --debug",
     "stop": "wp-env stop",
     "cli": "wp-env run cli",
     "wp": "wp-env run cli wp",
@@ -33,6 +33,7 @@
   },
   "homepage": "https://wcpos.com",
   "dependencies": {
-    "@wordpress/env": "^3.0.2"
+    "@wordpress/env": "https://gitpkg.now.sh/WordPress/gutenberg/packages/env?trunk",
+    "npm-run-all": "^4.1.5"
   }
 }

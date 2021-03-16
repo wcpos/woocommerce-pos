@@ -35,23 +35,23 @@ class Run {
 	public function init() {
 		// common classes
 		new i18n();
-		new Gateways();
-		new Products();
-		new Customers();
+//		new Gateways();
+//		new Products();
+//		new Customers();
 
 		// ajax only
-		if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-			new AJAX();
-		}
-
-		// admin only
-		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-			new Admin();
-		} // frontend only
-		else {
-			new Auth();
-			new Template();
-		}
+//		if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+//			new AJAX();
+//		}
+//
+//		// admin only
+//		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+//			new Admin();
+//		} // frontend only
+//		else {
+//			new Auth();
+//			new Template();
+//		}
 
 		// load integrations
 		$this->integrations();
@@ -73,10 +73,10 @@ class Run {
 	 * Loads POS integrations with third party plugins
 	 */
 	private function integrations() {
-		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		if ( class_exists( 'WC-Bookings' ) ) {
-			new Integrations\Bookings();
-		}
+//		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+//		if ( class_exists( 'WC-Bookings' ) ) {
+//			new Integrations\Bookings();
+//		}
 	}
 
 

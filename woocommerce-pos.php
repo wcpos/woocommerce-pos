@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Plugin Name:       WooCommerce POS
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
@@ -17,7 +16,6 @@
  * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com>
  * @link      http://wcpos.com
- *
  */
 
 namespace WCPOS;

@@ -180,11 +180,11 @@ class Activator {
 	 * Check version number, runs every admin page load
 	 */
 	private function version_check() {
-		$old = Admin\Settings::get_db_version();
-		if ( version_compare( $old, VERSION, '<' ) ) {
-			Admin\Settings::bump_versions();
-			$this->db_upgrade( $old, VERSION );
-		}
+//		$old = Admin\Settings::get_db_version();
+//		if ( version_compare( $old, VERSION, '<' ) ) {
+//			Admin\Settings::bump_versions();
+//			$this->db_upgrade( $old, VERSION );
+//		}
 	}
 
 	/**

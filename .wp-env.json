@@ -3,7 +3,7 @@
   "phpVersion": null,
   "plugins": [
     ".",
-    "woocommerce"
+    "https://downloads.wordpress.org/plugin/woocommerce.zip"
   ],
   "config": {
     "WP_DEBUG": true,
