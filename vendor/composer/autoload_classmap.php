@@ -19,4 +19,10 @@ return array(
     'VariableAnalysis\\Lib\\ScopeType' => $vendorDir . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/ScopeType.php',
     'VariableAnalysis\\Lib\\VariableInfo' => $vendorDir . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/VariableInfo.php',
     'VariableAnalysis\\Sniffs\\CodeAnalysis\\VariableAnalysisSniff' => $vendorDir . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Sniffs/CodeAnalysis/VariableAnalysisSniff.php',
+    'WCPOS\\WooCommercePOS\\Activator' => $baseDir . '/includes/activator.php',
+    'WCPOS\\WooCommercePOS\\Admin\\Notices' => $baseDir . '/includes/admin/notices.php',
+    'WCPOS\\WooCommercePOS\\Deactivator' => $baseDir . '/includes/deactivator.php',
+    'WCPOS\\WooCommercePOS\\Run' => $baseDir . '/includes/run.php',
+    'WCPOS\\WooCommercePOS\\Status' => $baseDir . '/includes/status.php',
+    'WCPOS\\WooCommercePOS\\i18n' => $baseDir . '/includes/i18n.php',
 );

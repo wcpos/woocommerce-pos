@@ -7,18 +7,16 @@
  * @link     http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 class Status {
 
-	public function output() {
-		$results = array(
+	public function output(): array {
+		return array(
 			$this->test_wc_version(),
 			$this->test_php_version(),
 			$this->test_wc_rest_api(),
 		);
-
-		return $results;
 	}
 
 	/**
@@ -34,6 +32,7 @@ class Status {
 
 		if ( ! $result['pass'] ) {
 			$result = array_merge( $result, array(
+				/* translators: minimum WooCommerce version */
 				'message' => sprintf( __( 'WooCommerce >= %s required', 'woocommerce-pos' ), Activator::WC_MIN_VERSION ),
 				'buttons' => array(
 					array(
@@ -68,6 +67,7 @@ class Status {
 
 		if ( ! $result['pass'] ) {
 			$result = array_merge( $result, array(
+				/* translators: minimum PHP version */
 				'message' => sprintf( __( 'PHP >= %s required', 'woocommerce-pos' ), Activator::PHP_MIN_VERSION ),
 				'buttons' => array(
 					array(
@@ -86,7 +86,7 @@ class Status {
 	 * Test WC REST API is accessible using RESTful HTTP methods
 	 * @return array
 	 */
-	private function test_wc_rest_api() {
+	private function test_wc_rest_api(): array {
 		$result = array(
 			'pass'    => true,
 			'title'   => __( 'WC REST API', 'woocommerce-pos' ),
@@ -108,7 +108,7 @@ class Status {
 	 * Option for to emulate RESTful HTTP requests
 	 */
 	public static function toggle_legacy_server() {
-		if ( isset( $_GET['enable'] ) && $_GET['enable'] === 'true' ) {
+		if ( true === isset( $_GET['enable'] ) && $_GET['enable'] ) {
 			update_option( 'woocommerce_pos_emulateHTTP', true );
 		} else {
 			delete_option( 'woocommerce_pos_emulateHTTP' );

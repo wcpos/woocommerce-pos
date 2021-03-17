@@ -53,11 +53,11 @@ if ( ! function_exists( 'getallheaders' ) ) {
  *
  * @return bool
  */
-if ( ! function_exists( 'is_pos' ) ) {
-	function is_pos( $type = 'all' ): bool {
+if ( ! function_exists( 'woocommerce_pos_is_pos' ) ) {
+	function woocommerce_pos_is_pos( $type = 'all' ): bool {
 
 		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule
-		if ( $type == 'all' || $type == 'query_var' ) {
+		if ( 'all' == $type || 'query_var' == $type ) {
 			global $wp;
 			if ( 1 == isset( $wp->query_vars['wcpos'] ) && $wp->query_vars['wcpos'] ) {
 				return true;
@@ -65,7 +65,7 @@ if ( ! function_exists( 'is_pos' ) ) {
 		}
 
 		// check headers, eg: from ajax request
-		if ( $type == 'all' || $type == 'header' ) {
+		if ( 'all' == $type || 'header' == $type ) {
 			$headers = array_change_key_case( getallheaders() ); // convert headers to lowercase
 			if ( 1 == isset( $headers['x-wcpos'] ) && $headers['x-wcpos'] ) {
 				return true;
@@ -79,8 +79,8 @@ if ( ! function_exists( 'is_pos' ) ) {
 /**
  *
  */
-if ( ! function_exists( 'is_pos_admin' ) ) {
-	function is_pos_admin() {
+if ( ! function_exists( 'woocommerce_pos_is_pos_admin' ) ) {
+	function woocommerce_pos_is_pos_admin() {
 		if ( function_exists( 'getallheaders' )
 		     && $headers = getallheaders()
 		                   && isset( $headers['X-WC-POS-ADMIN'] )
@@ -167,7 +167,7 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
  * @return bool
  */
 if ( ! function_exists( 'woocommerce_pos_get_option' ) ) {
-	function woocommerce_pos_get_option( $id, $key = false ): string|bool {
+	function woocommerce_pos_get_option( $id, $key = false ): string {
 		$handlers = (array) WCPOS\Admin\Settings::handlers();
 		if ( ! array_key_exists( $id, $handlers ) ) {
 			return false;
@@ -187,7 +187,7 @@ if ( ! function_exists( 'woocommerce_pos_get_option' ) ) {
  * @return mixed
  */
 if ( ! function_exists( 'woocommerce_pos_trim_html_string' ) ) {
-	function woocommerce_pos_trim_html_string( $str ) {
+	function woocommerce_pos_trim_html_string( $str ): string {
 		return preg_replace( '/^\s+|\n|\r|\s+$/m', '', $str );
 	}
 }

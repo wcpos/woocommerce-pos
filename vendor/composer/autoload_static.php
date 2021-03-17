@@ -11,6 +11,10 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
     );
 
     public static $prefixLengthsPsr4 = array (
+        'W' => 
+        array (
+            'WCPOS\\WooCommercePOS\\' => 21,
+        ),
         'V' => 
         array (
             'VariableAnalysis\\' => 17,
@@ -26,6 +30,10 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
     );
 
     public static $prefixDirsPsr4 = array (
+        'WCPOS\\WooCommercePOS\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/includes',
+        ),
         'VariableAnalysis\\' => 
         array (
             0 => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis',
@@ -54,6 +62,12 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'VariableAnalysis\\Lib\\ScopeType' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/ScopeType.php',
         'VariableAnalysis\\Lib\\VariableInfo' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/VariableInfo.php',
         'VariableAnalysis\\Sniffs\\CodeAnalysis\\VariableAnalysisSniff' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Sniffs/CodeAnalysis/VariableAnalysisSniff.php',
+        'WCPOS\\WooCommercePOS\\Activator' => __DIR__ . '/../..' . '/includes/activator.php',
+        'WCPOS\\WooCommercePOS\\Admin\\Notices' => __DIR__ . '/../..' . '/includes/admin/notices.php',
+        'WCPOS\\WooCommercePOS\\Deactivator' => __DIR__ . '/../..' . '/includes/deactivator.php',
+        'WCPOS\\WooCommercePOS\\Run' => __DIR__ . '/../..' . '/includes/run.php',
+        'WCPOS\\WooCommercePOS\\Status' => __DIR__ . '/../..' . '/includes/status.php',
+        'WCPOS\\WooCommercePOS\\i18n' => __DIR__ . '/../..' . '/includes/i18n.php',
     );
 
     public static function getInitializer(ClassLoader $loader)

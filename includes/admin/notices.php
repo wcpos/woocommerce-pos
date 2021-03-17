@@ -9,7 +9,7 @@
  * @link     http://wcpos.com
  */
 
-namespace WCPOS\Admin;
+namespace WCPOS\WooCommercePOS\Admin;
 
 class Notices {
 

@@ -32,23 +32,7 @@ define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( p
 /**
  * Autoloader
  */
-if ( ! function_exists( 'spl_autoload_register' ) ) {
-	return;
-}
-
-spl_autoload_register( __NAMESPACE__ . '\\autoload' );
-function autoload( $cls ) {
-	$cls = ltrim( $cls, '\\' );
-	if ( substr( $cls, 0, strlen( __NAMESPACE__ ) ) !== __NAMESPACE__ ) {
-		return;
-	}
-
-	$cls  = str_replace( __NAMESPACE__, '', $cls );
-	$file = PLUGIN_PATH . 'includes' . str_replace( '\\', DIRECTORY_SEPARATOR, strtolower( $cls ) ) . '.php';
-	if ( is_readable( $file ) ) {
-		require_once( $file );
-	}
-}
+require_once 'vendor/autoload.php';
 
 /**
  * Activate plugin

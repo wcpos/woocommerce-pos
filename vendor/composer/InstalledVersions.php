@@ -30,7 +30,7 @@ private static $installed = array (
     'aliases' => 
     array (
     ),
-    'reference' => '0169cf3adf267e8d6827a7687e59cb36b238ea9b',
+    'reference' => '96084e38e745d22de1e0100105ea31097df33b00',
     'name' => 'wcpos/woocommerce-pos',
   ),
   'versions' => 
@@ -114,7 +114,7 @@ private static $installed = array (
       'aliases' => 
       array (
       ),
-      'reference' => '0169cf3adf267e8d6827a7687e59cb36b238ea9b',
+      'reference' => '96084e38e745d22de1e0100105ea31097df33b00',
     ),
     'wp-coding-standards/wpcs' => 
     array (
@@ -357,6 +357,7 @@ self::$canGetVendors = method_exists('Composer\Autoload\ClassLoader', 'getRegist
 $installed = array();
 
 if (self::$canGetVendors) {
+
 foreach (ClassLoader::getRegisteredLoaders() as $vendorDir => $loader) {
 if (isset(self::$installedByVendor[$vendorDir])) {
 $installed[] = self::$installedByVendor[$vendorDir];
