@@ -14,5 +14,7 @@
     "WP_TESTS_DOMAIN": "http://localhost",
     "WP_SITEURL": "http://localhost",
     "WP_HOME": "http://localhost"
+  },
+  "mappings": {
   }
 }
