@@ -12,7 +12,7 @@
  * @link      http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 class i18n {
 }

@@ -8,7 +8,7 @@
  * @link      http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 class Activator {
 
@@ -67,11 +67,9 @@ class Activator {
 
 					restore_current_blog();
 				}
-
 			} else {
 				self::single_activate();
 			}
-
 		} else {
 			self::single_activate();
 		}
@@ -122,10 +120,10 @@ class Activator {
 		$this->create_pos_roles();
 
 		// add pos capabilities to non POS roles
-		$this->add_pos_capability( [
-			'administrator' => [ 'manage_woocommerce_pos', 'access_woocommerce_pos' ],
-			'shop_manager'  => [ 'manage_woocommerce_pos', 'access_woocommerce_pos' ],
-		] );
+		$this->add_pos_capability( array(
+			'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+			'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+		) );
 
 		// set the auto redirection on next page load
 		//set_transient( 'woocommere_pos_welcome', 1, 30 );
@@ -137,14 +135,14 @@ class Activator {
 	private function create_pos_roles() {
 
 		// Cashier role
-		$cashier_capabilities = [
+		$cashier_capabilities = array(
 			'read'                      => true,
 			'read_private_products'     => true,
 			'read_private_shop_orders'  => true,
 			'publish_shop_orders'       => true,
 			'list_users'                => true,
 			'read_private_shop_coupons' => true,
-		];
+		);
 
 		add_role(
 			'cashier',
@@ -152,15 +150,16 @@ class Activator {
 			$cashier_capabilities
 		);
 
-		$this->add_pos_capability( [
-			'cashier' => [ 'access_woocommerce_pos' ],
-		] );
+		$this->add_pos_capability( array(
+			'cashier' => array( 'access_woocommerce_pos' ),
+		) );
 
 	}
 
 	/**
 	 * add default pos capabilities to administrator and
 	 * shop_manager roles
+	 *
 	 * @param $roles - an array of arrays representing the roles and their POS capabilities
 	 */
 	private function add_pos_capability( $roles ) {
@@ -180,15 +179,16 @@ class Activator {
 	 * Check version number, runs every admin page load
 	 */
 	private function version_check() {
-//		$old = Admin\Settings::get_db_version();
-//		if ( version_compare( $old, VERSION, '<' ) ) {
-//			Admin\Settings::bump_versions();
-//			$this->db_upgrade( $old, VERSION );
-//		}
+		//      $old = Admin\Settings::get_db_version();
+		//      if ( version_compare( $old, VERSION, '<' ) ) {
+		//          Admin\Settings::bump_versions();
+		//          $this->db_upgrade( $old, VERSION );
+		//      }
 	}
 
 	/**
 	 * Upgrade database
+	 *
 	 * @param $old
 	 * @param $current
 	 */
@@ -197,7 +197,7 @@ class Activator {
 			'0.4'        => 'updates/update-0.4.php',
 			'0.4.6'      => 'updates/update-0.4.6.php',
 			'0.5.0-beta' => 'updates/update-0.5.php',
-			'0.5.0'      => 'updates/update-0.5.php'
+			'0.5.0'      => 'updates/update-0.5.php',
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&
@@ -216,7 +216,7 @@ class Activator {
 		}
 
 		$message = sprintf(
-			           __( '<strong>WooCommerce POS</strong> requires <a href="%s">WooCommerce %s or higher</a>. Please <a href="%s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+			           __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
 			           'http://wordpress.org/plugins/woocommerce/',
 			           self::WC_MIN_VERSION,
 			           admin_url( 'plugins.php' )
@@ -235,7 +235,7 @@ class Activator {
 		}
 
 		$message = sprintf(
-			           __( '<strong>WooCommerce POS</strong> requires PHP %s or higher. Read more information about <a href="%s">how you can update</a>', 'woocommerce-pos' ),
+			           __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
 			           self::PHP_MIN_VERSION,
 			           'http://www.wpupdatephp.com/update/'
 		           ) . ' &raquo;';

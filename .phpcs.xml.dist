@@ -1,53 +1,103 @@
 <?xml version="1.0"?>
-<ruleset name="WordPress Coding Standards based custom ruleset for your plugin">
-	<config name="installed_paths" value="vendor/wp-coding-standards/wpcs"/>
-	<description>Generally-applicable sniffs for WordPress plugins.</description>
+<ruleset name="WordPress Coding Standards">
+	<!-- See https://github.com/squizlabs/PHP_CodeSniffer/wiki/Annotated-ruleset.xml -->
+	<!-- See https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards -->
+	<!-- See https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards/blob/develop/WordPress-Core/ruleset.xml -->
 
-	<!-- How to scan -->
-	<!-- Usage instructions: https://github.com/squizlabs/PHP_CodeSniffer/wiki/Usage -->
-	<!-- Annotated ruleset: https://github.com/squizlabs/PHP_CodeSniffer/wiki/Annotated-ruleset.xml -->
-	<arg name="basepath" value="./"/><!-- Strip the file paths down to the relevant bit -->
-	<arg name="extensions" value="php"/>
-	<arg name="colors"/>
-	<arg value="sp"/> <!-- Show sniff and progress -->
-
-	<arg name="parallel" value="8"/><!-- Enables parallel processing when available for faster results. -->
-	<!-- Rules: Check PHP version compatibility -->
-	<!-- https://github.com/PHPCompatibility/PHPCompatibility#sniffing-your-code-for-compatibility-with-specific-php-versions -->
-	<config name="testVersion" value="7.0-"/>
-
-	<!-- Rules: WordPress Coding Standards -->
-	<!-- https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards -->
-	<rule ref="WordPress-Core"/>
-	<rule ref="WordPress-Docs"/>
-	<rule ref="WordPress-Extra"/>
-
-	<!-- https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards/wiki/Customizable-sniff-properties -->
-	<config name="minimum_supported_wp_version" value="4.9"/>
-	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
-		<properties>
-			<!-- Value: replace the function, class, and variable prefixes used. Separate multiple prefixes with a comma. -->
-			<property name="prefixes" type="array"
-					  value="WPGraphQL\WooCommerce,woographql,WPGRAPHQL_WOOCOMMERCE,WP_GraphQL_WooCommerce,graphql_,wc_graphql_"/>
-		</properties>
-	</rule>
-	<rule ref="WordPress.WP.I18n">
-		<properties>
-			<!-- Value: replace the text domain used. -->
-			<property name="text_domain" type="array" value="wp-graphql-woocommerce"/>
-		</properties>
-	</rule>
-	<rule ref="WordPress.WhiteSpace.ControlStructureSpacing">
-		<properties>
-			<property name="blank_line_check" value="true"/>
-		</properties>
-	</rule>
+	<description>Starting Point Rule Set.</description>
 
 	<!-- What to scan -->
 	<file>woocommerce-pos.php</file>
 	<file>includes/</file>
-	<exclude-pattern>/vendor/</exclude-pattern>
-	<exclude-pattern>/node_modules/</exclude-pattern>
-	<exclude-pattern>local/*</exclude-pattern>
-	<exclude-pattern>/tests/</exclude-pattern>
+
+	<!-- sniff both PHP and JS -->
+	<arg name="extensions" value="php/PHP,js/JS,jsx/JS,ts/JS,tsx/JS"/>
+
+	<!-- Exclude paths -->
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+
+	<!-- Show sniff codes in all reports, and progress when running -->
+	<arg value="snp"/>
+	<arg name="colors"/>
+	<arg name="basepath" value="."/>
+	<arg name="parallel" value="20"/>
+
+	<!-- Exclude paths -->
+	<exclude-pattern>*/dev/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/local-config\.php</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+
+	<config name="minimum_supported_wp_version" value="5.2.2"/>
+
+	<!-- @see https://github.com/PHPCompatibility/PHPCompatibility#using-a-custom-ruleset -->
+	<config name="testVersion" value="7.3-"/>
+	<!-- @see https://github.com/PHPCompatibility/PHPCompatibilityWP#how-to-use -->
+	<rule ref="PHPCompatibilityWP"/>
+	<rule ref="WordPress-Extra"/>
+	<rule ref="WordPress-Docs"/>
+
+	<!-- Turns on the WordPress Standard -->
+	<rule ref="WordPress">
+		<exclude-pattern>*/js/*</exclude-pattern>
+		<exclude name="Generic.Commenting"/>
+		<exclude name="Generic.PHP.DisallowShortOpenTag.EchoFound"/>
+		<exclude name="Generic.WhiteSpace.DisallowSpaceIndent.SpacesUsed"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.CloseBracketLine"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.ContentAfterOpenBracket"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.MultipleArguments"/>
+		<exclude name="PEAR.Functions.FunctionCallSignature.OpeningIndent"/>
+		<exclude name="Squiz.Commenting"/>
+		<exclude name="Squiz.WhiteSpace.SuperfluousWhitespace.EndLine"/>
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
+		<exclude name="WordPress.NamingConventions.ValidHookName.UseUnderscores"/>
+		<exclude name="WordPress.Variables.GlobalVariables.OverrideProhibited"/>
+	</rule>
+
+
+	<!-- wp_verify_nonce() handles casting on it's own and does not need extra overhead -->
+	<rule ref="WordPress.Security.ValidatedSanitizedInput">
+		<properties>
+			<property name="customUnslashingSanitizingFunctions" type="array">
+				<element value="wp_verify_nonce"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Test against JS XXS https://vip.wordpress.com/documentation/vip-go/vip-code-review/javascript-security-best-practices/ -->
+	<rule ref="WordPressVIPMinimum.JS">
+		<type>error</type>
+	</rule>
+
+	<rule ref="WordPress.Files.FileName">
+		<properties>
+			<property name="strict_class_file_names" value="false"/>
+		</properties>
+		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="woocommerce_pos_"/>
+				<element value="WCPOS\WooCommercePOS"/>
+			</property>
+		</properties>
+	</rule>
+
+	<!-- Translations -->
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="woocommerce-pos"/>
+				<!-- Sometimes I piggy back on WooCommerce & WordPress translations -->
+				<element value="woocommerce"/>
+				<element value="wordpress"/>
+			</property>
+		</properties>
+	</rule>
+
 </ruleset>

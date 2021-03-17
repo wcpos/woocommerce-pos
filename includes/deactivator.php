@@ -10,7 +10,7 @@
  * @link      http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 class Deactivator {
 
@@ -43,11 +43,9 @@ class Deactivator {
 					restore_current_blog();
 
 				}
-
 			} else {
 				$this->single_deactivate();
 			}
-
 		} else {
 			$this->single_deactivate();
 		}
@@ -89,14 +87,16 @@ class Deactivator {
 	 * remove default pos capabilities to administrator and
 	 * shop_manager roles
 	 */
-	static private function remove_pos_capability() {
+	private static function remove_pos_capability() {
 		$roles = array( 'administrator', 'shop_manager' );
 		$caps  = array( 'manage_woocommerce_pos', 'access_woocommerce_pos' );
 		foreach ( $roles as $slug ) :
 			$role = get_role( $slug );
-			if ( $role ) : foreach ( $caps as $cap ) :
-				$role->remove_cap( $cap );
-			endforeach; endif;
+			if ( $role ) :
+				foreach ( $caps as $cap ) :
+					$role->remove_cap( $cap );
+				endforeach;
+			endif;
 		endforeach;
 	}
 

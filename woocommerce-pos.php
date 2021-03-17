@@ -18,7 +18,7 @@
  * @link      http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 /**
  * Define plugin constants.

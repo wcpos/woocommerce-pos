@@ -8,7 +8,7 @@
  * @link      http://wcpos.com
  */
 
-namespace WCPOS;
+namespace WCPOS\WooCommercePOS;
 
 class Run {
 
@@ -35,23 +35,23 @@ class Run {
 	public function init() {
 		// common classes
 		new i18n();
-//		new Gateways();
-//		new Products();
-//		new Customers();
+		//      new Gateways();
+		//      new Products();
+		//      new Customers();
 
 		// ajax only
-//		if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-//			new AJAX();
-//		}
-//
-//		// admin only
-//		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-//			new Admin();
-//		} // frontend only
-//		else {
-//			new Auth();
-//			new Template();
-//		}
+		//      if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+		//          new AJAX();
+		//      }
+		//
+		//      // admin only
+		//      if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+		//          new Admin();
+		//      } // frontend only
+		//      else {
+		//          new Auth();
+		//          new Template();
+		//      }
 
 		// load integrations
 		$this->integrations();
@@ -73,10 +73,10 @@ class Run {
 	 * Loads POS integrations with third party plugins
 	 */
 	private function integrations() {
-//		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-//		if ( class_exists( 'WC-Bookings' ) ) {
-//			new Integrations\Bookings();
-//		}
+		//      // WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+		//      if ( class_exists( 'WC-Bookings' ) ) {
+		//          new Integrations\Bookings();
+		//      }
 	}
 
 
@@ -86,11 +86,12 @@ class Run {
 	 * @param \WP_HTTP_Response $result Result to send to the client. Usually a WP_REST_Response.
 	 * @param \WP_REST_Server $server Server instance.
 	 * @param \WP_REST_Request $request Request used to generate the response.
+	 *
 	 * @return mixed $result
 	 */
 	public function rest_pre_serve_request( $result, $server, $request ) {
 		if ( $request->get_method() == 'OPTIONS' || is_pos() ) {
-			header( "Access-Control-Allow-Origin: *" );
+			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WCPOS' );
 		}
 
@@ -101,8 +102,8 @@ class Run {
 	 * Allow WP API Discovery from the homepage
 	 */
 	public function send_headers() {
-		header( "Access-Control-Allow-Origin: *" );
-		header( "Access-Control-Expose-Headers: Link" );
+		header( 'Access-Control-Allow-Origin: *' );
+		header( 'Access-Control-Expose-Headers: Link' );
 	}
 
 	/**

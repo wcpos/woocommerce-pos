@@ -15,7 +15,7 @@ class Status {
 		$results = array(
 			$this->test_wc_version(),
 			$this->test_php_version(),
-			$this->test_wc_rest_api()
+			$this->test_wc_rest_api(),
 		);
 
 		return $results;
@@ -29,7 +29,7 @@ class Status {
 		$result = array(
 			'title'   => __( 'WC Version', 'woocommerce-pos' ),
 			'pass'    => version_compare( WC()->version, Activator::WC_MIN_VERSION, '>=' ),
-			'message' => esc_html( WC()->version )
+			'message' => esc_html( WC()->version ),
 		);
 
 		if ( ! $result['pass'] ) {
@@ -39,9 +39,9 @@ class Status {
 					array(
 						'href'   => admin_url( 'update-core.php' ),
 						/* translators: wordpress */
-						'prompt' => __( 'Update' )
-					)
-				)
+						'prompt' => __( 'Update', 'woocommerce-pos' ),
+					),
+				),
 			) );
 		}
 
@@ -63,7 +63,7 @@ class Status {
 			'title'   => /* translators: woocommerce */
 				__( 'PHP Version', 'woocommerce' ),
 			'pass'    => version_compare( $php_version, Activator::PHP_MIN_VERSION, '>' ),
-			'message' => esc_html( $php_version )
+			'message' => esc_html( $php_version ),
 		);
 
 		if ( ! $result['pass'] ) {
@@ -73,9 +73,9 @@ class Status {
 					array(
 						'href'   => 'http://docs.woothemes.com/document/how-to-update-your-php-version/',
 						/* translators: wordpress */
-						'prompt' => __( 'Update' )
-					)
-				)
+						'prompt' => __( 'Update', 'wordpress' ),
+					),
+				),
 			) );
 		}
 
@@ -90,7 +90,7 @@ class Status {
 		$result = array(
 			'pass'    => true,
 			'title'   => __( 'WC REST API', 'woocommerce-pos' ),
-			'message' => __( 'API is active', 'woocommerce-pos' )
+			'message' => __( 'API is active', 'woocommerce-pos' ),
 		);
 
 		if ( $fail = self::permalinks_disabled() ) {
@@ -107,7 +107,7 @@ class Status {
 	/**
 	 * Option for to emulate RESTful HTTP requests
 	 */
-	static public function toggle_legacy_server() {
+	public static function toggle_legacy_server() {
 		if ( isset( $_GET['enable'] ) && $_GET['enable'] === 'true' ) {
 			update_option( 'woocommerce_pos_emulateHTTP', true );
 		} else {
@@ -118,7 +118,7 @@ class Status {
 	/**
 	 * @return array
 	 */
-	static public function wc_rest_api_disabled() {
+	public static function wc_rest_api_disabled() {
 		if ( get_option( 'woocommerce_api_enabled' ) !== 'yes' ) {
 
 			// api settings changes in WC 2.4
@@ -134,9 +134,9 @@ class Status {
 					array(
 						'href'   => $href,
 						/* translators: woocommerce */
-						'prompt' => __( 'Enable the REST API', 'woocommerce' )
-					)
-				)
+						'prompt' => __( 'Enable the REST API', 'woocommerce' ),
+					),
+				),
 			);
 		}
 	}
@@ -144,7 +144,7 @@ class Status {
 	/**
 	 * @return array
 	 */
-	static public function permalinks_disabled() {
+	public static function permalinks_disabled() {
 		$permalinks = get_option( 'permalink_structure' );
 		if ( empty( $permalinks ) ) {
 			return array(
@@ -153,9 +153,9 @@ class Status {
 				'buttons' => array(
 					array(
 						'href'   => admin_url( 'options-permalink.php' ),
-						'prompt' => __( 'Enable permalinks', 'woocommerce-pos' )
-					)
-				)
+						'prompt' => __( 'Enable permalinks', 'woocommerce-pos' ),
+					),
+				),
 			);
 		}
 	}

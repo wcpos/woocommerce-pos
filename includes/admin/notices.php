@@ -14,7 +14,7 @@ namespace WCPOS\Admin;
 class Notices {
 
 	/* @var */
-	static private $notices = array();
+	private static $notices = array();
 
 	/**
 	 * Constructor
@@ -30,11 +30,11 @@ class Notices {
 	 * @param string $type (error | warning | success | info)
 	 * @param bool $dismissable
 	 */
-	static public function add( $message = '', $type = 'error', $dismissable = true ) {
+	public static function add( $message = '', $type = 'error', $dismissable = true ) {
 		self::$notices[] = array(
 			'type'        => $type,
 			'message'     => $message,
-			'dismissable' => $dismissable
+			'dismissable' => $dismissable,
 		);
 	}
 
@@ -47,7 +47,7 @@ class Notices {
 			return;
 		}
 
-		foreach ( $notices as $notice ):
+		foreach ( $notices as $notice ) :
 			$classes = 'notice notice-' . $notice['type'];
 			if ( $notice['dismissable'] ) {
 				$classes .= ' is-dismissable';
