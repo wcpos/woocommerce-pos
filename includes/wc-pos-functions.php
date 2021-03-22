@@ -17,7 +17,8 @@
  * @return string|void
  */
 
-use const WCPOS\VERSION;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use const WCPOS\WooCommercePOS\VERSION;
 
 if ( ! function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
@@ -53,13 +54,14 @@ if ( ! function_exists( 'getallheaders' ) ) {
  *
  * @return bool
  */
-if ( ! function_exists( 'woocommerce_pos_is_pos' ) ) {
-	function woocommerce_pos_is_pos( $type = 'all' ): bool {
+if ( ! function_exists( 'woocommerce_pos_request' ) ) {
+	function woocommerce_pos_request( $type = 'all' ): bool {
+		$plugin_name = \WCPOS\WooCommercePOS\SHORT_NAME;
 
 		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule
 		if ( 'all' == $type || 'query_var' == $type ) {
 			global $wp;
-			if ( 1 == isset( $wp->query_vars['wcpos'] ) && $wp->query_vars['wcpos'] ) {
+			if ( 1 == isset( $wp->query_vars[ $plugin_name ] ) && $wp->query_vars[ $plugin_name ] ) {
 				return true;
 			}
 		}
@@ -67,7 +69,7 @@ if ( ! function_exists( 'woocommerce_pos_is_pos' ) ) {
 		// check headers, eg: from ajax request
 		if ( 'all' == $type || 'header' == $type ) {
 			$headers = array_change_key_case( getallheaders() ); // convert headers to lowercase
-			if ( 1 == isset( $headers['x-wcpos'] ) && $headers['x-wcpos'] ) {
+			if ( 1 == isset( $headers[ 'x-' . $plugin_name ] ) && $headers[ 'x-' . $plugin_name ] ) {
 				return true;
 			}
 		}
@@ -79,8 +81,8 @@ if ( ! function_exists( 'woocommerce_pos_is_pos' ) ) {
 /**
  *
  */
-if ( ! function_exists( 'woocommerce_pos_is_pos_admin' ) ) {
-	function woocommerce_pos_is_pos_admin() {
+if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
+	function woocommerce_pos_admin_request() {
 		if ( function_exists( 'getallheaders' )
 		     && $headers = getallheaders()
 		                   && isset( $headers['X-WC-POS-ADMIN'] )
@@ -151,7 +153,7 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
 		) );
 
 		if ( ! $template ) {
-			$template = woocommerce_pos_PLUGIN_PATH . 'includes/views/' . $path;
+			$template = PLUGIN_PATH . 'includes/views/' . $path;
 		}
 
 		if ( file_exists( $template ) ) {

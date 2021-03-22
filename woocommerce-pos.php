@@ -25,6 +25,7 @@ namespace WCPOS\WooCommercePOS;
  */
 define( __NAMESPACE__ . '\VERSION', '0.5.0-beta' );
 define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
+define( __NAMESPACE__ . '\SHORT_NAME', 'wcpos' );
 define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
 define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
 define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
@@ -43,3 +44,4 @@ new Activator();
  * Deactivate plugin
  */
 new Deactivator();
+

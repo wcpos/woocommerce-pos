@@ -20,7 +20,8 @@
   },
   "require": {
     "firebase/php-jwt": "^v5.2.1",
-    "php": ">=7.0.0"
+    "php": ">=7.0.0",
+    "ext-json": "*"
   },
   "config": {
     "process-timeout": 0,

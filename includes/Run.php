@@ -63,7 +63,8 @@ class Run {
 	 * Loads the POS API and patches to the WC REST API
 	 */
 	public function rest_api_init() {
-		if ( is_pos() ) {
+		if ( woocommerce_pos_request() ) {
+			new Auth();
 			new API();
 		}
 	}
@@ -90,7 +91,7 @@ class Run {
 	 * @return mixed $result
 	 */
 	public function rest_pre_serve_request( $result, $server, $request ) {
-		if ( $request->get_method() == 'OPTIONS' || is_pos() ) {
+		if ( $request->get_method() == 'OPTIONS' || woocommerce_pos_request() ) {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WCPOS' );
 		}
@@ -110,7 +111,7 @@ class Run {
 	 *
 	 */
 	public function query_vars( $query_vars ) {
-		$query_vars[] = 'wcpos';
+		$query_vars[] = \WCPOS\WooCommercePOS\SHORT_NAME;
 
 		return $query_vars;
 	}
