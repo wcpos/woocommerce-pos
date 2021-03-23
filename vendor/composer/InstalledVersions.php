@@ -30,7 +30,7 @@ private static $installed = array (
     'aliases' => 
     array (
     ),
-    'reference' => '96084e38e745d22de1e0100105ea31097df33b00',
+    'reference' => 'd1fccfebcaa829f67da6e23588e4e4ae5cf6d2ca',
     'name' => 'wcpos/woocommerce-pos',
   ),
   'versions' => 
@@ -114,7 +114,7 @@ private static $installed = array (
       'aliases' => 
       array (
       ),
-      'reference' => '96084e38e745d22de1e0100105ea31097df33b00',
+      'reference' => 'd1fccfebcaa829f67da6e23588e4e4ae5cf6d2ca',
     ),
     'wp-coding-standards/wpcs' => 
     array (

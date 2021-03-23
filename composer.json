@@ -36,9 +36,6 @@
   "autoload": {
     "psr-4": {
       "WCPOS\\WooCommercePOS\\": "includes/"
-    },
-    "classmap": [
-      "includes/"
-    ]
+    }
   }
 }

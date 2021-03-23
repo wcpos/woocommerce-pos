@@ -37,5 +37,9 @@ jobs:
       - name: Npm install
         run: npm install
 
+      - name: Linting the code
+        run: npm run lint
+        continue-on-error: true
+
       - name: Running the tests
         run: npm run test

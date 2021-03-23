@@ -17,6 +17,6 @@ class WCPOS_Test_Sample extends WP_UnitTestCase {
 	 */
 	public function init() {
 		$wcpos = Run::init();
-		$this->assertTrue( is_a( $wcpos, '\WCPOS\Run' ) );
+		$this->assertTrue( is_a( $wcpos, '\WCPOS\WooCommercePOS\Run' ) );
 	}
 }
