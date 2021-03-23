@@ -23,6 +23,7 @@ class Activator {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
 		add_action( 'wpmu_new_blog', array( $this, 'activate_new_site' ) );
 		add_action( 'plugins_loaded', array( $this, 'init' ) );
+
 	}
 
 	/**
@@ -216,11 +217,11 @@ class Activator {
 		}
 
 		$message = sprintf(
-            __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
-            'http://wordpress.org/plugins/woocommerce/',
-            self::WC_MIN_VERSION,
-            admin_url( 'plugins.php' )
-        ) . ' &raquo;';
+			           __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+			           'http://wordpress.org/plugins/woocommerce/',
+			           self::WC_MIN_VERSION,
+			           admin_url( 'plugins.php' )
+		           ) . ' &raquo;';
 
 		Admin\Notices::add( $message );
 	}
@@ -235,10 +236,10 @@ class Activator {
 		}
 
 		$message = sprintf(
-            __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
-            self::PHP_MIN_VERSION,
-            'http://www.wpupdatephp.com/update/'
-        ) . ' &raquo;';
+			           __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
+			           self::PHP_MIN_VERSION,
+			           'http://www.wpupdatephp.com/update/'
+		           ) . ' &raquo;';
 
 		Admin\Notices::add( $message );
 	}

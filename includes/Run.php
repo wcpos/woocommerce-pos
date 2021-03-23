@@ -64,6 +64,7 @@ class Run {
 	 */
 	public function rest_api_init() {
 		if ( woocommerce_pos_request() ) {
+			new Auth();
 			new API();
 		}
 	}

@@ -10,7 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\API\Auth;
+use WCPOS\WooCommercePOS\Auth;
 use WP_REST_Request;
 
 class API {
@@ -35,9 +35,9 @@ class API {
 	public function init() {
 
 		// Validate JWT token
-		register_rest_route( self::REST_NAMESPACE, '/authorize', array(
+		register_rest_route( self::REST_NAMESPACE, '/jwt/authorize', array(
 			'methods'             => 'POST',
-			'callback'            => array( new Auth(), 'generate_jwt_token' ),
+			'callback'            => array( new Auth\JWT(), 'generate_token' ),
 			'permission_callback' => '__return_true',
 			'args'                => array(
 				'username' => array(
@@ -56,7 +56,7 @@ class API {
 		// Validate JWT token
 		register_rest_route( self::REST_NAMESPACE, '/jwt/validate', array(
 			'methods'             => 'POST',
-			'callback'            => array( new Auth(), 'validate_jwt_token' ),
+			'callback'            => array( new Auth\JWT(), 'validate_token' ),
 			'permission_callback' => '__return_true',
 			'args'                => array(
 				'jwt' => array(
@@ -69,7 +69,7 @@ class API {
 		// Refresh JWT token
 		register_rest_route( self::REST_NAMESPACE, '/jwt/refresh', array(
 			'methods'             => 'POST',
-			'callback'            => array( new Auth(), 'refresh_jwt_token' ),
+			'callback'            => array( new Auth\JWT(), 'refresh_token' ),
 			'permission_callback' => '__return_true',
 			'args'                => array(
 				'jwt' => array(
@@ -82,7 +82,7 @@ class API {
 		// Revoke JWT token
 		register_rest_route( self::REST_NAMESPACE, '/jwt/revoke', array(
 			'methods'             => 'POST',
-			'callback'            => array( new Auth(), 'revoke_jwt_token' ),
+			'callback'            => array( new Auth\JWT(), 'revoke_token' ),
 			'permission_callback' => '__return_true',
 			'args'                => array(
 				'jwt' => array(
@@ -118,6 +118,7 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
+		$break = '';
 //		$params = $request->get_params();
 //
 //		$this->init_handler( $route );
