@@ -63,12 +63,14 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'VariableAnalysis\\Lib\\VariableInfo' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/VariableInfo.php',
         'VariableAnalysis\\Sniffs\\CodeAnalysis\\VariableAnalysisSniff' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Sniffs/CodeAnalysis/VariableAnalysisSniff.php',
         'WCPOS\\WooCommercePOS\\API' => __DIR__ . '/../..' . '/includes/API.php',
+        'WCPOS\\WooCommercePOS\\API\\Orders' => __DIR__ . '/../..' . '/includes/API/Orders.php',
         'WCPOS\\WooCommercePOS\\Activator' => __DIR__ . '/../..' . '/includes/Activator.php',
-        'WCPOS\\WooCommercePOS\\Admin\\Notices' => __DIR__ . '/../..' . '/includes/admin/notices.php',
+        'WCPOS\\WooCommercePOS\\Admin\\Notices' => __DIR__ . '/../..' . '/includes/Admin/Notices.php',
         'WCPOS\\WooCommercePOS\\Auth' => __DIR__ . '/../..' . '/includes/Auth.php',
-        'WCPOS\\WooCommercePOS\\Deactivator' => __DIR__ . '/../..' . '/includes/deactivator.php',
+        'WCPOS\\WooCommercePOS\\Auth\\JWT' => __DIR__ . '/../..' . '/includes/Auth/JWT.php',
+        'WCPOS\\WooCommercePOS\\Deactivator' => __DIR__ . '/../..' . '/includes/Deactivator.php',
         'WCPOS\\WooCommercePOS\\Run' => __DIR__ . '/../..' . '/includes/Run.php',
-        'WCPOS\\WooCommercePOS\\Status' => __DIR__ . '/../..' . '/includes/status.php',
+        'WCPOS\\WooCommercePOS\\Status' => __DIR__ . '/../..' . '/includes/Status.php',
         'WCPOS\\WooCommercePOS\\i18n' => __DIR__ . '/../..' . '/includes/i18n.php',
     );
 

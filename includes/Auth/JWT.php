@@ -33,7 +33,7 @@ class JWT {
 		$password = $request->get_param( 'password' );
 
 		/** First thing, check the secret key if not exist return a error*/
-		if ( ! $this->secret_key ) {
+		if ( ! $this->get_secret_key() ) {
 			return new WP_Error(
 				'[woocommerce_pos] jwt_auth_bad_config',
 				__( 'JWT is not configurated properly, please contact the admin', PLUGIN_NAME ),
@@ -80,10 +80,14 @@ class JWT {
 
 		/** The token is signed, now create the object with no sensible user data to the client*/
 		$data = array(
-			'jwt_token'         => $token,
-			'user_email'        => $user->data->user_email,
-			'user_nicename'     => $user->data->user_nicename,
-			'user_display_name' => $user->data->display_name,
+			'jwt'          => $token,
+			'user_id'      => $user->ID,
+			'username'     => $user->username,
+			'email'        => $user->user_email,
+			'firstname'    => $user->user_firstname,
+			'lastname'     => $user->user_lastname,
+			'nicename'     => $user->user_nicename,
+			'display_name' => $user->display_name,
 		);
 
 		/** Let the user modify the data before send it back */

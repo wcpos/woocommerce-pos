@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Auth;
 use WP_REST_Request;
+use WP_REST_Server;
 
 class API {
 
@@ -24,6 +25,8 @@ class API {
 	 */
 	public function __construct() {
 //		add_filter( 'rest_index', array( $this, 'rest_index' ) );
+		// note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
+		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 
 		$this->init();
@@ -94,19 +97,17 @@ class API {
 	}
 
 	/**
-	 *
+	 * @param mixed $result Response to replace the requested version with. Can be anything
+	 *                                 a normal endpoint can return, or null to not hijack the request.
+	 * @param WP_REST_Server $server Server instance.
+	 * @param WP_REST_Request $request Request used to generate the response.
 	 */
-	private function init_handler( $route ) {
-//		switch ( $route ) {
-//			case '/wc/v3/products':
-//				$this->handler = new API\Products();
-//			case '/wc/v3/customers':
-//				$this->handler = new API\Customers();
-//			case '/wc/v3/orders':
-//				$this->handler = new API\Orders();
-//			default:
-//				return;
-//		}
+	public function rest_pre_dispatch( $result, $server, $request ) {
+		if ( 0 === strpos( $request->get_route(), '/wc/v3/orders' ) ) {
+			$this->handler = new API\Orders( $request );
+		}
+
+		return $result;
 	}
 
 	/**
@@ -118,18 +119,33 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		$break = '';
-//		$params = $request->get_params();
-//
+		$params = $request->get_params();
+
 //		$this->init_handler( $route );
-//
+
 //		if ( isset( $params['fields'] ) && in_array( 'id', $params['fields'] ) ) {
 //			if ( $this->handler ) {
 //				$dispatch_result = $this->handler->get_all_ids();
 //			}
 //		}
-//
-//		return $dispatch_result;
+
+		return $dispatch_result;
 	}
+
+	/**
+	 *
+	 */
+//	private function init_handler( $route ) {
+//		switch ( $route ) {
+////			case '/wc/v3/products':
+////				$this->handler = new API\Products();
+////			case '/wc/v3/customers':
+////				$this->handler = new API\Customers();
+//			case 'orders':
+//				$this->handler = new API\Orders();
+//			default:
+//				return;
+//		}
+//	}
 
 }
