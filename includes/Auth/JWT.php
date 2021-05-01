@@ -102,7 +102,7 @@ class JWT {
 		try {
 			$decoded_token = FirebaseJWT::decode( $token, $this->get_secret_key(), array( 'HS256' ) );
 			/** The Token is decoded now validate the iss */
-			if ( $decoded_token->iss != get_bloginfo( 'url' ) ) {
+			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
 				/** The iss do not match, return error */
 				return new WP_Error(
 					'jwt_auth_bad_iss',
@@ -135,7 +135,7 @@ class JWT {
 					'status' => 200,
 				),
 			);
-		} catch ( Exception $e ) {
+		} catch ( \Exception $e ) {
 			/** Something is wrong trying to decode the token, send back the error */
 			return new WP_Error(
 				'jwt_auth_invalid_token',
