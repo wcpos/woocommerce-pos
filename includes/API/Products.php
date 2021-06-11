@@ -17,7 +17,7 @@ class Products {
 		$this->request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
-//		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
+		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
 	}
 
 	/**
@@ -54,7 +54,7 @@ class Products {
 		if ( isset( $request['date_modified_gmt_after'] ) ) {
 			$date_query = array(
 				'column' => 'post_modified_gmt',
-				'after'  => 'now',
+				'after'  => $request['date_modified_gmt_after'],
 			);
 			array_push( $args['date_query'], $date_query );
 		}
@@ -87,39 +87,18 @@ class Products {
 	/**
 	 * Returns array of all product ids
 	 *
-	 * @param array $filter
+	 * @param array $fields
 	 *
 	 * @return array|void
 	 */
-	public function get_all_ids( array $filter = array() ) {
-		$args = array(
-			'post_type'      => array( 'product' ),
-			'post_status'    => array( 'publish' ),
-			'posts_per_page' => - 1,
-			'fields'         => 'ids',
-			'order'          => isset( $filter['order'] ) ? $filter['order'] : 'ASC',
-			'orderby'        => isset( $filter['orderby'] ) ? $filter['orderby'] : 'title',
-		);
+	public function get_all_posts( array $fields = array() ) {
+		global $wpdb;
 
-		if ( isset( $filter['after'] ) ) {
-			$args['date_query'][] = array(
-				'column'    => 'post_modified_gmt',
-				'after'     => $filter['after'],
-				'inclusive' => false,
-			);
-		}
+		$all_posts = $wpdb->get_results( '
+			SELECT ID as id, post_title as name FROM ' . $wpdb->posts . '
+			WHERE post_status = "publish" AND post_type = "product"
+        ' );
 
-		$query = new \WP_Query( $args );
-
-		return array_map( array( $this, 'format_id' ), $query->posts );
-	}
-
-	/**
-	 * @param int $id
-	 *
-	 * @return array
-	 */
-	private function format_id( int $id ): array {
-		return array( 'id' => (int) $id );
+		return $all_posts;
 	}
 }

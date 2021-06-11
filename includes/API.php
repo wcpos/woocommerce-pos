@@ -123,31 +123,13 @@ class API {
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
 		$params = $request->get_params();
 
-//		$this->init_handler( $route );
-
-//		if ( isset( $params['fields'] ) && in_array( 'id', $params['fields'] ) ) {
-//			if ( $this->handler ) {
-//				$dispatch_result = $this->handler->get_all_ids();
-//			}
-//		}
+		if ( isset( $params['posts_per_page'] ) && - 1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
+			if ( $this->handler ) {
+				$dispatch_result = $this->handler->get_all_posts( $params['fields'] );
+			}
+		}
 
 		return $dispatch_result;
 	}
-
-	/**
-	 *
-	 */
-//	private function init_handler( $route ) {
-//		switch ( $route ) {
-////			case '/wc/v3/products':
-////				$this->handler = new API\Products();
-////			case '/wc/v3/customers':
-////				$this->handler = new API\Customers();
-//			case 'orders':
-//				$this->handler = new API\Orders();
-//			default:
-//				return;
-//		}
-//	}
 
 }
