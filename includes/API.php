@@ -10,7 +10,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\Auth;
 use WP_REST_Request;
 use WP_REST_Server;
 
@@ -105,6 +104,9 @@ class API {
 	public function rest_pre_dispatch( $result, $server, $request ) {
 		if ( 0 === strpos( $request->get_route(), '/wc/v3/orders' ) ) {
 			$this->handler = new API\Orders( $request );
+		}
+		if ( 0 === strpos( $request->get_route(), '/wc/v3/products' ) ) {
+			$this->handler = new API\Products( $request );
 		}
 
 		return $result;
