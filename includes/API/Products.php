@@ -99,6 +99,20 @@ class Products {
 			WHERE post_status = "publish" AND post_type = "product"
         ' );
 
-		return $all_posts;
+		// wpdb returns id as string, we need int
+		return array_map( array( $this, 'format_id' ), $all_posts );
+	}
+
+	/**
+	 *
+	 *
+	 * @param object $record
+	 *
+	 * @return object
+	 */
+	private function format_id( $record ) {
+		$record->id = (int) $record->id;
+
+		return $record;
 	}
 }
