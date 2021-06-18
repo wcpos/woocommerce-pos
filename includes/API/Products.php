@@ -9,7 +9,7 @@ class Products {
 	private $request;
 
 	/**
-	 * Orders constructor.
+	 * Products constructor.
 	 *
 	 * @param $request WP_REST_Request
 	 */

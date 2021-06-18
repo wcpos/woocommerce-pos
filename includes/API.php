@@ -108,6 +108,9 @@ class API {
 		if ( 0 === strpos( $request->get_route(), '/wc/v3/products' ) ) {
 			$this->handler = new API\Products( $request );
 		}
+		if ( 0 === strpos( $request->get_route(), '/wc/v3/customers' ) ) {
+			$this->handler = new API\Customers( $request );
+		}
 
 		return $result;
 	}
