@@ -18,7 +18,7 @@ class Customers {
 	}
 
 	/**
-	 * Returns array of all product ids
+	 * Returns array of all customer ids, username
 	 *
 	 * @param array $fields
 	 *

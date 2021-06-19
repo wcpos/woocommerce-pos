@@ -85,7 +85,7 @@ class Products {
 	}
 
 	/**
-	 * Returns array of all product ids
+	 * Returns array of all product ids, name
 	 *
 	 * @param array $fields
 	 *
