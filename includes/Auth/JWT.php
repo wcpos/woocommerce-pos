@@ -82,7 +82,7 @@ class JWT {
 		$data = array(
 			'jwt'          => $token,
 			'user_id'      => $user->ID,
-			'username'     => $user->username,
+			'username'     => $user->user_login,
 			'email'        => $user->user_email,
 			'firstname'    => $user->user_firstname,
 			'lastname'     => $user->user_lastname,
@@ -90,7 +90,7 @@ class JWT {
 			'display_name' => $user->display_name,
 		);
 
-		/** Let the user modify the data before send it back */
+		/** Let the user modify the data before sending it back */
 		return apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
 	}
 

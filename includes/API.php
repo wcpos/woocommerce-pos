@@ -93,6 +93,13 @@ class API {
 				)
 			),
 		) );
+
+		// Stores
+		register_rest_route( self::REST_NAMESPACE, '/stores', array(
+			'methods'             => 'GET',
+			'callback'            => array( new API\Stores(), 'get_stores' ),
+			'permission_callback' => '__return_true',
+		) );
 	}
 
 	/**
