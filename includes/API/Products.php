@@ -18,6 +18,7 @@ class Products {
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'posts_search' ), 10, 2 );
 	}
 
 	/**
@@ -82,6 +83,37 @@ class Products {
 		}
 
 		return wc_placeholder_img_src();
+	}
+
+
+	/**
+	 * Search SQL filter for matching against post title only.
+	 *
+	 * @param string $search
+	 * @param \WP_Query $wp_query
+	 */
+	function posts_search( $search, $wp_query ): string {
+		global $wpdb;
+		if ( empty( $search ) ) {
+			return $search; // skip processing - no search term in query
+		}
+		$q      = $wp_query->query_vars;
+		$n      = ! empty( $q['exact'] ) ? '' : '%';
+		$search =
+		$searchand = '';
+		foreach ( (array) $q['search_terms'] as $term ) {
+			$term      = esc_sql( $wpdb->esc_like( $term ) );
+			$search    .= "{$searchand}($wpdb->posts.post_title LIKE '{$n}{$term}{$n}')";
+			$searchand = ' AND ';
+		}
+		if ( ! empty( $search ) ) {
+			$search = " AND ({$search}) ";
+			if ( ! is_user_logged_in() ) {
+				$search .= " AND ($wpdb->posts.post_password = '') ";
+			}
+		}
+
+		return $search;
 	}
 
 	/**
