@@ -23,10 +23,11 @@ class API {
 	 *
 	 */
 	public function __construct() {
-//		add_filter( 'rest_index', array( $this, 'rest_index' ) );
+		//      add_filter( 'rest_index', array( $this, 'rest_index' ) );
 		// note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
+		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
 
 		$this->init();
 	}
@@ -64,7 +65,7 @@ class API {
 				'jwt' => array(
 					'description' => __( 'JWT token.', PLUGIN_NAME ),
 					'type'        => 'string',
-				)
+				),
 			),
 		) );
 
@@ -77,7 +78,7 @@ class API {
 				'jwt' => array(
 					'description' => __( 'JWT token.', PLUGIN_NAME ),
 					'type'        => 'string',
-				)
+				),
 			),
 		) );
 
@@ -90,7 +91,7 @@ class API {
 				'jwt' => array(
 					'description' => __( 'JWT token.', PLUGIN_NAME ),
 					'type'        => 'string',
-				)
+				),
 			),
 		) );
 
@@ -103,10 +104,17 @@ class API {
 	}
 
 	/**
+	 * Filters the pre-calculated result of a REST API dispatch request.
+	 *
+	 * Allow hijacking the request before dispatching by returning a non-empty. The returned value
+	 * will be used to serve the request instead.
+	 *
 	 * @param mixed $result Response to replace the requested version with. Can be anything
 	 *                                 a normal endpoint can return, or null to not hijack the request.
 	 * @param WP_REST_Server $server Server instance.
 	 * @param WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
 		if ( 0 === strpos( $request->get_route(), '/wc/v3/orders' ) ) {
@@ -123,6 +131,8 @@ class API {
 	}
 
 	/**
+	 * Filters the REST API dispatch request result.
+	 *
 	 * @param mixed $dispatch_result Dispatch result, will be used if not empty.
 	 * @param WP_REST_Request $request Request used to generate the response.
 	 * @param string $route Route matched for the request.
@@ -140,6 +150,34 @@ class API {
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Filters the array of available REST API endpoints.
+	 *
+	 * @param array $endpoints The available endpoints. An array of matching regex patterns, each mapped
+	 *                         to an array of callbacks for the endpoint. These take the format
+	 *                         `'/path/regex' => array( $callback, $bitmask )` or
+	 *                         `'/path/regex' => array( array( $callback, $bitmask ).
+	 *
+	 * @return array
+	 *
+	 */
+	public function rest_endpoints( array $endpoints ): array {
+		if ( $endpoint =& $endpoints['/wc/v3/customers'] ) {
+			// allow ordering by meta_value
+			$endpoint[0]['args']['orderby']['enum'][] = 'meta_value';
+
+			// add valid meta_key
+			$endpoint[0]['args']['meta_key'] = array(
+				'description'       => 'The meta key to query',
+				'type'              => 'string',
+				'enum'              => array( 'first_name', 'last_name', 'email' ),
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		return $endpoints;
 	}
 
 }
