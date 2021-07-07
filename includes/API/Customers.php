@@ -14,7 +14,6 @@ class Customers {
 	 * @param $request WP_REST_Request
 	 */
 	public function __construct( WP_REST_Request $request ) {
-		// TODO: allow filtering by first_name, last_name, email, username
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
 
 		$this->request = $request;
@@ -32,6 +31,24 @@ class Customers {
 	 */
 	public function customer_query( array $prepared_args, WP_REST_Request $request ): array {
 		$query_params = $request->get_query_params();
+
+		// search first_name and last_name
+		if ( isset( $prepared_args['search'] ) && '' !== $prepared_args['search'] ) {
+			$prepared_args['meta_query'] = array(
+				'relation' => 'OR',
+				array(
+					'key'     => 'first_name',
+					'value'   => $query_params['search'],
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'last_name',
+					'value'   => $query_params['search'],
+					'compare' => 'LIKE',
+				),
+			);
+			$prepared_args['search']     = '';
+		}
 
 		// woocommerce removes valid query params, so we must put them back in
 		if ( isset( $query_params['orderby'] ) && 'meta_value' == $query_params['orderby'] ) {

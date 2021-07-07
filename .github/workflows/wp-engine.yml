@@ -1,0 +1,25 @@
+name: Deploy to WP Engine
+
+on:  
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+        
+    steps: 
+    - uses: actions/checkout@v2
+    - name: SSH Deploy to WP Engine
+      uses: bowiedev/github-action-wpengine-ssh-deploy@master 
+      env: 
+          WPE_ENV_NAME: wcposdev 
+          WPE_SSHG_KEY_PUBLIC: ${{ secrets.PUBLIC_KEY_NAME }} 
+          WPE_SSHG_KEY_PRIVATE: ${{ secrets.PRIVATE_KEY_NAME }} 
+          TPO_SRC_PATH: ""
+          TPO_PATH: "wp-content/plugins/woocommerce-pos"
