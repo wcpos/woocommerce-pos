@@ -6,7 +6,7 @@
     'aliases' => 
     array (
     ),
-    'reference' => '08168236645d4a54c6b37b70ac95b280d8ace052',
+    'reference' => '4e2d50342df29c8957aee1035d0c5554c9c9bed1',
     'name' => 'wcpos/woocommerce-pos',
   ),
   'versions' => 
@@ -90,7 +90,7 @@
       'aliases' => 
       array (
       ),
-      'reference' => '08168236645d4a54c6b37b70ac95b280d8ace052',
+      'reference' => '4e2d50342df29c8957aee1035d0c5554c9c9bed1',
     ),
     'wp-coding-standards/wpcs' => 
     array (
