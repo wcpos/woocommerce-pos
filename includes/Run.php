@@ -56,6 +56,9 @@ class Run {
 		// load integrations
 		$this->integrations();
 
+		// extend WooCommerce
+		new Orders();
+
 	}
 
 

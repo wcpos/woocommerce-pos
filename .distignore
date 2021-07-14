@@ -1,0 +1,7 @@
+/node_modules
+/hookdocs
+/tests
+/.github
+
+.distignore
+.gitignore

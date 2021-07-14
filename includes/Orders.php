@@ -1,0 +1,66 @@
+<?php
+
+/**
+ * WCPOS Orders Class
+ * Extends WooCommerce Orders
+ *
+ * @package  WCPOS\WooCommercePOS\Orders
+ * @author   Paul Kilmurray <paul@kilbot.com>
+ * @link     http://wcpos.com
+ */
+
+namespace WCPOS\WooCommercePOS;
+
+class Orders {
+
+	/**
+	 *
+	 */
+	public function __construct() {
+		$this->register_order_status();
+		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
+	}
+
+	/**
+	 *
+	 */
+	private function register_order_status() {
+		/**
+		 * Order status for open orders
+		 */
+		register_post_status( 'wc-pos-open', array(
+			'label'                     => _x( 'POS - Open', 'Order status', PLUGIN_NAME ),
+			'public'                    => true,
+			'exclude_from_search'       => false,
+			'show_in_admin_all_list'    => true,
+			'show_in_admin_status_list' => true,
+			'label_count'               => _n_noop( 'Open <span class="count">(%s)</span>', 'Open <span class="count">(%s)</span>' ),
+		) );
+
+		/**
+		 * Order status for order during checkout
+		 */
+		register_post_status( 'wc-pos-checkout', array(
+			'label'                     => _x( 'POS - Checkout', 'Order status', PLUGIN_NAME ),
+			'public'                    => true,
+			'exclude_from_search'       => false,
+			'show_in_admin_all_list'    => true,
+			'show_in_admin_status_list' => true,
+			'label_count'               => _n_noop( 'Checkout <span class="count">(%s)</span>', 'Checkout <span class="count">(%s)</span>' ),
+		) );
+	}
+
+	/**
+	 *
+	 * @param $order_statuses
+	 *
+	 * @return array
+	 */
+	public function wc_order_statuses( $order_statuses ): array {
+		$order_statuses['wc-pos-open']     = _x( 'POS - Open', 'Order status', PLUGIN_NAME );
+		$order_statuses['wc-pos-checkout'] = _x( 'POS - Checkout', 'Order status', PLUGIN_NAME );
+
+		return $order_statuses;
+	}
+
+}
