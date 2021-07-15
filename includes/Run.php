@@ -38,27 +38,23 @@ class Run {
 		//      new Gateways();
 		//      new Products();
 		//      new Customers();
+		new Orders();
 
-		// ajax only
-		//      if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-		//          new AJAX();
-		//      }
-		//
-		//      // admin only
-		//      if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
-		//          new Admin();
-		//      } // frontend only
-		//      else {
-		//          new Auth();
-		//          new Template();
-		//      }
+		// AJAX only
+		if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+			// new AJAX();
+		}
+
+		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+			// admin only
+			// new Admin();
+		} else {
+			// frontend only
+			new Templates();
+		}
 
 		// load integrations
 		$this->integrations();
-
-		// extend WooCommerce
-		new Orders();
-
 	}
 
 

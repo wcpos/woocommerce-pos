@@ -153,7 +153,7 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
 		) );
 
 		if ( ! $template ) {
-			$template = PLUGIN_PATH . 'includes/views/' . $path;
+			$template = PLUGIN_PATH . 'templates/' . $path;
 		}
 
 		if ( file_exists( $template ) ) {
