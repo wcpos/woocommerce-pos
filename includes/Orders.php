@@ -19,6 +19,10 @@ class Orders {
 	public function __construct() {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
+		add_filter( 'woocommerce_valid_order_statuses_for_payment', array(
+			$this,
+			'valid_order_statuses_for_payment'
+		), 10, 2 );
 	}
 
 	/**
@@ -34,7 +38,7 @@ class Orders {
 			'exclude_from_search'       => false,
 			'show_in_admin_all_list'    => true,
 			'show_in_admin_status_list' => true,
-			'label_count'               => _n_noop( 'Open <span class="count">(%s)</span>', 'Open <span class="count">(%s)</span>' ),
+			'label_count'               => _n_noop( 'POS - Open <span class="count">(%s)</span>', 'POS - Open <span class="count">(%s)</span>' ),
 		) );
 
 		/**
@@ -46,19 +50,31 @@ class Orders {
 			'exclude_from_search'       => false,
 			'show_in_admin_all_list'    => true,
 			'show_in_admin_status_list' => true,
-			'label_count'               => _n_noop( 'Checkout <span class="count">(%s)</span>', 'Checkout <span class="count">(%s)</span>' ),
+			'label_count'               => _n_noop( 'POS - Checkout <span class="count">(%s)</span>', 'POS - Checkout <span class="count">(%s)</span>' ),
 		) );
 	}
 
 	/**
 	 *
-	 * @param $order_statuses
+	 * @param array $order_statuses
 	 *
 	 * @return array
 	 */
-	public function wc_order_statuses( $order_statuses ): array {
+	public function wc_order_statuses( array $order_statuses ): array {
 		$order_statuses['wc-pos-open']     = _x( 'POS - Open', 'Order status', PLUGIN_NAME );
 		$order_statuses['wc-pos-checkout'] = _x( 'POS - Checkout', 'Order status', PLUGIN_NAME );
+
+		return $order_statuses;
+	}
+
+	/**
+	 * @param array $order_statuses
+	 * @param \WC_Order $order
+	 *
+	 * @return mixed
+	 */
+	public function valid_order_statuses_for_payment( array $order_statuses, \WC_Order $order ) {
+		array_push( $order_statuses, 'pos-checkout' );
 
 		return $order_statuses;
 	}

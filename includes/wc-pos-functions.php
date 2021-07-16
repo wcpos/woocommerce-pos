@@ -18,12 +18,14 @@
  */
 
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
 if ( ! function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
-		$slug   = WCPOS\Admin\Permalink::get_slug();
-		$scheme = woocommerce_pos_get_option( 'general', 'force_ssl' ) == true ? 'https' : null;
+		$slug = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
+//		$scheme = woocommerce_pos_get_option( 'general', 'force_ssl' ) == true ? 'https' : null;
+		$scheme = 'https';
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
@@ -56,12 +58,10 @@ if ( ! function_exists( 'getallheaders' ) ) {
  */
 if ( ! function_exists( 'woocommerce_pos_request' ) ) {
 	function woocommerce_pos_request( $type = 'all' ): bool {
-		$plugin_name = \WCPOS\WooCommercePOS\SHORT_NAME;
-
 		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule
 		if ( 'all' == $type || 'query_var' == $type ) {
 			global $wp;
-			if ( 1 == isset( $wp->query_vars[ $plugin_name ] ) && $wp->query_vars[ $plugin_name ] ) {
+			if ( 1 == isset( $wp->query_vars[ SHORT_NAME ] ) && $wp->query_vars[ SHORT_NAME ] ) {
 				return true;
 			}
 		}
@@ -69,7 +69,7 @@ if ( ! function_exists( 'woocommerce_pos_request' ) ) {
 		// check headers, eg: from ajax request
 		if ( 'all' == $type || 'header' == $type ) {
 			$headers = array_change_key_case( getallheaders() ); // convert headers to lowercase
-			if ( 1 == isset( $headers[ 'x-' . $plugin_name ] ) && $headers[ 'x-' . $plugin_name ] ) {
+			if ( 1 == isset( $headers[ 'x-' . SHORT_NAME ] ) && $headers[ 'x-' . SHORT_NAME ] ) {
 				return true;
 			}
 		}
@@ -170,7 +170,7 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
  */
 if ( ! function_exists( 'woocommerce_pos_get_option' ) ) {
 	function woocommerce_pos_get_option( $id, $key = false ): string {
-		$handlers = (array) WCPOS\Admin\Settings::handlers();
+		$handlers = (array) WCPOS\WooCommercePOS\Admin\Settings::handlers();
 		if ( ! array_key_exists( $id, $handlers ) ) {
 			return false;
 		}

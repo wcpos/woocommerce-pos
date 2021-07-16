@@ -47,7 +47,7 @@ class Run {
 
 		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
 			// admin only
-			// new Admin();
+			new Admin();
 		} else {
 			// frontend only
 			new Templates();

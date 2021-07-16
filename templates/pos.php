@@ -1,7 +1,13 @@
 <?php
 /**
  * POS template
+ *
+ * This template can be overridden by copying it to yourtheme/woocommerce-pos/pos.php.
+ *
+ * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
+
+defined( 'ABSPATH' ) || exit;
 ?>
 <!DOCTYPE html>
 <html>
@@ -16,23 +22,23 @@
 	<!-- For iPad with high-resolution Retina display running iOS ≥ 7: -->
 	<link rel="apple-touch-icon-precomposed" href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-152.png">
 	<link rel="apple-touch-icon-precomposed" sizes="152x152"
-	      href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-152.png">
+		  href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-152.png">
 
 	<!-- For iPad with high-resolution Retina display running iOS ≤ 6: -->
 	<link rel="apple-touch-icon-precomposed" sizes="144x144"
-	      href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-144.png">
+		  href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-144.png">
 
 	<!-- For iPhone with high-resolution Retina display running iOS ≥ 7: -->
 	<link rel="apple-touch-icon-precomposed" sizes="120x120"
-	      href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-120.png">
+		  href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-120.png">
 
 	<!-- For iPhone with high-resolution Retina display running iOS ≤ 6: -->
 	<link rel="apple-touch-icon-precomposed" sizes="114x114"
-	      href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-114.png">
+		  href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-114.png">
 
 	<!-- For first- and second-generation iPad: -->
 	<link rel="apple-touch-icon-precomposed" sizes="72x72"
-	      href="<?php echo WCPOS\WooCommercePOSPLUGIN_URL ?>assets/favicon-72.png">
+		  href="<?php echo WCPOS\WooCommercePOSPLUGIN_URL ?>assets/favicon-72.png">
 
 	<!-- For non-Retina iPhone, iPod Touch, and Android 2.1+ devices: -->
 	<link rel="apple-touch-icon-precomposed" href="<?php echo WCPOS\WooCommercePOS\PLUGIN_URL ?>assets/favicon-57.png">
