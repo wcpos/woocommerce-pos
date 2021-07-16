@@ -10,6 +10,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use Exception;
+use WC_Order;
 
 class Templates {
 
@@ -32,17 +33,21 @@ class Templates {
 	 *
 	 */
 	public function __construct() {
-//		$this->pos_slug          = Admin\Permalink::get_slug();
-		$this->pos_slug                   = 'wcpos';
+		$this->pos_slug                   = Admin\Permalink::get_slug();
 		$this->pos_rewrite_regex          = '^' . $this->pos_slug . '/?$';
 		$this->pos_checkout_slug          = 'wcpos-checkout';
-		$this->pos_checkout_rewrite_regex = '^' . $this->pos_checkout_slug . '/([0-9]+)[/]?$';
+		$this->pos_checkout_rewrite_regex = '^' . $this->pos_checkout_slug . '/([a-z-]+)/([0-9]+)[/]?$';
 
 		add_rewrite_tag( '%wcpos%', '([^&]+)' );
 		add_rewrite_rule( $this->pos_rewrite_regex, 'index.php?wcpos=1', 'top' );
-		add_rewrite_rule( $this->pos_checkout_rewrite_regex, 'index.php?order-pay=$matches[1]', 'top' );
+		add_rewrite_rule( $this->pos_checkout_rewrite_regex, 'index.php?$matches[1]=$matches[2]', 'top' );
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
+
+		add_filter( 'woocommerce_get_checkout_order_received_url', array(
+			$this,
+			'checkout_order_received_url',
+		), 10, 2 );
 	}
 
 	/**
@@ -68,7 +73,9 @@ class Templates {
 		}
 
 		if ( isset( $wp->query_vars['order-pay'] ) ) {
-			$this->pos_checkout_template( $wp->query_vars['order-pay'] );
+			$this->pos_pay_template( $wp->query_vars['order-pay'] );
+		} elseif ( isset( $wp->query_vars['order-received'] ) ) {
+			$this->pos_received_template( $wp->query_vars['order-received'] );
 		} else {
 			$this->pos_frontend_template();
 		}
@@ -93,7 +100,7 @@ class Templates {
 		}
 
 		// check privileges
-		if ( ! current_user_can( 'access_woocommerce_pos' ) ) /* translators: wordpress */ {
+		if ( ! current_user_can( 'access_woocommerce_pos' ) ) { /* translators: wordpress */
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 
@@ -113,7 +120,7 @@ class Templates {
 	/**
 	 *
 	 */
-	private function pos_checkout_template( $order_id ) {
+	private function pos_pay_template( $order_id ) {
 		if ( ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
 			define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
@@ -132,7 +139,7 @@ class Templates {
 			}
 
 			// set customer
-//			wp_set_current_user( $order->get_customer_id() );
+			//          wp_set_current_user( $order->get_customer_id() );
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $order_id ) ) {
@@ -145,7 +152,21 @@ class Templates {
 				current( $available_gateways )->set_current();
 			}
 
-			include woocommerce_pos_locate_template( 'checkout.php' );
+			include woocommerce_pos_locate_template( 'pay.php' );
+
+		} catch ( Exception $e ) {
+			wc_print_notice( $e->getMessage(), 'error' );
+		}
+	}
+
+	public function pos_received_template( $order_id ) {
+		$order_id = absint( $order_id );
+
+		try {
+			// get order
+			$order = wc_get_order( $order_id );
+
+			include woocommerce_pos_locate_template( 'received.php' );
 
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
@@ -169,12 +190,12 @@ class Templates {
 	private function no_cache() {
 		// disable W3 Total Cache minify
 		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( "DONOTMINIFY", "true" );
+			define( 'DONOTMINIFY', 'true' );
 		}
 
 		// disable WP Super Cache
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( "DONOTCACHEPAGE", "true" );
+			define( 'DONOTCACHEPAGE', 'true' );
 		}
 	}
 
@@ -190,5 +211,22 @@ class Templates {
 	 */
 	public function footer() {
 
+	}
+
+	/**
+	 * @param string $order_received_url
+	 * @param WC_Order $order
+	 *
+	 * @return string
+	 */
+	public function checkout_order_received_url( string $order_received_url, $order ): string {
+		// check is pos
+		// @TODO make sure _wp_http_referer is /wcpos-checkout/order-pay
+		if ( ! woocommerce_pos_request( 'query_var' ) ) {
+			return $order_received_url;
+		}
+
+		// @TODO construct url
+		return '/wcpos-checkout/order-received/' . $order->get_id() . '/?wcpos=1&key=' . $order->get_order_key();
 	}
 }
