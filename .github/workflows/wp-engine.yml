@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
         
     steps: 
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2.3.4
     - name: SSH Deploy to WP Engine
       uses: bowiedev/github-action-wpengine-ssh-deploy@master 
       env: 
