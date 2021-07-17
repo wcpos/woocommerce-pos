@@ -90,13 +90,6 @@ class Pay {
 			define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
-		// @TODO - these query variables are required by some gateways, eg: Stripe
-		// @TODO - I should include these in the iframe src in the POS
-		// @TODO - The payment link should be returned from the server when order is saved
-		// $_GET['pay_for_order']
-		// $_GET['key']
-		$_GET['pay_for_order'] = true;
-
 		do_action( 'woocommerce_pos_before_pay' );
 
 		try {

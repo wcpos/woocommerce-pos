@@ -62,6 +62,14 @@ class Orders {
 	 * @param $creating
 	 */
 	public function pre_insert_shop_order_object( $order, $request, $creating ) {
+
+		// add order meta _pos_checkout_url if it doesn't exist
+		$pos_checkout_url = add_query_arg( array(
+			'pay_for_order' => true,
+			'key'           => $order->get_order_key(),
+		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
+		$order->update_meta_data( '_pos_checkout_url', $pos_checkout_url );
+
 		return $order;
 	}
 
