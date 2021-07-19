@@ -22,6 +22,7 @@ class Menu {
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
+		add_filter( 'custom_menu_order', '__return_true' );
 	}
 
 	/**
@@ -50,7 +51,7 @@ class Menu {
 			__( 'View POS', 'woocommerce-pos' ),
 			__( 'View POS', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
-			null
+			null,
 		);
 
 		// adjust submenu
@@ -115,5 +116,5 @@ class Menu {
 		}
 		include_once 'views/upgrade.php';
 	}
-	
+
 }

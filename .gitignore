@@ -19,3 +19,4 @@ c3.php
 .codeception.yml
 composer.lock
 .wp-env.override.json
+/admin-client/js

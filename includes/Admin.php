@@ -27,7 +27,7 @@ class Admin {
 	private function init() {
 		new Admin\Notices();
 		new Admin\Menu();
-//		new Admin\Settings();
+		new Admin\Settings();
 //		new Admin\Status();
 //		new Admin\Gateways();
 	}
