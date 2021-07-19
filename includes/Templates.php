@@ -2,7 +2,7 @@
 /**
  *
  *
- * @package    WCPOS\Templates
+ * @package    WCPOS\WooCommercePOS\Templates
  * @author   Paul Kilmurray <paul@kilbot.com>
  * @link     http://wcpos.com
  */

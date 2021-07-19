@@ -68,12 +68,18 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'WCPOS\\WooCommercePOS\\API\\Products' => __DIR__ . '/../..' . '/includes/API/Products.php',
         'WCPOS\\WooCommercePOS\\API\\Stores' => __DIR__ . '/../..' . '/includes/API/Stores.php',
         'WCPOS\\WooCommercePOS\\Activator' => __DIR__ . '/../..' . '/includes/Activator.php',
+        'WCPOS\\WooCommercePOS\\Admin' => __DIR__ . '/../..' . '/includes/Admin.php',
         'WCPOS\\WooCommercePOS\\Admin\\Notices' => __DIR__ . '/../..' . '/includes/Admin/Notices.php',
+        'WCPOS\\WooCommercePOS\\Admin\\Permalink' => __DIR__ . '/../..' . '/includes/Admin/Permalink.php',
         'WCPOS\\WooCommercePOS\\Auth' => __DIR__ . '/../..' . '/includes/Auth.php',
         'WCPOS\\WooCommercePOS\\Auth\\JWT' => __DIR__ . '/../..' . '/includes/Auth/JWT.php',
         'WCPOS\\WooCommercePOS\\Deactivator' => __DIR__ . '/../..' . '/includes/Deactivator.php',
+        'WCPOS\\WooCommercePOS\\Orders' => __DIR__ . '/../..' . '/includes/Orders.php',
         'WCPOS\\WooCommercePOS\\Run' => __DIR__ . '/../..' . '/includes/Run.php',
         'WCPOS\\WooCommercePOS\\Status' => __DIR__ . '/../..' . '/includes/Status.php',
+        'WCPOS\\WooCommercePOS\\Templates' => __DIR__ . '/../..' . '/includes/Templates.php',
+        'WCPOS\\WooCommercePOS\\Templates\\Frontend' => __DIR__ . '/../..' . '/includes/Templates/Frontend.php',
+        'WCPOS\\WooCommercePOS\\Templates\\Pay' => __DIR__ . '/../..' . '/includes/Templates/Pay.php',
         'WCPOS\\WooCommercePOS\\i18n' => __DIR__ . '/../..' . '/includes/i18n.php',
     );
 

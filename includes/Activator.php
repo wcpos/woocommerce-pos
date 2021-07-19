@@ -3,7 +3,7 @@
 /**
  * Activation checks and set up
  *
- * @package   WCPOS\Activator
+ * @package   WCPOS\WooCommercePOS\Activator
  * @author    Paul Kilmurray <paul@kilbot.com>
  * @link      http://wcpos.com
  */

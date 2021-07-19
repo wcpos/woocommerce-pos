@@ -3,7 +3,7 @@
 /**
  * Load required classes
  *
- * @package   WCPOS\Run
+ * @package   WCPOS\WooCommercePOS\Run
  * @author    Paul Kilmurray <paul@kilbot.com>
  * @link      http://wcpos.com
  */
@@ -110,7 +110,7 @@ class Run {
 	 *
 	 */
 	public function query_vars( $query_vars ) {
-		$query_vars[] = \WCPOS\WooCommercePOS\SHORT_NAME;
+		$query_vars[] = SHORT_NAME;
 
 		return $query_vars;
 	}

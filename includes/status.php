@@ -2,7 +2,7 @@
 /**
  *
  *
- * @package    WCPOS\Status
+ * @package    WCPOS\WooCommercePOS\Status
  * @author   Paul Kilmurray <paul@kilbot.com>
  * @link     http://wcpos.com
  */

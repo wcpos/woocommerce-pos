@@ -3,7 +3,7 @@
 /**
  * Add a POS settings on the permalink admin page
  *
- * @package    WCPOS\Admin_Permlink
+ * @package    WCPOS\WooCommercePOS\Admin_Permlink
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  * @link     http://www.wcpos.com
  */

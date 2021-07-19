@@ -5,7 +5,7 @@
  *
  * This class defines all code necessary to run during the plugin's activation.
  *
- * @package   WCPOS\Deactivator
+ * @package   WCPOS\WooCommercePOS\Deactivator
  * @author    Paul Kilmurray <paul@kilbot.com>
  * @link      http://wcpos.com
  */

@@ -4,7 +4,7 @@
  * Admin Notices
  * - add notices via static method or filter
  *
- * @package    WCPOS\Admin_Notices
+ * @package    WCPOS\WooCommercePOS\Admin_Notices
  * @author   Paul Kilmurray <paul@kilbot.com>
  * @link     http://wcpos.com
  */

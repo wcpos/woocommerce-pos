@@ -1,6 +1,6 @@
 {
   "name": "wcpos-plugin",
-  "version": "0.5.0-beta",
+  "version": "1.0.0-beta",
   "description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
   "main": "index.js",
   "scripts": {

@@ -4,7 +4,7 @@
  * WP Admin Class
  * conditionally loads classes for WP Admin
  *
- * @package  WCPOS\Admin
+ * @package  WCPOS\WooCommercePOS\Admin
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  * @link     http://www.wcpos.com
  */
@@ -26,7 +26,7 @@ class Admin {
 	 */
 	private function init() {
 		new Admin\Notices();
-//		new Admin\Menu();
+		new Admin\Menu();
 //		new Admin\Settings();
 //		new Admin\Status();
 //		new Admin\Gateways();
@@ -50,9 +50,9 @@ class Admin {
 //		}
 
 		// Customise plugins page
-//		if ( $current_screen->id == 'plugins' ) {
-//			new Admin\Plugins();
-//		}
+		if ( 'plugins' == $current_screen->id ) {
+			new Admin\Plugins();
+		}
 
 	}
 
