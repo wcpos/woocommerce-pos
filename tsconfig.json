@@ -13,5 +13,5 @@
     "noEmit": true,
     "jsx": "react"
   },
-  "include": ["admin-client/src"]
+  "include": ["src"]
 }
