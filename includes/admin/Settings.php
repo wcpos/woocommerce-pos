@@ -1,8 +1,7 @@
 <?php
 
 /**
- * Admin Notices
- * - add notices via static method or filter
+ * POS Settings
  *
  * @package  WCPOS\WooCommercePOS\Admin\Settings
  * @author   Paul Kilmurray <paul@kilbot.com>
@@ -49,16 +48,18 @@ class Settings {
 	 * Output the settings pages
 	 */
 	public function display_settings_page() {
-		echo '<div id="' . PLUGIN_NAME . '-settings-container"></div>';
+		echo '<div id="' . PLUGIN_NAME . '-settings"></div>';
 	}
 
 	/**
 	 *
 	 */
 	public function enqueue_scripts() {
+		wp_enqueue_style( PLUGIN_NAME . '-settings-styles', PLUGIN_URL . 'admin-client/css/styles.min.css', array( 'wp-components' ), VERSION );
+
 		wp_enqueue_script( PLUGIN_NAME . '-bundle', PLUGIN_URL . 'admin-client/js/bundle.js', array(
-			'react',
-			'react-dom'
+			'wp-element',
+			'wp-components',
 		), VERSION, true );
 	}
 }

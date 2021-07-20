@@ -17,7 +17,9 @@ module.exports = function(_env, argv) {
 		},
 		externals: {
 			react: 'React',
-			"react-dom": 'ReactDOM'
+			"react-dom": 'ReactDOM',
+			wp: 'wp',
+			'@wordpress/components': 'wp.components'
 		},
 		module: {
 			rules: [
