@@ -101,6 +101,13 @@ class API {
 			'callback'            => array( new API\Stores(), 'get_stores' ),
 			'permission_callback' => '__return_true',
 		) );
+
+		// Settings
+		register_rest_route( self::REST_NAMESPACE, '/settings', array(
+			'methods'             => 'GET',
+			'callback'            => array( new API\Settings(), 'get_settings' ),
+			'permission_callback' => '__return_true',
+		) );
 	}
 
 	/**
@@ -164,7 +171,11 @@ class API {
 	 *
 	 */
 	public function rest_endpoints( array $endpoints ): array {
-		if ( $endpoint =& $endpoints['/wc/v3/customers'] ) {
+
+		// add ordering by meta_value to customers endpoint
+		if ( isset( $endpoints['/wc/v3/customers'] ) ) {
+			$endpoint = $endpoints['/wc/v3/customers'];
+
 			// allow ordering by meta_value
 			$endpoint[0]['args']['orderby']['enum'][] = 'meta_value';
 

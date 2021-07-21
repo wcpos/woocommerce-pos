@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
+
 import {
 	BaseControl,
 	Button,
@@ -13,6 +15,15 @@ import {
 } from '@wordpress/components';
 
 const Main = () => {
+	React.useEffect(() => {
+		async function fetchData() {
+			const data = await apiFetch({ path: 'wcpos/v1/settings?wcpos=1', method: 'GET' });
+			debugger;
+		}
+
+		fetchData();
+	}, []);
+
 	return (
 		<PanelBody title="PanelBody">
 			<PanelRow>

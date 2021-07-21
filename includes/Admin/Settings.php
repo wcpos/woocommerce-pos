@@ -19,18 +19,17 @@ class Settings {
 	/* @var string The db prefix for WP Options table */
 	const DB_PREFIX = 'woocommerce_pos_settings_';
 
-	/* @var string The settings screen id */
-	protected $screen_id;
-
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
+
+		$this->register_settings();
 	}
 
 	/**
 	 * Add Settings page to admin menu
 	 */
 	public function admin_menu() {
-		$this->screen_id = add_submenu_page(
+		$page_hook_suffix = add_submenu_page(
 			PLUGIN_NAME,
 			/* translators: wordpress */
 			__( 'Settings' ),
@@ -41,7 +40,7 @@ class Settings {
 			array( $this, 'display_settings_page' )
 		);
 
-		add_action( 'load-' . $this->screen_id, array( $this, 'enqueue_scripts' ) );
+		add_action( "load-{$page_hook_suffix}", array( $this, 'enqueue_assets' ) );
 	}
 
 	/**
@@ -54,12 +53,55 @@ class Settings {
 	/**
 	 *
 	 */
-	public function enqueue_scripts() {
-		wp_enqueue_style( PLUGIN_NAME . '-settings-styles', PLUGIN_URL . 'build/css/settings.css', array( 'wp-components' ), VERSION );
+	public function register_settings() {
+		// general
+		register_setting(
+			self::DB_PREFIX . 'general',
+			self::DB_PREFIX . 'general_pos_only_products',
+			array(
+				'type'         => 'boolean',
+				'description'  => __( 'Enable POS Only products', 'woocommerce-pos' ),
+				'show_in_rest' => false,
+				'default'      => false,
+			)
+		);
 
-		wp_enqueue_script( PLUGIN_NAME . '-bundle', PLUGIN_URL . 'build/js/settings.js', array(
-			'wp-element',
-			'wp-components',
-		), VERSION, true );
+		register_setting(
+			self::DB_PREFIX . 'general',
+			self::DB_PREFIX . 'general_decimal_qty',
+			array(
+				'type'         => 'boolean',
+				'description'  => __( 'Enable decimal quantities', 'woocommerce-pos' ),
+				'show_in_rest' => false,
+				'default'      => false,
+			)
+		);
+	}
+
+	/**
+	 *
+	 */
+	public function enqueue_assets() {
+		wp_enqueue_style(
+			PLUGIN_NAME . '-settings-styles',
+			PLUGIN_URL . 'build/css/settings.css',
+			array( 'wp-components' ),
+			VERSION
+		);
+
+		wp_enqueue_script(
+			PLUGIN_NAME . '-bundle',
+			PLUGIN_URL . 'build/js/settings.js',
+			array(
+				'react',
+				'react-dom',
+				'wp-element',
+				'wp-components',
+				'wp-i18n',
+				'wp-api-fetch',
+			),
+			VERSION,
+			true
+		);
 	}
 }
