@@ -2024,10 +2024,10 @@
     react "^17.0.1"
     react-dom "^17.0.1"
 
-"@wordpress/env@^4.0.5":
-  version "4.0.5"
-  resolved "https://registry.yarnpkg.com/@wordpress/env/-/env-4.0.5.tgz#5560c39fc2e453291ad370128807e9e1ec975f37"
-  integrity sha512-Z0ZHj2M0v7RMS59qIKdvfOkIGKKuNAcrQ6cCqY2IU4JVsDJEDjrjGV2uTj2oLuwwFKOb/cIDGZabDIsiBXw9AQ==
+"@wordpress/env@^4.1.0":
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/@wordpress/env/-/env-4.1.0.tgz#9977ade022d7b7b13a21cdd11d3aba21162153bf"
+  integrity sha512-wp3WP/KuUmdHRwWMRHd6m+3uWqCSRqHvJ56K3B4SjFMS4OZEBTPTcvG4rvw0ECH8x3pVXiua1QJm0acLfiIN4w==
   dependencies:
     chalk "^4.0.0"
     copy-dir "^1.3.0"
