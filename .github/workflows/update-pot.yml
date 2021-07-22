@@ -1,0 +1,23 @@
+name: Update POT
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update-pot:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2.3.4
+    - name: Update POT file
+      uses: pressbooks/action-pressbooks-make-pot@main
+      with:
+        path: './languages' # Directory where the file should be saved.
+        slug: 'woocommerce-pos' # Plugin or theme slug.
+        textdomain: 'woocommerce-pos' # Plugin or theme textodmain.
+        name: 'WooCommerce POS' # Plugin or theme name.
+        headers: "{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}" # Custom headers (see: https://github.com/wp-cli/i18n-command/issues/47)
+        excludes: 'vendor' # Comma-separated files/directories to exclude.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

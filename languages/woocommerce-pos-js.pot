@@ -1,0 +1,32 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=utf-8\n"
+"X-Generator: babel-plugin-makepot\n"
+
+#: src/settings/footer.tsx:13
+msgid "F.A.Q."
+msgstr ""
+
+#: src/settings/footer.tsx:7
+msgid "Need help? "
+msgstr ""
+
+#: src/settings/footer.tsx:9
+msgid "Docs"
+msgstr ""
+
+#: src/settings/general.tsx:58
+msgid "General"
+msgstr ""
+
+#: src/settings/header.tsx:7
+msgid "Settings"
+msgstr ""
+
+#: src/settings/main.tsx:42
+msgid "Save"
+msgstr ""
+
+#: src/settings/main.tsx:44
+msgid "Link"
+msgstr ""

@@ -13,7 +13,13 @@ module.exports = function (api) {
       {
         "regenerator": true
       }
-    ]
+    ],
+    [
+			"@wordpress/babel-plugin-makepot",
+      {
+        "output": "languages/woocommerce-pos-js.pot"
+      }
+		]
   ];
 
   return {
