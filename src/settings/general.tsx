@@ -40,6 +40,7 @@ function reducer(state, action) {
 
 const General = ({ initialSettings }: GeneralProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
+	const firstRender = React.useRef(true);
 
 	React.useEffect(() => {
 		async function updateSettings() {
@@ -51,7 +52,11 @@ const General = ({ initialSettings }: GeneralProps) => {
 			console.log(data);
 		}
 
-		updateSettings();
+		if (firstRender.current) {
+			firstRender.current = false;
+		} else {
+			updateSettings();
+		}
 	}, [settings]);
 
 	return (

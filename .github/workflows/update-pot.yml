@@ -1,4 +1,3 @@
-
 name: Update POT file
 
 on:
@@ -32,5 +31,5 @@ jobs:
     # - name: Commit updated POT file
     #   uses: stefanzweifel/git-auto-commit-action@v4.1.1
     #   with:
-    #     commit_message: 'chore(l10n): update languages/pressbooks.pot'
+    #     commit_message: 'chore(l10n): update languages/woocommerce-pos.pot'
     #     file_pattern: '*.pot'

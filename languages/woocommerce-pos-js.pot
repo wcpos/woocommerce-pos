@@ -15,7 +15,7 @@ msgstr ""
 msgid "Docs"
 msgstr ""
 
-#: src/settings/general.tsx:58
+#: src/settings/general.tsx:63
 msgid "General"
 msgstr ""
 
@@ -23,10 +23,10 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
-#: src/settings/main.tsx:42
+#: src/settings/main.tsx:33
 msgid "Save"
 msgstr ""
 
-#: src/settings/main.tsx:44
+#: src/settings/main.tsx:35
 msgid "Link"
 msgstr ""

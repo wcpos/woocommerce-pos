@@ -21,8 +21,6 @@ class Settings {
 
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
-
-		$this->register_settings();
 	}
 
 	/**
@@ -48,34 +46,6 @@ class Settings {
 	 */
 	public function display_settings_page() {
 		echo '<div id="' . PLUGIN_NAME . '-settings"></div>';
-	}
-
-	/**
-	 *
-	 */
-	public function register_settings() {
-		// general
-		register_setting(
-			self::DB_PREFIX . 'general',
-			self::DB_PREFIX . 'general_pos_only_products',
-			array(
-				'type'         => 'boolean',
-				'description'  => __( 'Enable POS Only products', 'woocommerce-pos' ),
-				'show_in_rest' => false,
-				'default'      => false,
-			)
-		);
-
-		register_setting(
-			self::DB_PREFIX . 'general',
-			self::DB_PREFIX . 'general_decimal_qty',
-			array(
-				'type'         => 'boolean',
-				'description'  => __( 'Enable decimal quantities', 'woocommerce-pos' ),
-				'show_in_rest' => false,
-				'default'      => false,
-			)
-		);
 	}
 
 	/**

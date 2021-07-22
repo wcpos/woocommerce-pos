@@ -108,6 +108,14 @@ class API {
 			'callback'            => array( new API\Settings(), 'get_settings' ),
 			'permission_callback' => '__return_true',
 		) );
+
+		register_rest_route( self::REST_NAMESPACE, '/settings', array(
+			'methods'             => 'POST',
+			'callback'            => array( new API\Settings(), 'save_settings' ),
+			'permission_callback' => function () {
+				return current_user_can( 'manage_woocommerce_pos' );
+			},
+		) );
 	}
 
 	/**
