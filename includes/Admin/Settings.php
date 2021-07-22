@@ -82,6 +82,8 @@ class Settings {
 	 *
 	 */
 	public function enqueue_assets() {
+		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
 			PLUGIN_URL . 'build/css/settings.css',
@@ -90,11 +92,12 @@ class Settings {
 		);
 
 		wp_enqueue_script(
-			PLUGIN_NAME . '-bundle',
+			PLUGIN_NAME . '-settings',
 			PLUGIN_URL . 'build/js/settings.js',
 			array(
 				'react',
 				'react-dom',
+				'lodash',
 				'wp-element',
 				'wp-components',
 				'wp-i18n',
@@ -103,5 +106,27 @@ class Settings {
 			VERSION,
 			true
 		);
+		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->stringify_settings(), 'before' );
+
+
+		if ( $development ) {
+			wp_enqueue_script(
+				'webpack-live-reload',
+				'http://localhost:35729/livereload.js',
+				null,
+				null,
+				true
+			);
+		}
+
+	}
+
+	/**
+	 *
+	 */
+	public function stringify_settings() {
+		$settings = new \WCPOS\WooCommercePOS\API\Settings();
+
+		return "var wcpos = " . wp_json_encode( array( 'settings' => $settings->get_settings() ) ) . ";";
 	}
 }

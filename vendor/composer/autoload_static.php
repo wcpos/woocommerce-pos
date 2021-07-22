@@ -66,6 +66,7 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'WCPOS\\WooCommercePOS\\API\\Customers' => __DIR__ . '/../..' . '/includes/API/Customers.php',
         'WCPOS\\WooCommercePOS\\API\\Orders' => __DIR__ . '/../..' . '/includes/API/Orders.php',
         'WCPOS\\WooCommercePOS\\API\\Products' => __DIR__ . '/../..' . '/includes/API/Products.php',
+        'WCPOS\\WooCommercePOS\\API\\Settings' => __DIR__ . '/../..' . '/includes/API/Settings.php',
         'WCPOS\\WooCommercePOS\\API\\Stores' => __DIR__ . '/../..' . '/includes/API/Stores.php',
         'WCPOS\\WooCommercePOS\\Activator' => __DIR__ . '/../..' . '/includes/Activator.php',
         'WCPOS\\WooCommercePOS\\Admin' => __DIR__ . '/../..' . '/includes/Admin.php',

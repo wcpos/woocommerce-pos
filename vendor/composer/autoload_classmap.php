@@ -23,6 +23,7 @@ return array(
     'WCPOS\\WooCommercePOS\\API\\Customers' => $baseDir . '/includes/API/Customers.php',
     'WCPOS\\WooCommercePOS\\API\\Orders' => $baseDir . '/includes/API/Orders.php',
     'WCPOS\\WooCommercePOS\\API\\Products' => $baseDir . '/includes/API/Products.php',
+    'WCPOS\\WooCommercePOS\\API\\Settings' => $baseDir . '/includes/API/Settings.php',
     'WCPOS\\WooCommercePOS\\API\\Stores' => $baseDir . '/includes/API/Stores.php',
     'WCPOS\\WooCommercePOS\\Activator' => $baseDir . '/includes/Activator.php',
     'WCPOS\\WooCommercePOS\\Admin' => $baseDir . '/includes/Admin.php',

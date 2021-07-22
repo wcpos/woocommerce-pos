@@ -3,6 +3,7 @@ const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 // const ESLintPlugin = require('eslint-webpack-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const LiveReloadPlugin = require('webpack-livereload-plugin');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
@@ -20,7 +21,8 @@ module.exports = function (_env, argv) {
         },
         externals: {
             react: 'React',
-            "react-dom": 'ReactDOM',
+						"react-dom": 'ReactDOM',
+						lodash: 'lodash',
             wp: 'wp',
             '@wordpress/element': 'wp.element',
             '@wordpress/components': 'wp.components',
@@ -76,7 +78,8 @@ module.exports = function (_env, argv) {
             // }),
             new MiniCssExtractPlugin({
                 filename: './css/[name].css'
-            }),
+						}),
+						new LiveReloadPlugin(),
         ],
         optimization: {
             minimize: NODE_ENV !== 'development',

@@ -18,14 +18,14 @@ const Main = () => {
 	React.useEffect(() => {
 		async function fetchData() {
 			const data = await apiFetch({ path: 'wcpos/v1/settings?wcpos=1', method: 'GET' });
-			debugger;
+			console.log(data);
 		}
 
 		fetchData();
 	}, []);
 
 	return (
-		<PanelBody title="PanelBody">
+		<PanelBody title="PanelBody" initialOpen={false}>
 			<PanelRow>
 				<ToggleControl label="Toggle" />
 			</PanelRow>

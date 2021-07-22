@@ -96,9 +96,10 @@ class Menu {
 	 * Render the upgrade page.
 	 */
 	public function display_upgrade_page() {
+		$upgrade = get_transient( 'remote_pro_page' );
 
 		// Check for transient, if none, grab remote HTML file
-		if ( false === ( $upgrade = get_transient( 'remote_pro_page' ) ) ) {
+		if ( false === $upgrade ) {
 			// Get remote HTML file
 			$response = wp_remote_get( 'http://wcpos.com/pro/?wp-admin=woocommerce-pos' );
 			// Check for error
@@ -114,7 +115,7 @@ class Menu {
 			// Store remote HTML file in transient, expire after 24 hours
 			set_transient( 'remote_pro_page', $upgrade, 24 * \HOUR_IN_SECONDS );
 		}
-		include_once 'views/upgrade.php';
+		include_once 'templates/upgrade.php';
 	}
 
 }

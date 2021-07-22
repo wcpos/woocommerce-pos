@@ -4,12 +4,22 @@
 
 #wpcontent {
 	padding-left: 0;
+	padding-right: 20px;
+
+	.text-separator {
+		padding: 0 10px;
+	}
 }
 
 #woocommerce-pos-settings {
 	background: #f6f6f6;
-	font-size: 14px;
-	position: relative;
-	box-sizing: border-box;
-	font-family: Helvetica Neue, Helvetica, Arial, Lucida Grande, sans-serif;
+}
+
+#woocommerce-pos-settings-footer {
+	padding: 10px;
+	text-align: center;
+
+	#discord-badge {
+		vertical-align: middle;
+	}
 }
