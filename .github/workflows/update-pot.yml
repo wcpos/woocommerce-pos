@@ -1,23 +1,36 @@
-name: Update POT
+
+name: Update POT file
 
 on:
   push:
     branches:
-      - main
+    - dev
+    paths:
+    - '**.php'
+    - '**.js'
 
 jobs:
   update-pot:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2.3.4
-    - name: Update POT file
-      uses: pressbooks/action-pressbooks-make-pot@main
+    - name: Setup PHP with tools
+      uses: shivammathur/setup-php@v2
       with:
-        path: './languages' # Directory where the file should be saved.
-        slug: 'woocommerce-pos' # Plugin or theme slug.
-        textdomain: 'woocommerce-pos' # Plugin or theme textodmain.
-        name: 'WooCommerce POS' # Plugin or theme name.
-        headers: "{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}" # Custom headers (see: https://github.com/wp-cli/i18n-command/issues/47)
-        excludes: 'vendor' # Comma-separated files/directories to exclude.
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        php-version: '7.3'
+        tools: composer, wp-cli
+    - name: Install dependencies
+      run: |
+        wp package install wp-cli/i18n-command:2.2.8
+    - name: Update POT file
+      run: wp pb make-pot . languages/woocommerce-pos.pot --require=vendor/autoload.php --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
+    # Remove the next four lines and uncomment the last five lines once the process has been confirmed to work as desired.
+    - uses: actions/upload-artifact@v2
+      with:
+        name: woocommerce-pos.pot
+        path: languages/woocommerce-pos.pot
+    # - name: Commit updated POT file
+    #   uses: stefanzweifel/git-auto-commit-action@v4.1.1
+    #   with:
+    #     commit_message: 'chore(l10n): update languages/pressbooks.pot'
+    #     file_pattern: '*.pot'
