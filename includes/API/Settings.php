@@ -83,8 +83,9 @@ class Settings extends Controller {
 	 */
 	public function get_general_settings() {
 		$data = array(
-			'pos_only_products' => woocommerce_pos_get_setting( 'general', 'pos_only_products', false ),
-			'decimal_qty'       => woocommerce_pos_get_setting( 'general', 'decimal_qty', false ),
+			'pos_only_products' => '1' == woocommerce_pos_get_setting( 'general', 'pos_only_products' ),
+			'decimal_qty'       => '1' == woocommerce_pos_get_setting( 'general', 'decimal_qty' ),
+			'force_ssl'         => '1' == woocommerce_pos_get_setting( 'general', 'force_ssl' ),
 		);
 
 		return $data;
@@ -97,15 +98,24 @@ class Settings extends Controller {
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
 		// Get sent data and set default value
-		$params = wp_parse_args( $request->get_params(), array() );
+		$params = wp_parse_args( $request->get_params() );
 
-		$success = woocommerce_pos_update_setting( 'general', 'pos_only_products', $params['pos_only_products'] );
-
-		if ( $success ) {
-			return rest_ensure_response( $this->get_general_settings() );
+		foreach ( $params as $key => $value ) {
+			switch ( $key ) {
+				case 'pos_only_products':
+				case 'decimal_qty':
+				case 'force_ssl':
+					woocommerce_pos_update_setting( 'general', $key, $value );
+					break;
+				default:
+					break;
+			}
 		}
 
-		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+
+		return rest_ensure_response( $this->get_general_settings() );
+
+//		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
 	}
 
 	/**
@@ -119,31 +129,24 @@ class Settings extends Controller {
 	 *
 	 */
 	public function get_general_endpoint_args() {
-		return rest_get_endpoint_args_for_schema( $this->get_general_schema(), WP_REST_Server::EDITABLE );
-	}
-
-	/**
-	 *
-	 */
-	public function get_general_schema() {
-		$schema = array(
-			'$schema'    => 'http://json-schema.org/draft-04/schema#',
-			'title'      => 'settings_general',
-			'type'       => 'object',
-			'properties' => array(
-				'pos_only_products' => array(
-					'description' => __( 'Enable POS only products', 'woocommerce-pos' ),
-					'type'        => 'boolean',
-					'context'     => array( 'view', 'edit' ),
-				),
-				'decimal_qty'       => array(
-					'description' => __( 'Enable decimal quantities', 'woocommerce-pos' ),
-					'type'        => 'boolean',
-					'context'     => array( 'view', 'edit' ),
-				),
+		$args = array(
+			'pos_only_products' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'decimal_qty'       => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'force_ssl'         => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
 			),
 		);
 
-		return $schema;
+		return $args;
 	}
 }

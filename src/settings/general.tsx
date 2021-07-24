@@ -1,23 +1,16 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import {
-	BaseControl,
-	Button,
-	ExternalLink,
-	Modal,
-	PanelBody,
-	PanelRow,
-	Placeholder,
-	Spinner,
-	ToggleControl,
-} from '@wordpress/components';
+import { PanelRow, ToggleControl, ComboboxControl, CheckboxControl } from '@wordpress/components';
 import { ErrorBoundary } from 'react-error-boundary';
 import Error from '../error';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
 	decimal_qty: boolean;
+	force_ssl: boolean;
+	default_customer: number;
+	logged_in_user: boolean;
 }
 
 interface GeneralProps {
@@ -60,35 +53,67 @@ const General = ({ initialSettings }: GeneralProps) => {
 	}, [settings]);
 
 	return (
-		<PanelBody title={__('General', 'woocommerce-pos')} initialOpen={true}>
-			<ErrorBoundary FallbackComponent={Error}>
-				<PanelRow>
-					<ToggleControl
-						label="Enable POS only products"
-						checked={settings.pos_only_products}
-						onChange={() => {
-							dispatch({
-								type: 'update',
-								payload: { pos_only_products: !settings.pos_only_products },
-							});
-						}}
-					/>
-				</PanelRow>
-				<PanelRow>
-					<ToggleControl
-						label="Enable decimal quantities"
-						help="Allows items to have decimal values in the quantity field, eg: 0.25"
-						checked={settings.decimal_qty}
-						onChange={() => {
-							dispatch({
-								type: 'update',
-								payload: { decimal_qty: !settings.decimal_qty },
-							});
-						}}
-					/>
-				</PanelRow>
-			</ErrorBoundary>
-		</PanelBody>
+		<ErrorBoundary FallbackComponent={Error}>
+			<PanelRow>
+				<ToggleControl
+					label="Enable POS only products"
+					checked={settings.pos_only_products}
+					onChange={() => {
+						dispatch({
+							type: 'update',
+							payload: { pos_only_products: !settings.pos_only_products },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<ToggleControl
+					label="Enable decimal quantities"
+					help="Allows items to have decimal values in the quantity field, eg: 0.25"
+					checked={settings.decimal_qty}
+					onChange={() => {
+						dispatch({
+							type: 'update',
+							payload: { decimal_qty: !settings.decimal_qty },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<ToggleControl
+					label="Force SSL"
+					help=""
+					checked={settings.force_ssl}
+					onChange={() => {
+						dispatch({
+							type: 'update',
+							payload: { force_ssl: !settings.force_ssl },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<ComboboxControl
+					label="Default POS customer"
+					value={settings.default_customer}
+					onChange={(args: any) => {
+						console.log(args);
+					}}
+					options={[
+						{ value: 0, label: 'Guest' },
+						{ value: 1, label: 'Admin' },
+					]}
+					onFilterValueChange={(inputValue: string) => {
+						console.log(inputValue);
+					}}
+				/>
+			</PanelRow>
+			<CheckboxControl
+				label="Use cashier account"
+				checked={settings.logged_in_user}
+				onChange={(args) => console.log(args)}
+			/>
+		</ErrorBoundary>
 	);
 };
 

@@ -16,7 +16,7 @@ import {
 
 const Main = () => {
 	return (
-		<PanelBody title="PanelBody" initialOpen={false}>
+		<>
 			<PanelRow>
 				<ToggleControl label="Toggle" />
 			</PanelRow>
@@ -35,7 +35,7 @@ const Main = () => {
 					<ExternalLink href="https://wcpos.com">{__('Link')}</ExternalLink>
 				</BaseControl>
 			</PanelRow>
-		</PanelBody>
+		</>
 	);
 };
 
