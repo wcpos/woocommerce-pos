@@ -97,6 +97,6 @@ class Settings {
 	public function stringify_settings() {
 		$settings = new \WCPOS\WooCommercePOS\API\Settings();
 
-		return "var wcpos = " . wp_json_encode( array( 'settings' => $settings->get_settings() ) ) . ";";
+		return "var wcpos = " . wp_json_encode( array( 'settings' => $settings->get_all_settings() ) ) . ";";
 	}
 }

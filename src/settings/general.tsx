@@ -45,7 +45,7 @@ const General = ({ initialSettings }: GeneralProps) => {
 	React.useEffect(() => {
 		async function updateSettings() {
 			const data = await apiFetch({
-				path: 'wcpos/v1/settings?wcpos=1',
+				path: 'wcpos/v1/settings/general?wcpos=1',
 				method: 'POST',
 				data: settings,
 			});

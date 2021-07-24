@@ -23,9 +23,8 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 if ( ! function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
-		$slug = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
-//		$scheme = woocommerce_pos_get_option( 'general', 'force_ssl' ) == true ? 'https' : null;
-		$scheme = 'https';
+		$slug   = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
+		$scheme = woocommerce_pos_get_setting( 'general', 'force_ssl' ) == true ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
@@ -100,14 +99,17 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
  * Add or update a WordPress option.
  * The option will _not_ auto-load by default.
  *
- * @param string $name
- * @param mixed $value
+ * @param string $group
+ * @param string $key
  * @param string $autoload
  *
  * @return bool
  */
-if ( ! function_exists( 'woocommerce_pos_update_option' ) ) {
-	function woocommerce_pos_update_option( $name, $value, $autoload = 'no' ): bool {
+if ( ! function_exists( 'woocommerce_pos_update_setting' ) ) {
+	function woocommerce_pos_update_setting( $group, $key, $value, $autoload = 'no' ): bool {
+		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
+		$name      = $db_prefix . $group . '_' . $key;
+
 		$success = add_option( $name, $value, '', $autoload );
 
 		if ( ! $success ) {
@@ -115,6 +117,24 @@ if ( ! function_exists( 'woocommerce_pos_update_option' ) ) {
 		}
 
 		return $success;
+	}
+}
+
+/**
+ * Get a WordPress option
+ *
+ * @param string $group
+ * @param string $key
+ * @param mixed $default
+ *
+ * @return mixed
+ */
+if ( ! function_exists( 'woocommerce_pos_get_setting' ) ) {
+	function woocommerce_pos_get_setting( $group, $key, $default = false ) {
+		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
+		$name      = $db_prefix . $group . '_' . $key;
+
+		return get_option( $name, $default );
 	}
 }
 
@@ -159,25 +179,6 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
 		if ( file_exists( $template ) ) {
 			return apply_filters( 'woocommerce_pos_locate_template', $template, $path );
 		}
-	}
-}
-
-/**
- * @param $id
- * @param $key
- *
- * @return bool
- */
-if ( ! function_exists( 'woocommerce_pos_get_option' ) ) {
-	function woocommerce_pos_get_option( $id, $key = false ): string {
-		$handlers = (array) WCPOS\WooCommercePOS\Admin\Settings::handlers();
-		if ( ! array_key_exists( $id, $handlers ) ) {
-			return false;
-		}
-
-		$settings = $handlers[ $id ]::get_instance();
-
-		return $settings->get( $key );
 	}
 }
 
