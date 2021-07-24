@@ -3,16 +3,24 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-use WP_REST_Request;
-
-class Stores {
-	private $request;
+class Stores extends Controller {
 
 	/**
 	 * Stores constructor.
 	 */
 	public function __construct() {
 
+	}
+
+	/**
+	 *
+	 */
+	public function register_routes() {
+		register_rest_route( $this->namespace, '/stores', array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'get_stores' ),
+			'permission_callback' => '__return_true',
+		) );
 	}
 
 	/**
@@ -25,11 +33,10 @@ class Stores {
 				'id'         => 0,
 				'name'       => 'Default Store',
 				'accounting' => $this->accounting(),
-			)
+			),
 		);
 
-		/** Let the user modify the data before sending it back */
-		return apply_filters( 'woocommerce_pos_stores_before_dispatch', $data );
+		return rest_ensure_response( $data );
 	}
 
 	/**

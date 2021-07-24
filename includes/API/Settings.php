@@ -5,9 +5,8 @@ namespace WCPOS\WooCommercePOS\API;
 
 use WP_Error;
 use WP_REST_Request;
-use WP_REST_Response;
 
-class Settings {
+class Settings extends Controller {
 
 	/**
 	 * @var string
@@ -22,7 +21,26 @@ class Settings {
 	}
 
 	/**
-	 * @return array
+	 *
+	 */
+	public function register_routes() {
+		register_rest_route( $this->namespace, '/settings', array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'get_settings' ),
+			'permission_callback' => '__return_true',
+		) );
+
+		register_rest_route( $this->namespace, '/settings', array(
+			'methods'             => 'POST',
+			'callback'            => array( $this, 'save_settings' ),
+			'permission_callback' => function () {
+				return current_user_can( 'manage_woocommerce_pos' );
+			},
+		) );
+	}
+
+	/**
+	 * @return WP_Error|\WP_HTTP_Response|\WP_REST_Response
 	 */
 	public function get_settings() {
 		$data = array(
@@ -32,16 +50,13 @@ class Settings {
 			),
 		);
 
-		/** Let the user modify the data before sending it back */
-		return apply_filters( 'woocommerce_pos_settings_before_dispatch', $data );
-
-//		return new WP_REST_Response( $data, 200 );
+		return rest_ensure_response( $data );
 	}
 
 	/**
 	 * @param WP_REST_Request $request
 	 *
-	 * @return WP_Error|WP_REST_Response
+	 * @return WP_Error|\WP_HTTP_Response|\WP_REST_Response
 	 */
 	public function save_settings( WP_REST_Request $request ) {
 		// Get sent data and set default value
@@ -50,7 +65,7 @@ class Settings {
 		$success = update_option( $this->db_prefix . 'general_pos_only_products', $params['pos_only_products'] );
 
 		if ( $success ) {
-			return $this->get_settings();
+			return rest_ensure_response( $this->get_settings() );
 		}
 
 		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );

@@ -1,20 +1,157 @@
 <?php
 
 /**
- * JWT Auth
+ * POS Auth API
  *
- * @package  WCPOS\WooCommercePOS\Auth\JWT
+ * @package  WCPOS\WooCommercePOS\API
  * @author   Paul Kilmurray <paul@kilbot.com>
  * @link     http://wcpos.com
  */
 
-namespace WCPOS\WooCommercePOS\Auth;
+namespace WCPOS\WooCommercePOS\API;
 
-use WP_Error;
 use Firebase\JWT\JWT as FirebaseJWT;
-use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use WP_Error;
+use WP_HTTP_Response;
+use WP_REST_Request;
+use WP_REST_Response;
+use WP_REST_Server;
 
-class JWT {
+class Auth extends Controller {
+
+	/**
+	 * Route base.
+	 *
+	 * @var string
+	 */
+	protected $rest_base = 'jwt';
+
+	/**
+	 * Stores constructor.
+	 */
+	public function __construct() {
+		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+	}
+
+	/**
+	 * Check request for any login tokens
+	 *
+	 * @param null $user
+	 *
+	 * @return int|mixed|null
+	 */
+	public function determine_current_user( $user = null ) {
+		if ( ! empty( $user ) ) {
+			return $user;
+		}
+
+		// extract Bearer token from Authorization Header
+		list( $token ) = sscanf( $this::get_auth_header(), 'Bearer %s' );
+
+		if ( $token ) {
+			$decoded_token = $this->validate_token( $token, false );
+
+			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
+				return $user;
+			} else {
+				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user;
+			}
+
+			return absint( $user );
+		}
+
+	}
+
+	/**
+	 * @return mixed|void
+	 */
+	public static function get_auth_header() {
+		$auth_header = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? $_SERVER['HTTP_AUTHORIZATION'] : false;
+		if ( ! $auth_header ) {
+			$auth_header = isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : false;
+		}
+
+		return apply_filters( 'woocommerce_pos_get_auth_header', $auth_header );
+	}
+
+	/**
+	 *
+	 */
+	public function register_routes() {
+		// Validate JWT token
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/authorize',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'generate_token' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'username' => array(
+						/* translators: WordPress */
+						'description' => __( 'Username', 'wordpress' ),
+						'type'        => 'string',
+					),
+					'password' => array(
+						/* translators: WordPress */
+						'description' => __( 'Password', 'wordpress' ),
+						'type'        => 'string',
+					),
+				),
+			)
+		);
+
+		// Validate JWT token
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/validate',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'validate_token' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'jwt' => array(
+						'description' => __( 'JWT token.', 'woocommerce-pos' ),
+						'type'        => 'string',
+					),
+				),
+			)
+		);
+
+		// Refresh JWT token
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'refresh_token' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'jwt' => array(
+						'description' => __( 'JWT token.', 'woocommerce-pos' ),
+						'type'        => 'string',
+					),
+				),
+			)
+		);
+
+		// Revoke JWT token
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/revoke',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'revoke_token' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'jwt' => array(
+						'description' => __( 'JWT token.', 'woocommerce-pos' ),
+						'type'        => 'string',
+					),
+				),
+			)
+		);
+	}
 
 	public function get_secret_key() {
 		//$secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
@@ -24,11 +161,11 @@ class JWT {
 	/**
 	 * Get the user and password in the request body and generate a JWT
 	 *
-	 * @param $request
+	 * @param WP_REST_Request $request
 	 *
-	 * @return mixed|void|WP_Error
+	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
 	 */
-	public function generate_token( $request ) {
+	public function generate_token( WP_REST_Request $request ) {
 		$username = $request->get_param( 'username' );
 		$password = $request->get_param( 'password' );
 
@@ -36,7 +173,7 @@ class JWT {
 		if ( ! $this->get_secret_key() ) {
 			return new WP_Error(
 				'[woocommerce_pos] jwt_auth_bad_config',
-				__( 'JWT is not configurated properly, please contact the admin', PLUGIN_NAME ),
+				__( 'JWT is not configured properly, please contact the admin', 'woocommerce-pos' ),
 				array(
 					'status' => 403,
 				)
@@ -110,12 +247,18 @@ class JWT {
 		);
 
 		/** Let the user modify the data before sending it back */
-		return apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
+		$data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
+
+		return rest_ensure_response( $data );
 	}
 
 	/**
 	 * Validate JWT Token
 	 *
+	 * @param null $token
+	 * @param bool $output
+	 *
+	 * @return array|object|WP_Error
 	 */
 	public function validate_token( $token = null, $output = true ) {
 		try {

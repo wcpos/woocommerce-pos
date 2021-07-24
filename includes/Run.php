@@ -59,11 +59,10 @@ class Run {
 
 
 	/**
-	 * Loads the POS API and patches to the WC REST API
+	 * Loads the POS API and duck punches the WC REST API
 	 */
 	public function rest_api_init() {
 		if ( woocommerce_pos_request() ) {
-			new Auth();
 			new API();
 		}
 	}
