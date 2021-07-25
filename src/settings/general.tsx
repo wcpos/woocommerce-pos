@@ -4,7 +4,8 @@ import apiFetch from '@wordpress/api-fetch';
 import { PanelRow, ToggleControl, CheckboxControl } from '@wordpress/components';
 import { ErrorBoundary } from 'react-error-boundary';
 import Error from '../error';
-import UserSelect from '../common/user-select';
+import UserSelect from '../components/user-select';
+import BarcodeFieldSelect from '../components/barcode-field-select';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -103,8 +104,16 @@ const General = ({ initialSettings }: GeneralProps) => {
 				<CheckboxControl
 					label="Use cashier account"
 					checked={settings.logged_in_user}
-					onChange={(args) => console.log(args)}
+					onChange={(value: boolean) => {
+						dispatch({
+							type: 'update',
+							payload: { logged_in_user: value },
+						});
+					}}
 				/>
+			</PanelRow>
+			<PanelRow>
+				<BarcodeFieldSelect selectedBarcodeField="_pos" dispatch={dispatch} />
 			</PanelRow>
 		</ErrorBoundary>
 	);

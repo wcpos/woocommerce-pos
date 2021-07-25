@@ -128,7 +128,7 @@ class Products {
 		$all_posts = $wpdb->get_results( '
 			SELECT ID as id, post_title as name FROM ' . $wpdb->posts . '
 			WHERE post_status = "publish" AND post_type = "product"
-        ' );
+		' );
 
 		// wpdb returns id as string, we need int
 		return array_map( array( $this, 'format_id' ), $all_posts );

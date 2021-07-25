@@ -56,6 +56,7 @@ const UserSelect = ({ selectedUserId = 0, dispatch, disabled = false }: UserSele
 	return (
 		<ComboboxControl
 			label="Default POS customer"
+			help="The default customer for POS orders, eg: Guest or create a new customer"
 			value={selectedUserId}
 			onChange={(id: number) => {
 				const default_customer = isInteger(id) ? id : 0;

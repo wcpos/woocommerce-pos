@@ -44,6 +44,11 @@ class Admin {
 			new Admin\Permalink();
 		}
 
+		// Edit products page
+		if ( 'product' == $current_screen->id ) {
+			new Admin\Products();
+		}
+
 		// Add POS settings to orders pages
 //		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
 //			new Admin\Orders();

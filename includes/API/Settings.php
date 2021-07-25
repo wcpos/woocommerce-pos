@@ -54,6 +54,23 @@ class Settings extends Controller {
 				'args'                => $this->get_general_endpoint_args(),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/barcode-fields',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_barcode_fields' ),
+					'permission_callback' => '__return_true',
+				),
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'add_barcode_field' ),
+					'permission_callback' => array( $this, 'update_permission_check' ),
+				),
+			)
+		);
 	}
 
 	/**
@@ -148,5 +165,38 @@ class Settings extends Controller {
 		);
 
 		return $args;
+	}
+
+	/**
+	 *
+	 */
+	public function get_barcode_fields( $request ) {
+		global $wpdb;
+
+//		$q = isset( $_GET['q'] ) ? $_GET['q'] : '';
+		$q = '';
+
+		$result = $wpdb->get_col(
+			$wpdb->prepare(
+				"
+				SELECT DISTINCT(pm.meta_key)
+				FROM $wpdb->postmeta AS pm
+				JOIN $wpdb->posts AS p
+				ON p.ID = pm.post_id
+				WHERE p.post_type IN ('product', 'product_variation')
+				AND pm.meta_key LIKE %s
+				ORDER BY pm.meta_key
+				", '%' . $q . '%'
+			)
+		);
+
+		return rest_ensure_response( $result );
+	}
+
+	/**
+	 *
+	 */
+	public function add_barcode_field() {
+
 	}
 }
