@@ -1,9 +1,10 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { PanelRow, ToggleControl, ComboboxControl, CheckboxControl } from '@wordpress/components';
+import { PanelRow, ToggleControl, CheckboxControl } from '@wordpress/components';
 import { ErrorBoundary } from 'react-error-boundary';
 import Error from '../error';
+import UserSelect from '../common/user-select';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -34,6 +35,7 @@ function reducer(state, action) {
 const General = ({ initialSettings }: GeneralProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
 	const firstRender = React.useRef(true);
+	console.log(settings);
 
 	React.useEffect(() => {
 		async function updateSettings() {
@@ -93,26 +95,17 @@ const General = ({ initialSettings }: GeneralProps) => {
 				/>
 			</PanelRow>
 			<PanelRow>
-				<ComboboxControl
-					label="Default POS customer"
-					value={settings.default_customer}
-					onChange={(args: any) => {
-						console.log(args);
-					}}
-					options={[
-						{ value: 0, label: 'Guest' },
-						{ value: 1, label: 'Admin' },
-					]}
-					onFilterValueChange={(inputValue: string) => {
-						console.log(inputValue);
-					}}
+				<UserSelect
+					selectedUserId={settings.default_customer}
+					dispatch={dispatch}
+					disabled={!settings.logged_in_user}
+				/>
+				<CheckboxControl
+					label="Use cashier account"
+					checked={settings.logged_in_user}
+					onChange={(args) => console.log(args)}
 				/>
 			</PanelRow>
-			<CheckboxControl
-				label="Use cashier account"
-				checked={settings.logged_in_user}
-				onChange={(args) => console.log(args)}
-			/>
 		</ErrorBoundary>
 	);
 };

@@ -21,8 +21,8 @@ module.exports = function (_env, argv) {
         },
         externals: {
             react: 'React',
-						"react-dom": 'ReactDOM',
-						lodash: 'lodash',
+            "react-dom": 'ReactDOM',
+            lodash: 'lodash',
             wp: 'wp',
             '@wordpress/element': 'wp.element',
             '@wordpress/components': 'wp.components',
@@ -78,8 +78,8 @@ module.exports = function (_env, argv) {
             // }),
             new MiniCssExtractPlugin({
                 filename: './css/[name].css'
-						}),
-						new LiveReloadPlugin(),
+            }),
+            new LiveReloadPlugin(),
         ],
         optimization: {
             minimize: NODE_ENV !== 'development',
