@@ -60,7 +60,7 @@
 		"@types/wordpress__components": "^14.0.3",
 		"@types/wordpress__data": "^4.6.10",
 		"@typescript-eslint/eslint-plugin": "^4.28.4",
-		"@typescript-eslint/parser": "^4.28.4",
+		"@typescript-eslint/parser": "^4.28.5",
 		"@wordpress/babel-plugin-makepot": "^4.2.0",
 		"@wordpress/env": "^4.1.0",
 		"babel-loader": "^8.2.2",
