@@ -63,7 +63,11 @@ module.exports = function (_env, argv) {
                 {
                     test: /\.(png|jpg)$/,
                     loader: 'url-loader'
-                }
+                },
+                {
+                    test: /\.svg$/,
+                    use: ['@svgr/webpack'],
+                },
             ],
         },
         resolve: {

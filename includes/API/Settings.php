@@ -84,16 +84,9 @@ class Settings extends Controller {
 			$this->namespace,
 			'/' . $this->rest_base . '/barcode-fields',
 			array(
-				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_barcode_fields' ),
-					'permission_callback' => '__return_true',
-				),
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'add_barcode_field' ),
-					'permission_callback' => array( $this, 'update_permission_check' ),
-				),
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_barcode_fields' ),
+				'permission_callback' => '__return_true',
 			)
 		);
 	}
@@ -209,9 +202,6 @@ class Settings extends Controller {
 	public function get_barcode_fields( $request ) {
 		global $wpdb;
 
-//		$q = isset( $_GET['q'] ) ? $_GET['q'] : '';
-		$q = '';
-
 		$result = $wpdb->get_col(
 			$wpdb->prepare(
 				"
@@ -220,19 +210,14 @@ class Settings extends Controller {
 				JOIN $wpdb->posts AS p
 				ON p.ID = pm.post_id
 				WHERE p.post_type IN ('product', 'product_variation')
-				AND pm.meta_key LIKE %s
 				ORDER BY pm.meta_key
-				", '%' . $q . '%'
+				"
 			)
 		);
 
-		return rest_ensure_response( $result );
-	}
+		// add custom barcode field
+		sort( array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) ) );
 
-	/**
-	 *
-	 */
-	public function add_barcode_field() {
-		
+		return rest_ensure_response( array_unique( $result ) );
 	}
 }

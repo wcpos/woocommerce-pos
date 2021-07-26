@@ -41,15 +41,20 @@ const BarcodeFieldSelect = ({ selectedBarcodeField, dispatch }: BarcodeFieldSele
 		}
 
 		getBarcodeFields();
-	}, []);
+	}, [setBarcodeFields]);
 
 	return (
 		<ComboboxControl
 			label="Barcode Field"
 			help="Select a meta field to use as the product barcode"
-			value={'_sku'}
-			onChange={(val: string) => {
-				console.log(val);
+			value={selectedBarcodeField}
+			onChange={(value: string) => {
+				if (value) {
+					dispatch({
+						type: 'update',
+						payload: { barcode_field: value },
+					});
+				}
 			}}
 			options={barcodeFields}
 			allowReset={true}

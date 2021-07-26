@@ -5,7 +5,7 @@
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'reference' => '3b403b516b6bdce52e5b3f834eb7eb02c5ca1357',
+        'reference' => '9e89f0ca7b73872f6fc15af5d5c09658d25fad4d',
         'name' => 'wcpos/woocommerce-pos',
         'dev' => true,
     ),
@@ -88,7 +88,7 @@
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
-            'reference' => '3b403b516b6bdce52e5b3f834eb7eb02c5ca1357',
+            'reference' => '9e89f0ca7b73872f6fc15af5d5c09658d25fad4d',
             'dev_requirement' => false,
         ),
         'wp-coding-standards/wpcs' => array(

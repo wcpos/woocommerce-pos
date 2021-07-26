@@ -1,7 +1,14 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { PanelRow, ToggleControl, CheckboxControl, Notice } from '@wordpress/components';
+import {
+	PanelRow,
+	ToggleControl,
+	CheckboxControl,
+	Notice,
+	TextControl,
+	Button,
+} from '@wordpress/components';
 import { ErrorBoundary } from 'react-error-boundary';
 import Error from '../error';
 import UserSelect from '../components/user-select';
@@ -12,7 +19,8 @@ export interface GeneralSettingsProps {
 	decimal_qty: boolean;
 	force_ssl: boolean;
 	default_customer: number;
-	logged_in_user: boolean;
+	default_customer_is_cashier: boolean;
+	barcode_field: string;
 }
 
 interface GeneralProps {
@@ -40,8 +48,9 @@ function reducer(state, action) {
 
 const General = ({ initialSettings }: GeneralProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
-	const silent = React.useRef(true);
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
+	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
+	const silent = React.useRef(true);
 
 	React.useEffect(() => {
 		async function updateSettings() {
@@ -62,7 +71,7 @@ const General = ({ initialSettings }: GeneralProps) => {
 		} else {
 			updateSettings();
 		}
-	}, [settings]);
+	}, [settings, dispatch, setNotice]);
 
 	return (
 		<ErrorBoundary FallbackComponent={Error}>
@@ -127,7 +136,31 @@ const General = ({ initialSettings }: GeneralProps) => {
 				/>
 			</PanelRow>
 			<PanelRow>
-				<BarcodeFieldSelect selectedBarcodeField="_pos" dispatch={dispatch} />
+				<BarcodeFieldSelect selectedBarcodeField={settings.barcode_field} dispatch={dispatch} />
+				<TextControl
+					label="Add new meta field"
+					value={newBarcodeField}
+					onChange={(nextValue: string) => setNewBarcodeField(nextValue)}
+				/>
+				<Button
+					disabled={!newBarcodeField}
+					isPrimary
+					onClick={() => {
+						dispatch({
+							type: 'update',
+							payload: { barcode_field: newBarcodeField },
+						});
+					}}
+				>
+					{__('Add')}
+				</Button>
+				<Button
+					onClick={() => {
+						console.log('cancel');
+					}}
+				>
+					{__('Cancel')}
+				</Button>
 			</PanelRow>
 		</ErrorBoundary>
 	);
