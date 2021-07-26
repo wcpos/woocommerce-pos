@@ -24,7 +24,7 @@ use const WCPOS\WooCommercePOS\VERSION;
 if ( ! function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
 		$slug   = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
-		$scheme = woocommerce_pos_get_setting( 'general', 'force_ssl' ) == true ? 'https' : null;
+		$scheme = woocommerce_pos_get_settings( 'general', 'force_ssl' ) == true ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
@@ -97,7 +97,6 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
 
 /**
  * Add or update a WordPress option.
- * The option will _not_ auto-load by default.
  *
  * @param string $group
  * @param string $key
@@ -105,18 +104,21 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
  *
  * @return bool
  */
-if ( ! function_exists( 'woocommerce_pos_update_setting' ) ) {
-	function woocommerce_pos_update_setting( $group, $key, $value, $autoload = 'no' ): bool {
+if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
+	function woocommerce_pos_update_settings( $group, $key = null, $value, $autoload = 'no' ): bool {
 		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
-		$name      = $db_prefix . $group . '_' . $key;
+		$name      = $db_prefix . $group;
 
-		$success = add_option( $name, $value, '', $autoload );
-
-		if ( ! $success ) {
-			$success = update_option( $name, $value );
+		if ( ! $key ) {
+			return update_option( $name, $value );
 		}
 
-		return $success;
+		$settings = woocommerce_pos_get_settings( $group );
+		if ( $settings ) {
+			$settings[ $key ] = $value;
+
+			return update_option( $name, $settings );
+		}
 	}
 }
 
@@ -129,12 +131,24 @@ if ( ! function_exists( 'woocommerce_pos_update_setting' ) ) {
  *
  * @return mixed
  */
-if ( ! function_exists( 'woocommerce_pos_get_setting' ) ) {
-	function woocommerce_pos_get_setting( $group, $key, $default = false ) {
+if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
+	function woocommerce_pos_get_settings( $group, $key = null, $default = false ) {
 		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
-		$name      = $db_prefix . $group . '_' . $key;
+		$name      = $db_prefix . $group;
+		$settings  = get_option( $name, $default );
 
-		return get_option( $name, $default );
+		if ( ! $key ) {
+			return $settings;
+		}
+
+		if ( isset( $settings[ $key ] ) ) {
+			return $settings[ $key ];
+		}
+
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			'Settings key not found'
+		);
 	}
 }
 

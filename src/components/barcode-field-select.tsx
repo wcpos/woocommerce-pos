@@ -48,13 +48,10 @@ const BarcodeFieldSelect = ({ selectedBarcodeField, dispatch }: BarcodeFieldSele
 			label="Barcode Field"
 			help="Select a meta field to use as the product barcode"
 			value={'_sku'}
-			onChange={(val) => {
+			onChange={(val: string) => {
 				console.log(val);
 			}}
 			options={barcodeFields}
-			onFilterValueChange={(val) => {
-				console.log(val);
-			}}
 			allowReset={true}
 		/>
 	);

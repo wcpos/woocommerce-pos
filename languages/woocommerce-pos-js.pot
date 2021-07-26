@@ -3,11 +3,11 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "X-Generator: babel-plugin-makepot\n"
 
-#: src/settings.tsx:36
+#: src/settings.tsx:38
 msgid "General"
 msgstr ""
 
-#: src/settings.tsx:52
+#: src/settings.tsx:54
 msgid "Checkout"
 msgstr ""
 

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { PanelRow, ToggleControl, CheckboxControl } from '@wordpress/components';
+import { PanelRow, ToggleControl, CheckboxControl, Notice } from '@wordpress/components';
 import { ErrorBoundary } from 'react-error-boundary';
 import Error from '../error';
 import UserSelect from '../components/user-select';
@@ -17,6 +17,11 @@ export interface GeneralSettingsProps {
 
 interface GeneralProps {
 	initialSettings: GeneralSettingsProps;
+}
+
+interface NoticeProps {
+	type?: 'error' | 'info' | 'success';
+	message: string;
 }
 
 // @ts-ignore
@@ -35,8 +40,8 @@ function reducer(state, action) {
 
 const General = ({ initialSettings }: GeneralProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
-	const firstRender = React.useRef(true);
-	console.log(settings);
+	const silent = React.useRef(true);
+	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
 
 	React.useEffect(() => {
 		async function updateSettings() {
@@ -44,12 +49,16 @@ const General = ({ initialSettings }: GeneralProps) => {
 				path: 'wcpos/v1/settings/general?wcpos=1',
 				method: 'POST',
 				data: settings,
-			});
-			console.log(data);
+			}).catch((err) => setNotice({ type: 'error', message: err.message }));
+
+			if (data) {
+				silent.current = true;
+				dispatch({ type: 'update', payload: data });
+			}
 		}
 
-		if (firstRender.current) {
-			firstRender.current = false;
+		if (silent.current) {
+			silent.current = false;
 		} else {
 			updateSettings();
 		}
@@ -57,6 +66,11 @@ const General = ({ initialSettings }: GeneralProps) => {
 
 	return (
 		<ErrorBoundary FallbackComponent={Error}>
+			{notice && (
+				<Notice status={notice.type} onRemove={() => setNotice(null)}>
+					{notice.message}
+				</Notice>
+			)}
 			<PanelRow>
 				<ToggleControl
 					label="Enable POS only products"
@@ -99,15 +113,15 @@ const General = ({ initialSettings }: GeneralProps) => {
 				<UserSelect
 					selectedUserId={settings.default_customer}
 					dispatch={dispatch}
-					disabled={!settings.logged_in_user}
+					disabled={!settings.default_customer_is_cashier}
 				/>
 				<CheckboxControl
 					label="Use cashier account"
-					checked={settings.logged_in_user}
+					checked={settings.default_customer_is_cashier}
 					onChange={(value: boolean) => {
 						dispatch({
 							type: 'update',
-							payload: { logged_in_user: value },
+							payload: { default_customer_is_cashier: value },
 						});
 					}}
 				/>

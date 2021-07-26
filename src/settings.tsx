@@ -7,6 +7,8 @@ import Header from './settings/header';
 import Main from './settings/main';
 import General, { GeneralSettingsProps } from './settings/general';
 import Checkout, { CheckoutSettingsProps } from './settings/checkout';
+import Access from './settings/access';
+import License from './settings/license';
 import Footer from './settings/footer';
 import Error from './error';
 import { get } from 'lodash';
@@ -61,8 +63,29 @@ const App = ({ initialSettings }: AppProps) => {
 					<Checkout initialSettings={checkout} />
 				</PanelBody>
 			</ErrorBoundary>
-			<PanelBody title="PanelBody" initialOpen={false}>
-				<Main />
+			<PanelBody
+				title="POS Access"
+				// @ts-ignore
+				onToggle={(o) => {
+					if (o) {
+						setOpen('access');
+					}
+				}}
+				opened={open === 'access'}
+			>
+				<Access />
+			</PanelBody>
+			<PanelBody
+				title="Pro License"
+				// @ts-ignore
+				onToggle={(o) => {
+					if (o) {
+						setOpen('license');
+					}
+				}}
+				opened={open === 'license'}
+			>
+				<License />
 			</PanelBody>
 			<Footer />
 		</ErrorBoundary>

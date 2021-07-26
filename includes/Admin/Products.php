@@ -16,7 +16,7 @@ class Products {
 	private $barcode_field;
 
 	public function __construct() {
-		$this->barcode_field = woocommerce_pos_get_setting( 'general', 'barcode_field', '' );
+		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field', '' );
 
 		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
 			// product

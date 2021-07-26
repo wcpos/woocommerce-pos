@@ -24,6 +24,31 @@ class Settings extends Controller {
 	protected $rest_base = 'settings';
 
 	/**
+	 *
+	 */
+	private $default_settings = array(
+		'general'  => array(
+			'pos_only_products'           => false,
+			'decimal_qty'                 => false,
+			'force_ssl'                   => true,
+			'default_customer'            => 0,
+			'default_customer_is_cashier' => false,
+			'barcode_field'               => '_sku',
+			'generate_username'           => true,
+		),
+		'checkout' => array(
+			'order_status'       => 'wc-completed',
+			'admin_emails'       => true,
+			'customer_emails'    => true,
+			'auto_print_receipt' => false,
+			'default_gateway'    => 'pos_cash',
+			'enabled'            => array(
+				'pos_cash',
+			),
+		),
+	);
+
+	/**
 	 * Stores constructor.
 	 */
 	public function __construct() {
@@ -99,13 +124,9 @@ class Settings extends Controller {
 	 * @return array
 	 */
 	public function get_general_settings() {
-		$data = array(
-			'pos_only_products' => '1' == woocommerce_pos_get_setting( 'general', 'pos_only_products' ),
-			'decimal_qty'       => '1' == woocommerce_pos_get_setting( 'general', 'decimal_qty' ),
-			'force_ssl'         => '1' == woocommerce_pos_get_setting( 'general', 'force_ssl' ),
-		);
+		$settings = woocommerce_pos_get_settings( 'general' );
 
-		return $data;
+		return $settings;
 	}
 
 	/**
@@ -115,20 +136,15 @@ class Settings extends Controller {
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
 		// Get sent data and set default value
-		$params = wp_parse_args( $request->get_params() );
+		$value = wp_parse_args(
+			array_intersect_key(
+				$request->get_params(),
+				$this->default_settings['general']
+			),
+			$this->default_settings['general']
+		);
 
-		foreach ( $params as $key => $value ) {
-			switch ( $key ) {
-				case 'pos_only_products':
-				case 'decimal_qty':
-				case 'force_ssl':
-					woocommerce_pos_update_setting( 'general', $key, $value );
-					break;
-				default:
-					break;
-			}
-		}
-
+		woocommerce_pos_update_settings( 'general', null, $value );
 
 		return rest_ensure_response( $this->get_general_settings() );
 
@@ -147,17 +163,37 @@ class Settings extends Controller {
 	 */
 	public function get_general_endpoint_args() {
 		$args = array(
-			'pos_only_products' => array(
+			'pos_only_products'           => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return is_bool( $param );
 				},
 			),
-			'decimal_qty'       => array(
+			'decimal_qty'                 => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return is_bool( $param );
 				},
 			),
-			'force_ssl'         => array(
+			'force_ssl'                   => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'default_customer'            => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_integer( $param );
+				},
+			),
+			'default_customer_is_cashier' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'barcode_field'               => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+			'generate_username'           => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return is_bool( $param );
 				},
@@ -197,6 +233,6 @@ class Settings extends Controller {
 	 *
 	 */
 	public function add_barcode_field() {
-
+		
 	}
 }
