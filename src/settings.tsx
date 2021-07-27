@@ -2,14 +2,14 @@ import * as React from 'react';
 import { render } from '@wordpress/element';
 import { ErrorBoundary } from 'react-error-boundary';
 import { __ } from '@wordpress/i18n';
-import { TabPanel } from '@wordpress/components';
+import { TabPanel, Notice } from '@wordpress/components';
 import Header from './settings/header';
 import General, { GeneralSettingsProps } from './settings/general';
 import Checkout, { CheckoutSettingsProps } from './settings/checkout';
 import Access from './settings/access';
 import License from './settings/license';
 import Footer from './settings/footer';
-import Error from './error';
+import Error from './components/error';
 import { get } from 'lodash';
 
 import './settings.scss';
@@ -21,7 +21,14 @@ interface AppProps {
 	};
 }
 
+export interface NoticeProps {
+	type?: 'error' | 'info' | 'success';
+	message: string;
+}
+
 const App = ({ initialSettings }: AppProps) => {
+	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
+
 	return (
 		<>
 			<Header />
@@ -41,7 +48,16 @@ const App = ({ initialSettings }: AppProps) => {
 							console.log('reset');
 						}}
 					>
-						<Component title={title} initialSettings={get(initialSettings, name)} />
+						{notice && (
+							<Notice status={notice.type} onRemove={() => setNotice(null)}>
+								{notice.message}
+							</Notice>
+						)}
+						<Component
+							title={title}
+							initialSettings={get(initialSettings, name)}
+							setNotice={setNotice}
+						/>
 					</ErrorBoundary>
 				)}
 			</TabPanel>

@@ -1,19 +1,7 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import {
-	BaseControl,
-	Button,
-	ExternalLink,
-	Modal,
-	PanelBody,
-	PanelRow,
-	Placeholder,
-	Spinner,
-	ToggleControl,
-} from '@wordpress/components';
-import { ErrorBoundary } from 'react-error-boundary';
-import Error from '../error';
+import { PanelRow, ToggleControl } from '@wordpress/components';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -41,7 +29,7 @@ const Checkout = ({ initialSettings }: CheckoutProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
 
 	return (
-		<ErrorBoundary FallbackComponent={Error}>
+		<>
 			<PanelRow>
 				<ToggleControl
 					label="Automatically print receipt after checkout"
@@ -54,7 +42,7 @@ const Checkout = ({ initialSettings }: CheckoutProps) => {
 					}}
 				/>
 			</PanelRow>
-		</ErrorBoundary>
+		</>
 	);
 };
 

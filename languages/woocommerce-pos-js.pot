@@ -3,14 +3,6 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "X-Generator: babel-plugin-makepot\n"
 
-#: src/settings.tsx:57
-msgid "General"
-msgstr ""
-
-#: src/settings.tsx:73
-msgid "Checkout"
-msgstr ""
-
 #: src/settings/footer.tsx:13
 msgid "F.A.Q."
 msgstr ""
@@ -23,14 +15,14 @@ msgstr ""
 msgid "Docs"
 msgstr ""
 
-#: src/settings/general.tsx:155
+#: src/settings/general.tsx:159
 msgid "Add"
 msgstr ""
 
-#: src/settings/general.tsx:162
+#: src/settings/general.tsx:166
 msgid "Cancel"
 msgstr ""
 
-#: src/settings/header.tsx:10
+#: src/settings/header.tsx:9
 msgid "Settings"
 msgstr ""
