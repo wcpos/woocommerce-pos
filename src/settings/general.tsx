@@ -7,9 +7,11 @@ import {
 	CheckboxControl,
 	TextControl,
 	Button,
+	// @ts-ignore
+	ComboboxControl,
 } from '@wordpress/components';
+import { get } from 'lodash';
 import UserSelect from '../components/user-select';
-import BarcodeFieldSelect from '../components/barcode-field-select';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -25,6 +27,7 @@ interface GeneralProps {
 	title: string;
 	initialSettings: GeneralSettingsProps;
 	setNotice: (args: import('../settings').NoticeProps) => void;
+	hydrate: import('../settings').HydrateProps;
 }
 
 // @ts-ignore
@@ -41,7 +44,7 @@ function reducer(state, action) {
 	}
 }
 
-const General = ({ initialSettings, setNotice }: GeneralProps) => {
+const General = ({ initialSettings, setNotice, hydrate }: GeneralProps) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
 	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
 	const [showNewBarcodeField, setShowNewBarcodeField] = React.useState<boolean>(false);
@@ -67,6 +70,14 @@ const General = ({ initialSettings, setNotice }: GeneralProps) => {
 			updateSettings();
 		}
 	}, [settings, dispatch, setNotice]);
+
+	const barcodeFields = React.useMemo(() => {
+		const fields = Object.values(get(hydrate, 'barcode_fields'));
+		if (!fields.includes(settings.barcode_field)) {
+			fields.push(settings.barcode_field);
+		}
+		return fields;
+	}, [hydrate, settings]);
 
 	return (
 		<>
@@ -139,7 +150,21 @@ const General = ({ initialSettings, setNotice }: GeneralProps) => {
 				/>
 			</PanelRow>
 			<PanelRow>
-				<BarcodeFieldSelect selectedBarcodeField={settings.barcode_field} dispatch={dispatch} />
+				<ComboboxControl
+					label="Barcode Field"
+					help="Select a meta field to use as the product barcode"
+					value={settings.barcode_field}
+					onChange={(value: string) => {
+						if (value) {
+							dispatch({
+								type: 'update',
+								payload: { barcode_field: value },
+							});
+						}
+					}}
+					options={barcodeFields.map((field: string) => ({ label: field, value: field }))}
+					allowReset={true}
+				/>
 				{showNewBarcodeField ? (
 					<>
 						<TextControl

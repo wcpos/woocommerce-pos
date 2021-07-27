@@ -3,6 +3,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WC_Payment_Gateways;
 use WP_Error;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -82,13 +83,24 @@ class Settings extends Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/barcode-fields',
+			'/' . $this->rest_base . '/checkout',
 			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_barcode_fields' ),
-				'permission_callback' => '__return_true',
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => array( $this, 'update_checkout_settings' ),
+				'permission_callback' => array( $this, 'update_permission_check' ),
+				'args'                => $this->get_checkout_endpoint_args(),
 			)
 		);
+
+		//      register_rest_route(
+		//          $this->namespace,
+		//          '/' . $this->rest_base . '/barcode-fields',
+		//          array(
+		//              'methods'             => WP_REST_Server::READABLE,
+		//              'callback'            => array( $this, 'get_barcode_fields' ),
+		//              'permission_callback' => '__return_true',
+		//          )
+		//      );
 	}
 
 	/**
@@ -107,17 +119,26 @@ class Settings extends Controller {
 	 */
 	public function get_all_settings() {
 		$data = array(
-			'general' => $this->get_general_settings(),
+			'general'  => $this->get_settings( 'general' ),
+			'checkout' => $this->get_settings( 'checkout' ),
 		);
 
 		return $data;
 	}
 
 	/**
+	 * @param string $group
+	 *
 	 * @return array
 	 */
-	public function get_general_settings() {
-		$settings = woocommerce_pos_get_settings( 'general' );
+	public function get_settings( $group ) {
+		$settings = wp_parse_args(
+			array_intersect_key(
+				woocommerce_pos_get_settings( $group, null, array() ),
+				$this->default_settings[ $group ]
+			),
+			$this->default_settings[ $group ]
+		);
 
 		return $settings;
 	}
@@ -139,9 +160,26 @@ class Settings extends Controller {
 
 		woocommerce_pos_update_settings( 'general', null, $value );
 
-		return rest_ensure_response( $this->get_general_settings() );
+		return rest_ensure_response( $this->get_settings( 'general' ) );
 
-//		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+		//      return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+	}
+
+	/**
+	 *
+	 */
+	public function update_checkout_settings( WP_REST_Request $request ) {
+		$value = wp_parse_args(
+			array_intersect_key(
+				$request->get_params(),
+				$this->default_settings['checkout']
+			),
+			$this->default_settings['checkout']
+		);
+
+		woocommerce_pos_update_settings( 'checkout', null, $value );
+
+		return rest_ensure_response( $this->get_settings( 'checkout' ) );
 	}
 
 	/**
@@ -199,25 +237,85 @@ class Settings extends Controller {
 	/**
 	 *
 	 */
-	public function get_barcode_fields( $request ) {
+	public function get_checkout_endpoint_args() {
+		$args = array(
+			'order_status'       => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+			'admin_emails'       => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'customer_emails'    => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'auto_print_receipt' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'default_gateway'    => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+//			'enabled'           => array(
+//				'validate_callback' => function ( $param, $request, $key ) {
+//					return is_string( $param );
+//				},
+//			),
+		);
+
+		return $args;
+	}
+
+	/**
+	 * @return array
+	 */
+	public function get_barcode_fields() {
 		global $wpdb;
 
 		$result = $wpdb->get_col(
-			$wpdb->prepare(
-				"
-				SELECT DISTINCT(pm.meta_key)
-				FROM $wpdb->postmeta AS pm
-				JOIN $wpdb->posts AS p
-				ON p.ID = pm.post_id
-				WHERE p.post_type IN ('product', 'product_variation')
-				ORDER BY pm.meta_key
-				"
-			)
+			"
+			SELECT DISTINCT(pm.meta_key)
+			FROM $wpdb->postmeta AS pm
+			JOIN $wpdb->posts AS p
+			ON p.ID = pm.post_id
+			WHERE p.post_type IN ('product', 'product_variation')
+			ORDER BY pm.meta_key
+			"
 		);
 
-		// add custom barcode field
-		sort( array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) ) );
+		// maybe add custom barcode field
+		array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) );
+		sort( $result );
 
-		return rest_ensure_response( array_unique( $result ) );
+		return array_unique( $result );
+	}
+
+	/**
+	 *
+	 */
+	public function get_gateways() {
+		$ordered_gateways = array();
+		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
+
+		foreach ( $gateways as $gateway ) {
+			array_push(
+				$ordered_gateways,
+				array(
+					'id'          => $gateway->id,
+					'title'       => $gateway->title,
+					'description' => $gateway->description,
+				)
+			);
+		}
+
+		return $ordered_gateways;
 	}
 }

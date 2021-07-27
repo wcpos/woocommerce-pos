@@ -78,7 +78,6 @@ class Settings {
 		);
 		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->stringify_settings(), 'before' );
 
-
 		if ( $development ) {
 			wp_enqueue_script(
 				'webpack-live-reload',
@@ -96,7 +95,13 @@ class Settings {
 	 */
 	public function stringify_settings() {
 		$settings = new \WCPOS\WooCommercePOS\API\Settings();
+		$payload  = array(
+			'settings'       => $settings->get_all_settings(),
+			'barcode_fields' => $settings->get_barcode_fields(),
+			'order_statuses' => wc_get_order_statuses(),
+			'gateways'       => $settings->get_gateways(),
+		);
 
-		return "var wcpos = " . wp_json_encode( array( 'settings' => $settings->get_all_settings() ) ) . ";";
+		return 'var wcpos = ' . wp_json_encode( $payload ) . ';';
 	}
 }

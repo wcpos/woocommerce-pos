@@ -14,11 +14,13 @@ import { get } from 'lodash';
 
 import './settings.scss';
 
-interface AppProps {
-	initialSettings: {
+export interface HydrateProps {
+	settings: {
 		general: GeneralSettingsProps;
 		checkout: CheckoutSettingsProps;
 	};
+	barcode_fields: string[];
+	order_statuses: Record<string, string>;
 }
 
 export interface NoticeProps {
@@ -26,7 +28,11 @@ export interface NoticeProps {
 	message: string;
 }
 
-const App = ({ initialSettings }: AppProps) => {
+interface AppProps {
+	hydrate: HydrateProps;
+}
+
+const App = ({ hydrate }: AppProps) => {
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
 
 	return (
@@ -40,6 +46,7 @@ const App = ({ initialSettings }: AppProps) => {
 					{ name: 'access', title: 'POS Access', Component: Access },
 					{ name: 'license', title: 'Pro License', Component: License },
 				]}
+				initialTabName="checkout"
 			>
 				{({ Component, title, name }) => (
 					<ErrorBoundary
@@ -55,8 +62,9 @@ const App = ({ initialSettings }: AppProps) => {
 						)}
 						<Component
 							title={title}
-							initialSettings={get(initialSettings, name)}
+							initialSettings={get(hydrate, ['settings', name])}
 							setNotice={setNotice}
+							hydrate={hydrate}
 						/>
 					</ErrorBoundary>
 				)}
@@ -66,7 +74,4 @@ const App = ({ initialSettings }: AppProps) => {
 	);
 };
 
-render(
-	<App initialSettings={get(window, 'wcpos.settings')} />,
-	document.getElementById('woocommerce-pos-settings')
-);
+render(<App hydrate={get(window, 'wcpos')} />, document.getElementById('woocommerce-pos-settings'));

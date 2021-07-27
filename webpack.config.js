@@ -10,7 +10,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 module.exports = function (_env, argv) {
     return {
         mode: NODE_ENV,
-        devtool: 'inline-source-map',
+        // devtool: 'inline-source-map',
         entry: {
             settings: "./src/settings.tsx",
         },
@@ -90,7 +90,7 @@ module.exports = function (_env, argv) {
             minimizer: [new TerserPlugin()],
             splitChunks: {
                 name: false,
-            },
+            }
         },
     };
 };

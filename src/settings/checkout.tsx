@@ -1,14 +1,22 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
-import { PanelRow, ToggleControl } from '@wordpress/components';
+import { PanelRow, ToggleControl, SelectControl } from '@wordpress/components';
+import { get, map } from 'lodash';
+import Gateways from '../components/gateways';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
+	order_status: string;
+	admin_emails: boolean;
+	customer_emails: boolean;
+	default_gateway: string;
+	enabled: string[];
 }
 
 interface CheckoutProps {
-	initialSettings: CheckoutSettingsProps;
+	setNotice: (args: import('../settings').NoticeProps) => void;
+	hydrate: import('../settings').HydrateProps;
 }
 
 // @ts-ignore
@@ -25,22 +33,89 @@ function reducer(state, action) {
 	}
 }
 
-const Checkout = ({ initialSettings }: CheckoutProps) => {
-	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
+const Checkout = ({ hydrate, setNotice }: CheckoutProps) => {
+	const [settings, dispatch] = React.useReducer(reducer, get(hydrate, ['settings', 'checkout']));
+	const silent = React.useRef(true);
+
+	React.useEffect(() => {
+		async function updateSettings() {
+			const data = await apiFetch({
+				path: 'wcpos/v1/settings/checkout?wcpos=1',
+				method: 'POST',
+				data: settings,
+			}).catch((err) => setNotice({ type: 'error', message: err.message }));
+
+			if (data) {
+				silent.current = true;
+				dispatch({ type: 'update', payload: data });
+			}
+		}
+
+		if (silent.current) {
+			silent.current = false;
+		} else {
+			updateSettings();
+		}
+	}, [settings, dispatch, setNotice]);
+
+	const orderStatusOptions = React.useMemo(() => {
+		const statuses = get(hydrate, 'order_statuses', []);
+		return map(statuses, (label, value) => ({ label, value }));
+	}, [hydrate]) as { label: string; value: string }[];
 
 	return (
 		<>
 			<PanelRow>
-				<ToggleControl
-					label="Automatically print receipt after checkout"
-					checked={settings.auto_print_receipt}
-					onChange={() => {
+				<SelectControl
+					label="Completed order status"
+					value={settings.order_status}
+					options={orderStatusOptions}
+					onChange={(order_status: string) => {
 						dispatch({
 							type: 'update',
-							payload: { auto_print_receipt: !settings.auto_print_receipt },
+							payload: { order_status },
 						});
 					}}
 				/>
+			</PanelRow>
+			<PanelRow>
+				<ToggleControl
+					label="Send admin emails"
+					checked={settings.admin_emails}
+					onChange={(admin_emails: boolean) => {
+						dispatch({
+							type: 'update',
+							payload: { admin_emails },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<ToggleControl
+					label="Send customer emails"
+					checked={settings.customer_emails}
+					onChange={(customer_emails: boolean) => {
+						dispatch({
+							type: 'update',
+							payload: { customer_emails },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<ToggleControl
+					label="Automatically print receipt after checkout"
+					checked={settings.auto_print_receipt}
+					onChange={(auto_print_receipt: boolean) => {
+						dispatch({
+							type: 'update',
+							payload: { auto_print_receipt },
+						});
+					}}
+				/>
+			</PanelRow>
+			<PanelRow>
+				<Gateways gateways={get(hydrate, 'gateways')} />
 			</PanelRow>
 		</>
 	);
