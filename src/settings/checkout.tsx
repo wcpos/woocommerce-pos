@@ -2,7 +2,7 @@ import * as React from 'react';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { PanelRow, ToggleControl, SelectControl } from '@wordpress/components';
-import { get, map } from 'lodash';
+import { get, map, find, set } from 'lodash';
 import Gateways from '../components/gateways';
 
 export interface CheckoutSettingsProps {
@@ -27,6 +27,12 @@ function reducer(state, action) {
 		case 'update':
 			// @ts-ignore
 			return { ...state, ...payload };
+		case 'update-gateway':
+			if (payload.id) {
+				const gateway = find(state.gateways, { id: payload.id });
+				Object.assign(gateway, payload);
+			}
+			return { ...state };
 		default:
 			// @ts-ignore
 			throw new Error('no action');
@@ -114,8 +120,18 @@ const Checkout = ({ hydrate, setNotice }: CheckoutProps) => {
 					}}
 				/>
 			</PanelRow>
-			<PanelRow>
-				<Gateways gateways={get(hydrate, 'gateways')} />
+			<PanelRow className="flexColumn">
+				<h2>Gateways</h2>
+				<p>
+					Installed gateways are listed below. Drag and drop gateways to control their display order
+					at the Point of Sale. Payment Gateways enabled here will be available at the Point of
+					Sale.
+				</p>
+				<Gateways
+					gateways={settings.gateways}
+					defaultGateway={settings.default_gateway}
+					dispatch={dispatch}
+				/>
 			</PanelRow>
 		</>
 	);

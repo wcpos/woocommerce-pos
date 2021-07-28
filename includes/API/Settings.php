@@ -43,9 +43,7 @@ class Settings extends Controller {
 			'customer_emails'    => true,
 			'auto_print_receipt' => false,
 			'default_gateway'    => 'pos_cash',
-			'enabled'            => array(
-				'pos_cash',
-			),
+			'gateways'           => array(),
 		),
 	);
 
@@ -139,6 +137,10 @@ class Settings extends Controller {
 			),
 			$this->default_settings[ $group ]
 		);
+
+		if ( 'checkout' == $group ) {
+			$settings['gateways'] = $this->get_gateways();
+		}
 
 		return $settings;
 	}
@@ -264,11 +266,11 @@ class Settings extends Controller {
 					return is_string( $param );
 				},
 			),
-//			'enabled'           => array(
-//				'validate_callback' => function ( $param, $request, $key ) {
-//					return is_string( $param );
-//				},
-//			),
+			'gateways'           => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_array( $param );
+				},
+			),
 		);
 
 		return $args;
@@ -312,6 +314,8 @@ class Settings extends Controller {
 					'id'          => $gateway->id,
 					'title'       => $gateway->title,
 					'description' => $gateway->description,
+					'enabled'     => false,
+
 				)
 			);
 		}

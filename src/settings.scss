@@ -26,12 +26,41 @@
 .woocommerce-pos-settings-main {
 	background: #fff;
 
+	.flexColumn {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
 	> .components-tab-panel__tabs {
 		justify-content: center;
 	}
 
 	> .components-tab-panel__tab-content {
 		padding: 20px;
+	}
+
+	// tables
+	.woocommerce-pos-table {
+		width: 100%;
+		border: 1px solid rgba($color: #000000, $alpha: 0.1);
+
+		.woocommerce-pos-table-header {
+			font-weight: bold;
+			border-bottom: 1px solid rgba($color: #000000, $alpha: 0.1);
+		}
+
+		.woocommerce-pos-table-row,
+		.woocommerce-pos-table-header {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			user-select: none;
+
+			.woocommerce-pos-table-cell {
+				flex: 1 1 20%;
+				padding: 10px;
+			}
+		}
 	}
 }
 
@@ -43,5 +72,14 @@
 
 	#discord-badge {
 		vertical-align: middle;
+	}
+}
+
+// modals
+.woocommerce-pos-settings-modal {
+	.components-modal__content {
+		.components-notice {
+			margin: 0 0 20px 0 !important;
+		}
 	}
 }

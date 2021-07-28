@@ -99,7 +99,6 @@ class Settings {
 			'settings'       => $settings->get_all_settings(),
 			'barcode_fields' => $settings->get_barcode_fields(),
 			'order_statuses' => wc_get_order_statuses(),
-			'gateways'       => $settings->get_gateways(),
 		);
 
 		return 'var wcpos = ' . wp_json_encode( $payload ) . ';';
