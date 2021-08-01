@@ -66,8 +66,8 @@ const Checkout = ({ hydrate, setNotice }: CheckoutProps) => {
 
 	const orderStatusOptions = React.useMemo(() => {
 		const statuses = get(hydrate, 'order_statuses', []);
-		return map(statuses, (label, value) => ({ label, value }));
-	}, [hydrate]) as { label: string; value: string }[];
+		return map(statuses, (label: string, value: string) => ({ label, value }));
+	}, [hydrate]);
 
 	return (
 		<>
@@ -75,6 +75,7 @@ const Checkout = ({ hydrate, setNotice }: CheckoutProps) => {
 				<SelectControl
 					label="Completed order status"
 					value={settings.order_status}
+					// @ts-ignore
 					options={orderStatusOptions}
 					onChange={(order_status: string) => {
 						dispatch({

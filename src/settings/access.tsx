@@ -4,7 +4,7 @@ import { TabPanel } from '@wordpress/components';
 const Access = () => {
 	return (
 		<TabPanel
-			className="my-tab-panel"
+			className="woocommerce-pos-settings-access-tabs"
 			activeClass="active-tab"
 			orientation="vertical"
 			tabs={[

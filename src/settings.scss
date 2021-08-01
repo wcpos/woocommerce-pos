@@ -5,77 +5,113 @@
 	.text-separator {
 		padding: 0 10px;
 	}
-}
 
-#woocommerce-pos-settings-header {
-	background: #fff;
-	text-align: center;
-	padding: 10px;
+	#woocommerce-pos-settings-header {
+		background: #fff;
+		text-align: center;
+		padding: 10px;
 
-	svg {
-		width: 60px;
-		vertical-align: middle;
-	}
-
-	h1 {
-		display: inline;
-		margin-left: 10px;
-	}
-}
-
-.woocommerce-pos-settings-main {
-	background: #fff;
-
-	.flexColumn {
-		flex-direction: column;
-		align-items: flex-start;
-	}
-
-	> .components-tab-panel__tabs {
-		justify-content: center;
-	}
-
-	> .components-tab-panel__tab-content {
-		padding: 20px;
-	}
-
-	// tables
-	.woocommerce-pos-table {
-		width: 100%;
-		border: 1px solid rgba($color: #000000, $alpha: 0.1);
-
-		.woocommerce-pos-table-header {
-			font-weight: bold;
-			border-bottom: 1px solid rgba($color: #000000, $alpha: 0.1);
+		svg {
+			width: 60px;
+			vertical-align: middle;
 		}
 
-		.woocommerce-pos-table-row,
-		.woocommerce-pos-table-header {
-			display: flex;
-			flex-direction: row;
-			align-items: center;
-			user-select: none;
+		h1 {
+			display: inline;
+			margin-left: 10px;
+		}
+	}
 
-			.woocommerce-pos-table-cell {
+	.woocommerce-pos-settings-main {
+		background: #fff;
+
+		.flexColumn {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+
+		> .components-tab-panel__tabs {
+			justify-content: center;
+		}
+
+		> .components-tab-panel__tab-content {
+			padding: 20px;
+		}
+
+		// tables
+		.woocommerce-pos-table {
+			width: 100%;
+			border: 1px solid rgba($color: #000000, $alpha: 0.1);
+
+			&-header {
+				font-weight: bold;
+				border-bottom: 1px solid rgba($color: #000000, $alpha: 0.1);
+			}
+
+			&-row,
+			&-header {
+				display: flex;
+				flex-direction: row;
+				align-items: center;
+				user-select: none;
+			}
+
+			&-cell {
 				flex: 1 1 20%;
 				padding: 10px;
 			}
 		}
+
+		// access settings
+		.woocommerce-pos-settings-access {
+			&-tabs {
+				display: flex;
+
+				.components-tab-panel {
+					&__tabs {
+						&-item {
+							&.active-tab {
+								background-color: #e2e4e7;
+								color: #000;
+							}
+						}
+					}
+
+					&__tab {
+						&-content {
+							flex: 1 1 auto;
+							padding: 0 50px;
+						}
+					}
+				}
+
+				.components-tab-panel {
+					&__tabs {
+						&-item {
+							&.active-tab {
+								background-color: #e2e4e7;
+								color: #000;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	#woocommerce-pos-settings-footer {
+		background: #fff;
+		padding: 10px;
+		text-align: center;
+		margin: 20px 0;
+
+		#discord-badge {
+			vertical-align: middle;
+		}
 	}
 }
 
-#woocommerce-pos-settings-footer {
-	background: #fff;
-	padding: 10px;
-	text-align: center;
-	margin: 20px 0;
-
-	#discord-badge {
-		vertical-align: middle;
-	}
-}
-
-// modals
+// modals (outside #woocommerce-pos-settings)
 .woocommerce-pos-settings-modal {
 	.components-modal__content {
 		.components-notice {
