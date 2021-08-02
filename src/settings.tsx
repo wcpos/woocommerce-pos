@@ -6,7 +6,7 @@ import { TabPanel, Notice } from '@wordpress/components';
 import Header from './settings/header';
 import General, { GeneralSettingsProps } from './settings/general';
 import Checkout, { CheckoutSettingsProps } from './settings/checkout';
-import Access from './settings/access';
+import Access, { AccessSettingsProps } from './settings/access';
 import License from './settings/license';
 import Footer from './settings/footer';
 import Error from './components/error';
@@ -18,6 +18,7 @@ export interface HydrateProps {
 	settings: {
 		general: GeneralSettingsProps;
 		checkout: CheckoutSettingsProps;
+		access: AccessSettingsProps;
 	};
 	barcode_fields: string[];
 	order_statuses: Record<string, string>;
