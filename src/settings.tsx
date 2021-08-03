@@ -47,7 +47,7 @@ const App = ({ hydrate }: AppProps) => {
 					{ name: 'access', title: 'POS Access', Component: Access },
 					{ name: 'license', title: 'Pro License', Component: License },
 				]}
-				initialTabName="access"
+				initialTabName="license"
 			>
 				{({ Component, title, name }) => (
 					<ErrorBoundary

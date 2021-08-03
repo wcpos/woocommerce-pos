@@ -125,7 +125,7 @@ class Settings extends Controller {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_access_settings' ),
 				'permission_callback' => array( $this, 'update_permission_check' ),
-//				'args'                => $this->get_access_endpoint_args(),
+				//              'args'                => $this->get_access_endpoint_args(),
 			)
 		);
 
@@ -184,25 +184,27 @@ class Settings extends Controller {
 		$role_caps = array();
 
 		$roles = $wp_roles->roles;
-		if ( $roles ): foreach ( $roles as $slug => $role ):
-			$role_caps[ $slug ] = array(
-				'name'         => $role['name'],
-				'capabilities' => array(
-					'wcpos' => array_intersect_key(
-						array_merge( array_fill_keys( $this->caps['wcpos'], false ), $role['capabilities'] ),
-						array_flip( $this->caps['wcpos'] )
+		if ( $roles ) :
+			foreach ( $roles as $slug => $role ) :
+				$role_caps[ $slug ] = array(
+					'name'         => $role['name'],
+					'capabilities' => array(
+						'wcpos' => array_intersect_key(
+							array_merge( array_fill_keys( $this->caps['wcpos'], false ), $role['capabilities'] ),
+							array_flip( $this->caps['wcpos'] )
+						),
+						'wc'    => array_intersect_key(
+							array_merge( array_fill_keys( $this->caps['wc'], false ), $role['capabilities'] ),
+							array_flip( $this->caps['wc'] )
+						),
+						'wp'    => array_intersect_key(
+							array_merge( array_fill_keys( $this->caps['wp'], false ), $role['capabilities'] ),
+							array_flip( $this->caps['wp'] )
+						),
 					),
-					'wc'    => array_intersect_key(
-						array_merge( array_fill_keys( $this->caps['wc'], false ), $role['capabilities'] ),
-						array_flip( $this->caps['wc'] )
-					),
-					'wp'    => array_intersect_key(
-						array_merge( array_fill_keys( $this->caps['wp'], false ), $role['capabilities'] ),
-						array_flip( $this->caps['wp'] )
-					),
-				),
-			);
-		endforeach; endif;
+				);
+			endforeach;
+		endif;
 
 		return $role_caps;
 	}
@@ -253,17 +255,25 @@ class Settings extends Controller {
 		global $wp_roles;
 		$roles = array_intersect_key( $request->get_params(), $wp_roles->roles );
 
-		foreach ( $roles as $slug => $array ):
+		foreach ( $roles as $slug => $array ) :
 
 			$role = get_role( $slug );
 
-			if ( $array['capabilities'] ) : foreach ( $array['capabilities'] as $key => $caps ):
-				if ( $caps ): foreach ( $caps as $cap => $grant ):
-					if ( in_array( $cap, $this->caps[ $key ] ) ) {
-						$grant ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
-					}
-				endforeach; endif;
-			endforeach; endif;
+			if ( $array['capabilities'] ) :
+				foreach ( $array['capabilities'] as $key => $caps ) :
+					if ( $caps ) :
+						foreach ( $caps as $cap => $grant ) :
+							// special case: administrator must have read capability
+							if ( 'administrator' == $slug && 'read' == $cap ) {
+								continue;
+							}
+							if ( in_array( $cap, $this->caps[ $key ] ) ) {
+								$grant ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
+							}
+						endforeach;
+					endif;
+				endforeach;
+			endif;
 
 		endforeach;
 

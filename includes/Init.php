@@ -3,14 +3,19 @@
 /**
  * Load required classes
  *
- * @package   WCPOS\WooCommercePOS\Run
+ * @package   WCPOS\WooCommercePOS\Init
  * @author    Paul Kilmurray <paul@kilbot.com>
  * @link      http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
 
-class Run {
+use WP_HTTP_Response;
+use WP_REST_Request;
+use WP_REST_Server;
+use const DOING_AJAX;
+
+class Init {
 
 	/**
 	 * Constructor
@@ -41,11 +46,11 @@ class Run {
 		new Orders();
 
 		// AJAX only
-		if ( is_admin() && ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+		if ( is_admin() && ( defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
 			// new AJAX();
 		}
 
-		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && \DOING_AJAX ) ) {
+		if ( is_admin() && ! ( defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
 			// admin only
 			new Admin();
 		} else {
@@ -57,17 +62,6 @@ class Run {
 		$this->integrations();
 	}
 
-
-	/**
-	 * Loads the POS API and duck punches the WC REST API
-	 */
-	public function rest_api_init() {
-		if ( woocommerce_pos_request() ) {
-			new API();
-		}
-	}
-
-
 	/**
 	 * Loads POS integrations with third party plugins
 	 */
@@ -78,13 +72,21 @@ class Run {
 		//      }
 	}
 
+	/**
+	 * Loads the POS API and duck punches the WC REST API
+	 */
+	public function rest_api_init() {
+		if ( woocommerce_pos_request() ) {
+			new API();
+		}
+	}
 
 	/**
 	 * Add Access Control Allow Headers for POS app
 	 *
-	 * @param \WP_HTTP_Response $result Result to send to the client. Usually a WP_REST_Response.
-	 * @param \WP_REST_Server $server Server instance.
-	 * @param \WP_REST_Request $request Request used to generate the response.
+	 * @param WP_HTTP_Response $result Result to send to the client. Usually a WP_REST_Response.
+	 * @param WP_REST_Server $server Server instance.
+	 * @param WP_REST_Request $request Request used to generate the response.
 	 *
 	 * @return mixed $result
 	 */

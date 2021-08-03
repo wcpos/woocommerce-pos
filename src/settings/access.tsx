@@ -24,7 +24,8 @@ function reducer(state, action) {
 		case 'update':
 			const { role, group, cap, value } = payload;
 			return set({ ...state }, [role, 'capabilities', group, cap], value);
-		// return state;
+		case 'sync':
+			return payload;
 		default:
 			// @ts-ignore
 			throw new Error('no action');
@@ -45,7 +46,7 @@ const Access = ({ hydrate, setNotice }: AccessProps) => {
 
 			if (data) {
 				silent.current = true;
-				dispatch({ type: 'update', payload: data });
+				dispatch({ type: 'sync', payload: data });
 			}
 		}
 
@@ -58,10 +59,11 @@ const Access = ({ hydrate, setNotice }: AccessProps) => {
 
 	return (
 		<>
-			<Notice status="warning">
-				By default, access to the POS is limited to Administrator and Shop Manager roles. It is
-				recommended that you do not change the default settings unless you are fully aware of the
-				consequences. For more information please visit http://woopos.com.au/docs/pos-access
+			<Notice status="warning" isDismissible={false}>
+				By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
+				It is recommended that you <strong>do not change</strong> the default settings unless you
+				are fully aware of the consequences. For more information please visit
+				http://woopos.com.au/docs/pos-access
 			</Notice>
 			<TabPanel
 				className="woocommerce-pos-settings-access-tabs"
@@ -78,7 +80,15 @@ const Access = ({ hydrate, setNotice }: AccessProps) => {
 						{map(tab.capabilities, (caps, group) => {
 							return (
 								<div key={group}>
-									<h3>{group}</h3>
+									<h3>
+										{
+											{
+												wcpos: 'WooCommerce POS',
+												wc: 'WooCommerce',
+												wp: 'WordPress',
+											}[group]
+										}
+									</h3>
 									<div className="capabilities">
 										{map(caps, (checked, label) => (
 											<CheckboxControl

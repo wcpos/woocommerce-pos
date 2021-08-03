@@ -69,6 +69,8 @@
 
 				.components-tab-panel {
 					&__tabs {
+						width: 400px;
+
 						&-item {
 							&.active-tab {
 								background-color: #e2e4e7;
@@ -81,17 +83,6 @@
 						&-content {
 							flex: 1 1 auto;
 							padding: 0 50px;
-						}
-					}
-				}
-
-				.components-tab-panel {
-					&__tabs {
-						&-item {
-							&.active-tab {
-								background-color: #e2e4e7;
-								color: #000;
-							}
 						}
 					}
 				}

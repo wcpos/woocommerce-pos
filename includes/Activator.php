@@ -10,6 +10,8 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use const DOING_AJAX;
+
 class Activator {
 
 	// minimum requirements
@@ -34,18 +36,94 @@ class Activator {
 		if ( $this->php_check() && $this->woocommerce_check() ) {
 
 			// check permalinks
-			if ( is_admin() && ( ! defined( '\DOING_AJAX' ) || ! \DOING_AJAX ) ) {
+			if ( is_admin() && ( ! defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
 				$this->permalink_check();
 			}
 
-			// Run update script if required
+			// Init update script if required
 			$this->version_check();
 
 			// resolve plugin plugins
 			$this->plugin_check();
 
-			new Run();
+			new Init();
 		}
+	}
+
+	/**
+	 * Check min version of PHP
+	 */
+	private function php_check() {
+		$php_version = phpversion();
+		if ( version_compare( $php_version, self::PHP_MIN_VERSION, '>' ) ) {
+			return true;
+		}
+
+		$message = sprintf(
+            __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
+            self::PHP_MIN_VERSION,
+            'http://www.wpupdatephp.com/update/'
+        ) . ' &raquo;';
+
+		Admin\Notices::add( $message );
+	}
+
+	/**
+	 * Check min version of WooCommerce installed
+	 */
+	private function woocommerce_check() {
+		if ( class_exists( '\WooCommerce' ) && version_compare( WC()->version, self::WC_MIN_VERSION, '>=' ) ) {
+			return true;
+		}
+
+		$message = sprintf(
+            __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+            'http://wordpress.org/plugins/woocommerce/',
+            self::WC_MIN_VERSION,
+            admin_url( 'plugins.php' )
+        ) . ' &raquo;';
+
+		Admin\Notices::add( $message );
+	}
+
+	/**
+	 * POS Frontend will give 404 if pretty permalinks not active
+	 * - requires autoloader, ie: WCPOS()
+	 */
+	private function permalink_check() {
+		$fail = Status::permalinks_disabled();
+		if ( $fail ) {
+			$message = $fail['message'] . '. ';
+			$message .= sprintf( '<a href="%s">%s</a>', $fail['buttons'][0]['href'], $fail['buttons'][0]['prompt'] ) . ' &raquo;';
+
+			Admin\Notices::add( $message );
+		}
+	}
+
+	/**
+	 * Check version number, runs every admin page load
+	 */
+	private function version_check() {
+		//      $old = Admin\Settings::get_db_version();
+		//      if ( version_compare( $old, VERSION, '<' ) ) {
+		//          Admin\Settings::bump_versions();
+		//          $this->db_upgrade( $old, VERSION );
+		//      }
+	}
+
+	/**
+	 * Plugin conflicts
+	 *
+	 * - NextGEN Gallery is a terrible plugin. It buffers all content on 'init' action, priority -1 and inserts junk code.
+	 *
+	 */
+	private function plugin_check() {
+
+		// disable NextGEN Gallery resource manager
+		if ( ! defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
+			define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
+		}
+
 	}
 
 	/**
@@ -74,23 +152,6 @@ class Activator {
 		} else {
 			self::single_activate();
 		}
-	}
-
-	/**
-	 * Fired when a new site is activated with a WPMU environment.
-	 *
-	 * @param $blog_id
-	 */
-	public function activate_new_site( $blog_id ) {
-
-		if ( 1 !== did_action( 'wpmu_new_blog' ) ) {
-			return;
-		}
-
-		switch_to_blog( $blog_id );
-		$this->single_activate();
-		restore_current_blog();
-
 	}
 
 	/**
@@ -177,14 +238,20 @@ class Activator {
 	}
 
 	/**
-	 * Check version number, runs every admin page load
+	 * Fired when a new site is activated with a WPMU environment.
+	 *
+	 * @param $blog_id
 	 */
-	private function version_check() {
-		//      $old = Admin\Settings::get_db_version();
-		//      if ( version_compare( $old, VERSION, '<' ) ) {
-		//          Admin\Settings::bump_versions();
-		//          $this->db_upgrade( $old, VERSION );
-		//      }
+	public function activate_new_site( $blog_id ) {
+
+		if ( 1 !== did_action( 'wpmu_new_blog' ) ) {
+			return;
+		}
+
+		switch_to_blog( $blog_id );
+		$this->single_activate();
+		restore_current_blog();
+
 	}
 
 	/**
@@ -206,71 +273,6 @@ class Activator {
 				include( $updater );
 			}
 		}
-	}
-
-	/**
-	 * Check min version of WooCommerce installed
-	 */
-	private function woocommerce_check() {
-		if ( class_exists( '\WooCommerce' ) && version_compare( WC()->version, self::WC_MIN_VERSION, '>=' ) ) {
-			return true;
-		}
-
-		$message = sprintf(
-			           __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
-			           'http://wordpress.org/plugins/woocommerce/',
-			           self::WC_MIN_VERSION,
-			           admin_url( 'plugins.php' )
-		           ) . ' &raquo;';
-
-		Admin\Notices::add( $message );
-	}
-
-	/**
-	 * Check min version of PHP
-	 */
-	private function php_check() {
-		$php_version = phpversion();
-		if ( version_compare( $php_version, self::PHP_MIN_VERSION, '>' ) ) {
-			return true;
-		}
-
-		$message = sprintf(
-			           __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
-			           self::PHP_MIN_VERSION,
-			           'http://www.wpupdatephp.com/update/'
-		           ) . ' &raquo;';
-
-		Admin\Notices::add( $message );
-	}
-
-	/**
-	 * POS Frontend will give 404 if pretty permalinks not active
-	 * - requires autoloader, ie: WCPOS()
-	 */
-	private function permalink_check() {
-		$fail = Status::permalinks_disabled();
-		if ( $fail ) {
-			$message = $fail['message'] . '. ';
-			$message .= sprintf( '<a href="%s">%s</a>', $fail['buttons'][0]['href'], $fail['buttons'][0]['prompt'] ) . ' &raquo;';
-
-			Admin\Notices::add( $message );
-		}
-	}
-
-	/**
-	 * Plugin conflicts
-	 *
-	 * - NextGEN Gallery is a terrible plugin. It buffers all content on 'init' action, priority -1 and inserts junk code.
-	 *
-	 */
-	private function plugin_check() {
-
-		// disable NextGEN Gallery resource manager
-		if ( ! defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
-			define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
-		}
-
 	}
 
 }
