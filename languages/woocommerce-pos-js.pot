@@ -16,7 +16,6 @@ msgid "Docs"
 msgstr ""
 
 #: src/settings/general.tsx:184
-#: src/settings/license.tsx:27
 msgid "Add"
 msgstr ""
 

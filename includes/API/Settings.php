@@ -13,17 +13,15 @@ use WP_REST_Server;
 class Settings extends Controller {
 
 	/**
-	 * @var string
-	 */
-	private $db_prefix;
-
-	/**
 	 * Route base.
 	 *
 	 * @var string
 	 */
 	protected $rest_base = 'settings';
-
+	/**
+	 * @var string
+	 */
+	private $db_prefix;
 	/**
 	 *
 	 */
@@ -132,6 +130,91 @@ class Settings extends Controller {
 	}
 
 	/**
+	 *
+	 */
+	public function get_general_endpoint_args() {
+		$args = array(
+			'pos_only_products'           => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'decimal_qty'                 => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'force_ssl'                   => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'default_customer'            => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_integer( $param );
+				},
+			),
+			'default_customer_is_cashier' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'barcode_field'               => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+			'generate_username'           => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+		);
+
+		return $args;
+	}
+
+	/**
+	 *
+	 */
+	public function get_checkout_endpoint_args() {
+		$args = array(
+			'order_status'       => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+			'admin_emails'       => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'customer_emails'    => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'auto_print_receipt' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_bool( $param );
+				},
+			),
+			'default_gateway'    => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_string( $param );
+				},
+			),
+			'gateways'           => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return is_array( $param );
+				},
+			),
+		);
+
+		return $args;
+	}
+
+	/**
 	 * @param WP_REST_Request $request
 	 *
 	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
@@ -152,7 +235,7 @@ class Settings extends Controller {
 			'access'   => $this->get_access_settings(),
 		);
 
-		return $data;
+		return apply_filters( 'woocommerce_pos_settings', $data, $this );
 	}
 
 	/**
@@ -174,6 +257,29 @@ class Settings extends Controller {
 		}
 
 		return $settings;
+	}
+
+	/**
+	 *
+	 */
+	public function get_gateways() {
+		$ordered_gateways = array();
+		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
+
+		foreach ( $gateways as $gateway ) {
+			array_push(
+				$ordered_gateways,
+				array(
+					'id'          => $gateway->id,
+					'title'       => $gateway->title,
+					'description' => $gateway->description,
+					'enabled'     => false,
+
+				)
+			);
+		}
+
+		return $ordered_gateways;
 	}
 
 	/**
@@ -290,91 +396,6 @@ class Settings extends Controller {
 	/**
 	 *
 	 */
-	public function get_general_endpoint_args() {
-		$args = array(
-			'pos_only_products'           => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'decimal_qty'                 => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'force_ssl'                   => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'default_customer'            => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_integer( $param );
-				},
-			),
-			'default_customer_is_cashier' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'barcode_field'               => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_string( $param );
-				},
-			),
-			'generate_username'           => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-		);
-
-		return $args;
-	}
-
-	/**
-	 *
-	 */
-	public function get_checkout_endpoint_args() {
-		$args = array(
-			'order_status'       => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_string( $param );
-				},
-			),
-			'admin_emails'       => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'customer_emails'    => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'auto_print_receipt' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_bool( $param );
-				},
-			),
-			'default_gateway'    => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_string( $param );
-				},
-			),
-			'gateways'           => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return is_array( $param );
-				},
-			),
-		);
-
-		return $args;
-	}
-
-	/**
-	 *
-	 */
 	public function get_access_endpoint_args() {
 		// validate access settings
 	}
@@ -401,28 +422,5 @@ class Settings extends Controller {
 		sort( $result );
 
 		return array_unique( $result );
-	}
-
-	/**
-	 *
-	 */
-	public function get_gateways() {
-		$ordered_gateways = array();
-		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
-
-		foreach ( $gateways as $gateway ) {
-			array_push(
-				$ordered_gateways,
-				array(
-					'id'          => $gateway->id,
-					'title'       => $gateway->title,
-					'description' => $gateway->description,
-					'enabled'     => false,
-
-				)
-			);
-		}
-
-		return $ordered_gateways;
 	}
 }

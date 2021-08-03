@@ -28,7 +28,7 @@ module.exports = function (_env, argv) {
             '@wordpress/components': 'wp.components',
             '@wordpress/i18n': 'wp.i18n',
             '@wordpress/api-fetch': 'wp.apiFetch',
-            '@wordpress/data': 'wp.data'
+            '@wordpress/url': 'wp.url',
         },
         module: {
             rules: [

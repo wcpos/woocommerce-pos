@@ -1932,6 +1932,13 @@
     "@types/wordpress__data" "*"
     "@types/wordpress__rich-text" "*"
 
+"@types/wordpress__url@^2.14.0":
+  version "2.14.0"
+  resolved "https://registry.yarnpkg.com/@types/wordpress__url/-/wordpress__url-2.14.0.tgz#b83ca15c990eaf88d4ba7d6ff7d624b8ee5cf311"
+  integrity sha512-zH0M0rejxnQ8usVPP55IPpcY0+kjEln0jfR/EY0WgKE/g0HSoRALexAxvGxSqWMee5nThJIEGQwHYSJSalDkyA==
+  dependencies:
+    "@wordpress/url" "*"
+
 "@types/yargs-parser@*":
   version "20.2.1"
   resolved "https://registry.yarnpkg.com/@types/yargs-parser/-/yargs-parser-20.2.1.tgz#3b9ce2489919d9e4fea439b76916abc34b2df129"
@@ -2299,7 +2306,7 @@
     sprintf-js "^1.1.1"
     tannin "^1.2.0"
 
-"@wordpress/url@^3.2.1":
+"@wordpress/url@*", "@wordpress/url@^3.2.1":
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/@wordpress/url/-/url-3.2.1.tgz#2b813231c04cbfbaebf3c3beba62cc543231f32a"
   integrity sha512-+AJt74qWz+iXkT05sBUBjx5EF3niFkvr1CqaIbWCew9/j47de6r0AHjaFhaiCCsq5fg1eqRe74sZKHrMmIWKQQ==
