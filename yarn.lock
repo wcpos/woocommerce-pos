@@ -7958,10 +7958,10 @@ webpack-cli@^4.7.2:
     v8-compile-cache "^2.2.0"
     webpack-merge "^5.7.3"
 
-webpack-livereload-plugin@^3.0.1:
-  version "3.0.1"
-  resolved "https://registry.yarnpkg.com/webpack-livereload-plugin/-/webpack-livereload-plugin-3.0.1.tgz#89b9b6978a13735f00f9b6f55661a7aa605d5be0"
-  integrity sha512-HFjUFH9kY8P5l8jYqiKsa9keE/DN1riOWH5l6VV27c9j/5rlqWLK0PPbErgqRyP1FON5GuKOgvOJo+0Ep0mYyQ==
+webpack-livereload-plugin@^3.0.2:
+  version "3.0.2"
+  resolved "https://registry.yarnpkg.com/webpack-livereload-plugin/-/webpack-livereload-plugin-3.0.2.tgz#b12f4ab56c75f03715eb32883bc2f24621f06da1"
+  integrity sha512-5JeZ2dgsvSNG+clrkD/u2sEiPcNk4qwCVZZmW8KpqKcNlkGv7IJjdVrq13+etAmMZYaCF1EGXdHkVFuLgP4zfw==
   dependencies:
     anymatch "^3.1.1"
     portfinder "^1.0.17"
