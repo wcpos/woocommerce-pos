@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { TextControl, Button, PanelRow } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
-import { addQueryArgs } from '@wordpress/url';
+import { addQueryArgs, getAuthority } from '@wordpress/url';
 import { get } from 'lodash';
 
 interface LicenseProps {
@@ -9,10 +9,22 @@ interface LicenseProps {
 	setNotice: (args: import('../settings').NoticeProps) => void;
 }
 
+const truncate = (fullStr: string, strLen = 20, separator = '...') => {
+	if (fullStr.length <= strLen) return fullStr;
+
+	separator = separator || '...';
+
+	const sepLen = separator.length,
+		charsToShow = strLen - sepLen,
+		frontChars = Math.ceil(charsToShow / 2),
+		backChars = Math.floor(charsToShow / 2);
+
+	return fullStr.substr(0, frontChars) + separator + fullStr.substr(fullStr.length - backChars);
+};
+
 const License = ({ hydrate, setNotice }: LicenseProps) => {
 	const [settings, setSettings] = React.useState(get(hydrate, ['settings', 'license']));
-	console.log(settings);
-	const [key, setKey] = React.useState('');
+	const [key, setKey] = React.useState(settings.key);
 	const silent = React.useRef(true);
 
 	const handleActivation = async (deactivate = false) => {
@@ -21,8 +33,9 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 			request: deactivate ? 'deactivation' : 'activation',
 			instance: settings.instance,
 			api_key: key,
-			// email,
 			product_id: settings.product_id,
+			platform: getAuthority(get(hydrate, 'homepage')),
+			version: get(hydrate, 'pro_version'),
 			timestamp: Date.now(),
 		});
 
@@ -38,6 +51,15 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 		if (!data.success) {
 			setNotice({ type: 'error', message: data.error });
 		} else {
+			if (deactivate) {
+				setKey('');
+			} else {
+				const confetti = get(window, 'confetti');
+				if (confetti) {
+					confetti();
+				}
+			}
+
 			setSettings({
 				...settings,
 				key: deactivate ? '' : key,
@@ -56,6 +78,8 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 
 			if (data) {
 				silent.current = true;
+				// @ts-ignore
+				setKey(data.key);
 				setSettings(data);
 			}
 		}
@@ -69,25 +93,24 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 
 	return settings.activated ? (
 		<>
-			<p>Activated!</p>
+			<h3>
+				<span style={{ fontSize: '4em' }}>🎉</span> Thank You!
+			</h3>
+			<p>
+				License <code>{truncate(settings.key)}</code> has been activated.
+			</p>
+			<p>Your support helps fund the ongoing development of WooCommerce POS.</p>
 			<Button disabled={!key} isPrimary onClick={() => handleActivation(true)}>
 				Deactivate
 			</Button>
 		</>
 	) : (
-		<>
-			<PanelRow>
-				<TextControl label="License Key" value={key} onChange={(value) => setKey(value)} />
-			</PanelRow>
-			<PanelRow>
-				<Button disabled={!key} isPrimary onClick={() => handleActivation()}>
-					Activate
-				</Button>
-				<Button disabled={!key} isPrimary onClick={() => handleActivation(true)}>
-					Deactivate
-				</Button>
-			</PanelRow>
-		</>
+		<PanelRow>
+			<TextControl label="License Key" value={key} onChange={(value) => setKey(value)} />
+			<Button disabled={!key} isPrimary onClick={() => handleActivation()}>
+				Activate
+			</Button>
+		</PanelRow>
 	);
 };
 

@@ -80,7 +80,7 @@ class Settings {
 			VERSION,
 			true
 		);
-		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->stringify_settings(), 'before' );
+		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_js(), 'before' );
 
 		if ( $development ) {
 			wp_enqueue_script(
@@ -92,20 +92,24 @@ class Settings {
 			);
 		}
 
+		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
 
 	/**
 	 *
 	 */
-	public function stringify_settings() {
-		$settings = new \WCPOS\WooCommercePOS\API\Settings();
-		$payload  = array(
+	public function inline_js() {
+		$vars = array(
+			'homepage'       => home_url(),
+			'version'        => VERSION,
 			'settings'       => $this->get_all_settings(),
 			'barcode_fields' => $this->get_barcode_fields(),
 			'order_statuses' => wc_get_order_statuses(),
 		);
 
-		return 'var wcpos = ' . wp_json_encode( $payload ) . ';';
+		$vars = apply_filters( 'woocommerce_pos_admin_settings_inline_vars', $vars );
+
+		return 'var wcpos = ' . wp_json_encode( $vars ) . ';';
 	}
 
 	/**

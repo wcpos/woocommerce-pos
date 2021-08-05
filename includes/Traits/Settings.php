@@ -1,4 +1,9 @@
 <?php
+/**
+ * Settings Trait
+ *
+ * - Used by Admin Settings and API Settings classes
+ */
 
 namespace WCPOS\WooCommercePOS\Traits;
 
