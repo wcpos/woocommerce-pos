@@ -1,7 +1,7 @@
 <?php
 
 /**
- * WC REST API Class
+ * REST API Class
  *
  * @package  WCPOS\WooCommercePOS\API
  * @author   Paul Kilmurray <paul@kilbot.com>
@@ -16,16 +16,13 @@ use WP_REST_Request;
 use WP_REST_Server;
 
 class API {
-	const REST_NAMESPACE = SHORT_NAME . '/v1/';
-
-	private $wc_rest_api_handler;
-
 	/**
 	 * WCPOS REST API namespaces and endpoints.
 	 *
 	 * @var array
 	 */
 	protected $controllers = array();
+	private $wc_rest_api_handler;
 
 	/**
 	 *
@@ -51,7 +48,7 @@ class API {
 	 */
 	public function init() {
 		$this->controllers = array(
-//			'auth' => new Auth(),
+			//          'auth' => new Auth()
 			'settings' => new Settings(),
 			'stores'   => new Stores(),
 		);
@@ -59,14 +56,6 @@ class API {
 		foreach ( $this->controllers as $key => $controller_class ) {
 			$controller_class->register_routes();
 		}
-
-
-
-		// Stores
-
-
-		// Settings
-
 	}
 
 	/**

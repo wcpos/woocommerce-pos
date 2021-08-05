@@ -12,10 +12,14 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
 class Settings {
+	/**
+	 * Admin and API Settings classes share the same traits
+	 */
+	use \WCPOS\WooCommercePOS\Traits\Settings;
+
 	/* @var string The db prefix for WP Options table */
 	const DB_PREFIX = 'woocommerce_pos_settings_';
 
@@ -96,11 +100,35 @@ class Settings {
 	public function stringify_settings() {
 		$settings = new \WCPOS\WooCommercePOS\API\Settings();
 		$payload  = array(
-			'settings'       => $settings->get_all_settings(),
-			'barcode_fields' => $settings->get_barcode_fields(),
+			'settings'       => $this->get_all_settings(),
+			'barcode_fields' => $this->get_barcode_fields(),
 			'order_statuses' => wc_get_order_statuses(),
 		);
 
 		return 'var wcpos = ' . wp_json_encode( $payload ) . ';';
+	}
+
+	/**
+	 * @return array
+	 */
+	public function get_barcode_fields() {
+		global $wpdb;
+
+		$result = $wpdb->get_col(
+			"
+			SELECT DISTINCT(pm.meta_key)
+			FROM $wpdb->postmeta AS pm
+			JOIN $wpdb->posts AS p
+			ON p.ID = pm.post_id
+			WHERE p.post_type IN ('product', 'product_variation')
+			ORDER BY pm.meta_key
+			"
+		);
+
+		// maybe add custom barcode field
+		array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) );
+		sort( $result );
+
+		return array_unique( $result );
 	}
 }

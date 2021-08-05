@@ -3,7 +3,6 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-use WC_Payment_Gateways;
 use WP_Error;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -11,6 +10,10 @@ use WP_REST_Response;
 use WP_REST_Server;
 
 class Settings extends Controller {
+	/**
+	 * Admin and API Settings classes share the same traits
+	 */
+	use \WCPOS\WooCommercePOS\Traits\Settings;
 
 	/**
 	 * Route base.
@@ -18,37 +21,11 @@ class Settings extends Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'settings';
+
 	/**
 	 * @var string
 	 */
 	private $db_prefix;
-	/**
-	 *
-	 */
-	private $default_settings = array(
-		'general'  => array(
-			'pos_only_products'           => false,
-			'decimal_qty'                 => false,
-			'force_ssl'                   => true,
-			'default_customer'            => 0,
-			'default_customer_is_cashier' => false,
-			'barcode_field'               => '_sku',
-			'generate_username'           => true,
-		),
-		'checkout' => array(
-			'order_status'       => 'wc-completed',
-			'admin_emails'       => true,
-			'customer_emails'    => true,
-			'auto_print_receipt' => false,
-			'default_gateway'    => 'pos_cash',
-			'gateways'           => array(),
-		),
-	);
-
-	/**
-	 * @var array
-	 */
-	private $caps;
 
 
 	/**
@@ -56,28 +33,6 @@ class Settings extends Controller {
 	 */
 	public function __construct() {
 		$this->db_prefix = \WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
-
-		$this->caps = apply_filters( 'woocommerce_pos_capabilities', array(
-			'wcpos' => array(
-				'access_woocommerce_pos',  // pos frontend
-				'manage_woocommerce_pos', // pos admin
-			),
-			'wc'    => array(
-				'create_users',
-				'edit_others_products',
-				'edit_product',
-				'edit_published_products',
-				'edit_users',
-				'list_users',
-				'publish_shop_orders',
-				'read_private_products',
-				'read_private_shop_coupons',
-				'read_private_shop_orders',
-			),
-			'wp'    => array(
-				'read',
-			),
-		) );
 	}
 
 	/**
@@ -123,7 +78,6 @@ class Settings extends Controller {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_access_settings' ),
 				'permission_callback' => array( $this, 'update_permission_check' ),
-				//              'args'                => $this->get_access_endpoint_args(),
 			)
 		);
 
@@ -226,96 +180,6 @@ class Settings extends Controller {
 	}
 
 	/**
-	 * @return array
-	 */
-	public function get_all_settings() {
-		$data = array(
-			'general'  => $this->get_settings( 'general' ),
-			'checkout' => $this->get_settings( 'checkout' ),
-			'access'   => $this->get_access_settings(),
-		);
-
-		return apply_filters( 'woocommerce_pos_settings', $data, $this );
-	}
-
-	/**
-	 * @param string $group
-	 *
-	 * @return array
-	 */
-	public function get_settings( $group ) {
-		$settings = wp_parse_args(
-			array_intersect_key(
-				woocommerce_pos_get_settings( $group, null, array() ),
-				$this->default_settings[ $group ]
-			),
-			$this->default_settings[ $group ]
-		);
-
-		if ( 'checkout' == $group ) {
-			$settings['gateways'] = $this->get_gateways();
-		}
-
-		return $settings;
-	}
-
-	/**
-	 *
-	 */
-	public function get_gateways() {
-		$ordered_gateways = array();
-		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
-
-		foreach ( $gateways as $gateway ) {
-			array_push(
-				$ordered_gateways,
-				array(
-					'id'          => $gateway->id,
-					'title'       => $gateway->title,
-					'description' => $gateway->description,
-					'enabled'     => false,
-
-				)
-			);
-		}
-
-		return $ordered_gateways;
-	}
-
-	/**
-	 *
-	 */
-	public function get_access_settings() {
-		global $wp_roles;
-		$role_caps = array();
-
-		$roles = $wp_roles->roles;
-		if ( $roles ) :
-			foreach ( $roles as $slug => $role ) :
-				$role_caps[ $slug ] = array(
-					'name'         => $role['name'],
-					'capabilities' => array(
-						'wcpos' => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wcpos'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wcpos'] )
-						),
-						'wc'    => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wc'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wc'] )
-						),
-						'wp'    => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wp'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wp'] )
-						),
-					),
-				);
-			endforeach;
-		endif;
-
-		return $role_caps;
-	}
-
-	/**
 	 * @param WP_REST_Request $request
 	 *
 	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
@@ -391,36 +255,5 @@ class Settings extends Controller {
 	 */
 	public function update_permission_check() {
 		return current_user_can( 'manage_woocommerce_pos' );
-	}
-
-	/**
-	 *
-	 */
-	public function get_access_endpoint_args() {
-		// validate access settings
-	}
-
-	/**
-	 * @return array
-	 */
-	public function get_barcode_fields() {
-		global $wpdb;
-
-		$result = $wpdb->get_col(
-			"
-			SELECT DISTINCT(pm.meta_key)
-			FROM $wpdb->postmeta AS pm
-			JOIN $wpdb->posts AS p
-			ON p.ID = pm.post_id
-			WHERE p.post_type IN ('product', 'product_variation')
-			ORDER BY pm.meta_key
-			"
-		);
-
-		// maybe add custom barcode field
-		array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) );
-		sort( $result );
-
-		return array_unique( $result );
 	}
 }
