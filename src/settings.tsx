@@ -7,7 +7,7 @@ import Header from './settings/header';
 import General, { GeneralSettingsProps } from './settings/general';
 import Checkout, { CheckoutSettingsProps } from './settings/checkout';
 import Access, { AccessSettingsProps } from './settings/access';
-import License from './settings/license';
+import License, { LicenseSettingsProps } from './settings/license';
 import Footer from './settings/footer';
 import Error from './components/error';
 import { get } from 'lodash';
@@ -19,6 +19,7 @@ export interface HydrateProps {
 		general: GeneralSettingsProps;
 		checkout: CheckoutSettingsProps;
 		access: AccessSettingsProps;
+		license: LicenseSettingsProps;
 	};
 	barcode_fields: string[];
 	order_statuses: Record<string, string>;
@@ -47,7 +48,7 @@ const App = ({ hydrate }: AppProps) => {
 					{ name: 'access', title: 'POS Access', Component: Access },
 					{ name: 'license', title: 'Pro License', Component: License },
 				]}
-				initialTabName="license"
+				initialTabName="general"
 			>
 				{({ Component, title, name }) => (
 					<ErrorBoundary
@@ -61,12 +62,7 @@ const App = ({ hydrate }: AppProps) => {
 								{notice.message}
 							</Notice>
 						)}
-						<Component
-							title={title}
-							initialSettings={get(hydrate, ['settings', name])}
-							setNotice={setNotice}
-							hydrate={hydrate}
-						/>
+						<Component setNotice={setNotice} hydrate={hydrate} />
 					</ErrorBoundary>
 				)}
 			</TabPanel>

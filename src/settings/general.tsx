@@ -24,8 +24,6 @@ export interface GeneralSettingsProps {
 }
 
 interface GeneralProps {
-	title: string;
-	initialSettings: GeneralSettingsProps;
 	setNotice: (args: import('../settings').NoticeProps) => void;
 	hydrate: import('../settings').HydrateProps;
 }
@@ -44,8 +42,8 @@ function reducer(state, action) {
 	}
 }
 
-const General = ({ initialSettings, setNotice, hydrate }: GeneralProps) => {
-	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
+const General = ({ setNotice, hydrate }: GeneralProps) => {
+	const [settings, dispatch] = React.useReducer(reducer, get(hydrate, ['settings', 'general']));
 	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
 	const [showNewBarcodeField, setShowNewBarcodeField] = React.useState<boolean>(false);
 	const silent = React.useRef(true);

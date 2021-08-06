@@ -41,7 +41,7 @@ class Init {
 		// common classes
 		new i18n();
 		//      new Gateways();
-		//      new Products();
+		new Products();
 		//      new Customers();
 		new Orders();
 

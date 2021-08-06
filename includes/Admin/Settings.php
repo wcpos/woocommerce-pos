@@ -100,11 +100,15 @@ class Settings {
 	 */
 	public function inline_js() {
 		$vars = array(
-			'homepage'       => home_url(),
-			'version'        => VERSION,
-			'settings'       => $this->get_all_settings(),
-			'barcode_fields' => $this->get_barcode_fields(),
-			'order_statuses' => wc_get_order_statuses(),
+			'homepage'         => home_url(),
+			'version'          => VERSION,
+			'settings'         => $this->get_all_settings(),
+			'barcode_fields'   => $this->get_barcode_fields(),
+			'order_statuses'   => wc_get_order_statuses(),
+			'default_customer' => array(
+				'value' => 0,
+				'label' => 'Guest',
+			),
 		);
 
 		$vars = apply_filters( 'woocommerce_pos_admin_settings_inline_vars', $vars );

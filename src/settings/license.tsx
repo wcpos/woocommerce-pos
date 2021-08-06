@@ -4,6 +4,13 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs, getAuthority } from '@wordpress/url';
 import { get } from 'lodash';
 
+export interface LicenseSettingsProps {
+	key: string;
+	instance: string;
+	product_id: string;
+	activated: boolean;
+}
+
 interface LicenseProps {
 	hydrate: import('../settings').HydrateProps;
 	setNotice: (args: import('../settings').NoticeProps) => void;
@@ -80,6 +87,7 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 				silent.current = true;
 				// @ts-ignore
 				setKey(data.key);
+				// @ts-ignore
 				setSettings(data);
 			}
 		}

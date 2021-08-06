@@ -3,7 +3,10 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WC_Data;
+use WP_Query;
 use WP_REST_Request;
+use WP_REST_Response;
 
 class Products {
 	private $request;
@@ -24,13 +27,13 @@ class Products {
 	/**
 	 * Filter the product response
 	 *
-	 * @param \WP_REST_Response $response The response object.
-	 * @param \WC_Data $product Product data.
-	 * @param \WP_REST_Request $request Request object.
+	 * @param WP_REST_Response $response The response object.
+	 * @param WC_Data $product Product data.
+	 * @param WP_REST_Request $request Request object.
 	 *
-	 * @return \WP_REST_Response $response The response object.
+	 * @return WP_REST_Response $response The response object.
 	 */
-	public function product_response( \WP_REST_Response $response, \WC_Data $product, \WP_REST_Request $request ): \WP_REST_Response {
+	public function product_response( WP_REST_Response $response, WC_Data $product, WP_REST_Request $request ): WP_REST_Response {
 		// get the old product data
 		$data = $response->get_data();
 
@@ -41,26 +44,6 @@ class Products {
 		$response->set_data( $data );
 
 		return $response;
-	}
-
-	/**
-	 * Filter the query arguments for a request.
-	 *
-	 * @param array $args Key value array of query var to query value.
-	 * @param \WP_REST_Request $request The request used.
-	 *
-	 * @return array $args Key value array of query var to query value.
-	 */
-	public function product_query( array $args, WP_REST_Request $request ): array {
-		if ( isset( $request['date_modified_gmt_after'] ) ) {
-			$date_query = array(
-				'column' => 'post_modified_gmt',
-				'after'  => $request['date_modified_gmt_after'],
-			);
-			array_push( $args['date_query'], $date_query );
-		}
-
-		return $args;
 	}
 
 	/**
@@ -85,12 +68,31 @@ class Products {
 		return wc_placeholder_img_src();
 	}
 
+	/**
+	 * Filter the query arguments for a request.
+	 *
+	 * @param array $args Key value array of query var to query value.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array $args Key value array of query var to query value.
+	 */
+	public function product_query( array $args, WP_REST_Request $request ): array {
+		if ( isset( $request['date_modified_gmt_after'] ) ) {
+			$date_query = array(
+				'column' => 'post_modified_gmt',
+				'after'  => $request['date_modified_gmt_after'],
+			);
+			array_push( $args['date_query'], $date_query );
+		}
+
+		return $args;
+	}
 
 	/**
 	 * Search SQL filter for matching against post title only.
 	 *
 	 * @param string $search
-	 * @param \WP_Query $wp_query
+	 * @param WP_Query $wp_query
 	 */
 	function posts_search( $search, $wp_query ): string {
 		if ( ! empty( $search ) && ! empty( $wp_query->query_vars['search_terms'] ) ) {
