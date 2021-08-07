@@ -134,7 +134,11 @@ class Settings {
 		);
 
 		// maybe add custom barcode field
-		array_push( $result, woocommerce_pos_get_settings( 'general', 'barcode_field' ) );
+		$custom_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		if ( ! empty( $custom_field ) ) {
+			array_push( $result, $custom_field );
+		}
+
 		sort( $result );
 
 		return array_unique( $result );
