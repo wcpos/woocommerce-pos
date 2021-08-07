@@ -10,8 +10,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\API\Settings;
-use WCPOS\WooCommercePOS\API\Stores;
 use WP_REST_Request;
 use WP_REST_Server;
 
@@ -48,9 +46,9 @@ class API {
 	 */
 	public function init() {
 		$this->controllers = array(
-			//          'auth' => new Auth()
-			'settings' => new Settings(),
-			'stores'   => new Stores(),
+			'auth'     => new API\Auth(),
+			'settings' => new API\Settings(),
+			'stores'   => new API\Stores(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
