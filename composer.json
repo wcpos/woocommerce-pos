@@ -37,5 +37,10 @@
     "psr-4": {
       "WCPOS\\WooCommercePOS\\": "includes/"
     }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "WCPOS\\WooCommercePOS\\Tests\\": "tests/includes/"
+    }
   }
 }
