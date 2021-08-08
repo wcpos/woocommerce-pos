@@ -8,13 +8,17 @@
 namespace WCPOS\WooCommercePOS\Traits;
 
 use WC_Payment_Gateways;
+use WP_Error;
 
 trait Settings {
+
+	/* @var string The db prefix for WP Options table */
+	private static $db_prefix = 'woocommerce_pos_settings_';
 
 	/**
 	 *
 	 */
-	private $default_settings = array(
+	private static $default_settings = array(
 		'general'  => array(
 			'pos_only_products'           => false,
 			'decimal_qty'                 => false,
@@ -58,6 +62,29 @@ trait Settings {
 			'read', // wp-admin access
 		),
 	);
+
+	/**
+	 *
+	 */
+	public static function get_setting( $group, $key ) {
+		$name     = self::$db_prefix . $group;
+		$settings = wp_parse_args(
+			array_intersect_key(
+				get_option( $name, array() ),
+				self::$default_settings[ $group ]
+			),
+			self::$default_settings[ $group ]
+		);
+
+		if ( isset( $settings[ $key ] ) ) {
+			return $settings[ $key ];
+		}
+
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			'Settings key not found'
+		);
+	}
 
 	/**
 	 * @return array

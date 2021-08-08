@@ -17,6 +17,7 @@
  * @return string|void
  */
 
+use WCPOS\WooCommercePOS\Admin\Settings;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -123,7 +124,7 @@ if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
 }
 
 /**
- * Get a WordPress option
+ * Helper function to get WCPOS settings
  *
  * @param string $group
  * @param string $key
@@ -132,23 +133,10 @@ if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
  * @return mixed
  */
 if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
-	function woocommerce_pos_get_settings( $group, $key = null, $default = false ) {
-		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
-		$name      = $db_prefix . $group;
-		$settings  = get_option( $name, $default );
-
-		if ( ! $key ) {
-			return $settings;
+	function woocommerce_pos_get_settings( $group, $key = null ) {
+		if ( $key ) {
+			return Settings::get_setting( $group, $key );
 		}
-
-		if ( isset( $settings[ $key ] ) ) {
-			return $settings[ $key ];
-		}
-
-		return new WP_Error(
-			'woocommerce_pos_settings_error',
-			'Settings key not found'
-		);
 	}
 }
 

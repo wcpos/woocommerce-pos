@@ -20,9 +20,6 @@ class Settings {
 	 */
 	use \WCPOS\WooCommercePOS\Traits\Settings;
 
-	/* @var string The db prefix for WP Options table */
-	const DB_PREFIX = 'woocommerce_pos_settings_';
-
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 	}
