@@ -23,3 +23,5 @@ assets/js/*
 !assets/js/README.md
 assets/css/*
 !assets/css/README.md
+assets/asset-manifest.json
+assets/static
