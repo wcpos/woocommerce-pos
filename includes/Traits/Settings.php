@@ -123,7 +123,6 @@ trait Settings {
 					'title'       => $gateway->title,
 					'description' => $gateway->description,
 					'enabled'     => false,
-
 				)
 			);
 		}

@@ -40,7 +40,7 @@ class Init {
 	public function init() {
 		// common classes
 		new i18n();
-		//      new Gateways();
+		new Gateways();
 		new Products();
 		//      new Customers();
 		new Orders();

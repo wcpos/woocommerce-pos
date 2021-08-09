@@ -46,8 +46,8 @@ class Test_Settings extends WP_UnitTestCase {
 	/**
 	 * @test
 	 */
-	public function test_get_general_settings() {
-		$this->assertEquals( array(), $this::get_settings( 'general' ) );
-	}
+	//  public function test_get_general_settings() {
+	//      $this->assertEquals( array(), $this::get_settings( 'general' ) );
+	//  }
 
 }
