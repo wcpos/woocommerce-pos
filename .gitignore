@@ -19,3 +19,7 @@ c3.php
 .codeception.yml
 composer.lock
 .wp-env.override.json
+assets/js/*
+!assets/js/README.md
+assets/css/*
+!assets/css/README.md

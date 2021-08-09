@@ -54,17 +54,18 @@ class Settings {
 	 */
 	public function enqueue_assets() {
 		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+		$assets      = $development ? 'build' : 'assets';
 
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
-			PLUGIN_URL . 'build/css/settings.css',
+			PLUGIN_URL . $assets . '/css/settings.css',
 			array( 'wp-components' ),
 			VERSION
 		);
 
 		wp_enqueue_script(
 			PLUGIN_NAME . '-settings',
-			PLUGIN_URL . 'build/js/settings.js',
+			PLUGIN_URL . $assets . '/js/settings.js',
 			array(
 				'react',
 				'react-dom',

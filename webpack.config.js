@@ -6,6 +6,7 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const OUTPUT = NODE_ENV === 'development' ? 'build' : 'assets';
 
 module.exports = function (_env, argv) {
     return {
@@ -13,9 +14,10 @@ module.exports = function (_env, argv) {
         // devtool: 'inline-source-map',
         entry: {
             settings: "./src/settings.tsx",
+            products: "./src/products.js"
         },
         output: {
-            path: path.resolve(__dirname, "build"),
+            path: path.resolve(__dirname, OUTPUT),
             filename: "js/[name].js",
             publicPath: "/"
         },
