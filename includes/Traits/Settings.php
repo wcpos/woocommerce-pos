@@ -41,7 +41,7 @@ trait Settings {
 	/**
 	 * @var array
 	 */
-	private $caps = array(
+	private static $caps = array(
 		'wcpos' => array(
 			'access_woocommerce_pos',  // pos frontend
 			'manage_woocommerce_pos', // pos admin
@@ -64,17 +64,10 @@ trait Settings {
 	);
 
 	/**
-	 *
+	 * Get settings by group and key
 	 */
 	public static function get_setting( $group, $key ) {
-		$name     = self::$db_prefix . $group;
-		$settings = wp_parse_args(
-			array_intersect_key(
-				get_option( $name, array() ),
-				self::$default_settings[ $group ]
-			),
-			self::$default_settings[ $group ]
-		);
+		$settings = self::get_settings( $group );
 
 		if ( isset( $settings[ $key ] ) ) {
 			return $settings[ $key ];
@@ -87,34 +80,16 @@ trait Settings {
 	}
 
 	/**
-	 * @return array
-	 */
-	public function get_all_settings() {
-		$data = array(
-			'general'  => $this->get_settings( 'general' ),
-			'checkout' => $this->get_settings( 'checkout' ),
-			'access'   => $this->get_access_settings(),
-		);
-
-		return apply_filters( 'woocommerce_pos_settings', $data );
-	}
-
-	/**
 	 * @param string $group
 	 *
 	 * @return array
 	 */
-	public function get_settings( $group ) {
-		$settings = wp_parse_args(
-			array_intersect_key(
-				woocommerce_pos_get_settings( $group, null, array() ),
-				$this->default_settings[ $group ]
-			),
-			$this->default_settings[ $group ]
-		);
+	public static function get_settings( $group ) {
+		$name     = self::$db_prefix . $group;
+		$settings = self::normalize_settings( $group, get_option( $name, array() ) );
 
 		if ( 'checkout' == $group ) {
-			$settings['gateways'] = $this->get_gateways();
+			$settings['gateways'] = self::get_gateways();
 		}
 
 		return $settings;
@@ -123,7 +98,20 @@ trait Settings {
 	/**
 	 *
 	 */
-	public function get_gateways() {
+	public static function normalize_settings( $group, $value ) {
+		return wp_parse_args(
+			array_intersect_key(
+				$value,
+				self::$default_settings[ $group ]
+			),
+			self::$default_settings[ $group ]
+		);
+	}
+
+	/**
+	 *
+	 */
+	public static function get_gateways() {
 		$ordered_gateways = array();
 		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
 
@@ -144,9 +132,22 @@ trait Settings {
 	}
 
 	/**
+	 * @return array
+	 */
+	public static function get_all_settings() {
+		$data = array(
+			'general'  => self::get_settings( 'general' ),
+			'checkout' => self::get_settings( 'checkout' ),
+			'access'   => self::get_access_settings(),
+		);
+
+		return apply_filters( 'woocommerce_pos_settings', $data );
+	}
+
+	/**
 	 *
 	 */
-	public function get_access_settings() {
+	public static function get_access_settings() {
 		global $wp_roles;
 		$role_caps = array();
 
@@ -157,16 +158,16 @@ trait Settings {
 					'name'         => $role['name'],
 					'capabilities' => array(
 						'wcpos' => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wcpos'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wcpos'] )
+							array_merge( array_fill_keys( self::$caps['wcpos'], false ), $role['capabilities'] ),
+							array_flip( self::$caps['wcpos'] )
 						),
 						'wc'    => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wc'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wc'] )
+							array_merge( array_fill_keys( self::$caps['wc'], false ), $role['capabilities'] ),
+							array_flip( self::$caps['wc'] )
 						),
 						'wp'    => array_intersect_key(
-							array_merge( array_fill_keys( $this->caps['wp'], false ), $role['capabilities'] ),
-							array_flip( $this->caps['wp'] )
+							array_merge( array_fill_keys( self::$caps['wp'], false ), $role['capabilities'] ),
+							array_flip( self::$caps['wp'] )
 						),
 					),
 				);
@@ -174,5 +175,29 @@ trait Settings {
 		endif;
 
 		return $role_caps;
+	}
+
+	/**
+	 *
+	 */
+	public static function update_setting( $group, $key, $value ) {
+		$settings = self::get_settings( $group );
+		if ( $settings ) {
+			$settings[ $key ] = $value;
+
+			return self::update_settings( $group, $settings );
+		}
+
+		return false;
+	}
+
+	/**
+	 *
+	 */
+	public static function update_settings( $group, $value ) {
+		$name     = self::$db_prefix . $group;
+		$settings = self::normalize_settings( $group, $value );
+
+		return update_option( $name, $settings );
 	}
 }

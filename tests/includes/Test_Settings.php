@@ -20,23 +20,34 @@ class Test_Settings extends WP_UnitTestCase {
 	 * @test
 	 */
 	public function test_get_general_default_settings() {
-		$pos_only_products           = $this::get_setting( 'general', 'pos_only_products' );
-		$decimal_qty                 = $this::get_setting( 'general', 'decimal_qty' );
-		$force_ssl                   = $this::get_setting( 'general', 'force_ssl' );
-		$default_customer            = $this::get_setting( 'general', 'default_customer' );
-		$default_customer_is_cashier = $this::get_setting( 'general', 'default_customer_is_cashier' );
-		$barcode_field               = $this::get_setting( 'general', 'barcode_field' );
-		$generate_username           = $this::get_setting( 'general', 'generate_username' );
-		$no_setting                  = $this::get_setting( 'general', 'no_setting' );
+		$this->assertEquals( false, $this::get_setting( 'general', 'pos_only_products' ) );
+		$this->assertEquals( false, $this::get_setting( 'general', 'decimal_qty' ) );
+		$this->assertEquals( true, $this::get_setting( 'general', 'force_ssl' ) );
+		$this->assertEquals( 0, $this::get_setting( 'general', 'default_customer' ) );
+		$this->assertEquals( false, $this::get_setting( 'general', 'default_customer_is_cashier' ) );
+		$this->assertEquals( '_sku', $this::get_setting( 'general', 'barcode_field' ) );
+		$this->assertEquals( true, $this::get_setting( 'general', 'generate_username' ) );
+		$this->assertWPError( $this::get_setting( 'general', 'no_setting' ) );
+	}
 
-		$this->assertEquals( false, $pos_only_products );
-		$this->assertEquals( false, $decimal_qty );
-		$this->assertEquals( true, $force_ssl );
-		$this->assertEquals( 0, $default_customer );
-		$this->assertEquals( false, $default_customer_is_cashier );
-		$this->assertEquals( '_sku', $barcode_field );
-		$this->assertEquals( true, $generate_username );
-		$this->assertWPError( $no_setting );
+	/**
+	 * @test
+	 */
+	public function test_get_checkout_default_settings() {
+		$this->assertEquals( 'wc-completed', $this::get_setting( 'checkout', 'order_status' ) );
+		$this->assertEquals( true, $this::get_setting( 'checkout', 'admin_emails' ) );
+		$this->assertEquals( true, $this::get_setting( 'checkout', 'customer_emails' ) );
+		$this->assertEquals( false, $this::get_setting( 'checkout', 'auto_print_receipt' ) );
+		$this->assertEquals( 'pos_cash', $this::get_setting( 'checkout', 'default_gateway' ) );
+		$this->assertEquals( array(), $this::get_setting( 'checkout', 'gateways' ) );
+		$this->assertWPError( $this::get_setting( 'checkout', 'no_setting' ) );
+	}
+
+	/**
+	 * @test
+	 */
+	public function test_get_general_settings() {
+		$this->assertEquals( array(), $this::get_settings( 'general' ) );
 	}
 
 }

@@ -22,17 +22,12 @@ class Settings extends Controller {
 	 */
 	protected $rest_base = 'settings';
 
-	/**
-	 * @var string
-	 */
-	private $db_prefix;
-
 
 	/**
 	 * Stores constructor.
 	 */
 	public function __construct() {
-		$this->db_prefix = \WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
+
 	}
 
 	/**
@@ -185,37 +180,24 @@ class Settings extends Controller {
 	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
-		// Get sent data and set default value
-		$value = wp_parse_args(
-			array_intersect_key(
-				$request->get_params(),
-				$this->default_settings['general']
-			),
-			$this->default_settings['general']
-		);
-
-		woocommerce_pos_update_settings( 'general', null, $value );
-
-		return rest_ensure_response( $this->get_settings( 'general' ) );
-
-		//      return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+		$success = $this->update_settings( 'general', $request->get_params() );
+		if ( $success ) {
+			return rest_ensure_response( $this->get_settings( 'general' ) );
+		} else {
+			return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+		}
 	}
 
 	/**
 	 *
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
-		$value = wp_parse_args(
-			array_intersect_key(
-				$request->get_params(),
-				$this->default_settings['checkout']
-			),
-			$this->default_settings['checkout']
-		);
-
-		woocommerce_pos_update_settings( 'checkout', null, $value );
-
-		return rest_ensure_response( $this->get_settings( 'checkout' ) );
+		$success = $this->update_settings( 'checkout', $request->get_params() );
+		if ( $success ) {
+			return rest_ensure_response( $this->get_settings( 'checkout' ) );
+		} else {
+			return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 200 ) );
+		}
 	}
 
 	/**

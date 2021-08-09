@@ -97,7 +97,7 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
 }
 
 /**
- * Add or update a WordPress option.
+ * Helper function to add or update WCPOS settings
  *
  * @param string $group
  * @param string $key
@@ -107,19 +107,11 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
  */
 if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
 	function woocommerce_pos_update_settings( $group, $key = null, $value, $autoload = 'no' ): bool {
-		$db_prefix = WCPOS\WooCommercePOS\Admin\Settings::DB_PREFIX;
-		$name      = $db_prefix . $group;
-
-		if ( ! $key ) {
-			return update_option( $name, $value );
+		if ( $key ) {
+			return Settings::update_setting( $group, $key, $value );
 		}
 
-		$settings = woocommerce_pos_get_settings( $group );
-		if ( $settings ) {
-			$settings[ $key ] = $value;
-
-			return update_option( $name, $settings );
-		}
+		return Settings::update_settings( $group, $value );
 	}
 }
 
@@ -137,6 +129,8 @@ if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
 		if ( $key ) {
 			return Settings::get_setting( $group, $key );
 		}
+
+		return Settings::get_settings( $group );
 	}
 }
 
