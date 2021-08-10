@@ -87,10 +87,6 @@ defined( 'ABSPATH' ) || exit;
 			width: 150px;
 		}
 	</style>
-	<script
-		src="https://code.jquery.com/jquery-3.6.0.min.js"
-		integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
-		crossorigin="anonymous"></script>
 
 	<?php do_action( 'woocommerce_pos_head' ); ?>
 </head>
@@ -107,13 +103,12 @@ defined( 'ABSPATH' ) || exit;
 <?php do_action( 'woocommerce_pos_footer' ); ?>
 
 <script>
-	const host = '<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/';
-	jQuery.getJSON(host + 'asset-manifest.json', ({files}) => {
+	jQuery.getJSON('https://wcpos.github.io/client/asset-manifest.json', ({files}) => {
 		for (const i in Object.keys(files)) {
 			const key = Object.keys(files)[i];
 
 			if (key.indexOf('.js') !== -1 && key.indexOf('.js.map') === -1) {
-				const path = host + files[key];
+				const path = files[key];
 				console.log('getting script', path);
 				jQuery.getScript(path);
 			}

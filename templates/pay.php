@@ -43,7 +43,7 @@ defined( 'ABSPATH' ) || exit;
 
 <body <?php body_class(); ?>>
 <div class="woocommerce">
-	<?php woocommerce_output_all_notices() ?>
+	<?php woocommerce_output_all_notices(); ?>
 
 	<form id="order_review" method="post"
 		  action="<?php echo $_SERVER['REQUEST_URI']; ?>&key=<?php echo $order->get_order_key(); ?>">
@@ -64,10 +64,13 @@ defined( 'ABSPATH' ) || exit;
 							<?php endif; ?>
 						</li>
 					<?php else : ?>
-						<li class="woocommerce-notice woocommerce-notice--info woocommerce-info"><?php echo apply_filters(
-								'woocommerce_no_available_payment_methods_message', esc_html__( 'Sorry, it seems that there are no available
+						<li class="woocommerce-notice woocommerce-notice--info woocommerce-info">
+                        <?php 
+                        echo apply_filters(
+                            'woocommerce_no_available_payment_methods_message', esc_html__( 'Sorry, it seems that there are no available
 						payment methods for your location. Please contact us if you require assistance or wish to make alternate
-						arrangements.', 'woocommerce' ) ); ?>
+						arrangements.', 'woocommerce' ) ); 
+						?>
 						</li>
 					<?php endif; ?>
 				</ul>

@@ -35,8 +35,9 @@ class Frontend {
 		}
 
 		// check privileges
-		if ( ! current_user_can( 'access_woocommerce_pos' ) ) { /* translators: wordpress */
-			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
+			/* translators: wordpress */
+			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.' ) );
 		}
 
 		// disable cache plugins
@@ -82,7 +83,10 @@ class Frontend {
 	 * Output the head scripts
 	 */
 	public function head() {
-
+		$wp_scripts = wp_scripts();
+		$jquery     = $wp_scripts->registered['jquery-core'];
+		$jquery_src = add_query_arg( 'ver', $jquery->ver, $wp_scripts->base_url . $jquery->src );
+		echo '<script src="' . esc_url( $jquery_src ) . '"></script>';
 	}
 
 	/**
@@ -91,6 +95,7 @@ class Frontend {
 	public function footer() {
 		$vars = array(
 			'version'       => VERSION,
+			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
 			'site'          => array(
 				'url'       => home_url(),
 				'name'      => '',
@@ -118,6 +123,6 @@ class Frontend {
 
 		$vars = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 
-		echo '<script>var wcpos = ' . wp_json_encode( $vars ) . ';</script>';
+		echo '<script>var initialProps = ' . wp_json_encode( $vars ) . ';</script>';
 	}
 }
