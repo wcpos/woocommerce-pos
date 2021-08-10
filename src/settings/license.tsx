@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { TextControl, Button, PanelRow } from '@wordpress/components';
-import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs, getAuthority } from '@wordpress/url';
 import { get } from 'lodash';
+import useSettingsApi from '../hooks/use-settings-api';
+import useNotices from '../hooks/use-notices';
 
 export interface LicenseSettingsProps {
 	key: string;
@@ -13,7 +14,6 @@ export interface LicenseSettingsProps {
 
 interface LicenseProps {
 	hydrate: import('../settings').HydrateProps;
-	setNotice: (args: import('../settings').NoticeProps) => void;
 }
 
 const truncate = (fullStr: string, strLen = 20, separator = '...') => {
@@ -29,10 +29,10 @@ const truncate = (fullStr: string, strLen = 20, separator = '...') => {
 	return fullStr.substr(0, frontChars) + separator + fullStr.substr(fullStr.length - backChars);
 };
 
-const License = ({ hydrate, setNotice }: LicenseProps) => {
-	const [settings, setSettings] = React.useState(get(hydrate, ['settings', 'license']));
+const License = ({ hydrate }: LicenseProps) => {
+	const { settings, dispatch } = useSettingsApi('license', get(hydrate, ['settings', 'license']));
+	const { setNotice } = useNotices();
 	const [key, setKey] = React.useState(settings.key);
-	const silent = React.useRef(true);
 
 	const handleActivation = async (deactivate = false) => {
 		const url = addQueryArgs('https://wcpos.com', {
@@ -67,37 +67,15 @@ const License = ({ hydrate, setNotice }: LicenseProps) => {
 				}
 			}
 
-			setSettings({
-				...settings,
-				key: deactivate ? '' : key,
-				activated: data.activated ? true : false,
+			dispatch({
+				type: 'update',
+				payload: {
+					key: deactivate ? '' : key,
+					activated: data.activated ? true : false,
+				},
 			});
 		}
 	};
-
-	React.useEffect(() => {
-		async function updateSettings() {
-			const data = await apiFetch({
-				path: 'wcpos/v1/settings/license?wcpos=1',
-				method: 'POST',
-				data: settings,
-			}).catch((err) => setNotice({ type: 'error', message: err.message }));
-
-			if (data) {
-				silent.current = true;
-				// @ts-ignore
-				setKey(data.key);
-				// @ts-ignore
-				setSettings(data);
-			}
-		}
-
-		if (silent.current) {
-			silent.current = false;
-		} else {
-			updateSettings();
-		}
-	}, [settings, setNotice]);
 
 	return settings.activated ? (
 		<>

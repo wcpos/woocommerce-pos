@@ -2,7 +2,8 @@ import * as React from 'react';
 import { render } from '@wordpress/element';
 import { ErrorBoundary } from 'react-error-boundary';
 import { __ } from '@wordpress/i18n';
-import { TabPanel, Notice } from '@wordpress/components';
+import { TabPanel, Notice, SnackbarList } from '@wordpress/components';
+import { get } from 'lodash';
 import Header from './settings/header';
 import General, { GeneralSettingsProps } from './settings/general';
 import Checkout, { CheckoutSettingsProps } from './settings/checkout';
@@ -10,7 +11,7 @@ import Access, { AccessSettingsProps } from './settings/access';
 import License, { LicenseSettingsProps } from './settings/license';
 import Footer from './settings/footer';
 import Error from './components/error';
-import { get } from 'lodash';
+import useNotices, { NoticesProvider } from './hooks/use-notices';
 
 import './settings.scss';
 
@@ -25,17 +26,12 @@ export interface HydrateProps {
 	order_statuses: Record<string, string>;
 }
 
-export interface NoticeProps {
-	type?: 'error' | 'info' | 'success';
-	message: string;
-}
-
 interface AppProps {
 	hydrate: HydrateProps;
 }
 
 const App = ({ hydrate }: AppProps) => {
-	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
+	const { notice, snackbars, setNotice, setSnackbars } = useNotices();
 
 	return (
 		<>
@@ -50,25 +46,36 @@ const App = ({ hydrate }: AppProps) => {
 				]}
 				initialTabName="general"
 			>
-				{({ Component, title, name }) => (
+				{({ Component }) => (
 					<ErrorBoundary
 						FallbackComponent={Error}
-						onReset={() => {
-							console.log('reset');
-						}}
+						// onReset={() => {
+						// 	console.log('reset');
+						// }}
 					>
 						{notice && (
 							<Notice status={notice.type} onRemove={() => setNotice(null)}>
 								{notice.message}
 							</Notice>
 						)}
-						<Component setNotice={setNotice} hydrate={hydrate} />
+						<Component hydrate={hydrate} />
 					</ErrorBoundary>
 				)}
 			</TabPanel>
 			<Footer />
+			<SnackbarList
+				notices={snackbars}
+				onRemove={() => {
+					setSnackbars([]);
+				}}
+			/>
 		</>
 	);
 };
 
-render(<App hydrate={get(window, 'wcpos')} />, document.getElementById('woocommerce-pos-settings'));
+render(
+	<NoticesProvider>
+		<App hydrate={get(window, 'wcpos')} />
+	</NoticesProvider>,
+	document.getElementById('woocommerce-pos-settings')
+);

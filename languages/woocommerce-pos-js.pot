@@ -15,11 +15,11 @@ msgstr ""
 msgid "Docs"
 msgstr ""
 
-#: src/settings/general.tsx:182
+#: src/settings/general.tsx:145
 msgid "Add"
 msgstr ""
 
-#: src/settings/general.tsx:189
+#: src/settings/general.tsx:152
 msgid "Cancel"
 msgstr ""
 

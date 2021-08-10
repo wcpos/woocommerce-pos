@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import {
 	PanelRow,
 	ToggleControl,
@@ -12,6 +11,7 @@ import {
 } from '@wordpress/components';
 import { get } from 'lodash';
 import UserSelect from '../components/user-select';
+import useSettingsApi from '../hooks/use-settings-api';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -24,50 +24,13 @@ export interface GeneralSettingsProps {
 }
 
 interface GeneralProps {
-	setNotice: (args: import('../settings').NoticeProps) => void;
 	hydrate: import('../settings').HydrateProps;
 }
 
-// @ts-ignore
-function reducer(state, action) {
-	const { type, payload } = action;
-
-	switch (type) {
-		case 'update':
-			// @ts-ignore
-			return { ...state, ...payload };
-		default:
-			// @ts-ignore
-			throw new Error('no action');
-	}
-}
-
-const General = ({ setNotice, hydrate }: GeneralProps) => {
-	const [settings, dispatch] = React.useReducer(reducer, get(hydrate, ['settings', 'general']));
+const General = ({ hydrate }: GeneralProps) => {
+	const { settings, dispatch } = useSettingsApi('general', get(hydrate, ['settings', 'general']));
 	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
 	const [showNewBarcodeField, setShowNewBarcodeField] = React.useState<boolean>(false);
-	const silent = React.useRef(true);
-
-	React.useEffect(() => {
-		async function updateSettings() {
-			const data = await apiFetch({
-				path: 'wcpos/v1/settings/general?wcpos=1',
-				method: 'POST',
-				data: settings,
-			}).catch((err) => setNotice({ type: 'error', message: err.message }));
-
-			if (data) {
-				silent.current = true;
-				dispatch({ type: 'update', payload: data });
-			}
-		}
-
-		if (silent.current) {
-			silent.current = false;
-		} else {
-			updateSettings();
-		}
-	}, [settings, dispatch, setNotice]);
 
 	const barcodeFields = React.useMemo(() => {
 		const fields = Object.values(get(hydrate, 'barcode_fields'));

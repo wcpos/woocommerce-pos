@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { __ } from '@wordpress/i18n';
-import apiFetch from '@wordpress/api-fetch';
 import { PanelRow, ToggleControl, SelectControl } from '@wordpress/components';
-import { get, map, find, set } from 'lodash';
+import { get, map } from 'lodash';
 import Gateways from '../components/gateways';
+import useSettingsApi from '../hooks/use-settings-api';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -11,58 +11,15 @@ export interface CheckoutSettingsProps {
 	admin_emails: boolean;
 	customer_emails: boolean;
 	default_gateway: string;
-	enabled: string[];
+	gateways: any[];
 }
 
 interface CheckoutProps {
-	setNotice: (args: import('../settings').NoticeProps) => void;
 	hydrate: import('../settings').HydrateProps;
 }
 
-// @ts-ignore
-function reducer(state, action) {
-	const { type, payload } = action;
-
-	switch (type) {
-		case 'update':
-			// @ts-ignore
-			return { ...state, ...payload };
-		case 'update-gateway':
-			if (payload.id) {
-				const gateway = find(state.gateways, { id: payload.id });
-				Object.assign(gateway, payload);
-			}
-			return { ...state };
-		default:
-			// @ts-ignore
-			throw new Error('no action');
-	}
-}
-
-const Checkout = ({ hydrate, setNotice }: CheckoutProps) => {
-	const [settings, dispatch] = React.useReducer(reducer, get(hydrate, ['settings', 'checkout']));
-	const silent = React.useRef(true);
-
-	React.useEffect(() => {
-		async function updateSettings() {
-			const data = await apiFetch({
-				path: 'wcpos/v1/settings/checkout?wcpos=1',
-				method: 'POST',
-				data: settings,
-			}).catch((err) => setNotice({ type: 'error', message: err.message }));
-
-			if (data) {
-				silent.current = true;
-				dispatch({ type: 'update', payload: data });
-			}
-		}
-
-		if (silent.current) {
-			silent.current = false;
-		} else {
-			updateSettings();
-		}
-	}, [settings, dispatch, setNotice]);
+const Checkout = ({ hydrate }: CheckoutProps) => {
+	const { settings, dispatch } = useSettingsApi('checkout', get(hydrate, ['settings', 'checkout']));
 
 	const orderStatusOptions = React.useMemo(() => {
 		const statuses = get(hydrate, 'order_statuses', []);

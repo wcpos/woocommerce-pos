@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { TabPanel, CheckboxControl, Notice } from '@wordpress/components';
-import { map, get, set } from 'lodash';
-import apiFetch from '@wordpress/api-fetch';
+import { map, get } from 'lodash';
+import useSettingsApi from '../hooks/use-settings-api';
 
 export type AccessSettingsProps = Record<
 	string,
@@ -13,49 +13,10 @@ export type AccessSettingsProps = Record<
 
 interface AccessProps {
 	hydrate: import('../settings').HydrateProps;
-	setNotice: (args: import('../settings').NoticeProps) => void;
 }
 
-// @ts-ignore
-function reducer(state, action) {
-	const { type, payload } = action;
-
-	switch (type) {
-		case 'update':
-			const { role, group, cap, value } = payload;
-			return set({ ...state }, [role, 'capabilities', group, cap], value);
-		case 'sync':
-			return payload;
-		default:
-			// @ts-ignore
-			throw new Error('no action');
-	}
-}
-
-const Access = ({ hydrate, setNotice }: AccessProps) => {
-	const [settings, dispatch] = React.useReducer(reducer, get(hydrate, ['settings', 'access']));
-	const silent = React.useRef(true);
-
-	React.useEffect(() => {
-		async function updateSettings() {
-			const data = await apiFetch({
-				path: 'wcpos/v1/settings/access?wcpos=1',
-				method: 'POST',
-				data: settings,
-			}).catch((err) => setNotice({ type: 'error', message: err.message }));
-
-			if (data) {
-				silent.current = true;
-				dispatch({ type: 'sync', payload: data });
-			}
-		}
-
-		if (silent.current) {
-			silent.current = false;
-		} else {
-			updateSettings();
-		}
-	}, [settings, dispatch, setNotice]);
+const Access = ({ hydrate }: AccessProps) => {
+	const { settings, dispatch } = useSettingsApi('access', get(hydrate, ['settings', 'access']));
 
 	return (
 		<>
@@ -98,7 +59,7 @@ const Access = ({ hydrate, setNotice }: AccessProps) => {
 												disabled={'administrator' == tab.name && 'read' == label}
 												onChange={(value) => {
 													dispatch({
-														type: 'update',
+														type: 'update-capabilities',
 														payload: { cap: label, value, group, role: tab.name },
 													});
 												}}
