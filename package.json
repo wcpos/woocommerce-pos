@@ -58,7 +58,7 @@
     "@babel/runtime": "^7.14.8",
     "@svgr/webpack": "^5.5.0",
     "@types/fork-ts-checker-webpack-plugin": "^0.4.5",
-    "@types/jest": "^26.0.24",
+    "@types/jest": "^27.0.0",
     "@types/lodash": "^4.14.172",
     "@types/react": "^17.0.16",
     "@types/react-beautiful-dnd": "^13.1.1",
