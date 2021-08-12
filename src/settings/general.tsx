@@ -8,6 +8,8 @@ import {
 	Button,
 	// @ts-ignore
 	ComboboxControl,
+	Tooltip,
+	Icon,
 } from '@wordpress/components';
 import { get } from 'lodash';
 import UserSelect from '../components/user-select';
@@ -45,7 +47,6 @@ const General = ({ hydrate }: GeneralProps) => {
 			<PanelRow>
 				<ToggleControl
 					label="Force SSL"
-					help=""
 					checked={settings.force_ssl}
 					onChange={(force_ssl: boolean) => {
 						dispatch({
@@ -54,6 +55,9 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
+				<Tooltip text="More information" position="top center">
+					<Icon icon="editor-help" />
+				</Tooltip>
 			</PanelRow>
 			<PanelRow>
 				<ToggleControl
@@ -66,11 +70,13 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
+				<Tooltip text="More information" position="top center">
+					<Icon icon="editor-help" />
+				</Tooltip>
 			</PanelRow>
 			<PanelRow>
 				<ToggleControl
 					label="Enable decimal quantities"
-					help="Allows items to have decimal values in the quantity field, eg: 0.25"
 					checked={settings.decimal_qty}
 					onChange={(decimal_qty: boolean) => {
 						dispatch({
@@ -79,11 +85,16 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
+				<Tooltip
+					text="Allows items to have decimal values in the quantity field, eg: 0.25"
+					position="top center"
+				>
+					<Icon icon="editor-help" />
+				</Tooltip>
 			</PanelRow>
 			<PanelRow>
 				<ToggleControl
 					label="Automatically generate username from customer email"
-					help=""
 					checked={settings.generate_username}
 					onChange={(generate_username: boolean) => {
 						dispatch({
@@ -92,10 +103,17 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
+				<Tooltip
+					text="More Allows items to have decimal values in the quantity field, eg: 0.25"
+					position="top center"
+				>
+					<Icon icon="editor-help" />
+				</Tooltip>
 			</PanelRow>
 			<PanelRow>
 				<UserSelect
 					selectedUserId={settings.default_customer}
+					initialOption={get(hydrate, ['default_customer'])}
 					dispatch={dispatch}
 					disabled={!settings.default_customer_is_cashier}
 				/>
@@ -113,7 +131,7 @@ const General = ({ hydrate }: GeneralProps) => {
 			<PanelRow>
 				<ComboboxControl
 					label="Barcode Field"
-					help="Select a meta field to use as the product barcode"
+					// help="Select a meta field to use as the product barcode"
 					value={settings.barcode_field}
 					onChange={(value: string) => {
 						if (value) {

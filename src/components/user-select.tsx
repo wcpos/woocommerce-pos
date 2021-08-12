@@ -4,20 +4,26 @@ import apiFetch from '@wordpress/api-fetch';
 import { ComboboxControl } from '@wordpress/components';
 import { debounce, isInteger } from 'lodash';
 
-interface UserSelectProps {
-	selectedUserId: number;
-	dispatch: any;
-	disabled?: boolean;
-}
-
 interface UserOptionProps {
 	value?: number;
 	label?: string;
 }
 
-const UserSelect = ({ selectedUserId = 0, dispatch, disabled = false }: UserSelectProps) => {
-	const [users, setUsers] = React.useState<UserOptionProps[]>([{ value: 0, label: 'Guest ' }]);
-	const [search, setSearch] = React.useState('');
+interface UserSelectProps {
+	selectedUserId: number;
+	dispatch: any;
+	disabled?: boolean;
+	initialOption: UserOptionProps;
+}
+
+const UserSelect = ({
+	selectedUserId = 0,
+	dispatch,
+	disabled = false,
+	initialOption,
+}: UserSelectProps) => {
+	const [users, setUsers] = React.useState<UserOptionProps[]>([initialOption]);
+	const [search, setSearch] = React.useState<string>('');
 
 	React.useEffect(() => {
 		async function getUsers() {
@@ -56,7 +62,7 @@ const UserSelect = ({ selectedUserId = 0, dispatch, disabled = false }: UserSele
 	return (
 		<ComboboxControl
 			label="Default POS customer"
-			help="The default customer for POS orders, eg: Guest or create a new customer"
+			// help="The default customer for POS orders, eg: Guest or create a new customer"
 			value={selectedUserId}
 			onChange={(id: number) => {
 				const default_customer = isInteger(id) ? id : 0;

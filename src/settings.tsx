@@ -47,12 +47,7 @@ const App = ({ hydrate }: AppProps) => {
 				initialTabName="general"
 			>
 				{({ Component }) => (
-					<ErrorBoundary
-						FallbackComponent={Error}
-						// onReset={() => {
-						// 	console.log('reset');
-						// }}
-					>
+					<ErrorBoundary FallbackComponent={Error}>
 						{notice && (
 							<Notice status={notice.type} onRemove={() => setNotice(null)}>
 								{notice.message}
@@ -63,12 +58,14 @@ const App = ({ hydrate }: AppProps) => {
 				)}
 			</TabPanel>
 			<Footer />
-			<SnackbarList
-				notices={snackbars}
-				onRemove={() => {
-					setSnackbars([]);
-				}}
-			/>
+			<div id="woocommerce-pos-settings-snackbars">
+				<SnackbarList
+					notices={snackbars}
+					onRemove={() => {
+						setSnackbars([]);
+					}}
+				/>
+			</div>
 		</>
 	);
 };
