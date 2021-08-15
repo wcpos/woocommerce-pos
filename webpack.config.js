@@ -64,6 +64,13 @@ module.exports = function (_env, argv) {
                     ],
                 },
                 {
+                    test: /\.css$/,
+                    use: [
+                        MiniCssExtractPlugin.loader,
+                        "css-loader", "postcss-loader",
+                    ],
+                },
+                {
                     test: /\.(png|jpg)$/,
                     loader: 'url-loader'
                 },

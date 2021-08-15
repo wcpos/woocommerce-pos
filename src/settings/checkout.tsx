@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { __ } from '@wordpress/i18n';
-import { PanelRow, ToggleControl, SelectControl } from '@wordpress/components';
 import { get, map } from 'lodash';
 import Gateways from '../components/gateways';
+import FormRow from '../components/form-row';
+import Toggle from '../components/toggle';
 import useSettingsApi from '../hooks/use-settings-api';
+import { Listbox, ListboxOption } from '@reach/listbox';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -12,6 +13,11 @@ export interface CheckoutSettingsProps {
 	customer_emails: boolean;
 	default_gateway: string;
 	gateways: any[];
+}
+
+interface OrderStatusProps {
+	label: string;
+	value: string;
 }
 
 interface CheckoutProps {
@@ -24,27 +30,29 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 	const orderStatusOptions = React.useMemo(() => {
 		const statuses = get(hydrate, 'order_statuses', []);
 		return map(statuses, (label: string, value: string) => ({ label, value }));
-	}, [hydrate]);
+	}, [hydrate]) as unknown as OrderStatusProps[];
 
 	return (
 		<>
-			<PanelRow>
-				<SelectControl
-					label="Completed order status"
-					value={settings.order_status}
-					// @ts-ignore
-					options={orderStatusOptions}
+			<FormRow label="Completed order status">
+				<Listbox
+					defaultValue={settings.order_status}
 					onChange={(order_status: string) => {
 						dispatch({
 							type: 'update',
 							payload: { order_status },
 						});
 					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Send admin emails"
+				>
+					{orderStatusOptions.map((option) => (
+						<ListboxOption key={option.value} value={option.value}>
+							{option.label}
+						</ListboxOption>
+					))}
+				</Listbox>
+			</FormRow>
+			<FormRow label="Send admin emails">
+				<Toggle
 					checked={settings.admin_emails}
 					onChange={(admin_emails: boolean) => {
 						dispatch({
@@ -53,10 +61,9 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 						});
 					}}
 				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Send customer emails"
+			</FormRow>
+			<FormRow label="Send customer emails">
+				<Toggle
 					checked={settings.customer_emails}
 					onChange={(customer_emails: boolean) => {
 						dispatch({
@@ -65,10 +72,9 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 						});
 					}}
 				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Automatically print receipt after checkout"
+			</FormRow>
+			<FormRow label="Automatically print receipt after checkout">
+				<Toggle
 					checked={settings.auto_print_receipt}
 					onChange={(auto_print_receipt: boolean) => {
 						dispatch({
@@ -77,20 +83,17 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 						});
 					}}
 				/>
-			</PanelRow>
-			<PanelRow className="flexColumn">
-				<h2>Gateways</h2>
-				<p>
-					Installed gateways are listed below. Drag and drop gateways to control their display order
-					at the Point of Sale. Payment Gateways enabled here will be available at the Point of
-					Sale.
-				</p>
-				<Gateways
-					gateways={settings.gateways}
-					defaultGateway={settings.default_gateway}
-					dispatch={dispatch}
-				/>
-			</PanelRow>
+			</FormRow>
+			<h2>Gateways</h2>
+			<p>
+				Installed gateways are listed below. Drag and drop gateways to control their display order
+				at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.
+			</p>
+			<Gateways
+				gateways={settings.gateways}
+				defaultGateway={settings.default_gateway}
+				dispatch={dispatch}
+			/>
 		</>
 	);
 };

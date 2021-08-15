@@ -1,7 +1,8 @@
 import * as React from 'react';
-import { TabPanel, CheckboxControl, Notice } from '@wordpress/components';
+import { TabPanel, CheckboxControl } from '@wordpress/components';
 import { map, get } from 'lodash';
 import useSettingsApi from '../hooks/use-settings-api';
+import Notice from '../components/notice';
 
 export type AccessSettingsProps = Record<
 	string,

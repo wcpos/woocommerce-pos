@@ -1,19 +1,11 @@
 import * as React from 'react';
-import { __ } from '@wordpress/i18n';
-import {
-	PanelRow,
-	ToggleControl,
-	CheckboxControl,
-	TextControl,
-	Button,
-	// @ts-ignore
-	ComboboxControl,
-	Tooltip,
-	Icon,
-} from '@wordpress/components';
 import { get } from 'lodash';
 import UserSelect from '../components/user-select';
 import useSettingsApi from '../hooks/use-settings-api';
+import Toggle from '../components/toggle';
+import FormRow from '../components/form-row';
+import BarcodeSelect from '../components/barcode-select';
+import { CustomCheckbox } from '@reach/checkbox';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -31,22 +23,11 @@ interface GeneralProps {
 
 const General = ({ hydrate }: GeneralProps) => {
 	const { settings, dispatch } = useSettingsApi('general', get(hydrate, ['settings', 'general']));
-	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
-	const [showNewBarcodeField, setShowNewBarcodeField] = React.useState<boolean>(false);
-
-	const barcodeFields = React.useMemo(() => {
-		const fields = Object.values(get(hydrate, 'barcode_fields'));
-		if (!fields.includes(settings.barcode_field)) {
-			fields.push(settings.barcode_field);
-		}
-		return fields;
-	}, [hydrate, settings]);
 
 	return (
 		<>
-			<PanelRow>
-				<ToggleControl
-					label="Force SSL"
+			<FormRow label="Force SSL">
+				<Toggle
 					checked={settings.force_ssl}
 					onChange={(force_ssl: boolean) => {
 						dispatch({
@@ -55,13 +36,9 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
-				<Tooltip text="More information" position="top center">
-					<Icon icon="editor-help" />
-				</Tooltip>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Enable POS only products"
+			</FormRow>
+			<FormRow label="Enable POS only products">
+				<Toggle
 					checked={settings.pos_only_products}
 					onChange={(pos_only_products: boolean) => {
 						dispatch({
@@ -70,13 +47,9 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
-				<Tooltip text="More information" position="top center">
-					<Icon icon="editor-help" />
-				</Tooltip>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Enable decimal quantities"
+			</FormRow>
+			<FormRow label="Enable decimal quantities">
+				<Toggle
 					checked={settings.decimal_qty}
 					onChange={(decimal_qty: boolean) => {
 						dispatch({
@@ -85,16 +58,9 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
-				<Tooltip
-					text="Allows items to have decimal values in the quantity field, eg: 0.25"
-					position="top center"
-				>
-					<Icon icon="editor-help" />
-				</Tooltip>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Automatically generate username from customer email"
+			</FormRow>
+			<FormRow label="Automatically generate username from customer email">
+				<Toggle
 					checked={settings.generate_username}
 					onChange={(generate_username: boolean) => {
 						dispatch({
@@ -103,37 +69,43 @@ const General = ({ hydrate }: GeneralProps) => {
 						});
 					}}
 				/>
-				<Tooltip
-					text="More Allows items to have decimal values in the quantity field, eg: 0.25"
-					position="top center"
-				>
-					<Icon icon="editor-help" />
-				</Tooltip>
-			</PanelRow>
-			<PanelRow>
+			</FormRow>
+			<FormRow
+				label="Default POS customer"
+				help="Product meta field to be used as barcode, eg: _sku or _barcode"
+				id="user-select"
+				extra={
+					<label>
+						<CustomCheckbox
+							className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border border-gray-300 rounded"
+							checked={settings.default_customer_is_cashier}
+							onChange={(event) => {
+								dispatch({
+									type: 'update',
+									payload: { default_customer_is_cashier: event?.target.checked },
+								});
+							}}
+						/>
+						Use cashier account
+					</label>
+				}
+			>
 				<UserSelect
 					selectedUserId={settings.default_customer}
 					initialOption={get(hydrate, ['default_customer'])}
 					dispatch={dispatch}
-					disabled={!settings.default_customer_is_cashier}
+					disabled={settings.default_customer_is_cashier}
 				/>
-				<CheckboxControl
-					label="Use cashier account"
-					checked={settings.default_customer_is_cashier}
-					onChange={(default_customer_is_cashier: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { default_customer_is_cashier },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ComboboxControl
-					label="Barcode Field"
-					// help="Select a meta field to use as the product barcode"
-					value={settings.barcode_field}
-					onChange={(value: string) => {
+			</FormRow>
+			<FormRow
+				label="Barcode Field"
+				help="Product meta field to be used as barcode, eg: _sku or _barcode"
+				id="barcode-field"
+			>
+				<BarcodeSelect
+					options={Object.values(get(hydrate, 'barcode_fields'))}
+					selected={settings.barcode_field}
+					onSelect={(value: string) => {
 						if (value) {
 							dispatch({
 								type: 'update',
@@ -141,45 +113,8 @@ const General = ({ hydrate }: GeneralProps) => {
 							});
 						}
 					}}
-					options={barcodeFields.map((field: string) => ({ label: field, value: field }))}
-					allowReset={true}
 				/>
-				{showNewBarcodeField ? (
-					<>
-						<TextControl
-							value={newBarcodeField}
-							onChange={(nextValue: string) => setNewBarcodeField(nextValue)}
-						/>
-						<Button
-							disabled={!newBarcodeField}
-							isPrimary
-							onClick={() => {
-								dispatch({
-									type: 'update',
-									payload: { barcode_field: newBarcodeField },
-								});
-							}}
-						>
-							{__('Add')}
-						</Button>
-						<Button
-							onClick={() => {
-								setShowNewBarcodeField(false);
-							}}
-						>
-							{__('Cancel')}
-						</Button>
-					</>
-				) : (
-					<Button
-						onClick={() => {
-							setShowNewBarcodeField(true);
-						}}
-					>
-						Add new meta field
-					</Button>
-				)}
-			</PanelRow>
+			</FormRow>
 		</>
 	);
 };

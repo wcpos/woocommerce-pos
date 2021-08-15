@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { TextControl, Button, PanelRow } from '@wordpress/components';
 import { addQueryArgs, getAuthority } from '@wordpress/url';
-import { get } from 'lodash';
+import { get, throttle } from 'lodash';
 import useSettingsApi from '../hooks/use-settings-api';
 import useNotices from '../hooks/use-notices';
+import FormRow from '../components/form-row';
+import Button from '../components/button';
 
 export interface LicenseSettingsProps {
 	key: string;
@@ -33,6 +34,8 @@ const License = ({ hydrate }: LicenseProps) => {
 	const { settings, dispatch } = useSettingsApi('license', get(hydrate, ['settings', 'license']));
 	const { setNotice } = useNotices();
 	const [key, setKey] = React.useState(settings.key);
+
+	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setKey(event.target.value);
 
 	const handleActivation = async (deactivate = false) => {
 		const url = addQueryArgs('https://wcpos.com', {
@@ -86,17 +89,26 @@ const License = ({ hydrate }: LicenseProps) => {
 				License <code>{truncate(settings.key)}</code> has been activated.
 			</p>
 			<p>Your support helps fund the ongoing development of WooCommerce POS.</p>
-			<Button disabled={!key} isPrimary onClick={() => handleActivation(true)}>
-				Deactivate
-			</Button>
+			<Button onClick={() => handleActivation(true)}>Deactivate</Button>
 		</>
 	) : (
-		<PanelRow>
-			<TextControl label="License Key" value={key} onChange={(value) => setKey(value)} />
-			<Button disabled={!key} isPrimary onClick={() => handleActivation()}>
-				Activate
-			</Button>
-		</PanelRow>
+		<FormRow
+			label="License Key"
+			id="license-key"
+			extra={
+				<Button disabled={!key} onClick={() => handleActivation()}>
+					Activate
+				</Button>
+			}
+		>
+			<input
+				type="text"
+				name="license-key"
+				id="license-key"
+				className="mt-1 focus:ring-indigo-500 focus:border-wp-admin-theme-color block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+				onChange={throttle(handleChange, 100)}
+			/>
+		</FormRow>
 	);
 };
 

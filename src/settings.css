@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '@reach/tooltip/styles.css';
+@import '@reach/combobox/styles.css';
+@import '@reach/checkbox/styles.css';
+@import '@reach/listbox/styles.css';
+
+/**
+ * Reach UI Combobox
+ */
+[data-suggested-value] {
+	font-weight: normal !important;
+}
+
+[data-user-value] {
+	color: var(--wp-admin-theme-color);
+}
