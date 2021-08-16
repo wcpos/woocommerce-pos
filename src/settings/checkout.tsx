@@ -3,8 +3,8 @@ import { get, map } from 'lodash';
 import Gateways from '../components/gateways';
 import FormRow from '../components/form-row';
 import Toggle from '../components/toggle';
+import Select from '../components/select';
 import useSettingsApi from '../hooks/use-settings-api';
-import { Listbox, ListboxOption } from '@reach/listbox';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -35,21 +35,16 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 	return (
 		<>
 			<FormRow label="Completed order status">
-				<Listbox
-					defaultValue={settings.order_status}
+				<Select
+					options={orderStatusOptions}
+					selected={settings.order_status}
 					onChange={(order_status: string) => {
 						dispatch({
 							type: 'update',
 							payload: { order_status },
 						});
 					}}
-				>
-					{orderStatusOptions.map((option) => (
-						<ListboxOption key={option.value} value={option.value}>
-							{option.label}
-						</ListboxOption>
-					))}
-				</Listbox>
+				/>
 			</FormRow>
 			<FormRow label="Send admin emails">
 				<Toggle

@@ -12,8 +12,8 @@ import { SelectorIcon } from '@heroicons/react/solid';
 import { throttle } from 'lodash';
 
 interface UserOptionProps {
-	value?: number;
-	label?: string;
+	value: number;
+	label: string;
 }
 
 interface UserSelectProps {
@@ -34,7 +34,7 @@ const UserSelect = ({
 
 	React.useEffect(() => {
 		async function getUsers() {
-			setUsers([{ value: undefined, label: 'Loading' }]);
+			setUsers([{ value: 0, label: 'Loading' }]);
 
 			const users = await apiFetch({
 				path: `wp/v2/users?search=${term}`,

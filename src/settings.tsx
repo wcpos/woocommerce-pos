@@ -65,39 +65,6 @@ const App = ({ hydrate }: AppProps) => {
 						</ErrorBoundary>
 					)}
 				</Tabs>
-				{/* <Tab.Group defaultIndex={0} manual>
-					<Tab.List className="flex space-x-4 justify-center">
-						{tabs.map((tab) => (
-							<Tab
-								key={tab.name}
-								className={({ selected }) =>
-									classNames('text-base px-4 py-2', selected ? 'border-b-4' : 'border-b-4')
-								}
-							>
-								{tab.title}
-							</Tab>
-						))}
-					</Tab.List>
-					<Tab.Panels className="mt-2">
-						{({ selectedIndex }) => {
-							if (isInteger(selectedIndex)) {
-								const Component = tabs[selectedIndex || 0].Component;
-								return (
-									<ErrorBoundary FallbackComponent={Error}>
-										{notice && (
-											<Notice status={notice.type} onRemove={() => setNotice(null)}>
-												<p>{notice.message}</p>
-											</Notice>
-										)}
-										<Tab.Panel>
-											<Component hydrate={hydrate} />
-										</Tab.Panel>
-									</ErrorBoundary>
-								);
-							}
-						}}
-					</Tab.Panels>
-				</Tab.Group> */}
 			</div>
 			<Footer />
 		</div>

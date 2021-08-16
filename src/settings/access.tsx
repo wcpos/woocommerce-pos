@@ -21,11 +21,14 @@ const Access = ({ hydrate }: AccessProps) => {
 
 	return (
 		<>
-			<Notice status="warning" isDismissible={false}>
+			<Notice status="info" isDismissible={false}>
 				By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
 				It is recommended that you <strong>do not change</strong> the default settings unless you
-				are fully aware of the consequences. For more information please visit
-				http://woopos.com.au/docs/pos-access
+				are fully aware of the consequences. For more information please visit 
+				<a href="https://wcpos.com/docs/pos-access" target="_blank" rel="noreferrer">
+					https://wcpos.com/docs/pos-access
+				</a>
+				.
 			</Notice>
 			<TabPanel
 				className="woocommerce-pos-settings-access-tabs"
