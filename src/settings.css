@@ -17,3 +17,10 @@
 [data-user-value] {
 	color: var(--wp-admin-theme-color);
 }
+
+/**
+ * Reach UI Listbox
+ */
+[data-reach-listbox-option][data-current-nav] {
+	background-color: var(--wp-admin-theme-color);
+}

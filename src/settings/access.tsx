@@ -1,6 +1,7 @@
 import * as React from 'react';
-import { TabPanel, CheckboxControl } from '@wordpress/components';
+import { CheckboxControl } from '@wordpress/components';
 import { map, get } from 'lodash';
+import classNames from 'classnames';
 import useSettingsApi from '../hooks/use-settings-api';
 import Notice from '../components/notice';
 
@@ -18,6 +19,7 @@ interface AccessProps {
 
 const Access = ({ hydrate }: AccessProps) => {
 	const { settings, dispatch } = useSettingsApi('access', get(hydrate, ['settings', 'access']));
+	const [selected, setSelected] = React.useState('administrator');
 
 	return (
 		<>
@@ -30,52 +32,59 @@ const Access = ({ hydrate }: AccessProps) => {
 				</a>
 				.
 			</Notice>
-			<TabPanel
-				className="woocommerce-pos-settings-access-tabs"
-				activeClass="active-tab"
-				orientation="vertical"
-				tabs={map(settings, (role, id) => ({
-					name: id,
-					title: role.name,
-					capabilities: role.capabilities,
-				}))}
-			>
-				{(tab) => (
-					<>
-						{map(tab.capabilities, (caps, group) => {
-							return (
-								<div key={group}>
-									<h3>
+			<div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+				<div className="">
+					<ul>
+						{map(settings, (role, id) => (
+							<li
+								className={classNames(
+									'p-4 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
+									id == selected &&
+										'bg-wp-admin-theme-color-lightest hover:bg-wp-admin-theme-color-lightest'
+								)}
+								onClick={() => {
+									setSelected(id);
+								}}
+							>
+								{role.name}
+							</li>
+						))}
+					</ul>
+				</div>
+				<div className="">
+					{map(settings[selected].capabilities, (caps, group) => {
+						return (
+							<div key={group}>
+								<h3>
+									{
 										{
-											{
-												wcpos: 'WooCommerce POS',
-												wc: 'WooCommerce',
-												wp: 'WordPress',
-											}[group]
-										}
-									</h3>
-									<div className="capabilities">
-										{map(caps, (checked, label) => (
-											<CheckboxControl
-												key={label}
-												checked={checked}
-												label={label}
-												disabled={'administrator' == tab.name && 'read' == label}
-												onChange={(value) => {
-													dispatch({
-														type: 'update-capabilities',
-														payload: { cap: label, value, group, role: tab.name },
-													});
-												}}
-											/>
-										))}
-									</div>
+											wcpos: 'WooCommerce POS',
+											wc: 'WooCommerce',
+											wp: 'WordPress',
+										}[group]
+									}
+								</h3>
+								<div>
+									{map(caps, (checked, label) => (
+										<CheckboxControl
+											key={label}
+											checked={checked}
+											label={label}
+											disabled={'administrator' == selected && 'read' == label}
+											onChange={(value) => {
+												dispatch({
+													type: 'update-capabilities',
+													payload: { cap: label, value, group, role: selected },
+												});
+											}}
+										/>
+									))}
 								</div>
-							);
-						})}
-					</>
-				)}
-			</TabPanel>
+							</div>
+						);
+					})}
+				</div>
+			</div>
 		</>
 	);
 };
