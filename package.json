@@ -43,6 +43,7 @@
 		"@heroicons/react": "^1.0.3",
 		"@reach/checkbox": "^0.16.0",
 		"@reach/combobox": "^0.16.1",
+		"@reach/dialog": "^0.16.0",
 		"@reach/listbox": "^0.16.1",
 		"@reach/portal": "^0.16.0",
 		"@reach/tooltip": "^0.16.0",

@@ -13,7 +13,7 @@ interface TabsProps {
 }
 
 const Tabs = ({ children, tabs, orientation }: TabsProps) => {
-	const [selected, setSelected] = React.useState<number>(2);
+	const [selected, setSelected] = React.useState<number>(1);
 
 	return (
 		<>

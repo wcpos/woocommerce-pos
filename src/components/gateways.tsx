@@ -1,16 +1,9 @@
 import * as React from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import {
-	Button,
-	FormToggle,
-	Modal,
-	TextControl,
-	TextareaControl,
-	Notice,
-} from '@wordpress/components';
 import DragIcon from '../../assets/img/drag-icon.svg';
 import GatewayModal from './gateway-modal';
 import Toggle from '../components/toggle';
+import Button from '../components/button';
 
 import type {
 	DraggableProvided,
@@ -81,25 +74,25 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 							<th scope="col"></th>
 							<th
 								scope="col"
-								className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
 							>
 								Default
 							</th>
 							<th
 								scope="col"
-								className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 							>
 								Gateway
 							</th>
 							<th
 								scope="col"
-								className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
 							>
 								Gateway ID
 							</th>
 							<th
 								scope="col"
-								className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
 							>
 								Enabled
 							</th>
@@ -126,10 +119,10 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 													index
 												)}
 											>
-												<td className="px-6 py-4 whitespace-nowrap">
+												<td className="px-4 py-2 whitespace-nowrap">
 													<DragIcon className="w-5 h-5 text-gray-400 fill-current" />
 												</td>
-												<td className="px-6 py-4 whitespace-nowrap">
+												<td className="px-4 py-2 whitespace-nowrap text-center">
 													<input
 														type="radio"
 														value={item.id}
@@ -143,11 +136,11 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 														}}
 													/>
 												</td>
-												<td className="px-6 py-4 whitespace-nowrap">
+												<td className="px-4 py-2 whitespace-nowrap">
 													<strong>{item.title}</strong>
 												</td>
-												<td className="px-6 py-4 whitespace-nowrap">{item.id}</td>
-												<td className="px-6 py-4 whitespace-nowrap">
+												<td className="px-4 py-2 whitespace-nowrap">{item.id}</td>
+												<td className="px-4 py-2 whitespace-nowrap text-center">
 													<Toggle
 														checked={item.enabled}
 														onChange={() => {
@@ -161,9 +154,9 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 														}}
 													/>
 												</td>
-												<td className="px-6 py-4 whitespace-nowrap">
+												<td className="px-4 py-2 whitespace-nowrap">
 													<Button
-														isSecondary
+														background="outline"
 														onClick={() => {
 															// @ts-ignore
 															modalGateway.current = item;
