@@ -79,7 +79,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 					}}
 				/>
 			</FormRow>
-			<h2>Gateways</h2>
+			<h2 className="text-base">Gateways</h2>
 			<p>
 				Installed gateways are listed below. Drag and drop gateways to control their display order
 				at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.

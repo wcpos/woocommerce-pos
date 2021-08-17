@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { CheckboxControl } from '@wordpress/components';
 import { map, get } from 'lodash';
 import classNames from 'classnames';
 import useSettingsApi from '../hooks/use-settings-api';
 import Notice from '../components/notice';
+import Checkbox from '../components/checkbox';
 
 export type AccessSettingsProps = Record<
 	string,
@@ -38,7 +38,7 @@ const Access = ({ hydrate }: AccessProps) => {
 						{map(settings, (role, id) => (
 							<li
 								className={classNames(
-									'p-4 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
+									'p-4 mb-1 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
 									id == selected &&
 										'bg-wp-admin-theme-color-lightest hover:bg-wp-admin-theme-color-lightest'
 								)}
@@ -55,7 +55,7 @@ const Access = ({ hydrate }: AccessProps) => {
 					{map(settings[selected].capabilities, (caps, group) => {
 						return (
 							<div key={group}>
-								<h3>
+								<h2 className="text-base">
 									{
 										{
 											wcpos: 'WooCommerce POS',
@@ -63,22 +63,29 @@ const Access = ({ hydrate }: AccessProps) => {
 											wp: 'WordPress',
 										}[group]
 									}
-								</h3>
+								</h2>
 								<div>
-									{map(caps, (checked, label) => (
-										<CheckboxControl
-											key={label}
-											checked={checked}
-											label={label}
-											disabled={'administrator' == selected && 'read' == label}
-											onChange={(value) => {
-												dispatch({
-													type: 'update-capabilities',
-													payload: { cap: label, value, group, role: selected },
-												});
-											}}
-										/>
-									))}
+									{map(caps, (checked, label) => {
+										const disabled = 'administrator' == selected && 'read' == label;
+										return (
+											<label
+												className={classNames('block mb-1', disabled ? 'cursor-not-allowed' : '')}
+											>
+												<Checkbox
+													key={label}
+													checked={checked}
+													disabled={disabled}
+													onChange={(value) => {
+														dispatch({
+															type: 'update-capabilities',
+															payload: { cap: label, value, group, role: selected },
+														});
+													}}
+												/>
+												{label}
+											</label>
+										);
+									})}
 								</div>
 							</div>
 						);

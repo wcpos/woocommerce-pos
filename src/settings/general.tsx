@@ -5,7 +5,7 @@ import useSettingsApi from '../hooks/use-settings-api';
 import Toggle from '../components/toggle';
 import FormRow from '../components/form-row';
 import BarcodeSelect from '../components/barcode-select';
-import { CustomCheckbox } from '@reach/checkbox';
+import Checkbox from '../components/checkbox';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -76,13 +76,12 @@ const General = ({ hydrate }: GeneralProps) => {
 				id="user-select"
 				extra={
 					<label>
-						<CustomCheckbox
-							className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border border-gray-300 rounded"
+						<Checkbox
 							checked={settings.default_customer_is_cashier}
-							onChange={(event) => {
+							onChange={(default_customer_is_cashier) => {
 								dispatch({
 									type: 'update',
-									payload: { default_customer_is_cashier: event?.target.checked },
+									payload: { default_customer_is_cashier },
 								});
 							}}
 						/>
