@@ -27,11 +27,9 @@ module.exports = function (_env, argv) {
             lodash: 'lodash',
             wp: 'wp',
             '@wordpress/element': 'wp.element',
-            '@wordpress/components': 'wp.components',
             '@wordpress/i18n': 'wp.i18n',
             '@wordpress/api-fetch': 'wp.apiFetch',
             '@wordpress/url': 'wp.url',
-            '@wordpress/data': 'wp.data',
         },
         module: {
             rules: [

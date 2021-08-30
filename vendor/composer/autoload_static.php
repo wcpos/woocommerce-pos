@@ -6,35 +6,67 @@ namespace Composer\Autoload;
 
 class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
 {
+    public static $files = array (
+        '38fbb71d514eee25044aa9d94851ee76' => __DIR__ . '/..' . '/wp-phpunit/wp-phpunit/__loaded.php',
+    );
+
     public static $prefixLengthsPsr4 = array (
         'W' => 
         array (
+            'WCPOS\\WooCommercePOS\\Tests\\' => 27,
             'WCPOS\\WooCommercePOS\\' => 21,
+        ),
+        'V' => 
+        array (
+            'VariableAnalysis\\' => 17,
         ),
         'F' => 
         array (
             'Firebase\\JWT\\' => 13,
         ),
+        'D' => 
+        array (
+            'Dealerdirect\\Composer\\Plugin\\Installers\\PHPCodeSniffer\\' => 55,
+        ),
     );
 
     public static $prefixDirsPsr4 = array (
+        'WCPOS\\WooCommercePOS\\Tests\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/tests/includes',
+        ),
         'WCPOS\\WooCommercePOS\\' => 
         array (
             0 => __DIR__ . '/../..' . '/includes',
+        ),
+        'VariableAnalysis\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis',
         ),
         'Firebase\\JWT\\' => 
         array (
             0 => __DIR__ . '/..' . '/firebase/php-jwt/src',
         ),
+        'Dealerdirect\\Composer\\Plugin\\Installers\\PHPCodeSniffer\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/dealerdirect/phpcodesniffer-composer-installer/src',
+        ),
     );
 
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
+        'Dealerdirect\\Composer\\Plugin\\Installers\\PHPCodeSniffer\\Plugin' => __DIR__ . '/..' . '/dealerdirect/phpcodesniffer-composer-installer/src/Plugin.php',
         'Firebase\\JWT\\BeforeValidException' => __DIR__ . '/..' . '/firebase/php-jwt/src/BeforeValidException.php',
         'Firebase\\JWT\\ExpiredException' => __DIR__ . '/..' . '/firebase/php-jwt/src/ExpiredException.php',
         'Firebase\\JWT\\JWK' => __DIR__ . '/..' . '/firebase/php-jwt/src/JWK.php',
         'Firebase\\JWT\\JWT' => __DIR__ . '/..' . '/firebase/php-jwt/src/JWT.php',
         'Firebase\\JWT\\SignatureInvalidException' => __DIR__ . '/..' . '/firebase/php-jwt/src/SignatureInvalidException.php',
+        'VariableAnalysis\\Lib\\Constants' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/Constants.php',
+        'VariableAnalysis\\Lib\\Helpers' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/Helpers.php',
+        'VariableAnalysis\\Lib\\ScopeInfo' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/ScopeInfo.php',
+        'VariableAnalysis\\Lib\\ScopeType' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/ScopeType.php',
+        'VariableAnalysis\\Lib\\VariableInfo' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Lib/VariableInfo.php',
+        'VariableAnalysis\\Sniffs\\CodeAnalysis\\VariableAnalysisSniff' => __DIR__ . '/..' . '/sirbrillig/phpcs-variable-analysis/VariableAnalysis/Sniffs/CodeAnalysis/VariableAnalysisSniff.php',
         'WCPOS\\WooCommercePOS\\API' => __DIR__ . '/../..' . '/includes/API.php',
         'WCPOS\\WooCommercePOS\\API\\Auth' => __DIR__ . '/../..' . '/includes/API/Auth.php',
         'WCPOS\\WooCommercePOS\\API\\Controller' => __DIR__ . '/../..' . '/includes/API/Controller.php',
@@ -62,6 +94,8 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'WCPOS\\WooCommercePOS\\Templates' => __DIR__ . '/../..' . '/includes/Templates.php',
         'WCPOS\\WooCommercePOS\\Templates\\Frontend' => __DIR__ . '/../..' . '/includes/Templates/Frontend.php',
         'WCPOS\\WooCommercePOS\\Templates\\Pay' => __DIR__ . '/../..' . '/includes/Templates/Pay.php',
+        'WCPOS\\WooCommercePOS\\Tests\\Test_Settings' => __DIR__ . '/../..' . '/tests/includes/Test_Settings.php',
+        'WCPOS\\WooCommercePOS\\Tests\\Test_Wcpos_Functions' => __DIR__ . '/../..' . '/tests/includes/Test_Wcpos_Functions.php',
         'WCPOS\\WooCommercePOS\\Traits\\Settings' => __DIR__ . '/../..' . '/includes/Traits/Settings.php',
         'WCPOS\\WooCommercePOS\\i18n' => __DIR__ . '/../..' . '/includes/i18n.php',
     );

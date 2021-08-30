@@ -1,26 +1,43 @@
 import * as React from 'react';
-import { Switch } from '@headlessui/react';
+import { useId } from '@reach/auto-id';
 
 interface ToggleProps {
 	checked: boolean;
 	onChange(checked: boolean): void;
+	disabled?: boolean;
+	name: string;
 }
 
-const Toggle = ({ checked, onChange }: ToggleProps) => {
+const Toggle = ({ checked, onChange, disabled, name }: ToggleProps) => {
+	const id = useId(name);
+
+	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+		!disabled && onChange(event.target.checked);
+	};
+
 	return (
-		<Switch
-			checked={checked}
-			onChange={onChange}
-			className={`${
-				checked ? 'bg-wp-admin-theme-color' : 'bg-gray-200'
-			} mt-1 sm:mt-0 sm:col-span-2 relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-wp-admin-theme-color`}
-		>
-			<span
-				className={`${
-					checked ? 'translate-x-6' : 'translate-x-1'
-				} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}
+		<div className="flex">
+			<input
+				checked={checked}
+				onChange={handleChange}
+				type="checkbox"
+				name={name}
+				id={id}
+				className="hidden"
 			/>
-		</Switch>
+			<label htmlFor={id} className="relative w-12 h-6 select-none cursor-pointer">
+				<span
+					className={`${
+						checked ? 'bg-wp-admin-theme-color' : 'bg-gray-200'
+					} absolute left-0 top-0 h-full w-full bg-gray-100 rounded-full transition-colors`}
+				></span>
+				<span
+					className={`${
+						checked ? 'translate-x-6 border-wp-admin-theme-color' : 'border-gray-200'
+					} h-6 w-6 border-2 absolute rounded-full bg-white transform duration-300 ease-in-out`}
+				></span>
+			</label>
+		</div>
 	);
 };
 

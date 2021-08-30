@@ -48,6 +48,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 			</FormRow>
 			<FormRow label="Send admin emails">
 				<Toggle
+					name="admin-emails"
 					checked={settings.admin_emails}
 					onChange={(admin_emails: boolean) => {
 						dispatch({
@@ -59,6 +60,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 			</FormRow>
 			<FormRow label="Send customer emails">
 				<Toggle
+					name="customer-emails"
 					checked={settings.customer_emails}
 					onChange={(customer_emails: boolean) => {
 						dispatch({
@@ -70,6 +72,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 			</FormRow>
 			<FormRow label="Automatically print receipt after checkout">
 				<Toggle
+					name="auto-print"
 					checked={settings.auto_print_receipt}
 					onChange={(auto_print_receipt: boolean) => {
 						dispatch({

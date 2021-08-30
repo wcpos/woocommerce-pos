@@ -13,6 +13,7 @@ import Footer from './components/footer';
 import Error from './components/error';
 import useNotices, { NoticesProvider } from './hooks/use-notices';
 import Notice from './components/notice';
+import Snackbar from './components/snackbar';
 import Tabs from './components/tabs';
 
 import './settings.css';
@@ -40,7 +41,7 @@ const tabs = [
 ];
 
 const App = ({ hydrate }: AppProps) => {
-	const { notice, snackbars, setNotice, setSnackbars } = useNotices();
+	const { notice, snackbar, setNotice, setSnackbar } = useNotices();
 
 	return (
 		<div className="container mx-auto max-w-screen-md py-0 md:py-4 md:pr-4 space-y-4">
@@ -67,6 +68,9 @@ const App = ({ hydrate }: AppProps) => {
 				</Tabs>
 			</div>
 			<Footer />
+			<div className="fixed w-48 h-48 bottom-8 pointer-events-none flex flex-col justify-end">
+				<Snackbar message={snackbar?.message} onRemove={() => setSnackbar(null)} />
+			</div>
 		</div>
 	);
 };

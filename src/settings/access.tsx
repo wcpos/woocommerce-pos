@@ -37,6 +37,7 @@ const Access = ({ hydrate }: AccessProps) => {
 					<ul>
 						{map(settings, (role, id) => (
 							<li
+								key={id}
 								className={classNames(
 									'p-4 mb-1 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
 									id == selected &&
@@ -69,6 +70,7 @@ const Access = ({ hydrate }: AccessProps) => {
 										const disabled = 'administrator' == selected && 'read' == label;
 										return (
 											<label
+												key={label}
 												className={classNames('block mb-1', disabled ? 'cursor-not-allowed' : '')}
 											>
 												<Checkbox
