@@ -36,7 +36,12 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 	);
 
 	return (
-		<Dialog onDismiss={closeModal} className="rounded-lg" initialFocusRef={inputRef}>
+		<Dialog
+			onDismiss={closeModal}
+			className="rounded-lg"
+			initialFocusRef={inputRef}
+			aria-label={`${gateway.title} Settings`}
+		>
 			<h2 className="mt-0 relative">
 				{gateway.title}
 				<button className="absolute top-0 right-0">
