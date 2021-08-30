@@ -59,7 +59,7 @@ class Settings {
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
 			PLUGIN_URL . $assets . '/css/settings.css',
-			array( 'wp-components' ),
+			array(),
 			VERSION
 		);
 
@@ -71,7 +71,6 @@ class Settings {
 				'react-dom',
 				'lodash',
 				'wp-element',
-				'wp-components',
 				'wp-i18n',
 				'wp-api-fetch',
 			),

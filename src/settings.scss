@@ -38,6 +38,23 @@
 			padding: 20px;
 		}
 
+		// tweaks to forms
+		.components-panel__row {
+			justify-content: flex-start;
+
+			label {
+				max-width: 100%;
+			}
+
+			.dashicons-editor-help::before {
+				opacity: 0.3;
+			}
+
+			.components-combobox-control__suggestions-container {
+				width: 200px;
+			}
+		}
+
 		// tables
 		.woocommerce-pos-table {
 			width: 100%;
@@ -99,9 +116,22 @@
 		}
 	}
 
-	.components-snackbar-list {
-		bottom: 1em;
-		left: 1em;
+	#woocommerce-pos-settings-snackbars {
+		width: 500px;
+		height: 500px;
+		position: fixed;
+		bottom: 40px;
+		left: 180px;
+		pointer-events: none;
+
+		@media only screen and (max-width: 960px) {
+			left: 56px;
+		}
+
+		.components-snackbar-list {
+			right: 1em;
+			bottom: 1em;
+		}
 	}
 
 	#woocommerce-pos-settings-footer {

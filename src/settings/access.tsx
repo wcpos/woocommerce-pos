@@ -1,7 +1,9 @@
 import * as React from 'react';
-import { TabPanel, CheckboxControl, Notice } from '@wordpress/components';
 import { map, get } from 'lodash';
+import classNames from 'classnames';
 import useSettingsApi from '../hooks/use-settings-api';
+import Notice from '../components/notice';
+import Checkbox from '../components/checkbox';
 
 export type AccessSettingsProps = Record<
 	string,
@@ -17,61 +19,81 @@ interface AccessProps {
 
 const Access = ({ hydrate }: AccessProps) => {
 	const { settings, dispatch } = useSettingsApi('access', get(hydrate, ['settings', 'access']));
+	const [selected, setSelected] = React.useState('administrator');
 
 	return (
 		<>
-			<Notice status="warning" isDismissible={false}>
+			<Notice status="info" isDismissible={false}>
 				By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
 				It is recommended that you <strong>do not change</strong> the default settings unless you
-				are fully aware of the consequences. For more information please visit
-				http://woopos.com.au/docs/pos-access
+				are fully aware of the consequences. For more information please visit 
+				<a href="https://wcpos.com/docs/pos-access" target="_blank" rel="noreferrer">
+					https://wcpos.com/docs/pos-access
+				</a>
+				.
 			</Notice>
-			<TabPanel
-				className="woocommerce-pos-settings-access-tabs"
-				activeClass="active-tab"
-				orientation="vertical"
-				tabs={map(settings, (role, id) => ({
-					name: id,
-					title: role.name,
-					capabilities: role.capabilities,
-				}))}
-			>
-				{(tab) => (
-					<>
-						{map(tab.capabilities, (caps, group) => {
-							return (
-								<div key={group}>
-									<h3>
+			<div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+				<div className="">
+					<ul>
+						{map(settings, (role, id) => (
+							<li
+								key={id}
+								className={classNames(
+									'p-4 mb-1 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
+									id == selected &&
+										'bg-wp-admin-theme-color-lightest hover:bg-wp-admin-theme-color-lightest'
+								)}
+								onClick={() => {
+									setSelected(id);
+								}}
+							>
+								{role.name}
+							</li>
+						))}
+					</ul>
+				</div>
+				<div className="">
+					{map(settings[selected].capabilities, (caps, group) => {
+						return (
+							<div key={group}>
+								<h2 className="text-base">
+									{
 										{
-											{
-												wcpos: 'WooCommerce POS',
-												wc: 'WooCommerce',
-												wp: 'WordPress',
-											}[group]
-										}
-									</h3>
-									<div className="capabilities">
-										{map(caps, (checked, label) => (
-											<CheckboxControl
+											wcpos: 'WooCommerce POS',
+											wc: 'WooCommerce',
+											wp: 'WordPress',
+										}[group]
+									}
+								</h2>
+								<div>
+									{map(caps, (checked, label) => {
+										const disabled = 'administrator' == selected && 'read' == label;
+										return (
+											<label
 												key={label}
-												checked={checked}
-												label={label}
-												disabled={'administrator' == tab.name && 'read' == label}
-												onChange={(value) => {
-													dispatch({
-														type: 'update-capabilities',
-														payload: { cap: label, value, group, role: tab.name },
-													});
-												}}
-											/>
-										))}
-									</div>
+												className={classNames('block mb-1', disabled ? 'cursor-not-allowed' : '')}
+											>
+												<Checkbox
+													key={label}
+													checked={checked}
+													disabled={disabled}
+													onChange={(value) => {
+														dispatch({
+															type: 'update-capabilities',
+															payload: { cap: label, value, group, role: selected },
+														});
+													}}
+												/>
+												{label}
+											</label>
+										);
+									})}
 								</div>
-							);
-						})}
-					</>
-				)}
-			</TabPanel>
+							</div>
+						);
+					})}
+				</div>
+			</div>
 		</>
 	);
 };

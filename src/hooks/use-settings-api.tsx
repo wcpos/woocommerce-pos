@@ -28,12 +28,12 @@ function reducer(state, action) {
 
 const useSettingsApi = (id: string, initialSettings: Record<string, any>) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
-	const { setNotice, setSnackbars } = useNotices();
+	const { setNotice, setSnackbar } = useNotices();
 	const silent = React.useRef(true);
 
 	React.useEffect(() => {
 		async function updateSettings() {
-			setSnackbars([{ id: 'saving', content: 'Saving' }]);
+			setSnackbar({ message: 'Saving' });
 			const data = await apiFetch({
 				path: `wcpos/v1/settings/${id}?wcpos=1`,
 				method: 'POST',
@@ -43,7 +43,7 @@ const useSettingsApi = (id: string, initialSettings: Record<string, any>) => {
 			if (data) {
 				silent.current = true;
 				dispatch({ type: 'sync', payload: data });
-				setSnackbars([{ id: 'saved', content: 'Saved' }]);
+				setSnackbar({ message: 'Saved' });
 			}
 		}
 
@@ -52,7 +52,7 @@ const useSettingsApi = (id: string, initialSettings: Record<string, any>) => {
 		} else {
 			updateSettings();
 		}
-	}, [id, settings, dispatch, setNotice, setSnackbars]);
+	}, [id, settings, dispatch, setNotice, setSnackbar]);
 
 	return { settings, dispatch };
 };

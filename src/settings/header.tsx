@@ -4,7 +4,7 @@ import PosIcon from '../../assets/img/wcpos-icon.svg';
 
 const Header = () => {
 	return (
-		<header id="woocommerce-pos-settings-header">
+		<header className="flex justify-between items-center">
 			<PosIcon />
 			<h1>{__('Settings', 'wordpress')}</h1>
 		</header>

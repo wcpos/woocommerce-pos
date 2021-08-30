@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { FallbackProps } from 'react-error-boundary';
-import { Notice } from '@wordpress/components';
+import Notice from './notice';
 
 const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
 	return (

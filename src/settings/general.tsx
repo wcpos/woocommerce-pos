@@ -1,17 +1,11 @@
 import * as React from 'react';
-import { __ } from '@wordpress/i18n';
-import {
-	PanelRow,
-	ToggleControl,
-	CheckboxControl,
-	TextControl,
-	Button,
-	// @ts-ignore
-	ComboboxControl,
-} from '@wordpress/components';
 import { get } from 'lodash';
 import UserSelect from '../components/user-select';
 import useSettingsApi from '../hooks/use-settings-api';
+import Toggle from '../components/toggle';
+import FormRow from '../components/form-row';
+import BarcodeSelect from '../components/barcode-select';
+import Checkbox from '../components/checkbox';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -29,139 +23,140 @@ interface GeneralProps {
 
 const General = ({ hydrate }: GeneralProps) => {
 	const { settings, dispatch } = useSettingsApi('general', get(hydrate, ['settings', 'general']));
-	const [newBarcodeField, setNewBarcodeField] = React.useState<string>('');
-	const [showNewBarcodeField, setShowNewBarcodeField] = React.useState<boolean>(false);
-
-	const barcodeFields = React.useMemo(() => {
-		const fields = Object.values(get(hydrate, 'barcode_fields'));
-		if (!fields.includes(settings.barcode_field)) {
-			fields.push(settings.barcode_field);
-		}
-		return fields;
-	}, [hydrate, settings]);
 
 	return (
 		<>
-			<PanelRow>
-				<ToggleControl
-					label="Force SSL"
-					help=""
-					checked={settings.force_ssl}
-					onChange={(force_ssl: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { force_ssl },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Enable POS only products"
-					checked={settings.pos_only_products}
-					onChange={(pos_only_products: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { pos_only_products },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Enable decimal quantities"
-					help="Allows items to have decimal values in the quantity field, eg: 0.25"
-					checked={settings.decimal_qty}
-					onChange={(decimal_qty: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { decimal_qty },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ToggleControl
-					label="Automatically generate username from customer email"
-					help=""
-					checked={settings.generate_username}
-					onChange={(generate_username: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { generate_username },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<UserSelect
-					selectedUserId={settings.default_customer}
-					dispatch={dispatch}
-					disabled={!settings.default_customer_is_cashier}
-				/>
-				<CheckboxControl
-					label="Use cashier account"
-					checked={settings.default_customer_is_cashier}
-					onChange={(default_customer_is_cashier: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { default_customer_is_cashier },
-						});
-					}}
-				/>
-			</PanelRow>
-			<PanelRow>
-				<ComboboxControl
-					label="Barcode Field"
-					help="Select a meta field to use as the product barcode"
-					value={settings.barcode_field}
-					onChange={(value: string) => {
-						if (value) {
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="force-ssl"
+						checked={settings.force_ssl}
+						onChange={(force_ssl: boolean) => {
 							dispatch({
 								type: 'update',
-								payload: { barcode_field: value },
+								payload: { force_ssl },
 							});
-						}
-					}}
-					options={barcodeFields.map((field: string) => ({ label: field, value: field }))}
-					allowReset={true}
-				/>
-				{showNewBarcodeField ? (
-					<>
-						<TextControl
-							value={newBarcodeField}
-							onChange={(nextValue: string) => setNewBarcodeField(nextValue)}
-						/>
-						<Button
-							disabled={!newBarcodeField}
-							isPrimary
-							onClick={() => {
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label
+					id="force-ssl"
+					help="Force POS to send server requests over HTTPS (recommended)"
+				>
+					Force SSL
+				</FormRow.Label>
+			</FormRow>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="pos-only-products"
+						checked={settings.pos_only_products}
+						onChange={(pos_only_products: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { pos_only_products },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label
+					id="pos-only-products"
+					help="Adds online and POS visibility settings to product admin"
+				>
+					Enable POS only products
+				</FormRow.Label>
+			</FormRow>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="decimal-qty"
+						checked={settings.decimal_qty}
+						onChange={(decimal_qty: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { decimal_qty },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label
+					id="decimal-qty"
+					help="Allows items to have decimal values in the quantity field, eg: 0.25"
+				>
+					Enable decimal quantities
+				</FormRow.Label>
+			</FormRow>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="generate-username"
+						checked={settings.generate_username}
+						onChange={(generate_username: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { generate_username },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label id="generate-username" className="col-span-2">
+					Automatically generate username from customer email
+				</FormRow.Label>
+			</FormRow>
+			<FormRow>
+				<FormRow.Label
+					id="user-select"
+					help="The default customer for POS orders, eg: Guest"
+					className="text-right"
+				>
+					Default POS customer
+				</FormRow.Label>
+				<FormRow.Col>
+					<UserSelect
+						selectedUserId={settings.default_customer}
+						initialOption={get(hydrate, ['default_customer'])}
+						dispatch={dispatch}
+						disabled={settings.default_customer_is_cashier}
+					/>
+				</FormRow.Col>
+				<FormRow.Col>
+					<label>
+						<Checkbox
+							checked={settings.default_customer_is_cashier}
+							onChange={(default_customer_is_cashier) => {
 								dispatch({
 									type: 'update',
-									payload: { barcode_field: newBarcodeField },
+									payload: { default_customer_is_cashier },
 								});
 							}}
-						>
-							{__('Add')}
-						</Button>
-						<Button
-							onClick={() => {
-								setShowNewBarcodeField(false);
-							}}
-						>
-							{__('Cancel')}
-						</Button>
-					</>
-				) : (
-					<Button
-						onClick={() => {
-							setShowNewBarcodeField(true);
+						/>
+						Use cashier account
+					</label>
+				</FormRow.Col>
+			</FormRow>
+			<FormRow>
+				<FormRow.Label
+					help="Product meta field to be used as barcode, eg: _sku or _barcode"
+					id="barcode-field"
+					className="text-right"
+				>
+					Barcode Field
+				</FormRow.Label>
+				<FormRow.Col>
+					<BarcodeSelect
+						options={Object.values(get(hydrate, 'barcode_fields'))}
+						selected={settings.barcode_field}
+						onSelect={(value: string) => {
+							if (value) {
+								dispatch({
+									type: 'update',
+									payload: { barcode_field: value },
+								});
+							}
 						}}
-					>
-						Add new meta field
-					</Button>
-				)}
-			</PanelRow>
+					/>
+				</FormRow.Col>
+			</FormRow>
 		</>
 	);
 };
