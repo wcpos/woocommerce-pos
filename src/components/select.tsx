@@ -17,11 +17,18 @@ interface SelectProps {
 	options: OptionProps[];
 	selected: string;
 	onChange: (value: string) => void;
+	name: string;
 }
 
-const Select = ({ options, selected, onChange }: SelectProps) => {
+const Select = ({ options, selected, onChange, name }: SelectProps) => {
 	return (
-		<ListboxInput defaultValue={selected} onChange={onChange}>
+		<ListboxInput
+			defaultValue={selected}
+			onChange={onChange}
+			aria-labelledby={name}
+			name={name}
+			id={name}
+		>
 			<ListboxButton
 				className="w-full rounded border border-gray-300 leading-8 focus:border-wp-admin-theme-color"
 				arrow={<SelectorIcon className="w-5 h-5 text-gray-400" />}

@@ -1,34 +1,65 @@
 import * as React from 'react';
+import { get } from 'lodash';
+import classnames from 'classnames';
 import Tooltip from '../components/tooltip';
 import { QuestionMarkCircleIcon } from '@heroicons/react/solid';
 
-interface FormRowProps {
-	label: React.ReactNode;
-	help?: string;
+interface ColProps {
 	children: React.ReactNode;
-	extra?: React.ReactNode;
-	id?: string;
+	className?: string;
 }
 
-const FormRow = ({ label, help, children, extra, id }: FormRowProps) => {
+const Col = ({ children, className }: ColProps) => {
+	return <div className={classnames(className)}>{children}</div>;
+};
+
+interface LabelProps {
+	children: string;
+	help?: string;
+	className?: string;
+	id: string;
+}
+
+const Label = ({ children, help, className, id }: LabelProps) => {
+	return (
+		<label className={classnames('block flex-1 font-medium text-sm', className)} htmlFor={id}>
+			{children}
+			{help && (
+				<Tooltip label={help}>
+					<button className="w-5 h-5 text-gray-300 cursor-help align-bottom ml-2">
+						<QuestionMarkCircleIcon />
+					</button>
+				</Tooltip>
+			)}
+		</label>
+	);
+};
+
+interface FormRowProps {
+	children: React.ReactElement[];
+}
+
+const FormRow = ({ children }: FormRowProps) => {
 	return (
 		<div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 items-center">
-			<div className="flex">
-				<label className="block flex-1 font-medium text-sm" htmlFor={id}>
-					{label}
-				</label>
-				{help && (
-					<Tooltip label={help}>
-						<button className="w-5 h-5 text-gray-400 cursor-help">
-							<QuestionMarkCircleIcon />
-						</button>
-					</Tooltip>
-				)}
-			</div>
-			<div className="mt-1 sm:mt-0">{children}</div>
-			{extra && <div className="mt-1 sm:mt-0">{extra}</div>}
+			{React.Children.map(children, (child, index) => {
+				const name = get(child, 'type.name');
+				let className = child.props.className || '';
+
+				if (index > 0) {
+					className += ' mt-1 sm:mt-0';
+				}
+
+				if (name == 'Label') {
+					return <Label {...child.props} className={className} />;
+				} else if (name == 'Col') {
+					return <Col {...child.props} className={className} />;
+				}
+			})}
 		</div>
 	);
 };
 
+FormRow.Col = Col;
+FormRow.Label = Label;
 export default FormRow;

@@ -16,7 +16,7 @@ const Toggle = ({ checked, onChange, disabled, name }: ToggleProps) => {
 	};
 
 	return (
-		<div className="flex">
+		<label htmlFor={id} className="relative block w-12 h-6 select-none cursor-pointer text-left">
 			<input
 				checked={checked}
 				onChange={handleChange}
@@ -25,19 +25,17 @@ const Toggle = ({ checked, onChange, disabled, name }: ToggleProps) => {
 				id={id}
 				className="hidden"
 			/>
-			<label htmlFor={id} className="relative w-12 h-6 select-none cursor-pointer">
-				<span
-					className={`${
-						checked ? 'bg-wp-admin-theme-color' : 'bg-gray-200'
-					} absolute left-0 top-0 h-full w-full bg-gray-100 rounded-full transition-colors`}
-				></span>
-				<span
-					className={`${
-						checked ? 'translate-x-6 border-wp-admin-theme-color' : 'border-gray-200'
-					} h-6 w-6 border-2 absolute rounded-full bg-white transform duration-300 ease-in-out`}
-				></span>
-			</label>
-		</div>
+			<span
+				className={`${
+					checked ? 'bg-wp-admin-theme-color' : 'bg-gray-200'
+				} absolute left-0 top-0 h-full w-full bg-gray-100 rounded-full transition-colors`}
+			></span>
+			<span
+				className={`${
+					checked ? 'translate-x-6 border-wp-admin-theme-color' : 'border-gray-200'
+				} h-6 w-6 border-2 absolute rounded-full bg-white transform duration-300 ease-in-out`}
+			></span>
+		</label>
 	);
 };
 

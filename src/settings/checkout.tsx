@@ -34,53 +34,86 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 
 	return (
 		<>
-			<FormRow label="Completed order status">
-				<Select
-					options={orderStatusOptions}
-					selected={settings.order_status}
-					onChange={(order_status: string) => {
-						dispatch({
-							type: 'update',
-							payload: { order_status },
-						});
-					}}
-				/>
+			<FormRow>
+				<FormRow.Label
+					id="order-status"
+					className="text-right"
+					help="Change the default order status for POS sales"
+				>
+					Completed order status
+				</FormRow.Label>
+				<FormRow.Col>
+					<Select
+						name="order-status"
+						options={orderStatusOptions}
+						selected={settings.order_status}
+						onChange={(order_status: string) => {
+							dispatch({
+								type: 'update',
+								payload: { order_status },
+							});
+						}}
+					/>
+				</FormRow.Col>
 			</FormRow>
-			<FormRow label="Send admin emails">
-				<Toggle
-					name="admin-emails"
-					checked={settings.admin_emails}
-					onChange={(admin_emails: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { admin_emails },
-						});
-					}}
-				/>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="admin-emails"
+						checked={settings.admin_emails}
+						onChange={(admin_emails: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { admin_emails },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label
+					id="admin-emails"
+					className="col-span-2"
+					help="Send WooCommerce notification emails for POS orders"
+				>
+					Send admin emails
+				</FormRow.Label>
 			</FormRow>
-			<FormRow label="Send customer emails">
-				<Toggle
-					name="customer-emails"
-					checked={settings.customer_emails}
-					onChange={(customer_emails: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { customer_emails },
-						});
-					}}
-				/>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="customer-emails"
+						checked={settings.customer_emails}
+						onChange={(customer_emails: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { customer_emails },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label
+					id="customer-emails"
+					className="col-span-2"
+					help="Send WooCommerce notification emails for POS orders"
+				>
+					Send customer emails
+				</FormRow.Label>
 			</FormRow>
-			<FormRow label="Automatically print receipt after checkout">
-				<Toggle
-					name="auto-print"
-					checked={settings.auto_print_receipt}
-					onChange={(auto_print_receipt: boolean) => {
-						dispatch({
-							type: 'update',
-							payload: { auto_print_receipt },
-						});
-					}}
-				/>
+			<FormRow>
+				<FormRow.Col className="flex justify-self-end">
+					<Toggle
+						name="auto-print"
+						checked={settings.auto_print_receipt}
+						onChange={(auto_print_receipt: boolean) => {
+							dispatch({
+								type: 'update',
+								payload: { auto_print_receipt },
+							});
+						}}
+					/>
+				</FormRow.Col>
+				<FormRow.Label id="auto-print" className="col-span-2">
+					Automatically print receipt after checkout
+				</FormRow.Label>
 			</FormRow>
 			<h2 className="text-base">Gateways</h2>
 			<p>

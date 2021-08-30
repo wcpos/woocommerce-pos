@@ -92,22 +92,24 @@ const License = ({ hydrate }: LicenseProps) => {
 			<Button onClick={() => handleActivation(true)}>Deactivate</Button>
 		</>
 	) : (
-		<FormRow
-			label="License Key"
-			id="license-key"
-			extra={
+		<FormRow>
+			<FormRow.Label id="license-key" className="text-right">
+				License Key
+			</FormRow.Label>
+			<FormRow.Col>
+				<input
+					type="text"
+					name="license-key"
+					id="license-key"
+					className="mt-1 focus:ring-indigo-500 focus:border-wp-admin-theme-color block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+					onChange={throttle(handleChange, 100)}
+				/>
+			</FormRow.Col>
+			<FormRow.Col>
 				<Button disabled={!key} onClick={() => handleActivation()}>
 					Activate
 				</Button>
-			}
-		>
-			<input
-				type="text"
-				name="license-key"
-				id="license-key"
-				className="mt-1 focus:ring-indigo-500 focus:border-wp-admin-theme-color block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-				onChange={throttle(handleChange, 100)}
-			/>
+			</FormRow.Col>
 		</FormRow>
 	);
 };
