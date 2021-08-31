@@ -30,27 +30,35 @@ const useSettingsApi = (id: string, initialSettings: Record<string, any>) => {
 	const [settings, dispatch] = React.useReducer(reducer, initialSettings);
 	const { setNotice, setSnackbar } = useNotices();
 	const silent = React.useRef(true);
+	const isSaving = React.useRef(false);
 
 	React.useEffect(() => {
 		async function updateSettings() {
-			setSnackbar({ message: 'Saving' });
+			isSaving.current = true;
+			setSnackbar({ message: 'Saving', timeout: false });
 			const data = await apiFetch({
 				path: `wcpos/v1/settings/${id}?wcpos=1`,
 				method: 'POST',
 				data: settings,
-			}).catch((err) => setNotice({ type: 'error', message: err.message }));
+			})
+				.catch((err) => setNotice({ type: 'error', message: err.message }))
+				.finally(() => {
+					isSaving.current = false;
+				});
 
 			if (data) {
 				silent.current = true;
 				dispatch({ type: 'sync', payload: data });
-				setSnackbar({ message: 'Saved' });
+				setSnackbar({ message: 'Saved', timeout: true });
 			}
 		}
 
 		if (silent.current) {
 			silent.current = false;
 		} else {
-			updateSettings();
+			if (!isSaving.current) {
+				updateSettings();
+			}
 		}
 	}, [id, settings, dispatch, setNotice, setSnackbar]);
 

@@ -33,13 +33,6 @@ interface AppProps {
 	hydrate: HydrateProps;
 }
 
-const tabs = [
-	{ name: 'general', title: 'General', Component: General },
-	{ name: 'checkout', title: 'Checkout', Component: Checkout },
-	{ name: 'access', title: 'POS Access', Component: Access },
-	{ name: 'license', title: 'Pro License', Component: License },
-];
-
 const App = ({ hydrate }: AppProps) => {
 	const { notice, snackbar, setNotice, setSnackbar } = useNotices();
 
@@ -69,7 +62,11 @@ const App = ({ hydrate }: AppProps) => {
 			</div>
 			<Footer />
 			<div className="fixed w-48 h-48 bottom-8 pointer-events-none flex flex-col justify-end">
-				<Snackbar message={snackbar?.message} onRemove={() => setSnackbar(null)} />
+				<Snackbar
+					message={snackbar?.message}
+					onRemove={() => setSnackbar(null)}
+					timeout={snackbar?.timeout}
+				/>
 			</div>
 		</div>
 	);

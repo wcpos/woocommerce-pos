@@ -7,6 +7,7 @@ interface NoticeProps {
 
 interface SnackbarProps {
 	message: string;
+	timeout: boolean;
 }
 
 interface NoticesContext {
