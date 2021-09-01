@@ -27,8 +27,8 @@ const Access = ({ hydrate }: AccessProps) => {
 				By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
 				It is recommended that you <strong>do not change</strong> the default settings unless you
 				are fully aware of the consequences. For more information please visit 
-				<a href="https://wcpos.com/docs/pos-access" target="_blank" rel="noreferrer">
-					https://wcpos.com/docs/pos-access
+				<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer">
+					https://docs.wcpos.com/pos-access
 				</a>
 				.
 			</Notice>

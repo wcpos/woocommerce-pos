@@ -113,10 +113,16 @@ const General = ({ hydrate }: GeneralProps) => {
 				</FormRow.Label>
 				<FormRow.Col>
 					<UserSelect
-						selectedUserId={settings.default_customer}
 						initialOption={get(hydrate, ['default_customer'])}
-						dispatch={dispatch}
 						disabled={settings.default_customer_is_cashier}
+						onSelect={(value: string) => {
+							if (value) {
+								dispatch({
+									type: 'update',
+									payload: { default_customer: value },
+								});
+							}
+						}}
 					/>
 				</FormRow.Col>
 				<FormRow.Col>

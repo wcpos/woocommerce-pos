@@ -17,20 +17,16 @@ interface UserOptionProps {
 }
 
 interface UserSelectProps {
-	selectedUserId: number;
 	dispatch: any;
 	disabled?: boolean;
 	initialOption: UserOptionProps;
+	onSelect: (value: number) => void;
 }
 
-const UserSelect = ({
-	selectedUserId = 0,
-	dispatch,
-	disabled = false,
-	initialOption,
-}: UserSelectProps) => {
-	const [users, setUsers] = React.useState<UserOptionProps[]>([initialOption]);
+const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectProps) => {
+	const [users, setUsers] = React.useState<UserOptionProps[]>([]);
 	const [term, setTerm] = React.useState<string>('');
+	const [selectedUser, setSelectedUser] = React.useState(initialOption);
 
 	React.useEffect(() => {
 		async function getUsers() {
@@ -54,7 +50,7 @@ const UserSelect = ({
 						label: user.name,
 					};
 				});
-				userOptions.unshift({ value: 0, label: 'Guest' });
+				// userOptions.unshift({ value: 0, label: 'Guest' });
 				setUsers(userOptions);
 			}
 		}
@@ -68,7 +64,7 @@ const UserSelect = ({
 		<Combobox
 			aria-labelledby="user-select"
 			onSelect={(val: any) => {
-				console.log(val);
+				// https://github.com/reach/reach-ui/issues/502
 			}}
 			openOnFocus={true}
 		>
@@ -76,7 +72,7 @@ const UserSelect = ({
 				<ComboboxInput
 					id="user-select"
 					name="user-select"
-					placeholder={''}
+					placeholder={selectedUser.label}
 					disabled={disabled}
 					onChange={throttle(handleChange, 100)}
 					className="w-full px-2 pr-10 rounded border border-gray-300 leading-8 focus:border-wp-admin-theme-color"
@@ -89,7 +85,16 @@ const UserSelect = ({
 			<ComboboxPopover className="mt-1 overflow-auto text-base bg-white border-0 rounded-md shadow-lg max-h-60 ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
 				<ComboboxList>
 					{users.length > 0 ? (
-						users.map((option) => <ComboboxOption key={option.value} value={option.label} />)
+						users.map((option) => (
+							<ComboboxOption
+								key={option.value}
+								value={option.label}
+								onClick={() => {
+									setSelectedUser(option);
+									onSelect(option.value);
+								}}
+							/>
+						))
 					) : (
 						<div className="p-2">No user found</div>
 					)}

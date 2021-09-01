@@ -72,7 +72,7 @@ class Settings extends Controller {
 			array(
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_access_settings' ),
-				'permission_callback' => array( $this, 'update_permission_check' ),
+				'permission_callback' => array( $this, 'access_permission_check' ),
 			)
 		);
 
@@ -219,7 +219,7 @@ class Settings extends Controller {
 							if ( 'administrator' == $slug && 'read' == $cap ) {
 								continue;
 							}
-							if ( in_array( $cap, $this->caps[ $key ] ) ) {
+							if ( in_array( $cap, self::$caps[ $key ] ) ) {
 								$grant ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
 							}
 						endforeach;
@@ -237,5 +237,12 @@ class Settings extends Controller {
 	 */
 	public function update_permission_check() {
 		return current_user_can( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 *
+	 */
+	public function access_permission_check() {
+		return current_user_can( 'manage_options' );
 	}
 }

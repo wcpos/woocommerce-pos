@@ -81,16 +81,17 @@ const License = ({ hydrate }: LicenseProps) => {
 	};
 
 	return settings.activated ? (
-		<>
-			<h3>
-				<span style={{ fontSize: '4em' }}>🎉</span> Thank You!
-			</h3>
-			<p>
-				License <code>{truncate(settings.key)}</code> has been activated.
-			</p>
-			<p>Your support helps fund the ongoing development of WooCommerce POS.</p>
-			<Button onClick={() => handleActivation(true)}>Deactivate</Button>
-		</>
+		<div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 items-center">
+			<div className="text-right text-8xl">🎉</div>
+			<div className="col-span-2">
+				<h3>Thank You!</h3>
+				<p>
+					License <code>{truncate(settings.key)}</code> has been activated.
+				</p>
+				<p>Your support helps fund the ongoing development of WooCommerce POS.</p>
+				<Button onClick={() => handleActivation(true)}>Deactivate</Button>
+			</div>
+		</div>
 	) : (
 		<FormRow>
 			<FormRow.Label id="license-key" className="text-right">

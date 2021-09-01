@@ -96,6 +96,10 @@ class Settings {
 	 *
 	 */
 	public function inline_js() {
+		$settings            = $this->get_all_settings();
+		$default_customer_id = $settings['general']['default_customer'] ?? 0;
+		$default_customer    = get_userdata( $default_customer_id );
+
 		$vars = array(
 			'homepage'         => home_url(),
 			'version'          => VERSION,
@@ -103,8 +107,8 @@ class Settings {
 			'barcode_fields'   => $this->get_barcode_fields(),
 			'order_statuses'   => wc_get_order_statuses(),
 			'default_customer' => array(
-				'value' => 0,
-				'label' => 'Guest',
+				'value' => $default_customer_id,
+				'label' => $default_customer ? $default_customer->display_name : 'Guest',
 			),
 		);
 
