@@ -61,8 +61,12 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 
 			const orderedItems = reorder(items, result.source.index, result.destination.index);
 			setItems(orderedItems);
+			dispatch({
+				type: 'update',
+				payload: { gateways: orderedItems },
+			});
 		},
-		[setItems, items]
+		[setItems, items, dispatch]
 	);
 
 	return (
@@ -140,8 +144,9 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 													<strong>{item.title}</strong>
 												</td>
 												<td className="px-4 py-2 whitespace-nowrap">{item.id}</td>
-												<td className="px-4 py-2 whitespace-nowrap text-center">
+												<td className="px-4 py-2 whitespace-nowrap">
 													<Toggle
+														name={item.id}
 														checked={item.enabled}
 														onChange={() => {
 															dispatch({

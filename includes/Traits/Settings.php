@@ -109,25 +109,56 @@ trait Settings {
 	}
 
 	/**
+	 * Returns the pos gateways settings, but also merges default settings
+	 * - note: gateways may be added/removed creating stale settings
 	 *
+	 * @return array
 	 */
 	public static function get_gateways() {
-		$ordered_gateways = array();
-		$gateways         = WC_Payment_Gateways::instance()->payment_gateways;
+		$available_gateways = array();
+		$gateways           = WC_Payment_Gateways::instance()->payment_gateways();
+		$checkout_settings  = get_option( self::$db_prefix . 'checkout' );
+		$gateway_settings   = array();
 
-		foreach ( $gateways as $gateway ) {
-			array_push(
-				$ordered_gateways,
-				array(
-					'id'          => $gateway->id,
-					'title'       => $gateway->title,
-					'description' => $gateway->description,
-					'enabled'     => false,
-				)
-			);
+		// map gateway settings so that id is key
+		if ( isset( $checkout_settings['gateways'] ) && is_array( $checkout_settings['gateways'] ) ) {
+			foreach ( $checkout_settings['gateways'] as $g ) {
+				$gateway_settings[ $g['id'] ] = $g;
+			}
+		} else {
+			// case where there are no previous gateway settings
+			$default_gateways = array( 'pos_cash', 'pos_card' );
+			foreach ( $default_gateways as $id ) {
+				if ( isset( $gateways[ $id ] ) ) {
+					$gateway_settings[ $id ] = array(
+						'id'          => $id,
+						'title'       => $gateways[ $id ]->title,
+						'description' => $gateways[ $id ]->description,
+						'enabled'     => true,
+					);
+				}
+			}
 		}
 
-		return $ordered_gateways;
+		$ordered_gateways = array_merge( array_flip( array_keys( $gateway_settings ) ), $gateways );
+
+		foreach ( $ordered_gateways as $gateway ) {
+			if ( isset( $gateway_settings[ $gateway->id ] ) ) {
+				array_push( $available_gateways, $gateway_settings[ $gateway->id ] );
+			} else {
+				array_push(
+					$available_gateways,
+					array(
+						'id'          => $gateway->id,
+						'title'       => $gateway->title,
+						'description' => $gateway->description,
+						'enabled'     => false,
+					)
+				);
+			}
+		}
+
+		return $available_gateways;
 	}
 
 	/**

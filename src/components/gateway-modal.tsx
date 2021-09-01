@@ -16,7 +16,14 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 	const inputRef = React.useRef();
 
 	const handleSave = () => {
-		// dispatch
+		dispatch({
+			type: 'update-gateway',
+			payload: {
+				id: gateway.id,
+				title,
+				description,
+			},
+		});
 		closeModal();
 	};
 
