@@ -74,7 +74,7 @@
 		"@types/react-dom": "^17.0.9",
 		"@types/wordpress__url": "^2.14.0",
 		"@typescript-eslint/eslint-plugin": "^4.31.0",
-		"@typescript-eslint/parser": "^4.31.0",
+		"@typescript-eslint/parser": "^4.31.1",
 		"@wordpress/babel-plugin-makepot": "^4.2.0",
 		"@wordpress/env": "^4.1.1",
 		"autoprefixer": "^10.3.4",
