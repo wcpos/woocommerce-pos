@@ -68,7 +68,7 @@
 		"@svgr/webpack": "^5.5.0",
 		"@types/fork-ts-checker-webpack-plugin": "^0.4.5",
 		"@types/jest": "^27.0.1",
-		"@types/lodash": "^4.14.172",
+		"@types/lodash": "^4.14.173",
 		"@types/react": "^17.0.21",
 		"@types/react-beautiful-dnd": "^13.1.2",
 		"@types/react-dom": "^17.0.9",
