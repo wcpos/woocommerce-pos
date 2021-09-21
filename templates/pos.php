@@ -102,17 +102,4 @@ defined( 'ABSPATH' ) || exit;
 </body>
 <?php do_action( 'woocommerce_pos_footer' ); ?>
 
-<script>
-	jQuery.getJSON('https://wcpos.github.io/client/asset-manifest.json', ({files}) => {
-		for (const i in Object.keys(files)) {
-			const key = Object.keys(files)[i];
-
-			if (key.indexOf('.js') !== -1 && key.indexOf('.js.map') === -1) {
-				const path = files[key];
-				console.log('getting script', path);
-				jQuery.getScript(path);
-			}
-		}
-	})
-</script>
 </html>

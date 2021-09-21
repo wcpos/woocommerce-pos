@@ -88,7 +88,6 @@ class Activator {
 
 	/**
 	 * POS Frontend will give 404 if pretty permalinks not active
-	 * - requires autoloader, ie: WCPOS()
 	 */
 	private function permalink_check() {
 		$fail = Status::permalinks_disabled();

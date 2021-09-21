@@ -93,8 +93,11 @@ class Frontend {
 	 * Output the footer scripts
 	 */
 	public function footer() {
+		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+
 		$vars = array(
 			'version'       => VERSION,
+			'manifest'      => $development ? 'https://localhost:3000/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
 			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
 			'site'          => array(
 				'url'       => home_url(),
@@ -121,8 +124,21 @@ class Frontend {
 			),
 		);
 
-		$vars = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
+		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
+		$initial_props = wp_json_encode( $vars );
+		$dev_url       = $development ? 'https://localhost:3000/' : '';
 
-		echo '<script>var initialProps = ' . wp_json_encode( $vars ) . ';</script>';
+		echo "<script>var initialProps={$initial_props};
+			jQuery.getJSON(initialProps.manifest, ({files}) => {
+				for (const i in Object.keys(files)) {
+					const key = Object.keys(files)[i];
+					if (key.indexOf('.js') !== - 1 && key.indexOf('.js.map') === -1) {
+						const path = files[key];
+						console.log('getting script', path);
+						jQuery.getScript('{$dev_url}' + path)
+					}
+				}
+			})
+		</script>" . "\n";
 	}
 }

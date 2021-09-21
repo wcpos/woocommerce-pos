@@ -53,7 +53,7 @@ class Notices {
 				$classes .= ' is-dismissable';
 			}
 			if ( $notice['message'] ) {
-				echo '<div class="' . $classes . '><p>' .
+				echo '<div class="' . $classes . '"><p>' .
 				     wp_kses( $notice['message'], wp_kses_allowed_html( 'post' ) ) .
 				     '</p></div>';
 			}
