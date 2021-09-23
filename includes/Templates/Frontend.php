@@ -94,27 +94,31 @@ class Frontend {
 	 */
 	public function footer() {
 		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+		$user        = wp_get_current_user();
 
 		$vars = array(
 			'version'       => VERSION,
 			'manifest'      => $development ? 'https://localhost:3000/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
 			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
 			'site'          => array(
-				'url'       => home_url(),
-				'name'      => '',
-				'home'      => home_url(),
-				'gmtOffset' => '',
-				'wpApiUrl'  => '',
-				'wcApiUrl'  => '',
+				'url'            => get_option( 'siteurl' ),
+				'name'           => get_option( 'blogname' ),
+				'description'    => get_option( 'blogdescription' ),
+				'home'           => home_url(),
+				'gmtOffset'      => get_option( 'gmt_offset' ),
+				'timezoneString' => get_option( 'timezone_string' ),
+				'wpApiUrl'       => get_rest_url(),
+				'wcApiUrl'       => get_rest_url( null, 'wc/v3' ),
+				'wcApiAuthUrl'   => get_rest_url( null, 'wcpos/v1/jwt' ),
 			),
 			'wpCredentials' => array(
-				'id'          => 1,
-				'username'    => 'admin',
-				'firstName'   => '',
-				'lastName'    => '',
-				'email'       => '',
-				'displayName' => '',
-				'niceName'    => '',
+				'id'          => $user->ID,
+				'username'    => $user->user_login,
+				'firstName'   => $user->user_firstname,
+				'lastName'    => $user->user_lastname,
+				'email'       => $user->user_email,
+				'displayName' => $user->display_name,
+				'niceName'    => $user->user_nicename,
 				'lastAccess'  => '',
 			),
 			'stores'        => array(
