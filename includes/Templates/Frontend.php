@@ -54,21 +54,6 @@ class Frontend {
 	}
 
 	/**
-	 * Disable caching conflicts
-	 */
-	private function no_cache() {
-		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
-		}
-
-		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
-		}
-	}
-
-	/**
 	 * Add variable to login url to signify POS login
 	 *
 	 * @param $login_url
@@ -122,9 +107,9 @@ class Frontend {
 				'lastAccess'  => '',
 			),
 			'stores'        => array(
-				'id'         => 0,
-				'name'       => '',
-				'accounting' => array(),
+				'id'   => 0,
+				'name' => '',
+//				'accounting' => array(),
 			),
 		);
 
@@ -144,5 +129,20 @@ class Frontend {
 				}
 			})
 		</script>" . "\n";
+	}
+
+	/**
+	 * Disable caching conflicts
+	 */
+	private function no_cache() {
+		// disable W3 Total Cache minify
+		if ( ! defined( 'DONOTMINIFY' ) ) {
+			define( 'DONOTMINIFY', 'true' );
+		}
+
+		// disable WP Super Cache
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', 'true' );
+		}
 	}
 }
