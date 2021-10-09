@@ -115,7 +115,7 @@ const General = ({ hydrate }: GeneralProps) => {
 					<UserSelect
 						initialOption={get(hydrate, ['default_customer'])}
 						disabled={settings.default_customer_is_cashier}
-						onSelect={(value: string) => {
+						onSelect={(value: number) => {
 							if (value) {
 								dispatch({
 									type: 'update',

@@ -5,7 +5,6 @@ import {
 	ComboboxPopover,
 	ComboboxList,
 	ComboboxOption,
-	ComboboxOptionText,
 } from '@reach/combobox';
 import { SelectorIcon } from '@heroicons/react/solid';
 import { throttle } from 'lodash';

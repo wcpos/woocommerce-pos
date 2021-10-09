@@ -5,18 +5,18 @@
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'reference' => '4d1ecd38d073d8ec359e4aa4cba87f22caa7370d',
+        'reference' => '9ad1419f51fb23419736dc12b806f56e78dafd3c',
         'name' => 'wcpos/woocommerce-pos',
         'dev' => true,
     ),
     'versions' => array(
         'automattic/vipwpcs' => array(
-            'pretty_version' => '2.3.2',
-            'version' => '2.3.2.0',
+            'pretty_version' => '2.3.3',
+            'version' => '2.3.3.0',
             'type' => 'phpcodesniffer-standard',
             'install_path' => __DIR__ . '/../automattic/vipwpcs',
             'aliases' => array(),
-            'reference' => 'efacebef421334d54b99afa92fb8fa645336a8a7',
+            'reference' => '6cd0a6a82bc0ac988dbf9d6a7c2e293dc8ac640b',
             'dev_requirement' => true,
         ),
         'dealerdirect/phpcodesniffer-composer-installer' => array(
@@ -88,7 +88,7 @@
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
-            'reference' => '4d1ecd38d073d8ec359e4aa4cba87f22caa7370d',
+            'reference' => '9ad1419f51fb23419736dc12b806f56e78dafd3c',
             'dev_requirement' => false,
         ),
         'wp-coding-standards/wpcs' => array(

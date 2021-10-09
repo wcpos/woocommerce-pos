@@ -6,7 +6,6 @@ import {
 	ComboboxPopover,
 	ComboboxList,
 	ComboboxOption,
-	ComboboxOptionText,
 } from '@reach/combobox';
 import { SelectorIcon } from '@heroicons/react/solid';
 import { throttle } from 'lodash';
@@ -17,7 +16,6 @@ interface UserOptionProps {
 }
 
 interface UserSelectProps {
-	dispatch: any;
 	disabled?: boolean;
 	initialOption: UserOptionProps;
 	onSelect: (value: number) => void;

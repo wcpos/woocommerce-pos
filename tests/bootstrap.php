@@ -45,6 +45,21 @@ function _manually_load_plugin() {
 tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 
 /**
+ * Install WooCommerce
+ */
+function install_woocommerce() {
+	require dirname( dirname( __FILE__ ) ) . '/../woocommerce/woocommerce.php';
+	// Clean existing install first.
+	//  define( 'WP_UNINSTALL_PLUGIN', true );
+	//  define( 'WC_REMOVE_ALL_DATA', true );
+	//  require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
+	//  WC_Install::install();
+	//  echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
+}
+
+tests_add_filter( 'muplugins_loaded', 'install_woocommerce' );
+
+/**
  * Adds a wp_die handler for use during tests.
  *
  * If bootstrap.php triggers wp_die, it will not cause the script to fail. This

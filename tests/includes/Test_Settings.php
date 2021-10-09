@@ -39,7 +39,26 @@ class Test_Settings extends WP_UnitTestCase {
 		$this->assertEquals( true, $this::get_setting( 'checkout', 'customer_emails' ) );
 		$this->assertEquals( false, $this::get_setting( 'checkout', 'auto_print_receipt' ) );
 		$this->assertEquals( 'pos_cash', $this::get_setting( 'checkout', 'default_gateway' ) );
-		$this->assertEquals( array(), $this::get_setting( 'checkout', 'gateways' ) );
+		$this->assertEquals( array(
+			array(
+				'id'          => 'pos_cash',
+				'title'       => 'Cash',
+				'description' => '',
+				'enabled'     => true,
+			),
+			array(
+				'id'          => 'pos_card',
+				'title'       => 'Card',
+				'description' => '',
+				'enabled'     => true,
+			),
+			array(
+				'id'          => 'paypal',
+				'title'       => 'PayPal',
+				'description' => '',
+				'enabled'     => true,
+			),
+		), $this::get_setting( 'checkout', 'gateways' ) );
 		$this->assertWPError( $this::get_setting( 'checkout', 'no_setting' ) );
 	}
 
