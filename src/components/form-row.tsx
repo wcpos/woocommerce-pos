@@ -60,6 +60,8 @@ const FormRow = ({ children }: FormRowProps) => {
 	);
 };
 
+Col.displayName = 'Col';
+Label.displayName = 'Label';
 FormRow.Col = Col;
 FormRow.Label = Label;
 export default FormRow;
