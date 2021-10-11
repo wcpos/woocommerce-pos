@@ -32,16 +32,16 @@ const Access = ({ hydrate }: AccessProps) => {
 				</a>
 				.
 			</Notice>
-			<div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+			<div className="sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6">
 				<div className="">
 					<ul>
 						{map(settings, (role, id) => (
 							<li
 								key={id}
 								className={classNames(
-									'p-4 mb-1 rounded font-medium text-sm hover:bg-gray-100 cursor-pointer',
+									'wcpos-p-4 wcpos-mb-1 wcpos-rounded wcpos-font-medium wcpos-text-sm hover:wcpos-bg-gray-100 wcpos-cursor-pointer',
 									id == selected &&
-										'bg-wp-admin-theme-color-lightest hover:bg-wp-admin-theme-color-lightest'
+										'wcpos-bg-wp-admin-theme-color-lightest hover:wcpos-bg-wp-admin-theme-color-lightest'
 								)}
 								onClick={() => {
 									setSelected(id);
@@ -56,7 +56,7 @@ const Access = ({ hydrate }: AccessProps) => {
 					{map(settings[selected].capabilities, (caps, group) => {
 						return (
 							<div key={group}>
-								<h2 className="text-base">
+								<h2 className="wcpos-text-base">
 									{
 										{
 											wcpos: 'WooCommerce POS',
@@ -71,7 +71,10 @@ const Access = ({ hydrate }: AccessProps) => {
 										return (
 											<label
 												key={label}
-												className={classNames('block mb-1', disabled ? 'cursor-not-allowed' : '')}
+												className={classNames(
+													'wcpos-block wcpos-mb-1',
+													disabled ? 'wcpos-cursor-not-allowed' : ''
+												)}
 											>
 												<Checkbox
 													key={label}

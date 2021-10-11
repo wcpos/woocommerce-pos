@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { CustomCheckboxContainer, CustomCheckboxInput } from '@reach/checkbox';
 import classNames from 'classnames';
-import { CheckIcon } from '@heroicons/react/solid';
+import CheckIcon from '@heroicons/react/solid/CheckIcon';
 
 interface CheckboxProps {
 	checked: boolean;
@@ -19,14 +19,16 @@ const Checkbox = ({ checked = false, onChange, disabled = false }: CheckboxProps
 			checked={checked}
 			onChange={handleChange}
 			className={classNames(
-				'w-6 h-6 border rounded focus:outline-none align-middle',
-				checked && !disabled ? 'border-transparent bg-wp-admin-theme-color' : 'border-gray-300',
-				disabled ? 'bg-gray-300 cursor-not-allowed' : ''
+				'wcpos-w-6 wcpos-h-6 wcpos-border wcpos-rounded focus:wcpos-outline-none wcpos-align-middle',
+				checked && !disabled
+					? 'wcpos-border-transparent wcpos-bg-wp-admin-theme-color'
+					: 'wcpos-border-gray-300',
+				disabled ? 'wcpos-bg-gray-300 wcpos-cursor-not-allowed' : ''
 			)}
 		>
 			<CustomCheckboxInput onChange={handleChange} checked={checked} />
-			<span aria-hidden className={classNames(checked ? 'inline' : 'hidden')}>
-				<CheckIcon className="fill-current text-white" />
+			<span aria-hidden className={classNames(checked ? 'wcpos-inline' : 'wcpos-hidden')}>
+				<CheckIcon className="wcpos-fill-current wcpos-text-white" />
 			</span>
 		</CustomCheckboxContainer>
 	);

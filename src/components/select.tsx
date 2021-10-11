@@ -6,7 +6,7 @@ import {
 	ListboxPopover,
 	ListboxList,
 } from '@reach/listbox';
-import { SelectorIcon } from '@heroicons/react/solid';
+import SelectorIcon from '@heroicons/react/solid/SelectorIcon';
 
 interface OptionProps {
 	label: string;
@@ -30,10 +30,10 @@ const Select = ({ options, selected, onChange, name }: SelectProps) => {
 			id={name}
 		>
 			<ListboxButton
-				className="w-full rounded border border-gray-300 leading-8 focus:border-wp-admin-theme-color"
-				arrow={<SelectorIcon className="w-5 h-5 text-gray-400" />}
+				className="wcpos-w-full wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
+				arrow={<SelectorIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400" />}
 			/>
-			<ListboxPopover className="mt-1 overflow-auto text-base bg-white border-0 rounded-md shadow-lg max-h-60 sm:text-sm">
+			<ListboxPopover className="wcpos-mt-1 wcpos-overflow-auto wcpos-text-base wcpos-bg-white wcpos-border-0 wcpos-rounded-md wcpos-shadow-lg wcpos-max-h-60 sm:wcpos-text-sm">
 				<ListboxList>
 					{options.map((option) => (
 						<ListboxOption key={option.value} value={option.value}>

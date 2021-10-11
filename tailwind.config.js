@@ -1,4 +1,5 @@
 module.exports = {
+    prefix: 'wcpos-',
     purge: [
         './src/**/*.tsx',
         './src/**/*.jsx',
@@ -17,8 +18,8 @@ module.exports = {
     },
     variants: {},
     plugins: [],
-    corePlugins: {
-        // preflight: false
-    },
-    important: true
+    // corePlugins: {
+    //     preflight: false
+    // },
+    // important: true
 }

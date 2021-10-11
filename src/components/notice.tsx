@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { XIcon } from '@heroicons/react/solid';
+import XIcon from '@heroicons/react/solid/XIcon';
 import classNames from 'classnames';
 
 interface NoticeProps {
@@ -11,17 +11,17 @@ interface NoticeProps {
 
 const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProps) => {
 	return (
-		<div className="p-4">
+		<div className="wcpos-p-4">
 			<div
 				className={classNames(
-					'flex px-4 py-2 items-center',
-					status == 'error' && 'bg-red-300 border-l-4 border-red-600',
-					status == 'info' && 'bg-yellow-100 border-l-4 border-yellow-300',
-					status == 'success' && 'bg-green-100 border-l-4 border-green-600'
+					'wcpos-flex wcpos-px-4 wcpos-py-2 wcpos-items-center',
+					status == 'error' && 'wcpos-bg-red-300 wcpos-border-l-4 wcpos-border-red-600',
+					status == 'info' && 'wcpos-bg-yellow-100 wcpos-border-l-4 wcpos-border-yellow-300',
+					status == 'success' && 'wcpos-bg-green-100 wcpos-border-l-4 wcpos-border-green-600'
 				)}
 			>
 				<p className="flex-1">{children}</p>
-				{isDismissible && <XIcon onClick={onRemove} className="h-5 w-5" />}
+				{isDismissible && <XIcon onClick={onRemove} className="wcpos-h-5 wcpos-w-5" />}
 			</div>
 		</div>
 	);

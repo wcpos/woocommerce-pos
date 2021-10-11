@@ -25,3 +25,11 @@
 [data-reach-listbox-option][data-current-nav] {
 	background-color: var(--wp-admin-theme-color, #007cba);
 }
+
+/**
+ * forms.css gives input[type="checkbox"] display: inline-block
+ * we need it to be hidden sometimes 
+ */
+.wcpos-hidden {
+	display: none !important;
+}

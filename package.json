@@ -3,6 +3,9 @@
 	"version": "1.0.0-beta",
 	"description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
 	"main": "index.js",
+	"sideEffects": [
+		"*.css"
+	],
 	"scripts": {
 		"wp-env": "wp-env",
 		"start": "wp-env start --xdebug=debug --debug",
@@ -80,7 +83,7 @@
 		"autoprefixer": "^10.3.7",
 		"babel-loader": "^8.2.2",
 		"css-loader": "^6.4.0",
-		"eslint": "^8.0.0",
+		"eslint": "7.32.0",
 		"eslint-config-prettier": "^8.3.0",
 		"eslint-plugin-jest": "^25.0.1",
 		"eslint-plugin-prettier": "^4.0.0",

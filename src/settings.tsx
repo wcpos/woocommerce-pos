@@ -37,8 +37,8 @@ const App = ({ hydrate }: AppProps) => {
 	const { notice, snackbar, setNotice, setSnackbar } = useNotices();
 
 	return (
-		<div className="container mx-auto max-w-screen-md py-0 md:py-4 md:pr-4 space-y-4">
-			<div className="bg-white rounded-lg">
+		<div className="wcpos-container wcpos-mx-auto wcpos-max-w-screen-md wcpos-py-0 md:wcpos-py-4 md:wcpos-pr-4 wcpos-space-y-4">
+			<div className="wcpos-bg-white wcpos-rounded-lg">
 				<Header />
 				<Tabs
 					tabs={[
@@ -61,7 +61,7 @@ const App = ({ hydrate }: AppProps) => {
 				</Tabs>
 			</div>
 			<Footer />
-			<div className="fixed w-48 h-48 bottom-8 pointer-events-none flex flex-col justify-end">
+			<div className="wcpos-fixed wcpos-w-48 wcpos-h-48 wcpos-bottom-8 wcpos-pointer-events-none wcpos-flex wcpos-flex-col wcpos-justify-end">
 				<Snackbar
 					message={snackbar?.message}
 					onRemove={() => setSnackbar(null)}

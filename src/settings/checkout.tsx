@@ -37,7 +37,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 			<FormRow>
 				<FormRow.Label
 					id="order-status"
-					className="text-right"
+					className="wcpos-text-right"
 					help="Change the default order status for POS sales"
 				>
 					Completed order status
@@ -57,7 +57,7 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 				</FormRow.Col>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="admin-emails"
 						checked={settings.admin_emails}
@@ -71,14 +71,14 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 				</FormRow.Col>
 				<FormRow.Label
 					id="admin-emails"
-					className="col-span-2"
+					className="wcpos-col-span-2"
 					help="Send WooCommerce notification emails for POS orders"
 				>
 					Send admin emails
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="customer-emails"
 						checked={settings.customer_emails}
@@ -92,14 +92,14 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 				</FormRow.Col>
 				<FormRow.Label
 					id="customer-emails"
-					className="col-span-2"
+					className="wcpos-col-span-2"
 					help="Send WooCommerce notification emails for POS orders"
 				>
 					Send customer emails
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="auto-print"
 						checked={settings.auto_print_receipt}
@@ -111,11 +111,11 @@ const Checkout = ({ hydrate }: CheckoutProps) => {
 						}}
 					/>
 				</FormRow.Col>
-				<FormRow.Label id="auto-print" className="col-span-2">
+				<FormRow.Label id="auto-print" className="wcpos-col-span-2">
 					Automatically print receipt after checkout
 				</FormRow.Label>
 			</FormRow>
-			<h2 className="text-base">Gateways</h2>
+			<h2 className="wcpos-text-base">Gateways</h2>
 			<p>
 				Installed gateways are listed below. Drag and drop gateways to control their display order
 				at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.

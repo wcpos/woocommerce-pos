@@ -70,33 +70,33 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 	);
 
 	return (
-		<div className="overflow-hidden border border-gray-200 sm:rounded-lg">
+		<div className="wcpos-overflow-hidden wcpos-border wcpos-border-gray-200 sm:wcpos-rounded-lg">
 			<DragDropContext onDragEnd={onDragEnd}>
-				<table className="min-w-full divide-y divide-gray-200">
-					<thead className="bg-gray-50">
+				<table className="wcpos-min-w-full wcpos-divide-y wcpos-divide-gray-200">
+					<thead className="wcpos-bg-gray-50">
 						<tr>
 							<th scope="col"></th>
 							<th
 								scope="col"
-								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
 							>
 								Default
 							</th>
 							<th
 								scope="col"
-								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider"
 							>
 								Gateway
 							</th>
 							<th
 								scope="col"
-								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider"
 							>
 								Gateway ID
 							</th>
 							<th
 								scope="col"
-								className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
 							>
 								Enabled
 							</th>
@@ -108,7 +108,7 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 							<tbody
 								{...provided.droppableProps}
 								ref={provided.innerRef}
-								className="bg-white divide-y divide-gray-200"
+								className="wcpos-bg-white wcpos-divide-y wcpos-divide-gray-200"
 							>
 								{items.map((item, index) => (
 									<Draggable key={item.id} draggableId={item.id} index={index}>
@@ -123,10 +123,10 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 													index
 												)}
 											>
-												<td className="px-4 py-2 whitespace-nowrap">
-													<DragIcon className="w-5 h-5 text-gray-400 fill-current" />
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
+													<DragIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400 wcpos-fill-current" />
 												</td>
-												<td className="px-4 py-2 whitespace-nowrap text-center">
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
 													<input
 														type="radio"
 														value={item.id}
@@ -140,11 +140,11 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 														}}
 													/>
 												</td>
-												<td className="px-4 py-2 whitespace-nowrap">
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
 													<strong>{item.title}</strong>
 												</td>
-												<td className="px-4 py-2 whitespace-nowrap">{item.id}</td>
-												<td className="px-4 py-2 whitespace-nowrap">
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">{item.id}</td>
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
 													<Toggle
 														name={item.id}
 														checked={item.enabled}
@@ -159,7 +159,7 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 														}}
 													/>
 												</td>
-												<td className="px-4 py-2 whitespace-nowrap">
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
 													<Button
 														background="outline"
 														onClick={() => {

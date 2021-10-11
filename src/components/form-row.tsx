@@ -2,7 +2,7 @@ import * as React from 'react';
 import { get } from 'lodash';
 import classnames from 'classnames';
 import Tooltip from '../components/tooltip';
-import { QuestionMarkCircleIcon } from '@heroicons/react/solid';
+import QuestionMarkCircleIcon from '@heroicons/react/solid/QuestionMarkCircleIcon';
 
 interface ColProps {
 	children: React.ReactNode;
@@ -22,11 +22,14 @@ interface LabelProps {
 
 const Label = ({ children, help, className, id }: LabelProps) => {
 	return (
-		<label className={classnames('block flex-1 font-medium text-sm', className)} htmlFor={id}>
+		<label
+			className={classnames('wcpos-block wcpos-flex-1 wcpos-font-medium wcpos-text-sm', className)}
+			htmlFor={id}
+		>
 			{children}
 			{help && (
 				<Tooltip label={help}>
-					<button className="w-5 h-5 text-gray-300 cursor-help align-bottom ml-2">
+					<button className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-300 wcpos-cursor-help wcpos-align-bottom wcpos-ml-2">
 						<QuestionMarkCircleIcon />
 					</button>
 				</Tooltip>
@@ -41,13 +44,13 @@ interface FormRowProps {
 
 const FormRow = ({ children }: FormRowProps) => {
 	return (
-		<div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 items-center">
+		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
 			{React.Children.map(children, (child, index) => {
-				const name = get(child, 'type.name');
+				const name = get(child, ['type', 'displayName']);
 				let className = child.props.className || '';
 
 				if (index > 0) {
-					className += ' mt-1 sm:mt-0';
+					className += ' wcpos-mt-1 sm:wcpos-mt-0';
 				}
 
 				if (name == 'Label') {
@@ -62,6 +65,7 @@ const FormRow = ({ children }: FormRowProps) => {
 
 Col.displayName = 'Col';
 Label.displayName = 'Label';
+FormRow.displayName = 'FormRow';
 FormRow.Col = Col;
 FormRow.Label = Label;
 export default FormRow;

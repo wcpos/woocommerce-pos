@@ -61,7 +61,7 @@ const Tooltip = ({ children, label, 'aria-label': ariaLabel }: TooltipProps) => 
 				{...tooltip}
 				label={label}
 				aria-label={ariaLabel}
-				className="bg-wp-admin-theme-black text-white border-0 rounded py-1 px-2"
+				className="wcpos-bg-wp-admin-theme-black wcpos-text-white wcpos-border-0 wcpos-rounded wcpos-py-1 wcpos-px-2"
 				position={centered}
 			/>
 		</React.Fragment>

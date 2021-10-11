@@ -6,7 +6,7 @@ import {
 	ComboboxList,
 	ComboboxOption,
 } from '@reach/combobox';
-import { SelectorIcon } from '@heroicons/react/solid';
+import SelectorIcon from '@heroicons/react/solid/SelectorIcon';
 import { throttle } from 'lodash';
 
 interface BarcodeSelect {
@@ -35,26 +35,26 @@ const BarcodeSelect = ({ options, selected, onSelect }: BarcodeSelect) => {
 
 	return (
 		<Combobox aria-labelledby="barcode-field" onSelect={onSelect} openOnFocus={true}>
-			<div className="relative">
+			<div className="wcpos-relative">
 				<ComboboxInput
 					id="barcode-field"
 					name="barcode-field"
 					placeholder={selected}
 					onChange={throttle(handleChange, 100)}
 					onKeyDown={handleKeyDown}
-					className="w-full px-2 pr-10 rounded border border-gray-300 leading-8 focus:border-wp-admin-theme-color"
+					className="wcpos-w-full wcpos-px-2 wcpos-pr-10 wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
 				/>
 				<SelectorIcon
-					className="absolute p-1.5 m-px top-0 right-0 w-8 h-8 text-gray-400 pointer-events-none"
+					className="wcpos-absolute wcpos-p-1.5 wcpos-m-px wcpos-top-0 wcpos-right-0 wcpos-w-8 wcpos-h-8 wcpos-text-gray-400 wcpos-pointer-events-none"
 					aria-hidden="true"
 				/>
 			</div>
-			<ComboboxPopover className="mt-1 overflow-auto text-base bg-white border-0 rounded-md shadow-lg max-h-60 ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+			<ComboboxPopover className="wcpos-mt-1 wcpos-overflow-auto wcpos-text-base wcpos-bg-white wcpos-border-0 wcpos-rounded-md wcpos-shadow-lg wcpos-max-h-60 wcpos-ring-1 wcpos-ring-black wcpos-ring-opacity-5 focus:wcpos-outline-none sm:wcpos-text-sm">
 				<ComboboxList>
 					{results.length > 0 ? (
 						results.map((option) => <ComboboxOption key={option} value={option} />)
 					) : (
-						<div className="p-2">Press &lsquo;enter&rsquo; to add new field</div>
+						<div className="wcpos-p-2">Press &lsquo;enter&rsquo; to add new field</div>
 					)}
 				</ComboboxList>
 			</ComboboxPopover>

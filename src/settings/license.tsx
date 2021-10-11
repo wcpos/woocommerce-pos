@@ -81,9 +81,9 @@ const License = ({ hydrate }: LicenseProps) => {
 	};
 
 	return settings.activated ? (
-		<div className="px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6 items-center">
-			<div className="text-right text-8xl">🎉</div>
-			<div className="col-span-2">
+		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
+			<div className="wcpos-text-right wcpos-text-8xl">🎉</div>
+			<div className="wcpos-col-span-2">
 				<h3>Thank You!</h3>
 				<p>
 					License <code>{truncate(settings.key)}</code> has been activated.
@@ -94,7 +94,7 @@ const License = ({ hydrate }: LicenseProps) => {
 		</div>
 	) : (
 		<FormRow>
-			<FormRow.Label id="license-key" className="text-right">
+			<FormRow.Label id="license-key" className="wcpos-text-right">
 				License Key
 			</FormRow.Label>
 			<FormRow.Col>
@@ -102,7 +102,7 @@ const License = ({ hydrate }: LicenseProps) => {
 					type="text"
 					name="license-key"
 					id="license-key"
-					className="mt-1 focus:ring-indigo-500 focus:border-wp-admin-theme-color block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+					className="wcpos-mt-1 focus:wcpos-ring-indigo-500 focus:wcpos-border-wp-admin-theme-color wcpos-block wcpos-w-full wcpos-shadow-sm sm:wcpos-text-sm wcpos-border-gray-300 wcpos-rounded-md"
 					onChange={throttle(handleChange, 100)}
 				/>
 			</FormRow.Col>

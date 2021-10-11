@@ -16,24 +16,29 @@ const Toggle = ({ checked, onChange, disabled, name }: ToggleProps) => {
 	};
 
 	return (
-		<label htmlFor={id} className="relative block w-12 h-6 select-none cursor-pointer text-left">
+		<label
+			htmlFor={id}
+			className="wcpos-relative wcpos-block wcpos-w-12 wcpos-h-6 wcpos-select-none wcpos-cursor-pointer wcpos-text-left"
+		>
 			<input
 				checked={checked}
 				onChange={handleChange}
 				type="checkbox"
 				name={name}
 				id={id}
-				className="hidden"
+				className="wcpos-hidden"
 			/>
 			<span
 				className={`${
-					checked ? 'bg-wp-admin-theme-color' : 'bg-gray-200'
-				} absolute left-0 top-0 h-full w-full bg-gray-100 rounded-full transition-colors`}
+					checked ? 'wcpos-bg-wp-admin-theme-color' : 'wcpos-bg-gray-200'
+				} wcpos-absolute wcpos-left-0 wcpos-top-0 wcpos-h-full wcpos-w-full wcpos-bg-gray-100 wcpos-rounded-full wcpos-transition-colors`}
 			></span>
 			<span
 				className={`${
-					checked ? 'translate-x-6 border-wp-admin-theme-color' : 'border-gray-200'
-				} h-6 w-6 border-2 absolute rounded-full bg-white transform duration-300 ease-in-out`}
+					checked
+						? 'wcpos-translate-x-6 wcpos-border-wp-admin-theme-color'
+						: 'wcpos-border-gray-200'
+				} wcpos-h-6 wcpos-w-6 wcpos-border-2 wcpos-absolute wcpos-rounded-full wcpos-bg-white wcpos-transform wcpos-duration-300 wcpos-ease-in-out`}
 			></span>
 		</label>
 	);

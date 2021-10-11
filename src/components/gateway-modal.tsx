@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Dialog } from '@reach/dialog';
-import { XIcon } from '@heroicons/react/solid';
+import XIcon from '@heroicons/react/solid/XIcon';
 import Notice from '../components/notice';
 import Button from '../components/button';
 
@@ -45,14 +45,14 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 	return (
 		<Dialog
 			onDismiss={closeModal}
-			className="rounded-lg"
+			className="wcpos-rounded-lg"
 			initialFocusRef={inputRef}
 			aria-label={`${gateway.title} Settings`}
 		>
-			<h2 className="mt-0 relative">
+			<h2 className="wcpos-mt-0 wcpos-relative">
 				{gateway.title}
-				<button className="absolute top-0 right-0">
-					<XIcon onClick={closeModal} className="w-5 h-5" />
+				<button className="wcpos-absolute wcpos-top-0 wcpos-right-0">
+					<XIcon onClick={closeModal} className="wcpos-w-5 wcpos-h-5" />
 				</button>
 			</h2>
 
@@ -64,8 +64,8 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 				</a>
 				.
 			</Notice>
-			<div className="py-2">
-				<label htmlFor="title" className="block mb-1 font-medium text-sm">
+			<div className="wcpos-py-2">
+				<label htmlFor="title" className="wcpos-block wcpos-mb-1 wcpos-font-medium wcpos-text-sm">
 					Title
 				</label>
 				<input
@@ -76,11 +76,11 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 					type="text"
 					value={title}
 					onChange={handleChange}
-					className="w-full p-2 rounded border border-gray-300 focus:border-wp-admin-theme-color"
+					className="wcpos-w-full wcpos-p-2 wcpos-rounded wcpos-border wcpos-border-gray-300 focus:wcpos-border-wp-admin-theme-color"
 				/>
 			</div>
-			<div className="py-2">
-				<label htmlFor="description" className="block mb-1 font-medium text-sm">
+			<div className="wcpos-py-2">
+				<label htmlFor="description" className="wcpos-block mb-1 wcpos-font-medium wcpos-text-sm">
 					Description
 				</label>
 				<textarea
@@ -88,10 +88,10 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 					name="description"
 					value={description}
 					onChange={handleChange}
-					className="w-full h-20 p-2 rounded border border-gray-300 focus:border-wp-admin-theme-color"
+					className="wcpos-w-full wcpos-h-20 wcpos-p-2 wcpos-rounded wcpos-border wcpos-border-gray-300 focus:wcpos-border-wp-admin-theme-color"
 				/>
 			</div>
-			<div className="text-right pt-4">
+			<div className="wcpos-text-right wcpos-pt-4">
 				<Button background="clear" onClick={closeModal}>
 					Cancel
 				</Button>

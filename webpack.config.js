@@ -40,7 +40,7 @@ module.exports = function (_env, argv) {
                         loader: "babel-loader",
                         options: {
                             presets: [
-                                "@babel/preset-env",
+                                [ "@babel/preset-env", {modules: false} ],
                                 "@babel/preset-react",
                                 "@babel/preset-typescript",
                             ],
@@ -65,7 +65,8 @@ module.exports = function (_env, argv) {
                     test: /\.css$/,
                     use: [
                         MiniCssExtractPlugin.loader,
-                        "css-loader", "postcss-loader",
+                        "css-loader",
+                        "postcss-loader",
                     ],
                 },
                 {
@@ -98,7 +99,13 @@ module.exports = function (_env, argv) {
             minimizer: [new TerserPlugin()],
             splitChunks: {
                 name: false,
-            }
+            },
+            usedExports: true,
+        },
+        stats: {
+            assetsSort: '!size',
+            assetsSpace: 999,
+            modulesSpace: 999,
         },
     };
 };

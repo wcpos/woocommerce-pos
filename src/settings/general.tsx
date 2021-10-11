@@ -27,7 +27,7 @@ const General = ({ hydrate }: GeneralProps) => {
 	return (
 		<>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="force-ssl"
 						checked={settings.force_ssl}
@@ -47,7 +47,7 @@ const General = ({ hydrate }: GeneralProps) => {
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="pos-only-products"
 						checked={settings.pos_only_products}
@@ -67,7 +67,7 @@ const General = ({ hydrate }: GeneralProps) => {
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="decimal-qty"
 						checked={settings.decimal_qty}
@@ -87,7 +87,7 @@ const General = ({ hydrate }: GeneralProps) => {
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
-				<FormRow.Col className="flex justify-self-end">
+				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="generate-username"
 						checked={settings.generate_username}
@@ -107,7 +107,7 @@ const General = ({ hydrate }: GeneralProps) => {
 				<FormRow.Label
 					id="user-select"
 					help="The default customer for POS orders, eg: Guest"
-					className="text-right"
+					className="wcpos-text-right"
 				>
 					Default POS customer
 				</FormRow.Label>
@@ -144,7 +144,7 @@ const General = ({ hydrate }: GeneralProps) => {
 				<FormRow.Label
 					help="Product meta field to be used as barcode, eg: _sku or _barcode"
 					id="barcode-field"
-					className="text-right"
+					className="wcpos-text-right"
 				>
 					Barcode Field
 				</FormRow.Label>
