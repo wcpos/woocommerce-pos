@@ -51,7 +51,7 @@
 		"@reach/portal": "^0.16.0",
 		"@reach/tooltip": "^0.16.0",
 		"@wordpress/api-fetch": "^5.2.2",
-		"@wordpress/element": "^4.0.1",
+		"@wordpress/element": "^4.0.2",
 		"@wordpress/i18n": "^4.2.2",
 		"@wordpress/url": "^3.2.2",
 		"classnames": "^2.3.1",
