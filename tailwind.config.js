@@ -21,5 +21,5 @@ module.exports = {
     // corePlugins: {
     //     preflight: false
     // },
-    // important: true
+    // important: '#woocommerce-pos-settings'
 }
