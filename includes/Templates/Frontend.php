@@ -54,6 +54,21 @@ class Frontend {
 	}
 
 	/**
+	 * Disable caching conflicts
+	 */
+	private function no_cache() {
+		// disable W3 Total Cache minify
+		if ( ! defined( 'DONOTMINIFY' ) ) {
+			define( 'DONOTMINIFY', 'true' );
+		}
+
+		// disable WP Super Cache
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', 'true' );
+		}
+	}
+
+	/**
 	 * Add variable to login url to signify POS login
 	 *
 	 * @param $login_url
@@ -82,6 +97,7 @@ class Frontend {
 		$user        = wp_get_current_user();
 
 		$vars = array(
+			'nonce'         => wp_create_nonce( 'wp_rest' ),
 			'version'       => VERSION,
 			'manifest'      => $development ? 'https://localhost:3000/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
 			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
@@ -109,7 +125,7 @@ class Frontend {
 			'stores'        => array(
 				'id'   => 0,
 				'name' => '',
-//				'accounting' => array(),
+		//              'accounting' => array(),
 			),
 		);
 
@@ -129,20 +145,5 @@ class Frontend {
 				}
 			})
 		</script>" . "\n";
-	}
-
-	/**
-	 * Disable caching conflicts
-	 */
-	private function no_cache() {
-		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
-		}
-
-		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
-		}
 	}
 }

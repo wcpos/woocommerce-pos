@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use Exception;
 use Firebase\JWT\JWT as FirebaseJWT;
 use WP_Error;
 use WP_HTTP_Response;
@@ -30,48 +31,69 @@ class Auth extends Controller {
 	 * Stores constructor.
 	 */
 	public function __construct() {
-		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+
 	}
 
 	/**
-	 * Check request for any login tokens
+	 * Validate JWT Token
 	 *
-	 * @param null $user
+	 * @param null $token
+	 * @param bool $output
 	 *
-	 * @return int|mixed|null
+	 * @return array|object|WP_Error
 	 */
-	public function determine_current_user( $user = null ) {
-		if ( ! empty( $user ) ) {
-			return $user;
-		}
-
-		// extract Bearer token from Authorization Header
-		list( $token ) = sscanf( $this::get_auth_header(), 'Bearer %s' );
-
-		if ( $token ) {
-			$decoded_token = $this->validate_token( $token, false );
-
-			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
-				return $user;
-			} else {
-				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user;
+	public function validate_token( $token = null, $output = true ) {
+		try {
+			$decoded_token = FirebaseJWT::decode( $token, $this->get_secret_key(), array( 'HS256' ) );
+			/** The Token is decoded now validate the iss */
+			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
+				/** The iss do not match, return error */
+				return new WP_Error(
+					'jwt_auth_bad_iss',
+					'The iss do not match with this server',
+					array(
+						'status' => 403,
+					)
+				);
+			}
+			/** So far so good, validate the user id in the token */
+			if ( ! isset( $decoded_token->data->user->id ) ) {
+				/** No user id in the token, abort!! */
+				return new WP_Error(
+					'jwt_auth_bad_request',
+					'User ID not found in the token',
+					array(
+						'status' => 403,
+					)
+				);
+			}
+			/** Everything looks good return the decoded token if the $output is false */
+			if ( ! $output ) {
+				return $decoded_token;
 			}
 
-			return absint( $user );
+			/** If the output is true return an answer to the request to show it */
+			return array(
+				'code' => 'jwt_auth_valid_token',
+				'data' => array(
+					'status' => 200,
+				),
+			);
+		} catch ( Exception $e ) {
+			/** Something is wrong trying to decode the token, send back the error */
+			return new WP_Error(
+				'jwt_auth_invalid_token',
+				$e->getMessage(),
+				array(
+					'status' => 403,
+				)
+			);
 		}
-
 	}
 
-	/**
-	 * @return mixed|void
-	 */
-	public static function get_auth_header() {
-		$auth_header = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? $_SERVER['HTTP_AUTHORIZATION'] : false;
-		if ( ! $auth_header ) {
-			$auth_header = isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] : false;
-		}
-
-		return apply_filters( 'woocommerce_pos_get_auth_header', $auth_header );
+	public function get_secret_key() {
+		//$secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
+		return '!x>),R!Z$1zLs1(*mJ3^+r#VvO(lfjBK;sqBB!|brVfL-%z+++7x!l34-z+mbQiq';
 	}
 
 	/**
@@ -151,11 +173,6 @@ class Auth extends Controller {
 				),
 			)
 		);
-	}
-
-	public function get_secret_key() {
-		//$secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
-		return '!x>),R!Z$1zLs1(*mJ3^+r#VvO(lfjBK;sqBB!|brVfL-%z+++7x!l34-z+mbQiq';
 	}
 
 	/**
@@ -250,63 +267,6 @@ class Auth extends Controller {
 		$data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
 
 		return rest_ensure_response( $data );
-	}
-
-	/**
-	 * Validate JWT Token
-	 *
-	 * @param null $token
-	 * @param bool $output
-	 *
-	 * @return array|object|WP_Error
-	 */
-	public function validate_token( $token = null, $output = true ) {
-		try {
-			$decoded_token = FirebaseJWT::decode( $token, $this->get_secret_key(), array( 'HS256' ) );
-			/** The Token is decoded now validate the iss */
-			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
-				/** The iss do not match, return error */
-				return new WP_Error(
-					'jwt_auth_bad_iss',
-					'The iss do not match with this server',
-					array(
-						'status' => 403,
-					)
-				);
-			}
-			/** So far so good, validate the user id in the token */
-			if ( ! isset( $decoded_token->data->user->id ) ) {
-				/** No user id in the token, abort!! */
-				return new WP_Error(
-					'jwt_auth_bad_request',
-					'User ID not found in the token',
-					array(
-						'status' => 403,
-					)
-				);
-			}
-			/** Everything looks good return the decoded token if the $output is false */
-			if ( ! $output ) {
-				return $decoded_token;
-			}
-
-			/** If the output is true return an answer to the request to show it */
-			return array(
-				'code' => 'jwt_auth_valid_token',
-				'data' => array(
-					'status' => 200,
-				),
-			);
-		} catch ( \Exception $e ) {
-			/** Something is wrong trying to decode the token, send back the error */
-			return new WP_Error(
-				'jwt_auth_invalid_token',
-				$e->getMessage(),
-				array(
-					'status' => 403,
-				)
-			);
-		}
 	}
 
 	/**

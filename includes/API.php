@@ -27,24 +27,8 @@ class API {
 	 */
 	public function __construct() {
 		/**
-		 * These filters allow changes to the WC REST API
-		 *
-		 * note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
-		 */
-		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
-		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
-		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
-
-		/**
 		 * Init and register routes for the WCPOS REST API
 		 */
-		$this->init();
-	}
-
-	/**
-	 * Init and register routes for the WCPOS REST API
-	 */
-	public function init() {
 		$this->controllers = array(
 			'auth'     => new API\Auth(),
 			'settings' => new API\Settings(),
@@ -54,6 +38,75 @@ class API {
 		foreach ( $this->controllers as $key => $controller_class ) {
 			$controller_class->register_routes();
 		}
+
+		/**
+		 *
+		 */
+		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+
+		/**
+		 * These filters allow changes to the WC REST API
+		 *
+		 * note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
+		 */
+		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
+		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
+	}
+
+	/**
+	 * Check request for any login tokens
+	 *
+	 * @param null $user
+	 *
+	 * @return int|mixed|null
+	 */
+	public function determine_current_user( $user = null ) {
+		if ( ! empty( $user ) ) {
+			return $user;
+		}
+
+		// extract Bearer token from Authorization Header
+		list( $token ) = sscanf( $this->get_auth_header(), 'Bearer %s' );
+
+		if ( $token ) {
+			$decoded_token = $this->controllers['auth']->validate_token( $token, false );
+
+			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
+				return $user;
+			} else {
+				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user;
+			}
+
+			return absint( $user );
+		}
+
+	}
+
+	/**
+	 * @return mixed|void
+	 */
+	public function get_auth_header() {
+		// Get HTTP Authorization Header.
+		$header = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] ) : false;
+
+		// Check for alternative header.
+		if ( ! $header && isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+			$header = sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		}
+
+		// The HTTP Authorization Header is missing, return an error.
+		if ( ! $header ) {
+			return new WP_Error(
+				'rest_authentication_no_header',
+				__( 'Authorization header was not found.', 'woocommerce-pos' ),
+				array(
+					'status' => 403,
+				)
+			);
+		}
+
+		return $header;
 	}
 
 	/**
