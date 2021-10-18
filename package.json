@@ -49,7 +49,7 @@
 		"@reach/dialog": "^0.16.0",
 		"@reach/listbox": "^0.16.1",
 		"@reach/portal": "^0.16.0",
-		"@reach/tooltip": "^0.16.0",
+		"@reach/tooltip": "^0.16.2",
 		"@wordpress/api-fetch": "^5.2.3",
 		"@wordpress/element": "^4.0.2",
 		"@wordpress/i18n": "^4.2.3",
