@@ -1944,15 +1944,15 @@
     react-remove-scroll "^2.4.3"
     tslib "^2.3.0"
 
-"@reach/listbox@^0.16.1":
-  version "0.16.1"
-  resolved "https://registry.yarnpkg.com/@reach/listbox/-/listbox-0.16.1.tgz#8a4a13cf171e9ba3118d2e6e72f3e7f17f4c2f80"
-  integrity sha512-2KQTYmxKvZW0XdBWGoV7E2gUWWBINJmfj2MDRmWbRNdTjsF9w3mTb09buTWQ2sznzF7DrLrwiBFv4b2egMfKOw==
+"@reach/listbox@^0.16.2":
+  version "0.16.2"
+  resolved "https://registry.yarnpkg.com/@reach/listbox/-/listbox-0.16.2.tgz#2ed4b30ebdf9ce0addffb0207f843b8232a7db1c"
+  integrity sha512-UBotBw7X8e2ajHn6tg1M9ArinisvSvwtu/aP3edEQKCvobd95nAa+dqnfAdihPAQFH2AQ2NFfa/73yawWV3LOQ==
   dependencies:
     "@reach/auto-id" "0.16.0"
     "@reach/descendants" "0.16.1"
     "@reach/machine" "0.16.0"
-    "@reach/popover" "0.16.0"
+    "@reach/popover" "0.16.2"
     "@reach/utils" "0.16.0"
     prop-types "^15.7.2"
 
@@ -1981,12 +1981,32 @@
     tabbable "^4.0.0"
     tslib "^2.3.0"
 
+"@reach/popover@0.16.2":
+  version "0.16.2"
+  resolved "https://registry.yarnpkg.com/@reach/popover/-/popover-0.16.2.tgz#71d7af3002ca49d791476b22dee1840dd1719c19"
+  integrity sha512-IwkRrHM7Vt33BEkSXneovymJv7oIToOfTDwRKpuYEB/BWYMAuNfbsRL7KVe6MjkgchDeQzAk24cYY1ztQj5HQQ==
+  dependencies:
+    "@reach/portal" "0.16.2"
+    "@reach/rect" "0.16.0"
+    "@reach/utils" "0.16.0"
+    tabbable "^4.0.0"
+    tslib "^2.3.0"
+
 "@reach/portal@0.16.0", "@reach/portal@^0.16.0":
   version "0.16.0"
   resolved "https://registry.yarnpkg.com/@reach/portal/-/portal-0.16.0.tgz#1544531d978b770770b718b2872b35652a11e7e3"
   integrity sha512-vXJ0O9T+72HiSEWHPs2cx7YbSO7pQsTMhgqPc5aaddIYpo2clJx1PnYuS0lSNlVaDO0IxQhwYq43evXaXnmviw==
   dependencies:
     "@reach/utils" "0.16.0"
+    tslib "^2.3.0"
+
+"@reach/portal@0.16.2":
+  version "0.16.2"
+  resolved "https://registry.yarnpkg.com/@reach/portal/-/portal-0.16.2.tgz#ca83696215ee03acc2bb25a5ae5d8793eaaf2f64"
+  integrity sha512-9ur/yxNkuVYTIjAcfi46LdKUvH0uYZPfEp4usWcpt6PIp+WDF57F/5deMe/uGi/B/nfDweQu8VVwuMVrCb97JQ==
+  dependencies:
+    "@reach/utils" "0.16.0"
+    tiny-warning "^1.0.3"
     tslib "^2.3.0"
 
 "@reach/rect@0.16.0":
