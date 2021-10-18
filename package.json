@@ -45,7 +45,7 @@
 		"@heroicons/react": "^1.0.4",
 		"@reach/auto-id": "^0.16.0",
 		"@reach/checkbox": "^0.16.0",
-		"@reach/combobox": "^0.16.1",
+		"@reach/combobox": "^0.16.2",
 		"@reach/dialog": "^0.16.0",
 		"@reach/listbox": "^0.16.1",
 		"@reach/portal": "^0.16.0",
