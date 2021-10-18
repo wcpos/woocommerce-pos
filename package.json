@@ -48,7 +48,7 @@
 		"@reach/combobox": "^0.16.1",
 		"@reach/dialog": "^0.16.0",
 		"@reach/listbox": "^0.16.1",
-		"@reach/portal": "^0.16.0",
+		"@reach/portal": "^0.16.2",
 		"@reach/tooltip": "^0.16.0",
 		"@wordpress/api-fetch": "^5.2.3",
 		"@wordpress/element": "^4.0.2",
