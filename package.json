@@ -74,7 +74,7 @@
 		"@types/lodash": "^4.14.175",
 		"@types/react": "^17.0.30",
 		"@types/react-beautiful-dnd": "^13.1.2",
-		"@types/react-dom": "^17.0.9",
+		"@types/react-dom": "^17.0.10",
 		"@types/wordpress__url": "^2.14.0",
 		"@typescript-eslint/eslint-plugin": "^5.1.0",
 		"@typescript-eslint/parser": "^5.1.0",
