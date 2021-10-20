@@ -16,27 +16,23 @@ use WCPOS\WooCommercePOS\Templates\Pay;
 
 class Templates {
 
-	/** @var string POS frontend slug */
-	private $pos_slug;
-
-	/** @var string POS checkout slug */
-	private $pos_checkout_slug;
-
-	/** @var string regex match for frontend rewite_rule */
-	private $pos_rewrite_regex;
-
-	/** @var string regex match for checkout rewite_rule */
-	private $pos_checkout_rewrite_regex;
-
 	/** @var WCPOS_Params instance */
 	public $params;
+	/** @var string POS frontend slug */
+	private $pos_slug;
+	/** @var string POS checkout slug */
+	private $pos_checkout_slug;
+	/** @var string regex match for frontend rewite_rule */
+	private $pos_rewrite_regex;
+	/** @var string regex match for checkout rewite_rule */
+	private $pos_checkout_rewrite_regex;
 
 	/**
 	 *
 	 */
 	public function __construct() {
 		$this->pos_slug                   = Admin\Permalink::get_slug();
-		$this->pos_rewrite_regex          = '^' . $this->pos_slug . '/?$';
+		$this->pos_rewrite_regex          = '^' . $this->pos_slug . '/?';
 		$this->pos_checkout_slug          = 'wcpos-checkout';
 		$this->pos_checkout_rewrite_regex = '^' . $this->pos_checkout_slug . '/([a-z-]+)/([0-9]+)[/]?$';
 
