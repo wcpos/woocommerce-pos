@@ -122,10 +122,10 @@ class Frontend {
 				'niceName'    => $user->user_nicename,
 				'lastAccess'  => '',
 			),
-			'stores'        => array(
+			'store'         => array(
 				'id'   => 0,
-				'name' => '',
-		//              'accounting' => array(),
+				'name' => 'US Store',
+				//              'accounting' => array(),
 			),
 		);
 
