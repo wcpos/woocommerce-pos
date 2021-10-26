@@ -97,7 +97,6 @@ class Frontend {
 		$user        = wp_get_current_user();
 
 		$vars = array(
-			'nonce'         => wp_create_nonce( 'wp_rest' ),
 			'version'       => VERSION,
 			'manifest'      => $development ? 'https://localhost:3000/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
 			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
@@ -121,6 +120,7 @@ class Frontend {
 				'displayName' => $user->display_name,
 				'niceName'    => $user->user_nicename,
 				'lastAccess'  => '',
+				'wpNonce'     => wp_create_nonce( 'wp_rest' ),
 			),
 			'store'         => array(
 				'id'   => 0,

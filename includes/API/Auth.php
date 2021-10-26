@@ -253,14 +253,14 @@ class Auth extends Controller {
 
 		/** The token is signed, now create the object with no sensible user data to the client*/
 		$data = array(
-			'jwt'          => $token,
-			'user_id'      => $user->ID,
-			'username'     => $user->user_login,
-			'email'        => $user->user_email,
-			'firstname'    => $user->user_firstname,
-			'lastname'     => $user->user_lastname,
-			'nicename'     => $user->user_nicename,
-			'display_name' => $user->display_name,
+			'jwt'         => $token,
+			'id'          => $user->ID,
+			'username'    => $user->user_login,
+			'email'       => $user->user_email,
+			'firstName'   => $user->user_firstname,
+			'lastName'    => $user->user_lastname,
+			'niceName'    => $user->user_nicename,
+			'displayName' => $user->display_name,
 		);
 
 		/** Let the user modify the data before sending it back */
