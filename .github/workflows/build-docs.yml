@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2.4.0
       - name: Use Node.js 10
-        uses: actions/setup-node@v2.4.1
+        uses: actions/setup-node@v2.5.1
         with:
           node-version: '10.x'
       - name: npm install, and build docs
