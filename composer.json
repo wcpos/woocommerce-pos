@@ -19,7 +19,7 @@
     "wp-phpunit/wp-phpunit": "^5.8.1"
   },
   "require": {
-    "firebase/php-jwt": "^v5.4.0",
+    "firebase/php-jwt": "^v6.0.0",
     "php": ">=7.0.0",
     "ext-json": "*"
   },
