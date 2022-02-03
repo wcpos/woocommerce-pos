@@ -80,7 +80,7 @@ class Products {
 		if ( isset( $request['date_modified_gmt_after'] ) ) {
 			$date_query = array(
 				'column' => 'post_modified_gmt',
-				'after'  => date( 'Y-m-d H:i:s', $request['date_modified_gmt_after'] ),
+				'after'  => date( 'Y-m-d H:i:s', intval( $request['date_modified_gmt_after'] ) ),
 			);
 			array_push( $args['date_query'], $date_query );
 		}
