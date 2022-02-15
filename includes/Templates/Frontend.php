@@ -54,21 +54,6 @@ class Frontend {
 	}
 
 	/**
-	 * Disable caching conflicts
-	 */
-	private function no_cache() {
-		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
-		}
-
-		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
-		}
-	}
-
-	/**
 	 * Add variable to login url to signify POS login
 	 *
 	 * @param $login_url
@@ -98,7 +83,7 @@ class Frontend {
 
 		$vars = array(
 			'version'       => VERSION,
-			'manifest'      => $development ? 'https://localhost:3000/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
+			'manifest'      => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
 			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
 			'site'          => array(
 				'url'            => get_option( 'siteurl' ),
@@ -131,7 +116,7 @@ class Frontend {
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_url       = $development ? 'https://localhost:3000/' : '';
+		$dev_url       = $development ? 'http://localhost:19006/' : '';
 
 		echo "<script>var initialProps={$initial_props};
 			jQuery.getJSON(initialProps.manifest, ({files}) => {
@@ -145,5 +130,20 @@ class Frontend {
 				}
 			})
 		</script>" . "\n";
+	}
+
+	/**
+	 * Disable caching conflicts
+	 */
+	private function no_cache() {
+		// disable W3 Total Cache minify
+		if ( ! defined( 'DONOTMINIFY' ) ) {
+			define( 'DONOTMINIFY', 'true' );
+		}
+
+		// disable WP Super Cache
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', 'true' );
+		}
 	}
 }

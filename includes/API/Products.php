@@ -77,13 +77,18 @@ class Products {
 	 * @return array $args Key value array of query var to query value.
 	 */
 	public function product_query( array $args, WP_REST_Request $request ): array {
-		if ( isset( $request['date_modified_gmt_after'] ) ) {
-			$date_query = array(
-				'column' => 'post_modified_gmt',
-				'after'  => date( 'Y-m-d H:i:s', intval( $request['date_modified_gmt_after'] ) ),
-			);
-			array_push( $args['date_query'], $date_query );
-		}
+		// Note!: date_query is removed from the query, use 'after' and delete this filter
+
+//		$params = $request->get_query_params();
+//		if ( isset( $params['date_modified_gmt_after'] ) ) {
+//			$date_query = array(
+//				'column' => 'post_modified_gmt',
+//				'after'  => $params['date_modified_gmt_after'],
+//			);
+//			array_push( $args['date_query'], $date_query );
+////			array_push( $args['after'], $date_query );
+//
+//		}
 
 		return $args;
 	}
