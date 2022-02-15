@@ -67,7 +67,7 @@
     "@babel/preset-env": "7.16.0",
     "@babel/preset-react": "7.16.0",
     "@babel/preset-typescript": "7.16.0",
-    "@babel/runtime": "7.16.3",
+    "@babel/runtime": "7.17.2",
     "@svgr/webpack": "5.5.0",
     "@types/jest": "27.0.2",
     "@types/lodash": "4.14.176",
