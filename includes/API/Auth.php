@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Exception;
 use Firebase\JWT\JWT as FirebaseJWT;
+use Firebase\JWT\Key as FirebaseKey;
 use WP_Error;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -44,7 +45,7 @@ class Auth extends Controller {
 	 */
 	public function validate_token( $token = null, $output = true ) {
 		try {
-			$decoded_token = FirebaseJWT::decode( $token, $this->get_secret_key(), array( 'HS256' ) );
+			$decoded_token = FirebaseJWT::decode( $token, new FirebaseKey( $this->get_secret_key(), 'HS256' ) );
 			/** The Token is decoded now validate the iss */
 			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
 				/** The iss do not match, return error */
@@ -249,7 +250,7 @@ class Auth extends Controller {
 		);
 
 		/** Let the user modify the token data before the sign. */
-		$token = FirebaseJWT::encode( apply_filters( 'woocommerce_pos_jwt_auth_token_before_sign', $token, $user ), $this->get_secret_key() );
+		$token = FirebaseJWT::encode( apply_filters( 'woocommerce_pos_jwt_auth_token_before_sign', $token, $user ), $this->get_secret_key(), 'HS256' );
 
 		/** The token is signed, now create the object with no sensible user data to the client*/
 		$data = array(

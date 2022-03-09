@@ -25,3 +25,4 @@ assets/css/*
 !assets/css/README.md
 assets/asset-manifest.json
 assets/static
+.yarn.lock
