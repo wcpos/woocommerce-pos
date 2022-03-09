@@ -12,7 +12,7 @@ jobs:
   update-pot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2.4.0
+      - uses: actions/checkout@v3
       - name: Setup PHP with tools
         uses: shivammathur/setup-php@v2
         with:
