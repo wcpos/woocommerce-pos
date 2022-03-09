@@ -5,7 +5,7 @@
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'reference' => 'b28495f7a8fa9a086677c1567f4d715bd3b25aaa',
+        'reference' => '63c6b71a84110698711730fe96e54c804bee7166',
         'name' => 'wcpos/woocommerce-pos',
         'dev' => true,
     ),
@@ -29,12 +29,12 @@
             'dev_requirement' => true,
         ),
         'firebase/php-jwt' => array(
-            'pretty_version' => 'v5.4.0',
-            'version' => '5.4.0.0',
+            'pretty_version' => 'v6.0.0',
+            'version' => '6.0.0.0',
             'type' => 'library',
             'install_path' => __DIR__ . '/../firebase/php-jwt',
             'aliases' => array(),
-            'reference' => 'd2113d9b2e0e349796e72d2a63cf9319100382d2',
+            'reference' => '0541cba75ab108ef901985e68055a92646c73534',
             'dev_requirement' => false,
         ),
         'phpcompatibility/php-compatibility' => array(
@@ -88,7 +88,7 @@
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
-            'reference' => 'b28495f7a8fa9a086677c1567f4d715bd3b25aaa',
+            'reference' => '63c6b71a84110698711730fe96e54c804bee7166',
             'dev_requirement' => false,
         ),
         'wp-coding-standards/wpcs' => array(
