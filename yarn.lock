@@ -2156,10 +2156,10 @@
     sprintf-js "^1.1.1"
     tannin "^1.2.0"
 
-"@wordpress/url@3.4.1", "@wordpress/url@^3.4.1":
-  version "3.4.1"
-  resolved "https://registry.yarnpkg.com/@wordpress/url/-/url-3.4.1.tgz#7a6e0402bb17b82c9f7a5439e308e1270d88ab0c"
-  integrity sha512-EeE/qCTe2wYxvEhH4ygV8CONX7j1aQaZF5LUg+QHZ+cnV5Bo8SkcLZdOHqczwvljqwVnKc+ybzQx/WLE+APNSw==
+"@wordpress/url@3.5.1", "@wordpress/url@^3.4.1":
+  version "3.5.1"
+  resolved "https://registry.yarnpkg.com/@wordpress/url/-/url-3.5.1.tgz#2e5024bab28ad5cef07b7361dad3c692184dd7f9"
+  integrity sha512-m4gjNdOkwaZ9NOVk/lYtpW4GoxHU0ZSv6WX3pFYRDSPdI1eX45uA8RrhPBYuj/e/XPUBiS+FXDilR0uvqqz9FA==
   dependencies:
     "@babel/runtime" "^7.16.0"
     lodash "^4.17.21"
