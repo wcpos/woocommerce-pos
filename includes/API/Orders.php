@@ -3,7 +3,6 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-
 use WP_REST_Request;
 
 class Orders {
@@ -23,7 +22,7 @@ class Orders {
 
 		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array(
 			$this,
-			'pre_insert_shop_order_object'
+			'pre_insert_shop_order_object',
 		), 10, 3 );
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'prepare_shop_order_object' ), 10, 3 );
 		add_action( 'woocommerce_rest_set_order_item', array( $this, 'rest_set_order_item' ), 10, 2 );
@@ -62,14 +61,6 @@ class Orders {
 	 * @param $creating
 	 */
 	public function pre_insert_shop_order_object( $order, $request, $creating ) {
-
-		// add order meta _pos_checkout_url if it doesn't exist
-		$pos_checkout_url = add_query_arg( array(
-			'pay_for_order' => true,
-			'key'           => $order->get_order_key(),
-		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
-		$order->update_meta_data( '_pos_checkout_url', $pos_checkout_url );
-
 		return $order;
 	}
 
@@ -81,6 +72,15 @@ class Orders {
 	 * @return
 	 */
 	public function prepare_shop_order_object( $response, $order, $request ) {
+		if ( $order->has_status( 'pos-open' ) ) {
+			$pos_payment_url = add_query_arg( array(
+				'pay_for_order' => true,
+				'key'           => $order->get_order_key(),
+			), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
+
+			$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
+		}
+
 		return $response;
 	}
 

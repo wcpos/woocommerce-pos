@@ -90,6 +90,10 @@ class Pay {
 			define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
+		if ( ! $this->gateway_id ) {
+			wp_die( __( 'No gateway selected', 'woocommerce-pos' ) );
+		}
+
 		do_action( 'woocommerce_pos_before_pay' );
 
 		try {
