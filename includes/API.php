@@ -96,17 +96,6 @@ class API {
 			$header = sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		}
 
-		// The HTTP Authorization Header is missing, return an error.
-		if ( ! $header ) {
-			return new WP_Error(
-				'rest_authentication_no_header',
-				__( 'Authorization header was not found.', 'woocommerce-pos' ),
-				array(
-					'status' => 403,
-				)
-			);
-		}
-
 		return $header;
 	}
 

@@ -110,9 +110,14 @@ class Card extends WC_Payment_Gateway {
 		// payment complete
 		$order->payment_complete();
 
+		$redirect = add_query_arg( array(
+			'wcpos' => 1,
+		), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ) );
+
 		// success
 		return array(
-			'result' => 'success',
+			'result'   => 'success',
+			'redirect' => $redirect,
 		);
 	}
 

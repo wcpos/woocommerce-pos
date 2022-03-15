@@ -10,7 +10,7 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <!doctype html>
-<html <?php language_attributes(); ?> <?php twentytwentyone_the_html_classes(); ?>>
+<html <?php language_attributes(); ?>>
 <head>
 	<meta charset="<?php bloginfo( 'charset' ); ?>"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -65,12 +65,12 @@ defined( 'ABSPATH' ) || exit;
 						</li>
 					<?php else : ?>
 						<li class="woocommerce-notice woocommerce-notice--info woocommerce-info">
-                        <?php 
-                        echo apply_filters(
-                            'woocommerce_no_available_payment_methods_message', esc_html__( 'Sorry, it seems that there are no available
+							<?php
+							echo apply_filters(
+								'woocommerce_no_available_payment_methods_message', esc_html__( 'Sorry, it seems that there are no available
 						payment methods for your location. Please contact us if you require assistance or wish to make alternate
-						arrangements.', 'woocommerce' ) ); 
-						?>
+						arrangements.', 'woocommerce' ) );
+							?>
 						</li>
 					<?php endif; ?>
 				</ul>

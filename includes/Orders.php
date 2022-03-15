@@ -25,6 +25,14 @@ class Orders {
 			$this,
 			'valid_order_statuses_for_payment',
 		), 10, 2 );
+		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array(
+			$this,
+			'valid_order_statuses_for_payment_complete',
+		), 10, 2 );
+		add_filter( 'woocommerce_payment_complete_order_status', array(
+			$this,
+			'payment_complete_order_status',
+		), 10, 3 );
 	}
 
 	/**
@@ -66,6 +74,33 @@ class Orders {
 		array_push( $order_statuses, 'pos-open' );
 
 		return $order_statuses;
+	}
+
+	/**
+	 * @param array $order_statuses
+	 * @param WC_Order $order
+	 *
+	 * @return mixed
+	 */
+	public function valid_order_statuses_for_payment_complete( array $order_statuses, WC_Order $order ) {
+		array_push( $order_statuses, 'pos-open' );
+
+		return $order_statuses;
+	}
+
+	/**
+	 * @param string $status
+	 * @param int id
+	 * @param WC_Order $order
+	 *
+	 * @return mixed
+	 */
+	public function payment_complete_order_status( $status, $id, WC_Order $order ) {
+		if ( woocommerce_pos_request() ) {
+			return woocommerce_pos_get_settings( 'checkout', 'order_status' );
+		}
+
+		return $status;
 	}
 
 }
