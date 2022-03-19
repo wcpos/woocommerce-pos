@@ -89,7 +89,23 @@ class Orders {
 	 * @param $posted
 	 */
 	public function rest_set_order_item( $item, $posted ) {
+		// fix for variations
+		if ( isset( $posted['meta_data'] ) && is_array( $posted['meta_data'] ) ) {
+			foreach ( $posted['meta_data'] as $meta ) {
+				if ( isset( $meta['attr_id'] ) ) {
+					$taxonomy = wc_attribute_taxonomy_name_by_id( $meta['attr_id'] );
 
+					$terms = get_the_terms( (int) $posted['product_id'], $taxonomy );
+					if ( ! empty( $terms ) ) {
+						foreach ( $terms as $term ) {
+							if ( $term->name === $meta['display_value'] ) {
+								$item->add_meta_data( $taxonomy, $term->slug, true );
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	/**
