@@ -75,7 +75,7 @@
     "@types/react-beautiful-dnd": "13.1.2",
     "@types/react-dom": "17.0.13",
     "@typescript-eslint/eslint-plugin": "5.14.0",
-    "@typescript-eslint/parser": "5.14.0",
+    "@typescript-eslint/parser": "5.16.0",
     "@wordpress/babel-plugin-makepot": "4.3.1",
     "@wordpress/env": "4.3.1",
     "autoprefixer": "10.4.2",
