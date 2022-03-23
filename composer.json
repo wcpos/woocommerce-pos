@@ -16,7 +16,7 @@
     "sirbrillig/phpcs-variable-analysis": "v2.11.3",
     "squizlabs/php_codesniffer": "3.6.2",
     "wp-coding-standards/wpcs": "2.3.0",
-    "wp-phpunit/wp-phpunit": "5.9.1"
+    "wp-phpunit/wp-phpunit": "5.9.2"
   },
   "require": {
     "firebase/php-jwt": "v6.0.0",
