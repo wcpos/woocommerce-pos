@@ -5,7 +5,7 @@
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
-        'reference' => 'ef9a8f22958b79458ea440688b315caec3a28f78',
+        'reference' => '194df7a112c3e129ed93a48a96c4d3143677fe74',
         'name' => 'wcpos/woocommerce-pos',
         'dev' => true,
     ),
@@ -88,7 +88,7 @@
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
-            'reference' => 'ef9a8f22958b79458ea440688b315caec3a28f78',
+            'reference' => '194df7a112c3e129ed93a48a96c4d3143677fe74',
             'dev_requirement' => false,
         ),
         'wp-coding-standards/wpcs' => array(
@@ -101,8 +101,8 @@
             'dev_requirement' => true,
         ),
         'wp-phpunit/wp-phpunit' => array(
-            'pretty_version' => '5.9.1',
-            'version' => '5.9.1.0',
+            'pretty_version' => '5.9.2',
+            'version' => '5.9.2.0',
             'type' => 'library',
             'install_path' => __DIR__ . '/../wp-phpunit/wp-phpunit',
             'aliases' => array(),

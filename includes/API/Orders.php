@@ -70,6 +70,8 @@ class Orders {
 	 * @param $creating
 	 */
 	public function pre_insert_shop_order_object( $order, $request, $creating ) {
+		$break = '';
+
 		return $order;
 	}
 
@@ -105,39 +107,42 @@ class Orders {
 		 * - variation meta_data with 'any' are not being saved
 		 * - default variation meta_data is always added (not unique)
 		 */
-		if ( isset( $posted['variation_id'] ) ) {
+		if ( isset( $posted['variation_id'] ) && 0 !== $posted['variation_id'] ) {
 			$variation  = wc_get_product( (int) $posted['variation_id'] );
 			$valid_keys = array();
 
-			foreach ( $variation->get_variation_attributes() as $attribute_name => $attribute ) {
-				$valid_keys[] = str_replace( 'attribute_', '', $attribute_name );
-			}
+			if ( is_callable( array( $variation, 'get_variation_attributes' ) ) ) {
 
-			if ( isset( $posted['meta_data'] ) && is_array( $posted['meta_data'] ) ) {
-				foreach ( $posted['meta_data'] as $meta ) {
-					// fix initial item creation
-					if ( isset( $meta['attr_id'] ) ) {
-						if ( 0 == $meta['attr_id'] ) {
-							// not a taxonomy
-							if ( in_array( strtolower( $meta['display_key'] ), $valid_keys ) ) {
-								$item->add_meta_data( strtolower( $meta['display_key'] ), $meta['display_value'], true );
-							}
-						} else {
-							$taxonomy = wc_attribute_taxonomy_name_by_id( $meta['attr_id'] );
+				foreach ( $variation->get_variation_attributes() as $attribute_name => $attribute ) {
+					$valid_keys[] = str_replace( 'attribute_', '', $attribute_name );
+				}
 
-							$terms = get_the_terms( (int) $posted['product_id'], $taxonomy );
-							if ( ! empty( $terms ) ) {
-								foreach ( $terms as $term ) {
-									if ( $term->name === $meta['display_value'] ) {
-										$item->add_meta_data( $taxonomy, $term->slug, true );
+				if ( isset( $posted['meta_data'] ) && is_array( $posted['meta_data'] ) ) {
+					foreach ( $posted['meta_data'] as $meta ) {
+						// fix initial item creation
+						if ( isset( $meta['attr_id'] ) ) {
+							if ( 0 == $meta['attr_id'] ) {
+								// not a taxonomy
+								if ( in_array( strtolower( $meta['display_key'] ), $valid_keys ) ) {
+									$item->add_meta_data( strtolower( $meta['display_key'] ), $meta['display_value'], true );
+								}
+							} else {
+								$taxonomy = wc_attribute_taxonomy_name_by_id( $meta['attr_id'] );
+
+								$terms = get_the_terms( (int) $posted['product_id'], $taxonomy );
+								if ( ! empty( $terms ) ) {
+									foreach ( $terms as $term ) {
+										if ( $term->name === $meta['display_value'] ) {
+											$item->add_meta_data( $taxonomy, $term->slug, true );
+										}
 									}
 								}
 							}
 						}
-					}
-					// fix subsequent overwrites
-					if ( wc_attribute_taxonomy_id_by_name( $meta['key'] ) || in_array( $meta['key'], $valid_keys ) ) {
-						$item->add_meta_data( $meta['key'], $meta['value'], true );
+						// fix subsequent overwrites
+						if ( wc_attribute_taxonomy_id_by_name( $meta['key'] ) || in_array( $meta['key'], $valid_keys ) ) {
+							$item->add_meta_data( $meta['key'], $meta['value'], true );
+						}
 					}
 				}
 			}
