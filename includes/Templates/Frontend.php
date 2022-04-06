@@ -9,6 +9,7 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
+use WCPOS\WooCommercePOS\API\Stores;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -54,6 +55,21 @@ class Frontend {
 	}
 
 	/**
+	 * Disable caching conflicts
+	 */
+	private function no_cache() {
+		// disable W3 Total Cache minify
+		if ( ! defined( 'DONOTMINIFY' ) ) {
+			define( 'DONOTMINIFY', 'true' );
+		}
+
+		// disable WP Super Cache
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', 'true' );
+		}
+	}
+
+	/**
 	 * Add variable to login url to signify POS login
 	 *
 	 * @param $login_url
@@ -78,40 +94,37 @@ class Frontend {
 	 * Output the footer scripts
 	 */
 	public function footer() {
-		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
-		$user        = wp_get_current_user();
+		$development    = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+		$user           = wp_get_current_user();
+		$store_settings = new Stores();
 
 		$vars = array(
-			'version'       => VERSION,
-			'manifest'      => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
-			'homepage'      => woocommerce_pos_url(), // @TODO change prop name
-			'site'          => array(
-				'url'            => get_option( 'siteurl' ),
-				'name'           => get_option( 'blogname' ),
-				'description'    => get_option( 'blogdescription' ),
-				'home'           => home_url(),
-				'gmtOffset'      => get_option( 'gmt_offset' ),
-				'timezoneString' => get_option( 'timezone_string' ),
-				'wpApiUrl'       => get_rest_url(),
-				'wcApiUrl'       => get_rest_url( null, 'wc/v3' ),
-				'wcApiAuthUrl'   => get_rest_url( null, 'wcpos/v1/jwt' ),
+			'version'        => VERSION,
+			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
+			'homepage'       => woocommerce_pos_url(), // @TODO change prop name
+			'site'           => array(
+				'url'             => get_option( 'siteurl' ),
+				'name'            => get_option( 'blogname' ),
+				'description'     => get_option( 'blogdescription' ),
+				'home'            => home_url(),
+				'gmt_offset'      => get_option( 'gmt_offset' ),
+				'timezone_string' => get_option( 'timezone_string' ),
+				'wp_api_url'      => get_rest_url(),
+				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
+				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
 			),
-			'wpCredentials' => array(
-				'id'          => $user->ID,
-				'username'    => $user->user_login,
-				'firstName'   => $user->user_firstname,
-				'lastName'    => $user->user_lastname,
-				'email'       => $user->user_email,
-				'displayName' => $user->display_name,
-				'niceName'    => $user->user_nicename,
-				'lastAccess'  => '',
-				'wpNonce'     => wp_create_nonce( 'wp_rest' ),
+			'wp_credentials' => array(
+				'id'           => $user->ID,
+				'username'     => $user->user_login,
+				'first_name'   => $user->user_firstname,
+				'last_name'    => $user->user_lastname,
+				'email'        => $user->user_email,
+				'display_name' => $user->display_name,
+				'nice_name'    => $user->user_nicename,
+				'last_access'  => '',
+				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
 			),
-			'store'         => array(
-				'id'   => 0,
-				'name' => 'US Store',
-				//              'accounting' => array(),
-			),
+			'store'          => array( $store_settings->get_store() )
 		);
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
@@ -130,20 +143,5 @@ class Frontend {
 				}
 			})
 		</script>" . "\n";
-	}
-
-	/**
-	 * Disable caching conflicts
-	 */
-	private function no_cache() {
-		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
-		}
-
-		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
-		}
 	}
 }
