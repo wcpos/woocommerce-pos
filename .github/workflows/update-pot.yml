@@ -24,7 +24,7 @@ jobs:
       - name: Update POT file
         run: wp i18n make-pot . languages/woocommerce-pos.pot --require=vendor/autoload.php --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
       # Remove the next four lines and uncomment the last five lines once the process has been confirmed to work as desired.
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: woocommerce-pos.pot
           path: languages/woocommerce-pos.pot
