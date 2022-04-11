@@ -100,7 +100,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/client/asset-manifest.json',
+			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/monorepo/asset-manifest.json',
 			'homepage'       => woocommerce_pos_url(), // @TODO change prop name
 			'site'           => array(
 				'url'             => get_option( 'siteurl' ),
