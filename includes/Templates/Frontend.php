@@ -129,7 +129,7 @@ class Frontend {
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_url       = $development ? 'http://localhost:19006/' : '';
+		$dev_url       = $development ? 'http://localhost:19006/' : 'https://wcpos.github.io/';
 
 		echo "<script>var initialProps={$initial_props};
 			jQuery.getJSON(initialProps.manifest, ({files}) => {
