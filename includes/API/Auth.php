@@ -37,6 +37,7 @@ class Auth extends Controller {
 
 	/**
 	 * Validate JWT Token
+	 * @TODO - flesh out this API, see https://github.com/wp-graphql/wp-graphql-jwt-authentication for inspiration
 	 *
 	 * @param null $token
 	 * @param bool $output
