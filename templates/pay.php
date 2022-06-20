@@ -39,6 +39,17 @@ defined( 'ABSPATH' ) || exit;
 			background: transparent;
 		}
 	</style>
+	<script>
+		window.addEventListener("message", ({data}) => {
+			if (data.action && data.action === "wcpos-process-payment") {
+				// submit checkout form
+				const form = document.getElementById('order_review');
+				if (form) {
+					form.submit();
+				}
+			}
+		}, false);
+	</script>
 </head>
 
 <body <?php body_class(); ?>>
@@ -77,7 +88,6 @@ defined( 'ABSPATH' ) || exit;
 			<?php endif; ?>
 
 			<input type="hidden" name="woocommerce_pay" value="1"/>
-			<?php echo apply_filters( 'woocommerce_order_button_html', '<button type="submit" class="button alt" name="test" id="place_order" value="Place Order" data-value="place_order">Place Order</button>' ); // @codingStandardsIgnoreLine ?>
 			<?php wp_nonce_field( 'woocommerce-pay', 'woocommerce-pay-nonce' ); ?>
 		</div>
 	</form>
