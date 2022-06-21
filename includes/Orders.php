@@ -102,5 +102,4 @@ class Orders {
 
 		return $status;
 	}
-
 }

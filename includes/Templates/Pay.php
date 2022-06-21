@@ -108,6 +108,9 @@ class Pay {
 			// set customer
 			wp_set_current_user( $order->get_customer_id() );
 
+			// create nonce for customer
+//			$nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
+
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
 				throw new Exception( __( 'This order cannot be paid for. Please contact us if you need assistance.', 'woocommerce' ) );
@@ -125,5 +128,22 @@ class Pay {
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Custom version of wp_create_nonce that uses the customer ID.
+	 */
+	private function create_customer_nonce() {
+		$user = wp_get_current_user();
+		$uid  = (int) $user->ID;
+//		if ( ! $uid ) {
+//			/** This filter is documented in wp-includes/pluggable.php */
+//			$uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
+//		}
+
+		$token = '';
+		$i     = wp_nonce_tick();
+
+		return substr( wp_hash( $i . '|woocommerce-pay|' . $uid . '|' . $token, 'nonce' ), - 12, 10 );
 	}
 }

@@ -23,6 +23,7 @@ class Init {
 	public function __construct() {
 		// global helper functions
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
+		require_once PLUGIN_PATH . 'includes/wcpos-form-handlers.php';
 
 		// allow requests from wcpos app
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 3 );
