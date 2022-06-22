@@ -122,6 +122,7 @@ class Frontend {
 				'display_name' => $user->display_name,
 				'nice_name'    => $user->user_nicename,
 				'last_access'  => '',
+				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
 			),
 			'store'          => array( $store_settings->get_store() )

@@ -263,6 +263,7 @@ class Auth extends Controller {
 			'last_name'    => $user->user_lastname,
 			'nice_name'    => $user->user_nicename,
 			'display_name' => $user->display_name,
+			'avatar_url'   => get_avatar_url( $user->ID ),
 		);
 
 		/** Let the user modify the data before sending it back */
