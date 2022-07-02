@@ -53,7 +53,7 @@ defined( 'ABSPATH' ) || exit;
 	<link rel="stylesheet" type="text/css" href="https://csstools.github.io/sanitize.css/latest/sanitize.css">
 	<style>
 		body {
-			color: #212121;
+			color: #243B55;
 			font-family: -apple-system,
 			BlinkMacSystemFont,
 			'Segoe UI',
@@ -68,6 +68,7 @@ defined( 'ABSPATH' ) || exit;
 
 		html, body, #root {
 			height: 100%;
+			background-color: #F0F4F8;
 		}
 
 		#root {

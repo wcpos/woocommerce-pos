@@ -100,7 +100,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/monorepo/asset-manifest.json',
+			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/managed-expo/asset-manifest.json',
 			'homepage'       => woocommerce_pos_url(), // @TODO change prop name
 			'site'           => array(
 				'url'             => get_option( 'siteurl' ),
@@ -130,7 +130,7 @@ class Frontend {
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_url       = $development ? 'http://localhost:19006/' : 'https://wcpos.github.io/';
+		$dev_url       = $development ? 'http://localhost:19006/' : 'https://wcpos.github.io/managed-expo/';
 
 		echo "<script>var initialProps={$initial_props};
 			jQuery.getJSON(initialProps.manifest, ({files}) => {
