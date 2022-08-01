@@ -1,8 +1,8 @@
 === WooCommerce POS ===
 Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
-Requires at least: 5.0 & WooCommerce 2.3.7
-Tested up to: 4.3
+Requires at least: 5.6 & WooCommerce 5.3
+Tested up to: 6
 Stable tag: 0.4.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -18,8 +18,9 @@ WooCommerce POS provides an alternative to Vend or Shopify POS - no need to sync
 You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with `login/pass` : `demo/demo`
 
 = REQUIREMENTS =
-* WordPress >= 5.0
-* WooCommerce >= 2.3.7
+* WordPress >= 5.6
+* WooCommerce >= 5.3
+* PHP >= 7.0
 
 == Installation ==
 

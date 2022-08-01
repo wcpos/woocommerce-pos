@@ -10,8 +10,8 @@
  * License:           GPL-3.0+
  * License URI:       http://www.gnu.org/licenses/gpl-3.0.txt
  * Domain Path:       /languages
- * WC tested up to:   5.7
- * WC requires at least: 2.3.7
+ * WC tested up to:   6
+ * WC requires at least: 5.3
  *
  * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com>
