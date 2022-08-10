@@ -125,7 +125,7 @@ class Frontend {
 				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
 			),
-			'store'          => array( $store_settings->get_store() )
+			'store'          => $store_settings->get_store()
 		);
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
