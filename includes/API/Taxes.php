@@ -15,6 +15,23 @@ class Taxes {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
+
+		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ) );
+	}
+
+	/**
+	 * Check if the current user can view the taxes.
+	 * Note: WC REST API currently requires manage_woocommerce capability to access the endpoint (even for read only).
+	 * This would stop the Cashier role from being able to view the taxes, so we check for read_private_products instead.
+	 *
+	 * @return bool
+	 */
+	public function check_permissions( $permission ) {
+		if ( ! $permission && 'GET' === $this->request->get_method() ) {
+			return current_user_can( 'read_private_products' );
+		}
+
+		return $permission;
 	}
 
 	/**
