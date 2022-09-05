@@ -16,7 +16,7 @@
     "sirbrillig/phpcs-variable-analysis": "v2.11.4",
     "squizlabs/php_codesniffer": "3.7.1",
     "wp-coding-standards/wpcs": "2.3.0",
-    "wp-phpunit/wp-phpunit": "6.0.1",
+    "wp-phpunit/wp-phpunit": "6.0.2",
     "yoast/phpunit-polyfills": "^1.0"
   },
   "require": {
