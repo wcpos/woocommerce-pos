@@ -38,6 +38,7 @@ class Auth extends Controller {
 	/**
 	 * Validate JWT Token
 	 * @TODO - flesh out this API, see https://github.com/wp-graphql/wp-graphql-jwt-authentication for inspiration
+	 * @TODO - validate, refresh and revoke should be GET with auth header tokens
 	 *
 	 * @param null $token
 	 * @param bool $output
@@ -107,21 +108,13 @@ class Auth extends Controller {
 			$this->namespace,
 			'/' . $this->rest_base . '/authorize',
 			array(
-				'methods'             => WP_REST_Server::CREATABLE,
+				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'generate_token' ),
-				'permission_callback' => '__return_true',
-				'args'                => array(
-					'username' => array(
-						/* translators: WordPress */
-						'description' => __( 'Username', 'wordpress' ),
-						'type'        => 'string',
-					),
-					'password' => array(
-						/* translators: WordPress */
-						'description' => __( 'Password', 'wordpress' ),
-						'type'        => 'string',
-					),
-				),
+				'permission_callback' => function ( WP_REST_Request $request ) {
+					$authorization = $request->get_header( 'authorization' );
+
+					return ! is_null( $authorization );
+				},
 			)
 		);
 
@@ -177,6 +170,7 @@ class Auth extends Controller {
 		);
 	}
 
+
 	/**
 	 * Get the user and password in the request body and generate a JWT
 	 *
@@ -185,8 +179,9 @@ class Auth extends Controller {
 	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
 	 */
 	public function generate_token( WP_REST_Request $request ) {
-		$username = $request->get_param( 'username' );
-		$password = $request->get_param( 'password' );
+		$token   = str_replace( 'Basic ', '', $request->get_header( 'authorization' ) );
+		$decoded = base64_decode( $token );
+		list( $username, $password ) = explode( ':', $decoded );
 
 		/** First thing, check the secret key if not exist return a error*/
 		if ( ! $this->get_secret_key() ) {
@@ -198,6 +193,7 @@ class Auth extends Controller {
 				)
 			);
 		}
+
 		/** Try to authenticate the user with the passed credentials*/
 		$user = wp_authenticate( $username, $password );
 

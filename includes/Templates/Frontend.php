@@ -84,10 +84,7 @@ class Frontend {
 	 * Output the head scripts
 	 */
 	public function head() {
-		$wp_scripts = wp_scripts();
-		$jquery     = $wp_scripts->registered['jquery-core'];
-		$jquery_src = add_query_arg( 'ver', $jquery->ver, $wp_scripts->base_url . $jquery->src );
-		echo '<script src="' . esc_url( $jquery_src ) . '"></script>';
+
 	}
 
 	/**
@@ -97,11 +94,13 @@ class Frontend {
 		$development    = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
 		$user           = wp_get_current_user();
 		$store_settings = new Stores();
+		$github_url     = 'https://wcpos.github.io/managed-expo/';
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $development ? 'http://localhost:19006/asset-manifest.json' : 'https://wcpos.github.io/managed-expo/asset-manifest.json',
-			'homepage'       => woocommerce_pos_url(), // @TODO change prop name
+			'manifest'       => $github_url . 'metadata.json',
+			'homepage'       => woocommerce_pos_url(),
+			// @TODO change prop name
 			'site'           => array(
 				'url'             => get_option( 'siteurl' ),
 				'name'            => get_option( 'blogname' ),
@@ -130,19 +129,54 @@ class Frontend {
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_url       = $development ? 'http://localhost:19006' : 'https://wcpos.github.io/managed-expo';
+		$dev_bundle    = 'http://localhost:19000/index.bundle?platform=web&dev=true&hot=false';
 
-		echo "<script>var initialProps={$initial_props};
-			jQuery.getJSON(initialProps.manifest, ({files}) => {
-				for (const i in Object.keys(files)) {
-					const key = Object.keys(files)[i];
-					if (key.indexOf('.js') !== - 1 && key.indexOf('.js.map') === -1) {
-						const path = files[key];
-						console.log('getting script', path);
-						jQuery.getScript('{$dev_url}' + path)
-					}
-				}
-			})
-		</script>" . "\n";
+		/**
+		 * getScript helper and initialProps
+		 */
+		echo "<script>
+	function getScript(source, callback) {
+	    var script = document.createElement('script');
+	    var prior = document.getElementsByTagName('script')[0];
+	    script.async = 1;
+
+	    script.onload = script.onreadystatechange = function( _, isAbort ) {
+	        if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
+	            script.onload = script.onreadystatechange = null;
+	            script = undefined;
+
+	            if(!isAbort && callback) setTimeout(callback, 0);
+	        }
+	    };
+
+	    script.src = source;
+	    prior.parentNode.insertBefore(script, prior);
+	}
+
+	var initialProps={$initial_props};
+</script>" . "\n";
+
+		if ( $development ) {
+			/**
+			 * Development
+			 */
+			echo "<script>getScript('{$dev_bundle}' , () => { console.log('done') });</script>" . "\n";
+		} else {
+			/**
+			 * Production
+			 */
+			echo "<script>
+	var initialProps={$initial_props};
+    var request = new Request(initialProps.manifest);
+
+    window.fetch(request)
+        .then((response) => response.json())
+        .then((data) => {
+            var bundle = data.fileMetadata.web.bundle;
+            var bundleUrl = '{$github_url}' + '/' + bundle;
+            getScript(bundleUrl, () => { console.log('done') });
+        });
+</script>" . "\n";
+		}
 	}
 }
