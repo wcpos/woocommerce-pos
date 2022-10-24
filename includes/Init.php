@@ -94,7 +94,7 @@ class Init {
 	public function rest_pre_serve_request( $result, $server, $request ) {
 		if ( $request->get_method() == 'OPTIONS' || woocommerce_pos_request() ) {
 			header( 'Access-Control-Allow-Origin: *' );
-			header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WCPOS' );
+			header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WCPOS, X-WP-NONCE' );
 		}
 
 		return $result;
