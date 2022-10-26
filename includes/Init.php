@@ -25,6 +25,8 @@ class Init {
 		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
+
+		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 	}
 
 	/**
@@ -81,6 +83,27 @@ class Init {
 		$query_vars[] = SHORT_NAME;
 
 		return $query_vars;
+	}
+
+	/**
+	 * Allow pre-flight requests from WCPOS Desktop and Mobile Apps
+	 * see: https://fetch.spec.whatwg.org/#cors-preflight-fetch
+	 *
+	 * @param bool $served Whether the request has already been served.
+	 *                                           Default false.
+	 * @param WP_HTTP_Response $result Result to send to the client. Usually a `WP_REST_Response`.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 * @param WP_REST_Server $server Server instance.
+	 *
+	 * @return bool $served
+	 */
+	public function rest_pre_serve_request( $served, $result, $request, $server ) {
+		if ( $request->get_method() == 'OPTIONS' ) {
+			$server->send_header( 'Access-Control-Allow-Origin', '*' );
+			$server->send_header( 'Access-Control-Allow-Headers', 'Authorization, Content-Type, X-WCPOS' );
+		}
+
+		return $served;
 	}
 
 }
