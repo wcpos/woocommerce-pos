@@ -40,6 +40,12 @@ class API {
 		}
 
 		/**
+		 * Allows requests from WCPOS Desktop and Mobile Apps
+		 */
+		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
+		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
+
+		/**
 		 *
 		 */
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
@@ -52,6 +58,36 @@ class API {
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
+	}
+
+	/**
+	 * Add CORS headers to the REST API response.
+	 *
+	 * @param string[] $allow_headers The list of request headers to allow.
+	 *
+	 * @return string[] $allow_headers
+	 */
+	public function rest_allowed_cors_headers( $allow_headers ) {
+		$allow_headers[] = 'X-WCPOS';
+
+		return $allow_headers;
+	}
+
+	/**
+	 * Add Access Control Allow Headers for POS app
+	 *
+	 * @param bool $served Whether the request has already been served.
+	 *                                           Default false.
+	 * @param WP_HTTP_Response $result Result to send to the client. Usually a `WP_REST_Response`.
+	 * @param WP_REST_Request $request Request used to generate the response.
+	 * @param WP_REST_Server $server Server instance.
+	 *
+	 * @return bool $served
+	 */
+	public function rest_pre_serve_request( $served, $result, $request, $server ) {
+		$server->send_header( 'Access-Control-Allow-Origin', '*' );
+
+		return $served;
 	}
 
 	/**
@@ -80,7 +116,6 @@ class API {
 
 			return absint( $user );
 		}
-
 	}
 
 	/**

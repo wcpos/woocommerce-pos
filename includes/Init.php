@@ -10,9 +10,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WP_HTTP_Response;
-use WP_REST_Request;
-use WP_REST_Server;
 use const DOING_AJAX;
 
 class Init {
@@ -25,14 +22,9 @@ class Init {
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
 		require_once PLUGIN_PATH . 'includes/wcpos-form-handlers.php';
 
-		// allow requests from wcpos app
-		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 3 );
-		add_action( 'send_headers', array( $this, 'send_headers' ) );
-
 		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
-
 	}
 
 	/**
@@ -80,32 +72,6 @@ class Init {
 		if ( woocommerce_pos_request() ) {
 			new API();
 		}
-	}
-
-	/**
-	 * Add Access Control Allow Headers for POS app
-	 *
-	 * @param WP_HTTP_Response $result Result to send to the client. Usually a WP_REST_Response.
-	 * @param WP_REST_Server $server Server instance.
-	 * @param WP_REST_Request $request Request used to generate the response.
-	 *
-	 * @return mixed $result
-	 */
-	public function rest_pre_serve_request( $result, $server, $request ) {
-		if ( $request->get_method() == 'OPTIONS' || woocommerce_pos_request() ) {
-			header( 'Access-Control-Allow-Origin: *' );
-			header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WCPOS, X-WP-NONCE' );
-		}
-
-		return $result;
-	}
-
-	/**
-	 * Allow WP API Discovery from the homepage
-	 */
-	public function send_headers() {
-		header( 'Access-Control-Allow-Origin: *' );
-		header( 'Access-Control-Expose-Headers: Link' );
 	}
 
 	/**
