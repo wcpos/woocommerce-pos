@@ -44,7 +44,7 @@ class API {
 		 * Allows requests from WCPOS Desktop and Mobile Apps
 		 */
 		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
-		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
+		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 10, 4 );
 
 		/**
 		 * Adds authentication to for JWT bearer tokens
@@ -116,7 +116,7 @@ class API {
 
 			return absint( $user );
 		}
-		
+
 		return $user_id;
 	}
 

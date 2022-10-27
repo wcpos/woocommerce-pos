@@ -36,7 +36,7 @@ class Init {
 		 * Headers for API discoverability
 		 */
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
-		add_filter( 'wp_headers', array( $this, 'wp_headers' ), 10, 1 );
+		add_action( 'send_headers', array( $this, 'send_headers' ), 10, 1 );
 	}
 
 	/**
@@ -125,16 +125,18 @@ class Init {
 
 	/**
 	 * Allow HEAD checks for WP API Link URL and server uptime
-	 *
-	 * @param string[] $headers Associative array of headers to be sent.
+	 * Fires once the requested HTTP headers for caching, content type, etc. have been sent.
 	 */
-	public function wp_headers( array $headers ): array {
-		if ( $_SERVER['REQUEST_METHOD'] == 'HEAD' ) {
-			$headers['Access-Control-Allow-Origin']   = '*';
-			$headers['Access-Control-Expose-Headers'] = 'Link';
+	public function send_headers() {
+		// only alter WCPOS requests
+		// note: $wp does not have query vars at this point
+		if ( isset( $_GET['wcpos'] ) && $_GET['wcpos'] == 1 ) {
+			// some server convert HEAD to GET method, so use this query param as backup
+			if ( $_SERVER['REQUEST_METHOD'] == 'HEAD' || ( isset( $_GET['http_method'] ) && $_GET['http_method'] == 'head' ) ) {
+				header( 'Access-Control-Allow-Origin: *' );
+				header( 'Access-Control-Expose-Headers: Link' );
+			}
 		}
-
-		return $headers;
 	}
 
 }
