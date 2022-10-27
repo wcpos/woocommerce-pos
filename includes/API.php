@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
 
@@ -46,14 +47,13 @@ class API {
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 
 		/**
-		 *
+		 * Adds authentication to for JWT bearer tokens
 		 */
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
 
 		/**
-		 * These filters allow changes to the WC REST API
-		 *
-		 * note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
+		 * These filters allow changes to the WC REST API response
+		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
 		 */
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
@@ -67,7 +67,7 @@ class API {
 	 *
 	 * @return string[] $allow_headers
 	 */
-	public function rest_allowed_cors_headers( $allow_headers ) {
+	public function rest_allowed_cors_headers( array $allow_headers ): array {
 		$allow_headers[] = 'X-WCPOS';
 
 		return $allow_headers;
@@ -84,7 +84,7 @@ class API {
 	 *
 	 * @return bool $served
 	 */
-	public function rest_pre_serve_request( $served, $result, $request, $server ) {
+	public function rest_pre_serve_request( bool $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
 
 		return $served;
@@ -93,13 +93,13 @@ class API {
 	/**
 	 * Check request for any login tokens
 	 *
-	 * @param null $user
+	 * @param int|false $user_id User ID if one has been determined, false otherwise.
 	 *
-	 * @return int|mixed|null
+	 * @return false|int|void
 	 */
-	public function determine_current_user( $user = null ) {
-		if ( ! empty( $user ) ) {
-			return $user;
+	public function determine_current_user( $user_id ) {
+		if ( ! empty( $user_id ) ) {
+			return $user_id;
 		}
 
 		// extract Bearer token from Authorization Header
@@ -109,17 +109,19 @@ class API {
 			$decoded_token = $this->controllers['auth']->validate_token( $token, false );
 
 			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
-				return $user;
+				return $user_id;
 			} else {
-				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user;
+				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
 			}
 
 			return absint( $user );
 		}
+		
+		return $user_id;
 	}
 
 	/**
-	 * @return mixed|void
+	 * @return false|string
 	 */
 	public function get_auth_header() {
 		// Get HTTP Authorization Header.

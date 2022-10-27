@@ -10,6 +10,9 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WP_HTTP_Response;
+use WP_REST_Request;
+use WP_REST_Server;
 use const DOING_AJAX;
 
 class Init {
@@ -22,11 +25,18 @@ class Init {
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
 		require_once PLUGIN_PATH . 'includes/wcpos-form-handlers.php';
 
+		/**
+		 * Init hooks
+		 */
 		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
+		/**
+		 * Headers for API discoverability
+		 */
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
+		add_filter( 'wp_headers', array( $this, 'wp_headers' ), 10, 1 );
 	}
 
 	/**
@@ -77,9 +87,15 @@ class Init {
 	}
 
 	/**
+	 * Adds 'wcpos' to the query variables allowed before processing.
 	 *
+	 * Allows (publicly allowed) query vars to be added, removed, or changed prior
+	 * to executing the query. Needed to allow custom rewrite rules using your own arguments
+	 * to work, or any other custom query variables you want to be publicly available.
+	 *
+	 * @param string[] $query_vars The array of allowed query variable names.
 	 */
-	public function query_vars( $query_vars ) {
+	public function query_vars( array $query_vars ): array {
 		$query_vars[] = SHORT_NAME;
 
 		return $query_vars;
@@ -87,7 +103,8 @@ class Init {
 
 	/**
 	 * Allow pre-flight requests from WCPOS Desktop and Mobile Apps
-	 * see: https://fetch.spec.whatwg.org/#cors-preflight-fetch
+	 * Note: pre-flight requests cannot have headers, so I can't filter by pos request
+	 * See: https://fetch.spec.whatwg.org/#cors-preflight-fetch
 	 *
 	 * @param bool $served Whether the request has already been served.
 	 *                                           Default false.
@@ -97,13 +114,27 @@ class Init {
 	 *
 	 * @return bool $served
 	 */
-	public function rest_pre_serve_request( $served, $result, $request, $server ) {
+	public function rest_pre_serve_request( bool $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
 		if ( $request->get_method() == 'OPTIONS' ) {
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
-			$server->send_header( 'Access-Control-Allow-Headers', 'Authorization, Content-Type, X-WCPOS' );
+			$server->send_header( 'Access-Control-Allow-Headers', 'Authorization, X-WP-Nonce, Content-Disposition, Content-MD5, Content-Type, X-WCPOS' );
 		}
 
 		return $served;
+	}
+
+	/**
+	 * Allow HEAD checks for WP API Link URL and server uptime
+	 *
+	 * @param string[] $headers Associative array of headers to be sent.
+	 */
+	public function wp_headers( array $headers ): array {
+		if ( $_SERVER['REQUEST_METHOD'] == 'HEAD' ) {
+			//$headers['Access-Control-Allow-Origin']   = '*';
+			$headers['Access-Control-Expose-Headers'] = 'Link';
+		}
+
+		return $headers;
 	}
 
 }
