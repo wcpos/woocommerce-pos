@@ -128,14 +128,10 @@ class Init {
 	 * Fires once the requested HTTP headers for caching, content type, etc. have been sent.
 	 */
 	public function send_headers() {
-		// only alter WCPOS requests
-		// note: $wp does not have query vars at this point
-		if ( isset( $_GET['wcpos'] ) && $_GET['wcpos'] == 1 ) {
-			// some server convert HEAD to GET method, so use this query param as backup
-			if ( $_SERVER['REQUEST_METHOD'] == 'HEAD' || ( isset( $_GET['http_method'] ) && $_GET['http_method'] == 'head' ) ) {
-				header( 'Access-Control-Allow-Origin: *' );
-				header( 'Access-Control-Expose-Headers: Link' );
-			}
+		// some server convert HEAD to GET method, so use this query param instead
+		if ( isset( $_GET['wcpos_http_method'] ) && $_GET['wcpos_http_method'] == 'head' ) {
+			header( 'Access-Control-Allow-Origin: *' );
+			header( 'Access-Control-Expose-Headers: Link' );
 		}
 	}
 
