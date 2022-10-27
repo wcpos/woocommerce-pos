@@ -130,7 +130,7 @@ class Init {
 	 */
 	public function wp_headers( array $headers ): array {
 		if ( $_SERVER['REQUEST_METHOD'] == 'HEAD' ) {
-			//$headers['Access-Control-Allow-Origin']   = '*';
+			$headers['Access-Control-Allow-Origin']   = '*';
 			$headers['Access-Control-Expose-Headers'] = 'Link';
 		}
 
