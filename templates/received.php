@@ -78,11 +78,11 @@ defined( 'ABSPATH' ) || exit;
 		}
 	</style>
 	<script>
-		window.postMessage({
+		window.parent.postMessage({
 			action: 'wcpos-payment-received',
-			//data: {
-			//	//order_id: <?php ////echo esc_attr( $order_id ); ?>
-			//}
+			payload: {
+				status: 'completed'
+			}
 		}, '*');
 	</script>
 </head>
