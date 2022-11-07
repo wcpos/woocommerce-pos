@@ -35,8 +35,16 @@ defined( 'ABSPATH' ) || exit;
 			'Segoe UI Symbol';
 		}
 
-		.wc_payment_method .payment_box {
+		.woocommerce-page.woocommerce-order-pay #payment {
 			background: transparent;
+			padding: 0;
+			margin: 0;
+		}
+
+		.woocommerce-page .payment_box {
+			background: transparent;
+			padding: 0 !important;
+			margin: 0 !important;
 		}
 	</style>
 	<script>

@@ -161,6 +161,9 @@ class API {
 		if ( 0 === strpos( $request->get_route(), '/wc/v3/taxes' ) ) {
 			$this->wc_rest_api_handler = new API\Taxes( $request );
 		}
+		if ( 0 === strpos( $request->get_route(), '/wc/v3/payment_gateways' ) ) {
+			$this->wc_rest_api_handler = new API\Payment_Gateways( $request );
+		}
 
 		return $result;
 	}
