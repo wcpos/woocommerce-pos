@@ -78,12 +78,19 @@ defined( 'ABSPATH' ) || exit;
 		}
 	</style>
 	<script>
-		window.parent.postMessage({
+		window.top.postMessage({
 			action: 'wcpos-payment-received',
 			payload: {
 				status: 'completed'
 			}
 		}, '*');
+
+		window.ReactNativeWebView.postMessage(JSON.stringify({
+			action: 'wcpos-payment-received',
+			payload: {
+				status: 'completed'
+			}
+		}));
 	</script>
 </head>
 <body>
