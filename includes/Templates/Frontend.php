@@ -166,7 +166,6 @@ class Frontend {
 			 * Production
 			 */
 			echo "<script>
-	var initialProps={$initial_props};
     var request = new Request(initialProps.manifest);
 
     window.fetch(request)

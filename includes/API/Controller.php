@@ -36,7 +36,7 @@ abstract class Controller extends WP_REST_Controller {
 	 *
 	 * @var string
 	 */
-	protected $namespace = SHORT_NAME . '/v1/';
+	protected $namespace = SHORT_NAME . '/v1';
 
 	/**
 	 * Route base.

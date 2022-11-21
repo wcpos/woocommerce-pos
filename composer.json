@@ -17,12 +17,13 @@
     "squizlabs/php_codesniffer": "3.7.1",
     "wp-coding-standards/wpcs": "2.3.0",
     "wp-phpunit/wp-phpunit": "6.0.2",
-    "yoast/phpunit-polyfills": "^1.0"
+    "yoast/phpunit-polyfills": "^1.0.4"
   },
   "require": {
-    "firebase/php-jwt": "v6.0.0",
     "php": ">=7.0.0",
-    "ext-json": "*"
+    "ext-json": "*",
+    "firebase/php-jwt": "v6.0.0",
+    "salesforce/handlebars-php": "^3.0"
   },
   "config": {
     "process-timeout": 0,

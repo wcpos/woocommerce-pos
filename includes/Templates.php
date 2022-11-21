@@ -10,9 +10,12 @@
 namespace WCPOS\WooCommercePOS;
 
 use Exception;
+use Handlebars\Handlebars;
+use Handlebars\Loader\StringLoader;
 use WC_Order;
 use WCPOS\WooCommercePOS\Templates\Frontend;
 use WCPOS\WooCommercePOS\Templates\Pay;
+use WP_REST_Request;
 
 class Templates {
 
@@ -37,6 +40,7 @@ class Templates {
 		$this->pos_checkout_rewrite_regex = '^' . $this->pos_checkout_slug . '/([a-z-]+)/([0-9]+)[/]?$';
 
 		add_rewrite_tag( '%wcpos%', '([^&]+)' );
+		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
 		add_rewrite_rule( $this->pos_rewrite_regex, 'index.php?wcpos=1', 'top' );
 		add_rewrite_rule( $this->pos_checkout_rewrite_regex, 'index.php?$matches[1]=$matches[2]', 'top' );
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
@@ -72,6 +76,8 @@ class Templates {
 			$template->get_template();
 		} elseif ( isset( $wp->query_vars['order-received'] ) ) {
 			$this->pos_received_template( $wp->query_vars['order-received'] );
+		} elseif ( isset( $wp->query_vars['wcpos-receipt'] ) ) {
+			$this->pos_receipt_template( $wp->query_vars['wcpos-receipt'] );
 		} else {
 			$template = new Frontend();
 			$template->get_template();
@@ -113,4 +119,56 @@ class Templates {
 		// @TODO construct url
 		return '/wcpos-checkout/order-received/' . $order->get_id() . '/?wcpos=1&key=' . $order->get_order_key();
 	}
+
+	/**
+	 * @param $order_id
+	 *
+	 * @return void
+	 */
+	public function pos_receipt_template( $order_id ) {
+		$order_id = absint( $order_id );
+
+		try {
+			// get order
+			add_filter( 'woocommerce_rest_check_permissions', function () {
+				return true;
+			} );
+
+			$request  = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $order_id );
+			$response = rest_get_server()->dispatch( $request );
+			$data     = $response->get_data();
+
+			$path = apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( 'legacy-receipt.php' ) );
+			ob_start();
+			include $path;
+			$template = ob_get_clean();
+			$engine   = new Handlebars( array(
+				'loader'  => new StringLoader(),
+				'helpers' => new Helpers(),
+//				'enableDataVariables' => true,
+			) );
+			$engine->addHelper( 'formatAddress', function ( $template, $context, $args, $source ) {
+				return 'formatAddress';
+			} );
+			$engine->addHelper( 'formatDate', function ( $template, $context, $args, $source ) {
+				return 'formatDate';
+			} );
+			$engine->addHelper( 'number', function ( $template, $context, $args, $source ) {
+				return 'number';
+			} );
+			$engine->addHelper( 'money', function ( $template, $context, $args, $source ) {
+				return 'money';
+			} );
+			$receipt = $engine->render( $template, $data );
+
+			echo $receipt;
+		} catch ( Exception $e ) {
+			wc_print_notice( $e->getMessage(), 'error' );
+		}
+	}
+
+	private function legacy_receipt_template() {
+
+	}
+
 }
