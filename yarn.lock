@@ -3487,20 +3487,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/parser@npm:5.29.0":
-  version: 5.29.0
-  resolution: "@typescript-eslint/parser@npm:5.29.0"
+"@typescript-eslint/parser@npm:5.44.0":
+  version: 5.44.0
+  resolution: "@typescript-eslint/parser@npm:5.44.0"
   dependencies:
-    "@typescript-eslint/scope-manager": 5.29.0
-    "@typescript-eslint/types": 5.29.0
-    "@typescript-eslint/typescript-estree": 5.29.0
+    "@typescript-eslint/scope-manager": 5.44.0
+    "@typescript-eslint/types": 5.44.0
+    "@typescript-eslint/typescript-estree": 5.44.0
     debug: ^4.3.4
   peerDependencies:
     eslint: ^6.0.0 || ^7.0.0 || ^8.0.0
   peerDependenciesMeta:
     typescript:
       optional: true
-  checksum: 7805796638d1ddbe21f2627e9f03493ec17710e22ae81d2345f3e0f5ff9cbf6f0cd1b0e05d8d0b9aa08435bafdb6b5c86f27d7115f0959de43e3322b86c00709
+  checksum: 2d09a1a1547a7ae3f76c9a33a54e11d79a194fbb9dbae69988e7aed3370bdf12bafde669211152769d89db822e0cdee4173affc126664fa6f17abba56daa7261
   languageName: node
   linkType: hard
 
@@ -3521,6 +3521,16 @@ __metadata:
     "@typescript-eslint/types": 5.29.0
     "@typescript-eslint/visitor-keys": 5.29.0
   checksum: 540642bef9c55fd7692af98dfb42ab99eeb82553f42ab2a3c4e132e02b5ba492da1c6bf1ca6b02b900a678fc74399ad6c564c0ca20d91032090b6cbcb01a5bde
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/scope-manager@npm:5.44.0":
+  version: 5.44.0
+  resolution: "@typescript-eslint/scope-manager@npm:5.44.0"
+  dependencies:
+    "@typescript-eslint/types": 5.44.0
+    "@typescript-eslint/visitor-keys": 5.44.0
+  checksum: 4cfe4b55eb428eda740e6b967e3a87f3e1f9c4bbd8e1d6b8d64a11666abe33ffe7a21e4e614444ccde2da6930fa85f3e0ffca43d6e339943ff7a4fbccb09c8fc
   languageName: node
   linkType: hard
 
@@ -3551,6 +3561,13 @@ __metadata:
   version: 5.29.0
   resolution: "@typescript-eslint/types@npm:5.29.0"
   checksum: 982ecdd69103105cabff8deac7f82f6002cf909238702ce902133e9af655cd962f977d5adf650c5ddae80d8c0e46abe1612a9141b25c7ed20ba8d662eb7ab871
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/types@npm:5.44.0":
+  version: 5.44.0
+  resolution: "@typescript-eslint/types@npm:5.44.0"
+  checksum: ced7d32abecfc62ccb67cf27e30c0785b9c153ec7b1a05153ced58fa5a2031ab3845bc2e477b83e4cebdcc5881c5845d23053c6739c62549d41ae6208e547e85
   languageName: node
   linkType: hard
 
@@ -3587,6 +3604,24 @@ __metadata:
     typescript:
       optional: true
   checksum: b91107a9fc31bf511aaa70f1e6d1d832d3acf08cfe999c870169447a7c223abff54c1d604bbb08d7c069dd98b43fb279bc314d1726097704fe8ad4c6e0969b12
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/typescript-estree@npm:5.44.0":
+  version: 5.44.0
+  resolution: "@typescript-eslint/typescript-estree@npm:5.44.0"
+  dependencies:
+    "@typescript-eslint/types": 5.44.0
+    "@typescript-eslint/visitor-keys": 5.44.0
+    debug: ^4.3.4
+    globby: ^11.1.0
+    is-glob: ^4.0.3
+    semver: ^7.3.7
+    tsutils: ^3.21.0
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 758731108497cca7ff81cf0a78d086b5a85757a983979d6bb25ad8252b7acbc738c642ecb5f5df82f925a45926b9846e431d5cf9fee5ed2613300b4d0c5d6c3f
   languageName: node
   linkType: hard
 
@@ -3639,6 +3674,16 @@ __metadata:
     "@typescript-eslint/types": 5.29.0
     eslint-visitor-keys: ^3.3.0
   checksum: 15f228ad9ffaf0e42cc6b2ee4e5095c1e89c4c2dc46a65d19ca0e2296d88c08a1192039d942bd9600b1496176749f6322d636dd307602dbab90404a9501b4d6e
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/visitor-keys@npm:5.44.0":
+  version: 5.44.0
+  resolution: "@typescript-eslint/visitor-keys@npm:5.44.0"
+  dependencies:
+    "@typescript-eslint/types": 5.44.0
+    eslint-visitor-keys: ^3.3.0
+  checksum: a012c888209e1d6ae684b2a44fd460ae5a80f5faf07bca4bda6c9c0d8c063ad3297d4c53f7151ae86cf1a43dee09625dc3ee72183323c91089c7288fd573c6f4
   languageName: node
   linkType: hard
 
@@ -11802,7 +11847,7 @@ __metadata:
     "@types/react-beautiful-dnd": 13.1.2
     "@types/react-dom": 17.0.17
     "@typescript-eslint/eslint-plugin": 5.29.0
-    "@typescript-eslint/parser": 5.29.0
+    "@typescript-eslint/parser": 5.44.0
     "@wordpress/api-fetch": 6.8.0
     "@wordpress/babel-plugin-makepot": 4.4.0
     "@wordpress/element": 4.9.0
