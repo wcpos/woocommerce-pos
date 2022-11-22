@@ -34,6 +34,7 @@ class API {
 			'auth'     => new API\Auth(),
 			'settings' => new API\Settings(),
 			'stores'   => new API\Stores(),
+			'emails'   => new API\Order_Emails(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {

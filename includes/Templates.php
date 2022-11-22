@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS;
 
 use Exception;
 use Handlebars\Handlebars;
+use Handlebars\Helpers;
 use Handlebars\Loader\StringLoader;
 use WC_Order;
 use WCPOS\WooCommercePOS\Templates\Frontend;
