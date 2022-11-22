@@ -32,6 +32,7 @@ return array(
     'WCPOS\\WooCommercePOS\\API\\Auth' => $baseDir . '/includes/API/Auth.php',
     'WCPOS\\WooCommercePOS\\API\\Controller' => $baseDir . '/includes/API/Controller.php',
     'WCPOS\\WooCommercePOS\\API\\Customers' => $baseDir . '/includes/API/Customers.php',
+    'WCPOS\\WooCommercePOS\\API\\Order_Emails' => $baseDir . '/includes/API/Order_Emails.php',
     'WCPOS\\WooCommercePOS\\API\\Orders' => $baseDir . '/includes/API/Orders.php',
     'WCPOS\\WooCommercePOS\\API\\Payment_Gateways' => $baseDir . '/includes/API/Payment_Gateways.php',
     'WCPOS\\WooCommercePOS\\API\\Products' => $baseDir . '/includes/API/Products.php',
