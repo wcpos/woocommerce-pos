@@ -123,6 +123,8 @@ class Pay {
 				$gateway->chosen = true;
 			}
 
+			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce' ) );
+
 			include woocommerce_pos_locate_template( 'pay.php' );
 
 		} catch ( Exception $e ) {

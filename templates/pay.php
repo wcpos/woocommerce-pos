@@ -46,14 +46,18 @@ defined( 'ABSPATH' ) || exit;
 			padding: 0 !important;
 			margin: 0 !important;
 		}
+
+		.woocommerce-page #payment button#place_order {
+			display: none;
+		}
 	</style>
 	<script>
 		window.addEventListener("message", ({data}) => {
 			if (data.action && data.action === "wcpos-process-payment") {
 				// submit checkout form
-				const form = document.getElementById('order_review');
-				if (form) {
-					form.submit();
+				const button = document.getElementById('place_order');
+				if (button) {
+					button.click();
 				}
 			}
 		}, false);
@@ -96,6 +100,10 @@ defined( 'ABSPATH' ) || exit;
 			<?php endif; ?>
 
 			<input type="hidden" name="woocommerce_pay" value="1"/>
+			<?php //wc_get_template( 'checkout/terms.php' ); ?>
+			<?php do_action( 'woocommerce_pay_order_before_submit' ); ?>
+			<?php echo apply_filters( 'woocommerce_pay_order_button_html', '<button type="submit" class="button alt" id="place_order" value="' . esc_attr( $order_button_text ) . '" data-value="' . esc_attr( $order_button_text ) . '">' . esc_html( $order_button_text ) . '</button>' ); ?>
+			<?php do_action( 'woocommerce_pay_order_after_submit' ); ?>
 			<?php wp_nonce_field( 'woocommerce-pay', 'woocommerce-pay-nonce' ); ?>
 		</div>
 	</form>
