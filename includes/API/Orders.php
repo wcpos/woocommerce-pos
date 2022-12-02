@@ -4,8 +4,10 @@
 namespace WCPOS\WooCommercePOS\API;
 
 use Exception;
+use WC_Order;
 use WC_Product_Variation;
 use WP_REST_Request;
+use WP_REST_Response;
 
 class Orders {
 	private $request;
@@ -76,13 +78,16 @@ class Orders {
 	}
 
 	/**
-	 * @param $response
-	 * @param $order
-	 * @param $request
+	 * @param WP_REST_Response $response The response object.
+	 * @param WC_Order $order Object data.
+	 * @param WP_REST_Request $request Request object.
 	 *
-	 * @return
+	 * @return WP_REST_Response
 	 */
-	public function prepare_shop_order_object( $response, $order, $request ) {
+	public function prepare_shop_order_object( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
+		/**
+		 * Add link for order payment
+		 */
 		if ( $order->has_status( 'pos-open' ) ) {
 			$pos_payment_url = add_query_arg( array(
 				'pay_for_order' => true,
@@ -90,6 +95,14 @@ class Orders {
 			), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
 
 			$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
+		}
+
+		/**
+		 * Add link for order receipt
+		 */
+		if ( $order->is_paid() ) {
+			$pos_receipt_url = get_home_url( null, '/wcpos-checkout/order-receipt/' . $order->get_id() );
+			$response->add_link( 'receipt', $pos_receipt_url );
 		}
 
 		return $response;
