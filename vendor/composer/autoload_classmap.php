@@ -55,10 +55,13 @@ return array(
     'WCPOS\\WooCommercePOS\\Logger' => $baseDir . '/includes/Logger.php',
     'WCPOS\\WooCommercePOS\\Orders' => $baseDir . '/includes/Orders.php',
     'WCPOS\\WooCommercePOS\\Products' => $baseDir . '/includes/Products.php',
+    'WCPOS\\WooCommercePOS\\Server' => $baseDir . '/includes/Server.php',
     'WCPOS\\WooCommercePOS\\Status' => $baseDir . '/includes/Status.php',
     'WCPOS\\WooCommercePOS\\Templates' => $baseDir . '/includes/Templates.php',
     'WCPOS\\WooCommercePOS\\Templates\\Frontend' => $baseDir . '/includes/Templates/Frontend.php',
     'WCPOS\\WooCommercePOS\\Templates\\Pay' => $baseDir . '/includes/Templates/Pay.php',
+    'WCPOS\\WooCommercePOS\\Templates\\Receipt' => $baseDir . '/includes/Templates/Receipt.php',
+    'WCPOS\\WooCommercePOS\\Templates\\Received' => $baseDir . '/includes/Templates/Received.php',
     'WCPOS\\WooCommercePOS\\Traits\\Settings' => $baseDir . '/includes/Traits/Settings.php',
     'WCPOS\\WooCommercePOS\\i18n' => $baseDir . '/includes/i18n.php',
 );

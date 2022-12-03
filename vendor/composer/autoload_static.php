@@ -88,10 +88,13 @@ class ComposerStaticInitb86ec637313980c3ab39e5d77f4b945d
         'WCPOS\\WooCommercePOS\\Logger' => __DIR__ . '/../..' . '/includes/Logger.php',
         'WCPOS\\WooCommercePOS\\Orders' => __DIR__ . '/../..' . '/includes/Orders.php',
         'WCPOS\\WooCommercePOS\\Products' => __DIR__ . '/../..' . '/includes/Products.php',
+        'WCPOS\\WooCommercePOS\\Server' => __DIR__ . '/../..' . '/includes/Server.php',
         'WCPOS\\WooCommercePOS\\Status' => __DIR__ . '/../..' . '/includes/Status.php',
         'WCPOS\\WooCommercePOS\\Templates' => __DIR__ . '/../..' . '/includes/Templates.php',
         'WCPOS\\WooCommercePOS\\Templates\\Frontend' => __DIR__ . '/../..' . '/includes/Templates/Frontend.php',
         'WCPOS\\WooCommercePOS\\Templates\\Pay' => __DIR__ . '/../..' . '/includes/Templates/Pay.php',
+        'WCPOS\\WooCommercePOS\\Templates\\Receipt' => __DIR__ . '/../..' . '/includes/Templates/Receipt.php',
+        'WCPOS\\WooCommercePOS\\Templates\\Received' => __DIR__ . '/../..' . '/includes/Templates/Received.php',
         'WCPOS\\WooCommercePOS\\Traits\\Settings' => __DIR__ . '/../..' . '/includes/Traits/Settings.php',
         'WCPOS\\WooCommercePOS\\i18n' => __DIR__ . '/../..' . '/includes/i18n.php',
     );
