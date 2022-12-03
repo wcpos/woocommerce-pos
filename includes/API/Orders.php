@@ -101,7 +101,7 @@ class Orders {
 		 * Add link for order receipt
 		 */
 		if ( $order->is_paid() ) {
-			$pos_receipt_url = get_home_url( null, '/wcpos-checkout/order-receipt/' . $order->get_id() );
+			$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
 			$response->add_link( 'receipt', $pos_receipt_url );
 		}
 

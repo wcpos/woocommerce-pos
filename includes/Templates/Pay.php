@@ -91,7 +91,7 @@ class Pay {
 		}
 
 		if ( ! $this->gateway_id ) {
-			wp_die( __( 'No gateway selected', 'woocommerce-pos' ) );
+			wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
 		}
 
 		do_action( 'woocommerce_pos_before_pay' );
@@ -102,7 +102,12 @@ class Pay {
 
 			// Order or payment link is invalid.
 			if ( ! $order || $order->get_id() !== $this->order_id ) {
-				throw new Exception( __( 'Sorry, this order is invalid and cannot be paid for.', 'woocommerce' ) );
+				wp_die( esc_html__( 'Sorry, this order is invalid and cannot be paid for.', 'woocommerce-pos' ) );
+			}
+
+			// Order has already been paid for.
+			if ( $order->is_paid() ) {
+				wp_die( esc_html__( 'Sorry, this order has already been paid for.', 'woocommerce-pos' ) );
 			}
 
 			// set customer
@@ -113,7 +118,7 @@ class Pay {
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
-				throw new Exception( __( 'This order cannot be paid for. Please contact us if you need assistance.', 'woocommerce' ) );
+				wp_die( esc_html__( 'This order cannot be paid for. Please contact us if you need assistance.', 'woocommerce-pos' ) );
 			}
 
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -123,7 +128,7 @@ class Pay {
 				$gateway->chosen = true;
 			}
 
-			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce' ) );
+			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) );
 
 			include woocommerce_pos_locate_template( 'pay.php' );
 

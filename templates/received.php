@@ -80,12 +80,12 @@ defined( 'ABSPATH' ) || exit;
 	<script>
 		window.top.postMessage({
 			action: 'wcpos-payment-received',
-			payload: <?php echo $result; ?>
+			payload: <?php echo $order_json; ?>
 		}, '*');
 
 		window.ReactNativeWebView.postMessage(JSON.stringify({
 			action: 'wcpos-payment-received',
-			payload: <?php echo $result; ?>
+			payload: <?php echo $order_json; ?>
 		}));
 	</script>
 </head>

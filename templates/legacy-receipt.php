@@ -133,7 +133,7 @@
 </div>
 <div class="order-addresses">
 	<div class="billing-address">
-		{{formatAddress billing_address title="<?php _e( 'Billing Address', 'woocommerce-pos' ); ?>"}}
+		{{#formatAddress billing_address title="<?php _e( 'Billing Address', 'woocommerce-pos' ); ?>"}}
 	</div>
 	<div class="shipping-address">
 		{{formatAddress shipping_address title="<?php _e( 'Shipping Address', 'woocommerce-pos' ); ?>"}}
