@@ -121,6 +121,10 @@ class Pay {
 				wp_die( esc_html__( 'This order cannot be paid for. Please contact us if you need assistance.', 'woocommerce-pos' ) );
 			}
 
+			/**
+			 * We need to reload the gateways here to use the current customer details.
+			 */
+			WC()->payment_gateways()->init();
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
 			if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
