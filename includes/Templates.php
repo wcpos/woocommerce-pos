@@ -49,7 +49,7 @@ class Templates {
 		add_rewrite_tag( '%wcpos%', '([^&]+)' );
 		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
 		add_rewrite_rule( $this->pos_rewrite_regex, 'index.php?wcpos=1', 'top' );
-		add_rewrite_rule( $this->pos_checkout_rewrite_regex, 'index.php?$matches[1]=$matches[2]?wcpos=1', 'top' );
+		add_rewrite_rule( $this->pos_checkout_rewrite_regex, 'index.php?$matches[1]=$matches[2]&wcpos=1', 'top' );
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
 

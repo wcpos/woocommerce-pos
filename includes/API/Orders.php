@@ -88,23 +88,19 @@ class Orders {
 		/**
 		 * Add link for order payment
 		 */
-		if ( $order->has_status( 'pos-open' ) ) {
-			$pos_payment_url = add_query_arg( array(
-				'pay_for_order' => true,
-				'key'           => $order->get_order_key(),
-			), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
+		$pos_payment_url = add_query_arg( array(
+			'pay_for_order' => true,
+			'key'           => $order->get_order_key(),
+		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ) );
 
-			$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
-		}
+		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
 
 		/**
 		 * Add link for order receipt
 		 */
-		if ( $order->is_paid() ) {
-			$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
-			$response->add_link( 'receipt', $pos_receipt_url );
-		}
-
+		$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
+		$response->add_link( 'receipt', $pos_receipt_url );
+		
 		return $response;
 	}
 
