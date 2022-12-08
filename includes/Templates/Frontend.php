@@ -111,6 +111,7 @@ class Frontend {
 				'wp_api_url'      => get_rest_url(),
 				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
 				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
+				'locale'          => get_locale(),
 			),
 			'wp_credentials' => array(
 				'id'           => $user->ID,
