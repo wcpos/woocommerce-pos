@@ -68,8 +68,9 @@ class Stores extends Controller {
 
 		return array_merge(
 			array(
-				'id'   => 0,
-				'name' => get_option( 'blogname' ),
+				'id'     => 0,
+				'name'   => get_option( 'blogname' ),
+				'locale' => get_locale(),
 			), $filtered_settings
 		);
 	}
