@@ -1,8 +1,8 @@
 import * as React from 'react';
-import AtSymbolIcon from '@heroicons/react/solid/AtSymbolIcon';
-import ChatAlt2Icon from '@heroicons/react/solid/ChatAlt2Icon';
-import DocumentTextIcon from '@heroicons/react/solid/DocumentTextIcon';
-import QuestionMarkCircleIcon from '@heroicons/react/solid/QuestionMarkCircleIcon';
+import AtSymbolIcon from '@heroicons/react/24/solid/AtSymbolIcon';
+import ChatBubbleLeftRightIcon from '@heroicons/react/24/solid/ChatBubbleLeftRightIcon';
+import DocumentTextIcon from '@heroicons/react/24/solid/DocumentTextIcon';
+import QuestionMarkCircleIcon from '@heroicons/react/24/solid/QuestionMarkCircleIcon';
 
 const Footer = () => {
 	return (
@@ -31,7 +31,7 @@ const Footer = () => {
 						</a>
 					</p>
 					<p className="wcpos-flex wcpos-items-center">
-						<ChatAlt2Icon className="wcpos-w-5 wcpos-h-5 wcpos-mr-2 wcpos-text-gray-400" />
+						<ChatBubbleLeftRightIcon className="wcpos-w-5 wcpos-h-5 wcpos-mr-2 wcpos-text-gray-400" />
 						<a href="https://wcpos.com/discord" target="_blank" rel="noreferrer">
 							<img
 								id="discord-badge"

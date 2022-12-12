@@ -2,7 +2,7 @@ import * as React from 'react';
 import { get } from 'lodash';
 import classnames from 'classnames';
 import Tooltip from '../components/tooltip';
-import QuestionMarkCircleIcon from '@heroicons/react/solid/QuestionMarkCircleIcon';
+import QuestionMarkCircleIcon from '@heroicons/react/24/solid/QuestionMarkCircleIcon';
 
 interface ColProps {
 	children: React.ReactNode;

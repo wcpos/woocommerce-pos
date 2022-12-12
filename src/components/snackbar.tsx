@@ -1,5 +1,5 @@
 import * as React from 'react';
-import XIcon from '@heroicons/react/solid/XIcon';
+import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
 
 interface SnackbarProps {
 	message?: string;
@@ -19,7 +19,7 @@ const Snackbar = ({ message, onRemove, timeout }: SnackbarProps) => {
 		<div className="wcpos-rounded-lg wcpos-bg-wp-admin-theme-black wcpos-shadow-lg wcpos-text-white wcpos-mb-2 wcpos-p-4 wcpos-pointer-events-auto wcpos-flex">
 			<span className="wcpos-flex-1">{message}</span>
 			<button>
-				<XIcon onClick={onRemove} className="wcpos-w-5 wcpos-h-5 wcpos-text-white" />
+				<XMarkIcon onClick={onRemove} className="wcpos-w-5 wcpos-h-5 wcpos-text-white" />
 			</button>
 		</div>
 	) : null;

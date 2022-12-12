@@ -1,5 +1,5 @@
 import * as React from 'react';
-import XIcon from '@heroicons/react/solid/XIcon';
+import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
 import classNames from 'classnames';
 
 interface NoticeProps {
@@ -21,7 +21,7 @@ const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProp
 				)}
 			>
 				<p className="flex-1">{children}</p>
-				{isDismissible && <XIcon onClick={onRemove} className="wcpos-h-5 wcpos-w-5" />}
+				{isDismissible && <XMarkIcon onClick={onRemove} className="wcpos-h-5 wcpos-w-5" />}
 			</div>
 		</div>
 	);

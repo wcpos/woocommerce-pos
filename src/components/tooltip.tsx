@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useTooltip, TooltipPopup, Position } from '@reach/tooltip';
-import Portal from '@reach/portal';
+import { Portal } from '@reach/portal';
 
 interface TooltipProps {
 	children: React.ReactElement;

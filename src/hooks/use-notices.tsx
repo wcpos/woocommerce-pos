@@ -26,7 +26,7 @@ const NoticesContext = React.createContext<NoticesContext>({
 	setSnackbar: () => {},
 });
 
-export const NoticesProvider: React.FC = ({ children }) => {
+export const NoticesProvider = ({ children }) => {
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
 	const [snackbar, setSnackbar] = React.useState<SnackbarProps | null>(null);
 

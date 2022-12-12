@@ -7,7 +7,7 @@ import {
 	ComboboxList,
 	ComboboxOption,
 } from '@reach/combobox';
-import SelectorIcon from '@heroicons/react/solid/SelectorIcon';
+import ChevronUpDownIcon from '@heroicons/react/24/solid/ChevronUpDownIcon';
 import { throttle } from 'lodash';
 
 interface UserOptionProps {
@@ -75,7 +75,7 @@ const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectPro
 					onChange={throttle(handleChange, 100)}
 					className="wcpos-w-full wcpos-px-2 wcpos-pr-10 wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
 				/>
-				<SelectorIcon
+				<ChevronUpDownIcon
 					className="wcpos-absolute wcpos-p-1.5 wcpos-m-px wcpos-top-0 wcpos-right-0 wcpos-w-8 wcpos-h-8 wcpos-text-gray-400 wcpos-pointer-events-none"
 					aria-hidden="true"
 				/>

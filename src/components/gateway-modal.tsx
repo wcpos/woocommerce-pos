@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Dialog } from '@reach/dialog';
-import XIcon from '@heroicons/react/solid/XIcon';
+import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
 import Notice from '../components/notice';
 import Button from '../components/button';
 
@@ -52,7 +52,7 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 			<h2 className="wcpos-mt-0 wcpos-relative">
 				{gateway.title}
 				<button className="wcpos-absolute wcpos-top-0 wcpos-right-0">
-					<XIcon onClick={closeModal} className="wcpos-w-5 wcpos-h-5" />
+					<XMarkIcon onClick={closeModal} className="wcpos-w-5 wcpos-h-5" />
 				</button>
 			</h2>
 

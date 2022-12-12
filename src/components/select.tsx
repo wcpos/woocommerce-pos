@@ -6,7 +6,7 @@ import {
 	ListboxPopover,
 	ListboxList,
 } from '@reach/listbox';
-import SelectorIcon from '@heroicons/react/solid/SelectorIcon';
+import ChevronUpDownIcon from '@heroicons/react/24/solid/ChevronUpDownIcon';
 
 interface OptionProps {
 	label: string;
@@ -31,7 +31,7 @@ const Select = ({ options, selected, onChange, name }: SelectProps) => {
 		>
 			<ListboxButton
 				className="wcpos-w-full wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
-				arrow={<SelectorIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400" />}
+				arrow={<ChevronUpDownIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400" />}
 			/>
 			<ListboxPopover className="wcpos-mt-1 wcpos-overflow-auto wcpos-text-base wcpos-bg-white wcpos-border-0 wcpos-rounded-md wcpos-shadow-lg wcpos-max-h-60 sm:wcpos-text-sm">
 				<ListboxList>
