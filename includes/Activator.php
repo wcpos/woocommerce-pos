@@ -90,13 +90,17 @@ class Activator {
 	 * POS Frontend will give 404 if pretty permalinks not active
 	 */
 	private function permalink_check() {
-		$fail = Status::permalinks_disabled();
-		if ( $fail ) {
-			$message = $fail['message'] . '. ';
-			$message .= sprintf( '<a href="%s">%s</a>', $fail['buttons'][0]['href'], $fail['buttons'][0]['prompt'] ) . ' &raquo;';
+		$permalinks = get_option( 'permalink_structure' );
 
-			Admin\Notices::add( $message );
+		// early return
+		if( $permalinks ) {
+			return;
 		}
+
+		$message = __( '<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly', 'woocommerce-pos' ) . '. ';
+		$message .= sprintf( '<a href="%s">%s</a>', admin_url( 'options-permalink.php' ), __( 'Enable permalinks', 'woocommerce-pos' ) ) . ' &raquo;';
+
+		Admin\Notices::add( $message );
 	}
 
 	/**

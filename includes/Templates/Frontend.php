@@ -91,7 +91,7 @@ class Frontend {
 	 * Output the footer scripts
 	 */
 	public function footer() {
-		$development    = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
 		$store_settings = new Stores();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';

@@ -39,7 +39,27 @@ Coming soon.
 
 ## 👷 Workflows
 
-Coming soon.
+We recommend [LocalWP](https://localwp.com/) for creating a WordPress install on your local machine. 
+You can either clone the WooCommerce POS repository into the `/wp-content/plugins/` folder or create a symbolic link (recommended).
+
+```sh
+> git clone https://github.com/wcpos/woocommerce-pos.git
+```
+
+To prepare the repository for local development you should rename `.env.example` to `.env`, this will set the local development flag to `true`.
+
+Next you will need to install the required PHP and JavaScript packages via `composer` (for PHP packages) and `yarn` (for JS packages).
+
+```sh
+> composer install
+> yarn install
+```
+
+Once you have the required packages installed you can now start development.
+
+```sh
+yarn start:js
+```
 
 ## 🚀 How to use it
 

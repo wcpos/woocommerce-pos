@@ -23,7 +23,8 @@
     "php": ">=7.0.0",
     "ext-json": "*",
     "firebase/php-jwt": "v6.0.0",
-    "salesforce/handlebars-php": "^3.0"
+    "salesforce/handlebars-php": "^3.0",
+    "vlucas/phpdotenv": "^5.5"
   },
   "config": {
     "process-timeout": 0,

@@ -20,6 +20,8 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use Dotenv\Dotenv;
+
 /**
  * Define plugin constants.
  */
@@ -34,6 +36,12 @@ define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( p
  * Autoloader
  */
 require_once 'vendor/autoload.php';
+
+/**
+ * Environment variables
+ */
+$dotenv = Dotenv::createImmutable(__DIR__);
+$dotenv->safeLoad();
 
 /**
  * Activate plugin

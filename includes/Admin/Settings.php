@@ -53,7 +53,7 @@ class Settings {
 	 *
 	 */
 	public function enqueue_assets() {
-		$development = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG;
+		$development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$assets      = $development ? 'build' : 'assets';
 
 		wp_enqueue_style(
