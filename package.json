@@ -50,7 +50,7 @@
 		"@reach/listbox": "0.18.0",
 		"@reach/portal": "0.18.0",
 		"@reach/tooltip": "0.18.0",
-		"@wordpress/api-fetch": "6.19.0",
+		"@wordpress/api-fetch": "6.20.0",
 		"@wordpress/element": "4.20.0",
 		"@wordpress/i18n": "4.22.0",
 		"@wordpress/url": "3.23.0",
