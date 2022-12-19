@@ -3265,7 +3265,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@wordpress/url@npm:3.23.0, @wordpress/url@npm:^3.23.0":
+"@wordpress/url@npm:3.24.0":
+  version: 3.24.0
+  resolution: "@wordpress/url@npm:3.24.0"
+  dependencies:
+    "@babel/runtime": ^7.16.0
+    remove-accents: ^0.4.2
+  checksum: 2f1daea3f674eee380f7f2a363181e06fed0f5628c1386049ad0e630af3a9748a97131162d4dca4f4c51c5b3aeaf2758d805dba4365292fab3cebf4d87ec7ee6
+  languageName: node
+  linkType: hard
+
+"@wordpress/url@npm:^3.23.0":
   version: 3.23.0
   resolution: "@wordpress/url@npm:3.23.0"
   dependencies:
@@ -11222,7 +11232,7 @@ __metadata:
     "@wordpress/element": 4.20.0
     "@wordpress/env": 5.7.0
     "@wordpress/i18n": 4.22.0
-    "@wordpress/url": 3.23.0
+    "@wordpress/url": 3.24.0
     autoprefixer: 10.4.13
     babel-loader: 9.1.0
     classnames: 2.3.2
