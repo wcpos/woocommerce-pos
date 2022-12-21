@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import '@reach/tooltip/styles.css';
+@import '@reach/combobox/styles.css';
+@import '@reach/checkbox/styles.css';
+@import '@reach/listbox/styles.css';
+@import '@reach/dialog/styles.css';
+
+/**
+ * Reach UI Combobox
+ */
+[data-suggested-value] {
+	font-weight: normal !important;
+}
+
+[data-user-value] {
+	color: var(--wp-admin-theme-color, #007cba);
+}
+
+/**
+ * Reach UI Listbox
+ */
+[data-reach-listbox-option][data-current-nav] {
+	background-color: var(--wp-admin-theme-color, #007cba);
+}
+
+/**
+ * forms.css gives input[type="checkbox"] display: inline-block
+ * we need it to be hidden sometimes 
+ */
+.wcpos-hidden {
+	display: none !important;
+}
+
+/**
+ * Hide the error element for 2 seconds
+ */
+#woocommerce-pos-js-error {
+	animation: 2s wcposError;
+	animation-fill-mode: forwards;
+	visibility: hidden;
+}
+
+@keyframes wcposError {
+	99% {
+		visibility: hidden;
+	}
+
+	100% {
+		visibility: visible;
+	}
+}

@@ -148,34 +148,53 @@
 		<th><?php _e( 'Order Date', 'woocommerce-pos' ); ?></th>
 		<td><?php echo wc_format_datetime( $order->get_date_paid() ); ?></td>
 	</tr>
-	<?php if ( $order->get_billing_email() ): ?>
+	<?php if ( $order->get_billing_email() ) { ?>
 		<tr>
-			<th><?php /* translators: woocommerce */
-				_e( 'Email', 'woocommerce' ); ?></th>
+			<th>
+            <?php 
+            // translators: woocommerce
+				_e( 'Email', 'woocommerce' ); 
+			?>
+                </th>
 			<td><?php echo $order->get_billing_email(); ?></td>
 		</tr>
-	<?php endif; ?>
-	<?php if ( $order->get_billing_phone() ): ?>
+	<?php } ?>
+	<?php if ( $order->get_billing_phone() ) { ?>
 		<tr>
-			<th><?php /* translators: woocommerce */
-				_e( 'Telephone', 'woocommerce' ); ?></th>
+			<th>
+            <?php 
+            // translators: woocommerce
+				_e( 'Telephone', 'woocommerce' ); 
+			?>
+                </th>
 			<td><?php echo $order->get_billing_phone(); ?></td>
 		</tr>
-	<?php endif; ?>
+	<?php } ?>
 </table>
 <table class="order-items">
 	<thead>
 	<tr>
-		<th class="product"><?php /* translators: woocommerce */
-			_e( 'Product', 'woocommerce' ); ?></th>
+		<th class="product">
+        <?php 
+        // translators: woocommerce
+			_e( 'Product', 'woocommerce' ); 
+		?>
+            </th>
 		<th class="qty"><?php _ex( 'Qty', 'Abbreviation of Quantity', 'woocommerce-pos' ); ?></th>
-		<th class="price"><?php /* translators: woocommerce */
-			_e( 'Price', 'woocommerce' ); ?></th>
+		<th class="price">
+        <?php 
+        // translators: woocommerce
+			_e( 'Price', 'woocommerce' ); 
+		?>
+            </th>
 	</tr>
 	</thead>
 	<tbody>
-	<?php $items = $order->get_items( 'line_item' );
-	if ( $items ) : foreach ( $items as $item ): ?>
+	<?php 
+    $items = $order->get_items( 'line_item' );
+	if ( $items ) {
+		foreach ( $items as $item ) { 
+			?>
 		<tr>
 			<td class="product">
 				<?php echo $item->get_name(); ?>
@@ -188,33 +207,48 @@
 				<?php echo $order->get_formatted_line_subtotal( $item ); ?>
 			</td>
 		</tr>
-	<?php endforeach; endif; ?>
+			<?php 
+		}
+	} 
+	?>
 	</tbody>
 	<tfoot>
-	<?php $items = $order->get_items( 'shipping' );
-	if ( $items ) : foreach ( $items as $item ): ?>
+	<?php 
+    $items = $order->get_items( 'shipping' );
+	if ( $items ) {
+		foreach ( $items as $item ) { 
+			?>
 		<tr class="shipping">
 			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
 			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
 		</tr>
-	<?php endforeach; endif; ?>
-	<?php $items = $order->get_items( 'fee' );
-	if ( $items ) : foreach ( $items as $item ): ?>
+			<?php 
+		}
+	} 
+	?>
+	<?php 
+    $items = $order->get_items( 'fee' );
+	if ( $items ) {
+		foreach ( $items as $item ) { 
+			?>
 		<tr class="fee">
 			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
 			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
 		</tr>
-	<?php endforeach; endif; ?>
+			<?php 
+		}
+	} 
+	?>
 	<?php
-	foreach ( $order->get_order_item_totals() as $key => $total ):
+	foreach ( $order->get_order_item_totals() as $key => $total ) {
 		?>
 		<tr class="order-total">
 			<th colspan="2"><?php echo esc_html( $total['label'] ); ?></th>
 			<td colspan="1"><?php echo ( 'payment_method' === $key ) ? esc_html( $total['value'] ) : wp_kses_post( $total['value'] ); ?></td>
 		</tr>
-	<?php endforeach; ?>
+	<?php } ?>
 	</tfoot>
 </table>
-<div class="order-notes"><?php $order->get_customer_note() ?></div>
+<div class="order-notes"><?php $order->get_customer_note(); ?></div>
 </body>
 </html>

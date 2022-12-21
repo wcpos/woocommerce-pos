@@ -1,10 +1,8 @@
 <?php
 /**
- *
- *
- * @package    WCPOS\WooCommercePOS\Templates\Pay
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -12,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Exception;
 
 class Pay {
-
 	/**
 	 * @var int
 	 */
@@ -44,50 +41,48 @@ class Pay {
 		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
 	}
 
-	/**
-	 *
-	 */
-	public function remove_scripts() {
+	
+	public function remove_scripts(): void {
 		global $wp_styles, $wp_scripts;
 
 		// by default allow any styles and scripts from woocommerce and gateway plugins
 		$allow = array( 'woocommerce', 'wc-', $this->gateway_id );
 
-		foreach ( $wp_styles->queue as $style ) :
+		foreach ( $wp_styles->queue as $style ) {
 			$keep = false;
 			// @TODO - add_filter styles for $allow
-			foreach ( $allow as $string ) :
-				if ( strpos( $style, $string ) !== false ) {
+			foreach ( $allow as $string ) {
+				if ( false !== strpos( $style, $string ) ) {
 					$keep = true;
+
 					continue;
 				}
-			endforeach;
+			}
 			if ( ! $keep ) {
 				wp_dequeue_style( $style );
 			}
-		endforeach;
+		}
 
-		foreach ( $wp_scripts->queue as $script ) :
+		foreach ( $wp_scripts->queue as $script ) {
 			$keep = false;
 			// @TODO - add_filter scripts for $allow
-			foreach ( $allow as $string ) :
-				if ( strpos( $script, $string ) !== false ) {
+			foreach ( $allow as $string ) {
+				if ( false !== strpos( $script, $string ) ) {
 					$keep = true;
+
 					continue;
 				}
-			endforeach;
+			}
 			if ( ! $keep ) {
 				wp_dequeue_script( $script );
 			}
-		endforeach;
+		}
 	}
 
-	/**
-	 *
-	 */
-	public function get_template() {
-		if ( ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
-			define( 'WOOCOMMERCE_CHECKOUT', true );
+	
+	public function get_template(): void {
+		if ( ! \defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
+			\define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
 		if ( ! $this->gateway_id ) {
@@ -114,16 +109,14 @@ class Pay {
 			wp_set_current_user( $order->get_customer_id() );
 
 			// create nonce for customer
-//			$nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
+			//			$nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
 				wp_die( esc_html__( 'This order cannot be paid for. Please contact us if you need assistance.', 'woocommerce-pos' ) );
 			}
 
-			/**
-			 * We need to reload the gateways here to use the current customer details.
-			 */
+			// We need to reload the gateways here to use the current customer details.
 			WC()->payment_gateways()->init();
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
@@ -135,7 +128,6 @@ class Pay {
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) );
 
 			include woocommerce_pos_locate_template( 'pay.php' );
-
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
@@ -147,10 +139,10 @@ class Pay {
 	private function create_customer_nonce() {
 		$user = wp_get_current_user();
 		$uid  = (int) $user->ID;
-//		if ( ! $uid ) {
-//			/** This filter is documented in wp-includes/pluggable.php */
-//			$uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
-//		}
+		//		if ( ! $uid ) {
+		//			/** This filter is documented in wp-includes/pluggable.php */
+		//			$uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
+		//		}
 
 		$token = '';
 		$i     = wp_nonce_tick();

@@ -1,12 +1,12 @@
 <?php
 /**
  * Update to 0.4.6
- * - fix reports bug
+ * - fix reports bug.
  *
  * @version   0.4.6
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
+if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
 

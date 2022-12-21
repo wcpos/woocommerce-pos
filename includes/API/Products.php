@@ -1,6 +1,5 @@
 <?php
 
-
 namespace WCPOS\WooCommercePOS\API;
 
 use WC_Data;
@@ -25,11 +24,11 @@ class Products {
 	}
 
 	/**
-	 * Filter the product response
+	 * Filter the product response.
 	 *
 	 * @param WP_REST_Response $response The response object.
-	 * @param WC_Data $product Product data.
-	 * @param WP_REST_Request $request Request object.
+	 * @param WC_Data          $product  Product data.
+	 * @param WP_REST_Request  $request  Request object.
 	 *
 	 * @return WP_REST_Response $response The response object.
 	 */
@@ -47,31 +46,9 @@ class Products {
 	}
 
 	/**
-	 * Returns thumbnail if it exists, if not, returns the WC placeholder image
-	 *
-	 * @param int $id
-	 *
-	 * @return string
-	 */
-	private function get_thumbnail( int $id ): string {
-		$image    = false;
-		$thumb_id = get_post_thumbnail_id( $id );
-
-		if ( $thumb_id ) {
-			$image = wp_get_attachment_image_src( $thumb_id, 'shop_thumbnail' );
-		}
-
-		if ( is_array( $image ) ) {
-			return $image[0];
-		}
-
-		return wc_placeholder_img_src();
-	}
-
-	/**
 	 * Filter the query arguments for a request.
 	 *
-	 * @param array $args Key value array of query var to query value.
+	 * @param array           $args    Key value array of query var to query value.
 	 * @param WP_REST_Request $request The request used.
 	 *
 	 * @return array $args Key value array of query var to query value.
@@ -79,16 +56,16 @@ class Products {
 	public function product_query( array $args, WP_REST_Request $request ): array {
 		// Note!: date_query is removed from the query, use 'after' and delete this filter
 
-//		$params = $request->get_query_params();
-//		if ( isset( $params['date_modified_gmt_after'] ) ) {
-//			$date_query = array(
-//				'column' => 'post_modified_gmt',
-//				'after'  => $params['date_modified_gmt_after'],
-//			);
-//			array_push( $args['date_query'], $date_query );
-////			array_push( $args['after'], $date_query );
-//
-//		}
+		//		$params = $request->get_query_params();
+		//		if ( isset( $params['date_modified_gmt_after'] ) ) {
+		//			$date_query = array(
+		//				'column' => 'post_modified_gmt',
+		//				'after'  => $params['date_modified_gmt_after'],
+		//			);
+		//			array_push( $args['date_query'], $date_query );
+		// //			array_push( $args['after'], $date_query );
+		//
+		//		}
 
 		return $args;
 	}
@@ -96,10 +73,10 @@ class Products {
 	/**
 	 * Search SQL filter for matching against post title only.
 	 *
-	 * @param string $search
+	 * @param string   $search
 	 * @param WP_Query $wp_query
 	 */
-	function posts_search( $search, $wp_query ): string {
+	public function posts_search( $search, $wp_query ): string {
 		if ( ! empty( $search ) && ! empty( $wp_query->query_vars['search_terms'] ) ) {
 			global $wpdb;
 
@@ -123,7 +100,7 @@ class Products {
 	}
 
 	/**
-	 * Returns array of all product ids, name
+	 * Returns array of all product ids, name.
 	 *
 	 * @param array $fields
 	 *
@@ -142,8 +119,28 @@ class Products {
 	}
 
 	/**
+	 * Returns thumbnail if it exists, if not, returns the WC placeholder image.
 	 *
+	 * @param int $id
 	 *
+	 * @return string
+	 */
+	private function get_thumbnail( int $id ): string {
+		$image    = false;
+		$thumb_id = get_post_thumbnail_id( $id );
+
+		if ( $thumb_id ) {
+			$image = wp_get_attachment_image_src( $thumb_id, 'shop_thumbnail' );
+		}
+
+		if ( \is_array( $image ) ) {
+			return $image[0];
+		}
+
+		return wc_placeholder_img_src();
+	}
+
+	/**
 	 * @param object $record
 	 *
 	 * @return object

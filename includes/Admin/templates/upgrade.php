@@ -1,10 +1,10 @@
 <?php
 /**
- * Template for the Upgrade page
+ * Template for the Upgrade page.
  *
- * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com.au>
- * @link      http://www.kilbot.com.au
+ *
+ * @see      http://www.kilbot.com.au
  */
 ?>
 
@@ -142,6 +142,6 @@
 
     <h2 style="margin:20px 0;">Thank you for using WooCommerce POS!</h2>
 
-	<?php echo $upgrade ?>
+	<?php echo $upgrade; ?>
 
 </div>

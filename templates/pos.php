@@ -1,13 +1,13 @@
 <?php
 /**
- * POS template
+ * POS template.
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/pos.php.
  *
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 ?>
 <!DOCTYPE html>
 <html>
@@ -104,3 +104,4 @@ defined( 'ABSPATH' ) || exit;
 <?php do_action( 'woocommerce_pos_footer' ); ?>
 
 </html>
+

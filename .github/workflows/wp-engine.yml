@@ -16,8 +16,8 @@ jobs:
 
       - name: Build
         run: |
-          npm install
-          npm run build:js
+          yarn install
+          yarn settings build
 
       - name: SSH Deploy to WP Engine
         uses: bowiedev/github-action-wpengine-ssh-deploy@master

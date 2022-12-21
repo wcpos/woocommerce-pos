@@ -1,8 +1,8 @@
 <?php
 /**
- * Admin View: Variation Metabox
+ * Admin View: Variation Metabox.
  */
-if ( ! defined( 'ABSPATH' ) ) {
+if ( ! \defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly
 }
 ?>
@@ -16,3 +16,4 @@ if ( ! defined( 'ABSPATH' ) ) {
         <input type="text" name="variable_pos_barcode[<?php echo $variation->ID; ?>]" value="<?php echo $value; ?>">
     </p>
 </div>
+

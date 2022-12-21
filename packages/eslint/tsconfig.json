@@ -1,0 +1,3 @@
+{
+  "extends": "@wcpos/tsconfig/base.json"
+}

@@ -4,7 +4,9 @@
  * Provides a Card Payment Gateway.
  *
  * @author      Paul Kilmurray <paul@kilbot.com>
- * @link        https://wcpos.com
+ *
+ * @see        https://wcpos.com
+ *
  * @extends     WC_Payment_Gateway
  */
 
@@ -14,7 +16,6 @@ use WC_Order;
 use WC_Payment_Gateway;
 
 class Card extends WC_Payment_Gateway {
-
 	/**
 	 * Constructor for the gateway.
 	 */
@@ -26,26 +27,24 @@ class Card extends WC_Payment_Gateway {
 		$this->has_fields  = true;
 
 		// Actions
-		add_action( 'woocommerce_pos_update_options_payment_gateways_' . $this->id, array(
+		add_action('woocommerce_pos_update_options_payment_gateways_' . $this->id, array(
 			$this,
 			'process_admin_options',
-		) );
+		));
 		add_action( 'woocommerce_thankyou_pos_card', array( $this, 'calculate_cashback' ) );
-
 	}
 
 	/**
-	 * Display the payment fields in the checkout
+	 * Display the payment fields in the checkout.
 	 */
-	public function payment_fields() {
-
+	public function payment_fields(): void {
 		if ( $this->description ) {
 			echo '<p>' . wp_kses_post( $this->description ) . '</p>';
 		}
 
 		$currency_pos = get_option( 'woocommerce_currency_pos' );
 
-		if ( $currency_pos == 'left' || 'left_space' ) {
+		if ( 'left' == $currency_pos || 'left_space' ) {
 			$left_addon  = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
 			$right_addon = '';
 		} else {
@@ -63,7 +62,6 @@ class Card extends WC_Payment_Gateway {
         </div>
       </div>
     ';
-
 	}
 
 	/**
@@ -72,7 +70,6 @@ class Card extends WC_Payment_Gateway {
 	 * @return array
 	 */
 	public function process_payment( $order_id ) {
-
 		// get order object
 		$order = new WC_Order( $order_id );
 
@@ -80,17 +77,16 @@ class Card extends WC_Payment_Gateway {
 		//      $data     = API::get_raw_data();
 		$cashback = isset( $data['payment_details']['pos-cashback'] ) ? wc_format_decimal( $data['payment_details']['pos-cashback'] ) : 0;
 
-		if ( $cashback !== 0 ) {
-
+		if ( 0 !== $cashback ) {
 			// add order meta
 			update_post_meta( $order_id, '_pos_card_cashback', $cashback );
 
 			// add cashback as fee line item
 			// TODO: this should be handled by $order->add_fee after WC 2.2
-			$item_id = wc_add_order_item( $order_id, array(
+			$item_id = wc_add_order_item($order_id, array(
 				'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
 				'order_item_type' => 'fee',
-			) );
+			));
 
 			if ( $item_id ) {
 				wc_add_order_item_meta( $item_id, '_line_total', $cashback );
@@ -104,15 +100,14 @@ class Card extends WC_Payment_Gateway {
 			$order_total = get_post_meta( $order_id, '_order_total', true );
 			$order_total += $cashback;
 			update_post_meta( $order_id, '_order_total', $order_total );
-
 		}
 
 		// payment complete
 		$order->payment_complete();
 
-		$redirect = add_query_arg( array(
+		$redirect = add_query_arg(array(
 			'wcpos' => 1,
-		), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ) );
+		), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));
 
 		// success
 		return array(
@@ -124,7 +119,7 @@ class Card extends WC_Payment_Gateway {
 	/**
 	 * @param $order_id
 	 */
-	public function calculate_cashback( $order_id ) {
+	public function calculate_cashback( $order_id ): void {
 		$message  = '';
 		$cashback = get_post_meta( $order_id, '_pos_card_cashback', true );
 
@@ -136,5 +131,4 @@ class Card extends WC_Payment_Gateway {
 
 		echo $message;
 	}
-
 }

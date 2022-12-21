@@ -160,15 +160,23 @@
 	</tr>
 	{{#if billing_address.email}}
 	<tr>
-		<th><?php /* translators: woocommerce */
-			_e( 'Email', 'woocommerce' ); ?></th>
+		<th>
+        <?php 
+        // translators: woocommerce
+			_e( 'Email', 'woocommerce' ); 
+		?>
+            </th>
 		<td>{{billing_address.email}}</td>
 	</tr>
 	{{/if}}
 	{{#if billing_address.phone}}
 	<tr>
-		<th><?php /* translators: woocommerce */
-			_e( 'Telephone', 'woocommerce' ); ?></th>
+		<th>
+        <?php 
+        // translators: woocommerce
+			_e( 'Telephone', 'woocommerce' ); 
+		?>
+            </th>
 		<td>{{billing_address.phone}}</td>
 	</tr>
 	{{/if}}
@@ -176,11 +184,19 @@
 <table class="order-items">
 	<thead>
 	<tr>
-		<th class="product"><?php /* translators: woocommerce */
-			_e( 'Product', 'woocommerce' ); ?></th>
+		<th class="product">
+        <?php 
+        // translators: woocommerce
+			_e( 'Product', 'woocommerce' ); 
+		?>
+            </th>
 		<th class="qty"><?php _ex( 'Qty', 'Abbreviation of Quantity', 'woocommerce-pos' ); ?></th>
-		<th class="price"><?php /* translators: woocommerce */
-			_e( 'Price', 'woocommerce' ); ?></th>
+		<th class="price">
+        <?php 
+        // translators: woocommerce
+			_e( 'Price', 'woocommerce' ); 
+		?>
+            </th>
 	</tr>
 	</thead>
 	<tbody>
@@ -266,8 +282,12 @@
 	{{/if}}
 	<!-- end order_discount -->
 	<tr class="order-total">
-		<th colspan="2"><?php /* translators: woocommerce */
-			_e( 'Order total', 'woocommerce' ); ?>:
+		<th colspan="2">
+        <?php 
+        // translators: woocommerce
+			_e( 'Order total', 'woocommerce' ); 
+		?>
+            :
 		</th>
 		<td colspan="1">{{{money total}}}</td>
 	</tr>

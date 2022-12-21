@@ -1,6 +1,5 @@
 <?php
 
-
 namespace WCPOS\WooCommercePOS\API;
 
 use WP_REST_Request;
@@ -24,8 +23,8 @@ class Customers {
 	 *
 	 * @see https://developer.wordpress.org/reference/classes/wp_user_query/
 	 *
-	 * @param array $prepared_args Array of arguments for WP_User_Query.
-	 * @param WP_REST_Request $request The current request.
+	 * @param array           $prepared_args Array of arguments for WP_User_Query.
+	 * @param WP_REST_Request $request       The current request.
 	 *
 	 * @return array $prepared_args Array of arguments for WP_User_Query.
 	 */
@@ -60,7 +59,7 @@ class Customers {
 	}
 
 	/**
-	 * Returns array of all customer ids, username
+	 * Returns array of all customer ids, username.
 	 *
 	 * @param array $fields
 	 *
@@ -69,7 +68,8 @@ class Customers {
 	public function get_all_posts( array $fields = array() ) {
 		global $wpdb;
 
-		$all_posts = $wpdb->get_results( '
+		$all_posts = $wpdb->get_results(
+			'
 			SELECT ID as id, user_login as username FROM ' . $wpdb->users
 		);
 
@@ -78,8 +78,6 @@ class Customers {
 	}
 
 	/**
-	 *
-	 *
 	 * @param object $record
 	 *
 	 * @return object

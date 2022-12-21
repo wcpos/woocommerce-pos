@@ -1,30 +1,31 @@
 <?php
+
 // Require composer dependencies.
-require_once dirname( dirname( __FILE__ ) ) . '/vendor/autoload.php';
+require_once \dirname(__FILE__, 2) . '/vendor/autoload.php';
 
 // If we're running in WP's build directory, ensure that WP knows that, too.
-if ( 'build' === getenv( 'LOCAL_DIR' ) ) {
-	define( 'WP_RUN_CORE_TESTS', true );
+if ('build' === getenv('LOCAL_DIR')) {
+	\define('WP_RUN_CORE_TESTS', true);
 }
 
 // Determine the tests directory (from a WP dev checkout).
 // Try the WP_TESTS_DIR environment variable first.
-$_tests_dir = getenv( 'WP_TESTS_DIR' );
+$_tests_dir = getenv('WP_TESTS_DIR');
 
 // Next, try the WP_PHPUNIT composer package.
-if ( ! $_tests_dir ) {
-	$_tests_dir = getenv( 'WP_PHPUNIT__DIR' );
+if ( ! $_tests_dir) {
+	$_tests_dir = getenv('WP_PHPUNIT__DIR');
 }
 
 // See if we're installed inside an existing WP dev instance.
-if ( ! $_tests_dir ) {
-	$_try_tests_dir = dirname( __FILE__ ) . '/../../../../../tests/phpunit';
-	if ( file_exists( $_try_tests_dir . '/includes/functions.php' ) ) {
+if ( ! $_tests_dir) {
+	$_try_tests_dir = \dirname(__FILE__) . '/../../../../../tests/phpunit';
+	if (file_exists($_try_tests_dir . '/includes/functions.php')) {
 		$_tests_dir = $_try_tests_dir;
 	}
 }
 // Fallback.
-if ( ! $_tests_dir ) {
+if ( ! $_tests_dir) {
 	$_tests_dir = '/tmp/wordpress-tests-lib';
 }
 
@@ -33,22 +34,22 @@ require_once $_tests_dir . '/includes/functions.php';
 
 // Do not try to load JavaScript files from an external URL - this takes a
 // while.
-define( 'GUTENBERG_LOAD_VENDOR_SCRIPTS', false );
+\define('GUTENBERG_LOAD_VENDOR_SCRIPTS', false);
 
 /**
  * Manually load the plugin being tested.
  */
-function _manually_load_plugin() {
-	require dirname( dirname( __FILE__ ) ) . '/vendor/autoload.php';
+function _manually_load_plugin(): void {
+	require \dirname(__FILE__, 2) . '/vendor/autoload.php';
 }
 
-tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
+tests_add_filter('muplugins_loaded', '_manually_load_plugin');
 
 /**
- * Install WooCommerce
+ * Install WooCommerce.
  */
-function install_woocommerce() {
-	require dirname( dirname( __FILE__ ) ) . '/../woocommerce/woocommerce.php';
+function install_woocommerce(): void {
+	require \dirname(__FILE__, 2) . '/../woocommerce/woocommerce.php';
 	// Clean existing install first.
 	//  define( 'WP_UNINSTALL_PLUGIN', true );
 	//  define( 'WC_REMOVE_ALL_DATA', true );
@@ -57,7 +58,7 @@ function install_woocommerce() {
 	//  echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
 }
 
-tests_add_filter( 'muplugins_loaded', 'install_woocommerce' );
+tests_add_filter('muplugins_loaded', 'install_woocommerce');
 
 /**
  * Adds a wp_die handler for use during tests.
@@ -71,15 +72,15 @@ tests_add_filter( 'muplugins_loaded', 'install_woocommerce' );
  *
  * @throws Exception When a `wp_die()` occurs.
  */
-function fail_if_died( $message ) {
-	if ( is_wp_error( $message ) ) {
+function fail_if_died($message): void {
+	if (is_wp_error($message)) {
 		$message = $message->get_error_message();
 	}
 
-	throw new Exception( 'WordPress died: ' . $message );
+	throw new Exception('WordPress died: ' . $message);
 }
 
-tests_add_filter( 'wp_die_handler', 'fail_if_died' );
+tests_add_filter('wp_die_handler', 'fail_if_died');
 
 $GLOBALS['wp_tests_options'] = array(
 	'gutenberg-experiments' => array(
@@ -91,4 +92,4 @@ $GLOBALS['wp_tests_options'] = array(
 require $_tests_dir . '/includes/bootstrap.php';
 
 // Use existing behavior for wp_die during actual test execution.
-remove_filter( 'wp_die_handler', 'fail_if_died' );
+remove_filter('wp_die_handler', 'fail_if_died');

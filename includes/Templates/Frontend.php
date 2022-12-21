@@ -1,28 +1,23 @@
 <?php
 /**
- *
- *
- * @package    WCPOS\WooCommercePOS\Templates\Frontend
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\API\Stores;
+
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
 class Frontend {
-
 	public function __construct() {
-
 	}
 
-	/**
-	 *
-	 */
-	public function get_template() {
+	
+	public function get_template(): void {
 		// force ssl
 		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
 			wp_safe_redirect( woocommerce_pos_url() );
@@ -37,7 +32,7 @@ class Frontend {
 
 		// check privileges
 		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
-			/* translators: wordpress */
+			// translators: wordpress
 			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.' ) );
 		}
 
@@ -55,22 +50,7 @@ class Frontend {
 	}
 
 	/**
-	 * Disable caching conflicts
-	 */
-	private function no_cache() {
-		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
-		}
-
-		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
-		}
-	}
-
-	/**
-	 * Add variable to login url to signify POS login
+	 * Add variable to login url to signify POS login.
 	 *
 	 * @param $login_url
 	 *
@@ -81,16 +61,15 @@ class Frontend {
 	}
 
 	/**
-	 * Output the head scripts
+	 * Output the head scripts.
 	 */
-	public function head() {
-
+	public function head(): void {
 	}
 
 	/**
-	 * Output the footer scripts
+	 * Output the footer scripts.
 	 */
-	public function footer() {
+	public function footer(): void {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
 		$store_settings = new Stores();
@@ -125,16 +104,14 @@ class Frontend {
 				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
 			),
-			'store'          => $store_settings->get_store()
+			'store'          => $store_settings->get_store(),
 		);
 
 		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
 		$dev_bundle    = 'http://localhost:19000/index.bundle?platform=web&dev=true&hot=false';
 
-		/**
-		 * getScript helper and initialProps
-		 */
+		// getScript helper and initialProps
 		echo "<script>
 	function getScript(source, callback) {
 	    var script = document.createElement('script');
@@ -158,14 +135,10 @@ class Frontend {
 </script>" . "\n";
 
 		if ( $development ) {
-			/**
-			 * Development
-			 */
+			// Development
 			echo "<script>getScript('{$dev_bundle}' , () => { console.log('done') });</script>" . "\n";
 		} else {
-			/**
-			 * Production
-			 */
+			// Production
 			echo "<script>
     var request = new Request(initialProps.manifest);
 
@@ -177,6 +150,21 @@ class Frontend {
             getScript(bundleUrl, () => { console.log('done') });
         });
 </script>" . "\n";
+		}
+	}
+
+	/**
+	 * Disable caching conflicts.
+	 */
+	private function no_cache(): void {
+		// disable W3 Total Cache minify
+		if ( ! \defined( 'DONOTMINIFY' ) ) {
+			\define( 'DONOTMINIFY', 'true' );
+		}
+
+		// disable WP Super Cache
+		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
+			\define( 'DONOTCACHEPAGE', 'true' );
 		}
 	}
 }

@@ -1,10 +1,8 @@
 <?php
 /**
- *
- *
- * @package    WCPOS\WooCommercePOS\Templates\Receipt
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -25,10 +23,8 @@ class Receipt {
 		$this->order_id = $order_id;
 	}
 
-	/**
-	 *
-	 */
-	public function get_template() {
+	
+	public function get_template(): void {
 		try {
 			// get order
 			$order = wc_get_order( $this->order_id );
@@ -38,7 +34,6 @@ class Receipt {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			//
 			if ( ! $order->is_paid() ) {
 				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
 			}
@@ -56,7 +51,6 @@ class Receipt {
 			$path  = $this->get_template_path( 'receipt.php' );
 			include $path;
 			exit;
-
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
@@ -65,16 +59,14 @@ class Receipt {
 	/**
 	 * @param string $file_name
 	 *
-	 * @return mixed|null
+	 * @return null|mixed
 	 */
 	private function get_template_path( string $file_name ) {
 		return apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( $file_name ) );
 	}
 
-	/**
-	 *
-	 */
-	private function legacy_receipt_template() {
+	
+	private function legacy_receipt_template(): void {
 		$server     = new Server();
 		$order_json = $server->wp_rest_request( '/wc/v3/orders/' . $this->order_id );
 		$path       = $this->get_template_path( 'legacy-receipt.php' );
@@ -83,23 +75,23 @@ class Receipt {
 		include $path;
 		$template = ob_get_clean();
 
-		$engine = new Handlebars( array(
+		$engine = new Handlebars(array(
 			'loader'  => new StringLoader(),
 			'helpers' => new Helpers(),
-//				'enableDataVariables' => true,
-		) );
-		$engine->addHelper( 'formatAddress', function ( $template, $context, $args, $source ) {
+			//				'enableDataVariables' => true,
+		));
+		$engine->addHelper('formatAddress', function ( $template, $context, $args, $source ) {
 			return 'formatAddress';
-		} );
-		$engine->addHelper( 'formatDate', function ( $template, $context, $args, $source ) {
+		});
+		$engine->addHelper('formatDate', function ( $template, $context, $args, $source ) {
 			return 'formatDate';
-		} );
-		$engine->addHelper( 'number', function ( $template, $context, $args, $source ) {
+		});
+		$engine->addHelper('number', function ( $template, $context, $args, $source ) {
 			return 'number';
-		} );
-		$engine->addHelper( 'money', function ( $template, $context, $args, $source ) {
+		});
+		$engine->addHelper('money', function ( $template, $context, $args, $source ) {
 			return 'money';
-		} );
+		});
 		$receipt = $engine->render( $template, $order_json );
 
 		echo $receipt;

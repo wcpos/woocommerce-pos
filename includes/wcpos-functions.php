@@ -1,15 +1,14 @@
 <?php
 
 /**
- * Global helper functions for WooCommerce POS
+ * Global helper functions for WooCommerce POS.
  *
- * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com>
- * @link      http://wcpos.com
  *
+ * @see      http://wcpos.com
  */
 
-/**
+/*
  * Construct the POS permalink
  *
  * @param string $page
@@ -18,29 +17,30 @@
  */
 
 use WCPOS\WooCommercePOS\Admin\Settings;
+
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
-if ( ! function_exists( 'woocommerce_pos_url' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
 		$slug   = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
-		$scheme = woocommerce_pos_get_settings( 'general', 'force_ssl' ) == true ? 'https' : null;
+		$scheme = true == woocommerce_pos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
 }
 
-/**
+/*
  * getallheaders() is an alias of apache_response_headers()
  * This function provides compatibility for nginx servers
  */
-if ( ! function_exists( 'getallheaders' ) ) {
+if ( ! \function_exists( 'getallheaders' ) ) {
 	function getallheaders(): array {
 		$headers = array();
 		foreach ( $_SERVER as $name => $value ) {
-			/* RFC2616 (HTTP/1.1) defines header fields as case-insensitive entities. */
-			if ( strtolower( substr( $name, 0, 5 ) ) == 'http_' ) {
+			// RFC2616 (HTTP/1.1) defines header fields as case-insensitive entities.
+			if ( 'http_' == strtolower( substr( $name, 0, 5 ) ) ) {
 				$headers[ str_replace( ' ', '-', ucwords( strtolower( str_replace( '_', ' ', substr( $name, 5 ) ) ) ) ) ] = $value;
 			}
 		}
@@ -49,14 +49,14 @@ if ( ! function_exists( 'getallheaders' ) ) {
 	}
 }
 
-/**
+/*
  * Test for POS requests to the server
  *
  * @param $type : 'query_var' | 'header' | 'all'
  *
  * @return bool
  */
-if ( ! function_exists( 'woocommerce_pos_request' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
 	function woocommerce_pos_request( $type = 'all' ): bool {
 		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule
 		if ( 'all' == $type || 'query_var' == $type ) {
@@ -78,17 +78,16 @@ if ( ! function_exists( 'woocommerce_pos_request' ) ) {
 	}
 }
 
-/**
- *
- */
-if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
+
+if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
 	function woocommerce_pos_admin_request() {
-		if ( function_exists( 'getallheaders' )
-		     && $headers = getallheaders()
-		                   && isset( $headers['X-WC-POS-ADMIN'] )
+		if ( \function_exists( 'getallheaders' )
+						   && $headers = getallheaders()
+						   && isset( $headers['X-WC-POS-ADMIN'] )
 		) {
 			return $headers['X-WC-POS-ADMIN'];
-		} elseif ( isset( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) ) {
+		}
+		if ( isset( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) ) {
 			return $_SERVER['HTTP_X_woocommerce_pos_ADMIN'];
 		}
 
@@ -96,7 +95,7 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
 	}
 }
 
-/**
+/*
  * Helper function to add or update WCPOS settings
  *
  * @param string $group
@@ -105,8 +104,8 @@ if ( ! function_exists( 'woocommerce_pos_admin_request' ) ) {
  *
  * @return bool
  */
-if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
-	function woocommerce_pos_update_settings( $group, $key = null, $value, $autoload = 'no' ): bool {
+if ( ! \function_exists( 'woocommerce_pos_update_settings' ) ) {
+	function woocommerce_pos_update_settings( $group, $key, $value, $autoload = 'no' ): bool {
 		if ( $key ) {
 			return Settings::update_setting( $group, $key, $value );
 		}
@@ -115,7 +114,7 @@ if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
 	}
 }
 
-/**
+/*
  * Helper function to get WCPOS settings
  *
  * @param string $group
@@ -124,7 +123,7 @@ if ( ! function_exists( 'woocommerce_pos_update_settings' ) ) {
  *
  * @return mixed
  */
-if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	function woocommerce_pos_get_settings( $group, $key = null ) {
 		if ( $key ) {
 			return Settings::get_setting( $group, $key );
@@ -134,7 +133,7 @@ if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
 	}
 }
 
-/**
+/*
  * Simple wrapper for json_encode
  *
  * Use JSON_FORCE_OBJECT for PHP 5.3 or higher with fallback for
@@ -147,26 +146,26 @@ if ( ! function_exists( 'woocommerce_pos_get_settings' ) ) {
  *
  * @return mixed
  */
-if ( ! function_exists( 'woocommerce_pos_json_encode' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
 	function woocommerce_pos_json_encode( $data ) {
 		$args = array( $data, JSON_FORCE_OBJECT );
 
-		return call_user_func_array( 'json_encode', $args );
+		return \call_user_func_array( 'json_encode', $args );
 	}
 }
 
-/**
+/*
  * Return template path
  *
  * @param string $path
  *
  * @return mixed|void
  */
-if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 	function woocommerce_pos_locate_template( $path = '' ) {
-		$template = locate_template( array(
+		$template = locate_template(array(
 			'woocommerce-pos/' . $path,
-		) );
+		));
 
 		if ( ! $template ) {
 			$template = PLUGIN_PATH . 'templates/' . $path;
@@ -178,32 +177,28 @@ if ( ! function_exists( 'woocommerce_pos_locate_template' ) ) {
 	}
 }
 
-/**
+/*
  * Remove newlines and code spacing
  *
  * @param $str
  *
  * @return mixed
  */
-if ( ! function_exists( 'woocommerce_pos_trim_html_string' ) ) {
+if ( ! \function_exists( 'woocommerce_pos_trim_html_string' ) ) {
 	function woocommerce_pos_trim_html_string( $str ): string {
 		return preg_replace( '/^\s+|\n|\r|\s+$/m', '', $str );
 	}
 }
 
-/**
- *
- */
-if ( ! function_exists( 'woocommerce_pos_doc_url' ) ) {
+
+if ( ! \function_exists( 'woocommerce_pos_doc_url' ) ) {
 	function woocommerce_pos_doc_url( $page ): string {
 		return 'http://docs.wcpos.com/v/' . VERSION . '/en/' . $page;
 	}
 }
 
-/**
- *
- */
-if ( ! function_exists( 'woocommerce_pos_faq_url' ) ) {
+
+if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
 	function woocommerce_pos_faq_url( $page ): string {
 		return 'http://faq.wcpos.com/v/' . VERSION . '/en/' . $page;
 	}

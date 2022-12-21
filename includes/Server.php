@@ -1,9 +1,10 @@
 <?php
 /**
- * POS Server Class
+ * POS Server Class.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     https://wcpos.com
+ *
+ * @see     https://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -11,10 +12,6 @@ namespace WCPOS\WooCommercePOS;
 use WP_REST_Request;
 
 class Server {
-
-	/**
-	 *
-	 */
 	public function __construct() {
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ) );
 	}
@@ -31,7 +28,7 @@ class Server {
 	/**
 	 * @param string $route
 	 * @param string $method
-	 * @param array $attributes
+	 * @param array  $attributes
 	 *
 	 * @return false|string
 	 */
@@ -61,6 +58,7 @@ class Server {
 
 	/**
 	 * Returns if an error occurred during most recent JSON encode/decode.
+	 *
 	 * @See - wp-includes/rest-api/class-wp-rest-server.php
 	 *
 	 * Strings to be translated will be in format like

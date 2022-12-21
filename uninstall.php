@@ -12,13 +12,13 @@
  * - Repeat with other user roles. Best directly by using the links/query string parameters.
  * - Repeat things for multisite. Once for a single site in the network, once sitewide.
  *
- * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com.au>
- * @link      http://www.woopos.com.au
+ *
+ * @see      http://www.woopos.com.au
  */
 
 // If uninstall not called from WordPress, then exit
-if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+if ( ! \defined('WP_UNINSTALL_PLUGIN')) {
 	exit;
 }
 
@@ -40,5 +40,5 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
  */
 
 
-//global $wpdb;
-//$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'woocommerce_pos_%'" );
+// global $wpdb;
+// $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'woocommerce_pos_%'" );

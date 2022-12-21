@@ -1,13 +1,13 @@
 <?php
 /**
- * POS Order Pay template
+ * POS Order Pay template.
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/pay.php.
  *
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 ?>
 <!doctype html>
 <html <?php language_attributes(); ?>>
@@ -71,36 +71,38 @@ defined( 'ABSPATH' ) || exit;
 	<form id="order_review" method="post"
 		  action="<?php echo $_SERVER['REQUEST_URI']; ?>&key=<?php echo $order->get_order_key(); ?>">
 		<div id="payment">
-			<?php if ( $order->needs_payment() ) : ?>
+			<?php if ( $order->needs_payment() ) { ?>
 				<ul class="wc_payment_methods payment_methods methods">
-					<?php if ( ! empty( $gateway ) ) : ?>
+					<?php if ( ! empty( $gateway ) ) { ?>
 						<li class="wc_payment_method payment_method_<?php echo esc_attr( $gateway->id ); ?>">
 							<input id="payment_method_<?php echo esc_attr( $gateway->id ); ?>" type="radio"
 								   class="input-radio" name="payment_method"
 								   value="<?php echo esc_attr( $gateway->id ); ?>" <?php checked( $gateway->chosen, true ); ?>
 								   data-order_button_text="<?php echo esc_attr( $gateway->order_button_text ); ?>"/>
 
-							<?php if ( $gateway->has_fields() || $gateway->get_description() ) : ?>
+							<?php if ( $gateway->has_fields() || $gateway->get_description() ) { ?>
 								<div class="payment_box payment_method_<?php echo esc_attr( $gateway->id ); ?>">
 									<?php $gateway->payment_fields(); ?>
 								</div>
-							<?php endif; ?>
+							<?php } ?>
 						</li>
-					<?php else : ?>
+					<?php } else { ?>
 						<li class="woocommerce-notice woocommerce-notice--info woocommerce-info">
 							<?php
 							echo apply_filters(
-								'woocommerce_no_available_payment_methods_message', esc_html__( 'Sorry, it seems that there are no available
+								'woocommerce_no_available_payment_methods_message',
+								esc_html__( 'Sorry, it seems that there are no available
 						payment methods for your location. Please contact us if you require assistance or wish to make alternate
-						arrangements.', 'woocommerce' ) );
+						arrangements.', 'woocommerce' )
+                            );
 							?>
 						</li>
-					<?php endif; ?>
+					<?php } ?>
 				</ul>
-			<?php endif; ?>
+			<?php } ?>
 
 			<input type="hidden" name="woocommerce_pay" value="1"/>
-			<?php //wc_get_template( 'checkout/terms.php' ); ?>
+			<?php // wc_get_template( 'checkout/terms.php' ); ?>
 			<?php do_action( 'woocommerce_pay_order_before_submit' ); ?>
 			<?php echo apply_filters( 'woocommerce_pay_order_button_html', '<button type="submit" class="button alt" id="place_order" value="' . esc_attr( $order_button_text ) . '" data-value="' . esc_attr( $order_button_text ) . '">' . esc_html( $order_button_text ) . '</button>' ); ?>
 			<?php do_action( 'woocommerce_pay_order_after_submit' ); ?>
@@ -113,3 +115,4 @@ defined( 'ABSPATH' ) || exit;
 
 </body>
 </html>
+

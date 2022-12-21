@@ -1,8 +1,8 @@
 <?php
 /**
- * Admin View: Quick Edit Product
+ * Admin View: Quick Edit Product.
  */
-if ( ! defined( 'ABSPATH' ) ) {
+if ( ! \defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly
 }
 ?>
@@ -23,3 +23,4 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</div>
 	</div>
 </fieldset>
+

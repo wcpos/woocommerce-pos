@@ -6,9 +6,9 @@
  * Loads and defines the internationalization files for this plugin
  * so that its ready for translation.
  *
- * @package   WCPOS\WooCommercePOS\i18n
  * @author    Paul Kilmurray <paul@kilbot.com>
- * @link      http://wcpos.com
+ *
+ * @see      http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;

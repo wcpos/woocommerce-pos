@@ -1,10 +1,8 @@
 <?php
 /**
- *
- *
- * @package    WCPOS\WooCommercePOS\Templates
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -13,7 +11,6 @@ use WC_Order;
 use WCPOS\WooCommercePOS\Templates\Frontend;
 
 class Templates {
-
 	/**
 	 * @var string POS frontend slug
 	 */
@@ -34,18 +31,14 @@ class Templates {
 	 */
 	private $pos_checkout_rewrite_regex;
 
-	/**
-	 *
-	 */
+	
 	public function __construct() {
 		$this->pos_slug                   = Admin\Permalink::get_slug();
 		$this->pos_rewrite_regex          = '^' . $this->pos_slug . '/?';
 		$this->pos_checkout_slug          = 'wcpos-checkout';
 		$this->pos_checkout_rewrite_regex = '^' . $this->pos_checkout_slug . '/([a-z-]+)/([0-9]+)[/]?$';
 
-		/**
-		 * Note: 'order-pay' and 'order-received' rewrite tags are added by WC
-		 */
+		// Note: 'order-pay' and 'order-received' rewrite tags are added by WC
 		add_rewrite_tag( '%wcpos%', '([^&]+)' );
 		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
 		add_rewrite_rule( $this->pos_rewrite_regex, 'index.php?wcpos=1', 'top' );
@@ -57,25 +50,23 @@ class Templates {
 	}
 
 	/**
-	 * Make sure cache contains POS rewrite rules
+	 * Make sure cache contains POS rewrite rules.
 	 *
 	 * @param $rules
 	 *
-	 * @return array | bool
+	 * @return array|bool
 	 */
 	public function rewrite_rules( $rules ) {
 		return isset( $rules[ $this->pos_rewrite_regex ], $rules[ $this->pos_checkout_rewrite_regex ] ) ? $rules : false;
 	}
 
 	/**
-	 * Output the matched template
+	 * Output the matched template.
 	 */
-	public function template_redirect() {
+	public function template_redirect(): void {
 		global $wp;
 
-		/**
-		 * URL matches checkout slug
-		 */
+		// URL matches checkout slug
 		if ( $wp->matched_rule == $this->pos_checkout_rewrite_regex ) {
 			$classname = null;
 			$order_id  = null;
@@ -98,12 +89,9 @@ class Templates {
 				wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 			}
 			exit;
-
 		}
 
-		/**
-		 * URL matches pos slug
-		 */
+		// URL matches pos slug
 		if ( $wp->matched_rule == $this->pos_rewrite_regex ) {
 			$template = new Frontend();
 			$template->get_template();
@@ -112,7 +100,7 @@ class Templates {
 	}
 
 	/**
-	 * @param string $order_received_url
+	 * @param string   $order_received_url
 	 * @param WC_Order $order
 	 *
 	 * @return string

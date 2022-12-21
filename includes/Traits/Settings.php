@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings Trait
+ * Settings Trait.
  *
  * - Used by Admin Settings and API Settings classes
  */
@@ -11,13 +11,10 @@ use WC_Payment_Gateways;
 use WP_Error;
 
 trait Settings {
-
-	/* @var string The db prefix for WP Options table */
+	// @var string The db prefix for WP Options table
 	private static $db_prefix = 'woocommerce_pos_settings_';
 
-	/**
-	 *
-	 */
+	
 	private static $default_settings = array(
 		'general'  => array(
 			'pos_only_products'           => false,
@@ -64,7 +61,10 @@ trait Settings {
 	);
 
 	/**
-	 * Get settings by group and key
+	 * Get settings by group and key.
+	 *
+	 * @param mixed $group
+	 * @param mixed $key
 	 */
 	public static function get_setting( $group, $key ) {
 		$settings = self::get_settings( $group );
@@ -96,7 +96,8 @@ trait Settings {
 	}
 
 	/**
-	 *
+	 * @param mixed $group
+	 * @param mixed $value
 	 */
 	public static function normalize_settings( $group, $value ) {
 		return wp_parse_args(
@@ -110,7 +111,7 @@ trait Settings {
 
 	/**
 	 * Returns the pos gateways settings, but also merges default settings
-	 * - note: gateways may be added/removed creating stale settings
+	 * - note: gateways may be added/removed creating stale settings.
 	 *
 	 * @return array
 	 */
@@ -121,7 +122,7 @@ trait Settings {
 		$gateway_settings   = array();
 
 		// map gateway settings so that id is key
-		if ( isset( $checkout_settings['gateways'] ) && is_array( $checkout_settings['gateways'] ) ) {
+		if ( isset( $checkout_settings['gateways'] ) && \is_array( $checkout_settings['gateways'] ) ) {
 			foreach ( $checkout_settings['gateways'] as $g ) {
 				$gateway_settings[ $g['id'] ] = $g;
 			}
@@ -174,16 +175,14 @@ trait Settings {
 		return apply_filters( 'woocommerce_pos_settings', $data );
 	}
 
-	/**
-	 *
-	 */
+	
 	public static function get_access_settings() {
 		global $wp_roles;
 		$role_caps = array();
 
 		$roles = $wp_roles->roles;
-		if ( $roles ) :
-			foreach ( $roles as $slug => $role ) :
+		if ( $roles ) {
+			foreach ( $roles as $slug => $role ) {
 				$role_caps[ $slug ] = array(
 					'name'         => $role['name'],
 					'capabilities' => array(
@@ -201,14 +200,16 @@ trait Settings {
 						),
 					),
 				);
-			endforeach;
-		endif;
+			}
+		}
 
 		return $role_caps;
 	}
 
 	/**
-	 *
+	 * @param mixed $group
+	 * @param mixed $key
+	 * @param mixed $value
 	 */
 	public static function update_setting( $group, $key, $value ) {
 		$settings = self::get_settings( $group );
@@ -222,7 +223,8 @@ trait Settings {
 	}
 
 	/**
-	 *
+	 * @param mixed $group
+	 * @param mixed $value
 	 */
 	public static function update_settings( $group, $value ) {
 		$name     = self::$db_prefix . $group;

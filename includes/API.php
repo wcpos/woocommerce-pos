@@ -1,11 +1,11 @@
 <?php
 
 /**
- * REST API Class
+ * REST API Class.
  *
- * @package  WCPOS\WooCommercePOS\API
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -23,13 +23,9 @@ class API {
 	protected $controllers = array();
 	private $wc_rest_api_handler;
 
-	/**
-	 *
-	 */
+	
 	public function __construct() {
-		/**
-		 * Init and register routes for the WCPOS REST API
-		 */
+		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
 			'auth'     => new API\Auth(),
 			'settings' => new API\Settings(),
@@ -41,18 +37,14 @@ class API {
 			$controller_class->register_routes();
 		}
 
-		/**
-		 * Allows requests from WCPOS Desktop and Mobile Apps
-		 */
+		// Allows requests from WCPOS Desktop and Mobile Apps
 		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 10, 4 );
 
-		/**
-		 * Adds authentication to for JWT bearer tokens
-		 */
+		// Adds authentication to for JWT bearer tokens
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
 
-		/**
+		/*
 		 * These filters allow changes to the WC REST API response
 		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
 		 */
@@ -75,13 +67,13 @@ class API {
 	}
 
 	/**
-	 * Add Access Control Allow Headers for POS app
+	 * Add Access Control Allow Headers for POS app.
 	 *
-	 * @param bool $served Whether the request has already been served.
-	 *                                           Default false.
-	 * @param WP_HTTP_Response $result Result to send to the client. Usually a `WP_REST_Response`.
-	 * @param WP_REST_Request $request Request used to generate the response.
-	 * @param WP_REST_Server $server Server instance.
+	 * @param bool             $served  Whether the request has already been served.
+	 *                                  Default false.
+	 * @param WP_HTTP_Response $result  Result to send to the client. Usually a `WP_REST_Response`.
+	 * @param WP_REST_Request  $request Request used to generate the response.
+	 * @param WP_REST_Server   $server  Server instance.
 	 *
 	 * @return bool $served
 	 */
@@ -92,9 +84,9 @@ class API {
 	}
 
 	/**
-	 * Check request for any login tokens
+	 * Check request for any login tokens.
 	 *
-	 * @param int|false $user_id User ID if one has been determined, false otherwise.
+	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
 	 * @return false|int|void
 	 */
@@ -104,16 +96,15 @@ class API {
 		}
 
 		// extract Bearer token from Authorization Header
-		list( $token ) = sscanf( $this->get_auth_header(), 'Bearer %s' );
+		list($token) = sscanf( $this->get_auth_header(), 'Bearer %s' );
 
 		if ( $token ) {
 			$decoded_token = $this->controllers['auth']->validate_token( $token, false );
 
 			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
 				return $user_id;
-			} else {
-				$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
 			}
+			$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
 
 			return absint( $user );
 		}
@@ -142,9 +133,9 @@ class API {
 	 * Allow hijacking the request before dispatching by returning a non-empty. The returned value
 	 * will be used to serve the request instead.
 	 *
-	 * @param mixed $result Response to replace the requested version with. Can be anything
+	 * @param mixed           $result  Response to replace the requested version with. Can be anything
 	 *                                 a normal endpoint can return, or null to not hijack the request.
-	 * @param WP_REST_Server $server Server instance.
+	 * @param WP_REST_Server  $server  Server instance.
 	 * @param WP_REST_Request $request Request used to generate the response.
 	 *
 	 * @return mixed
@@ -172,17 +163,17 @@ class API {
 	/**
 	 * Filters the REST API dispatch request result.
 	 *
-	 * @param mixed $dispatch_result Dispatch result, will be used if not empty.
-	 * @param WP_REST_Request $request Request used to generate the response.
-	 * @param string $route Route matched for the request.
-	 * @param array $handler Route handler used for the request.
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
 	 *
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
 		$params = $request->get_params();
 
-		if ( isset( $params['posts_per_page'] ) && - 1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
+		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
 			if ( $this->wc_rest_api_handler ) {
 				$dispatch_result = $this->wc_rest_api_handler->get_all_posts( $params['fields'] );
 			}
@@ -200,10 +191,8 @@ class API {
 	 *                         `'/path/regex' => array( array( $callback, $bitmask ).
 	 *
 	 * @return array
-	 *
 	 */
 	public function rest_endpoints( array $endpoints ): array {
-
 		// add ordering by meta_value to customers endpoint
 		if ( isset( $endpoints['/wc/v3/customers'] ) ) {
 			$endpoint = $endpoints['/wc/v3/customers'];
@@ -222,5 +211,4 @@ class API {
 
 		return $endpoints;
 	}
-
 }

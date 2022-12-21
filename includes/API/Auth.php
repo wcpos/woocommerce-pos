@@ -1,11 +1,11 @@
 <?php
 
 /**
- * POS Auth API
+ * POS Auth API.
  *
- * @package  WCPOS\WooCommercePOS\API
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -20,7 +20,6 @@ use WP_REST_Response;
 use WP_REST_Server;
 
 class Auth extends Controller {
-
 	/**
 	 * Route base.
 	 *
@@ -32,11 +31,11 @@ class Auth extends Controller {
 	 * Stores constructor.
 	 */
 	public function __construct() {
-
 	}
 
 	/**
-	 * Validate JWT Token
+	 * Validate JWT Token.
+	 *
 	 * @TODO - flesh out this API, see https://github.com/wp-graphql/wp-graphql-jwt-authentication for inspiration
 	 * @TODO - validate, refresh and revoke should be GET with auth header tokens
 	 *
@@ -48,20 +47,18 @@ class Auth extends Controller {
 	public function validate_token( $token = null, $output = true ) {
 		try {
 			$decoded_token = FirebaseJWT::decode( $token, new FirebaseKey( $this->get_secret_key(), 'HS256' ) );
-			/** The Token is decoded now validate the iss */
+			// The Token is decoded now validate the iss
 			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
-				/** The iss do not match, return error */
+				// The iss do not match, return error
 				return new WP_Error(
 					'jwt_auth_bad_iss',
 					'The iss do not match with this server',
-					array(
-						'status' => 403,
-					)
+					array( 'status' => 403 )
 				);
 			}
-			/** So far so good, validate the user id in the token */
+			// So far so good, validate the user id in the token
 			if ( ! isset( $decoded_token->data->user->id ) ) {
-				/** No user id in the token, abort!! */
+				// No user id in the token, abort!!
 				return new WP_Error(
 					'jwt_auth_bad_request',
 					'User ID not found in the token',
@@ -75,7 +72,7 @@ class Auth extends Controller {
 				return $decoded_token;
 			}
 
-			/** If the output is true return an answer to the request to show it */
+			// If the output is true return an answer to the request to show it
 			return array(
 				'code' => 'jwt_auth_valid_token',
 				'data' => array(
@@ -83,7 +80,7 @@ class Auth extends Controller {
 				),
 			);
 		} catch ( Exception $e ) {
-			/** Something is wrong trying to decode the token, send back the error */
+			// Something is wrong trying to decode the token, send back the error
 			return new WP_Error(
 				'jwt_auth_invalid_token',
 				$e->getMessage(),
@@ -95,14 +92,12 @@ class Auth extends Controller {
 	}
 
 	public function get_secret_key() {
-		//$secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
+		// $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
 		return '!x>),R!Z$1zLs1(*mJ3^+r#VvO(lfjBK;sqBB!|brVfL-%z+++7x!l34-z+mbQiq';
 	}
 
-	/**
-	 *
-	 */
-	public function register_routes() {
+
+	public function register_routes(): void {
 		// Validate JWT token
 		register_rest_route(
 			$this->namespace,
@@ -113,7 +108,7 @@ class Auth extends Controller {
 				'permission_callback' => function ( WP_REST_Request $request ) {
 					$authorization = $request->get_header( 'authorization' );
 
-					return ! is_null( $authorization );
+					return ! \is_null( $authorization );
 				},
 			)
 		);
@@ -172,18 +167,18 @@ class Auth extends Controller {
 
 
 	/**
-	 * Get the user and password in the request body and generate a JWT
+	 * Get the user and password in the request body and generate a JWT.
 	 *
 	 * @param WP_REST_Request $request
 	 *
 	 * @return WP_Error|WP_HTTP_Response|WP_REST_Response
 	 */
 	public function generate_token( WP_REST_Request $request ) {
-		$token   = str_replace( 'Basic ', '', $request->get_header( 'authorization' ) );
-		$decoded = base64_decode( $token );
-		list( $username, $password ) = explode( ':', $decoded );
+		$token                     = str_replace( 'Basic ', '', $request->get_header( 'authorization' ) );
+		$decoded                   = base64_decode( $token, true );
+		list($username, $password) = explode( ':', $decoded );
 
-		/** First thing, check the secret key if not exist return a error*/
+		// First thing, check the secret key if not exist return a error
 		if ( ! $this->get_secret_key() ) {
 			return new WP_Error(
 				'[woocommerce_pos] jwt_auth_bad_config',
@@ -197,7 +192,7 @@ class Auth extends Controller {
 		/** Try to authenticate the user with the passed credentials*/
 		$user = wp_authenticate( $username, $password );
 
-		/** If the authentication fails return a error*/
+		// If the authentication fails return a error
 		if ( is_wp_error( $user ) ) {
 			$error_code = $user->get_error_code();
 
@@ -214,22 +209,26 @@ class Auth extends Controller {
 		$issued_at = time();
 
 		/**
-		 * Filters the JWT issued at time
+		 * Filters the JWT issued at time.
 		 *
 		 * @param {string} $issued_at
+		 *
 		 * @returns {string} Issued at time
 		 *
 		 * @since 1.0.0
+		 *
 		 * @hook woocommerce_pos_jwt_auth_not_before
 		 */
 		$not_before = apply_filters( 'woocommerce_pos_jwt_auth_not_before', $issued_at, $issued_at );
 		/**
-		 * Filters the JWT expire time
+		 * Filters the JWT expire time.
 		 *
 		 * @param {string} $issued_at
+		 *
 		 * @returns {string} Expire time
 		 *
 		 * @since 1.0.0
+		 *
 		 * @hook woocommerce_pos_jwt_auth_expire
 		 */
 		$expire = apply_filters( 'woocommerce_pos_jwt_auth_expire', $issued_at + ( DAY_IN_SECONDS * 7 ), $issued_at );
@@ -269,18 +268,14 @@ class Auth extends Controller {
 	}
 
 	/**
-	 * Refresh JWT Token
-	 *
+	 * Refresh JWT Token.
 	 */
-	public function refresh_token() {
-
+	public function refresh_token(): void {
 	}
 
 	/**
-	 * Revoke JWT Token
-	 *
+	 * Revoke JWT Token.
 	 */
-	public function revoke_token() {
-
+	public function revoke_token(): void {
 	}
 }

@@ -1,11 +1,11 @@
 <?php
 
 /**
- * Handles the POS Only functionality (optional)
+ * Handles the POS Only functionality (optional).
  *
- * @package    WCPOS\Products_Visibility
  * @author   Paul Kilmurray <paul@kilbot.com.au>
- * @link     http://www.wcpos.com
+ *
+ * @see     http://www.wcpos.com
  */
 
 namespace WCPOS\Products;
@@ -17,14 +17,12 @@ use const WCPOS\PLUGIN_URL;
 use const WCPOS\VERSION;
 
 class Visibility {
-
 	protected $options;
 
 	/**
-	 * Constructor
+	 * Constructor.
 	 */
 	public function __construct() {
-
 		// visibility options
 		$this->options = array(
 			''            => __( 'POS & Online', 'woocommerce-pos' ),
@@ -41,17 +39,16 @@ class Visibility {
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
 		add_action( 'manage_product_posts_custom_column', array( $this, 'custom_product_column' ), 10, 2 );
 		add_action( 'post_submitbox_misc_actions', array( $this, 'post_submitbox_misc_actions' ), 99 );
-		add_action( 'woocommerce_product_after_variable_attributes', array(
+		add_action('woocommerce_product_after_variable_attributes', array(
 			$this,
 			'after_variable_attributes',
-		), 10, 3 );
+		), 10, 3);
 		add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation' ) );
 		add_filter( 'woocommerce_get_children', array( $this, 'get_children' ) );
-
 	}
 
 	/**
-	 * Show/hide POS products
+	 * Show/hide POS products.
 	 *
 	 * @param $where
 	 * @param $query
@@ -60,10 +57,10 @@ class Visibility {
 	 */
 	public function posts_where( $where, $query ) {
 		global $wpdb;
-		$post_types = is_array( $query->get( 'post_type' ) ) ? $query->get( 'post_type' ) : array( $query->get( 'post_type' ) );
+		$post_types = \is_array( $query->get( 'post_type' ) ) ? $query->get( 'post_type' ) : array( $query->get( 'post_type' ) );
 
 		// only alter product queries
-		if ( ! in_array( 'product', $post_types ) ) {
+		if ( ! \in_array( 'product', $post_types, true ) ) {
 			return $where;
 		}
 
@@ -78,11 +75,10 @@ class Visibility {
 		$where .= " AND ID NOT IN (SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_pos_visibility' AND meta_value = '$hide')";
 
 		return $where;
-
 	}
 
 	/**
-	 * Admin filters for POS / Online visibility
+	 * Admin filters for POS / Online visibility.
 	 *
 	 * @param array $views
 	 *
@@ -102,7 +98,6 @@ class Visibility {
 		}
 
 		foreach ( $visibility_filters as $key => $label ) {
-
 			$sql   = "SELECT count(DISTINCT pm.post_id)
         FROM $wpdb->postmeta pm
         JOIN $wpdb->posts p ON (p.ID = pm.post_id)
@@ -114,7 +109,7 @@ class Visibility {
 			$count = $wpdb->get_var( $sql );
 
 			$class = ( isset( $_GET['pos_visibility'] ) && $_GET['pos_visibility'] == $key ) ? 'current' : '';
-			if ( $class == '' ) {
+			if ( '' == $class ) {
 				$query_string = remove_query_arg( array( 'paged' ) );
 			}
 			$query_string  = remove_query_arg( array( 'pos_visibility', 'post_status' ) );
@@ -126,15 +121,13 @@ class Visibility {
 	}
 
 	/**
-	 * Filter the results on the products admin page
+	 * Filter the results on the products admin page.
 	 *
 	 * @param $query
 	 */
-	public function pre_get_posts( $query ) {
-
+	public function pre_get_posts( $query ): void {
 		// product page
-		if ( is_admin() && get_query_var( 'post_type' ) == 'product' ) {
-
+		if ( is_admin() && 'product' == get_query_var( 'post_type' ) ) {
 			if ( isset( $_GET['pos_visibility'] ) && ! empty( $_GET['pos_visibility'] ) ) {
 				$meta_query = array(
 					array(
@@ -147,19 +140,19 @@ class Visibility {
 				$query->set( 'meta_query', $meta_query );
 			}
 		}
-
 	}
 
 	/**
 	 * @param $column_name
 	 * @param $post_type
 	 */
-	public function bulk_edit( $column_name, $post_type ) {
+	public function bulk_edit( $column_name, $post_type ): void {
 		if ( 'name' != $column_name || 'product' != $post_type ) {
 			return;
 		}
 		$options = array_merge(
-			array( '-1' => '&mdash; No Change &mdash;' ), $this->options
+			array( '-1' => '&mdash; No Change &mdash;' ),
+			$this->options
 		);
 		include 'views/quick-edit-visibility-select.php';
 	}
@@ -168,7 +161,7 @@ class Visibility {
 	 * @param $column_name
 	 * @param $post_type
 	 */
-	public function quick_edit( $column_name, $post_type ) {
+	public function quick_edit( $column_name, $post_type ): void {
 		if ( 'product_cat' != $column_name || 'product' != $post_type ) {
 			return;
 		}
@@ -180,10 +173,9 @@ class Visibility {
 	 * @param $post_id
 	 * @param $post
 	 */
-	public function save_post( $post_id, $post ) {
-
+	public function save_post( $post_id, $post ): void {
 		// If this is an autosave, our form has not been submitted, so we don't want to do anything.
-		if ( defined( '\DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		if ( \defined( '\DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 			return;
 		}
 
@@ -204,20 +196,20 @@ class Visibility {
 
 		// Check nonces
 		if ( ! isset( $_REQUEST['woocommerce_quick_edit_nonce'] ) &&
-		     ! isset( $_REQUEST['woocommerce_bulk_edit_nonce'] ) &&
-		     ! isset( $_REQUEST['woocommerce_meta_nonce'] ) ) {
+			 ! isset( $_REQUEST['woocommerce_bulk_edit_nonce'] ) &&
+			 ! isset( $_REQUEST['woocommerce_meta_nonce'] ) ) {
 			return;
 		}
 		if ( isset( $_REQUEST['woocommerce_quick_edit_nonce'] ) &&
-		     ! wp_verify_nonce( $_REQUEST['woocommerce_quick_edit_nonce'], 'woocommerce_quick_edit_nonce' ) ) {
+			 ! wp_verify_nonce( $_REQUEST['woocommerce_quick_edit_nonce'], 'woocommerce_quick_edit_nonce' ) ) {
 			return;
 		}
 		if ( isset( $_REQUEST['woocommerce_bulk_edit_nonce'] ) &&
-		     ! wp_verify_nonce( $_REQUEST['woocommerce_bulk_edit_nonce'], 'woocommerce_bulk_edit_nonce' ) ) {
+			 ! wp_verify_nonce( $_REQUEST['woocommerce_bulk_edit_nonce'], 'woocommerce_bulk_edit_nonce' ) ) {
 			return;
 		}
 		if ( isset( $_REQUEST['woocommerce_meta_nonce'] ) &&
-		     ! wp_verify_nonce( $_REQUEST['woocommerce_meta_nonce'], 'woocommerce_save_data' ) ) {
+			 ! wp_verify_nonce( $_REQUEST['woocommerce_meta_nonce'], 'woocommerce_save_data' ) ) {
 			return;
 		}
 
@@ -225,21 +217,20 @@ class Visibility {
 		if ( isset( $_REQUEST['_pos_visibility'] ) ) {
 			update_post_meta( $post_id, '_pos_visibility', $_REQUEST['_pos_visibility'] );
 		}
-
 	}
 
 	/**
 	 * @param $hook
 	 */
-	public function admin_enqueue_scripts( $hook ) {
+	public function admin_enqueue_scripts( $hook ): void {
 		$pages  = array( 'edit.php', 'post.php', 'post-new.php' );
 		$screen = get_current_screen();
 
-		if ( ! in_array( $hook, $pages ) || $screen->post_type != 'product' ) {
+		if ( ! \in_array( $hook, $pages, true ) || 'product' != $screen->post_type ) {
 			return;
 		}
 
-		if ( defined( '\SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+		if ( \defined( '\SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
 			$script = PLUGIN_URL . 'assets/js/src/products.js';
 		} else {
 			$script = PLUGIN_URL . 'assets/js/products.min.js';
@@ -258,17 +249,17 @@ class Visibility {
 	 * @param $column
 	 * @param $post_id
 	 */
-	public function custom_product_column( $column, $post_id ) {
-		if ( $column == 'name' ) {
+	public function custom_product_column( $column, $post_id ): void {
+		if ( 'name' == $column ) {
 			$selected = get_post_meta( $post_id, '_pos_visibility', true );
 			echo '<div class="hidden" id="woocommerce_pos_inline_' . $post_id . '" data-visibility="' . $selected . '"></div>';
 		}
 	}
 
 	/**
-	 * Add visibility option to the Product edit page
+	 * Add visibility option to the Product edit page.
 	 */
-	public function post_submitbox_misc_actions() {
+	public function post_submitbox_misc_actions(): void {
 		global $post;
 
 		if ( 'product' != $post->post_type ) {
@@ -278,7 +269,7 @@ class Visibility {
 		$selected = get_post_meta( $post->ID, '_pos_visibility', true );
 		if ( ! $selected ) {
 			$selected = '';
-			if ( get_current_screen()->action == 'add' ) {
+			if ( 'add' == get_current_screen()->action ) {
 				$selected = apply_filters( 'woocommerce_pos_default_product_visibility', '', $post );
 			}
 		}
@@ -290,7 +281,7 @@ class Visibility {
 	 * @param $variation_data
 	 * @param $variation
 	 */
-	public function after_variable_attributes( $loop, $variation_data, $variation ) {
+	public function after_variable_attributes( $loop, $variation_data, $variation ): void {
 		$selected = get_post_meta( $variation->ID, '_pos_visibility', true );
 		if ( ! $selected ) {
 			$selected = '';
@@ -301,7 +292,7 @@ class Visibility {
 	/**
 	 * @param $variation_id
 	 */
-	public function save_product_variation( $variation_id ) {
+	public function save_product_variation( $variation_id ): void {
 		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) ) {
 			update_post_meta( $variation_id, '_pos_visibility', $_POST['variable_pos_visibility'][ $variation_id ] );
 		}
@@ -313,7 +304,6 @@ class Visibility {
 	 * @return mixed
 	 */
 	public function get_children( $variation ) {
-
 		// don't alter product queries in the admin
 		if ( is_admin() && ! is_pos() ) {
 			return $variation;
@@ -331,5 +321,4 @@ class Visibility {
 
 		return $variation;
 	}
-
 }

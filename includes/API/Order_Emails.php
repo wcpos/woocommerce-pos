@@ -2,6 +2,8 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WC_Email_Customer_Invoice;
+use WC_Order;
 use WC_REST_Controller;
 use WP_Error;
 use WP_REST_Request;
@@ -37,17 +39,17 @@ class Order_Emails extends WC_REST_Controller {
 	 */
 	private $request;
 
-	/**
-	 *
-	 */
-	public function register_routes() {
-		register_rest_route( $this->namespace, '/' . $this->rest_base,
+	
+	public function register_routes(): void {
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base,
 			array(
 				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'send_email' ),
 					'permission_callback' => array( $this, 'send_email_permissions_check' ),
-					'args'                => array_merge( $this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ), array(
+					'args'                => array_merge($this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ), array(
 						'email'   => array(
 							'type'        => 'string',
 							'description' => __( 'Email address', 'woocommerce-pos' ),
@@ -58,7 +60,7 @@ class Order_Emails extends WC_REST_Controller {
 							'description' => __( 'Save email to order', 'woocommerce-pos' ),
 							'required'    => false,
 						),
-					) ),
+					)),
 				),
 				'schema' => array(),
 			)
@@ -80,7 +82,7 @@ class Order_Emails extends WC_REST_Controller {
 		if ( ! $order || $this->post_type !== $order->get_type() ) {
 			return new WP_Error( 'woocommerce_rest_order_invalid_id', __( 'Invalid order ID.', 'woocommerce' ), array( 'status' => 404 ) );
 		}
-		
+
 		if ( 'billing' == $request['save_to'] ) {
 			$order->set_billing_email( $email );
 			$order->save();
@@ -101,16 +103,13 @@ class Order_Emails extends WC_REST_Controller {
 		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' );
 
 		$request->set_param( 'context', 'edit' );
-		$response = rest_ensure_response( array( 'success' => true ) );
 
-//		$response->set_status( 201 );
+		return rest_ensure_response( array( 'success' => true ) );
 
-		return $response;
+		//		$response->set_status( 201 );
 	}
 
-	/**
-	 *
-	 */
+	
 	public function send_email_permissions_check() {
 		if ( ! wc_rest_check_post_permissions( $this->post_type, 'create' ) ) {
 			return new WP_Error( 'woocommerce_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
@@ -120,13 +119,13 @@ class Order_Emails extends WC_REST_Controller {
 	}
 
 	/**
-	 * @param string $recipient
-	 * @param \WC_Order $order
-	 * @param \WC_Email_Customer_Invoice $WC_Email_Customer_Invoice
+	 * @param string                    $recipient
+	 * @param WC_Order                  $order
+	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice
 	 *
 	 * @return string
 	 */
-	public function recipient_email_address( string $recipient, \WC_Order $order, \WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
+	public function recipient_email_address( string $recipient, WC_Order $order, WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
 		return $this->request['email'];
 	}
 }

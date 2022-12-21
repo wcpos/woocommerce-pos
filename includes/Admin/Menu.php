@@ -1,11 +1,11 @@
 <?php
 
 /**
- * WP Admin Menu Class
+ * WP Admin Menu Class.
  *
- * @package  WCPOS\WooCommercePOS\Admin\Menu
  * @author   Paul Kilmurray <paul@kilbot.com>
- * @link     http://wcpos.com
+ *
+ * @see     http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
@@ -13,11 +13,13 @@ namespace WCPOS\WooCommercePOS\Admin;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
 class Menu {
-	/** @vars string Unique menu identifier */
+	/**
+	 * @vars string Unique menu identifier
+	 */
 	private $toplevel_screen_id;
 
 	/**
-	 * Constructor
+	 * Constructor.
 	 */
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
@@ -26,13 +28,13 @@ class Menu {
 	}
 
 	/**
-	 * Add POS to admin menu
+	 * Add POS to admin menu.
 	 *
 	 *  Fires before the administration menu loads in the admin.
 	 *
 	 * The hook fires before menus and sub-menus are removed based on user privileges.
 	 */
-	public function admin_menu() {
+	public function admin_menu(): void {
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return;
 		}
@@ -74,8 +76,8 @@ class Menu {
 	 * @return array
 	 */
 	public function menu_order( $menu_order ) {
-		$woo = array_search( 'woocommerce', $menu_order );
-		$pos = array_search( PLUGIN_NAME, $menu_order );
+		$woo = array_search( 'woocommerce', $menu_order, true );
+		$pos = array_search( PLUGIN_NAME, $menu_order, true );
 
 		if ( false !== $woo && false !== $pos ) {
 			// rearrange menu
@@ -95,7 +97,7 @@ class Menu {
 	/**
 	 * Render the upgrade page.
 	 */
-	public function display_upgrade_page() {
+	public function display_upgrade_page(): void {
 		$upgrade = get_transient( 'remote_pro_page' );
 
 		// Check for transient, if none, grab remote HTML file
@@ -117,5 +119,4 @@ class Menu {
 		}
 		include_once 'templates/upgrade.php';
 	}
-
 }

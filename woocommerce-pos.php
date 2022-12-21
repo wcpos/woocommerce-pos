@@ -11,45 +11,38 @@
  * License URI:       http://www.gnu.org/licenses/gpl-3.0.txt
  * Domain Path:       /languages
  * WC tested up to:   6
- * WC requires at least: 5.3
+ * WC requires at least: 5.3.
  *
- * @package   WooCommerce POS
  * @author    Paul Kilmurray <paul@kilbot.com>
- * @link      http://wcpos.com
+ *
+ * @see      http://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
 
 use Dotenv\Dotenv;
 
-/**
- * Define plugin constants.
- */
-define( __NAMESPACE__ . '\VERSION', '1.0.0-beta' );
-define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
-define( __NAMESPACE__ . '\SHORT_NAME', 'wcpos' );
-define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
-define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
-define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
+// Define plugin constants.
+\define(__NAMESPACE__ . '\VERSION', '1.0.0-beta');
+\define(__NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos');
+\define(__NAMESPACE__ . '\SHORT_NAME', 'wcpos');
+\define(__NAMESPACE__ . '\PLUGIN_FILE', plugin_basename(__FILE__)); // 'woocommerce-pos/woocommerce-pos.php'
+\define(__NAMESPACE__ . '\PLUGIN_PATH', trailingslashit(plugin_dir_path(__FILE__)));
+\define(__NAMESPACE__ . '\PLUGIN_URL', trailingslashit(plugins_url(basename(plugin_dir_path(__FILE__)), basename(__FILE__))));
+
+// Autoloader
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+	require_once __DIR__ . '/vendor/autoload.php';
+}
 
 /**
- * Autoloader
- */
-require_once 'vendor/autoload.php';
-
-/**
- * Environment variables
+ * Environment variables.
  */
 $dotenv = Dotenv::createImmutable(__DIR__);
 $dotenv->safeLoad();
 
-/**
- * Activate plugin
- */
+// Activate plugin
 new Activator();
 
-/**
- * Deactivate plugin
- */
+// Deactivate plugin
 new Deactivator();
-

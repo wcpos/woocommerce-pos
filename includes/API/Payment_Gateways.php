@@ -19,7 +19,12 @@ class Payment_Gateways {
 	}
 
 	/**
-	 * Authorize payment_gateways API (read only) for cashiers
+	 * Authorize payment_gateways API (read only) for cashiers.
+	 *
+	 * @param mixed $permission
+	 * @param mixed $context
+	 * @param mixed $object_id
+	 * @param mixed $object
 	 */
 	public function check_permissions( $permission, $context, $object_id, $object ) {
 		if ( ! $permission && 'payment_gateways' === $object && 'read' === $context ) {
@@ -30,7 +35,7 @@ class Payment_Gateways {
 	}
 
 	/**
-	 * Returns array of all gateway ids, titles
+	 * Returns array of all gateway ids, titles.
 	 *
 	 * @param array $fields
 	 *
@@ -40,7 +45,7 @@ class Payment_Gateways {
 		$pos_gateways         = Settings::get_setting( 'checkout', 'gateways' );
 		$enabled_pos_gateways = array();
 
-		for ( $i = 0; $i < count( $pos_gateways ); $i ++ ) {
+		for ( $i = 0; $i < \count( $pos_gateways ); $i ++ ) {
 			if ( $pos_gateways[ $i ]['enabled'] ) {
 				$gateway = $pos_gateways[ $i ];
 

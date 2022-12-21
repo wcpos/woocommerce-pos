@@ -2,19 +2,18 @@
 
 /**
  * WP Admin Class
- * conditionally loads classes for WP Admin
+ * conditionally loads classes for WP Admin.
  *
- * @package  WCPOS\WooCommercePOS\Admin
  * @author   Paul Kilmurray <paul@kilbot.com.au>
- * @link     http://www.wcpos.com
+ *
+ * @see     http://www.wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
 
 class Admin {
-
 	/**
-	 * Constructor
+	 * Constructor.
 	 */
 	public function __construct() {
 		$this->init();
@@ -22,23 +21,11 @@ class Admin {
 	}
 
 	/**
-	 * Load admin subclasses
-	 */
-	private function init() {
-		new Admin\Notices();
-		new Admin\Menu();
-		new Admin\Settings();
-//		new Admin\Status();
-//		new Admin\Gateways();
-	}
-
-	/**
-	 * Conditionally load subclasses
+	 * Conditionally load subclasses.
 	 *
 	 * @param $current_screen
 	 */
-	public function conditional_init( $current_screen ) {
-
+	public function conditional_init( $current_screen ): void {
 		// Add setting to permalink page
 		if ( 'options-permalink' == $current_screen->id ) {
 			new Admin\Permalink();
@@ -50,15 +37,24 @@ class Admin {
 		}
 
 		// Add POS settings to orders pages
-//		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
-//			new Admin\Orders();
-//		}
+		//		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
+		//			new Admin\Orders();
+		//		}
 
 		// Customise plugins page
 		if ( 'plugins' == $current_screen->id ) {
 			new Admin\Plugins();
 		}
-
 	}
 
+	/**
+	 * Load admin subclasses.
+	 */
+	private function init(): void {
+		new Admin\Notices();
+		new Admin\Menu();
+		new Admin\Settings();
+		//		new Admin\Status();
+		//		new Admin\Gateways();
+	}
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<ruleset name="WordPress Coding Standards">
+<ruleset xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="WooCommerce POS" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/squizlabs/PHP_CodeSniffer/master/phpcs.xsd">
 	<!-- See https://github.com/squizlabs/PHP_CodeSniffer/wiki/Annotated-ruleset.xml -->
 	<!-- See https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards -->
 	<!-- See https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards/blob/develop/WordPress-Core/ruleset.xml -->
@@ -7,6 +7,7 @@
 	<description>Starting Point Rule Set.</description>
 
 	<!-- What to scan -->
+	<file>vendor/autoload.php</file>
 	<file>woocommerce-pos.php</file>
 	<file>includes/</file>
 

@@ -1,6 +1,5 @@
 <?php
 
-
 namespace WCPOS\WooCommercePOS\API;
 
 use WP_REST_Request;
@@ -24,6 +23,8 @@ class Taxes {
 	 * Note: WC REST API currently requires manage_woocommerce capability to access the endpoint (even for read only).
 	 * This would stop the Cashier role from being able to view the taxes, so we check for read_private_products instead.
 	 *
+	 * @param mixed $permission
+	 *
 	 * @return bool
 	 */
 	public function check_permissions( $permission ) {
@@ -35,7 +36,7 @@ class Taxes {
 	}
 
 	/**
-	 * Returns array of all tax_rate ids
+	 * Returns array of all tax_rate ids.
 	 *
 	 * @param array $fields
 	 *
@@ -53,8 +54,6 @@ class Taxes {
 	}
 
 	/**
-	 *
-	 *
 	 * @param object $record
 	 *
 	 * @return object

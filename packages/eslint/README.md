@@ -1,0 +1,1 @@
+# Shared Eslint configuration for [WooCommerce POS](https://wcpos.com) React Native app
