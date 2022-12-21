@@ -27,4 +27,4 @@ assets/asset-manifest.json
 assets/static
 .yarn.lock
 .yarn/install-state.gz
-.yarn/plugins
+.yarn/cache

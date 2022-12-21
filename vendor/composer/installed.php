@@ -3,7 +3,7 @@
         'name' => 'wcpos/woocommerce-pos',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '5394d7a742fdafb2ead4c4f773c31f82d968fc03',
+        'reference' => '7fa5ea6f33f0087cbf9bf078b93e11b6fe21ba0a',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -652,7 +652,7 @@
         'wcpos/woocommerce-pos' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '5394d7a742fdafb2ead4c4f773c31f82d968fc03',
+            'reference' => '7fa5ea6f33f0087cbf9bf078b93e11b6fe21ba0a',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
