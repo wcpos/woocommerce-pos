@@ -105,10 +105,10 @@ module.exports = function (_env, argv) {
 			lodash: 'lodash',
 			wp: 'wp',
 			'@wordpress/element': 'wp.element',
-			'@wordpress/i18n': 'wp.i18n',
 			'@wordpress/api-fetch': 'wp.apiFetch',
 			'@wordpress/url': 'wp.url',
 			'@tanstack/react-query': 'ReactQuery',
+			'@transifex/native': 'Transifex',
 		};
 	} else {
 		config.externals = {
@@ -117,7 +117,6 @@ module.exports = function (_env, argv) {
 			lodash: 'lodash',
 			wp: 'wp',
 			'@wordpress/element': 'wp.element',
-			'@wordpress/i18n': 'wp.i18n',
 			'@wordpress/api-fetch': 'wp.apiFetch',
 			'@wordpress/url': 'wp.url',
 		};

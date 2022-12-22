@@ -8,9 +8,11 @@ import {
 	ComboboxList,
 	ComboboxOption,
 } from '@reach/combobox';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { throttle, get } from 'lodash';
+
+import { t } from '../../translations';
 
 interface UserOptionProps {
 	value: number;
@@ -23,11 +25,9 @@ interface UserSelectProps {
 	onSelect: (value: number) => void;
 }
 
-const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectProps) => {
-	// const [users, setUsers] = React.useState<UserOptionProps[]>([]);
+const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
 	const [term, setTerm] = React.useState<string>('');
-	const guestUser = { id: 0, name: 'Guest' };
-	// const [selectedUser, setSelectedUser] = React.useState(initialOption);
+	const guestUser = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
 
 	const { isLoading, isError, data, error } = useQuery({
 		queryKey: ['users'],
@@ -56,35 +56,7 @@ const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectPro
 		};
 	});
 
-	// React.useEffect(() => {
-	// 	async function getUsers() {
-	// 		setUsers([{ value: 0, label: 'Loading' }]);
-
-	// 		const users = await apiFetch({
-	// 			path: `wp/v2/users?search=${term}`,
-	// 			method: 'GET',
-	// 		})
-	// 			.catch((err) => {
-	// 				console.log(err);
-	// 			})
-	// 			.finally(() => {
-	// 				// setUsers([]);
-	// 			});
-
-	// 		if (Array.isArray(users)) {
-	// 			const userOptions = users.map((user) => {
-	// 				return {
-	// 					value: user.id,
-	// 					label: user.name,
-	// 				};
-	// 			});
-	// 			// userOptions.unshift({ value: 0, label: 'Guest' });
-	// 			setUsers(userOptions);
-	// 		}
-	// 	}
-
-	// 	getUsers();
-	// }, [term, setUsers]);
+	const selectedUser = users.find((user) => user.value === selected);
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setTerm(event.target.value);
 
@@ -100,7 +72,7 @@ const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectPro
 				<ComboboxInput
 					id="user-select"
 					name="user-select"
-					placeholder={get(users, '0.label', '')}
+					placeholder={(selectedUser && selectedUser.label) || ''}
 					disabled={disabled}
 					onChange={throttle(handleChange, 100)}
 					className="wcpos-w-full wcpos-px-2 wcpos-pr-10 wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
@@ -118,7 +90,6 @@ const UserSelect = ({ disabled = false, initialOption, onSelect }: UserSelectPro
 								key={option.value}
 								value={option.label}
 								onClick={() => {
-									setSelectedUser(option);
 									onSelect(option.value);
 								}}
 							/>

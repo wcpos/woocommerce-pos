@@ -4,6 +4,7 @@ import Checkbox from '../../components/checkbox';
 import FormRow from '../../components/form-row';
 import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';
+import { t } from '../../translations';
 import BarcodeSelect from './barcode-select';
 import UserSelect from './user-select';
 
@@ -34,9 +35,11 @@ const General = () => {
 				</FormRow.Col>
 				<FormRow.Label
 					id="force-ssl"
-					help="Force POS to send server requests over HTTPS (recommended)"
+					help={t('Force POS to send server requests over HTTPS (recommended)', {
+						_tags: 'wp-admin-settings',
+					})}
 				>
-					Force SSL
+					{t('Force SSL', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
@@ -51,9 +54,11 @@ const General = () => {
 				</FormRow.Col>
 				<FormRow.Label
 					id="pos-only-products"
-					help="Adds online and POS visibility settings to product admin"
+					help={t('Adds online and POS visibility settings to product admin', {
+						_tags: 'wp-admin-settings',
+					})}
 				>
-					Enable POS only products
+					{t('Enable POS only products', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
@@ -68,9 +73,11 @@ const General = () => {
 				</FormRow.Col>
 				<FormRow.Label
 					id="decimal-qty"
-					help="Allows items to have decimal values in the quantity field, eg: 0.25"
+					help={t('Allows items to have decimal values in the quantity field, eg: 0.25', {
+						_tags: 'wp-admin-settings',
+					})}
 				>
-					Enable decimal quantities
+					{t('Enable decimal quantities', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
@@ -84,28 +91,25 @@ const General = () => {
 					/>
 				</FormRow.Col>
 				<FormRow.Label id="generate-username" className="col-span-2">
-					Automatically generate username from customer email
+					{t('Automatically generate username from customer email', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
 				<FormRow.Label
 					id="user-select"
-					help="The default customer for POS orders, eg: Guest"
+					help={t('The default customer for POS orders, eg: Guest', { _tags: 'wp-admin-settings' })}
 					className="wcpos-text-right"
 				>
-					Default POS customer
+					{t('Default POS customer', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 				<FormRow.Col>
 					<React.Suspense fallback={<></>}>
 						<UserSelect
-							// initialOption={get(hydrate, ['default_customer'])}
 							disabled={data.default_customer_is_cashier}
+							selected={data.default_customer}
 							onSelect={(value: number) => {
 								if (value) {
-									// dispatch({
-									// 	type: 'update',
-									// 	payload: { default_customer: value },
-									// });
+									mutate({ default_customer: value });
 								}
 							}}
 						/>
@@ -116,35 +120,30 @@ const General = () => {
 						<Checkbox
 							checked={data.default_customer_is_cashier}
 							onChange={(default_customer_is_cashier) => {
-								// dispatch({
-								// 	type: 'update',
-								// 	payload: { default_customer_is_cashier },
-								// });
+								mutate({ default_customer_is_cashier });
 							}}
 						/>
-						Use cashier account
+						{t('Use cashier account', { _tags: 'wp-admin-settings' })}
 					</label>
 				</FormRow.Col>
 			</FormRow>
 			<FormRow>
 				<FormRow.Label
-					help="Product meta field to be used as barcode, eg: _sku or _barcode"
+					help={t('Product meta field to be used as barcode, eg: _sku or _barcode', {
+						_tags: 'wp-admin-settings',
+					})}
 					id="barcode-field"
 					className="wcpos-text-right"
 				>
-					Barcode Field
+					{t('Barcode Field', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 				<FormRow.Col>
 					<React.Suspense fallback={<></>}>
 						<BarcodeSelect
-							// options={Object.values(get(hydrate, 'barcode_fields'))}
 							selected={data.barcode_field}
 							onSelect={(value: string) => {
 								if (value) {
-									// dispatch({
-									// 	type: 'update',
-									// 	payload: { barcode_field: value },
-									// });
+									mutate({ barcode_field: value });
 								}
 							}}
 						/>

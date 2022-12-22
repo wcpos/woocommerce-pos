@@ -1,15 +1,11 @@
-import { tx, t } from '@transifex/native';
+import * as Transifex from '@transifex/native';
 
-import CustomCache from './cache';
+const tx = Transifex.tx;
+const t = Transifex.t;
 
 tx.init({
-	token: '1/53ff5ea9a168aa4e7b8a72157b83537886a51938',
+	token: '1/09853773ef9cda3be96c8c451857172f26927c0f',
 	filterTags: 'wp-admin-settings',
-	cache: new CustomCache(),
 });
-
-tx.setCurrentLocale('es')
-	.then(() => console.log('content loaded'))
-	.catch(console.log);
 
 export { tx, t };

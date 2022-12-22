@@ -1,7 +1,8 @@
 import * as React from 'react';
+
+import CheckIcon from '@heroicons/react/24/solid/CheckIcon';
 import { CustomCheckboxContainer, CustomCheckboxInput } from '@reach/checkbox';
 import classNames from 'classnames';
-import CheckIcon from '@heroicons/react/24/solid/CheckIcon';
 
 interface CheckboxProps {
 	checked: boolean;

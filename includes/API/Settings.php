@@ -148,6 +148,27 @@ class Settings extends Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/payment_gateways',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_payment_gateways_settings' ),
+				'permission_callback' => array( $this, 'read_permission_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/payment_gateways',
+			array(
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => array( $this, 'update_payment_gateways_settings' ),
+				'permission_callback' => array( $this, 'update_permission_check' ),
+				'args'                => $this->get_checkout_endpoint_args(),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/access',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -283,6 +304,18 @@ class Settings extends Controller {
 		sort( $result );
 
 		return array_unique( $result );
+	}
+
+	/**
+	 *
+	 */
+	public function get_payment_gateways_settings() {
+		$payment_gateways = $this->merge_settings(
+			get_option( self::$db_prefix . 'payment_gateways', array() ),
+			array()
+		);
+
+		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $payment_gateways );
 	}
 
 	/**

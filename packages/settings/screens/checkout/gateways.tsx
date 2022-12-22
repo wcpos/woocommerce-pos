@@ -2,9 +2,10 @@ import * as React from 'react';
 
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
-import DragIcon from '../../../assets/img/drag-icon.svg';
+import DragIcon from '../../../../assets/img/drag-icon.svg';
 import Button from '../../components/button';
 import Toggle from '../../components/toggle';
+import useSettingsApi from '../../hooks/use-settings-api';
 import GatewayModal from './gateway-modal';
 
 import type {
@@ -47,7 +48,8 @@ const getItemStyle = (isDragging: boolean, draggableStyle: any, index: number) =
 /**
  *
  */
-const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
+const Gateways = () => {
+	const { data: gateways, mutate } = useSettingsApi('payment_gateways');
 	const [items, setItems] = React.useState(gateways);
 	const [isOpen, setOpen] = React.useState(false);
 	const openModal = () => setOpen(true);
@@ -63,12 +65,9 @@ const Gateways = ({ gateways, defaultGateway, dispatch }: GatewaysProps) => {
 
 			const orderedItems = reorder(items, result.source.index, result.destination.index);
 			setItems(orderedItems);
-			dispatch({
-				type: 'update',
-				payload: { gateways: orderedItems },
-			});
+			mutate(orderedItems);
 		},
-		[setItems, items, dispatch]
+		[setItems, items, mutate]
 	);
 
 	return (

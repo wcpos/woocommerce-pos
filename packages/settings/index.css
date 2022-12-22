@@ -35,7 +35,7 @@
 }
 
 /**
- * Hide the error element for 2 seconds
+ * Give JS 2 seconds to load before showing the error
  */
 #woocommerce-pos-js-error {
 	animation: 2s wcposError;

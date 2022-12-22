@@ -4,6 +4,7 @@ import FormRow from '../../components/form-row';
 import Select from '../../components/select';
 import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';
+import { t } from '../../translations';
 import Gateways from './gateways';
 
 export interface CheckoutSettingsProps {
@@ -34,9 +35,9 @@ const Checkout = () => {
 				<FormRow.Label
 					id="order-status"
 					className="wcpos-text-right"
-					help="Change the default order status for POS sales"
+					help={t('Change the default order status for POS sales', { _tags: 'wp-admin-settings' })}
 				>
-					Completed order status
+					{t('Completed order status', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 				<FormRow.Col>
 					<Select
@@ -62,9 +63,11 @@ const Checkout = () => {
 				<FormRow.Label
 					id="admin-emails"
 					className="wcpos-col-span-2"
-					help="Send WooCommerce notification emails for POS orders"
+					help={t('Send WooCommerce notification emails for POS orders', {
+						_tags: 'wp-admin-settings',
+					})}
 				>
-					Send admin emails
+					{t('Send admin emails', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
@@ -80,9 +83,11 @@ const Checkout = () => {
 				<FormRow.Label
 					id="customer-emails"
 					className="wcpos-col-span-2"
-					help="Send WooCommerce notification emails for POS orders"
+					help={t('Send WooCommerce notification emails for POS orders', {
+						_tags: 'wp-admin-settings',
+					})}
 				>
-					Send customer emails
+					{t('Send customer emails', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
 			<FormRow>
@@ -96,19 +101,18 @@ const Checkout = () => {
 					/>
 				</FormRow.Col>
 				<FormRow.Label id="auto-print" className="wcpos-col-span-2">
-					Automatically print receipt after checkout
+					{t('Automatically print receipt after checkout', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
-			<h2 className="wcpos-text-base">Gateways</h2>
+
+			<h2 className="wcpos-text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
 			<p>
-				Installed gateways are listed below. Drag and drop gateways to control their display order
-				at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.
+				{t(
+					'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.',
+					{ _tags: 'wp-admin-settings' }
+				)}
 			</p>
-			{/* <Gateways
-				gateways={data.gateways}
-				defaultGateway={settings.default_gateway}
-				dispatch={dispatch}
-			/> */}
+			<Gateways />
 		</>
 	);
 };

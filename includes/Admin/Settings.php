@@ -54,7 +54,7 @@ class Settings {
 		</div>';
 	}
 
-	
+
 	public function enqueue_assets() {
 		if ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] ) {
 			return $this->enqueue_development_assets();
@@ -68,11 +68,21 @@ class Settings {
 		);
 
 		wp_enqueue_script(
-			'react-query',
+			PLUGIN_NAME . '-react-query',
 			'https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js',
 			array(
 				'react',
-			)
+			),
+			VERSION,
+			true
+		);
+
+		wp_enqueue_script(
+			PLUGIN_NAME . '-transifex',
+			'https://cdn.jsdelivr.net/npm/@transifex/native/dist/browser.native.min.js',
+			array(),
+			VERSION,
+			true
 		);
 
 		wp_enqueue_script(
@@ -80,12 +90,13 @@ class Settings {
 			PLUGIN_URL . 'assets/js/settings.js',
 			array(
 				'react',
-				'react-query',
+				PLUGIN_NAME . '-react-query',
 				'react-dom',
 				'lodash',
 				'wp-element',
 				'wp-i18n',
 				'wp-api-fetch',
+				PLUGIN_NAME . '-transifex'
 			),
 			VERSION,
 			true
@@ -132,7 +143,7 @@ class Settings {
 		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
 
-	
+
 	public function inline_js() {
 		$settings            = $this->get_all_settings();
 		$default_customer_id = $settings['general']['default_customer'] ?? 0;
