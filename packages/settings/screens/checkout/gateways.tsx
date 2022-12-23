@@ -1,11 +1,13 @@
 import * as React from 'react';
 
+import { map, sortBy, keyBy } from 'lodash';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 import DragIcon from '../../../../assets/img/drag-icon.svg';
 import Button from '../../components/button';
 import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';
+import { t } from '../../translations';
 import GatewayModal from './gateway-modal';
 
 import type {
@@ -49,12 +51,17 @@ const getItemStyle = (isDragging: boolean, draggableStyle: any, index: number) =
  *
  */
 const Gateways = () => {
-	const { data: gateways, mutate } = useSettingsApi('payment_gateways');
-	const [items, setItems] = React.useState(gateways);
+	const { data, mutate } = useSettingsApi('payment_gateways');
 	const [isOpen, setOpen] = React.useState(false);
 	const openModal = () => setOpen(true);
 	const closeModal = () => setOpen(false);
 	const modalGateway = React.useRef<GatewayProps>(null);
+
+	/**
+	 * Sort gateways by order.
+	 * NOTE: This will convert associative array to indexed array, we will need to keyBy when saving.
+	 */
+	const gateways = sortBy(data.gateways, ['order', 'id']);
 
 	const onDragEnd = React.useCallback(
 		(result: DropResult) => {
@@ -63,11 +70,15 @@ const Gateways = () => {
 				return;
 			}
 
-			const orderedItems = reorder(items, result.source.index, result.destination.index);
-			setItems(orderedItems);
-			mutate(orderedItems);
+			const orderedItems = reorder(gateways, result.source.index, result.destination.index);
+			const mutatedList = map(orderedItems, (item, index) => {
+				item.order = index;
+				return item;
+			});
+
+			mutate({ gateways: keyBy(mutatedList, 'id') });
 		},
-		[setItems, items, mutate]
+		[gateways, mutate]
 	);
 
 	return (
@@ -81,25 +92,25 @@ const Gateways = () => {
 								scope="col"
 								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
 							>
-								Default
+								{t('Default', { _tags: 'wp-admin-settings' })}
 							</th>
 							<th
 								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
 							>
-								Gateway
+								{t('Gateway', { _tags: 'wp-admin-settings' })}
 							</th>
 							<th
 								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider"
+								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
 							>
-								Gateway ID
+								{t('Gateway ID', { _tags: 'wp-admin-settings' })}
 							</th>
 							<th
 								scope="col"
 								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
 							>
-								Enabled
+								{t('Enabled', { _tags: 'wp-admin-settings' })}
 							</th>
 							<th scope="col"></th>
 						</tr>
@@ -111,7 +122,7 @@ const Gateways = () => {
 								ref={provided.innerRef}
 								className="wcpos-bg-white wcpos-divide-y wcpos-divide-gray-200"
 							>
-								{items.map((item, index) => (
+								{map(gateways, (item, index) => (
 									<Draggable key={item.id} draggableId={item.id} index={index}>
 										{(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
 											<tr
@@ -131,17 +142,14 @@ const Gateways = () => {
 													<input
 														type="radio"
 														value={item.id}
-														checked={defaultGateway === item.id}
+														checked={data.default_gateway === item.id}
 														className=""
 														onChange={() => {
-															dispatch({
-																type: 'update',
-																payload: { default_gateway: item.id },
-															});
+															mutate({ default_gateway: item.id });
 														}}
 													/>
 												</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
+												<td className="wcpos-px-4 wcpos-py-2">
 													<strong>{item.title}</strong>
 												</td>
 												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">{item.id}</td>
@@ -150,17 +158,17 @@ const Gateways = () => {
 														name={item.id}
 														checked={item.enabled}
 														onChange={() => {
-															dispatch({
-																type: 'update-gateway',
-																payload: {
-																	id: item.id,
-																	enabled: !item.enabled,
+															mutate({
+																gateways: {
+																	[item.id]: {
+																		enabled: !item.enabled,
+																	},
 																},
 															});
 														}}
 													/>
 												</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-right">
 													<Button
 														background="outline"
 														onClick={() => {
@@ -169,7 +177,7 @@ const Gateways = () => {
 															openModal();
 														}}
 													>
-														Settings
+														{t('Settings', { _tags: 'wp-admin-settings' })}
 													</Button>
 												</td>
 											</tr>
@@ -183,7 +191,7 @@ const Gateways = () => {
 				</table>
 			</DragDropContext>
 			{isOpen && modalGateway.current && (
-				<GatewayModal gateway={modalGateway.current} dispatch={dispatch} closeModal={closeModal} />
+				<GatewayModal gateway={modalGateway.current} mutate={mutate} closeModal={closeModal} />
 			)}
 		</div>
 	);

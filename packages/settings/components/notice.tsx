@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
 import classNames from 'classnames';
 
@@ -15,12 +16,12 @@ const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProp
 			<div
 				className={classNames(
 					'wcpos-flex wcpos-px-4 wcpos-py-2 wcpos-items-center',
-					status == 'error' && 'wcpos-bg-red-300 wcpos-border-l-4 wcpos-border-red-600',
-					status == 'info' && 'wcpos-bg-yellow-100 wcpos-border-l-4 wcpos-border-yellow-300',
-					status == 'success' && 'wcpos-bg-green-100 wcpos-border-l-4 wcpos-border-green-600'
+					status === 'error' && 'wcpos-bg-red-300 wcpos-border-l-4 wcpos-border-red-600',
+					status === 'info' && 'wcpos-bg-yellow-100 wcpos-border-l-4 wcpos-border-yellow-300',
+					status === 'success' && 'wcpos-bg-green-100 wcpos-border-l-4 wcpos-border-green-600'
 				)}
 			>
-				<p className="flex-1">{children}</p>
+				<p className="wcpos-flex-1">{children}</p>
 				{isDismissible && <XMarkIcon onClick={onRemove} className="wcpos-h-5 wcpos-w-5" />}
 			</div>
 		</div>

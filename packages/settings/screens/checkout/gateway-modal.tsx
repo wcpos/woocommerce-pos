@@ -5,25 +5,26 @@ import { Dialog } from '@reach/dialog';
 
 import Button from '../../components/button';
 import Notice from '../../components/notice';
+import { t } from '../../translations';
 
 interface GatewayModalProps {
 	gateway: import('./gateways').GatewayProps;
-	dispatch: React.Dispatch<any>;
+	dispatch: () => void;
 	closeModal: () => void;
 }
 
-const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
+const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 	const [title, setTitle] = React.useState(gateway.title);
 	const [description, setDescription] = React.useState(gateway.description);
 	const inputRef = React.useRef();
 
 	const handleSave = () => {
-		dispatch({
-			type: 'update-gateway',
-			payload: {
-				id: gateway.id,
-				title,
-				description,
+		mutate({
+			gateways: {
+				[gateway.id]: {
+					title,
+					description,
+				},
 			},
 		});
 		closeModal();
@@ -95,9 +96,9 @@ const GatewayModal = ({ gateway, dispatch, closeModal }: GatewayModalProps) => {
 			</div>
 			<div className="wcpos-text-right wcpos-pt-4">
 				<Button background="clear" onClick={closeModal}>
-					Cancel
+					{t('Cancel', { _tags: 'wc-admin-settings' })}
 				</Button>
-				<Button onClick={handleSave}>Save</Button>
+				<Button onClick={handleSave}>{t('Save', { _tags: 'wc-admin-settings' })}</Button>
 			</div>
 		</Dialog>
 	);

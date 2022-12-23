@@ -1,11 +1,14 @@
 import * as React from 'react';
 
+import { ErrorBoundary } from 'react-error-boundary';
+
+import Error from '../../components/error';
 import FormRow from '../../components/form-row';
-import Select from '../../components/select';
 import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 import Gateways from './gateways';
+import OrderStatusSelect from './order-status-select';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -16,18 +19,8 @@ export interface CheckoutSettingsProps {
 	gateways: any[];
 }
 
-interface OrderStatusProps {
-	label: string;
-	value: string;
-}
-
 const Checkout = () => {
 	const { data, mutate } = useSettingsApi('checkout');
-
-	// const orderStatusOptions = React.useMemo(() => {
-	// 	const statuses = get(hydrate, 'order_statuses', []);
-	// 	return map(statuses, (label: string, value: string) => ({ label, value }));
-	// }, [hydrate]) as unknown as OrderStatusProps[];
 
 	return (
 		<>
@@ -40,14 +33,11 @@ const Checkout = () => {
 					{t('Completed order status', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 				<FormRow.Col>
-					<Select
-						name="order-status"
-						options={[]}
-						selected={data.order_status}
-						onChange={(order_status: string) => {
-							mutate({ order_status });
-						}}
-					/>
+					<ErrorBoundary FallbackComponent={Error}>
+						<React.Suspense fallback={null}>
+							<OrderStatusSelect selectedStatus={data.order_status} mutate={mutate} />
+						</React.Suspense>
+					</ErrorBoundary>
 				</FormRow.Col>
 			</FormRow>
 			<FormRow>
@@ -90,29 +80,21 @@ const Checkout = () => {
 					{t('Send customer emails', { _tags: 'wp-admin-settings' })}
 				</FormRow.Label>
 			</FormRow>
-			<FormRow>
-				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
-					<Toggle
-						name="auto-print"
-						checked={data.auto_print_receipt}
-						onChange={(auto_print_receipt: boolean) => {
-							mutate({ auto_print_receipt });
-						}}
-					/>
-				</FormRow.Col>
-				<FormRow.Label id="auto-print" className="wcpos-col-span-2">
-					{t('Automatically print receipt after checkout', { _tags: 'wp-admin-settings' })}
-				</FormRow.Label>
-			</FormRow>
 
-			<h2 className="wcpos-text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
-			<p>
-				{t(
-					'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.',
-					{ _tags: 'wp-admin-settings' }
-				)}
-			</p>
-			<Gateways />
+			<div className="wcpos-px-4 wcpos-pb-5">
+				<h2 className="wcpos-text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
+				<p>
+					{t(
+						'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.',
+						{ _tags: 'wp-admin-settings' }
+					)}
+				</p>
+				<ErrorBoundary FallbackComponent={Error}>
+					<React.Suspense fallback={null}>
+						<Gateways />
+					</React.Suspense>
+				</ErrorBoundary>
+			</div>
 		</>
 	);
 };

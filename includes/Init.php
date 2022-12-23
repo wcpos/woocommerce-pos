@@ -24,7 +24,6 @@ class Init {
 	public function __construct() {
 		// global helper functions
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
-		// require_once PLUGIN_PATH . 'includes/wcpos-form-handlers.php';
 
 		// Init hooks
 		add_action( 'init', array( $this, 'init' ) );
