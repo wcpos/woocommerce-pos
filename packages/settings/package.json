@@ -34,7 +34,7 @@
     "@babel/preset-env": "7.20.2",
     "@babel/preset-react": "7.18.6",
     "@babel/preset-typescript": "7.18.6",
-    "@babel/runtime": "7.20.6",
+    "@babel/runtime": "7.20.7",
     "@svgr/webpack": "6.5.1",
     "@tanstack/react-query-devtools": "^4.20.4",
     "@transifex/cli": "^5.0.2",
