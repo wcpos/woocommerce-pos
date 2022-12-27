@@ -35,10 +35,11 @@
 }
 
 /**
- * Give JS 2 seconds to load before showing the error
+ * Give JS 10 seconds to load before showing the error
+ * @TODO - there must be a better way to do this
  */
 #woocommerce-pos-js-error {
-	animation: 2s wcposError;
+	animation: 10s wcposError;
 	animation-fill-mode: forwards;
 	visibility: hidden;
 }

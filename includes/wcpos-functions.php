@@ -16,7 +16,8 @@
  * @return string|void
  */
 
-use WCPOS\WooCommercePOS\Admin\Settings;
+use WCPOS\WooCommercePOS\Admin\Permalink;
+use WCPOS\WooCommercePOS\API\Settings;
 
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -24,8 +25,8 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 if ( ! \function_exists( 'woocommerce_pos_url' ) ) {
 	function woocommerce_pos_url( $page = '' ): string {
-		$slug   = WCPOS\WooCommercePOS\Admin\Permalink::get_slug();
-		$scheme = true == woocommerce_pos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+		$slug   = Permalink::get_slug();
+		$scheme = woocommerce_pos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
@@ -96,25 +97,6 @@ if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
 }
 
 /*
- * Helper function to add or update WCPOS settings
- *
- * @param string $group
- * @param string $key
- * @param string $autoload
- *
- * @return bool
- */
-if ( ! \function_exists( 'woocommerce_pos_update_settings' ) ) {
-	function woocommerce_pos_update_settings( $group, $key, $value, $autoload = 'no' ): bool {
-		if ( $key ) {
-			return Settings::update_setting( $group, $key, $value );
-		}
-
-		return Settings::update_settings( $group, $value );
-	}
-}
-
-/*
  * Helper function to get WCPOS settings
  *
  * @param string $group
@@ -125,11 +107,21 @@ if ( ! \function_exists( 'woocommerce_pos_update_settings' ) ) {
  */
 if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	function woocommerce_pos_get_settings( $group, $key = null ) {
-		if ( $key ) {
-			return Settings::get_setting( $group, $key );
+		$api = new Settings();
+		$settings = $api->get_settings( $group );
+
+		if ( ! $key ) {
+			return $settings;
 		}
 
-		return Settings::get_settings( $group );
+		if ( isset( $settings[ $key ] ) ) {
+			return $settings[ $key ];
+		}
+
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			'Settings key not found'
+		);
 	}
 }
 

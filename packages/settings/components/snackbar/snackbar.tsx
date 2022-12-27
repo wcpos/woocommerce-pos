@@ -2,9 +2,10 @@ import * as React from 'react';
 
 import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
 
-interface SnackbarProps {
-	message?: string;
-	onRemove: () => void;
+export interface SnackbarProps {
+	id: string;
+	message: string;
+	onRemove?: () => void;
 	timeout?: boolean;
 }
 

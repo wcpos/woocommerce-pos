@@ -1,9 +1,13 @@
 import * as React from 'react';
 
+import { useQueryClient } from '@tanstack/react-query';
+import apiFetch from '@wordpress/api-fetch';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import Error from '../components/error';
+import Notice from '../components/notice';
 import Tabs from '../components/tabs';
+import useNotices from '../hooks/use-notices';
 import { t } from '../translations';
 import Access from './access';
 import Checkout from './checkout';
@@ -19,12 +23,22 @@ const screens = {
 	license: License,
 };
 
+type ScreenKeys = keyof typeof screens;
+
+interface Route {
+	key: ScreenKeys;
+	title: string;
+}
+
 interface Props {
-	initialScreen: keyof typeof screens;
+	initialScreen: ScreenKeys;
 }
 
 const Main = ({ initialScreen }: Props) => {
-	const routes = [
+	const queryClient = useQueryClient();
+	const { notice, setNotice } = useNotices();
+
+	const routes: Route[] = [
 		{ key: 'general', title: t('General', { _tags: 'wp-admin-settings ' }) },
 		{ key: 'checkout', title: t('Checkout', { _tags: 'wp-admin-settings' }) },
 		{ key: 'access', title: t('Access', { _tags: 'wp-admin-settings' }) },
@@ -35,16 +49,16 @@ const Main = ({ initialScreen }: Props) => {
 		routes.findIndex((route) => route.key === initialScreen) || 0
 	);
 
-	const renderScene = ({ route }) => {
+	const renderScene = ({ route }: { route: Route }) => {
 		const Component = screens[route.key];
 
 		return (
 			<ErrorBoundary FallbackComponent={Error}>
-				{/* {notice && (
+				{notice && (
 					<Notice status={notice.type} onRemove={() => setNotice(null)}>
 						{notice.message}
 					</Notice>
-				)} */}
+				)}
 				<React.Suspense fallback={<></>}>
 					<Component />
 				</React.Suspense>
@@ -59,7 +73,23 @@ const Main = ({ initialScreen }: Props) => {
 				<Tabs<typeof routes[number]>
 					renderScene={renderScene}
 					navigationState={{ index, routes }}
-					onIndexChange={setIndex}
+					onIndexChange={(idx) => {
+						history.pushState(null, '', `#${routes[idx].key}`);
+						setIndex(idx);
+					}}
+					onTabItemHover={(idx, route) => {
+						queryClient.prefetchQuery({
+							queryKey: [route.key],
+							queryFn: async () => {
+								const response = await apiFetch({
+									path: `wcpos/v1/settings/${route.key}?wcpos=1`,
+									method: 'GET',
+								});
+
+								return response;
+							},
+						});
+					}}
 				/>
 			</div>
 			<div className="wcpos-bg-white wcpos-rounded-lg wcpos-py-4">

@@ -1,4 +1,5 @@
 import * as Transifex from '@transifex/native';
+import { T, UT } from '@transifex/react';
 
 const tx = Transifex.tx;
 const t = Transifex.t;
@@ -8,4 +9,4 @@ tx.init({
 	filterTags: 'wp-admin-settings',
 });
 
-export { tx, t };
+export { tx, t, T, UT };

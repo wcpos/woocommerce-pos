@@ -51,10 +51,8 @@ const getItemStyle = (isDragging: boolean, draggableStyle: any, index: number) =
  *
  */
 const Gateways = () => {
-	const { data, mutate } = useSettingsApi('payment_gateways');
+	const { data, mutate } = useSettingsApi('payment-gateways');
 	const [isOpen, setOpen] = React.useState(false);
-	const openModal = () => setOpen(true);
-	const closeModal = () => setOpen(false);
 	const modalGateway = React.useRef<GatewayProps>(null);
 
 	/**
@@ -142,7 +140,7 @@ const Gateways = () => {
 													<input
 														type="radio"
 														value={item.id}
-														checked={data.default_gateway === item.id}
+														checked={data?.default_gateway === item.id}
 														className=""
 														onChange={() => {
 															mutate({ default_gateway: item.id });
@@ -174,7 +172,7 @@ const Gateways = () => {
 														onClick={() => {
 															// @ts-ignore
 															modalGateway.current = item;
-															openModal();
+															setOpen(true);
 														}}
 													>
 														{t('Settings', { _tags: 'wp-admin-settings' })}
@@ -191,7 +189,11 @@ const Gateways = () => {
 				</table>
 			</DragDropContext>
 			{isOpen && modalGateway.current && (
-				<GatewayModal gateway={modalGateway.current} mutate={mutate} closeModal={closeModal} />
+				<GatewayModal
+					gateway={modalGateway.current}
+					mutate={mutate}
+					closeModal={() => setOpen(false)}
+				/>
 			)}
 		</div>
 	);

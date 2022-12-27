@@ -23,26 +23,40 @@ namespace WCPOS\WooCommercePOS;
 use Dotenv\Dotenv;
 
 // Define plugin constants.
-\define(__NAMESPACE__ . '\VERSION', '1.0.0-beta');
-\define(__NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos');
-\define(__NAMESPACE__ . '\SHORT_NAME', 'wcpos');
-\define(__NAMESPACE__ . '\PLUGIN_FILE', plugin_basename(__FILE__)); // 'woocommerce-pos/woocommerce-pos.php'
-\define(__NAMESPACE__ . '\PLUGIN_PATH', trailingslashit(plugin_dir_path(__FILE__)));
-\define(__NAMESPACE__ . '\PLUGIN_URL', trailingslashit(plugins_url(basename(plugin_dir_path(__FILE__)), basename(__FILE__))));
+\define( __NAMESPACE__ . '\VERSION', '1.0.0-beta' );
+\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
+\define( __NAMESPACE__ . '\SHORT_NAME', 'wcpos' );
+\define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
+\define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
+\define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 
 // Autoloader
-if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';
+
+	/**
+	 * Environment variables.
+	 */
+	Dotenv::createImmutable( __DIR__ )->safeLoad();
+
+	/**
+	 * Activate plugin
+	 */
+	new Activator();
+
+	/**
+	 * Deactivate plugin
+	 */
+	new Deactivator();
+
+} else {
+	add_action( 'admin_notices', function() {
+		?>
+		<div class="notice notice-error">
+			<p><?php esc_html_e( 'The WooCommerce POS plugin failed to load correctly.', 'woocommerce-pos' ); ?></p>
+		</div>
+		<?php
+	} );
 }
 
-/**
- * Environment variables.
- */
-$dotenv = Dotenv::createImmutable(__DIR__);
-$dotenv->safeLoad();
 
-// Activate plugin
-new Activator();
-
-// Deactivate plugin
-new Deactivator();

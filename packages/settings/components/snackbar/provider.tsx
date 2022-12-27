@@ -2,13 +2,27 @@ import * as React from 'react';
 
 import { SnackbarList } from './snackbar-list';
 
-export const SnackbarContext = React.createContext(null);
+type Snackbar = import('./snackbar').SnackbarProps;
+
+interface SnackbarContextProps {
+	addSnackbar: (snackbar: Snackbar) => void;
+	removeSnackbar: (id: string) => void;
+}
+
+export const SnackbarContext = React.createContext<SnackbarContextProps>({
+	addSnackbar: () => {},
+	removeSnackbar: () => {},
+});
 
 export const SnackbarProvider = ({ children }) => {
-	const [snackbars, setSnackbars] = React.useState([]);
+	const [snackbars, setSnackbars] = React.useState<Snackbar[]>([]);
 
-	const addSnackbar = (snackbar) => {
-		setSnackbars((prev) => [...prev, snackbar]);
+	/**
+	 * Note: snackbars is an array of objects, but for now we only support one snackbar at a time.
+	 */
+	const addSnackbar = (snackbar: Snackbar) => {
+		// setSnackbars((prev) => [...prev, snackbar]);
+		setSnackbars([snackbar]);
 	};
 
 	const removeSnackbar = (id) => {

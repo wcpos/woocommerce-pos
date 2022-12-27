@@ -13,7 +13,7 @@ use function is_bool;
 use function is_integer;
 use function is_string;
 
-class Settings extends Controller {
+class Settings extends Settings_Controller {
 
 
 	/**
@@ -22,6 +22,7 @@ class Settings extends Controller {
 	 * @var string
 	 */
 	protected static $db_prefix = 'woocommerce_pos_settings_';
+
 	protected static $default_settings = array(
 		'general' => array(
 			'pos_only_products' => false,
@@ -51,10 +52,7 @@ class Settings extends Controller {
 				),
 			),
 		),
-		'license' => array(
-			'key' => '',
-			'activated' => false,
-		),
+		'license' => array(),
 	);
 	/**
 	 * @var array
@@ -171,7 +169,7 @@ class Settings extends Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/payment_gateways',
+			'/' . $this->rest_base . '/payment-gateways',
 			array(
 				'methods' => WP_REST_Server::READABLE,
 				'callback' => array( $this, 'get_payment_gateways_settings' ),
@@ -181,7 +179,7 @@ class Settings extends Controller {
 
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/payment_gateways',
+			'/' . $this->rest_base . '/payment-gateways',
 			array(
 				'methods' => WP_REST_Server::EDITABLE,
 				'callback' => array( $this, 'update_payment_gateways_settings' ),
@@ -451,24 +449,36 @@ class Settings extends Controller {
 	 */
 	public function update_access_settings( WP_REST_Request $request ) {
 		global $wp_roles;
-		$roles = array_intersect_key( $request->get_params(), $wp_roles->roles );
+		$data = $request->get_params();
 
-		foreach ( $roles as $slug => $array ) {
+		// get all role slugs
+		$roles = array_keys( $wp_roles->roles );
+
+		// get property from $data where key is in $roles
+		$update = array_intersect_key( $data, array_flip( $roles ) );
+
+		// if $role is array with one property, update the capabilities
+		if ( 1 === count( $update ) ) {
+			$slugs = array_keys( $update );
+			$slug = $slugs[0];
 			$role = get_role( $slug );
 
-			if ( $array['capabilities'] ) {
-				foreach ( $array['capabilities'] as $key => $caps ) {
-					if ( $caps ) {
-						foreach ( $caps as $cap => $grant ) {
-							// special case: administrator must have read capability
-							if ( 'administrator' == $slug && 'read' == $cap ) {
-								continue;
-							}
-							if ( in_array( $cap, self::$caps[ $key ], true ) ) {
-								$grant ? $role->add_cap( $cap ) : $role->remove_cap( $cap );
-							}
-						}
-					}
+			// flatten capabilities array from 'wc', 'wp', 'wcpos' grouping
+			$flattened_caps = array();
+			foreach ( $update[ $slug ]['capabilities'] as $capabilities ) {
+				$flattened_caps = array_merge( $flattened_caps, $capabilities );
+			}
+
+			// update capabilities for each $flattened_cap (should only be one)
+			foreach ( $flattened_caps as $cap => $grant ) {
+				// sanity check for admin role, read capability
+				if ( 'administrator' === $slug && 'read' === $cap ) {
+					continue;
+				}
+				if ( $grant ) {
+					$role->add_cap( $cap );
+				} else {
+					$role->remove_cap( $cap );
 				}
 			}
 		}
@@ -510,53 +520,6 @@ class Settings extends Controller {
 	}
 
 	/**
-	 * @param string $key
-	 * @param array $settings
-	 * @return array|mixed|WP_Error|null
-	 */
-	public function save_settings( string $key, array $settings ) {
-		$success = update_option(
-			self::$db_prefix . $key,
-			array_merge(
-				array( 'date_modified_gmt' => current_time( 'mysql', true ) ),
-				$settings
-			),
-			false
-		);
-
-		if ( $success ) {
-			return $this->get_settings( $key );
-		}
-
-		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 400 ) );
-	}
-
-	/**
-	 * @param string $key
-	 * @return array|mixed|WP_Error|null
-	 */
-	public function get_settings( string $key ) {
-		$method_name = 'get_' . $key . '_settings';
-		if ( method_exists( $this, $method_name ) ) {
-			return $this->$method_name();
-		} else {
-			return new WP_Error( 'cant-get', __( 'message', 'woocommerce-pos' ), array( 'status' => 400 ) );
-		}
-	}
-
-	/**
-	 * Merges the given array settings with the defaults.
-	 *
-	 * @param string $group
-	 * @param array $settings
-	 *
-	 * @return array
-	 */
-	public function merge_settings( array $settings, array $default ): array {
-		return wp_parse_args( array_intersect_key( $settings, $default ), $default );
-	}
-
-	/**
 	 * @TODO - who can read settings?
 	 *
 	 * @return bool
@@ -577,6 +540,6 @@ class Settings extends Controller {
 	 * @return bool
 	 */
 	public function access_permission_check() {
-         return current_user_can( 'manage_options' );
+         return current_user_can( 'promote_users' );
 	}
 }

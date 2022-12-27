@@ -5,38 +5,24 @@ interface NoticeProps {
 	message: string;
 }
 
-interface SnackbarProps {
-	message: string;
-	timeout?: boolean;
-}
-
-interface NoticesContext {
+interface NoticesContextProps {
 	notice: NoticeProps | null;
-	// snackbar: SnackbarProps | null;
 	setNotice: (args: NoticeProps | null) => void;
-	// setSnackbar: (args: SnackbarProps | null) => void;
 }
 
-const NoticesContext = React.createContext<NoticesContext>({
+const NoticesContext = React.createContext<NoticesContextProps>({
 	notice: null,
-	// snackbar: null,
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
 	setNotice: () => {},
-	// eslint-disable-next-line @typescript-eslint/no-empty-function
-	// setSnackbar: () => {},
 });
 
 export const NoticesProvider = ({ children }) => {
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
-	// const [snackbar, setSnackbar] = React.useState<SnackbarProps | null>(null);
 
 	return (
 		<NoticesContext.Provider
 			value={{
 				notice,
-				//snackbar,
 				setNotice,
-				//setSnackbar
 			}}
 		>
 			{children}

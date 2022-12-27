@@ -35,7 +35,7 @@ const Checkout = () => {
 				<FormRow.Col>
 					<ErrorBoundary FallbackComponent={Error}>
 						<React.Suspense fallback={null}>
-							<OrderStatusSelect selectedStatus={data.order_status} mutate={mutate} />
+							<OrderStatusSelect selectedStatus={data?.order_status} mutate={mutate} />
 						</React.Suspense>
 					</ErrorBoundary>
 				</FormRow.Col>
@@ -44,7 +44,7 @@ const Checkout = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="admin-emails"
-						checked={data.admin_emails}
+						checked={!!data?.admin_emails}
 						onChange={(admin_emails: boolean) => {
 							mutate({ admin_emails });
 						}}
@@ -64,7 +64,7 @@ const Checkout = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="customer-emails"
-						checked={data.customer_emails}
+						checked={!!data?.customer_emails}
 						onChange={(customer_emails: boolean) => {
 							mutate({ customer_emails });
 						}}

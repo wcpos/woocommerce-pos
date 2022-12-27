@@ -6,7 +6,7 @@ import { render } from '@wordpress/element';
 import { getFragment, isValidFragment } from '@wordpress/url';
 
 import { SnackbarProvider } from './components/snackbar';
-import useNotices, { NoticesProvider } from './hooks/use-notices';
+import { NoticesProvider } from './hooks/use-notices';
 import useReadyState from './hooks/use-ready-state';
 import Main from './screens';
 

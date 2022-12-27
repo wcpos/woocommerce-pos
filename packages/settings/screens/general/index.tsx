@@ -27,7 +27,7 @@ const General = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="force-ssl"
-						checked={data.force_ssl}
+						checked={!!data?.force_ssl}
 						onChange={(force_ssl: boolean) => {
 							mutate({ force_ssl });
 						}}
@@ -46,7 +46,7 @@ const General = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="pos-only-products"
-						checked={data.pos_only_products}
+						checked={!!data?.pos_only_products}
 						onChange={(pos_only_products: boolean) => {
 							mutate({ pos_only_products });
 						}}
@@ -65,7 +65,7 @@ const General = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="decimal-qty"
-						checked={data.decimal_qty}
+						checked={!!data?.decimal_qty}
 						onChange={(decimal_qty: boolean) => {
 							mutate({ decimal_qty });
 						}}
@@ -84,7 +84,7 @@ const General = () => {
 				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
 					<Toggle
 						name="generate-username"
-						checked={data.generate_username}
+						checked={!!data?.generate_username}
 						onChange={(generate_username: boolean) => {
 							mutate({ generate_username });
 						}}
@@ -105,8 +105,8 @@ const General = () => {
 				<FormRow.Col>
 					<React.Suspense fallback={<></>}>
 						<UserSelect
-							disabled={data.default_customer_is_cashier}
-							selected={data.default_customer}
+							disabled={!!data?.default_customer_is_cashier}
+							selected={data?.default_customer}
 							onSelect={(value: number) => {
 								if (value) {
 									mutate({ default_customer: value });
@@ -118,7 +118,7 @@ const General = () => {
 				<FormRow.Col>
 					<label>
 						<Checkbox
-							checked={data.default_customer_is_cashier}
+							checked={!!data?.default_customer_is_cashier}
 							onChange={(default_customer_is_cashier) => {
 								mutate({ default_customer_is_cashier });
 							}}
@@ -140,7 +140,7 @@ const General = () => {
 				<FormRow.Col>
 					<React.Suspense fallback={<></>}>
 						<BarcodeSelect
-							selected={data.barcode_field}
+							selected={data?.barcode_field}
 							onSelect={(value: string) => {
 								if (value) {
 									mutate({ barcode_field: value });

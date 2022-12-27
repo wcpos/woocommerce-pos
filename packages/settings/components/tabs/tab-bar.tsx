@@ -5,6 +5,7 @@ import { TabItem } from './tab-item';
 export interface TabBarProps {
 	routes: import('./').Route[];
 	onIndexChange: (index: number) => void;
+	onTabItemHover?: (index: number, route) => void;
 	direction?: 'horizontal' | 'vertical';
 	focusedIndex: number;
 }
@@ -12,6 +13,7 @@ export interface TabBarProps {
 export const TabBar = ({
 	routes,
 	onIndexChange,
+	onTabItemHover,
 	direction = 'horizontal',
 	focusedIndex,
 }: TabBarProps) => {
@@ -24,6 +26,7 @@ export const TabBar = ({
 						key={route.key}
 						title={route.title}
 						onClick={() => onIndexChange(i)}
+						onHover={() => onTabItemHover && onTabItemHover(i, route)}
 						focused={focused}
 					/>
 				);

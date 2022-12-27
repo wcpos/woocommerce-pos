@@ -1,12 +1,14 @@
 import * as React from 'react';
 
-import { addQueryArgs, getAuthority } from '@wordpress/url';
+import ShieldCheckIcon from '@heroicons/react/24/solid/ShieldCheckIcon';
+import { addQueryArgs } from '@wordpress/url';
 import { get, throttle } from 'lodash';
 
 import Button from '../../components/button';
 import FormRow from '../../components/form-row';
 import useNotices from '../../hooks/use-notices';
 import useSettingsApi from '../../hooks/use-settings-api';
+import { t, T } from '../../translations';
 
 export interface LicenseSettingsProps {
 	key: string;
@@ -31,7 +33,7 @@ const truncate = (fullStr: string, strLen = 20, separator = '...') => {
 const License = () => {
 	const { data, mutate } = useSettingsApi('license');
 	const { setNotice } = useNotices();
-	const [key, setKey] = React.useState(data.key);
+	const [key, setKey] = React.useState(data?.key);
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setKey(event.target.value);
 
@@ -39,30 +41,29 @@ const License = () => {
 		const url = addQueryArgs('https://wcpos.com', {
 			'wc-api': 'am-software-api',
 			request: deactivate ? 'deactivation' : 'activation',
-			instance: data.instance,
+			instance: data?.instance,
 			api_key: key,
-			product_id: data.product_id,
-			platform: getAuthority(get(hydrate, 'homepage')),
-			version: get(hydrate, 'pro_version'),
+			product_id: data?.product_id,
+			platform: data?.platform,
+			version: data?.version,
 			timestamp: Date.now(),
 		});
 
-		const data = await fetch(url, {
+		const response = await fetch(url, {
 			method: 'GET',
 			credentials: 'omit',
 		})
-			.then((response) => response.json())
+			.then((res) => res.json())
 			.catch((err) => {
 				setNotice({ type: 'error', message: err.message });
 			});
 
-		if (!data.success) {
-			setNotice({ type: 'error', message: data.error });
+		if (!response.success) {
+			setNotice({ type: 'error', message: response.error });
 		} else {
 			if (deactivate) {
 				setKey('');
 			} else {
-				const confetti = get(window, 'confetti');
 				if (confetti) {
 					confetti();
 				}
@@ -70,27 +71,57 @@ const License = () => {
 
 			mutate({
 				key: deactivate ? '' : key,
-				activated: !!data.activated,
+				activated: !!response.activated,
 			});
 		}
 	};
 
-	return data.activated ? (
-		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
-			<div className="wcpos-text-right wcpos-text-8xl">🎉</div>
-			<div className="wcpos-col-span-2">
-				<h3>Thank You!</h3>
-				<p>
-					License <code>{truncate(data.key)}</code> has been activated.
+	if (!data?.instance) {
+		return (
+			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
+				<div>
+					<ShieldCheckIcon className="wcpos-w-20 wcpos-h-20 sm:wcpos-ml-auto wcpos-text-wp-admin-theme-color" />
+				</div>
+				<p className="wcpos-col-span-2">
+					{t(
+						'If you would like to support the development of WooCommerce POS, please consider purchasing a Pro license.',
+						{
+							_tags: 'wp-admin-settings',
+						}
+					)}
 				</p>
-				<p>Your support helps fund the ongoing development of WooCommerce POS.</p>
-				<Button onClick={() => handleActivation(true)}>Deactivate</Button>
 			</div>
-		</div>
-	) : (
+		);
+	}
+
+	if (data.activated) {
+		return (
+			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
+				<div className="wcpos-text-right wcpos-text-8xl">🎉</div>
+				<div className="wcpos-col-span-2">
+					<h3>{t('Thank You!', { _tags: 'wp-admin-settings' })}</h3>
+					<p>
+						<T
+							_str="License {number} has been activated."
+							_tags="wc-admin-settings"
+							number={<code>{truncate(data?.key)}</code>}
+						/>
+					</p>
+					<p>
+						{t('Your support helps fund the ongoing development of WooCommerce POS.', {
+							_tags: 'wp-admin-settings',
+						})}
+					</p>
+					<Button onClick={() => handleActivation(true)}>Deactivate</Button>
+				</div>
+			</div>
+		);
+	}
+
+	return (
 		<FormRow>
 			<FormRow.Label id="license-key" className="wcpos-text-right">
-				License Key
+				{t('License Key', { _tags: 'wp-admin-settings' })}
 			</FormRow.Label>
 			<FormRow.Col>
 				<input
@@ -103,7 +134,7 @@ const License = () => {
 			</FormRow.Col>
 			<FormRow.Col>
 				<Button disabled={!key} onClick={() => handleActivation()}>
-					Activate
+					{t('Activate', { _tags: 'wp-admin-settings' })}
 				</Button>
 			</FormRow.Col>
 		</FormRow>

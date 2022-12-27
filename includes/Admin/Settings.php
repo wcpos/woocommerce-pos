@@ -15,10 +15,6 @@ use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\VERSION;
 
 class Settings {
-	/**
-	 * Admin and API Settings classes share the same traits.
-	 */
-	use \WCPOS\WooCommercePOS\Traits\Settings;
 
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
@@ -143,54 +139,4 @@ class Settings {
 		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
 
-
-	public function inline_js() {
-		$settings            = $this->get_all_settings();
-		$default_customer_id = $settings['general']['default_customer'] ?? 0;
-		$default_customer    = get_userdata( $default_customer_id );
-
-		$vars = array(
-			'homepage'         => home_url(),
-			'version'          => VERSION,
-			'settings'         => $this->get_all_settings(),
-			'barcode_fields'   => $this->get_barcode_fields(),
-			'order_statuses'   => wc_get_order_statuses(),
-			'default_customer' => array(
-				'value' => $default_customer_id,
-				'label' => $default_customer ? $default_customer->display_name : 'Guest',
-			),
-		);
-
-		$vars = apply_filters( 'woocommerce_pos_admin_settings_inline_vars', $vars );
-
-		return 'var wcpos = ' . wp_json_encode( $vars ) . ';';
-	}
-
-	/**
-	 * @return array
-	 */
-	public function get_barcode_fields() {
-		global $wpdb;
-
-		$result = $wpdb->get_col(
-			"
-			SELECT DISTINCT(pm.meta_key)
-			FROM $wpdb->postmeta AS pm
-			JOIN $wpdb->posts AS p
-			ON p.ID = pm.post_id
-			WHERE p.post_type IN ('product', 'product_variation')
-			ORDER BY pm.meta_key
-			"
-		);
-
-		// maybe add custom barcode field
-		$custom_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-		if ( ! empty( $custom_field ) ) {
-			array_push( $result, $custom_field );
-		}
-
-		sort( $result );
-
-		return array_unique( $result );
-	}
 }

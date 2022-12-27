@@ -5,11 +5,11 @@ import { Dialog } from '@reach/dialog';
 
 import Button from '../../components/button';
 import Notice from '../../components/notice';
-import { t } from '../../translations';
+import { t, T } from '../../translations';
 
 interface GatewayModalProps {
 	gateway: import('./gateways').GatewayProps;
-	dispatch: () => void;
+	mutate: (arg) => void;
 	closeModal: () => void;
 }
 
@@ -60,16 +60,19 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			</h2>
 
 			<Notice status="info" isDismissible={false}>
-				This will change the settings for the POS only. If you would like to change gateway settings
-				for online and POS, please visit the 
-				<a href="admin.php?page=wc-settings&amp;tab=checkout" target="_blank">
-					WooCommerce Settings
-				</a>
-				.
+				<T
+					_str="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the {link}."
+					_tags="wc-admin-settings"
+					link={
+						<a href="admin.php?page=wc-settings&amp;tab=checkout" target="_blank">
+							<T _str="WooCommerce Settings" _tags="wc-admin-settings" />
+						</a>
+					}
+				/>
 			</Notice>
 			<div className="wcpos-py-2">
 				<label htmlFor="title" className="wcpos-block wcpos-mb-1 wcpos-font-medium wcpos-text-sm">
-					Title
+					{t('Title', { _tags: 'wc-admin-settings' })}
 				</label>
 				<input
 					// @ts-ignore
@@ -84,7 +87,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			</div>
 			<div className="wcpos-py-2">
 				<label htmlFor="description" className="wcpos-block mb-1 wcpos-font-medium wcpos-text-sm">
-					Description
+					{t('Description', { _tags: 'wc-admin-settings' })}
 				</label>
 				<textarea
 					id="description"
