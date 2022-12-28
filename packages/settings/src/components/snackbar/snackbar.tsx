@@ -12,7 +12,7 @@ export interface SnackbarProps {
 export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) => {
 	React.useEffect(() => {
 		const timer = setTimeout(() => {
-			timeout && onRemove();
+			timeout && onRemove && onRemove();
 		}, 3000);
 		return () => clearTimeout(timer);
 	}, [message, onRemove, timeout]);

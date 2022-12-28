@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { isString } from 'lodash';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import Error from '../../components/error';
@@ -35,7 +36,10 @@ const Checkout = () => {
 				<FormRow.Col>
 					<ErrorBoundary FallbackComponent={Error}>
 						<React.Suspense fallback={null}>
-							<OrderStatusSelect selectedStatus={data?.order_status} mutate={mutate} />
+							<OrderStatusSelect
+								selectedStatus={isString(data?.order_status) ? data?.order_status || '' : ''}
+								mutate={mutate}
+							/>
 						</React.Suspense>
 					</ErrorBoundary>
 				</FormRow.Col>

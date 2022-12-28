@@ -15,7 +15,11 @@ const NoticesContext = React.createContext<NoticesContextProps>({
 	setNotice: () => {},
 });
 
-export const NoticesProvider = ({ children }) => {
+interface NoticesProviderProps {
+	children: React.ReactNode;
+}
+
+export const NoticesProvider = ({ children }: NoticesProviderProps) => {
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
 
 	return (

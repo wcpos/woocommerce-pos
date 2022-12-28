@@ -1,10 +1,12 @@
 const path = require('path');
 
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 // const ESLintPlugin = require('eslint-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 console.log(NODE_ENV);
@@ -13,6 +15,7 @@ const OUTPUT = NODE_ENV === 'development' ? '../../build' : '../../assets';
 module.exports = function (_env, argv) {
 	const config = {
 		mode: NODE_ENV,
+		bail: false,
 		entry: {
 			settings: './src/index.tsx',
 		},
@@ -31,6 +34,7 @@ module.exports = function (_env, argv) {
 			'@wordpress/url': 'wp.url',
 			'@tanstack/react-query': 'ReactQuery',
 			'@transifex/native': 'Transifex',
+			'react-beautiful-dnd': 'ReactBeautifulDnd',
 		},
 		module: {
 			rules: [
@@ -88,10 +92,11 @@ module.exports = function (_env, argv) {
 				filename: './css/[name].css',
 			}),
 			new LiveReloadPlugin(),
+			new BundleAnalyzerPlugin(),
 		],
 		optimization: {
 			minimize: NODE_ENV === 'production',
-			minimizer: [new TerserPlugin()],
+			minimizer: [new TerserPlugin(), new CssMinimizerPlugin()],
 			splitChunks: {
 				name: false,
 			},

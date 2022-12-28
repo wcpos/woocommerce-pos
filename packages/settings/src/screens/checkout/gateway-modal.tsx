@@ -9,7 +9,7 @@ import { t, T } from '../../translations';
 
 interface GatewayModalProps {
 	gateway: import('./gateways').GatewayProps;
-	mutate: (arg) => void;
+	mutate: (data: any) => void;
 	closeModal: () => void;
 }
 
@@ -35,10 +35,10 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			const value = event.target.value;
 			const field = event.target.id;
 
-			if (field == 'title') {
+			if (field === 'title') {
 				setTitle(value);
 			}
-			if (field == 'description') {
+			if (field === 'description') {
 				setDescription(value);
 			}
 		},

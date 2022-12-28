@@ -23,7 +23,7 @@ const screens = {
 	license: License,
 };
 
-type ScreenKeys = keyof typeof screens;
+export type ScreenKeys = keyof typeof screens;
 
 interface Route {
 	key: ScreenKeys;

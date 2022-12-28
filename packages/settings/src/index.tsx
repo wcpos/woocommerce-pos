@@ -8,7 +8,7 @@ import { getFragment, isValidFragment } from '@wordpress/url';
 import { SnackbarProvider } from './components/snackbar';
 import { NoticesProvider } from './hooks/use-notices';
 import useReadyState from './hooks/use-ready-state';
-import Main from './screens';
+import Main, { ScreenKeys } from './screens';
 
 import './index.css';
 
@@ -24,8 +24,9 @@ const queryClient = new QueryClient({
 
 const App = () => {
 	const fragment = getFragment(window.location.href) || '';
-	// @TODO - validate fragment against routes
-	const initialScreen = isValidFragment(fragment) ? fragment.replace(/^#/, '') : 'general';
+	const initialScreen = isValidFragment(fragment)
+		? (fragment.replace(/^#/, '') as ScreenKeys)
+		: 'general';
 
 	const { isReady } = useReadyState({ initialScreen });
 

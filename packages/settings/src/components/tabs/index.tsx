@@ -15,7 +15,7 @@ export type NavigationState<T extends Route> = {
 
 export type TabsProps<T extends Route> = {
 	onIndexChange: (index: number) => void;
-	onTabItemHover?: (index: number, route) => void;
+	onTabItemHover?: (index: number, route: Route) => void;
 	navigationState: NavigationState<T>;
 	renderScene: (props: { route: T }) => React.ReactNode;
 	// renderLazyPlaceholder?: (props: { route: T }) => React.ReactNode;

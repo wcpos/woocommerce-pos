@@ -82,6 +82,16 @@ class Settings {
 		);
 
 		wp_enqueue_script(
+			PLUGIN_NAME . '-react-beautiful-dnd',
+			'https://unpkg.com/react-beautiful-dnd@13.1.1/dist/react-beautiful-dnd.js',
+			array(
+				'react',
+				'react-dom',
+			),
+			VERSION
+		);
+
+		wp_enqueue_script(
 			PLUGIN_NAME . '-transifex',
 			'https://cdn.jsdelivr.net/npm/@transifex/native/dist/browser.native.min.js',
 			array(),
@@ -93,6 +103,7 @@ class Settings {
 			PLUGIN_URL . $dir . '/js/settings.js',
 			array(
 				PLUGIN_NAME . '-react-query',
+				PLUGIN_NAME . '-react-beautiful-dnd',
 				PLUGIN_NAME . '-transifex',
 				'wp-element',
 				'wp-i18n',

@@ -46,7 +46,7 @@ const Access = () => {
 			<div className="sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 wcpos-p-4 wcpos-pt-0">
 				<div className="">
 					<ul>
-						{map(data, (role, id) => (
+						{map(data, (role: { name: string }, id) => (
 							<li
 								key={id}
 								className={classNames(
@@ -58,7 +58,7 @@ const Access = () => {
 									setSelected(id);
 								}}
 							>
-								{role?.name}
+								{role.name}
 							</li>
 						))}
 					</ul>

@@ -1,6 +1,6 @@
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { merge, cloneDeep } from 'lodash';
+import { merge, cloneDeep, get } from 'lodash';
 
 import useSnackbar from '../components/snackbar';
 import useNotices from '../hooks/use-notices';
@@ -8,7 +8,9 @@ import useNotices from '../hooks/use-notices';
 const placeholders = {
 	general: {},
 	checkout: {},
-	'payment-gateways': {},
+	'payment-gateways': {
+		gateways: {},
+	},
 	access: {},
 	license: {},
 };
@@ -31,6 +33,10 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				throw new Error(err.message);
 			});
 
+			if (!response) {
+				throw new Error('No response');
+			}
+
 			return response;
 		},
 		placeholderData: placeholders[id],
@@ -46,6 +52,10 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				throw new Error(err.message);
 			});
 
+			if (!response) {
+				throw new Error('No response');
+			}
+
 			return response;
 		},
 		onMutate: async (newData) => {
@@ -59,10 +69,11 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 			return { previousSettings };
 		},
 		onSettled: (data, error, variables, context) => {
-			if (error) {
-				setNotice({ type: 'error', message: error.message });
+			const errorMessage = get(error, 'message');
+			if (errorMessage) {
+				setNotice({ type: 'error', message: errorMessage });
 				// rollback data
-				return queryClient.setQueryData([id], context.previousSettings);
+				return queryClient.setQueryData([id], context?.previousSettings);
 			}
 			addSnackbar({ message: 'Saved', id });
 			return queryClient.setQueryData([id], data);

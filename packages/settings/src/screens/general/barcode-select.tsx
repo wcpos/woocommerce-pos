@@ -8,21 +8,21 @@ import {
 	ComboboxList,
 	ComboboxOption,
 } from '@reach/combobox';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { throttle } from 'lodash';
 
-interface BarcodeSelect {
+interface BarcodeSelectProps {
 	selected: string;
 	onSelect: (value: string) => void;
 }
 
-const BarcodeSelect = ({ selected, onSelect }: BarcodeSelect) => {
+const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 	const [term, setTerm] = React.useState('');
-	const { isLoading, isError, data, error } = useQuery({
+	const { data } = useQuery({
 		queryKey: ['barcodes'],
 		queryFn: async () => {
-			const response = await apiFetch({
+			const response = await apiFetch<string[]>({
 				path: `wcpos/v1/settings/general/barcodes?wcpos=1`,
 				method: 'GET',
 			}).catch((err) => {
@@ -32,17 +32,18 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelect) => {
 			// convert to array
 			return Object.values(response);
 		},
+		placeholderData: [],
 	});
 
 	// const results = isLoading ? [] : data;
 
 	const results = React.useMemo(() => {
-		const options = isLoading ? [] : data;
+		const options = data || [];
 		if (!options.includes(selected)) {
 			options.push(selected);
 		}
 		return options.sort().filter((option) => option.includes(term.trim().toLocaleLowerCase()));
-	}, [term, data, selected, isLoading]);
+	}, [term, data, selected]);
 
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setTerm(event.target.value);
 

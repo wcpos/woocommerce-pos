@@ -1,5 +1,7 @@
 import * as React from 'react';
 
+import { isString, isNumber } from 'lodash';
+
 import Checkbox from '../../components/checkbox';
 import FormRow from '../../components/form-row';
 import Toggle from '../../components/toggle';
@@ -106,7 +108,7 @@ const General = () => {
 					<React.Suspense fallback={<></>}>
 						<UserSelect
 							disabled={!!data?.default_customer_is_cashier}
-							selected={data?.default_customer}
+							selected={isNumber(data?.default_customer) ? data?.default_customer || 0 : 0}
 							onSelect={(value: number) => {
 								if (value) {
 									mutate({ default_customer: value });
@@ -140,7 +142,7 @@ const General = () => {
 				<FormRow.Col>
 					<React.Suspense fallback={<></>}>
 						<BarcodeSelect
-							selected={data?.barcode_field}
+							selected={isString(data?.barcode_field) ? data?.barcode_field || '' : ''}
 							onSelect={(value: string) => {
 								if (value) {
 									mutate({ barcode_field: value });

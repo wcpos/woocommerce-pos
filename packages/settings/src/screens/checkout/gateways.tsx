@@ -59,7 +59,13 @@ const Gateways = () => {
 	 * Sort gateways by order.
 	 * NOTE: This will convert associative array to indexed array, we will need to keyBy when saving.
 	 */
-	const gateways = sortBy(data.gateways, ['order', 'id']);
+	const gateways = sortBy(
+		data?.gateways as Record<
+			string,
+			{ id: string; title: string; order: number; enabled: boolean }
+		>,
+		['order', 'id']
+	);
 
 	const onDragEnd = React.useCallback(
 		(result: DropResult) => {

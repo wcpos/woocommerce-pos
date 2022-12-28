@@ -2,10 +2,12 @@ import * as React from 'react';
 
 import { TabItem } from './tab-item';
 
+type Route = import('./').Route;
+
 export interface TabBarProps {
-	routes: import('./').Route[];
+	routes: Route[];
 	onIndexChange: (index: number) => void;
-	onTabItemHover?: (index: number, route) => void;
+	onTabItemHover?: (index: number, route: Route) => void;
 	direction?: 'horizontal' | 'vertical';
 	focusedIndex: number;
 }

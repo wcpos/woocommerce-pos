@@ -21,7 +21,7 @@ export const TabItem = ({ title, onClick, focused, onHover }: TabItemProps) => {
 				focused ? 'wcpos-border-wp-admin-theme-color' : 'wcpos-border-transparent'
 			)}
 		>
-			{title}
+			{typeof title === 'function' ? title({ focused }) : title}
 		</button>
 	);
 };

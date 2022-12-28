@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import ShieldCheckIcon from '@heroicons/react/24/solid/ShieldCheckIcon';
 import { addQueryArgs } from '@wordpress/url';
-import { get, throttle } from 'lodash';
+import { get, throttle, isString } from 'lodash';
 
 import Button from '../../components/button';
 import FormRow from '../../components/form-row';
@@ -64,6 +64,7 @@ const License = () => {
 			if (deactivate) {
 				setKey('');
 			} else {
+				const confetti = get(window, 'confetti') as unknown as () => void;
 				if (confetti) {
 					confetti();
 				}
@@ -104,7 +105,7 @@ const License = () => {
 						<T
 							_str="License {number} has been activated."
 							_tags="wc-admin-settings"
-							number={<code>{truncate(data?.key)}</code>}
+							number={<code>{truncate(isString(data?.key) ? data?.key : '')}</code>}
 						/>
 					</p>
 					<p>

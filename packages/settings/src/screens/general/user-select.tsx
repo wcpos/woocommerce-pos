@@ -21,15 +21,20 @@ interface UserOptionProps {
 
 interface UserSelectProps {
 	disabled?: boolean;
-	initialOption: UserOptionProps;
+	selected: number;
 	onSelect: (value: number) => void;
+}
+
+interface User {
+	id: number;
+	name: string;
 }
 
 const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
 	const [term, setTerm] = React.useState<string>('');
-	const guestUser = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
+	const guestUser: User = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
 
-	const { isLoading, isError, data, error } = useQuery({
+	const { data } = useQuery<User[]>({
 		queryKey: ['users'],
 		queryFn: async () => {
 			const response = await apiFetch({
@@ -49,7 +54,7 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 		placeholderData: [guestUser],
 	});
 
-	const users = data.map((user) => {
+	const users = (data || []).map((user) => {
 		return {
 			value: user.id,
 			label: user.name,

@@ -14,7 +14,11 @@ export const SnackbarContext = React.createContext<SnackbarContextProps>({
 	// removeSnackbar: () => {},
 });
 
-export const SnackbarProvider = ({ children }) => {
+interface Props {
+	children: React.ReactNode;
+}
+
+export const SnackbarProvider = ({ children }: Props) => {
 	const [snackbars, setSnackbars] = React.useState<Snackbar[]>([]);
 
 	/**
@@ -25,7 +29,7 @@ export const SnackbarProvider = ({ children }) => {
 		setSnackbars([snackbar]);
 	};
 
-	const removeSnackbar = (id) => {
+	const removeSnackbar = (id: string) => {
 		setSnackbars((prev) => prev.filter((snackbar) => snackbar.id !== id));
 	};
 
