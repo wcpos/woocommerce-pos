@@ -92,7 +92,10 @@ module.exports = function (_env, argv) {
 				filename: './css/[name].css',
 			}),
 			new LiveReloadPlugin(),
-			new BundleAnalyzerPlugin(),
+			new BundleAnalyzerPlugin({
+				analyzerMode: 'static',
+				openAnalyzer: false,
+			}),
 		],
 		optimization: {
 			minimize: NODE_ENV === 'production',

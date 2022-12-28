@@ -22,6 +22,7 @@ assets/css/*
 !assets/css/README.md
 assets/asset-manifest.json
 assets/static
+assets/report.html
 .yarn.lock
 .yarn/install-state.gz
 .yarn/cache
