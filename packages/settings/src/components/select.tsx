@@ -1,4 +1,6 @@
 import * as React from 'react';
+
+import ChevronUpDownIcon from '@heroicons/react/24/solid/ChevronUpDownIcon';
 import {
 	ListboxInput,
 	ListboxOption,
@@ -6,7 +8,6 @@ import {
 	ListboxPopover,
 	ListboxList,
 } from '@reach/listbox';
-import ChevronUpDownIcon from '@heroicons/react/24/solid/ChevronUpDownIcon';
 
 interface OptionProps {
 	label: string;

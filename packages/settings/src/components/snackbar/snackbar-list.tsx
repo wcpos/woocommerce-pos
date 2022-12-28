@@ -9,7 +9,11 @@ export interface SnackbarListProps {
 }
 
 export const SnackbarList = ({ snackbars, removeSnackbar }: SnackbarListProps) => {
-	return snackbars.map((snackbar) => (
-		<Snackbar onRemove={() => removeSnackbar(snackbar.id)} key={snackbar.id} {...snackbar} />
-	));
+	return (
+		<>
+			{snackbars.map((snackbar) => (
+				<Snackbar onRemove={() => removeSnackbar(snackbar.id)} key={snackbar.id} {...snackbar} />
+			))}
+		</>
+	);
 };

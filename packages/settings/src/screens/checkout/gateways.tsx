@@ -3,7 +3,7 @@ import * as React from 'react';
 import { map, sortBy, keyBy } from 'lodash';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
-import DragIcon from '../../../../assets/img/drag-icon.svg';
+import DragIcon from '../../../assets/drag-icon.svg';
 import Button from '../../components/button';
 import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';

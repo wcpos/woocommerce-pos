@@ -1,8 +1,5 @@
 {
   "name": "@wcpos/settings",
-  "sideEffects": [
-    "*.css"
-  ],
   "scripts": {
     "build": "NODE_ENV=production ../../node_modules/.bin/webpack",
     "start": "../../node_modules/.bin/webpack --watch"
@@ -47,7 +44,6 @@
     "@typescript-eslint/eslint-plugin": "5.47.1",
     "@typescript-eslint/parser": "5.47.1",
     "@wcpos/eslint-config": "*",
-    "@wordpress/babel-plugin-makepot": "5.7.0",
     "@wordpress/env": "5.8.0",
     "autoprefixer": "10.4.13",
     "babel-loader": "9.1.0",

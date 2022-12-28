@@ -6,12 +6,12 @@ type Snackbar = import('./snackbar').SnackbarProps;
 
 interface SnackbarContextProps {
 	addSnackbar: (snackbar: Snackbar) => void;
-	removeSnackbar: (id: string) => void;
+	// removeSnackbar: (id: string) => void;
 }
 
 export const SnackbarContext = React.createContext<SnackbarContextProps>({
 	addSnackbar: () => {},
-	removeSnackbar: () => {},
+	// removeSnackbar: () => {},
 });
 
 export const SnackbarProvider = ({ children }) => {

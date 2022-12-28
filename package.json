@@ -3,9 +3,6 @@
 	"version": "1.0.0-alpha.1",
 	"description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
 	"main": "index.js",
-	"sideEffects": [
-		"*.css"
-	],
 	"workspaces": {
 		"packages": [
 			"packages/*"
@@ -23,9 +20,7 @@
 		"test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
 		"test:unit": "run-s test:unit:*",
 		"test": "run-s test:*",
-		"postinstall": "composer install",
 		"build:docs": "rm -rf hookdocs/ && jsdoc -c hookdoc-conf.json",
-		"precommit": "composer dump-autoload --no-dev",
 		"prepare": "husky install",
 		"settings": "yarn workspace @wcpos/settings",
 		"edit-product": "yarn workspace @wcpos/edit-product"

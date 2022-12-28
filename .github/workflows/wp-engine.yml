@@ -17,6 +17,7 @@ jobs:
       - name: Build
         run: |
           yarn install
+          composer install --no-dev
           yarn settings build
 
       - name: SSH Deploy to WP Engine

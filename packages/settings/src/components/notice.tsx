@@ -21,7 +21,7 @@ const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProp
 					status === 'success' && 'wcpos-bg-green-100 wcpos-border-l-4 wcpos-border-green-600'
 				)}
 			>
-				<p className="wcpos-flex-1">{children}</p>
+				<div className="wcpos-flex-1">{children}</div>
 				{isDismissible && <XMarkIcon onClick={onRemove} className="wcpos-h-5 wcpos-w-5" />}
 			</div>
 		</div>

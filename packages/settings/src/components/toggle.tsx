@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import { useId } from '@reach/auto-id';
 
 interface ToggleProps {

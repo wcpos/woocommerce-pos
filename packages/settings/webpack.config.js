@@ -7,18 +7,30 @@ const TerserPlugin = require('terser-webpack-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
+console.log(NODE_ENV);
 const OUTPUT = NODE_ENV === 'development' ? '../../build' : '../../assets';
 
 module.exports = function (_env, argv) {
 	const config = {
 		mode: NODE_ENV,
 		entry: {
-			settings: './index.tsx',
+			settings: './src/index.tsx',
 		},
 		output: {
 			path: path.resolve(__dirname, OUTPUT),
 			filename: 'js/[name].js',
 			publicPath: '/',
+		},
+		externals: {
+			react: 'React',
+			'react-dom': 'ReactDOM',
+			lodash: 'lodash',
+			wp: 'wp',
+			'@wordpress/element': 'wp.element',
+			'@wordpress/api-fetch': 'wp.apiFetch',
+			'@wordpress/url': 'wp.url',
+			'@tanstack/react-query': 'ReactQuery',
+			'@transifex/native': 'Transifex',
 		},
 		module: {
 			rules: [
@@ -68,9 +80,7 @@ module.exports = function (_env, argv) {
 			extensions: ['.tsx', '.ts', '.js'],
 		},
 		plugins: [
-			new ForkTsCheckerWebpackPlugin({
-				async: false,
-			}),
+			new ForkTsCheckerWebpackPlugin(),
 			// new ESLintPlugin({
 			// 	extensions: ["js", "jsx", "ts", "tsx"],
 			// }),
@@ -80,7 +90,7 @@ module.exports = function (_env, argv) {
 			new LiveReloadPlugin(),
 		],
 		optimization: {
-			minimize: NODE_ENV !== 'development',
+			minimize: NODE_ENV === 'production',
 			minimizer: [new TerserPlugin()],
 			splitChunks: {
 				name: false,
@@ -96,30 +106,6 @@ module.exports = function (_env, argv) {
 
 	if (NODE_ENV === 'development') {
 		config.devtool = 'inline-source-map';
-	}
-
-	if (NODE_ENV !== 'development') {
-		config.externals = {
-			react: 'React',
-			'react-dom': 'ReactDOM',
-			lodash: 'lodash',
-			wp: 'wp',
-			'@wordpress/element': 'wp.element',
-			'@wordpress/api-fetch': 'wp.apiFetch',
-			'@wordpress/url': 'wp.url',
-			'@tanstack/react-query': 'ReactQuery',
-			'@transifex/native': 'Transifex',
-		};
-	} else {
-		config.externals = {
-			react: 'React',
-			'react-dom': 'ReactDOM',
-			lodash: 'lodash',
-			wp: 'wp',
-			'@wordpress/element': 'wp.element',
-			'@wordpress/api-fetch': 'wp.apiFetch',
-			'@wordpress/url': 'wp.url',
-		};
 	}
 
 	return config;

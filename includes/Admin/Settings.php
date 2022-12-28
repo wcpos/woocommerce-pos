@@ -42,23 +42,31 @@ class Settings {
 	 * Output the settings pages.
 	 */
 	public function display_settings_page(): void {
-		echo '<div id="' . PLUGIN_NAME . '-settings">
-			<div id="' . PLUGIN_NAME . '-js-error" class="wrap">
-				<h1>' . __( 'Error', 'woocommerce-pos' ) . '</h1>
-				<p>' . __( 'Settings failed to load, please contact support' ) . ' <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
+		printf('<div id="woocommerce-pos-settings">
+			<div id="woocommerce-pos-js-error" class="wrap">
+				<h1>%s</h1>
+				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
 			</div>
-		</div>';
+		</div>',
+            __( 'Error', 'woocommerce-pos' ),
+            __( 'Settings failed to load, please contact support', 'woocommerce-pos' )
+		);
 	}
 
-
+	/**
+	 * Enqueue assets.
+	 *
+	 * Note: SCRIPT_DEBUG should be set in the wp-config.php file for debugging
+	 *
+	 * @return void
+	 */
 	public function enqueue_assets() {
-		if ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] ) {
-			return $this->enqueue_development_assets();
-		}
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+		$dir = $is_development ? 'build' : 'assets';
 
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
-			PLUGIN_URL . 'assets/css/settings.css',
+			PLUGIN_URL . $dir . '/css/settings.css',
 			array(),
 			VERSION
 		);
@@ -68,75 +76,43 @@ class Settings {
 			'https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js',
 			array(
 				'react',
+				'react-dom',
 			),
-			VERSION,
-			true
+			VERSION
 		);
 
 		wp_enqueue_script(
 			PLUGIN_NAME . '-transifex',
 			'https://cdn.jsdelivr.net/npm/@transifex/native/dist/browser.native.min.js',
 			array(),
-			VERSION,
-			true
-		);
-
-		wp_enqueue_script(
-			PLUGIN_NAME . '-settings',
-			PLUGIN_URL . 'assets/js/settings.js',
-			array(
-				'react',
-				PLUGIN_NAME . '-react-query',
-				'react-dom',
-				'lodash',
-				'wp-element',
-				'wp-i18n',
-				'wp-api-fetch',
-				PLUGIN_NAME . '-transifex'
-			),
-			VERSION,
-			true
-		);
-
-		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
-	}
-
-	/**
-	 * Note: SCRIPT_DEBUG should be set in the wp-config.php file for debugging
-	 * We also remove react-query from the dependencies so we can use the unminified version.
-	 */
-	public function enqueue_development_assets(): void {
-		wp_enqueue_style(
-			PLUGIN_NAME . '-settings-styles',
-			PLUGIN_URL . 'build/css/settings.css',
-			array(),
 			VERSION
 		);
 
 		wp_enqueue_script(
 			PLUGIN_NAME . '-settings',
-			PLUGIN_URL . 'build/js/settings.js',
+			PLUGIN_URL . $dir . '/js/settings.js',
 			array(
-				'react',
-				'react-dom',
-				'lodash',
+				PLUGIN_NAME . '-react-query',
+				PLUGIN_NAME . '-transifex',
 				'wp-element',
 				'wp-i18n',
 				'wp-api-fetch',
+				'lodash',
 			),
 			VERSION,
 			true
 		);
 
-		wp_enqueue_script(
-			'webpack-live-reload',
-			'http://localhost:35729/livereload.js',
-			null,
-			null,
-			true
-		);
+		if ( $is_development ) {
+			wp_enqueue_script(
+				'webpack-live-reload',
+				'http://localhost:35729/livereload.js',
+				null,
+				null,
+				true
+			);
+		}
 
 		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
-
 }

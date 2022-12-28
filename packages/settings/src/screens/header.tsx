@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import PosIcon from '../../../assets/img/wcpos-icon.svg';
+import PosIcon from '../../assets/wcpos-icon.svg';
 import { t } from '../translations';
 
 const Header = () => {
