@@ -19,11 +19,11 @@ jobs:
       - name: Build
         run: |
           yarn install
-          composer install --no-dev
+          composer install
 
       - name: Linting the code
-        run: yarn lint
+        run: npm run lint
         continue-on-error: true
 
       - name: Running the tests
-        run: yarn test
+        run: npm run test

@@ -309,6 +309,17 @@ class Settings extends Settings_Controller {
             self::$default_settings['license']
 		);
 
+		/**
+		 * Filters the license settings.
+		 *
+		 * @param {array} $settings
+		 *
+		 * @returns {array} $settings
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_license_settings
+		 */
 		return apply_filters( 'woocommerce_pos_license_settings', $license_settings );
 	}
 
@@ -384,6 +395,17 @@ class Settings extends Settings_Controller {
 			);
 		}
 
+		/**
+		 * Filters the payment gateways settings.
+		 *
+		 * @param {array} $settings
+		 *
+		 * @returns {array} $settings
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_payment_gateways_settings
+		 */
 		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
 	}
 
@@ -417,6 +439,17 @@ class Settings extends Settings_Controller {
 			self::$default_settings['general']
 		);
 
+		/**
+		 * Filters the general settings.
+		 *
+		 * @param {array} $settings
+		 *
+		 * @returns {array} $settings
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_general_settings
+		 */
 		return apply_filters( 'woocommerce_pos_general_settings', $general_settings );
 	}
 
@@ -439,6 +472,17 @@ class Settings extends Settings_Controller {
 			self::$default_settings['checkout']
 		);
 
+		/**
+		 * Filters the checkout settings.
+		 *
+		 * @param {array} $settings
+		 *
+		 * @returns {array} $settings
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_checkout_settings
+		 */
 		return apply_filters( 'woocommerce_pos_checkout_settings', $checkout_settings );
 	}
 
@@ -516,6 +560,17 @@ class Settings extends Settings_Controller {
 			}
 		}
 
+		/**
+		 * Filters the access settings.
+		 *
+		 * @param {array} $settings
+		 *
+		 * @returns {array} $settings
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_access_settings
+		 */
 		return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
 	}
 

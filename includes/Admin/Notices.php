@@ -41,6 +41,17 @@ class Notices {
 	 * Display the admin notices.
 	 */
 	public function admin_notices(): void {
+		/**
+		 * Filters the POS admin notices.
+		 *
+		 * @param {array} $notices
+		 *
+		 * @returns {array} $notices
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_admin_notices
+		 */
 		$notices = apply_filters( 'woocommerce_pos_admin_notices', self::$notices );
 		if ( empty( $notices ) ) {
 			return;

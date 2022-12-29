@@ -164,6 +164,18 @@ if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 		}
 
 		if ( file_exists( $template ) ) {
+			/**
+			 * Filters the template path.
+			 *
+			 * @param {array} $template
+			 * @param {string} $path
+			 *
+			 * @returns {array} $template
+			 *
+			 * @since 1.0.0
+			 *
+			 * @hook woocommerce_pos_locate_template
+			 */
 			return apply_filters( 'woocommerce_pos_locate_template', $template, $path );
 		}
 	}

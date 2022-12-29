@@ -23,7 +23,7 @@ class Receipt {
 		$this->order_id = $order_id;
 	}
 
-	
+
 	public function get_template(): void {
 		try {
 			// get order
@@ -62,10 +62,21 @@ class Receipt {
 	 * @return null|mixed
 	 */
 	private function get_template_path( string $file_name ) {
+		/**
+		 * Filters the path to the receipt template file.
+		 *
+		 * @param {string} $path Full server path to the template file.
+		 *
+		 * @returns {string} $path Full server path to the template file.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_print_receipt_path
+		 */
 		return apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( $file_name ) );
 	}
 
-	
+
 	private function legacy_receipt_template(): void {
 		$server     = new Server();
 		$order_json = $server->wp_rest_request( '/wc/v3/orders/' . $this->order_id );

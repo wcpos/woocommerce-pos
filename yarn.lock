@@ -3532,7 +3532,9 @@ __metadata:
     "@wordpress/babel-plugin-makepot": 5.7.0
     "@wordpress/env": 5.8.0
     husky: 8.0.2
+    jsdoc: ^4.0.0
     npm-run-all: 4.1.5
+    taffydb: ^2.7.3
     wp-hookdoc: 0.2.0
   languageName: unknown
   linkType: soft
@@ -8340,7 +8342,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"jsdoc@npm:4.0.0":
+"jsdoc@npm:4.0.0, jsdoc@npm:^4.0.0":
   version: 4.0.0
   resolution: "jsdoc@npm:4.0.0"
   dependencies:
@@ -12053,6 +12055,13 @@ __metadata:
   version: 5.3.3
   resolution: "tabbable@npm:5.3.3"
   checksum: 1aa56e1bb617cc10616c407f4e756f0607f3e2d30f9803664d70b85db037ca27e75918ed1c71443f3dc902e21dc9f991ce4b52d63a538c9b69b3218d3babcd70
+  languageName: node
+  linkType: hard
+
+"taffydb@npm:^2.7.3":
+  version: 2.7.3
+  resolution: "taffydb@npm:2.7.3"
+  checksum: 40b1c3d463c9479e1b7154018eee5da8725ce46bfbe88be9bce1f84a73459280d79cbef7a597446997bcbf66372251257981e7578b882755dedbd8e203f4e6e0
   languageName: node
   linkType: hard
 

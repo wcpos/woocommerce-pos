@@ -16,7 +16,7 @@ class Frontend {
 	public function __construct() {
 	}
 
-	
+
 	public function get_template(): void {
 		// force ssl
 		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
@@ -107,7 +107,18 @@ class Frontend {
 			'store'          => $store_settings->get_store(),
 		);
 
-		$vars          = apply_filters( 'woocommerce_pos_admin_inline_vars', $vars );
+		/**
+		 * Filters the javascript variables passed to the POS.
+		 *
+		 * @param {array} $vars
+		 *
+		 * @returns {array} $vars
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_inline_vars
+		 */
+		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
 		$dev_bundle    = 'http://localhost:19000/index.bundle?platform=web&dev=true&hot=false';
 
