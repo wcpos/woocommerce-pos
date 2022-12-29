@@ -1,7 +1,8 @@
-/node_modules
-/hookdocs
-/tests
-/.github
-
-.distignore
-.gitignore
+*
+!woocommerce-pos.php
+!uninstall.php
+!readme.txt
+!LICENSE
+!include
+!assets
+!templates

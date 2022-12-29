@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
-use WCPOS\WooCommercePOS\Traits\Settings;
+use WCPOS\WooCommercePOS\API\Settings;
 use WP_UnitTestCase;
 
 /**
@@ -11,8 +11,6 @@ use WP_UnitTestCase;
  * @coversNothing
  */
 class Test_Settings extends WP_UnitTestCase {
-	use Settings;
-
 	public function setup(): void {
 		parent::setup();
 	}
@@ -21,46 +19,23 @@ class Test_Settings extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
-	
+
 	public function test_get_general_default_settings(): void {
-		$this->assertFalse($this::get_setting('general', 'pos_only_products'));
-		$this->assertFalse($this::get_setting('general', 'decimal_qty'));
-		$this->assertTrue($this::get_setting('general', 'force_ssl'));
-		$this->assertEquals(0, $this::get_setting('general', 'default_customer'));
-		$this->assertFalse($this::get_setting('general', 'default_customer_is_cashier'));
-		$this->assertEquals('_sku', $this::get_setting('general', 'barcode_field'));
-		$this->assertTrue($this::get_setting('general', 'generate_username'));
-		$this->assertWPError($this::get_setting('general', 'no_setting'));
+		$settings = Settings::get_general_settings();
+		$this->assertTrue($settings['force_ssl']);
+		$this->assertFalse($settings['pos_only_products']);
+		$this->assertTrue($settings['generate_username']);
+		$this->assertFalse($settings['default_customer_is_cashier']);
+		$this->assertEquals(0, $settings['default_customer']);
+		$this->assertEquals('_sku', $settings['barcode_field']);
 	}
 
-	
+
 	public function test_get_checkout_default_settings(): void {
-		$this->assertEquals('wc-completed', $this::get_setting('checkout', 'order_status'));
-		$this->assertTrue($this::get_setting('checkout', 'admin_emails'));
-		$this->assertTrue($this::get_setting('checkout', 'customer_emails'));
-		$this->assertFalse($this::get_setting('checkout', 'auto_print_receipt'));
-		$this->assertEquals('pos_cash', $this::get_setting('checkout', 'default_gateway'));
-		$this->assertEquals(array(
-			array(
-				'id'          => 'pos_cash',
-				'title'       => 'Cash',
-				'description' => '',
-				'enabled'     => true,
-			),
-			array(
-				'id'          => 'pos_card',
-				'title'       => 'Card',
-				'description' => '',
-				'enabled'     => true,
-			),
-			array(
-				'id'          => 'paypal',
-				'title'       => 'PayPal',
-				'description' => '',
-				'enabled'     => true,
-			),
-		), $this::get_setting('checkout', 'gateways'));
-		$this->assertWPError($this::get_setting('checkout', 'no_setting'));
+		$settings = Settings::get_checkout_settings();
+		$this->assertEquals('wc-completed', $settings['order_status']);
+		$this->assertTrue($settings['admin_emails']);
+		$this->assertTrue($settings['customer_emails']);
 	}
 
 	// @test
