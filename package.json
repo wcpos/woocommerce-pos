@@ -20,7 +20,7 @@
 		"test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
 		"test:unit": "run-s test:unit:*",
 		"test": "run-s test:*",
-		"build:docs": "rm -rf hookdocs/ && jsdoc -c hookdoc-conf.json",
+		"build:docs": "jsdoc -c hookdoc-conf.json",
 		"prepare": "husky install",
 		"settings": "yarn workspace @wcpos/settings",
 		"edit-product": "yarn workspace @wcpos/edit-product"
