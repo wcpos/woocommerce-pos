@@ -56,8 +56,9 @@ class Gateways {
 		}
 
 		// use POS settings
-		$gateway_settings    = Settings::get_gateways();
-		$enabled_gateway_ids = array_reduce($gateway_settings, function ( $result, $gateway ) {
+		$api                 = new Settings();
+		$settings            = $api->get_payment_gateways_settings();
+		$enabled_gateway_ids = array_reduce($settings['gateways'], function ( $result, $gateway ) {
 			if ( $gateway['id'] && $gateway['enabled'] ) {
 				$result[] = $gateway['id'];
 			};

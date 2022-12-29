@@ -40,7 +40,8 @@ require_once $_tests_dir . '/includes/functions.php';
  * Manually load the plugin being tested.
  */
 function _manually_load_plugin(): void {
-	require \dirname(__FILE__, 2) . '/vendor/autoload.php';
+	require \dirname(__FILE__, 2) . '/woocommerce-pos.php';
+	require_once \dirname(__FILE__, 2) . '/includes/wcpos-functions.php';
 }
 
 tests_add_filter('muplugins_loaded', '_manually_load_plugin');

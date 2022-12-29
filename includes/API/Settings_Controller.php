@@ -14,7 +14,15 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-class Settings_Controller extends Controller {
+use WP_Error;
+
+abstract class Settings_Controller extends Controller {
+	/**
+	 * Prefix for the $wpdb->options table.
+	 * Empty here because I extend this Controller in the Pro plugin
+	 *
+	 * @var string
+	 */
 	protected static $db_prefix = '';
 	protected static $default_settings = array();
 
@@ -38,10 +46,10 @@ class Settings_Controller extends Controller {
 	 */
 	protected function save_settings( string $key, array $settings ) {
 		$success = update_option(
-			self::$db_prefix . $key,
+			static::$db_prefix . $key,
 			array_merge(
-				array( 'date_modified_gmt' => current_time( 'mysql', true ) ),
-				$settings
+				$settings,
+				array( 'date_modified_gmt' => current_time( 'mysql', true ) )
 			),
 			false
 		);
@@ -51,17 +59,5 @@ class Settings_Controller extends Controller {
 		}
 
 		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 400 ) );
-	}
-
-	/**
-	 * Merges the given array settings with the defaults.
-	 *
-	 * @param string $group
-	 * @param array $settings
-	 *
-	 * @return array
-	 */
-	public function merge_settings( array $settings, array $default ): array {
-		return wp_parse_args( array_intersect_key( $settings, $default ), $default );
 	}
 }

@@ -38,6 +38,7 @@
 	<rule ref="PHPCompatibilityWP"/>
 	<rule ref="WordPress-Extra"/>
 	<rule ref="WordPress-Docs"/>
+	<rule ref="WooCommerce-Core" />
 
 	<!-- Turns on the WordPress Standard -->
 	<rule ref="WordPress">

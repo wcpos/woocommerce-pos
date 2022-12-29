@@ -44,7 +44,6 @@ class Settings extends Settings_Controller {
 				'pos_cash' => array(
 					'order' => 0,
 					'enabled' => true,
-					'default' => true,
 				),
 				'pos_card' => array(
 					'order' => 1,
@@ -304,9 +303,9 @@ class Settings extends Settings_Controller {
 	 *
 	 */
 	public function get_license_settings() {
-        $license_settings = $this->merge_settings(
-            get_option( self::$db_prefix . 'license', array() ),
-            self::$default_settings['license']
+		$license_settings = array_replace_recursive(
+			self::$default_settings['license'],
+			get_option( self::$db_prefix . 'license', array() )
 		);
 
 		/**
@@ -366,9 +365,9 @@ class Settings extends Settings_Controller {
 	 */
 	public function get_payment_gateways_settings() {
 		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
-		$gateways_settings = $this->merge_settings(
-			get_option( self::$db_prefix . 'payment_gateways', array() ),
-			self::$default_settings['payment_gateways']
+		$gateways_settings = array_replace_recursive(
+			self::$default_settings['payment_gateways'],
+			get_option( self::$db_prefix . 'payment_gateways', array() )
 		);
 
 		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale
@@ -383,15 +382,15 @@ class Settings extends Settings_Controller {
 			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
 				continue;
 			}
-			$response['gateways'][ $id ] = $this->merge_settings(
-				isset( $gateways_settings['gateways'][ $id ] ) ? $gateways_settings['gateways'][ $id ] : array(),
+			$response['gateways'][ $id ] = array_replace_recursive(
 				array(
 					'id' => $gateway->id,
 					'title' => $gateway->title,
 					'description' => $gateway->description,
 					'enabled' => false,
 					'order' => 999,
-				)
+				),
+				isset( $gateways_settings['gateways'][ $id ] ) ? $gateways_settings['gateways'][ $id ] : array()
 			);
 		}
 
@@ -434,9 +433,9 @@ class Settings extends Settings_Controller {
 	 * @return array
 	 */
 	public function get_general_settings(): array {
-		$general_settings = $this->merge_settings(
-			get_option( self::$db_prefix . 'general', array() ),
-			self::$default_settings['general']
+		$general_settings = array_replace_recursive(
+			self::$default_settings['general'],
+			get_option( self::$db_prefix . 'general', array() )
 		);
 
 		/**
@@ -467,9 +466,9 @@ class Settings extends Settings_Controller {
 	 * @return array
 	 */
 	public function get_checkout_settings(): array {
-		$checkout_settings = $this->merge_settings(
-			get_option( self::$db_prefix . 'checkout', array() ),
-			self::$default_settings['checkout']
+		$checkout_settings = array_replace_recursive(
+			self::$default_settings['checkout'],
+			get_option( self::$db_prefix . 'checkout', array() )
 		);
 
 		/**

@@ -27,6 +27,16 @@ class Test_Settings_API extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
+	public function mock_rest_request( array $params ) {
+		$request = $this->getMockBuilder( 'WP_REST_Request' )
+			->setMethods( array( 'get_params' ) )
+			->getMock();
+
+		$request->method( 'get_params' )
+			->willReturn( $params );
+
+		return $request;
+	}
 
 	public function test_get_general_default_settings(): void {
 		$settings = $this->api->get_general_settings();
@@ -38,7 +48,6 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertEquals('_sku', $settings['barcode_field']);
 	}
 
-
 	public function test_get_checkout_default_settings(): void {
 		$settings = $this->api->get_checkout_settings();
 		$this->assertEquals('wc-completed', $settings['order_status']);
@@ -46,8 +55,55 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue($settings['customer_emails']);
 	}
 
-	// @test
-	//  public function test_get_general_settings() {
-	//      $this->assertEquals( array(), $this::get_settings( 'general' ) );
-	//  }
+	public function test_get_payment_gateways_default_settings(): void {
+		$settings = $this->api->get_payment_gateways_settings();
+		$this->assertEquals('pos_cash', $settings['default_gateway']);
+		$this->assertIsArray($settings['gateways']);
+
+		$gateways = $settings['gateways'];
+		$this->assertTrue($gateways['pos_cash']['enabled']);
+		$this->assertEquals(0, $gateways['pos_cash']['order']);
+	}
+
+	public function test_update_general_settings(): void {
+		$request = $this->mock_rest_request( array( 'pos_only_products' => false ) );
+		$response = $this->api->update_general_settings( $request );
+		$this->assertFalse($response['pos_only_products']);
+
+		$request = $this->mock_rest_request( array( 'pos_only_products' => true ) );
+		$response = $this->api->update_general_settings( $request );
+		$this->assertTrue($response['pos_only_products']);
+	}
+
+	public function test_update_checkout_settings(): void {
+		$request = $this->mock_rest_request( array( 'admin_emails' => false ) );
+		$response = $this->api->update_checkout_settings( $request );
+		$this->assertFalse($response['admin_emails']);
+
+		$request = $this->mock_rest_request( array( 'admin_emails' => true ) );
+		$response = $this->api->update_checkout_settings( $request );
+		$this->assertTrue($response['admin_emails']);
+	}
+
+	public function test_update_payment_gateways_settings(): void {
+		$request = $this->mock_rest_request( array( 'default_gateway' => 'pos_cash' ) );
+		$response = $this->api->update_payment_gateways_settings( $request );
+		$this->assertEquals('pos_cash', $response['default_gateway']);
+
+		$request = $this->mock_rest_request( array( 'default_gateway' => 'pos_card' ) );
+		$response = $this->api->update_payment_gateways_settings( $request );
+		$this->assertEquals('pos_card', $response['default_gateway']);
+
+		$request = $this->mock_rest_request(
+			array(
+				'gateways' => array(
+					'pos_cash' => array(
+						'enabled' => false,
+					),
+				)
+			)
+		);
+		$response = $this->api->update_payment_gateways_settings( $request );
+		$this->assertFalse($response['gateways']['pos_cash']['enabled']);
+	}
 }
