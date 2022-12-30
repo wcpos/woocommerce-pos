@@ -65,6 +65,11 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertEquals(0, $gateways['pos_cash']['order']);
 	}
 
+	public function test_get_license_default_settings(): void {
+		$settings = $this->api->get_license_settings();
+		$this->assertEmpty($settings);
+	}
+
 	public function test_update_general_settings(): void {
 		$request = $this->mock_rest_request( array( 'pos_only_products' => false ) );
 		$response = $this->api->update_general_settings( $request );

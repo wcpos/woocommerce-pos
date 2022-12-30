@@ -29,7 +29,8 @@ jobs:
         run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
 
 
-      - uses: technote-space/get-diff-action@v6
+      - name: Check git diff
+        uses: technote-space/get-diff-action@v6
         with:
           SET_ENV_NAME_COUNT: 'FILE_COUNT'
           SET_ENV_NAME_LINES: 'LINE_COUNT'
