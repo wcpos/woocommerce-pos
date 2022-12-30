@@ -1,8 +1,1 @@
-*
-!woocommerce-pos.php
-!uninstall.php
-!readme.txt
-!LICENSE
-!include
-!assets
-!templates
+node_modules
