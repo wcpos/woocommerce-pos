@@ -28,6 +28,6 @@ jobs:
           # Deploy Options
           # SRC_PATH: "."
           REMOTE_PATH: "wp-content/plugins/woocommerce-pos"
-          FLAGS: -azvr --inplace --delete --exclude-from=.distignore
+          FLAGS: -azvr --inplace --delete  --exclude=".*" --include-from=.rsync
           #          SCRIPT: "path/yourscript.sh"
           CACHE_CLEAR: TRUE
