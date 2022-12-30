@@ -10,6 +10,7 @@ on:
 jobs:
   update-pot:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,7 +27,14 @@ jobs:
 
       - name: Update POT file
         run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
-      # Remove the next four lines and uncomment the last five lines once the process has been confirmed to work as desired.
+
+
+      - uses: technote-space/get-diff-action@v6
+        with:
+          SET_ENV_NAME_COUNT: FILE_COUNT
+          SET_ENV_NAME_LINES: LINE_COUNT
+          PATTERNS: |
+            '*.pot'
 
 #      - name: Upload POT file
 #        uses: actions/upload-artifact@v3
@@ -35,6 +43,7 @@ jobs:
 #          path: languages/woocommerce-pos.pot
 
       - name: Commit updated POT file
+        if: env.FILE_COUNT != env.LINE_COUNT
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: 'chore(l10n): update languages/woocommerce-pos.pot'

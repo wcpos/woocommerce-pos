@@ -14,10 +14,6 @@
 	<!-- sniff both PHP and JS -->
 	<arg name="extensions" value="php/PHP,js/JS,jsx/JS,ts/JS,tsx/JS"/>
 
-	<!-- Exclude paths -->
-	<exclude-pattern>*/node_modules/*</exclude-pattern>
-	<exclude-pattern>*/vendor/*</exclude-pattern>
-
 	<!-- Show sniff codes in all reports, and progress when running -->
 	<arg value="snp"/>
 	<arg name="colors"/>
