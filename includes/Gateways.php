@@ -12,10 +12,13 @@ namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\API\Settings;
 
-class Gateways {
-	public function __construct() {
-		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
-		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ) );
+class Gateways
+{
+
+	public function __construct()
+	{
+		add_action('woocommerce_payment_gateways', array($this, 'payment_gateways'));
+		add_filter('woocommerce_available_payment_gateways', array($this, 'available_payment_gateways'));
 	}
 
 	/**
@@ -27,14 +30,15 @@ class Gateways {
 	 *
 	 * @return array
 	 */
-	public function payment_gateways( array $gateways ) {
+	public function payment_gateways(array $gateways)
+	{
 		global $plugin_page;
 
 		// Remove gateways from WooCommerce settings, ie: they cannot be activated
-		if ( is_admin() && 'wc-settings' == $plugin_page ) {
+		if (is_admin() && 'wc-settings' == $plugin_page) {
 			return $gateways;
 		}
-		
+
 		// All other cases, the default POS gateways are added
 		return array_merge($gateways, array(
 			'WCPOS\WooCommercePOS\Gateways\Cash',
@@ -47,19 +51,20 @@ class Gateways {
 	 *
 	 * @return array
 	 */
-	public function available_payment_gateways( array $gateways ): array {
+	public function available_payment_gateways(array $gateways): array
+	{
 		$_available_gateways = array();
 
 		// early exit
-		if ( ! woocommerce_pos_request() ) {
+		if (!woocommerce_pos_request()) {
 			return $gateways;
 		}
 
 		// use POS settings
-		$api                 = new Settings();
-		$settings            = $api->get_payment_gateways_settings();
-		$enabled_gateway_ids = array_reduce($settings['gateways'], function ( $result, $gateway ) {
-			if ( $gateway['id'] && $gateway['enabled'] ) {
+		$api = new Settings();
+		$settings = $api->get_payment_gateways_settings();
+		$enabled_gateway_ids = array_reduce($settings['gateways'], function ($result, $gateway) {
+			if ($gateway['id'] && $gateway['enabled']) {
 				$result[] = $gateway['id'];
 			};
 
@@ -70,9 +75,9 @@ class Gateways {
 		 * @TODO - WC()->payment_gateways->payment_gateways vs WC_Payment_Gateways::instance()->payment_gateways()
 		 * @TODO - review settings/api/frontend overlap
 		 */
-		foreach ( WC()->payment_gateways->payment_gateways as $gateway ) {
-			if ( \in_array( $gateway->id, $enabled_gateway_ids, true ) ) {
-				$_available_gateways[ $gateway->id ] = $gateway;
+		foreach (WC()->payment_gateways->payment_gateways as $gateway) {
+			if (\in_array($gateway->id, $enabled_gateway_ids, true)) {
+				$_available_gateways[$gateway->id] = $gateway;
 			}
 		}
 

@@ -28,6 +28,12 @@ jobs:
       - name: Update POT file
         run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
 
+      - name: Commit updated POT file
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: 'chore(l10n): update languages/woocommerce-pos.pot'
+          file_pattern: '*.pot'
+          push_options: '--dry-run' # We just want to check the diff first
 
       - name: Check git diff
         uses: technote-space/get-diff-action@v6
@@ -37,15 +43,8 @@ jobs:
           PATTERNS: |
             '*.pot'
 
-#      - name: Upload POT file
-#        uses: actions/upload-artifact@v3
-#        with:
-#          name: woocommerce-pos.pot
-#          path: languages/woocommerce-pos.pot
-
       - name: Commit updated POT file
         if: env.FILE_COUNT != env.LINE_COUNT
         uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: 'chore(l10n): update languages/woocommerce-pos.pot'
-          file_pattern: '*.pot'
+
+
