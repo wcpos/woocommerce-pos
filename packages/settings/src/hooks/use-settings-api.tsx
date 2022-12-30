@@ -30,11 +30,13 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				path: endpoint,
 				method: 'GET',
 			}).catch((err) => {
-				throw new Error(err.message);
+				console.error(err);
+				return err;
 			});
 
-			if (!response) {
-				throw new Error('No response');
+			// if we have an error response, set the notice
+			if (response?.code && response?.message) {
+				setNotice({ type: 'error', message: response?.message });
 			}
 
 			return response;
@@ -49,11 +51,13 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				method: 'POST',
 				data,
 			}).catch((err) => {
-				throw new Error(err.message);
+				console.error(err);
+				return err;
 			});
 
-			if (!response) {
-				throw new Error('No response');
+			// if we have an error response, set the notice
+			if (response?.code && response?.message) {
+				setNotice({ type: 'error', message: response?.message });
 			}
 
 			return response;

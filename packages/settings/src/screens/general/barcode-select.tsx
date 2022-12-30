@@ -12,6 +12,8 @@ import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { throttle } from 'lodash';
 
+import useNotices from '../../hooks/use-notices';
+
 interface BarcodeSelectProps {
 	selected: string;
 	onSelect: (value: string) => void;
@@ -19,6 +21,8 @@ interface BarcodeSelectProps {
 
 const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 	const [term, setTerm] = React.useState('');
+	const { setNotice } = useNotices();
+
 	const { data } = useQuery({
 		queryKey: ['barcodes'],
 		queryFn: async () => {
@@ -26,8 +30,14 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 				path: `wcpos/v1/settings/general/barcodes?wcpos=1`,
 				method: 'GET',
 			}).catch((err) => {
-				throw new Error(err.message);
+				console.error(err);
+				return err;
 			});
+
+			// if we have an error response, set the notice
+			if (response?.code && response?.message) {
+				setNotice({ type: 'error', message: response?.message });
+			}
 
 			// convert to array
 			return Object.values(response);
@@ -38,7 +48,7 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 	// const results = isLoading ? [] : data;
 
 	const results = React.useMemo(() => {
-		const options = data || [];
+		const options = (data || []) as string[];
 		if (!options.includes(selected)) {
 			options.push(selected);
 		}

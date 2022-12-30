@@ -15,7 +15,7 @@
 		"cli": "wp-env run cli",
 		"wp": "wp-env run cli wp",
 		"pretest": "wp-env start --xdebug=coverage && wp-env run composer 'install --no-interaction'",
-		"lint:php": "wp-env run composer run-script lint",
+		"lint:php": "phpcs -q --report=checkstyle | cs2pr",
 		"lint": "run-s lint:*",
 		"test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
 		"test:unit": "run-s test:unit:*",

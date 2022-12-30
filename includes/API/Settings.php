@@ -364,6 +364,8 @@ class Settings extends Settings_Controller {
 	 *
 	 */
 	public function get_payment_gateways_settings() {
+		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
+		WC_Payment_Gateways::instance()->init();
 		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
 		$gateways_settings = array_replace_recursive(
 			self::$default_settings['payment_gateways'],

@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { throttle, get } from 'lodash';
 
+import useNotices from '../../hooks/use-notices';
 import { t } from '../../translations';
 
 interface UserOptionProps {
@@ -33,16 +34,23 @@ interface User {
 const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
 	const [term, setTerm] = React.useState<string>('');
 	const guestUser: User = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
+	const { setNotice } = useNotices();
 
 	const { data } = useQuery<User[]>({
 		queryKey: ['users'],
 		queryFn: async () => {
-			const response = await apiFetch({
+			const response = await apiFetch<Record<string, unknown>>({
 				path: `wp/v2/users?search=${term}`,
 				method: 'GET',
 			}).catch((err) => {
-				throw new Error(err.message);
+				console.error(err);
+				return err;
 			});
+
+			// if we have an error response, set the notice
+			if (response?.code && response?.message) {
+				setNotice({ type: 'error', message: response?.message });
+			}
 
 			if (Array.isArray(response)) {
 				response.unshift(guestUser);

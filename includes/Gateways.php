@@ -34,7 +34,7 @@ class Gateways {
 		if ( is_admin() && 'wc-settings' == $plugin_page ) {
 			return $gateways;
 		}
-
+		
 		// All other cases, the default POS gateways are added
 		return array_merge($gateways, array(
 			'WCPOS\WooCommercePOS\Gateways\Cash',

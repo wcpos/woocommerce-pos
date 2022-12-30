@@ -5,6 +5,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { map } from 'lodash';
 
 import Select from '../../components/select';
+import useNotices from '../../hooks/use-notices';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
@@ -12,6 +13,8 @@ interface OrderStatusSelectProps {
 }
 
 const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) => {
+	const { setNotice } = useNotices();
+
 	const { data: options } = useQuery({
 		queryKey: ['order-statuses'],
 		queryFn: async () => {
@@ -19,8 +22,14 @@ const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) =
 				path: `wcpos/v1/settings/checkout/order-statuses?wcpos=1`,
 				method: 'GET',
 			}).catch((err) => {
-				throw new Error(err.message);
+				console.error(err);
+				return err;
 			});
+
+			// if we have an error response, set the notice
+			if (response?.code && response?.message) {
+				setNotice({ type: 'error', message: response?.message });
+			}
 
 			return map(response, (label, value) => ({
 				label,
