@@ -1,1 +1,8 @@
-node_modules
+\*
+!woocommerce-pos.php
+!uninstall.php
+!readme.txt
+!LICENSE
+!include
+!assets
+!templates
