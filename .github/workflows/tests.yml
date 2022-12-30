@@ -3,8 +3,10 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
+    paths:
+      - "**.php"
+      - "**.tsx"
+      - "**.ts"
 
 jobs:
   test:
@@ -19,7 +21,7 @@ jobs:
       - name: Setup PHP with tools
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '7.3'
+          php-version: "7.3"
           tools: composer, cs2pr, phpcs
 
       - name: Build
