@@ -31,8 +31,8 @@ jobs:
 
       - uses: technote-space/get-diff-action@v6
         with:
-          SET_ENV_NAME_COUNT: FILE_COUNT
-          SET_ENV_NAME_LINES: LINE_COUNT
+          SET_ENV_NAME_COUNT: 'FILE_COUNT'
+          SET_ENV_NAME_LINES: 'LINE_COUNT'
           PATTERNS: |
             '*.pot'
 
