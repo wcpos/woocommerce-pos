@@ -26,8 +26,8 @@ jobs:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: wcposdev
           # Deploy Options
-          SRC_PATH: "./"
+          # SRC_PATH: "."
           REMOTE_PATH: "wp-content/plugins/woocommerce-pos"
-          FLAGS: -azvr --inplace --delete --exclude-from=distignore.txt
+          FLAGS: -azvr --inplace --delete --exclude-from=.distignore
           #          SCRIPT: "path/yourscript.sh"
           CACHE_CLEAR: TRUE
