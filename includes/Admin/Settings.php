@@ -67,7 +67,9 @@ class Settings {
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
 			PLUGIN_URL . $dir . '/css/settings.css',
-			array(),
+			array(
+				'wp-components',
+			),
 			VERSION
 		);
 
@@ -105,6 +107,7 @@ class Settings {
 				PLUGIN_NAME . '-react-query',
 				PLUGIN_NAME . '-react-beautiful-dnd',
 				PLUGIN_NAME . '-transifex',
+				'wp-components',
 				'wp-element',
 				'wp-i18n',
 				'wp-api-fetch',

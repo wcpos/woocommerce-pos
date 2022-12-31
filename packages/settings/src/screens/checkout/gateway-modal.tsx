@@ -1,9 +1,7 @@
 import * as React from 'react';
 
-import XMarkIcon from '@heroicons/react/24/solid/XMarkIcon';
-import { Dialog } from '@reach/dialog';
+import { Button, Modal } from '@wordpress/components';
 
-import Button from '../../components/button';
 import Notice from '../../components/notice';
 import { t, T } from '../../translations';
 
@@ -46,19 +44,15 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 	);
 
 	return (
-		<Dialog
-			onDismiss={closeModal}
-			className="wcpos-rounded-lg"
-			initialFocusRef={inputRef}
-			aria-label={`${gateway.title} Settings`}
+		<Modal
+			focusOnMount
+			shouldCloseOnEsc
+			shouldCloseOnClickOutside
+			overlayClassName="my-extra-modal-overlay-class"
+			title={gateway.title}
+			onRequestClose={closeModal}
+			className="wcpos-max-w-md"
 		>
-			<h2 className="wcpos-mt-0 wcpos-relative">
-				{gateway.title}
-				<button className="wcpos-absolute wcpos-top-0 wcpos-right-0">
-					<XMarkIcon onClick={closeModal} className="wcpos-w-5 wcpos-h-5" />
-				</button>
-			</h2>
-
 			<Notice status="info" isDismissible={false}>
 				<T
 					_str="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the {link}."
@@ -98,12 +92,12 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				/>
 			</div>
 			<div className="wcpos-text-right wcpos-pt-4">
-				<Button background="clear" onClick={closeModal}>
-					{t('Cancel', { _tags: 'wc-admin-settings' })}
+				<Button onClick={closeModal}>{t('Cancel', { _tags: 'wc-admin-settings' })}</Button>
+				<Button variant="primary" onClick={handleSave}>
+					{t('Save', { _tags: 'wc-admin-settings' })}
 				</Button>
-				<Button onClick={handleSave}>{t('Save', { _tags: 'wc-admin-settings' })}</Button>
 			</div>
-		</Dialog>
+		</Modal>
 	);
 };
 

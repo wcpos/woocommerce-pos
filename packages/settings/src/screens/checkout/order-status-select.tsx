@@ -2,9 +2,9 @@ import * as React from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
+import { SelectControl } from '@wordpress/components';
 import { map } from 'lodash';
 
-import Select from '../../components/select';
 import useNotices from '../../hooks/use-notices';
 
 interface OrderStatusSelectProps {
@@ -40,10 +40,9 @@ const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) =
 	});
 
 	return (
-		<Select
-			name="order-status"
+		<SelectControl
 			options={options ? options : []}
-			selected={selectedStatus}
+			value={selectedStatus}
 			onChange={(order_status: string) => {
 				mutate({ order_status });
 			}}

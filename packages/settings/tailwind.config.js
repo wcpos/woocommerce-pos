@@ -16,8 +16,8 @@ module.exports = {
 	},
 	variants: {},
 	plugins: [],
-	// corePlugins: {
-	//     preflight: false
-	// },
+	corePlugins: {
+		preflight: false,
+	},
 	// important: '#woocommerce-pos-settings'
 };

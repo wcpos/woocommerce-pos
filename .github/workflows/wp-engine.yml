@@ -17,7 +17,7 @@ jobs:
         run: |
           yarn install
           composer install --no-dev
-          yarn settings build
+          yarn build:js
 
       - name: Deploy to WP Engine
         uses: wpengine/github-action-wpe-site-deploy@v3

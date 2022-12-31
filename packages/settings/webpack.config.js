@@ -29,6 +29,7 @@ module.exports = function (_env, argv) {
 			'react-dom': 'ReactDOM',
 			lodash: 'lodash',
 			wp: 'wp',
+			'@wordpress/components': 'wp.components',
 			'@wordpress/element': 'wp.element',
 			'@wordpress/api-fetch': 'wp.apiFetch',
 			'@wordpress/url': 'wp.url',

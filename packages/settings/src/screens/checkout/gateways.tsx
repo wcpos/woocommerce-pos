@@ -1,11 +1,10 @@
 import * as React from 'react';
 
+import { Button, FormToggle } from '@wordpress/components';
 import { map, sortBy, keyBy } from 'lodash';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 import DragIcon from '../../../assets/drag-icon.svg';
-import Button from '../../components/button';
-import Toggle from '../../components/toggle';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 import GatewayModal from './gateway-modal';
@@ -153,13 +152,13 @@ const Gateways = () => {
 														}}
 													/>
 												</td>
-												<td className="wcpos-px-4 wcpos-py-2">
+												<td className="wcpos-px-4 wcpos-py-2 text-ellipsis overflow-hidden">
 													<strong>{item.title}</strong>
 												</td>
 												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">{item.id}</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
-													<Toggle
-														name={item.id}
+												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
+													<FormToggle
+														label=""
 														checked={item.enabled}
 														onChange={() => {
 															mutate({
@@ -174,7 +173,7 @@ const Gateways = () => {
 												</td>
 												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-right">
 													<Button
-														background="outline"
+														variant="secondary"
 														onClick={() => {
 															// @ts-ignore
 															modalGateway.current = item;

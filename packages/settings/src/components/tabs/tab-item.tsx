@@ -17,7 +17,7 @@ export const TabItem = ({ title, onClick, focused, onHover }: TabItemProps) => {
 			}}
 			onClick={onClick}
 			className={classNames(
-				'wcpos-text-sm wcpos-px-4 wcpos-py-2 wcpos-border-b-4',
+				'wcpos-text-sm wcpos-px-4 wcpos-py-2 wcpos-border-b-4 wcpos-bg-transparent wcpos-cursor-pointer',
 				focused ? 'wcpos-border-wp-admin-theme-color' : 'wcpos-border-transparent'
 			)}
 		>

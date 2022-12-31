@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import snackbar from '.';
 import { Snackbar, SnackbarProps } from './snackbar';
 
 export interface SnackbarListProps {

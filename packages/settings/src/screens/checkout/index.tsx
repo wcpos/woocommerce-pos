@@ -1,11 +1,11 @@
 import * as React from 'react';
 
+import { ToggleControl } from '@wordpress/components';
 import { isString } from 'lodash';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import Error from '../../components/error';
-import FormRow from '../../components/form-row';
-import Toggle from '../../components/toggle';
+import Label from '../../components/label';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 import Gateways from './gateways';
@@ -25,15 +25,15 @@ const Checkout = () => {
 
 	return (
 		<>
-			<FormRow>
-				<FormRow.Label
-					id="order-status"
-					className="wcpos-text-right"
-					help={t('Change the default order status for POS sales', { _tags: 'wp-admin-settings' })}
-				>
-					{t('Completed order status', { _tags: 'wp-admin-settings' })}
-				</FormRow.Label>
-				<FormRow.Col>
+			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
+				<div className="wcpos-flex sm:wcpos-justify-end">
+					<Label
+						tip={t('Change the default order status for POS sales', { _tags: 'wp-admin-settings' })}
+					>
+						{t('Completed order status', { _tags: 'wp-admin-settings' })}
+					</Label>
+				</div>
+				<div>
 					<ErrorBoundary FallbackComponent={Error}>
 						<React.Suspense fallback={null}>
 							<OrderStatusSelect
@@ -42,48 +42,45 @@ const Checkout = () => {
 							/>
 						</React.Suspense>
 					</ErrorBoundary>
-				</FormRow.Col>
-			</FormRow>
-			<FormRow>
-				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
-					<Toggle
-						name="admin-emails"
+				</div>
+				<div></div>
+				<div></div>
+				<div className="wcpos-col-span-2">
+					<ToggleControl
+						label={
+							<Label
+								tip={t('Send WooCommerce notification emails for POS orders', {
+									_tags: 'wp-admin-settings',
+								})}
+							>
+								{t('Send customer emails', { _tags: 'wp-admin-settings' })}
+							</Label>
+						}
 						checked={!!data?.admin_emails}
 						onChange={(admin_emails: boolean) => {
 							mutate({ admin_emails });
 						}}
 					/>
-				</FormRow.Col>
-				<FormRow.Label
-					id="admin-emails"
-					className="wcpos-col-span-2"
-					help={t('Send WooCommerce notification emails for POS orders', {
-						_tags: 'wp-admin-settings',
-					})}
-				>
-					{t('Send admin emails', { _tags: 'wp-admin-settings' })}
-				</FormRow.Label>
-			</FormRow>
-			<FormRow>
-				<FormRow.Col className="wcpos-flex wcpos-justify-self-end">
-					<Toggle
-						name="customer-emails"
+				</div>
+				<div></div>
+				<div className="wcpos-col-span-2">
+					<ToggleControl
+						label={
+							<Label
+								tip={t('Send WooCommerce notification emails for POS orders', {
+									_tags: 'wp-admin-settings',
+								})}
+							>
+								{t('Send admin emails', { _tags: 'wp-admin-settings' })}
+							</Label>
+						}
 						checked={!!data?.customer_emails}
 						onChange={(customer_emails: boolean) => {
 							mutate({ customer_emails });
 						}}
 					/>
-				</FormRow.Col>
-				<FormRow.Label
-					id="customer-emails"
-					className="wcpos-col-span-2"
-					help={t('Send WooCommerce notification emails for POS orders', {
-						_tags: 'wp-admin-settings',
-					})}
-				>
-					{t('Send customer emails', { _tags: 'wp-admin-settings' })}
-				</FormRow.Label>
-			</FormRow>
+				</div>
+			</div>
 
 			<div className="wcpos-px-4 wcpos-pb-5">
 				<h2 className="wcpos-text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>

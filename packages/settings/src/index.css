@@ -2,37 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-@import '@reach/tooltip/styles.css';
-@import '@reach/combobox/styles.css';
-@import '@reach/checkbox/styles.css';
-@import '@reach/listbox/styles.css';
-@import '@reach/dialog/styles.css';
-
-/**
- * Reach UI Combobox
- */
-[data-suggested-value] {
-	font-weight: normal !important;
+/*
+1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
+2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
+*/
+*,
+::before,
+::after {
+	/* 1 */
+	box-sizing: border-box;
+	/* 2 */
+	border-width: 0;
+	/* 2 */
+	border-style: solid;
+	/* 2 */
+	border-color: #e5e7eb;
 }
 
-[data-user-value] {
-	color: var(--wp-admin-theme-color, #007cba);
-}
+/*
+1. Remove text indentation from table contents in Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
+2. Correct table border color inheritance in all Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
+3. Remove gaps between table borders by default.
+*/
 
-/**
- * Reach UI Listbox
- */
-[data-reach-listbox-option][data-current-nav] {
-	background-color: var(--wp-admin-theme-color, #007cba);
+#woocommerce-pos-settings table {
+	/* 1 */
+	text-indent: 0;
+	/* 2 */
+	border-color: inherit;
+	/* 3 */
+	border-collapse: collapse;
 }
 
 /**
  * forms.css gives input[type="checkbox"] display: inline-block
  * we need it to be hidden sometimes 
  */
-.wcpos-hidden {
+/* .wcpos-hidden {
 	display: none !important;
-}
+} */
 
 /**
  * Give JS 10 seconds to load before showing the error

@@ -3,6 +3,7 @@ node_modules
 packages
 tests
 languages
+report.html
 README.md
 composer.json
 composer.lock

@@ -1,24 +1,11 @@
 import * as React from 'react';
 
-import ChevronUpDownIcon from '@heroicons/react/24/solid/ChevronUpDownIcon';
-import {
-	Combobox,
-	ComboboxInput,
-	ComboboxPopover,
-	ComboboxList,
-	ComboboxOption,
-} from '@reach/combobox';
 import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { throttle, get } from 'lodash';
+import { ComboboxControl } from '@wordpress/components';
 
 import useNotices from '../../hooks/use-notices';
 import { t } from '../../translations';
-
-interface UserOptionProps {
-	value: number;
-	label: string;
-}
 
 interface UserSelectProps {
 	disabled?: boolean;
@@ -26,13 +13,15 @@ interface UserSelectProps {
 	onSelect: (value: number) => void;
 }
 
+/**
+ * Note: ComboboxControl wants a string for the value, api returns a number for user.id
+ */
 interface User {
 	id: number;
 	name: string;
 }
 
 const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
-	const [term, setTerm] = React.useState<string>('');
 	const guestUser: User = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
 	const { setNotice } = useNotices();
 
@@ -40,7 +29,7 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 		queryKey: ['users'],
 		queryFn: async () => {
 			const response = await apiFetch<Record<string, unknown>>({
-				path: `wp/v2/users?search=${term}`,
+				path: `wp/v2/users`,
 				method: 'GET',
 			}).catch((err) => {
 				console.error(err);
@@ -62,57 +51,25 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 		placeholderData: [guestUser],
 	});
 
-	const users = (data || []).map((user) => {
-		return {
-			value: user.id,
-			label: user.name,
-		};
-	});
-
-	const selectedUser = users.find((user) => user.value === selected);
-
-	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setTerm(event.target.value);
+	const options = React.useMemo(() => {
+		return (data || []).map((user) => {
+			return {
+				value: String(user.id),
+				label: user.name,
+			};
+		});
+	}, [data]);
 
 	return (
-		<Combobox
-			aria-labelledby="user-select"
-			onSelect={(val: any) => {
-				// https://github.com/reach/reach-ui/issues/502
+		<ComboboxControl
+			value={String(selected || 0)}
+			options={options}
+			onChange={(value) => {
+				const id = value ? Number(value) : 0;
+				onSelect(id);
 			}}
-			openOnFocus={true}
-		>
-			<div className="wcpos-relative">
-				<ComboboxInput
-					id="user-select"
-					name="user-select"
-					placeholder={(selectedUser && selectedUser.label) || ''}
-					disabled={disabled}
-					onChange={throttle(handleChange, 100)}
-					className="wcpos-w-full wcpos-px-2 wcpos-pr-10 wcpos-rounded wcpos-border wcpos-border-gray-300 wcpos-leading-8 focus:wcpos-border-wp-admin-theme-color"
-				/>
-				<ChevronUpDownIcon
-					className="wcpos-absolute wcpos-p-1.5 wcpos-m-px wcpos-top-0 wcpos-right-0 wcpos-w-8 wcpos-h-8 wcpos-text-gray-400 wcpos-pointer-events-none"
-					aria-hidden="true"
-				/>
-			</div>
-			<ComboboxPopover className="wcpos-mt-1 wcpos-overflow-auto wcpos-text-base wcpos-bg-white border-0 wcpos-rounded-md wcpos-shadow-lg wcpos-max-h-60 wcpos-ring-1 wcpos-ring-black wcpos-ring-opacity-5 focus:wcpos-outline-none sm:wcpos-text-sm">
-				<ComboboxList>
-					{users.length > 0 ? (
-						users.map((option) => (
-							<ComboboxOption
-								key={option.value}
-								value={option.label}
-								onClick={() => {
-									onSelect(option.value);
-								}}
-							/>
-						))
-					) : (
-						<div className="wcpos-p-2">No user found</div>
-					)}
-				</ComboboxList>
-			</ComboboxPopover>
-		</Combobox>
+			allowReset={false}
+		/>
 	);
 };
 

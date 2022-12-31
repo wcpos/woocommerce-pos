@@ -55,9 +55,11 @@ const Main = ({ initialScreen }: Props) => {
 		return (
 			<ErrorBoundary FallbackComponent={Error}>
 				{notice && (
-					<Notice status={notice.type} onRemove={() => setNotice(null)}>
-						{notice.message}
-					</Notice>
+					<div className="wcpos-p-4">
+						<Notice status={notice.type} onRemove={() => setNotice(null)}>
+							{notice.message}
+						</Notice>
+					</div>
 				)}
 				<React.Suspense fallback={<></>}>
 					<Component />
@@ -92,7 +94,7 @@ const Main = ({ initialScreen }: Props) => {
 					}}
 				/>
 			</div>
-			<div className="wcpos-bg-white wcpos-rounded-lg wcpos-py-4">
+			<div className="wcpos-bg-white wcpos-rounded-lg">
 				<Footer />
 			</div>
 		</div>

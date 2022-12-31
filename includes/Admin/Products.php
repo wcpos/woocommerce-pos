@@ -72,7 +72,7 @@ class Products {
 		}
 	}
 
-	
+
 	public function woocommerce_product_options_sku(): void {
 		woocommerce_wp_text_input(
 			array(
@@ -93,7 +93,7 @@ class Products {
 		}
 	}
 
-	
+
 	public function woocommerce_product_after_variable_attributes(): void {
 		woocommerce_wp_text_input(
 			array(
@@ -245,15 +245,15 @@ class Products {
 			return;
 		}
 
-		//      if ( defined( '\SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
-		//          $script = PLUGIN_URL . 'assets/js/src/products.js';
-		//      } else {
-		//          $script = PLUGIN_URL . 'assets/js/products.min.js';
-		//      }
+		if ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] ) {
+			$script = PLUGIN_URL . 'build/js/edit-product.js';
+		} else {
+			$script = PLUGIN_URL . 'assets/js/edit-product.js';
+		}
 
 		wp_enqueue_script(
-			PLUGIN_NAME . '-admin-edit',
-			PLUGIN_URL . 'assets/js/products.js',
+			PLUGIN_NAME . '-edit-product',
+			$script,
 			false,
 			VERSION,
 			true

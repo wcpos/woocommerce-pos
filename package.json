@@ -23,7 +23,8 @@
 		"build:docs": "jsdoc -c hookdoc-conf.json",
 		"prepare": "husky install",
 		"settings": "yarn workspace @wcpos/settings",
-		"edit-product": "yarn workspace @wcpos/edit-product"
+		"edit-product": "yarn workspace @wcpos/edit-product",
+		"build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build"
 	},
 	"repository": {
 		"type": "git",

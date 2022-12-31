@@ -1,11 +1,10 @@
 import * as React from 'react';
 
-import ShieldCheckIcon from '@heroicons/react/24/solid/ShieldCheckIcon';
+import { Button } from '@wordpress/components';
 import { addQueryArgs } from '@wordpress/url';
 import { get, throttle, isString } from 'lodash';
 
-import Button from '../../components/button';
-import FormRow from '../../components/form-row';
+import Label from '../../components/label';
 import useNotices from '../../hooks/use-notices';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t, T } from '../../translations';
@@ -80,17 +79,33 @@ const License = () => {
 	if (!data?.instance) {
 		return (
 			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
-				<div>
-					<ShieldCheckIcon className="wcpos-w-20 wcpos-h-20 sm:wcpos-ml-auto wcpos-text-wp-admin-theme-color" />
+				<div className="sm:wcpos-text-right wcpos-text-8xl">
+					<a href="https://wcpos.com/pro">
+						<img
+							src="https://wcpos.com/wp-content/themes/woocommerce-pos/img/woopos-pro-logo-600.png"
+							alt-="WooCommerce POS Pro"
+							width={100}
+							height={100}
+						/>
+					</a>
 				</div>
-				<p className="wcpos-col-span-2">
-					{t(
-						'If you would like to support the development of WooCommerce POS, please consider purchasing a Pro license.',
-						{
-							_tags: 'wp-admin-settings',
-						}
-					)}
-				</p>
+				<div className="wcpos-col-span-2">
+					<p>
+						{t(
+							'If you would like to support the development of WooCommerce POS, please consider purchasing a Pro license.',
+							{
+								_tags: 'wp-admin-settings',
+							}
+						)}
+					</p>
+					<p>
+						<a href="https://wcpos.com/pro">
+							{t('Upgrade to WooCommerce POS Pro', {
+								_tags: 'wp-admin-settings',
+							})}
+						</a>
+					</p>
+				</div>
 			</div>
 		);
 	}
@@ -98,7 +113,7 @@ const License = () => {
 	if (data.activated) {
 		return (
 			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
-				<div className="wcpos-text-right wcpos-text-8xl">🎉</div>
+				<div className="sm:wcpos-text-right wcpos-text-8xl">🎉</div>
 				<div className="wcpos-col-span-2">
 					<h3>{t('Thank You!', { _tags: 'wp-admin-settings' })}</h3>
 					<p>
@@ -113,18 +128,20 @@ const License = () => {
 							_tags: 'wp-admin-settings',
 						})}
 					</p>
-					<Button onClick={() => handleActivation(true)}>Deactivate</Button>
+					<Button variant="primary" onClick={() => handleActivation(true)}>
+						Deactivate
+					</Button>
 				</div>
 			</div>
 		);
 	}
 
 	return (
-		<FormRow>
-			<FormRow.Label id="license-key" className="wcpos-text-right">
-				{t('License Key', { _tags: 'wp-admin-settings' })}
-			</FormRow.Label>
-			<FormRow.Col>
+		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
+			<div className="wcpos-flex sm:wcpos-justify-end">
+				<Label>{t('License Key', { _tags: 'wp-admin-settings' })}</Label>
+			</div>
+			<div>
 				<input
 					type="text"
 					name="license-key"
@@ -132,13 +149,13 @@ const License = () => {
 					className="wcpos-mt-1 focus:wcpos-ring-indigo-500 focus:wcpos-border-wp-admin-theme-color wcpos-block wcpos-w-full wcpos-shadow-sm sm:wcpos-text-sm wcpos-border-gray-300 wcpos-rounded-md"
 					onChange={throttle(handleChange, 100)}
 				/>
-			</FormRow.Col>
-			<FormRow.Col>
-				<Button disabled={!key} onClick={() => handleActivation()}>
+			</div>
+			<div>
+				<Button variant="primary" disabled={!key} onClick={() => handleActivation()}>
 					{t('Activate', { _tags: 'wp-admin-settings' })}
 				</Button>
-			</FormRow.Col>
-		</FormRow>
+			</div>
+		</div>
 	);
 };
 

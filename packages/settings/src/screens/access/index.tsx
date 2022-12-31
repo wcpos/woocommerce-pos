@@ -1,9 +1,9 @@
 import * as React from 'react';
 
+import { CheckboxControl } from '@wordpress/components';
 import classNames from 'classnames';
 import { map, get } from 'lodash';
 
-import Checkbox from '../../components/checkbox';
 import Notice from '../../components/notice';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { UT, T } from '../../translations';
@@ -23,26 +23,28 @@ const Access = () => {
 
 	return (
 		<>
-			<Notice status="info" isDismissible={false}>
-				<UT
-					_str="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
+			<div className="wcpos-p-4">
+				<Notice status="info" isDismissible={false}>
+					<UT
+						_str="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
 					It is recommended that you <strong>do not change</strong> the default settings unless you
 					are fully aware of the consequences."
-					_tags="wc-admin-settings"
-					_inline
-				/>
-				&nbsp;
-				<T
-					_str="For more information please visit the {link}"
-					_tags="wc-admin-settings"
-					link={
-						<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer">
-							<T _str="documentation" _tags="wc-admin-settings" />
-						</a>
-					}
-				/>
-				.
-			</Notice>
+						_tags="wc-admin-settings"
+						_inline
+					/>
+					&nbsp;
+					<T
+						_str="For more information please visit the {link}"
+						_tags="wc-admin-settings"
+						link={
+							<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer">
+								<T _str="documentation" _tags="wc-admin-settings" />
+							</a>
+						}
+					/>
+					.
+				</Notice>
+			</div>
 			<div className="sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 wcpos-p-4 wcpos-pt-0">
 				<div className="">
 					<ul>
@@ -81,32 +83,24 @@ const Access = () => {
 										{map(caps, (checked, label) => {
 											const disabled = selected === 'administrator' && label === 'read';
 											return (
-												<label
+												<CheckboxControl
 													key={label}
-													className={classNames(
-														'wcpos-block wcpos-mb-1',
-														disabled ? 'wcpos-cursor-not-allowed' : ''
-													)}
-												>
-													<Checkbox
-														key={label}
-														checked={checked}
-														disabled={disabled}
-														onChange={(value) => {
-															// mutate({ cap: label, value, group, role: selected });
-															mutate({
-																[selected]: {
-																	capabilities: {
-																		[group]: {
-																			[label]: value,
-																		},
+													label={label}
+													checked={checked}
+													disabled={disabled}
+													onChange={(value) => {
+														// mutate({ cap: label, value, group, role: selected });
+														mutate({
+															[selected]: {
+																capabilities: {
+																	[group]: {
+																		[label]: value,
 																	},
 																},
-															});
-														}}
-													/>
-													{label}
-												</label>
+															},
+														});
+													}}
+												/>
 											);
 										})}
 									</div>
