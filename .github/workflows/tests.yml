@@ -31,8 +31,8 @@ jobs:
 
       - name: Linting the code
         run: |
-          phpcs -i
-          phpcs --config-show
+          vendor/bin/phpcs -i
+          vendor/bin/phpcs --config-show
           npm run lint
         continue-on-error: true
 

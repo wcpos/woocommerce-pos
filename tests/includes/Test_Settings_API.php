@@ -95,10 +95,10 @@ class Test_Settings_API extends WP_UnitTestCase {
 
 	public function mock_rest_request( array $params ) {
 		$request = $this->getMockBuilder( 'WP_REST_Request' )
-			->setMethods( array( 'get_params' ) )
+			->setMethods( array( 'get_json_params' ) )
 			->getMock();
 
-		$request->method( 'get_params' )
+		$request->method( 'get_json_params' )
 			->willReturn( $params );
 
 		return $request;

@@ -43,6 +43,7 @@
   "scripts": {
     "format": "phpcbf --standard=./.phpcs.xml.dist --report-summary --report-source",
     "lint": "phpcs --standard=./.phpcs.xml.dist",
+    "lint-report": "phpcs --standard=./.phpcs.xml.dist --report=checkstyle",
     "fix": "php-cs-fixer fix ."
   },
   "autoload": {

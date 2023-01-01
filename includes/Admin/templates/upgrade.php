@@ -145,3 +145,4 @@
 	<?php echo $upgrade; ?>
 
 </div>
+
