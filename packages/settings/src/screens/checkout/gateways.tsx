@@ -146,6 +146,7 @@ const Gateways = () => {
 														type="radio"
 														value={item.id}
 														checked={data?.default_gateway === item.id}
+														disabled={!item.enabled}
 														className=""
 														onChange={() => {
 															mutate({ default_gateway: item.id });

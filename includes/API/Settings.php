@@ -415,7 +415,7 @@ class Settings extends Settings_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_payment_gateways_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->get_payment_gateways_settings(), $request->get_params() );
+		$settings = array_replace_recursive( $this->get_payment_gateways_settings(), $request->get_json_params() );
 		return $this->save_settings( 'payment_gateways', $settings );
 	}
 
@@ -427,7 +427,7 @@ class Settings extends Settings_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->get_general_settings(), $request->get_params() );
+		$settings = array_replace_recursive( $this->get_general_settings(), $request->get_json_params() );
 		return $this->save_settings( 'general', $settings );
 	}
 
@@ -460,7 +460,7 @@ class Settings extends Settings_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->get_checkout_settings(), $request->get_params() );
+		$settings = array_replace_recursive( $this->get_checkout_settings(), $request->get_json_params() );
 		return $this->save_settings( 'checkout', $settings );
 	}
 
@@ -494,7 +494,7 @@ class Settings extends Settings_Controller {
 	 */
 	public function update_access_settings( WP_REST_Request $request ) {
 		global $wp_roles;
-		$data = $request->get_params();
+		$data = $request->get_json_params();
 
 		// get all role slugs
 		$roles = array_keys( $wp_roles->roles );
