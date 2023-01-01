@@ -14,10 +14,10 @@ use const DOING_AJAX;
 
 class Activator {
 	// minimum requirements
-	public const WC_MIN_VERSION  = '2.3.7';
-	public const PHP_MIN_VERSION = '5.6';
+	public const WC_MIN_VERSION  = '5.3';
+	public const PHP_MIN_VERSION = '7.0';
 
-	
+
 	public function __construct() {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
 		add_action( 'wpmu_new_blog', array( $this, 'activate_new_site' ) );
