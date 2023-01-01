@@ -30,7 +30,10 @@ jobs:
           composer install
 
       - name: Linting the code
-        run: npm run lint
+        run: |
+          phpcs -i
+          phpcs --config-show
+          npm run lint
         continue-on-error: true
 
       - name: Running the tests

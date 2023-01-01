@@ -3,6 +3,7 @@
 /**
  * POS Product Admin Class
  * - pos only products.
+ * - barcode field.
  *
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  *

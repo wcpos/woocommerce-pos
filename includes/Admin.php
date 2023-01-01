@@ -21,6 +21,17 @@ class Admin {
 	}
 
 	/**
+	 * Load admin subclasses.
+	 */
+	private function init(): void {
+		new Admin\Notices();
+		new Admin\Menu();
+		new Admin\Settings();
+		//		new Admin\Status();
+		//		new Admin\Gateways();
+	}
+
+	/**
 	 * Conditionally load subclasses.
 	 *
 	 * @param $current_screen
@@ -45,16 +56,5 @@ class Admin {
 		if ( 'plugins' == $current_screen->id ) {
 			new Admin\Plugins();
 		}
-	}
-
-	/**
-	 * Load admin subclasses.
-	 */
-	private function init(): void {
-		new Admin\Notices();
-		new Admin\Menu();
-		new Admin\Settings();
-		//		new Admin\Status();
-		//		new Admin\Gateways();
 	}
 }
