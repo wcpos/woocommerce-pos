@@ -3630,7 +3630,7 @@ __metadata:
     "@wcpos/tsconfig": "*"
     eslint: 8.31.0
     eslint-config-airbnb: 19.0.4
-    eslint-config-prettier: 8.5.0
+    eslint-config-prettier: 8.6.0
     eslint-config-universe: ^11.1.1
     eslint-plugin-import: 2.26.0
     eslint-plugin-jest: 27.1.7
@@ -6495,7 +6495,18 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint-config-prettier@npm:8.5.0, eslint-config-prettier@npm:^8.5.0":
+"eslint-config-prettier@npm:8.6.0":
+  version: 8.6.0
+  resolution: "eslint-config-prettier@npm:8.6.0"
+  peerDependencies:
+    eslint: ">=7.0.0"
+  bin:
+    eslint-config-prettier: bin/cli.js
+  checksum: ff0d0dfc839a556355422293428637e8d35693de58dabf8638bf0b6529131a109d0b2ade77521aa6e54573bb842d7d9d322e465dd73dd61c7590fa3834c3fa81
+  languageName: node
+  linkType: hard
+
+"eslint-config-prettier@npm:^8.5.0":
   version: 8.5.0
   resolution: "eslint-config-prettier@npm:8.5.0"
   peerDependencies:
