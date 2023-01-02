@@ -3672,7 +3672,7 @@ __metadata:
     "@wordpress/api-fetch": 6.20.0
     "@wordpress/components": ^23.0.0
     "@wordpress/element": 5.0.0
-    "@wordpress/env": 5.8.0
+    "@wordpress/env": 5.9.0
     "@wordpress/url": 3.24.0
     autoprefixer: 10.4.13
     babel-loader: 9.1.0
@@ -3722,7 +3722,7 @@ __metadata:
   resolution: "@wcpos/woocommerce-pos@workspace:."
   dependencies:
     "@wordpress/babel-plugin-makepot": 5.7.0
-    "@wordpress/env": 5.8.0
+    "@wordpress/env": 5.9.0
     husky: 8.0.2
     jsdoc: ^4.0.0
     npm-run-all: 4.1.5
@@ -4106,9 +4106,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@wordpress/env@npm:5.8.0":
-  version: 5.8.0
-  resolution: "@wordpress/env@npm:5.8.0"
+"@wordpress/env@npm:5.9.0":
+  version: 5.9.0
+  resolution: "@wordpress/env@npm:5.9.0"
   dependencies:
     chalk: ^4.0.0
     copy-dir: ^1.3.0
@@ -4124,7 +4124,7 @@ __metadata:
     yargs: ^17.3.0
   bin:
     wp-env: bin/wp-env
-  checksum: 57cc1b4834aa8809453ab91f540863794de1f4b7101c49ef7ac88315d7a307a54abf2c9dfb33d949f9176570c21d4e18e558f83308bc54da4fb779a00fc7ebb6
+  checksum: b0551917ac2b672512a14a6a63387bdbfd90ef18e2f9821913e5d36051541123abf1d5e9d513c2d7961c62c31b3368279da90785ef59327b4899bf30e0c3a842
   languageName: node
   linkType: hard
 
