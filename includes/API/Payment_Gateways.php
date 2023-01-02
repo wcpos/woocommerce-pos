@@ -2,10 +2,16 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WC_Payment_Gateway;
 use WP_REST_Request;
+use WP_REST_Response;
 
 class Payment_Gateways {
+	/* @var WP_REST_Request $request */
 	private $request;
+
+	/* @var $settings */
+	private $settings;
 
 	/**
 	 * Payment Gateways constructor.
@@ -14,8 +20,10 @@ class Payment_Gateways {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
+		$this->settings = woocommerce_pos_get_settings( 'payment_gateways' );
 
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ), 10, 4 );
+		add_filter( 'woocommerce_rest_prepare_payment_gateway', array( $this, 'prepare_payment_gateway' ), 10, 3 );
 	}
 
 	/**
@@ -35,25 +43,25 @@ class Payment_Gateways {
 	}
 
 	/**
-	 * Returns array of all gateway ids, titles.
+	 * Filter payment gateway objects returned from the REST API.
 	 *
-	 * @param array $fields
-	 *
-	 * @return array|void
+	 * @param WP_REST_Response $response The response object.
+	 * @param WC_Payment_Gateway $gateway  Payment gateway object.
+	 * @param WP_REST_Request $request  Request object.
 	 */
-	public function get_all_posts( array $fields = array() ) {
-		$pos_gateways         = Settings::get_setting( 'checkout', 'gateways' );
-		$enabled_pos_gateways = array();
+	public function prepare_payment_gateway( WP_REST_Response $response, WC_Payment_Gateway $gateway, WP_REST_Request $request ): WP_REST_Response {
+		$pos_setting = $this->settings['gateways'][ $gateway->id ] ?? null;
+		$data  = $response->get_data();
 
-		for ( $i = 0; $i < \count( $pos_gateways ); $i ++ ) {
-			if ( $pos_gateways[ $i ]['enabled'] ) {
-				$gateway = $pos_gateways[ $i ];
-
-				$gateway['order']       = $i;
-				$enabled_pos_gateways[] = $gateway;
-			}
+		if ( $pos_setting ) {
+			$data['enabled'] = $pos_setting['enabled'];
+			$data['order']   = $pos_setting['order'];
+		} else {
+			$data['enabled'] = false;
 		}
 
-		return $enabled_pos_gateways;
+		$response->set_data( $data );
+
+		return $response;
 	}
 }

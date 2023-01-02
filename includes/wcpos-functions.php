@@ -99,29 +99,31 @@ if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
 /*
  * Helper function to get WCPOS settings
  *
- * @param string $group
+ * @param string $id
  * @param string $key
  * @param mixed $default
  *
  * @return mixed
  */
 if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
-	function woocommerce_pos_get_settings( $group, $key = null ) {
+	function woocommerce_pos_get_settings( $id, $key = null ) {
 		$api = new Settings();
-		$settings = $api->get_settings( $group );
+		$settings = $api->get_settings( $id );
 
-		if ( ! $key ) {
+		if ( is_wp_error( $settings ) ) {
 			return $settings;
 		}
 
-		if ( isset( $settings[ $key ] ) ) {
-			return $settings[ $key ];
+		if ( $key && ! isset( $settings[ $key ] ) ) {
+			return new WP_Error(
+				'woocommerce_pos_settings_error',
+				/* translators: 1. %s: Settings group id, ie: 'general' or 'checkout' 2. Settings key for a group, eg: 'barcode_field' */
+				sprintf( __( 'Settings with id %s and key %s not found', 'woocommerce-pos' ), $id, $key ),
+				array( 'status' => 400 )
+			);
 		}
 
-		return new WP_Error(
-			'woocommerce_pos_settings_error',
-			'Settings key not found'
-		);
+		return $key ? $settings[ $key ] : $settings;
 	}
 }
 

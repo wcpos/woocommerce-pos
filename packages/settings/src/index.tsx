@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { render } from '@wordpress/element';
 import { getFragment, isValidFragment } from '@wordpress/url';
+import { ErrorBoundary } from 'react-error-boundary';
 
+import Error from './components/error';
 import { SnackbarProvider } from './components/snackbar';
 import { NoticesProvider } from './hooks/use-notices';
 import useReadyState from './hooks/use-ready-state';
@@ -46,9 +48,11 @@ const App = () => {
 };
 
 render(
-	<QueryClientProvider client={queryClient}>
-		<App />
-		<ReactQueryDevtools initialIsOpen={true} />
-	</QueryClientProvider>,
+	<ErrorBoundary FallbackComponent={Error}>
+		<QueryClientProvider client={queryClient}>
+			<App />
+			<ReactQueryDevtools initialIsOpen={true} />
+		</QueryClientProvider>
+	</ErrorBoundary>,
 	document.getElementById('woocommerce-pos-settings')
 );

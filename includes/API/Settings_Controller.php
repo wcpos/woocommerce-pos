@@ -27,26 +27,32 @@ abstract class Settings_Controller extends Controller {
 	protected static $default_settings = array();
 
 	/**
-	 * @param string $key
+	 * @param string $id
 	 * @return array|mixed|WP_Error|null
 	 */
-	public function get_settings( string $key ) {
-		$method_name = 'get_' . $key . '_settings';
+	public function get_settings( string $id ) {
+		$method_name = 'get_' . $id . '_settings';
+
 		if ( method_exists( $this, $method_name ) ) {
 			return $this->$method_name();
-		} else {
-			return new WP_Error( 'cant-get', __( 'message', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
+
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			/* translators: %s: Settings group id, ie: 'general' or 'checkout' */
+			sprintf( __( 'Settings with id %s not found', 'woocommerce-pos' ), $id ),
+			array( 'status' => 400 )
+		);
 	}
 
 	/**
-	 * @param string $key
+	 * @param string $id
 	 * @param array $settings
 	 * @return array|mixed|WP_Error|null
 	 */
-	protected function save_settings( string $key, array $settings ) {
+	protected function save_settings( string $id, array $settings ) {
 		$success = update_option(
-			static::$db_prefix . $key,
+			static::$db_prefix . $id,
 			array_merge(
 				$settings,
 				array( 'date_modified_gmt' => current_time( 'mysql', true ) )
@@ -55,9 +61,14 @@ abstract class Settings_Controller extends Controller {
 		);
 
 		if ( $success ) {
-			return $this->get_settings( $key );
+			return $this->get_settings( $id );
 		}
 
-		return new WP_Error( 'cant-save', __( 'message', 'woocommerce-pos' ), array( 'status' => 400 ) );
+		return new WP_Error(
+			'woocommerce_pos_settings_error',
+			/* translators: %s: Settings group id, ie: 'general' or 'checkout' */
+			sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
+			array( 'status' => 400 )
+		);
 	}
 }

@@ -32,7 +32,7 @@ class Gateways {
 	public function payment_gateways( array $gateways ) {
 		global $plugin_page;
 
-		// Remove gateways from WooCommerce settings, ie: they cannot be activated
+		// Early exit for WooCommerce settings, ie: don't show POS gateways
 		if ( is_admin() && 'wc-settings' == $plugin_page ) {
 			return $gateways;
 		}
