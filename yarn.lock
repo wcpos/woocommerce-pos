@@ -3266,20 +3266,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/parser@npm:5.47.1":
-  version: 5.47.1
-  resolution: "@typescript-eslint/parser@npm:5.47.1"
+"@typescript-eslint/parser@npm:5.49.0":
+  version: 5.49.0
+  resolution: "@typescript-eslint/parser@npm:5.49.0"
   dependencies:
-    "@typescript-eslint/scope-manager": 5.47.1
-    "@typescript-eslint/types": 5.47.1
-    "@typescript-eslint/typescript-estree": 5.47.1
+    "@typescript-eslint/scope-manager": 5.49.0
+    "@typescript-eslint/types": 5.49.0
+    "@typescript-eslint/typescript-estree": 5.49.0
     debug: ^4.3.4
   peerDependencies:
     eslint: ^6.0.0 || ^7.0.0 || ^8.0.0
   peerDependenciesMeta:
     typescript:
       optional: true
-  checksum: 36806686a2c5cc60558c09b13e885861aa21ec6250539d8d3d3c8abb90b321662e57dacec44915c87726a5a0d74187b58a65880a0613024eaeeb7ad0197a345d
+  checksum: 87b3760cfc29b3edd3d28fe0d5e9e5a3833d60398d7779ecc657b9e3bfec624cd464176e26b24b0761fb79cc88daddae19560340f91119c4856b91f9663594dd
   languageName: node
   linkType: hard
 
@@ -3327,6 +3327,16 @@ __metadata:
     "@typescript-eslint/types": 5.47.1
     "@typescript-eslint/visitor-keys": 5.47.1
   checksum: 73e2e2949b6e0122d89cfd44e1d24eda38d774899b834746700a4f1eb096effd1432c953f8be743a3ea3c7fc8fbf6e0882b11ee0f39b7ced6d8abf6a8665f1c8
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/scope-manager@npm:5.49.0":
+  version: 5.49.0
+  resolution: "@typescript-eslint/scope-manager@npm:5.49.0"
+  dependencies:
+    "@typescript-eslint/types": 5.49.0
+    "@typescript-eslint/visitor-keys": 5.49.0
+  checksum: 466047e24ff8a4195f14aadde39375f22891bdaced09e58c89f2c32af0aa4a0d87e71a5f006f6ab76858e6f30c4b764b1e0ef7bc26713bb78add30638108c45f
   languageName: node
   linkType: hard
 
@@ -3385,6 +3395,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@typescript-eslint/types@npm:5.49.0":
+  version: 5.49.0
+  resolution: "@typescript-eslint/types@npm:5.49.0"
+  checksum: 41f72a043007fc3f3356b5a38d7bfa54871545b4a309810a062f044cff25122413a9660ce6d83d1221762f60d067351d020b0cb68f7e1279817f53e77ce8f33d
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/typescript-estree@npm:5.46.0":
   version: 5.46.0
   resolution: "@typescript-eslint/typescript-estree@npm:5.46.0"
@@ -3436,6 +3453,24 @@ __metadata:
     typescript:
       optional: true
   checksum: 803214a53fd4faf19b6b325dd4e8ddaa5bb1ebb9b52358d26ebeaeb86b431cea5bc09f3b43ca8abfdd3a72fdea667467a1abfda50cbad866696ec5739afae2ac
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/typescript-estree@npm:5.49.0":
+  version: 5.49.0
+  resolution: "@typescript-eslint/typescript-estree@npm:5.49.0"
+  dependencies:
+    "@typescript-eslint/types": 5.49.0
+    "@typescript-eslint/visitor-keys": 5.49.0
+    debug: ^4.3.4
+    globby: ^11.1.0
+    is-glob: ^4.0.3
+    semver: ^7.3.7
+    tsutils: ^3.21.0
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: f331af9f0ef3ce3157c421b8cc727dec5aa0a60add305aa4c676a02c63ec07799105268af192c5ed193a682b7ed804564d29d49bdbd2019678e495d80e65e29a
   languageName: node
   linkType: hard
 
@@ -3520,6 +3555,16 @@ __metadata:
     "@typescript-eslint/types": 5.47.1
     eslint-visitor-keys: ^3.3.0
   checksum: b4d1f4daa67e962d22c41325d9dcb6b2efde1caf354a2edb5bf682b92ab8c6205435d0b12f39ce9771955250e26f2a6f03adabb37e62e5aac8225691a59ef153
+  languageName: node
+  linkType: hard
+
+"@typescript-eslint/visitor-keys@npm:5.49.0":
+  version: 5.49.0
+  resolution: "@typescript-eslint/visitor-keys@npm:5.49.0"
+  dependencies:
+    "@typescript-eslint/types": 5.49.0
+    eslint-visitor-keys: ^3.3.0
+  checksum: 46dc7bc713e8825d1fccba521fdf7c6e2f8829e491c2afd44dbe4105c6432e3c3dfe7e1ecb221401269d639264bb4af77b60a7b65521fcff9ab02cd31d8ef782
   languageName: node
   linkType: hard
 
@@ -3626,7 +3671,7 @@ __metadata:
   dependencies:
     "@rushstack/eslint-patch": ^1.2.0
     "@typescript-eslint/eslint-plugin": ^5.47.1
-    "@typescript-eslint/parser": 5.47.1
+    "@typescript-eslint/parser": 5.49.0
     "@wcpos/tsconfig": "*"
     eslint: 8.31.0
     eslint-config-airbnb: 19.0.4
@@ -3667,7 +3712,7 @@ __metadata:
     "@types/react-dom": 18.0.10
     "@types/wordpress__components": ^23.0.1
     "@typescript-eslint/eslint-plugin": 5.47.1
-    "@typescript-eslint/parser": 5.47.1
+    "@typescript-eslint/parser": 5.49.0
     "@wcpos/eslint-config": "*"
     "@wordpress/api-fetch": 6.20.0
     "@wordpress/components": ^23.0.0
