@@ -12,7 +12,9 @@ namespace WCPOS\WooCommercePOS;
 
 use WP_HTTP_Response;
 use WP_REST_Request;
+use WP_REST_Response;
 use WP_REST_Server;
+use Ramsey\Uuid\Uuid;
 
 class API {
 	/**
@@ -23,7 +25,7 @@ class API {
 	protected $controllers = array();
 	private $wc_rest_api_handler;
 
-	
+
 	public function __construct() {
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
@@ -43,6 +45,9 @@ class API {
 
 		// Adds authentication to for JWT bearer tokens
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+
+		// Adds uuid for the WordPress install
+		add_filter( 'rest_index', array( $this, 'rest_index' ), 10, 1 );
 
 		/*
 		 * These filters allow changes to the WC REST API response
@@ -125,6 +130,23 @@ class API {
 		}
 
 		return $header;
+	}
+
+	/**
+	 * Add uuid to the WP REST API index.
+	 *
+	 * @param WP_REST_Response $response Response data
+	 * @return WP_REST_Response
+	 */
+	public function rest_index( WP_REST_Response $response ): WP_REST_Response {
+		$uuid = get_option( 'woocommerce_pos_uuid' );
+		if ( ! $uuid ) {
+			$uuid = Uuid::uuid4()->toString();
+			update_option( 'woocommerce_pos_uuid', $uuid );
+		}
+		$response->data['uuid'] = $uuid;
+
+		return $response;
 	}
 
 	/**

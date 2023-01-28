@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
+use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Stores;
 
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -75,12 +76,24 @@ class Frontend {
 		$store_settings = new Stores();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
 
+		$site_uuid = get_option( 'woocommerce_pos_uuid' );
+		if ( ! $site_uuid ) {
+			$site_uuid = Uuid::uuid4()->toString();
+			update_option( 'woocommerce_pos_uuid', $site_uuid );
+		}
+
+		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( ! $user_uuid ) {
+			$user_uuid = Uuid::uuid4()->toString();
+			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
+		}
+
 		$vars = array(
 			'version'        => VERSION,
 			'manifest'       => $github_url . 'metadata.json',
 			'homepage'       => woocommerce_pos_url(),
-			// @TODO change prop name
-			'site'           => array(
+			'site' => array(
+				'uuid' => $site_uuid,
 				'url'             => get_option( 'siteurl' ),
 				'name'            => get_option( 'blogname' ),
 				'description'     => get_option( 'blogdescription' ),
@@ -91,20 +104,23 @@ class Frontend {
 				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
 				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
 				'locale'          => get_locale(),
+				'wp_credentials' => array(
+					array(
+						'uuid' => $user_uuid,
+						'id'           => $user->ID,
+						'username'     => $user->user_login,
+						'first_name'   => $user->user_firstname,
+						'last_name'    => $user->user_lastname,
+						'email'        => $user->user_email,
+						'display_name' => $user->display_name,
+						'nice_name'    => $user->user_nicename,
+						'last_access'  => '',
+						'avatar_url'   => get_avatar_url( $user->ID ),
+						'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
+						'stores'       => array( $store_settings->get_store() ),
+					),
+				),
 			),
-			'wp_credentials' => array(
-				'id'           => $user->ID,
-				'username'     => $user->user_login,
-				'first_name'   => $user->user_firstname,
-				'last_name'    => $user->user_lastname,
-				'email'        => $user->user_email,
-				'display_name' => $user->display_name,
-				'nice_name'    => $user->user_nicename,
-				'last_access'  => '',
-				'avatar_url'   => get_avatar_url( $user->ID ),
-				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
-			),
-			'store'          => $store_settings->get_store(),
 		);
 
 		/**

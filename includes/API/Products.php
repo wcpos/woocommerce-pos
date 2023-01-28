@@ -2,6 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use Ramsey\Uuid\Uuid;
 use WC_Data;
 use WP_Query;
 use WP_REST_Request;
@@ -35,6 +36,14 @@ class Products {
 	public function product_response( WP_REST_Response $response, WC_Data $product, WP_REST_Request $request ): WP_REST_Response {
 		// get the old product data
 		$data = $response->get_data();
+
+		// add uuid
+		$data['uuid'] = $product->get_meta( '_woocommerce_pos_uuid' );
+		if ( ! $data['uuid'] ) {
+			$data['uuid'] = Uuid::uuid4()->toString();
+			$product->update_meta_data( '_woocommerce_pos_uuid', $data['uuid'] );
+			$product->save();
+		}
 
 		// set thumbnail
 		$data['thumbnail'] = $this->get_thumbnail( $product->get_id() );

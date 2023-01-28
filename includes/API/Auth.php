@@ -13,11 +13,13 @@ namespace WCPOS\WooCommercePOS\API;
 use Exception;
 use Firebase\JWT\JWT as FirebaseJWT;
 use Firebase\JWT\Key as FirebaseKey;
+use Ramsey\Uuid\Uuid;
 use WP_Error;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use WP_User;
 
 class Auth extends Controller {
 	/**
@@ -245,23 +247,36 @@ class Auth extends Controller {
 			),
 		);
 
-		/** Let the user modify the token data before the sign. */
+		/**
+		 * Let the user modify the token data before the sign.
+		 *
+		 * @param {string} $token
+		 * @param {WP_User} $user
+		 *
+		 * @returns {string} Token
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_jwt_auth_token_before_sign
+		 */
 		$token = FirebaseJWT::encode( apply_filters( 'woocommerce_pos_jwt_auth_token_before_sign', $token, $user ), $this->get_secret_key(), 'HS256' );
 
 		/** The token is signed, now create the object with no sensible user data to the client*/
-		$data = array(
-			'jwt'          => $token,
-			'id'           => $user->ID,
-			'username'     => $user->user_login,
-			'email'        => $user->user_email,
-			'first_name'   => $user->user_firstname,
-			'last_name'    => $user->user_lastname,
-			'nice_name'    => $user->user_nicename,
-			'display_name' => $user->display_name,
-			'avatar_url'   => get_avatar_url( $user->ID ),
-		);
+		$data = $this->get_user_data( $user );
+		$data['jwt'] = $token;
 
-		/** Let the user modify the data before sending it back */
+		/**
+		 * Let the user modify the data before sending it back
+		 *
+		 * @param {object} $data
+		 * @param {WP_User} $user
+		 *
+		 * @returns {object} Response data
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_jwt_auth_token_before_dispatch
+		 */
 		$data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
 
 		return rest_ensure_response( $data );
@@ -277,5 +292,36 @@ class Auth extends Controller {
 	 * Revoke JWT Token.
 	 */
 	public function revoke_token(): void {
+	}
+
+	/**
+	 *
+	 * @param WP_User $user
+	 *
+	 * @return array
+	 */
+	private function get_user_data( WP_User $user ): array {
+		$uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( ! $uuid ) {
+			$uuid = Uuid::uuid4()->toString();
+			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+		}
+
+		$store_settings = new Stores();
+
+		$data = array(
+			'uuid'         => $uuid,
+			'id'           => $user->ID,
+			'username'     => $user->user_login,
+			'email'        => $user->user_email,
+			'first_name'   => $user->user_firstname,
+			'last_name'    => $user->user_lastname,
+			'nice_name'    => $user->user_nicename,
+			'display_name' => $user->display_name,
+			'avatar_url'   => get_avatar_url( $user->ID ),
+			'stores' => $store_settings->get_stores(),
+		);
+
+		return $data;
 	}
 }

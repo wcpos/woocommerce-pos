@@ -11,7 +11,7 @@ class Stores extends Controller {
 	public function __construct() {
 	}
 
-	
+
 	public function register_routes(): void {
 		register_rest_route($this->namespace, '/stores', array(
 			'methods'             => 'GET',
@@ -20,17 +20,22 @@ class Stores extends Controller {
 		));
 	}
 
-	
+	/**
+	 * @TODO
+	 * @return
+	 */
 	public function get_stores() {
 		$data = array(
 			$this->get_store(),
 		);
 
-		return rest_ensure_response( $data );
+		return $data;
+
+//		return rest_ensure_response( $data );
 	}
 
 
-	
+
 	public function get_store(): array {
 		$general_settings = apply_filters( 'woocommerce_settings-general', array() );
 		$tax_settings     = apply_filters( 'woocommerce_settings-tax', array() );

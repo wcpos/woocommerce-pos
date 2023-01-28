@@ -25,6 +25,7 @@
     "php": ">=7.2.0",
     "ext-json": "*",
     "firebase/php-jwt": "v6.3.2",
+    "ramsey/uuid": "^4.2",
     "salesforce/handlebars-php": "^3.0",
     "vlucas/phpdotenv": "^5.5"
   },

@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\API;
 
 use Exception;
+use Ramsey\Uuid\Uuid;
 use WC_Order;
 use WC_Product_Variation;
 use WP_REST_Request;
@@ -30,7 +31,7 @@ class Orders {
 			$this,
 			'pre_insert_shop_order_object',
 		), 10, 3);
-		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'prepare_shop_order_object' ), 10, 3 );
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'order_response' ), 10, 3 );
 		add_action( 'woocommerce_rest_set_order_item', array( $this, 'rest_set_order_item' ), 10, 2 );
 		add_filter('woocommerce_product_variation_get_attributes', array(
 			$this,
@@ -38,7 +39,7 @@ class Orders {
 		), 10, 2);
 	}
 
-	
+
 	public function incoming_shop_order(): void {
 		$raw_data = $this->request->get_json_params();
 
@@ -81,7 +82,21 @@ class Orders {
 	 *
 	 * @return WP_REST_Response
 	 */
-	public function prepare_shop_order_object( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
+	public function order_response( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
+		// get the old product data
+		$data = $response->get_data();
+
+		// add uuid
+		$data['uuid'] = $order->get_meta( '_woocommerce_pos_uuid' );
+		if ( ! $data['uuid'] ) {
+			$data['uuid'] = Uuid::uuid4()->toString();
+			$order->update_meta_data( '_woocommerce_pos_uuid', $data['uuid'] );
+			$order->save();
+		}
+
+		// save the new response data
+		$response->set_data( $data );
+
 		/**
 		 * Add link for order payment.
 		 */
