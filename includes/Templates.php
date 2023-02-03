@@ -10,6 +10,9 @@ namespace WCPOS\WooCommercePOS;
 use WC_Order;
 use WCPOS\WooCommercePOS\Templates\Frontend;
 
+/**
+ *
+ */
 class Templates {
 	/**
 	 * @var string POS frontend slug
@@ -18,6 +21,8 @@ class Templates {
 
 	/**
 	 * @var string POS checkout slug
+	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
+	 * eg: x-frame-options: SAMEORIGIN
 	 */
 	private $pos_checkout_slug;
 
@@ -31,7 +36,7 @@ class Templates {
 	 */
 	private $pos_checkout_rewrite_regex;
 
-	
+
 	public function __construct() {
 		$this->pos_slug                   = Admin\Permalink::get_slug();
 		$this->pos_rewrite_regex          = '^' . $this->pos_slug . '/?';

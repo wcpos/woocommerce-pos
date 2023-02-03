@@ -2,7 +2,13 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use Exception;
+use Ramsey\Uuid\Uuid;
+use WC_Customer;
+use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
+use WP_REST_Response;
+use WP_User;
 
 class Customers {
 	private $request;
@@ -14,6 +20,7 @@ class Customers {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
+		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response'), 10, 3 );
 
 		$this->request = $request;
 	}
@@ -56,6 +63,39 @@ class Customers {
 		}
 
 		return $prepared_args;
+	}
+
+	/**
+	 * Filter customer data returned from the REST API.
+	 *
+	 * @param WP_REST_Response $response   The response object.
+	 * @param WP_User $user_data  User object used to create response.
+	 * @param WP_REST_Request $request    Request object.
+	 */
+	public function customer_response( WP_REST_Response $response, WP_User $user_data, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		/**
+		 * Make sure the customer has a uuid
+		 */
+		$uuid = get_user_meta( $user_data->ID, '_woocommerce_pos_uuid', true );
+		if ( ! $uuid ) {
+			$uuid = Uuid::uuid4()->toString();
+			update_user_meta( $user_data->ID, '_woocommerce_pos_uuid', $uuid );
+			try {
+				$customer = new WC_Customer( $user_data->ID );
+				$data['meta_data'] = $customer->get_meta_data();
+			} catch ( Exception $e ) {
+				Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
+			}
+		}
+
+		/**
+		 * Reset the new response data
+		 */
+		$response->set_data( $data );
+
+		return $response;
 	}
 
 	/**

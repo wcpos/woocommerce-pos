@@ -20,6 +20,7 @@ class Products {
 		$this->request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'posts_search' ), 99, 2 );
 	}
@@ -34,21 +35,22 @@ class Products {
 	 * @return WP_REST_Response $response The response object.
 	 */
 	public function product_response( WP_REST_Response $response, WC_Data $product, WP_REST_Request $request ): WP_REST_Response {
-		// get the old product data
 		$data = $response->get_data();
 
-		// add uuid
-		$data['uuid'] = $product->get_meta( '_woocommerce_pos_uuid' );
-		if ( ! $data['uuid'] ) {
-			$data['uuid'] = Uuid::uuid4()->toString();
-			$product->update_meta_data( '_woocommerce_pos_uuid', $data['uuid'] );
-			$product->save();
+		/**
+		 * make sure the product has a uuid
+		 */
+		$uuid = $product->get_meta( '_woocommerce_pos_uuid' );
+		if ( ! $uuid ) {
+			$uuid = Uuid::uuid4()->toString();
+			$product->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+			$product->save_meta_data();
+			$data['meta_data'] = $product->get_meta_data();
 		}
 
-		// set thumbnail
-		$data['thumbnail'] = $this->get_thumbnail( $product->get_id() );
-
-		// reset the new response data
+		/**
+		 * reset the new response data
+		 */
 		$response->set_data( $data );
 
 		return $response;

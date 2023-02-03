@@ -41,7 +41,9 @@ class Pay {
 		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
 	}
 
-	
+	/**
+	 * @return void
+	 */
 	public function remove_scripts(): void {
 		global $wp_styles, $wp_scripts;
 
@@ -79,7 +81,7 @@ class Pay {
 		}
 	}
 
-	
+
 	public function get_template(): void {
 		if ( ! \defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
 			\define( 'WOOCOMMERCE_CHECKOUT', true );

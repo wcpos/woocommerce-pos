@@ -23,7 +23,7 @@ namespace WCPOS\WooCommercePOS;
 use Dotenv\Dotenv;
 
 // Define plugin constants.
-const VERSION = '1.0.0-alpha.1';
+const VERSION = '1.0.0-alpha.2';
 const PLUGIN_NAME = 'woocommerce-pos';
 const SHORT_NAME = 'wcpos';
 \define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'

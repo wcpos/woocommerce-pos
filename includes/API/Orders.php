@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\API;
 use Exception;
 use Ramsey\Uuid\Uuid;
 use WC_Order;
+use WC_Order_Item;
 use WC_Product_Variation;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -32,6 +33,8 @@ class Orders {
 			'pre_insert_shop_order_object',
 		), 10, 3);
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'order_response' ), 10, 3 );
+		add_filter( 'woocommerce_order_get_items', array( $this, 'order_get_items' ), 10, 3 );
+
 		add_action( 'woocommerce_rest_set_order_item', array( $this, 'rest_set_order_item' ), 10, 2 );
 		add_filter('woocommerce_product_variation_get_attributes', array(
 			$this,
@@ -83,18 +86,22 @@ class Orders {
 	 * @return WP_REST_Response
 	 */
 	public function order_response( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
-		// get the old product data
 		$data = $response->get_data();
 
-		// add uuid
-		$data['uuid'] = $order->get_meta( '_woocommerce_pos_uuid' );
-		if ( ! $data['uuid'] ) {
-			$data['uuid'] = Uuid::uuid4()->toString();
-			$order->update_meta_data( '_woocommerce_pos_uuid', $data['uuid'] );
-			$order->save();
+		/**
+		 * make sure the order has a uuid
+		 */
+		$uuid = $order->get_meta( '_woocommerce_pos_uuid' );
+		if ( ! $uuid ) {
+			$uuid = Uuid::uuid4()->toString();
+			$order->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+			$order->save_meta_data();
+			$data['meta_data'] = $order->get_meta_data();
 		}
 
-		// save the new response data
+		/**
+		 * reset the new response data
+		 */
 		$response->set_data( $data );
 
 		/**
@@ -114,6 +121,28 @@ class Orders {
 		$response->add_link( 'receipt', $pos_receipt_url );
 
 		return $response;
+	}
+
+	/**
+	 * @param $items WC_Order_Item[]
+	 * @param $order WC_Order
+	 * @param $item_type string[] ['line_item' | 'fee' | 'shipping' | 'tax' | 'coupon']
+	 * @return WC_Order_Item[]
+	 */
+	public function order_get_items( array $items, WC_Order $order, array $item_type ): array {
+		foreach ( $items as $item ) {
+			/**
+			 * make sure the cart items have a uuid
+			 */
+			$uuid = $item->get_meta( '_woocommerce_pos_uuid' );
+			if ( ! $uuid ) {
+				$uuid = Uuid::uuid4()->toString();
+				$item->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+				$item->save_meta_data();
+			}
+		}
+
+		return $items;
 	}
 
 	/**
