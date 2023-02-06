@@ -38,7 +38,7 @@
     "@typescript-eslint/eslint-plugin": "5.47.1",
     "@typescript-eslint/parser": "5.47.1",
     "@wcpos/eslint-config": "*",
-    "@wordpress/env": "5.8.0",
+    "@wordpress/env": "5.11.0",
     "autoprefixer": "10.4.13",
     "babel-loader": "9.1.0",
     "css-loader": "6.7.3",
