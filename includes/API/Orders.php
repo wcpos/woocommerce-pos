@@ -4,11 +4,13 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Exception;
 use Ramsey\Uuid\Uuid;
+use WC_Data_Exception;
 use WC_Order;
 use WC_Order_Item;
 use WC_Product_Variation;
 use WP_REST_Request;
 use WP_REST_Response;
+use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
 class Orders {
 	private $request;
@@ -40,6 +42,7 @@ class Orders {
 			$this,
 			'product_variation_get_attributes',
 		), 10, 2);
+		add_action( 'woocommerce_before_order_object_save', array( $this, 'before_order_object_save' ), 10, 2 );
 	}
 
 
@@ -211,6 +214,18 @@ class Orders {
 		 */
 
 		return $value;
+	}
+
+	/**
+	 * Add custom 'created_via' prop for POS orders, used in WC Admin display
+	 *
+	 * @param WC_Order $order The object being saved.
+	 * @throws WC_Data_Exception
+	 */
+	public function before_order_object_save( WC_Order $order ) {
+		if ( $order->get_id() === 0 ) {
+			$order->set_created_via( PLUGIN_NAME );
+		}
 	}
 
 	/**
