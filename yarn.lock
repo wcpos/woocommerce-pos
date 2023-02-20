@@ -3671,7 +3671,7 @@ __metadata:
     "@wcpos/eslint-config": "*"
     "@wordpress/api-fetch": 6.20.0
     "@wordpress/components": ^23.0.0
-    "@wordpress/element": 5.0.0
+    "@wordpress/element": 5.4.0
     "@wordpress/env": 5.8.0
     "@wordpress/url": 3.24.0
     autoprefixer: 10.4.13
@@ -4090,7 +4090,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@wordpress/element@npm:5.0.0, @wordpress/element@npm:^5.0.0":
+"@wordpress/element@npm:5.4.0":
+  version: 5.4.0
+  resolution: "@wordpress/element@npm:5.4.0"
+  dependencies:
+    "@babel/runtime": ^7.16.0
+    "@types/react": ^18.0.21
+    "@types/react-dom": ^18.0.6
+    "@wordpress/escape-html": ^2.27.0
+    change-case: ^4.1.2
+    is-plain-object: ^5.0.0
+    react: ^18.2.0
+    react-dom: ^18.2.0
+  checksum: 368dc624ed3c15c437698ce121a2cd5e5c7bfdb62d2b636e87a354245b7cf7c45f986a3f9a16f64e192ba08ba8d5a50f209b5e5a66b01e311de89f88bebc6c86
+  languageName: node
+  linkType: hard
+
+"@wordpress/element@npm:^5.0.0":
   version: 5.0.0
   resolution: "@wordpress/element@npm:5.0.0"
   dependencies:
@@ -4134,6 +4150,15 @@ __metadata:
   dependencies:
     "@babel/runtime": ^7.16.0
   checksum: 3032acf55eaaa39bc3c129adb80f2eca3a23dad0b13c58214550190b805906b08d72f7475bb0c5702608507ccd3e6b2ed1e0f9565ca9b9e82d731883c5dcdff9
+  languageName: node
+  linkType: hard
+
+"@wordpress/escape-html@npm:^2.27.0":
+  version: 2.27.0
+  resolution: "@wordpress/escape-html@npm:2.27.0"
+  dependencies:
+    "@babel/runtime": ^7.16.0
+  checksum: 56ab4fa1a6ce9052c9a678f54c3ddc64fdf525f97f496543cdeb1d0615bd4162f077aa62db0beaa589954300aa91e4f5c5dda2ed348cde1114ab7a883c16230d
   languageName: node
   linkType: hard
 
