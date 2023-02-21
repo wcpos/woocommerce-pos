@@ -92,6 +92,7 @@ class Frontend {
 			'version'        => VERSION,
 			'manifest'       => $github_url . 'metadata.json',
 			'homepage'       => woocommerce_pos_url(),
+			'logout_url'     => wp_logout_url( woocommerce_pos_url() ),
 			'site' => array(
 				'uuid' => $site_uuid,
 				'url'             => get_option( 'siteurl' ),
@@ -104,23 +105,21 @@ class Frontend {
 				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
 				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
 				'locale'          => get_locale(),
-				'wp_credentials' => array(
-					array(
-						'uuid' => $user_uuid,
-						'id'           => $user->ID,
-						'username'     => $user->user_login,
-						'first_name'   => $user->user_firstname,
-						'last_name'    => $user->user_lastname,
-						'email'        => $user->user_email,
-						'display_name' => $user->display_name,
-						'nice_name'    => $user->user_nicename,
-						'last_access'  => '',
-						'avatar_url'   => get_avatar_url( $user->ID ),
-						'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
-						'stores'       => array( $store_settings->get_store() ),
-					),
-				),
 			),
+			'wp_credentials' => array(
+				'uuid' => $user_uuid,
+				'id'           => $user->ID,
+				'username'     => $user->user_login,
+				'first_name'   => $user->user_firstname,
+				'last_name'    => $user->user_lastname,
+				'email'        => $user->user_email,
+				'display_name' => $user->display_name,
+				'nice_name'    => $user->user_nicename,
+				'last_access'  => '',
+				'avatar_url'   => get_avatar_url( $user->ID ),
+				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
+			),
+			'store' => $store_settings->get_store(),
 		);
 
 		/**
