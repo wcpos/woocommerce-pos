@@ -48,9 +48,9 @@ class Admin {
 		}
 
 		// Add POS settings to orders pages
-		//		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
-		//			new Admin\Orders();
-		//		}
+		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
+			new Admin\Orders();
+		}
 
 		// Customise plugins page
 		if ( 'plugins' == $current_screen->id ) {
