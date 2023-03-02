@@ -15,7 +15,7 @@
 	<title><?php esc_attr_e( 'Point of Sale', 'woocommerce-pos' ); ?> - <?php esc_html( bloginfo( 'name' ) ); ?></title>
 	<meta charset="utf-8"/>
 
-	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1.00001, viewport-fit=cover">
 	<meta name="theme-color" content="#000000">
 	<meta name="apple-mobile-web-app-capable" content="yes"/>
 
@@ -50,43 +50,55 @@
 	<meta name="msapplication-TileImage"
 		  content="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/favicon-144.png">
 
-	<link rel="stylesheet" type="text/css" href="https://csstools.github.io/sanitize.css/latest/sanitize.css">
 	<style>
-		body {
-			color: #243B55;
-			font-family: -apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			Roboto,
-			Helvetica,
-			Arial,
-			sans-serif,
-			'Apple Color Emoji',
-			'Segoe UI Emoji',
-			'Segoe UI Symbol';
-		}
+		/**
+		 * Matches Expo build
 
-		html, body, #root {
-			height: 100%;
-			background-color: #F0F4F8;
-		}
-
+		 * Extend the react-native-web reset:
+		 * https://github.com/necolas/react-native-web/blob/master/packages/react-native-web/src/exports/StyleSheet/initialRules.js
+		 */
+		html,
+		body,
 		#root {
+			width: 100%;
+			/* To smooth any scrolling behavior */
+			-webkit-overflow-scrolling: touch;
+			margin: 0px;
+			padding: 0px;
+			/* Allows content to fill the viewport and go beyond the bottom */
+			min-height: 100%;
+		}
+		#root {
+			flex-shrink: 0;
+			flex-basis: auto;
+			flex-grow: 1;
 			display: flex;
-			flex-direction: column;
+			flex: 1;
 		}
 
-		#splash {
-			display: flex;
-			flex-direction: column;
-			justify-content: center;
-			align-items: center;
-			height: 100%;
+		html {
+			scroll-behavior: smooth;
+			/* Prevent text size change on orientation change https://gist.github.com/tfausak/2222823#file-ios-8-web-app-html-L138 */
+			-webkit-text-size-adjust: 100%;
+			height: calc(100% + env(safe-area-inset-top));
 		}
 
-		#splash img {
-			width: 150px;
+		body {
+			display: flex;
+			/* Allows you to scroll below the viewport; default value is visible */
+			overflow-y: auto;
+			overscroll-behavior-y: none;
+			text-rendering: optimizeLegibility;
+			-webkit-font-smoothing: antialiased;
+			-moz-osx-font-smoothing: grayscale;
+			-ms-overflow-style: scrollbar;
 		}
+		/* Enable for apps that support dark-theme */
+		/*@media (prefers-color-scheme: dark) {
+		  body {
+			background-color: black;
+		  }
+		}*/
 	</style>
 
 	<?php do_action( 'woocommerce_pos_head' ); ?>

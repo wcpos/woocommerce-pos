@@ -38,7 +38,7 @@ class Products {
 		$data = $response->get_data();
 
 		/**
-		 * make sure the product has a uuid
+		 * Make sure the product has a uuid
 		 */
 		$uuid = $product->get_meta( '_woocommerce_pos_uuid' );
 		if ( ! $uuid ) {
@@ -49,7 +49,13 @@ class Products {
 		}
 
 		/**
-		 * reset the new response data
+		 * Add barcode field
+		 */
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$data['barcode'] = $product->get_meta( $barcode_field );
+
+		/**
+		 * Reset the new response data
 		 */
 		$response->set_data( $data );
 

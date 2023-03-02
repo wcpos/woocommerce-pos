@@ -53,7 +53,8 @@ class API {
 		 * These filters allow changes to the WC REST API response
 		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
 		 */
-		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+//		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
 	}
@@ -163,23 +164,52 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
-		if ( 0 === strpos( $request->get_route(), '/wc/v3/orders' ) ) {
-			$this->wc_rest_api_handler = new API\Orders( $request );
-		}
-		if ( 0 === strpos( $request->get_route(), '/wc/v3/products' ) ) {
-			$this->wc_rest_api_handler = new API\Products( $request );
-		}
-		if ( 0 === strpos( $request->get_route(), '/wc/v3/customers' ) ) {
-			$this->wc_rest_api_handler = new API\Customers( $request );
-		}
-		if ( 0 === strpos( $request->get_route(), '/wc/v3/taxes' ) ) {
-			$this->wc_rest_api_handler = new API\Taxes( $request );
-		}
-		if ( 0 === strpos( $request->get_route(), '/wc/v3/payment_gateways' ) ) {
-			$this->wc_rest_api_handler = new API\Payment_Gateways( $request );
+		return $result;
+	}
+
+	/**
+	 * Filters the response before executing any REST API callbacks.
+	 *
+	 * Allows plugins to perform additional validation after a
+	 * request is initialized and matched to a registered route,
+	 * but before it is executed.
+	 *
+	 * Note that this filter will not be called for requests that
+	 * fail to authenticate or match to a registered route.
+	 *
+	 * @since 4.7.0
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Result to send to the client.
+	 *                                                                   Usually a WP_REST_Response or WP_Error.
+	 * @param array                                            $handler  Route handler used for the request.
+	 * @param WP_REST_Request                                  $request  Request used to generate the response.
+	 */
+	public function rest_request_before_callbacks( $response, $handler, $request ) {
+		$controller = get_class( $handler['callback'][0] );
+
+		switch ( $controller ) {
+			case 'WC_REST_Orders_Controller':
+				$this->wc_rest_api_handler = new API\Orders( $request );
+				break;
+			case 'WC_REST_Products_Controller':
+			case 'WC_REST_Product_Variations_Controller':
+				$this->wc_rest_api_handler = new API\Products( $request );
+				break;
+			case 'WC_REST_Customers_Controller':
+				$this->wc_rest_api_handler = new API\Customers( $request );
+				break;
+			case 'WC_REST_Taxes_Controller':
+				$this->wc_rest_api_handler = new API\Taxes( $request );
+				break;
+			case 'WC_REST_Payment_Gateways_Controller':
+				$this->wc_rest_api_handler = new API\Payment_Gateways( $request );
+				break;
+			case 'WC_REST_Product_Categories_Controller':
+				$this->wc_rest_api_handler = new API\Product_Categories( $request );
+				break;
 		}
 
-		return $result;
+		return $response;
 	}
 
 	/**
