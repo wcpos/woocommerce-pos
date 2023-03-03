@@ -68,6 +68,7 @@ class Settings extends Settings_Controller {
 			'edit_published_products',
 			'edit_users',
 			'list_users',
+			'manage_product_terms',
 			'publish_shop_orders',
 			'read_private_products',
 			'read_private_shop_coupons',

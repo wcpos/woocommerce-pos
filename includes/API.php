@@ -207,6 +207,9 @@ class API {
 			case 'WC_REST_Product_Categories_Controller':
 				$this->wc_rest_api_handler = new API\Product_Categories( $request );
 				break;
+			case 'WC_REST_Product_Tags_Controller':
+				$this->wc_rest_api_handler = new API\Product_Tags( $request );
+				break;
 		}
 
 		return $response;

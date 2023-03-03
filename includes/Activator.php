@@ -207,6 +207,7 @@ class Activator {
 			'publish_shop_orders'       => true,
 			'list_users'                => true,
 			'read_private_shop_coupons' => true,
+			'manage_product_terms' 		=> true,
 		);
 
 		add_role(
