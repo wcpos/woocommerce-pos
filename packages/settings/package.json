@@ -27,7 +27,7 @@
     "@babel/preset-typescript": "7.21.0",
     "@babel/runtime": "7.21.0",
     "@svgr/webpack": "6.5.1",
-    "@tanstack/react-query-devtools": "^4.24.12",
+    "@tanstack/react-query-devtools": "^4.26.1",
     "@transifex/cli": "^5.1.0",
     "@types/jest": "29.4.0",
     "@types/lodash": "4.14.191",

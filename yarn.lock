@@ -2876,18 +2876,18 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tanstack/react-query-devtools@npm:^4.24.12":
-  version: 4.24.12
-  resolution: "@tanstack/react-query-devtools@npm:4.24.12"
+"@tanstack/react-query-devtools@npm:^4.26.1":
+  version: 4.26.1
+  resolution: "@tanstack/react-query-devtools@npm:4.26.1"
   dependencies:
     "@tanstack/match-sorter-utils": ^8.7.0
     superjson: ^1.10.0
     use-sync-external-store: ^1.2.0
   peerDependencies:
-    "@tanstack/react-query": 4.24.10
+    "@tanstack/react-query": 4.26.1
     react: ^16.8.0 || ^17.0.0 || ^18.0.0
     react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0
-  checksum: 8cea2cd99268aa057ee22d63d0f1e24ec659134598b624cad45369c9a2a589bb90fd7cc56f9b4b794036e870afedf6867e61c79d9c52ee24763102d7c4c21f70
+  checksum: d647115677b7c2f9f339be6c47486dabe1e4f5793a595564bd7201bd9f08f1c991ded234190b7f20c80ef5ba62b23b8792394173ae3396fb5a392262e389c75a
   languageName: node
   linkType: hard
 
@@ -3726,7 +3726,7 @@ __metadata:
     "@babel/runtime": 7.21.0
     "@svgr/webpack": 6.5.1
     "@tanstack/react-query": ^4.24.10
-    "@tanstack/react-query-devtools": ^4.24.12
+    "@tanstack/react-query-devtools": ^4.26.1
     "@transifex/cli": ^5.1.0
     "@transifex/native": ^5.1.0
     "@transifex/react": ^5.1.0
