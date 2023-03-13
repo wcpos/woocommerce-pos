@@ -248,15 +248,24 @@ class API {
 	 * @return array
 	 */
 	public function rest_endpoints( array $endpoints ): array {
+		// This is a hack to allow order creation without an email address
+		// @TODO - there must be a better way to this?
+		// @NOTE - WooCommercePOS\API\Orders is loaded after validation checks, so can't put it there
+		if ( isset( $endpoints['/wc/v3/orders'] ) ) {
+			$endpoints['/wc/v3/orders'][1]['args']['billing']['properties']['email']['format'] = '';
+		}
+		if ( isset( $endpoints['/wc/v3/orders/(?P<id>[\d]+)'] ) ) {
+			$endpoints['/wc/v3/orders/(?P<id>[\d]+)'][1]['args']['billing']['properties']['email']['format'] = '';
+		}
+
+
 		// add ordering by meta_value to customers endpoint
 		if ( isset( $endpoints['/wc/v3/customers'] ) ) {
-			$endpoint = $endpoints['/wc/v3/customers'];
-
 			// allow ordering by meta_value
-			$endpoint[0]['args']['orderby']['enum'][] = 'meta_value';
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'meta_value';
 
 			// add valid meta_key
-			$endpoint[0]['args']['meta_key'] = array(
+			$endpoints['/wc/v3/customers'][0]['args']['meta_key'] = array(
 				'description'       => 'The meta key to query',
 				'type'              => 'string',
 				'enum'              => array( 'first_name', 'last_name', 'email' ),

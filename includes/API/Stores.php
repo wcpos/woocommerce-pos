@@ -68,7 +68,14 @@ class Stores extends Controller {
 				'name'   => get_option( 'blogname' ),
 				'locale' => get_locale(),
 			),
-			$filtered_settings
+			$filtered_settings,
+			/**
+			 * The default settings for tax calculation should be store base.
+			 * Perhaps let users change this in the POS settings?
+			 */
+			array(
+				'tax_based_on' => 'base',
+			)
 		);
 	}
 }
