@@ -20,7 +20,7 @@ class Customers {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
-		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response'), 10, 3 );
+		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response' ), 10, 3 );
 
 		$this->request = $request;
 	}
@@ -54,6 +54,19 @@ class Customers {
 				),
 			);
 			$prepared_args['search']     = '';
+		}
+
+		// add after date_modified_gmt
+		// TODO: do I need to add 'relation' => 'OR' if there is already a meta_query?
+		if ( isset( $query_params['after'] ) && '' !== $query_params['after'] ) {
+			$timestamp = strtotime( $query_params['after'] );
+			$prepared_args['meta_query'] = array(
+				array(
+					'key'     => 'last_update',
+					'value'   => $timestamp ? (string) $timestamp : '',
+					'compare' => '>',
+				),
+			);
 		}
 
 		// woocommerce removes valid query params, so we must put them back in
