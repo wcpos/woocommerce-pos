@@ -68,8 +68,7 @@
 <div class="woocommerce">
 	<?php woocommerce_output_all_notices(); ?>
 
-	<form id="order_review" method="post"
-		  action="<?php echo $_SERVER['REQUEST_URI']; ?>&key=<?php echo $order->get_order_key(); ?>">
+	<form id="order_review" method="post" action="<?php echo $_SERVER['REQUEST_URI']; ?>">
 		<div id="payment">
 			<?php if ( $order->needs_payment() ) { ?>
 				<ul class="wc_payment_methods payment_methods methods">

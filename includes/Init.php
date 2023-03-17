@@ -75,6 +75,7 @@ class Init {
 		} else {
 			// frontend only
 			new Templates();
+			new Form_Handler();
 		}
 
 		// load integrations

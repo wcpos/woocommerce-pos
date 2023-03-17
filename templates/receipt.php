@@ -125,6 +125,13 @@
 			border-top: 1px solid #000;
 		}
 	</style>
+	<script>
+		window.addEventListener("message", ({data}) => {
+			if (data.action && data.action === "wcpos-print-receipt") {
+				window.print();
+			}
+		}, false);
+	</script>
 </head>
 
 <body>
@@ -151,9 +158,9 @@
 	<?php if ( $order->get_billing_email() ) { ?>
 		<tr>
 			<th>
-            <?php 
+            <?php
             // translators: woocommerce
-				_e( 'Email', 'woocommerce' ); 
+				_e( 'Email', 'woocommerce' );
 			?>
                 </th>
 			<td><?php echo $order->get_billing_email(); ?></td>
@@ -162,9 +169,9 @@
 	<?php if ( $order->get_billing_phone() ) { ?>
 		<tr>
 			<th>
-            <?php 
+            <?php
             // translators: woocommerce
-				_e( 'Telephone', 'woocommerce' ); 
+				_e( 'Telephone', 'woocommerce' );
 			?>
                 </th>
 			<td><?php echo $order->get_billing_phone(); ?></td>
@@ -175,25 +182,25 @@
 	<thead>
 	<tr>
 		<th class="product">
-        <?php 
+        <?php
         // translators: woocommerce
-			_e( 'Product', 'woocommerce' ); 
+			_e( 'Product', 'woocommerce' );
 		?>
             </th>
 		<th class="qty"><?php _ex( 'Qty', 'Abbreviation of Quantity', 'woocommerce-pos' ); ?></th>
 		<th class="price">
-        <?php 
+        <?php
         // translators: woocommerce
-			_e( 'Price', 'woocommerce' ); 
+			_e( 'Price', 'woocommerce' );
 		?>
             </th>
 	</tr>
 	</thead>
 	<tbody>
-	<?php 
+	<?php
     $items = $order->get_items( 'line_item' );
 	if ( $items ) {
-		foreach ( $items as $item ) { 
+		foreach ( $items as $item ) {
 			?>
 		<tr>
 			<td class="product">
@@ -207,37 +214,37 @@
 				<?php echo $order->get_formatted_line_subtotal( $item ); ?>
 			</td>
 		</tr>
-			<?php 
+			<?php
 		}
-	} 
+	}
 	?>
 	</tbody>
 	<tfoot>
-	<?php 
+	<?php
     $items = $order->get_items( 'shipping' );
 	if ( $items ) {
-		foreach ( $items as $item ) { 
+		foreach ( $items as $item ) {
 			?>
 		<tr class="shipping">
 			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
 			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
 		</tr>
-			<?php 
+			<?php
 		}
-	} 
+	}
 	?>
-	<?php 
+	<?php
     $items = $order->get_items( 'fee' );
 	if ( $items ) {
-		foreach ( $items as $item ) { 
+		foreach ( $items as $item ) {
 			?>
 		<tr class="fee">
 			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
 			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
 		</tr>
-			<?php 
+			<?php
 		}
-	} 
+	}
 	?>
 	<?php
 	foreach ( $order->get_order_item_totals() as $key => $total ) {
