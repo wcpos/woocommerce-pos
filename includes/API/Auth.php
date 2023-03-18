@@ -93,12 +93,23 @@ class Auth extends Controller {
 		}
 	}
 
-	public function get_secret_key() {
-		// $secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
-		return '!x>),R!Z$1zLs1(*mJ3^+r#VvO(lfjBK;sqBB!|brVfL-%z+++7x!l34-z+mbQiq';
+	/**
+	 *
+	 * @return string
+	 */
+	public function get_secret_key(): string {
+		$secret_key = get_option( 'woocommerce_pos_secret_key' );
+		if ( false === $secret_key || empty( $secret_key ) ) {
+			$secret_key = wp_generate_password( 64, true, true );
+			update_option( 'woocommerce_pos_secret_key', $secret_key );
+		}
+		return $secret_key;
 	}
 
 
+	/**
+	 *
+	 */
 	public function register_routes(): void {
 		// Validate JWT token
 		register_rest_route(
