@@ -3,11 +3,11 @@ import * as React from 'react';
 import { ToggleControl, CheckboxControl } from '@wordpress/components';
 import { isString, isNumber } from 'lodash';
 
+import BarcodeSelect from './barcode-select';
+import UserSelect from './user-select';
 import Label from '../../components/label';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
-import BarcodeSelect from './barcode-select';
-import UserSelect from './user-select';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -24,7 +24,7 @@ const General = () => {
 
 	return (
 		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
-			<div></div>
+			{/* <div></div>
 			<div className="wcpos-col-span-2">
 				<ToggleControl
 					label={
@@ -41,7 +41,7 @@ const General = () => {
 						mutate({ force_ssl });
 					}}
 				/>
-			</div>
+			</div> */}
 			<div></div>
 			<div className="wcpos-col-span-2">
 				<ToggleControl
