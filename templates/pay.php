@@ -98,6 +98,13 @@
 						</li>
 					<?php } ?>
 				</ul>
+			<?php } else { ?>
+				<li class="woocommerce-notice woocommerce-notice--info woocommerce-info">
+					<?php
+						// @TODO - update this message
+						esc_html_e( 'Order does not need payment, either the status is paid, or the total is 0', 'woocommerce-pos' );
+					?>
+				</li>
 			<?php } ?>
 
 			<input type="hidden" name="woocommerce_pay" value="1"/>
