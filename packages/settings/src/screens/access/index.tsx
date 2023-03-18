@@ -29,16 +29,16 @@ const Access = () => {
 						_str="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
 					It is recommended that you <strong>do not change</strong> the default settings unless you
 					are fully aware of the consequences."
-						_tags="wc-admin-settings"
+						_tags="wp-admin-settings"
 						_inline
 					/>
 					&nbsp;
 					<T
 						_str="For more information please visit the {link}"
-						_tags="wc-admin-settings"
+						_tags="wp-admin-settings"
 						link={
 							<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer">
-								<T _str="documentation" _tags="wc-admin-settings" />
+								<T _str="documentation" _tags="wp-admin-settings" />
 							</a>
 						}
 					/>

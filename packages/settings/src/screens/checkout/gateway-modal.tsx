@@ -56,17 +56,17 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			<Notice status="info" isDismissible={false}>
 				<T
 					_str="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the {link}."
-					_tags="wc-admin-settings"
+					_tags="wp-admin-settings"
 					link={
 						<a href="admin.php?page=wc-settings&amp;tab=checkout" target="_blank">
-							<T _str="WooCommerce Settings" _tags="wc-admin-settings" />
+							<T _str="WooCommerce Settings" _tags="wp-admin-settings" />
 						</a>
 					}
 				/>
 			</Notice>
 			<div className="wcpos-py-2">
 				<label htmlFor="title" className="wcpos-block wcpos-mb-1 wcpos-font-medium wcpos-text-sm">
-					{t('Title', { _tags: 'wc-admin-settings' })}
+					{t('Title', { _tags: 'wp-admin-settings' })}
 				</label>
 				<input
 					// @ts-ignore
@@ -81,7 +81,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			</div>
 			<div className="wcpos-py-2">
 				<label htmlFor="description" className="wcpos-block mb-1 wcpos-font-medium wcpos-text-sm">
-					{t('Description', { _tags: 'wc-admin-settings' })}
+					{t('Description', { _tags: 'wp-admin-settings' })}
 				</label>
 				<textarea
 					id="description"
@@ -92,9 +92,9 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				/>
 			</div>
 			<div className="wcpos-text-right wcpos-pt-4">
-				<Button onClick={closeModal}>{t('Cancel', { _tags: 'wc-admin-settings' })}</Button>
+				<Button onClick={closeModal}>{t('Cancel', { _tags: 'wp-admin-settings' })}</Button>
 				<Button variant="primary" onClick={handleSave}>
-					{t('Save', { _tags: 'wc-admin-settings' })}
+					{t('Save', { _tags: 'wp-admin-settings' })}
 				</Button>
 			</div>
 		</Modal>

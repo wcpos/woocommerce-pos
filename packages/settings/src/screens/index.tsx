@@ -4,17 +4,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { ErrorBoundary } from 'react-error-boundary';
 
-import Error from '../components/error';
-import Notice from '../components/notice';
-import Tabs from '../components/tabs';
-import useNotices from '../hooks/use-notices';
-import { t } from '../translations';
 import Access from './access';
 import Checkout from './checkout';
 import Footer from './footer';
 import General from './general';
 import Header from './header';
 import License from './license';
+import Error from '../components/error';
+import Notice from '../components/notice';
+import Tabs from '../components/tabs';
+import useNotices from '../hooks/use-notices';
+import { t } from '../translations';
 
 const screens = {
 	general: General,
@@ -72,7 +72,7 @@ const Main = ({ initialScreen }: Props) => {
 		<div className="wcpos-container wcpos-mx-auto wcpos-max-w-screen-md wcpos-py-0 md:wcpos-py-4 md:wcpos-pr-4 wcpos-space-y-4">
 			<div className="wcpos-bg-white wcpos-rounded-lg">
 				<Header />
-				<Tabs<typeof routes[number]>
+				<Tabs<(typeof routes)[number]>
 					renderScene={renderScene}
 					navigationState={{ index, routes }}
 					onIndexChange={(idx) => {

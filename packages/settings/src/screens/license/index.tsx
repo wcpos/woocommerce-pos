@@ -119,7 +119,7 @@ const License = () => {
 					<p>
 						<T
 							_str="License {number} has been activated."
-							_tags="wc-admin-settings"
+							_tags="wp-admin-settings"
 							number={<code>{truncate(isString(data?.key) ? data?.key : '')}</code>}
 						/>
 					</p>

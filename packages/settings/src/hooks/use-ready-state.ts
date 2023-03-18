@@ -5,10 +5,27 @@ import apiFetch from '@wordpress/api-fetch';
 
 import useNotices from '../hooks/use-notices';
 import { tx } from '../translations';
+import localesData from '../translations/locales.json';
+
+interface Locale {
+	name: string;
+	nativeName?: string;
+	code: string;
+	locale: string;
+}
+
+interface Locales {
+	[key: string]: Locale;
+}
 
 interface Props {
 	initialScreen: string;
 }
+
+const locales: Locales = localesData;
+const htmlElement = document.documentElement;
+const lang = htmlElement.getAttribute('lang') || 'en';
+const { locale } = locales[lang.toLowerCase()] || locales[lang.split('-')[0]] || locales['en'];
 
 const useReadyState = ({ initialScreen }: Props) => {
 	const [isReady, setIsReady] = React.useState(false);
@@ -16,7 +33,7 @@ const useReadyState = ({ initialScreen }: Props) => {
 	const { setNotice } = useNotices();
 
 	const fetchLanguage = React.useCallback(() => {
-		return tx.setCurrentLocale('es_ES').catch(console.error);
+		return tx.setCurrentLocale(locale).catch(console.error);
 	}, []);
 
 	const prefetchSettings = React.useCallback(() => {
