@@ -159,11 +159,11 @@ class Activator {
 	 * Check version number, runs every admin page load.
 	 */
 	private function version_check(): void {
-		//      $old = Admin\Settings::get_db_version();
-		//      if ( version_compare( $old, VERSION, '<' ) ) {
-		//          Admin\Settings::bump_versions();
-		//          $this->db_upgrade( $old, VERSION );
-		//      }
+		$old = Admin\Settings::get_db_version();
+		if ( version_compare( $old, VERSION, '<' ) ) {
+			Admin\Settings::bump_versions();
+			$this->db_upgrade( $old, VERSION );
+		}
 	}
 
 	/**
@@ -173,9 +173,9 @@ class Activator {
 	 */
 	private function plugin_check(): void {
 		// disable NextGEN Gallery resource manager
-		if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
-			\define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
-		}
+//		if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
+//			\define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
+//		}
 	}
 
 	/**
@@ -246,10 +246,9 @@ class Activator {
 	 */
 	private function db_upgrade( $old, $current ): void {
 		$db_updates = array(
-			'0.4'        => 'updates/update-0.4.php',
-			'0.4.6'      => 'updates/update-0.4.6.php',
-			'0.5.0-beta' => 'updates/update-0.5.php',
-			'0.5.0'      => 'updates/update-0.5.php',
+			'0.4'          => 'updates/update-0.4.php',
+			'0.4.6'        => 'updates/update-0.4.6.php',
+			'1.0.0-beta.1' => 'updates/update-1.0.0-beta.1.php',
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&
