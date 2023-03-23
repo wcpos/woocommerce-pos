@@ -37,7 +37,23 @@ class Orders {
 	 * @return array
 	 */
 	public function wc_order_statuses( array $order_statuses ): array {
-		$order_statuses['wc-pos-open'] = _x( 'POS - Open', 'Order status', PLUGIN_NAME );
+		$order_statuses['wc-pos-open'] = _x( 'POS - Open', 'Order status', 'woocommerce-pos' );
+		$order_statuses['wc-pos-partial'] = _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' );
+
+		return $order_statuses;
+	}
+
+	/**
+	 * Note: the wc- prefix is not used here because it is added by WooCommerce.
+	 *
+	 * @param array    $order_statuses
+	 * @param WC_Order $order
+	 *
+	 * @return array
+	 */
+	public function valid_order_statuses_for_payment( array $order_statuses, WC_Order $order ): array {
+		$order_statuses[] = 'pos-open';
+		$order_statuses[] = 'pos-partial';
 
 		return $order_statuses;
 	}
@@ -46,35 +62,23 @@ class Orders {
 	 * @param array    $order_statuses
 	 * @param WC_Order $order
 	 *
-	 * @return mixed
+	 * @return array
 	 */
-	public function valid_order_statuses_for_payment( array $order_statuses, WC_Order $order ) {
-		array_push( $order_statuses, 'pos-open' );
-
-		return $order_statuses;
-	}
-
-	/**
-	 * @param array    $order_statuses
-	 * @param WC_Order $order
-	 *
-	 * @return mixed
-	 */
-	public function valid_order_statuses_for_payment_complete( array $order_statuses, WC_Order $order ) {
-		array_push( $order_statuses, 'pos-open' );
+	public function valid_order_statuses_for_payment_complete( array $order_statuses, WC_Order $order ): array {
+		$order_statuses[] = 'pos-open';
+		$order_statuses[] = 'pos-partial';
 
 		return $order_statuses;
 	}
 
 	/**
 	 * @param string $status
-	 * @param int id
+	 * @param int $id
 	 * @param WC_Order $order
-	 * @param mixed    $id
 	 *
-	 * @return mixed
+	 * @return string
 	 */
-	public function payment_complete_order_status( $status, $id, WC_Order $order ) {
+	public function payment_complete_order_status( string $status, int $id, WC_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
 			return woocommerce_pos_get_settings( 'checkout', 'order_status' );
 		}
@@ -82,16 +86,36 @@ class Orders {
 		return $status;
 	}
 
-	
+
 	private function register_order_status(): void {
 		// Order status for open orders
 		register_post_status('wc-pos-open', array(
-			'label'                     => _x( 'POS - Open', 'Order status', PLUGIN_NAME ),
+			'label'                     => _x( 'POS - Open', 'Order status', 'woocommerce-pos' ),
 			'public'                    => true,
 			'exclude_from_search'       => false,
 			'show_in_admin_all_list'    => true,
 			'show_in_admin_status_list' => true,
-			'label_count'               => _n_noop( 'POS - Open <span class="count">(%s)</span>', 'POS - Open <span class="count">(%s)</span>' ),
+			// translators: %s is the number of orders with POS - Open status
+			'label_count'               => _n_noop(
+				'POS - Open <span class="count">(%s)</span>',
+				'POS - Open <span class="count">(%s)</span>',
+				'woocommerce-pos'
+			),
+		));
+
+		// Order status for partial payment orders
+		register_post_status('wc-pos-partial', array(
+			'label'                     => _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' ),
+			'public'                    => true,
+			'exclude_from_search'       => false,
+			'show_in_admin_all_list'    => true,
+			'show_in_admin_status_list' => true,
+			// translators: %s is the number of orders with POS - Partial Payment status
+			'label_count'               => _n_noop(
+				'POS - Partial Payment <span class="count">(%s)</span>',
+				'POS - Partial Payment <span class="count">(%s)</span>',
+				'woocommerce-pos'
+			),
 		));
 	}
 }

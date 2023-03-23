@@ -221,32 +221,6 @@
 	</tbody>
 	<tfoot>
 	<?php
-    $items = $order->get_items( 'shipping' );
-	if ( $items ) {
-		foreach ( $items as $item ) {
-			?>
-		<tr class="shipping">
-			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
-			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
-		</tr>
-			<?php
-		}
-	}
-	?>
-	<?php
-    $items = $order->get_items( 'fee' );
-	if ( $items ) {
-		foreach ( $items as $item ) {
-			?>
-		<tr class="fee">
-			<th colspan="2"><?php echo $item->get_name(); ?>:</th>
-			<td colspan="1"><?php echo $order->get_formatted_line_subtotal( $item ); ?></td>
-		</tr>
-			<?php
-		}
-	}
-	?>
-	<?php
 	foreach ( $order->get_order_item_totals() as $key => $total ) {
 		?>
 		<tr class="order-total">

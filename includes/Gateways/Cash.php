@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Gateways;
 
 use WC_Order;
+use WC_Order_Item_Fee;
 use WC_Payment_Gateway;
 
 class Cash extends WC_Payment_Gateway {
@@ -72,6 +73,7 @@ class Cash extends WC_Payment_Gateway {
           <input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . __( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
         ' . $right_addon . '
         </div>
+        ' . wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' ) . '
       </div>
     ';
 	}
@@ -81,19 +83,55 @@ class Cash extends WC_Payment_Gateway {
 	 *
 	 * @return string[]
 	 */
-	public function process_payment( $order_id ) {
+	public function process_payment( $order_id ): array {
+		// Check nonce
+		if ( !isset( $_POST['pos_cash_payment_nonce_field'] ) || !wp_verify_nonce( $_POST['pos_cash_payment_nonce_field'], 'pos_cash_payment_nonce' ) ) {
+			wp_die( __( 'Nonce verification failed', 'woocommerce-pos' ) );
+		}
+
 		// get order object
 		$order = new WC_Order( $order_id );
+		$tendered = $order->get_total();
 
-		// update pos_cash data
-		//      $data     = API::get_raw_data();
-		$tendered = isset( $data['payment_details']['pos-cash-tendered'] ) ? wc_format_decimal( $data['payment_details']['pos-cash-tendered'] ) : 0;
-		$change   = isset( $data['payment_details']['pos-cash-change'] ) ? wc_format_decimal( $data['payment_details']['pos-cash-change'] ) : 0;
+		// get pos_cash data from $_POST
+		if ( isset( $_POST['pos-cash-tendered'] ) && ! empty( $_POST['pos-cash-tendered'] ) ) {
+			$tendered = wc_format_decimal( wp_unslash( $_POST['pos-cash-tendered'] ) );
+		}
+		$change = $tendered > $order->get_total() ? wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) ) : '0';
 		update_post_meta( $order_id, '_pos_cash_amount_tendered', $tendered );
 		update_post_meta( $order_id, '_pos_cash_change', $change );
 
-		// payment complete
-		$order->payment_complete();
+		if ( $tendered >= $order->get_total() ) {
+			// payment complete
+			$order->payment_complete();
+		} else {
+			// Add negative fee to adjust order total
+			$fee = new WC_Order_Item_Fee();
+			$fee->set_props(
+				array(
+					'name'      => __( 'Partial Payment', 'woocommerce-pos' ),
+					'tax_class' => 0,
+					'amount'    => '-' . $tendered,
+					'total'     => '-' . $tendered,
+					'total_tax' => 0,
+				)
+			);
+//			$fee->set_name( __( 'Partial Payment', 'woocommerce-pos' ) );
+//			$fee->set_amount( '-' . $tendered );
+//			$fee->set_total( '-' . $tendered );
+//			$fee->set_total_tax( '0' );
+//			$fee->set_tax_status( 'none' );
+			$fee->add_meta_data( 'date_paid_gmt', gmdate( 'Y-m-d\TH:i:s' ), true );
+			$fee->set_order_id( $order_id );
+			$fee->save();
+
+			$order->add_item( $fee );
+			$order->set_total( wc_format_decimal( floatval( $order->get_total() ) - floatval( $tendered ) ) );
+			$order->save();
+
+			// Set order status to 'wc-pos-partial'
+			$order->update_status( 'wc-pos-partial' );
+		}
 
 		// Return thankyou redirect
 		$redirect = add_query_arg(array(

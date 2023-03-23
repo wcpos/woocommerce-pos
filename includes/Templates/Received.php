@@ -20,7 +20,7 @@ class Received {
 		$this->order_id = $order_id;
 	}
 
-	
+
 	public function get_template(): void {
 		try {
 			// get order
@@ -31,9 +31,9 @@ class Received {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			if ( ! $order->is_paid() ) {
-				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-			}
+//			if ( ! $order->is_paid() ) {
+//				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
+//			}
 
 			$server     = new Server();
 			$order_json = $server->wp_rest_request( '/wc/v3/orders/' . $this->order_id );

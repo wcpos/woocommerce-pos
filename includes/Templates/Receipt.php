@@ -34,9 +34,9 @@ class Receipt {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			if ( ! $order->is_paid() ) {
-				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-			}
+//			if ( ! $order->is_paid() ) {
+//				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
+//			}
 
 			if ( isset( $_GET['template'] ) ) {
 				if ( 'legacy' === $_GET['template'] ) {
