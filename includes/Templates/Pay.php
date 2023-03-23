@@ -24,6 +24,9 @@ class Pay {
 		$this->order_id   = $order_id;
 		$this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
 
+		// this is a checkout page
+		add_filter( 'woocommerce_is_checkout', '__return_true' );
+
 		// remove junk from head
 		add_filter( 'show_admin_bar', '__return_false' );
 		remove_action( 'wp_head', 'rsd_link' );
@@ -38,7 +41,7 @@ class Pay {
 		remove_action( 'wp_head', 'wp_shortlink_wp_head', 10, 0 );
 		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
 
-		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
+//		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
 	}
 
 	/**
@@ -83,8 +86,8 @@ class Pay {
 
 
 	public function get_template(): void {
-		if ( ! \defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
-			\define( 'WOOCOMMERCE_CHECKOUT', true );
+		if ( ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
+			define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
 		if ( ! $this->gateway_id ) {
