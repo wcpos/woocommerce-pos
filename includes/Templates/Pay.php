@@ -22,7 +22,7 @@ class Pay {
 
 	public function __construct( int $order_id ) {
 		$this->order_id   = $order_id;
-		$this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
+		//$this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
 
 		// this is a checkout page
 		//add_filter( 'woocommerce_is_checkout', '__return_true' );
@@ -90,9 +90,9 @@ class Pay {
 			\define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
-		if ( ! $this->gateway_id ) {
-			wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
-		}
+//		if ( ! $this->gateway_id ) {
+//			wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
+//		}
 
 		do_action( 'woocommerce_pos_before_pay' );
 
@@ -125,14 +125,14 @@ class Pay {
 			WC()->payment_gateways()->init();
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
-			if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
-				$gateway         = $available_gateways[ $this->gateway_id ];
-				$gateway->chosen = true;
-			}
+//			if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
+//				$gateway         = $available_gateways[ $this->gateway_id ];
+//				$gateway->chosen = true;
+//			}
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) );
 
-			include woocommerce_pos_locate_template( 'pay.php' );
+			include woocommerce_pos_locate_template( 'payment.php' );
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
