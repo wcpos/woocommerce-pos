@@ -25,7 +25,9 @@ class Pay {
 		//$this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
 
 		// this is a checkout page
-		//add_filter( 'woocommerce_is_checkout', '__return_true' );
+		add_filter( 'woocommerce_is_checkout', '__return_true' );
+		// remove the terms and conditions checkbox
+		add_filter( 'woocommerce_checkout_show_terms', '__return_false' );
 
 		// remove junk from head
 		add_filter( 'show_admin_bar', '__return_false' );

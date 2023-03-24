@@ -37,44 +37,41 @@ class Stores extends Controller {
 
 
 	public function get_store(): array {
-		$general_settings = apply_filters( 'woocommerce_settings-general', array() );
-		$tax_settings     = apply_filters( 'woocommerce_settings-tax', array() );
-		$settings         = array_merge( $general_settings, $tax_settings );
-
-		$filtered_settings = array();
-		$settings_prefix   = 'woocommerce_';
-		foreach ( $settings as $setting ) {
-			if ( $settings_prefix === substr( $setting['id'], 0, \strlen( $settings_prefix ) ) ) {
-				$id = substr( $setting['id'], \strlen( $settings_prefix ) );
-
-				$option_key = $setting['option_key'];
-				$default    = $setting['default'] ?? '';
-				// Get the option value.
-				if ( \is_array( $option_key ) ) {
-					$option           = get_option( $option_key[0] );
-					$setting['value'] = $option[ $option_key[1] ] ?? $default;
-				} else {
-					$admin_setting_value = WC_Admin_Settings::get_option( $option_key, $default );
-					$setting['value']    = $admin_setting_value;
-				}
-
-				$filtered_settings[ $id ] = $setting['value'];
-			}
-		}
-
 		return array_merge(
 			array(
 				'id'     => 0,
 				'name'   => get_option( 'blogname' ),
 				'locale' => get_locale(),
 			),
-			$filtered_settings,
-			/**
-			 * The default settings for tax calculation should be store base.
-			 * Perhaps let users change this in the POS settings?
-			 */
 			array(
-				'tax_based_on' => 'base',
+				/**
+				 * Get the General settings from WooCommerce
+				 */
+				'store_address' => WC_Admin_Settings::get_option( 'woocommerce_store_address' ),
+				'store_address_2' => WC_Admin_Settings::get_option( 'woocommerce_store_address_2' ),
+				'store_city' => WC_Admin_Settings::get_option( 'woocommerce_store_city' ),
+				'default_country' => WC_Admin_Settings::get_option( 'woocommerce_default_country' ),
+				'store_postcode' => WC_Admin_Settings::get_option( 'woocommerce_store_postcode' ),
+				'default_customer_address' => WC_Admin_Settings::get_option( 'woocommerce_default_customer_address' ),
+				'calc_taxes' => WC_Admin_Settings::get_option( 'woocommerce_calc_taxes' ),
+				'enable_coupons' => WC_Admin_Settings::get_option( 'woocommerce_enable_coupons' ),
+				'calc_discounts_sequentially' => WC_Admin_Settings::get_option( 'woocommerce_calc_discounts_sequentially' ),
+				'currency' => WC_Admin_Settings::get_option( 'woocommerce_currency' ),
+				'currency_pos' => WC_Admin_Settings::get_option( 'woocommerce_currency_pos' ),
+				'price_thousand_sep' => WC_Admin_Settings::get_option( 'woocommerce_price_thousand_sep' ),
+				'price_decimal_sep' => WC_Admin_Settings::get_option( 'woocommerce_price_decimal_sep' ),
+				'price_num_decimals' => WC_Admin_Settings::get_option( 'woocommerce_price_num_decimals' ),
+				/**
+				 * Get the Tax settings from WooCommerce
+				 */
+				'prices_include_tax' => WC_Admin_Settings::get_option( 'woocommerce_prices_include_tax' ),
+				'tax_based_on' => 'base', // default should be base, perhaps have a setting for this?
+				'shipping_tax_class' => WC_Admin_Settings::get_option( 'woocommerce_shipping_tax_class' ),
+				'tax_round_at_subtotal' => WC_Admin_Settings::get_option( 'woocommerce_tax_round_at_subtotal' ),
+				'tax_display_shop' => WC_Admin_Settings::get_option( 'woocommerce_tax_display_shop' ),
+				'tax_display_cart' => WC_Admin_Settings::get_option( 'woocommerce_tax_display_cart' ),
+				'price_display_suffix' => WC_Admin_Settings::get_option( 'woocommerce_price_display_suffix' ),
+				'tax_total_display' => WC_Admin_Settings::get_option( 'woocommerce_tax_total_display' ),
 			)
 		);
 	}
