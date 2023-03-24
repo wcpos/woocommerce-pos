@@ -22,6 +22,13 @@
 				margin: 0 !important;
 				padding: 0 !important;
 			}
+			.woocommerce-error {
+				background-color: #f8d7da;
+				color: #721c24;
+				border-color: #f5c6cb;
+				padding: 10px;
+				margin-bottom: 20px;
+			}
 
 			/* Style for Order Details Table */
 			table.shop_table {

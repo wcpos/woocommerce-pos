@@ -45,6 +45,10 @@ class Gateways {
 	}
 
 	/**
+	 * Get available payment POS gateways,
+	 * - Order and set default order
+	 * - Also going to remove icons from the gateways
+	 *
 	 * @param array $gateways
 	 *
 	 * @return array
@@ -74,9 +78,28 @@ class Gateways {
 		 */
 		foreach ( WC()->payment_gateways->payment_gateways as $gateway ) {
 			if ( \in_array( $gateway->id, $enabled_gateway_ids, true ) ) {
+				$gateway->icon = '';
+				$gateway->enabled = 'yes';
+				$gateway->chosen = $gateway->id === $settings['default_gateway'];
 				$_available_gateways[ $gateway->id ] = $gateway;
 			}
 		}
+
+		// Create an array of gateway order values
+		$gateway_order = array();
+		foreach ( $settings['gateways'] as $gateway ) {
+			if ( isset( $gateway['id'] ) && isset( $gateway['order'] ) ) {
+				$gateway_order[ $gateway['id'] ] = $gateway['order'];
+			}
+		}
+
+		// Order the available gateways according to the settings
+		uksort( $_available_gateways, function ( $a, $b ) use ( $gateway_order ) {
+			if ( ! isset( $gateway_order[ $a ] ) || ! isset( $gateway_order[ $b ] ) ) {
+				return 0;
+			}
+			return $gateway_order[ $a ] <=> $gateway_order[ $b ];
+		});
 
 		return $_available_gateways;
 	}
