@@ -71,36 +71,35 @@ class Templates {
 	public function template_redirect(): void {
 		global $wp;
 
-		$rules = [
-			$this->pos_checkout_rewrite_regex => [
-				'order-pay'      => __NAMESPACE__ . '\\Templates\\Pay',
-				'order-received' => __NAMESPACE__ . '\\Templates\\Received',
-				'wcpos-receipt'  => __NAMESPACE__ . '\\Templates\\Receipt',
-			],
-			$this->pos_rewrite_regex          => [
-				'' => Frontend::class,
-			],
-		];
+		$query_var_classname_map = array(
+			'order-pay' => __NAMESPACE__ . '\\Templates\\Pay',
+			'order-received' => __NAMESPACE__ . '\\Templates\\Received',
+			'wcpos-receipt' => __NAMESPACE__ . '\\Templates\\Receipt',
+		);
 
-		if ( array_key_exists( $wp->matched_rule, $rules ) ) {
-			$template = null;
-
-			foreach ( $rules[ $wp->matched_rule ] as $query_var => $classname ) {
+		if ( $wp->matched_rule === $this->pos_checkout_rewrite_regex ) {
+			foreach ( $query_var_classname_map as $query_var => $classname ) {
 				if ( isset( $wp->query_vars[ $query_var ] ) ) {
 					$order_id = absint( $wp->query_vars[ $query_var ] );
-					$template = new $classname( $order_id );
-					break;
+
+					if ( class_exists( $classname ) && $order_id ) {
+						$template = new $classname( $order_id );
+						$template->get_template();
+						exit;
+					} else {
+						wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+					}
 				}
 			}
+		}
 
-			if ( $template ) {
-				$template->get_template();
-				exit;
-			}
-
-			wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		if ( $wp->matched_rule === $this->pos_rewrite_regex ) {
+			$template = new Frontend();
+			$template->get_template();
+			exit;
 		}
 	}
+
 
 	/**
 	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
