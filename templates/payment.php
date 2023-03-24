@@ -26,7 +26,13 @@
 					// submit checkout form
 					const button = document.getElementById('place_order');
 					if (button) {
-						button.click();
+						const event = new MouseEvent('click', {
+							bubbles: true,
+							cancelable: true,
+							view: window
+						});
+
+						button.dispatchEvent(event);
 					}
 				}
 			}, false);

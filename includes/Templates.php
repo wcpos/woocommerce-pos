@@ -105,6 +105,9 @@ class Templates {
 	}
 
 	/**
+	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
+	 * version of the receipt.
+	 *
 	 * @param string   $order_received_url
 	 * @param WC_Order $order
 	 *
@@ -112,12 +115,14 @@ class Templates {
 	 */
 	public function order_received_url( string $order_received_url, WC_Order $order ): string {
 		// check is pos
-		// @TODO make sure _wp_http_referer is /wcpos-checkout/order-pay
-		if ( ! woocommerce_pos_request( 'query_var' ) ) {
+		if ( ! woocommerce_pos_request() ) {
 			return $order_received_url;
 		}
 
-		// @TODO construct url
-		return '/wcpos-checkout/order-received/' . $order->get_id() . '/?key=' . $order->get_order_key();
+		$redirect = add_query_arg(array(
+			'key' => $order->get_order_key(),
+		), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));
+
+		return $redirect;
 	}
 }
