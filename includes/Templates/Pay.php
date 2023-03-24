@@ -43,47 +43,42 @@ class Pay {
 		remove_action( 'wp_head', 'wp_shortlink_wp_head', 10, 0 );
 		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
 
-//		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
+		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
 	}
 
 	/**
+	 * Each theme will apply it's own styles to the checkout page.
+	 * I want to keep it simple, so we remove all styles and scripts associated with the active theme.
+	 * NOTE: This is not perfect, we don't know the theme handle, so we just take a guess from the source URL.
+	 *
 	 * @return void
 	 */
 	public function remove_scripts(): void {
 		global $wp_styles, $wp_scripts;
 
-		// by default allow any styles and scripts from woocommerce and gateway plugins
-		$allow = array( 'woocommerce', 'wc-', $this->gateway_id );
+		// Get the active theme's directory
+		$active_theme_directory = basename( get_template_directory() );
 
-		foreach ( $wp_styles->queue as $style ) {
-			$keep = false;
-			// @TODO - add_filter styles for $allow
-			foreach ( $allow as $string ) {
-				if ( false !== strpos( $style, $string ) ) {
-					$keep = true;
+		// Loop through all enqueued styles
+		foreach ( $wp_styles->queue as $handle ) {
+			$src = $wp_styles->registered[ $handle ]->src;
 
-					continue;
-				}
-			}
-			if ( ! $keep ) {
-				wp_dequeue_style( $style );
+			// Check if the source URL contains the active theme's directory
+			if ( strpos( $src, $active_theme_directory ) !== false ) {
+				wp_dequeue_style( $handle );
 			}
 		}
 
-		foreach ( $wp_scripts->queue as $script ) {
-			$keep = false;
-			// @TODO - add_filter scripts for $allow
-			foreach ( $allow as $string ) {
-				if ( false !== strpos( $script, $string ) ) {
-					$keep = true;
+		// Loop through all enqueued scripts
+		foreach ( $wp_scripts->queue as $handle ) {
+			$src = $wp_scripts->registered[ $handle ]->src;
 
-					continue;
-				}
-			}
-			if ( ! $keep ) {
-				wp_dequeue_script( $script );
+			// Check if the source URL contains the active theme's directory
+			if ( strpos( $src, $active_theme_directory ) !== false ) {
+				wp_dequeue_style( $handle );
 			}
 		}
+
 	}
 
 
