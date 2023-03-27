@@ -54,6 +54,18 @@
 				padding: 10px;
 				text-align: right;
 			}
+			table.shop_table ul.wc-item-meta {
+				padding: 0;
+				list-style: none;
+				margin-top: 5px !important;
+			}
+			table.shop_table ul.wc-item-meta li {
+				font-size: 12px;
+			}
+			table.shop_table ul.wc-item-meta p {
+				display: inline-block;
+				margin: 0;
+			}
 
 			/* Style for Payment List Accordion */
 			.wc_payment_methods ul {
@@ -85,7 +97,7 @@
 				vertical-align: middle;
 			}
 			.wc_payment_methods li input[type="radio"]:checked + label {
-				background-color: #f7f7f7;
+				font-weight: bold;
 			}
 			.wc_payment_methods li input[type="radio"]:checked + label + div.payment_box {
 				display: block;
