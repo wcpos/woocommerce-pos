@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
 
-class Pay {
+class Payment {
 	/**
 	 * @var int
 	 */

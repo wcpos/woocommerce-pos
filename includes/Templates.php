@@ -72,7 +72,7 @@ class Templates {
 		global $wp;
 
 		$query_var_classname_map = array(
-			'order-pay' => __NAMESPACE__ . '\\Templates\\Pay',
+			'order-pay' => __NAMESPACE__ . '\\Templates\\Payment',
 			'order-received' => __NAMESPACE__ . '\\Templates\\Received',
 			'wcpos-receipt' => __NAMESPACE__ . '\\Templates\\Receipt',
 		);

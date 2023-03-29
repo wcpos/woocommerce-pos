@@ -64,8 +64,10 @@ class Settings extends Settings_Controller {
 		'wc' => array(
 			'create_users',
 			'edit_others_products',
+			'edit_others_shop_orders',
 			'edit_product',
 			'edit_published_products',
+			'edit_shop_orders',
 			'edit_users',
 			'list_users',
 			'manage_product_terms',
