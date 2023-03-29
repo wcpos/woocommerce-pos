@@ -104,6 +104,24 @@ class Customers {
 		}
 
 		/**
+		 * In the WC REST Customers Controller -> get_formatted_item_data_core function, the customer's
+		 * meta_data is only added for administrators. I assume this is for privacy/security reasons.
+		 *
+		 * Cashiers are not always administrators so we need to add the meta_data for uuids.
+		 * @TODO - are there any other meta_data we need to add?
+		 */
+		if ( empty( $data['meta_data'] ) ) {
+			try {
+				$customer = new WC_Customer( $user_data->ID );
+				$data['meta_data'] = array_values( array_filter( $customer->get_meta_data(), function ( $meta ) {
+					return '_woocommerce_pos_uuid' === $meta->key;
+				}));
+			} catch ( Exception $e ) {
+				Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
+			}
+		}
+
+		/**
 		 * Reset the new response data
 		 */
 		$response->set_data( $data );
