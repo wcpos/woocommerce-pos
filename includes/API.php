@@ -192,8 +192,10 @@ class API {
 				$this->wc_rest_api_handler = new API\Orders( $request );
 				break;
 			case 'WC_REST_Products_Controller':
-			case 'WC_REST_Product_Variations_Controller':
 				$this->wc_rest_api_handler = new API\Products( $request );
+				break;
+			case 'WC_REST_Product_Variations_Controller':
+				$this->wc_rest_api_handler = new API\Product_Variations( $request );
 				break;
 			case 'WC_REST_Customers_Controller':
 				$this->wc_rest_api_handler = new API\Customers( $request );

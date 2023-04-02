@@ -241,6 +241,7 @@ class Orders {
 		$all_posts = $wpdb->get_results( '
 			SELECT ID as id FROM ' . $wpdb->posts . '
 			WHERE post_type = "shop_order"
+    		AND post_status != "trash"
 		' );
 
 		// wpdb returns id as string, we need int

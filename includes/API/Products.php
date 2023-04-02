@@ -20,7 +20,6 @@ class Products {
 		$this->request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
-		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'posts_search' ), 99, 2 );
 	}
@@ -126,10 +125,21 @@ class Products {
 	public function get_all_posts( array $fields = array() ) {
 		global $wpdb;
 
-		$all_posts = $wpdb->get_results( '
-			SELECT ID as id, post_title as name FROM ' . $wpdb->posts . '
-			WHERE post_status = "publish" AND post_type = "product"
-		' );
+		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+
+		$sql = '
+    		SELECT ID as id FROM ' . $wpdb->posts . '
+    		WHERE post_status = "publish" AND post_type = "product"
+		';
+
+		if ( $pos_only_products ) {
+			$sql .= ' AND NOT EXISTS (
+        		SELECT 1 FROM ' . $wpdb->postmeta . '
+        		WHERE post_id = ' . $wpdb->posts . '.ID AND meta_key = "_pos_visibility" AND meta_value = "online_only"
+    		)';
+		}
+
+		$all_posts = $wpdb->get_results( $sql );
 
 		// wpdb returns id as string, we need int
 		return array_map( array( $this, 'format_id' ), $all_posts );
