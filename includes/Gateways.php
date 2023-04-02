@@ -54,8 +54,6 @@ class Gateways {
 	 * @return array
 	 */
 	public function available_payment_gateways( array $gateways ): array {
-		$_available_gateways = array();
-
 		// early exit
 		if ( ! woocommerce_pos_request() ) {
 			return $gateways;
@@ -64,43 +62,35 @@ class Gateways {
 		// use POS settings
 		$api = new Settings();
 		$settings = $api->get_payment_gateways_settings();
-		$enabled_gateway_ids = array_reduce($settings['gateways'], function ( $result, $gateway ) {
-			if ( $gateway['id'] && $gateway['enabled'] ) {
-				$result[] = $gateway['id'];
-			};
 
-			return $result;
-		}, array());
+		// Get all payment gateways
+		$all_gateways = WC()->payment_gateways->payment_gateways;
 
-		/*
-		 * @TODO - WC()->payment_gateways->payment_gateways vs WC_Payment_Gateways::instance()->payment_gateways()
-		 * @TODO - review settings/api/frontend overlap
-		 */
-		foreach ( WC()->payment_gateways->payment_gateways as $gateway ) {
-			if ( \in_array( $gateway->id, $enabled_gateway_ids, true ) ) {
+		$_available_gateways = array();
+
+		foreach ( $all_gateways as $gateway ) {
+			if ( isset( $settings['gateways'][ $gateway->id ] ) && $settings['gateways'][ $gateway->id ]['enabled'] ) {
+				if ( isset( $settings['gateways'][ $gateway->id ]['title'] ) ) {
+					$gateway->title = $settings['gateways'][ $gateway->id ]['title'];
+				}
+				if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
+					$gateway->description = $settings['gateways'][ $gateway->id ]['description'];
+				}
+
 				$gateway->icon = '';
 				$gateway->enabled = 'yes';
 				$gateway->chosen = $gateway->id === $settings['default_gateway'];
+
 				$_available_gateways[ $gateway->id ] = $gateway;
 			}
 		}
 
-		// Create an array of gateway order values
-		$gateway_order = array();
-		foreach ( $settings['gateways'] as $gateway ) {
-			if ( isset( $gateway['id'] ) && isset( $gateway['order'] ) ) {
-				$gateway_order[ $gateway['id'] ] = $gateway['order'];
-			}
-		}
-
 		// Order the available gateways according to the settings
-		uksort( $_available_gateways, function ( $a, $b ) use ( $gateway_order ) {
-			if ( ! isset( $gateway_order[ $a ] ) || ! isset( $gateway_order[ $b ] ) ) {
-				return 0;
-			}
-			return $gateway_order[ $a ] <=> $gateway_order[ $b ];
+		uksort( $_available_gateways, function ( $a, $b ) use ( $settings ) {
+			return $settings['gateways'][ $a ]['order'] <=> $settings['gateways'][ $b ]['order'];
 		});
 
 		return $_available_gateways;
 	}
+
 }
