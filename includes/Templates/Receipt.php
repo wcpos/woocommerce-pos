@@ -26,7 +26,6 @@ class Receipt {
 
 	public function get_template(): void {
 		try {
-			// get order
 			$order = wc_get_order( $this->order_id );
 
 			// Order or receipt url is invalid.
@@ -47,7 +46,6 @@ class Receipt {
 			/**
 			 * Put WC_Order into the global scope so that the template can access it.
 			 */
-			$order = wc_get_order( $this->order_id );
 			$path  = $this->get_template_path( 'receipt.php' );
 			include $path;
 			exit;

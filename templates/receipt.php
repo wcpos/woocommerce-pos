@@ -1,235 +1,280 @@
-<html>
-<head>
-	<meta charset="utf-8">
-	<title><?php _e( 'Receipt', 'woocommerce-pos' ); ?></title>
-	<style>
-		/* Reset */
-		* {
-			background: transparent !important;
-			color: #000 !important;
-			box-shadow: none !important;
-			text-shadow: none !important;
-		}
+<?php
+/**
+ * Sales Receipt Template
+ */
 
-		body, table {
-			font-family: 'Arial', sans-serif;
-			line-height: 1.4;
-			font-size: 14px;
-		}
-
-		h1, h2, h3, h4, h5, h6 {
-			margin: 0;
-		}
-
-		table {
-			border-collapse: collapse;
-			border-spacing: 0;
-		}
-
-		/* Spacing */
-		.order-branding, .order-addresses, .order-info, .order-items, .order-notes, .order-thanks {
-			margin-bottom: 40px;
-		}
-
-		/* Branding */
-		.order-branding h1 {
-			font-size: 2em;
-			font-weight: bold;
-		}
-
-		/* Addresses */
-		.order-addresses {
-			display: table;
-			width: 100%;
-		}
-
-		.billing-address, .shipping-address {
-			display: table-cell;
-		}
-
-		/* Order */
-		table {
-			width: 100%;
-		}
-
-		table tr {
-			border-bottom: 1px solid #dddddd;
-		}
-
-		table th, table td {
-			padding: 6px 12px;
-		}
-
-		table.order-info {
-			border-top: 3px solid #000;
-		}
-
-		table.order-info th {
-			text-align: left;
-			width: 30%;
-		}
-
-		table.order-items {
-			border-bottom: 3px solid #000;
-		}
-
-		table.order-items thead tr {
-			border-bottom: 3px solid #000;
-		}
-
-		table.order-items tbody tr:last-of-type {
-			border-bottom: 1px solid #000;
-		}
-
-		.product {
-			text-align: left;
-		}
-
-		.product dl {
-			margin: 0;
-		}
-
-		.product dt {
-			font-weight: 600;
-			padding-right: 6px;
-			float: left;
-			clear: left;
-		}
-
-		.product dd {
-			float: left;
-			margin: 0;
-		}
-
-		.price {
-			text-align: right;
-		}
-
-		.qty {
-			text-align: center;
-		}
-
-		tfoot {
-			text-align: right;
-		}
-
-		tfoot th {
-			width: 70%;
-		}
-
-		tfoot tr.order-total {
-			font-weight: bold;
-		}
-
-		tfoot tr.pos_cash-tendered th, tfoot tr.pos_cash-tendered td {
-			border-top: 1px solid #000;
-		}
-	</style>
-	<script>
-		window.addEventListener("message", ({data}) => {
-			if (data.action && data.action === "wcpos-print-receipt") {
-				window.print();
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly
+}
+?>
+	<!DOCTYPE html>
+<html <?php language_attributes(); ?>>
+	<head>
+		<meta charset="<?php bloginfo( 'charset' ); ?>">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<style>
+			html, body, ul, li, fieldset, address {
+				font-family: sans-serif;
+				font-size: 14px;
+				margin: 0 !important;
+				padding: 0 !important;
 			}
-		}, false);
-	</script>
-</head>
+			h1, h2, h3, h4, h5, h6 {
+				margin: 0;
+				padding: 0;
+				font-weight: 600;
+				line-height: 1.3;
+			}
+			h1 {
+				font-size: 18px;
+				margin-bottom: 15px;
+			}
+			h2 {
+				font-size: 16px;
+				margin-bottom: 12px;
+			}
+			h3 {
+				font-size: 14px;
+				margin-bottom: 10px;
+			}
+			h4 {
+				font-size: 14px;
+				margin-bottom: 8px;
+			}
+			h5 {
+				font-size: 14px;
+				margin-bottom: 6px;
+			}
+			h6 {
+				font-size: 12px;
+				margin-bottom: 4px;
+			}
 
-<body>
-<div class="order-branding">
-	<h1><?php bloginfo( 'name' ); ?></h1>
-</div>
-<div class="order-addresses">
-	<div class="billing-address">
-		<?php echo wp_kses_post( $order->get_formatted_billing_address() ); ?>
+			.sales-receipt {
+				width: 100%;
+				max-width: 100%;
+			}
+			.header, .footer {
+				text-align: center;
+				margin-bottom: 20px;
+			}
+			.header img {
+				max-width: 200px;
+				height: auto;
+			}
+			.order-details {
+				padding: 5px;
+				margin-bottom: 20px;
+			}
+
+			/* Style for Order Details Table */
+			table {
+				border-collapse: collapse !important;
+				width: 100% !important;
+				margin-bottom: 20px;
+			}
+			table thead tr th,
+			table tbody tr td,
+			table tfoot tr td {
+				border: none;
+				padding: 5px;
+				text-align: left;
+			}
+			table thead tr th {
+				font-weight: bold;
+				border-bottom: 2px solid #ddd;
+			}
+			table tbody tr td {
+				border-bottom: 1px solid #ddd;
+			}
+			table tfoot tr th {
+				padding: 5px;
+				text-align: right;
+			}
+			th:last-child, td:last-child {
+				text-align: right;
+			}
+			table ul.wc-item-meta {
+				padding: 0;
+				list-style: none;
+				margin-top: 5px !important;
+			}
+			table ul.wc-item-meta li {
+				font-size: 12px;
+			}
+			table ul.wc-item-meta p {
+				display: inline-block;
+				margin: 0;
+			}
+
+			/* Style for Customer Details */
+			.woocommerce-customer-details {
+				margin-bottom: 20px;
+			}
+			.woocommerce-columns {
+				display: flex;
+				justify-content: space-between;
+				margin-bottom: 10px;
+			}
+			.woocommerce-column {
+				flex: 0 0 calc(50% - 10px);
+			}
+			address {
+				font-size: 12px;
+				line-height: 1.4;
+			}
+			address p {
+				margin-bottom: 3px;
+			}
+			.woocommerce-customer-details--phone,
+			.woocommerce-customer-details--email {
+				font-size: 12px;
+				margin-bottom: 3px;
+			}
+		</style>
+	</head>
+<body <?php body_class(); ?>>
+<div class="sales-receipt">
+	<div class="header">
+		<?php
+		$header_image = get_theme_mod( 'custom_logo' );
+		if ( $header_image ) :
+			$image_attributes = wp_get_attachment_image_src( $header_image, 'full' );
+			$src = $image_attributes[0];
+			?>
+			<img src="<?php echo esc_url( $src ); ?>" alt="<?php bloginfo( 'name' ); ?>">
+		<?php else: ?>
+			<h1><?php bloginfo( 'name' ); ?></h1>
+		<?php endif; ?>
+		<h2><?php esc_html_e( 'Tax Receipt', 'woocommerce-pos' ); ?></h2>
 	</div>
-	<div class="shipping-address">
-		<?php echo wp_kses_post( $order->get_formatted_shipping_address() ); ?>
+
+
+	<div class="order-details">
+		<p><strong><?php _e( 'Order Number', 'woocommerce' ); ?>: </strong> <?php echo $order->get_order_number(); ?></p>
+		<p><strong><?php _e( 'Order Date', 'woocommerce' ); ?>: </strong> <?php echo wc_format_datetime( $order->get_date_created(), 'F j, Y, g:i a' ); ?></p>
+	</div>
+
+	<table>
+		<thead>
+			<tr>
+				<th><?php esc_html_e( 'Product', 'woocommerce' ); ?></th>
+				<th><?php esc_html_e( 'Quantity', 'woocommerce' ); ?></th>
+				<th><?php esc_html_e( 'Price', 'woocommerce' ); ?></th>
+				<th><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
+			</tr>
+		</thead>
+		<tbody>
+	<?php foreach ( $order->get_items() as $item_id => $item ) {
+		$product = $item->get_product();
+		?>
+		<tr>
+			<td>
+				<?php
+					echo wp_kses_post( apply_filters( 'woocommerce_order_item_name', $item->get_name(), $item, false ) );
+
+					do_action( 'woocommerce_order_item_meta_start', $item_id, $item, $order, false );
+
+					wc_display_item_meta( $item );
+
+					do_action( 'woocommerce_order_item_meta_end', $item_id, $item, $order, false );
+				?>
+			</td>
+			<td><?php echo esc_html( $item->get_quantity() ); ?></td>
+			<td><?php echo wp_kses_post( wc_price( $product->get_price() ) ); ?></td>
+			<td><?php echo wp_kses_post( wc_price( $item->get_total() ) ); ?></td>
+		</tr>
+	<?php } ?>
+		</tbody>
+		<tfoot>
+			<tr>
+				<th colspan="3"><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></th>
+				<td><?php echo wp_kses_post( wc_price( $order->get_subtotal() ) ); ?></td>
+			</tr>
+			<?php if ( $order->get_shipping_total() > 0 ) : ?>
+				<tr>
+					<th colspan="3"><?php esc_html_e( 'Shipping', 'woocommerce' ); ?></th>
+					<td><?php echo wp_kses_post( wc_price( $order->get_shipping_total() ) ); ?></td>
+				</tr>
+			<?php endif; ?>
+			<?php if ( $order->get_total_discount() > 0 ) : ?>
+				<tr>
+					<th colspan="3"><?php esc_html_e( 'Discount', 'woocommerce' ); ?></th>
+					<td><?php echo wp_kses_post( wc_price( $order->get_total_discount() ) ); ?></td>
+				</tr>
+			<?php endif; ?>
+			<?php if ( wc_tax_enabled() ) : ?>
+				<?php foreach ( $order->get_tax_totals() as $code => $tax ) : ?>
+					<tr>
+						<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
+						<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+			<?php endif; ?>
+			<tr>
+				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
+				<td><?php echo wp_kses_post( wc_price( $order->get_total() ) ); ?></td>
+			</tr>
+		</tfoot>
+	</table>
+
+	<div class="address-fields">
+		<section class="woocommerce-customer-details">
+
+			<section class="woocommerce-columns woocommerce-columns--2 woocommerce-columns--addresses col2-set addresses">
+				<div class="woocommerce-column woocommerce-column--1 woocommerce-column--billing-address col-1">
+
+
+					<h2 class="woocommerce-column__title"><?php esc_html_e( 'Billing address', 'woocommerce' ); ?></h2>
+
+					<address>
+						<?php echo wp_kses_post( $order->get_formatted_billing_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
+
+						<?php if ( $order->get_billing_phone() ) : ?>
+							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_billing_phone() ); ?></p>
+						<?php endif; ?>
+
+						<?php if ( $order->get_billing_email() ) : ?>
+							<p class="woocommerce-customer-details--email"><?php echo esc_html( $order->get_billing_email() ); ?></p>
+						<?php endif; ?>
+					</address>
+
+				</div><!-- /.col-1 -->
+
+				<div class="woocommerce-column woocommerce-column--2 woocommerce-column--shipping-address col-2">
+					<h2 class="woocommerce-column__title"><?php esc_html_e( 'Shipping address', 'woocommerce' ); ?></h2>
+					<address>
+						<?php echo wp_kses_post( $order->get_formatted_shipping_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
+
+						<?php if ( $order->get_shipping_phone() ) : ?>
+							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_shipping_phone() ); ?></p>
+						<?php endif; ?>
+					</address>
+				</div><!-- /.col-2 -->
+
+			</section><!-- /.col2-set -->
+
+
+
+			<?php do_action( 'woocommerce_order_details_after_customer_details', $order ); ?>
+
+		</section>
+	</div>
+
+<?php if ( $order->get_customer_note() ) : ?>
+	<div class="customer-notes">
+		<h4 class="section-title"><?php esc_html_e( 'Customer Notes', 'woocommerce' ); ?></h4>
+		<p><?php echo wp_kses_post( nl2br( $order->get_customer_note() ) ); ?></p>
+	</div>
+<?php endif; ?>
+
+	<div class="footer">
+	<p><?php esc_html_e( 'Thank you for your purchase!', 'woocommerce' ); ?></p>
+	<p><?php bloginfo( 'name' ); ?> - <?php
+		bloginfo( 'description' ); ?></p>
 	</div>
 </div>
-<table class="order-info">
-	<tr>
-		<th><?php _e( 'Order Number', 'woocommerce-pos' ); ?></th>
-		<td><?php echo $order->get_order_number(); ?></td>
-	</tr>
-	<tr>
-		<th><?php _e( 'Order Date', 'woocommerce-pos' ); ?></th>
-		<td><?php echo wc_format_datetime( $order->get_date_paid() ); ?></td>
-	</tr>
-	<?php if ( $order->get_billing_email() ) { ?>
-		<tr>
-			<th>
-            <?php
-            // translators: woocommerce
-				_e( 'Email', 'woocommerce' );
-			?>
-                </th>
-			<td><?php echo $order->get_billing_email(); ?></td>
-		</tr>
-	<?php } ?>
-	<?php if ( $order->get_billing_phone() ) { ?>
-		<tr>
-			<th>
-            <?php
-            // translators: woocommerce
-				_e( 'Telephone', 'woocommerce' );
-			?>
-                </th>
-			<td><?php echo $order->get_billing_phone(); ?></td>
-		</tr>
-	<?php } ?>
-</table>
-<table class="order-items">
-	<thead>
-	<tr>
-		<th class="product">
-        <?php
-        // translators: woocommerce
-			_e( 'Product', 'woocommerce' );
-		?>
-            </th>
-		<th class="qty"><?php _ex( 'Qty', 'Abbreviation of Quantity', 'woocommerce-pos' ); ?></th>
-		<th class="price">
-        <?php
-        // translators: woocommerce
-			_e( 'Price', 'woocommerce' );
-		?>
-            </th>
-	</tr>
-	</thead>
-	<tbody>
-	<?php
-    $items = $order->get_items( 'line_item' );
-	if ( $items ) {
-		foreach ( $items as $item ) {
-			?>
-		<tr>
-			<td class="product">
-				<?php echo $item->get_name(); ?>
-				<?php wc_display_item_meta( $item ); ?>
-			</td>
-			<td class="qty">
-				<?php echo $item->get_quantity(); ?>
-			</td>
-			<td class="price">
-				<?php echo $order->get_formatted_line_subtotal( $item ); ?>
-			</td>
-		</tr>
-			<?php
-		}
-	}
-	?>
-	</tbody>
-	<tfoot>
-	<?php
-	foreach ( $order->get_order_item_totals() as $key => $total ) {
-		?>
-		<tr class="order-total">
-			<th colspan="2"><?php echo esc_html( $total['label'] ); ?></th>
-			<td colspan="1"><?php echo ( 'payment_method' === $key ) ? esc_html( $total['value'] ) : wp_kses_post( $total['value'] ); ?></td>
-		</tr>
-	<?php } ?>
-	</tfoot>
-</table>
-<div class="order-notes"><?php $order->get_customer_note(); ?></div>
+
 </body>
 </html>
+
