@@ -115,6 +115,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				display: flex;
 				justify-content: space-between;
 				margin-bottom: 10px;
+				padding: 5px;
 			}
 			.woocommerce-column {
 				flex: 0 0 calc(50% - 10px);

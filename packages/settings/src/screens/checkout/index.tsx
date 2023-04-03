@@ -53,7 +53,7 @@ const Checkout = () => {
 									_tags: 'wp-admin-settings',
 								})}
 							>
-								{t('Send customer emails', { _tags: 'wp-admin-settings' })}
+								{t('Send admin emails', { _tags: 'wp-admin-settings' })}
 							</Label>
 						}
 						checked={!!data?.admin_emails}
@@ -71,7 +71,7 @@ const Checkout = () => {
 									_tags: 'wp-admin-settings',
 								})}
 							>
-								{t('Send admin emails', { _tags: 'wp-admin-settings' })}
+								{t('Send customer emails', { _tags: 'wp-admin-settings' })}
 							</Label>
 						}
 						checked={!!data?.customer_emails}

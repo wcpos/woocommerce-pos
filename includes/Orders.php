@@ -29,6 +29,29 @@ class Orders {
 			$this,
 			'payment_complete_order_status',
 		), 10, 3);
+
+		// order emails
+		$admin_emails = array(
+			'new_order',
+			'cancelled_order',
+			'failed_order',
+			'reset_password',
+			'new_account',
+		);
+		$customer_emails = array(
+			'customer_on_hold_order',
+			'customer_processing_order',
+			'customer_completed_order',
+			'customer_refunded_order',
+			'customer_invoice',
+			'customer_note',
+		);
+		foreach ( $admin_emails as $email_id ) {
+			add_filter( "woocommerce_email_enabled_{$email_id}", array( $this, 'manage_admin_emails' ), 10, 3 );
+		}
+		foreach ( $customer_emails as $email_id ) {
+			add_filter( "woocommerce_email_enabled_{$email_id}", array( $this, 'manage_customer_emails' ), 10, 3 );
+		}
 	}
 
 	/**
@@ -117,5 +140,21 @@ class Orders {
 				'woocommerce-pos'
 			),
 		));
+	}
+
+	public function manage_admin_emails( $enabled, $order, $email_class ) {
+		if ( ! woocommerce_pos_request() ) {
+			return $enabled;
+		}
+
+		return woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+	}
+
+	public function manage_customer_emails( $enabled, $order, $email_class ) {
+		if ( ! woocommerce_pos_request() ) {
+			return $enabled;
+		}
+
+		return woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 	}
 }
