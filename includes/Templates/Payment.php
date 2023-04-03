@@ -47,7 +47,7 @@ class Payment {
 	}
 
 	/**
-	 * Each theme will apply it's own styles to the checkout page.
+	 * Each theme will apply its own styles to the checkout page.
 	 * I want to keep it simple, so we remove all styles and scripts associated with the active theme.
 	 * NOTE: This is not perfect, we don't know the theme handle, so we just take a guess from the source URL.
 	 *
@@ -56,25 +56,51 @@ class Payment {
 	public function remove_scripts(): void {
 		global $wp_styles, $wp_scripts;
 
+		// Exclude list of handles
+		// @TODO - this should be a filter
+		$exclude_list = array(
+			'admin-bar',
+			'woocommerce-general',
+			'woocommerce-inline',
+			'woocommerce-layout',
+			'woocommerce-smallscreen',
+			'woocommerce-blocktheme',
+			'wp-block-library', // are we using blocks?
+		);
+
+		// Include list of handles
+		// @TODO - this should be a filter
+		$include_list = array();
+
 		// Get the active theme's directory
 		$active_theme_directory = basename( get_template_directory() );
 
 		// Loop through all enqueued styles
 		foreach ( $wp_styles->queue as $handle ) {
+			// Skip blacklisted handles
+			if ( in_array( $handle, $include_list ) ) {
+				continue;
+			}
+
 			$src = $wp_styles->registered[ $handle ]->src;
 
 			// Check if the source URL contains the active theme's directory
-			if ( strpos( $src, $active_theme_directory ) !== false ) {
+			if ( strpos( $src, $active_theme_directory ) !== false || in_array( $handle, $exclude_list ) ) {
 				wp_dequeue_style( $handle );
 			}
 		}
 
 		// Loop through all enqueued scripts
 		foreach ( $wp_scripts->queue as $handle ) {
+			// Skip blacklisted handles
+			if ( in_array( $handle, $include_list ) ) {
+				continue;
+			}
+
 			$src = $wp_scripts->registered[ $handle ]->src;
 
 			// Check if the source URL contains the active theme's directory
-			if ( strpos( $src, $active_theme_directory ) !== false ) {
+			if ( strpos( $src, $active_theme_directory ) !== false || in_array( $handle, $exclude_list ) ) {
 				wp_dequeue_style( $handle );
 			}
 		}
