@@ -207,8 +207,8 @@
 
 	<div class="current-user">
 		<span><?php esc_html_e( 'Paying as customer: ', 'woocommerce-pos' ); ?></span>
-		<?php $current_user = wp_get_current_user(); ?>
-		<span class="user-name"><?php echo esc_html( $current_user->display_name ); ?></span>
+		<?php $woocommerce_pos_customer = wp_get_current_user(); ?>
+		<span class="user-name"><?php echo 0 === $woocommerce_pos_customer->ID ? esc_html__( 'Guest', 'woocommerce-pos' ) : esc_html( $woocommerce_pos_customer->display_name ); ?></span>
 	</div>
 
 	<div class="address-fields" style="display: none;">

@@ -73,9 +73,13 @@ class Gateways {
 				if ( isset( $settings['gateways'][ $gateway->id ]['title'] ) ) {
 					$gateway->title = $settings['gateways'][ $gateway->id ]['title'];
 				}
-				if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
-					$gateway->description = $settings['gateways'][ $gateway->id ]['description'];
-				}
+				/**
+				 * There is an issue over-writing the description field because some gateways use this for info,
+				 * eg: Account Funds uses it to show the current balance.
+				 */
+//				if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
+//					$gateway->description = $settings['gateways'][ $gateway->id ]['description'];
+//				}
 
 				$gateway->icon = '';
 				$gateway->enabled = 'yes';
