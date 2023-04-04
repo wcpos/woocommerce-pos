@@ -33,9 +33,9 @@ module.exports = function (_env, argv) {
 			'@wordpress/element': 'wp.element',
 			'@wordpress/api-fetch': 'wp.apiFetch',
 			'@wordpress/url': 'wp.url',
-			'@tanstack/react-query': 'ReactQuery',
+			// '@tanstack/react-query': 'ReactQuery', // unpkg.com is unreliable
 			'@transifex/native': 'Transifex',
-			'react-beautiful-dnd': 'ReactBeautifulDnd',
+			// 'react-beautiful-dnd': 'ReactBeautifulDnd', // unpkg.com is unreliable
 		},
 		module: {
 			rules: [

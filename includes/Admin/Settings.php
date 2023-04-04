@@ -73,25 +73,29 @@ class Settings {
 			VERSION
 		);
 
-		wp_enqueue_script(
-			PLUGIN_NAME . '-react-query',
-			'https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js',
-			array(
-				'react',
-				'react-dom',
-			),
-			VERSION
-		);
 
-		wp_enqueue_script(
-			PLUGIN_NAME . '-react-beautiful-dnd',
-			'https://unpkg.com/react-beautiful-dnd@13.1.1/dist/react-beautiful-dnd.js',
-			array(
-				'react',
-				'react-dom',
-			),
-			VERSION
-		);
+		/**
+		 * unpkg.com is unreliable, so we're packaging these dependencies
+		 */
+//		wp_enqueue_script(
+//			PLUGIN_NAME . '-react-query',
+//			'https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js',
+//			array(
+//				'react',
+//				'react-dom',
+//			),
+//			VERSION
+//		);
+//
+//		wp_enqueue_script(
+//			PLUGIN_NAME . '-react-beautiful-dnd',
+//			'https://unpkg.com/react-beautiful-dnd@13.1.1/dist/react-beautiful-dnd.js',
+//			array(
+//				'react',
+//				'react-dom',
+//			),
+//			VERSION
+//		);
 
 		wp_enqueue_script(
 			PLUGIN_NAME . '-transifex',
@@ -104,14 +108,14 @@ class Settings {
 			PLUGIN_NAME . '-settings',
 			PLUGIN_URL . $dir . '/js/settings.js',
 			array(
-				PLUGIN_NAME . '-react-query',
-				PLUGIN_NAME . '-react-beautiful-dnd',
-				PLUGIN_NAME . '-transifex',
+				'react',
+				'react-dom',
 				'wp-components',
 				'wp-element',
 				'wp-i18n',
 				'wp-api-fetch',
 				'lodash',
+				PLUGIN_NAME . '-transifex',
 			),
 			VERSION,
 			true
