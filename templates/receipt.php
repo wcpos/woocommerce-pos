@@ -16,8 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 			html, body, ul, li, fieldset, address {
 				font-family: sans-serif;
 				font-size: 14px;
-				margin: 0 !important;
-				padding: 0 !important;
+				margin: 0;
+				padding: 0;
 			}
 			h1, h2, h3, h4, h5, h6 {
 				margin: 0;
@@ -63,8 +63,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 				height: auto;
 			}
 			.order-details {
-				padding: 5px;
 				margin-bottom: 20px;
+				padding: 5px;
+			}
+			.order-details li {
+				margin-bottom: 10px;
 			}
 
 			/* Style for Order Details Table */
@@ -150,11 +153,31 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<h2><?php esc_html_e( 'Tax Receipt', 'woocommerce-pos' ); ?></h2>
 	</div>
 
-
-	<div class="order-details">
-		<p><strong><?php _e( 'Order Number', 'woocommerce' ); ?>: </strong> <?php echo $order->get_order_number(); ?></p>
-		<p><strong><?php _e( 'Order Date', 'woocommerce' ); ?>: </strong> <?php echo wc_format_datetime( $order->get_date_created(), 'F j, Y, g:i a' ); ?></p>
-	</div>
+	<ul class="order-details">
+		<li class="order">
+			<?php esc_html_e( 'Order number:', 'woocommerce' ); ?>
+			<strong><?php echo esc_html( $order->get_order_number() ); ?></strong>
+		</li>
+		<li class="date">
+			<?php esc_html_e( 'Date:', 'woocommerce' ); ?>
+			<strong><?php echo esc_html( wc_format_datetime( $order->get_date_created(), 'F j, Y, g:i a' ) ); ?></strong>
+		</li>
+		<?php
+			// if order has meta value _pos_user, get the user id and display the user name
+			$pos_user = $order->get_meta( '_pos_user' );
+			if ( $pos_user ) {
+				$user = get_user_by( 'id', $pos_user );
+				$user_name = $user->display_name;
+				echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
+			}
+		?>
+		<?php if ( $order->get_payment_method_title() ) : ?>
+			<li class="method">
+				<?php esc_html_e( 'Payment method:', 'woocommerce' ); ?>
+				<strong><?php echo wp_kses_post( $order->get_payment_method_title() ); ?></strong>
+			</li>
+		<?php endif; ?>
+	</ul>
 
 	<table>
 		<thead>

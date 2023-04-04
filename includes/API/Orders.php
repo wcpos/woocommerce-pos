@@ -226,6 +226,17 @@ class Orders {
 		if ( $order->get_id() === 0 ) {
 			$order->set_created_via( PLUGIN_NAME );
 		}
+
+		/**
+		 * Add cashier user id to order meta
+		 * Note: There should only be one cashier per order, currently this will overwrite previous cashier id
+		 */
+		$user_id = get_current_user_id();
+		$cashier_id = $order->get_meta( '_pos_user' );
+
+		if ( ! $cashier_id ) {
+			$order->update_meta_data( '_pos_user', $user_id );
+		}
 	}
 
 	/**

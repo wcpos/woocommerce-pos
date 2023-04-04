@@ -80,7 +80,7 @@
 			}
 		}
 	</style>
-	<?php if( $order_complete ): ?>
+	<?php if ( $order_complete ) : ?>
 	<script>
 		(function() {
 			// Parse the order JSON from PHP
@@ -108,14 +108,14 @@
 
 <body <?php body_class(); ?>>
 <div class="woocommerce">
-	<? if( $order_complete ): ?>
+	<?php if ( $order_complete ) : ?>
 		<div class="wrapper">
 			<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
 				<circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
 				<path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
 			</svg>
 		</div>
-	<?php else: ?>
+	<?php else : ?>
 		<?php woocommerce_output_all_notices(); ?>
 		<?php wc_get_template( 'checkout/thankyou.php', array( 'order' => $order ) ); ?>
 	<?php endif; ?>
