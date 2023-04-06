@@ -249,11 +249,17 @@ class Orders {
 	public function get_all_posts( array $fields = array() ) {
 		global $wpdb;
 
-		$all_posts = $wpdb->get_results( '
-			SELECT ID as id FROM ' . $wpdb->posts . '
-			WHERE post_type = "shop_order"
-    		AND post_status != "trash"
-		' );
+		// get valid order statuses
+		// NOTE: the REST API does not return 'trashed' orders, and we won't either
+		// WordPress posts can also have a status of 'auto-draft', but we don't want to include those either
+		$order_statuses = wc_get_order_statuses();
+		$valid_statuses_string = "'" . implode( "', '", array_map( 'esc_sql', array_keys( $order_statuses ) ) ) . "'";
+
+		$all_posts = $wpdb->get_results( "
+			SELECT ID as id FROM {$wpdb->posts}
+			WHERE post_type = 'shop_order'
+			AND post_status IN ({$valid_statuses_string})
+		" );
 
 		// wpdb returns id as string, we need int
 		return array_map( array( $this, 'format_id' ), $all_posts );
@@ -268,5 +274,21 @@ class Orders {
 		$record->id = (int) $record->id;
 
 		return $record;
+	}
+
+	/**
+	 * NOTE: this comes from the WC_API_Orders class, it may be better to extend that class in the future
+	 *
+	 * @return array
+	 */
+	public function get_order_statuses() {
+
+		$order_statuses = array();
+
+		foreach ( wc_get_order_statuses() as $slug => $name ) {
+			$order_statuses[ str_replace( 'wc-', '', $slug ) ] = $name;
+		}
+
+		return apply_filters( 'woocommerce_api_order_statuses_response', $order_statuses );
 	}
 }

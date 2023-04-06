@@ -141,7 +141,7 @@ class Customers {
 
 		$all_posts = $wpdb->get_results(
 			'
-			SELECT ID as id, user_login as username FROM ' . $wpdb->users
+			SELECT ID as id FROM ' . $wpdb->users
 		);
 
 		// wpdb returns id as string, we need int
