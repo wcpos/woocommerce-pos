@@ -56,10 +56,10 @@ class Customers {
 			$prepared_args['search']     = '';
 		}
 
-		// add after date_modified_gmt
+		// add modified_after date_modified_gmt
 		// TODO: do I need to add 'relation' => 'OR' if there is already a meta_query?
-		if ( isset( $query_params['after'] ) && '' !== $query_params['after'] ) {
-			$timestamp = strtotime( $query_params['after'] );
+		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
+			$timestamp = strtotime( $query_params['modified_after'] );
 			$prepared_args['meta_query'] = array(
 				array(
 					'key'     => 'last_update',
