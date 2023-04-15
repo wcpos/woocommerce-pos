@@ -7,6 +7,7 @@ use WC_Data;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
+use WC_Product_Query;
 
 class Products {
 	private $request;
@@ -120,29 +121,38 @@ class Products {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array|void
+	 * @return array
 	 */
-	public function get_all_posts( array $fields = array() ) {
-		global $wpdb;
-
+	public function get_all_posts( array $fields = array() ): array {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
-		$sql = '
-    		SELECT ID as id FROM ' . $wpdb->posts . '
-    		WHERE post_status = "publish" AND post_type = "product"
-		';
+		$args = array(
+			'post_type' => 'product',
+			'post_status' => 'publish',
+			'posts_per_page' => -1,
+			'fields' => 'ids',
+		);
 
 		if ( $pos_only_products ) {
-			$sql .= ' AND NOT EXISTS (
-        		SELECT 1 FROM ' . $wpdb->postmeta . '
-        		WHERE post_id = ' . $wpdb->posts . '.ID AND meta_key = "_pos_visibility" AND meta_value = "online_only"
-    		)';
+			$args['meta_query'] = array(
+				'relation' => 'OR',
+				array(
+					'key' => '_pos_visibility',
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key' => '_pos_visibility',
+					'value' => 'online_only',
+					'compare' => '!=',
+				),
+			);
 		}
 
-		$all_posts = $wpdb->get_results( $sql );
+		$product_query = new WP_Query( $args );
+		$product_ids = $product_query->posts;
 
-		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $all_posts );
+		// Convert the array of product IDs to an array of objects with product IDs as integers
+		return array_map( array( $this, 'format_id' ), $product_ids );
 	}
 
 	/**
@@ -168,13 +178,11 @@ class Products {
 	}
 
 	/**
-	 * @param object $record
+	 * @param string $product_id
 	 *
 	 * @return object
 	 */
-	private function format_id( $record ) {
-		$record->id = (int) $record->id;
-
-		return $record;
+	private function format_id( string $product_id ): object {
+		return (object) array( 'id' => (int) $product_id );
 	}
 }

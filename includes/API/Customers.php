@@ -9,6 +9,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_User;
+use WP_User_Query;
 
 class Customers {
 	private $request;
@@ -130,32 +131,39 @@ class Customers {
 	}
 
 	/**
-	 * Returns array of all customer ids, username.
+	 * Returns array of all customer ids.
+	 *
+	 * Note: user queries are a little more complicated than post queries, for example,
+	 * multisite would return all users from all sites, not just the current site.
+	 * Also, querying by role is not as simple as querying by post type.
 	 *
 	 * @param array $fields
 	 *
 	 * @return array|void
 	 */
 	public function get_all_posts( array $fields = array() ) {
-		global $wpdb;
-
-		$all_posts = $wpdb->get_results(
-			'
-			SELECT ID as id FROM ' . $wpdb->users
+		$args = array(
+			'fields' => 'ID', // Only return user IDs
 		);
+		$roles = 'all'; // @TODO: could be an array of roles, like ['customer', 'cashier']
+
+		if ( 'all' !== $roles ) {
+			$args['role__in'] = $roles;
+		}
+
+		$user_query = new WP_User_Query( $args );
+		$user_ids = $user_query->get_results();
 
 		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $all_posts );
+		return array_map( array( $this, 'format_id' ), $user_ids );
 	}
 
 	/**
-	 * @param object $record
+	 * @param int $user_id
 	 *
 	 * @return object
 	 */
-	private function format_id( $record ) {
-		$record->id = (int) $record->id;
-
-		return $record;
+	private function format_id( $user_id ): object {
+		return (object) array( 'id' => (int) $user_id );
 	}
 }

@@ -7,6 +7,7 @@ use WC_Data;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
+use WC_Product_Query;
 
 class Product_Variations {
 	private $request;
@@ -67,18 +68,21 @@ class Product_Variations {
 	 * @return array|void
 	 */
 	public function get_all_posts( array $fields = array() ) {
-		global $wpdb;
 		$parent_id = $this->request['product_id'];
 
-		$all_posts = $wpdb->get_results(
-			$wpdb->prepare("
-    			SELECT ID as id FROM  {$wpdb->posts}
-				WHERE post_status = 'publish' AND post_parent = %d AND post_type = 'product_variation'
-			", $parent_id)
+		$args = array(
+			'post_type' => 'product_variation',
+			'post_status' => 'publish',
+			'post_parent' => $parent_id,
+			'posts_per_page' => -1,
+			'fields' => 'ids',
 		);
 
+		$variation_query = new WP_Query( $args );
+		$variation_ids = $variation_query->posts;
+
 		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $all_posts );
+		return array_map( array( $this, 'format_id' ), $variation_ids );
 	}
 
 	/**
@@ -104,13 +108,11 @@ class Product_Variations {
 	}
 
 	/**
-	 * @param object $record
+	 * @param string $variation_id
 	 *
 	 * @return object
 	 */
-	private function format_id( $record ) {
-		$record->id = (int) $record->id;
-
-		return $record;
+	private function format_id( $variation_id ) {
+		return (object) array( 'id' => (int) $variation_id );
 	}
 }

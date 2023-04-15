@@ -8,9 +8,11 @@ use WC_Data_Exception;
 use WC_Order;
 use WC_Order_Item;
 use WC_Product_Variation;
+use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
 use WP_REST_Response;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use WC_Order_Query;
 
 class Orders {
 	private $request;
@@ -244,51 +246,34 @@ class Orders {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array|void
+	 * @return array
 	 */
-	public function get_all_posts( array $fields = array() ) {
-		global $wpdb;
+	public function get_all_posts( array $fields = array() ): array {
+		$args = array(
+			'limit' => -1,
+			'return' => 'ids',
+			'status' => array_keys( wc_get_order_statuses() ), // Get valid order statuses
+		);
 
-		// get valid order statuses
-		// NOTE: the REST API does not return 'trashed' orders, and we won't either
-		// WordPress posts can also have a status of 'auto-draft', but we don't want to include those either
-		$order_statuses = wc_get_order_statuses();
-		$valid_statuses_string = "'" . implode( "', '", array_map( 'esc_sql', array_keys( $order_statuses ) ) ) . "'";
+		$order_query = new WC_Order_Query( $args );
 
-		$all_posts = $wpdb->get_results( "
-			SELECT ID as id FROM {$wpdb->posts}
-			WHERE post_type = 'shop_order'
-			AND post_status IN ({$valid_statuses_string})
-		" );
+		try {
+			$order_ids = $order_query->get_orders();
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
+			return array(); // Return an empty array in case of an error
+		}
 
 		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $all_posts );
+		return array_map( array( $this, 'format_id' ), $order_ids );
 	}
 
 	/**
-	 * @param object $record
+	 * @param string $order_id
 	 *
 	 * @return object
 	 */
-	private function format_id( $record ) {
-		$record->id = (int) $record->id;
-
-		return $record;
-	}
-
-	/**
-	 * NOTE: this comes from the WC_API_Orders class, it may be better to extend that class in the future
-	 *
-	 * @return array
-	 */
-	public function get_order_statuses() {
-
-		$order_statuses = array();
-
-		foreach ( wc_get_order_statuses() as $slug => $name ) {
-			$order_statuses[ str_replace( 'wc-', '', $slug ) ] = $name;
-		}
-
-		return apply_filters( 'woocommerce_api_order_statuses_response', $order_statuses );
+	private function format_id( string $order_id ): object {
+		return (object) array( 'id' => (int) $order_id );
 	}
 }
