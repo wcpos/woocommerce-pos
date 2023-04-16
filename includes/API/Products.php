@@ -22,7 +22,8 @@ class Products {
 
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
-		add_filter( 'posts_search', array( $this, 'posts_search' ), 99, 2 );
+		add_filter( 'posts_search', array( $this, 'posts_search' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'orderby_stock_quantity' ), 10, 2 );
 	}
 
 	/**
@@ -86,6 +87,47 @@ class Products {
 
 		return $args;
 	}
+
+	/**
+	 * Filters all query clauses at once, for convenience.
+	 *
+	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
+	 * fields (SELECT), and LIMIT clauses.
+	 *
+	 * @param string[] $clauses {
+	 *     Associative array of the clauses for the query.
+	 *
+	 *     @type string $where    The WHERE clause of the query.
+	 *     @type string $groupby  The GROUP BY clause of the query.
+	 *     @type string $join     The JOIN clause of the query.
+	 *     @type string $orderby  The ORDER BY clause of the query.
+	 *     @type string $distinct The DISTINCT clause of the query.
+	 *     @type string $fields   The SELECT clause of the query.
+	 *     @type string $limits   The LIMIT clause of the query.
+	 * }
+	 * @param WP_Query $wp_query   The WP_Query instance (passed by reference).
+	 */
+	public function orderby_stock_quantity( array $clauses, WP_Query $wp_query ): array {
+		global $wpdb;
+
+		// add option to order by stock quantity
+		if ( isset( $wp_query->query_vars['orderby'] ) && 'stock_quantity' === $wp_query->query_vars['orderby'] ) {
+			// Join the postmeta table to access the stock data
+			$clauses['join'] .= " LEFT JOIN {$wpdb->postmeta} AS stock_meta ON {$wpdb->posts}.ID = stock_meta.post_id AND stock_meta.meta_key='_stock'";
+
+			// Order the query results: records with _stock meta_value first, then NULL, then items without _stock meta_key
+			$order = isset( $wp_query->query_vars['order'] ) ? $wp_query->query_vars['order'] : 'DESC';
+			$clauses['orderby']  = "CASE";
+			$clauses['orderby'] .= " WHEN stock_meta.meta_value IS NOT NULL THEN 1";
+			$clauses['orderby'] .= " WHEN stock_meta.meta_value IS NULL THEN 2";
+			$clauses['orderby'] .= " ELSE 3";
+			$clauses['orderby'] .= " END {$order}, COALESCE(stock_meta.meta_value+0, 0) {$order}";
+		}
+
+		return $clauses;
+	}
+
+
 
 	/**
 	 * Search SQL filter for matching against post title only.

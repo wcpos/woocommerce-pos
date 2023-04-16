@@ -275,6 +275,12 @@ class API {
 			);
 		}
 
+		// add ordering by stock_quantity to products endpoint
+		if ( isset( $endpoints['/wc/v3/products'] ) ) {
+			// allow ordering by meta_value
+			$endpoints['/wc/v3/products'][0]['args']['orderby']['enum'][] = 'stock_quantity';
+		}
+
 		return $endpoints;
 	}
 }
