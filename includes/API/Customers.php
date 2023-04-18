@@ -10,6 +10,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_User;
 use WP_User_Query;
+use WP_Meta_Query;
 
 class Customers {
 	private $request;
@@ -24,84 +25,7 @@ class Customers {
 
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response' ), 10, 3 );
-	}
-
-	/**
-	 * Filter arguments, before passing to WP_User_Query, when querying users via the REST API.
-	 *
-	 * @see https://developer.wordpress.org/reference/classes/wp_user_query/
-	 *
-	 * @param array           $prepared_args Array of arguments for WP_User_Query.
-	 * @param WP_REST_Request $request       The current request.
-	 *
-	 * @return array $prepared_args Array of arguments for WP_User_Query.
-	 */
-	public function customer_query( array $prepared_args, WP_REST_Request $request ): array {
-		$query_params = $request->get_query_params();
-
-		// search first_name and last_name
-		if ( isset( $prepared_args['search'] ) && '' !== $prepared_args['search'] ) {
-			$prepared_args['meta_query'] = array(
-				'relation' => 'OR',
-				array(
-					'key'     => 'first_name',
-					'value'   => $query_params['search'],
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'last_name',
-					'value'   => $query_params['search'],
-					'compare' => 'LIKE',
-				),
-			);
-			$prepared_args['search']     = '';
-		}
-
-		// add modified_after date_modified_gmt
-		// TODO: do I need to add 'relation' => 'OR' if there is already a meta_query?
-		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
-			$timestamp = strtotime( $query_params['modified_after'] );
-			$prepared_args['meta_query'] = array(
-				array(
-					'key'     => 'last_update',
-					'value'   => $timestamp ? (string) $timestamp : '',
-					'compare' => '>',
-				),
-			);
-		}
-
-		// Handle orderby cases
-		if ( isset( $query_params['orderby'] ) ) {
-			switch ( $query_params['orderby'] ) {
-				case 'first_name':
-					$prepared_args['meta_key'] = 'first_name';
-					$prepared_args['orderby']  = 'meta_value';
-					break;
-
-				case 'last_name':
-					$prepared_args['meta_key'] = 'last_name';
-					$prepared_args['orderby']  = 'meta_value';
-					break;
-
-				case 'email':
-					$prepared_args['orderby'] = 'user_email';
-					break;
-
-				case 'role':
-					$prepared_args['meta_key'] = 'wp_capabilities';
-					$prepared_args['orderby'] = 'meta_value';
-					break;
-
-				case 'username':
-					$prepared_args['orderby'] = 'user_login';
-					break;
-
-				default:
-					break;
-			}
-		}
-
-		return $prepared_args;
+		add_filter( 'users_where', array( $this, 'users_where' ), 10, 2 );
 	}
 
 
@@ -155,6 +79,122 @@ class Customers {
 
 		return $response;
 	}
+
+
+	/**
+	 * Filter arguments, before passing to WP_User_Query, when querying users via the REST API.
+	 *
+	 * @see https://developer.wordpress.org/reference/classes/wp_user_query/
+	 *
+	 * @param array           $prepared_args Array of arguments for WP_User_Query.
+	 * @param WP_REST_Request $request       The current request.
+	 *
+	 * @return array $prepared_args Array of arguments for WP_User_Query.
+	 */
+	public function customer_query( array $prepared_args, WP_REST_Request $request ): array {
+		$query_params = $request->get_query_params();
+
+		if ( isset( $prepared_args['search'] ) && '' !== $prepared_args['search'] ) {
+			$prepared_args['_search_term'] = $query_params['search'];
+			$prepared_args['search'] = '';
+
+			add_action( 'pre_user_query', array( $this, 'modify_user_query' ) );
+		}
+
+		// add modified_after date_modified_gmt
+		// TODO: do I need to add 'relation' => 'OR' if there is already a meta_query?
+		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
+			$timestamp = strtotime( $query_params['modified_after'] );
+			$prepared_args['meta_query'] = array(
+				array(
+					'key'     => 'last_update',
+					'value'   => $timestamp ? (string) $timestamp : '',
+					'compare' => '>',
+				),
+			);
+		}
+
+		// Handle orderby cases
+		if ( isset( $query_params['orderby'] ) ) {
+			switch ( $query_params['orderby'] ) {
+				case 'first_name':
+					$prepared_args['meta_key'] = 'first_name';
+					$prepared_args['orderby']  = 'meta_value';
+					break;
+
+				case 'last_name':
+					$prepared_args['meta_key'] = 'last_name';
+					$prepared_args['orderby']  = 'meta_value';
+					break;
+
+				case 'email':
+					$prepared_args['orderby'] = 'user_email';
+					break;
+
+				case 'role':
+					$prepared_args['meta_key'] = 'wp_capabilities';
+					$prepared_args['orderby'] = 'meta_value';
+					break;
+
+				case 'username':
+					$prepared_args['orderby'] = 'user_login';
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		return $prepared_args;
+	}
+
+	public function modify_user_query( $user_query ) {
+		if ( isset( $user_query->query_vars['_search_term'] ) && ! empty( $user_query->query_vars['_search_term'] ) ) {
+			$search_term = $user_query->query_vars['_search_term'];
+
+			global $wpdb;
+
+			$like = '%' . $wpdb->esc_like( $search_term ) . '%';
+
+			$meta_conditions = "
+			( wp_usermeta.meta_key = '_woocommerce_pos_uuid' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'first_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'last_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'billing_first_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'billing_last_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'billing_email' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'billing_company' AND wp_usermeta.meta_value LIKE '{$like}' )
+			OR
+			( wp_usermeta.meta_key = 'billing_phone' AND wp_usermeta.meta_value LIKE '{$like}' )
+			";
+
+			// Add conditions for user email, username, and ID
+			$user_conditions = "
+			( {$wpdb->users}.user_email LIKE '{$like}' )
+			OR
+			( {$wpdb->users}.user_login LIKE '{$like}' )
+			OR
+			( {$wpdb->users}.ID = '{$search_term}' )
+			";
+
+			// Combine meta_conditions and user_conditions
+			$all_conditions = "({$meta_conditions}) OR ({$user_conditions})";
+
+			// Append the all_conditions to the original query_where
+			$user_query->query_where .= " AND ( {$all_conditions} )";
+
+			remove_action( 'pre_user_query', array( $this, 'modify_user_query' ) );
+		}
+	}
+
+
+
 
 	/**
 	 * Returns array of all customer ids.

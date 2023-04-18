@@ -57,6 +57,16 @@ class API {
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
+
+		$this->prevent_messages();
+	}
+
+	/**
+	 * Error messages and notices can cause the JSON response to fail.
+	 */
+	private function prevent_messages() {
+		error_reporting( 0 );
+		@ini_set( 'display_errors', 0 );
 	}
 
 	/**
