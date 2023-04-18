@@ -20,10 +20,10 @@ class Customers {
 	 * @param $request WP_REST_Request
 	 */
 	public function __construct( WP_REST_Request $request ) {
+		$this->request = $request;
+
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response' ), 10, 3 );
-
-		$this->request = $request;
 	}
 
 	/**
@@ -70,14 +70,40 @@ class Customers {
 			);
 		}
 
-		// woocommerce removes valid query params, so we must put them back in
-		if ( isset( $query_params['orderby'] ) && 'meta_value' == $query_params['orderby'] ) {
-			$prepared_args['orderby']  = 'meta_value';
-			$prepared_args['meta_key'] = $query_params['meta_key'];
+		// Handle orderby cases
+		if ( isset( $query_params['orderby'] ) ) {
+			switch ( $query_params['orderby'] ) {
+				case 'first_name':
+					$prepared_args['meta_key'] = 'first_name';
+					$prepared_args['orderby']  = 'meta_value';
+					break;
+
+				case 'last_name':
+					$prepared_args['meta_key'] = 'last_name';
+					$prepared_args['orderby']  = 'meta_value';
+					break;
+
+				case 'email':
+					$prepared_args['orderby'] = 'user_email';
+					break;
+
+				case 'role':
+					$prepared_args['meta_key'] = 'wp_capabilities';
+					$prepared_args['orderby'] = 'meta_value';
+					break;
+
+				case 'username':
+					$prepared_args['orderby'] = 'user_login';
+					break;
+
+				default:
+					break;
+			}
 		}
 
 		return $prepared_args;
 	}
+
 
 	/**
 	 * Filter customer data returned from the REST API.

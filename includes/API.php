@@ -268,16 +268,12 @@ class API {
 
 		// add ordering by meta_value to customers endpoint
 		if ( isset( $endpoints['/wc/v3/customers'] ) ) {
-			// allow ordering by meta_value
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'meta_value';
-
-			// add valid meta_key
-			$endpoints['/wc/v3/customers'][0]['args']['meta_key'] = array(
-				'description'       => 'The meta key to query',
-				'type'              => 'string',
-				'enum'              => array( 'first_name', 'last_name', 'email' ),
-				'validate_callback' => 'rest_validate_request_arg',
-			);
+			// allow ordering by first_name, last_name, email, role, username
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'first_name';
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'last_name';
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'email';
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'role';
+			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'username';
 		}
 
 		// add ordering by stock_quantity to products endpoint
