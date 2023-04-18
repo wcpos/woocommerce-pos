@@ -13,6 +13,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WC_Order_Query;
+use WP_Query;
 
 class Orders {
 	private $request;
@@ -45,6 +46,8 @@ class Orders {
 			'product_variation_get_attributes',
 		), 10, 2);
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'before_order_object_save' ), 10, 2 );
+
+		add_filter( 'posts_clauses', array( $this, 'orderby_additions' ), 10, 2 );
 	}
 
 
@@ -239,6 +242,63 @@ class Orders {
 		if ( ! $cashier_id ) {
 			$order->update_meta_data( '_pos_user', $user_id );
 		}
+	}
+
+	/**
+	 * Filters all query clauses at once, for convenience.
+	 *
+	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
+	 * fields (SELECT), and LIMIT clauses.
+	 *
+	 * @param string[] $clauses {
+	 *     Associative array of the clauses for the query.
+	 *
+	 *     @type string $where    The WHERE clause of the query.
+	 *     @type string $groupby  The GROUP BY clause of the query.
+	 *     @type string $join     The JOIN clause of the query.
+	 *     @type string $orderby  The ORDER BY clause of the query.
+	 *     @type string $distinct The DISTINCT clause of the query.
+	 *     @type string $fields   The SELECT clause of the query.
+	 *     @type string $limits   The LIMIT clause of the query.
+	 * }
+	 * @param WP_Query $wp_query   The WP_Query instance (passed by reference).
+	 */
+	public function orderby_additions( array $clauses, WP_Query $wp_query ): array {
+		global $wpdb;
+
+		$order = isset( $wp_query->query_vars['order'] ) ? $wp_query->query_vars['order'] : 'DESC';
+
+		if ( isset( $wp_query->query_vars['orderby'] ) ) {
+
+			// add option to order by status
+			if ( 'status' === $wp_query->query_vars['orderby'] ) {
+				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}posts AS order_posts ON {$wpdb->prefix}posts.ID = order_posts.ID ";
+				$clauses['orderby'] = " order_posts.post_status " . $order;
+			}
+
+			// add option to order by customer_id
+			if ( 'customer_id' === $wp_query->query_vars['orderby'] ) {
+				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS customer_meta ON {$wpdb->prefix}posts.ID = customer_meta.post_id ";
+				$clauses['where'] .= " AND customer_meta.meta_key = '_customer_user' ";
+				$clauses['orderby'] = " customer_meta.meta_value " . $order;
+			}
+
+			// add option to order by payment_method
+			if ( 'payment_method' === $wp_query->query_vars['orderby'] ) {
+				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS payment_method_meta ON {$wpdb->prefix}posts.ID = payment_method_meta.post_id ";
+				$clauses['where'] .= " AND payment_method_meta.meta_key = '_payment_method' ";
+				$clauses['orderby'] = " payment_method_meta.meta_value " . $order;
+			}
+
+			// add option to order by total
+			if ( 'total' === $wp_query->query_vars['orderby'] ) {
+				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS total_meta ON {$wpdb->prefix}posts.ID = total_meta.post_id ";
+				$clauses['where'] .= " AND total_meta.meta_key = '_order_total' ";
+				$clauses['orderby'] = " total_meta.meta_value+0 " . $order;
+			}
+		}
+
+		return $clauses;
 	}
 
 	/**

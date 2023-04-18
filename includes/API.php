@@ -255,6 +255,11 @@ class API {
 		// @NOTE - WooCommercePOS\API\Orders is loaded after validation checks, so can't put it there
 		if ( isset( $endpoints['/wc/v3/orders'] ) ) {
 			$endpoints['/wc/v3/orders'][1]['args']['billing']['properties']['email']['format'] = '';
+			// add ordering by status, customer_id, payment_method and total to orders endpoint
+			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'status';
+			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'customer_id';
+			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'payment_method';
+			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'total';
 		}
 		if ( isset( $endpoints['/wc/v3/orders/(?P<id>[\d]+)'] ) ) {
 			$endpoints['/wc/v3/orders/(?P<id>[\d]+)'][1]['args']['billing']['properties']['email']['format'] = '';
