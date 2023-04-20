@@ -221,6 +221,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<td><?php echo wp_kses_post( wc_price( $order->get_shipping_total() ) ); ?></td>
 				</tr>
 			<?php endif; ?>
+			<?php foreach ( $order->get_fees() as $fee ) : ?>
+				<tr>
+					<th colspan="3"><?php esc_html_e( 'Fee', 'woocommerce' ); ?></th>
+					<td><?php echo wp_kses_post( wc_price( $fee->get_total() ) ); ?></td>
+				</tr>
+			<?php endforeach; ?>
 			<?php if ( $order->get_total_discount() > 0 ) : ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Discount', 'woocommerce' ); ?></th>
@@ -228,12 +234,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 				</tr>
 			<?php endif; ?>
 			<?php if ( wc_tax_enabled() ) : ?>
-				<?php foreach ( $order->get_tax_totals() as $code => $tax ) : ?>
+				<?php if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) : ?>
+					<?php foreach ( $order->get_tax_totals() as $code => $tax ) : ?>
+						<tr>
+							<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
+							<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				<?php else : ?>
 					<tr>
-						<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
-						<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
+						<th colspan="3"><?php echo esc_html( WC()->countries->tax_or_vat() ); ?></th>
+						<td><?php echo wp_kses_post( wc_price( $order->get_total_tax() ) ); ?></td>
 					</tr>
-				<?php endforeach; ?>
+				<?php endif; ?>
 			<?php endif; ?>
 			<tr>
 				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
