@@ -254,7 +254,7 @@
 		</section>
 	</div>
 
-<?php wc_get_template( 'checkout/form-pay.php', array( 'order' => $order, 'available_gateways' => $available_gateways ) ); ?>
+<?php wc_get_template( 'checkout/form-pay.php', array( 'order' => $order, 'available_gateways' => $available_gateways, 'order_button_text' => $order_button_text ) ); ?>
 
 </div>
 

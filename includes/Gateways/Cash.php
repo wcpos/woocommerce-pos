@@ -26,6 +26,7 @@ class Cash extends WC_Payment_Gateway {
 		$this->description = '';
 		$this->icon        = apply_filters( 'woocommerce_pos_cash_icon', '' );
 		$this->has_fields  = true;
+		$this->enabled     = 'no';
 
 		// Actions
 		add_action('woocommerce_pos_update_options_payment_gateways_' . $this->id, array(
