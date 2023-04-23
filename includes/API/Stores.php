@@ -45,6 +45,11 @@ class Stores extends Controller {
 			),
 			array(
 				/**
+				 * Get POS Settings
+				 */
+				'default_customer' => woocommerce_pos_get_settings( 'general', 'default_customer' ),
+				'default_customer_is_cashier' => woocommerce_pos_get_settings( 'general', 'default_customer_is_cashier' ),
+				/**
 				 * Get the General settings from WooCommerce
 				 */
 				'store_address' => WC_Admin_Settings::get_option( 'woocommerce_store_address' ),
