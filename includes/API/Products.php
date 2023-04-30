@@ -24,6 +24,37 @@ class Products {
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'posts_search' ), 10, 2 );
 		add_filter( 'posts_clauses', array( $this, 'orderby_stock_quantity' ), 10, 2 );
+		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
+		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
+	}
+
+	/**
+	 * @param $schema
+	 * @return array
+	 */
+	public function add_barcode_to_product_schema( $schema ): array {
+		$schema['properties']['barcode'] = array(
+			'description' => __( 'Barcode', 'woocommerce-pos' ),
+			'type'        => 'string',
+			'context'     => array( 'view', 'edit' ),
+		);
+		return $schema;
+	}
+
+	/**
+	 * Fires after a single object is created or updated via the REST API.
+	 *
+	 * @param WC_Data         $object    Inserted object.
+	 * @param WP_REST_Request $request   Request object.
+	 * @param boolean $creating  True when creating object, false when updating.
+	 */
+	public function insert_product_object( WC_Data $object, WP_REST_Request $request, bool $creating ) {
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$barcode = $request->get_param( 'barcode' );
+		if ( $barcode ) {
+			$object->update_meta_data( $barcode_field, $barcode );
+			$object->save_meta_data();
+		}
 	}
 
 	/**
