@@ -29,8 +29,11 @@ class Products {
 	private $options;
 
 
+	/**
+	 *
+	 */
 	public function __construct() {
-		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field', '' );
+		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 
 		// visibility options
 		$this->options = array(
@@ -43,9 +46,7 @@ class Products {
 			// product
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-
-			// product_variation
-			// note: variation HTML fetched via AJAX
+			// variations
 			add_action('woocommerce_product_after_variable_attributes', array(
 				$this,
 				'after_variable_attributes_barcode_field',
@@ -69,10 +70,8 @@ class Products {
 				$this,
 				'save_product_variation_pos_only_products',
 			));
-			//          add_filter( 'woocommerce_get_children', array( $this, 'get_children' ) );
 		}
 	}
-
 
 	public function woocommerce_product_options_sku(): void {
 		woocommerce_wp_text_input(
@@ -92,18 +91,6 @@ class Products {
 		if ( isset( $_POST[ $this->barcode_field ] ) ) {
 			update_post_meta( $post_id, $this->barcode_field, sanitize_text_field( $_POST[ $this->barcode_field ] ) );
 		}
-	}
-
-
-	public function woocommerce_product_after_variable_attributes(): void {
-		woocommerce_wp_text_input(
-			array(
-				'id'          => $this->barcode_field,
-				'label'       => __( 'POS Barcode', 'woocommerce-pos' ),
-				'desc_tip'    => 'true',
-				'description' => __( 'Product barcode used at the point of sale', 'woocommerce-pos' ),
-			)
-		);
 	}
 
 	/**

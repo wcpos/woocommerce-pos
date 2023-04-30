@@ -66,7 +66,7 @@ class Init {
 
 		// AJAX only
 		if ( is_admin() && ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
-			// new AJAX();
+			 new AJAX();
 		}
 
 		if ( is_admin() && ! ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
