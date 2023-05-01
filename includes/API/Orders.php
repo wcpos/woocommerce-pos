@@ -46,8 +46,30 @@ class Orders {
 			'product_variation_get_attributes',
 		), 10, 2);
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'before_order_object_save' ), 10, 2 );
-
 		add_filter( 'posts_clauses', array( $this, 'orderby_additions' ), 10, 2 );
+		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'tax_based_on' ), 10, 2 );
+	}
+
+	/**
+	 * Filters the value of the woocommerce_tax_based_on option.
+	 *
+	 * @param mixed  $value  Value of the option.
+	 * @param string $option Option name.
+	 */
+	public function tax_based_on( $value, $option ) {
+		$tax_based_on = 'base'; // default value is base
+
+		// try to get POS tax settings from order meta
+		$raw_data = $this->request->get_json_params();
+		if ( isset( $raw_data['meta_data'] ) ) {
+			foreach ( $raw_data['meta_data'] as $meta ) {
+				if ( '_woocommerce_pos_tax_based_on' == $meta['key'] ) {
+					$tax_based_on = $meta['value'];
+				}
+			}
+		}
+
+		return $tax_based_on;
 	}
 
 
