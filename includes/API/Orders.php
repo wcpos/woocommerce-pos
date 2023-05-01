@@ -50,6 +50,25 @@ class Orders {
 		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'tax_based_on' ), 10, 2 );
 	}
 
+
+	public function incoming_shop_order(): void {
+		$raw_data = $this->request->get_json_params();
+
+		/*
+		 * WC REST validation enforces email address for orders
+		 * this hack allows guest orders to bypass this validation
+		 */
+		if ( isset( $raw_data['customer_id'] ) && 0 == $raw_data['customer_id'] ) {
+			add_filter('is_email', function ( $result, $email ) {
+				if ( ! $email ) {
+					return true;
+				}
+
+				return $result;
+			}, 10, 2);
+		}
+	}
+
 	/**
 	 * Filters the value of the woocommerce_tax_based_on option.
 	 *
@@ -70,25 +89,6 @@ class Orders {
 		}
 
 		return $tax_based_on;
-	}
-
-
-	public function incoming_shop_order(): void {
-		$raw_data = $this->request->get_json_params();
-
-		/*
-		 * WC REST validation enforces email address for orders
-		 * this hack allows guest orders to bypass this validation
-		 */
-		if ( isset( $raw_data['customer_id'] ) && 0 == $raw_data['customer_id'] ) {
-			add_filter('is_email', function ( $result, $email ) {
-				if ( ! $email ) {
-					return true;
-				}
-
-				return $result;
-			}, 10, 2);
-		}
 	}
 
 	public function test_email() {

@@ -44,6 +44,8 @@ class Payment {
 		remove_action( 'wp_head', 'adjacent_posts_rel_link_wp_head', 10, 0 );
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'remove_scripts' ), 100 );
+
+		add_filter( 'option_woocommerce_tax_display_cart', array( $this, 'tax_display_cart' ), 10, 2 );
 	}
 
 	/**
@@ -176,5 +178,16 @@ class Payment {
 		$i     = wp_nonce_tick();
 
 		return substr( wp_hash( $i . '|woocommerce-pay|' . $uid . '|' . $token, 'nonce' ), - 12, 10 );
+	}
+
+	/**
+	 * Filters the value of the woocommerce_tax_display_cart option.
+	 * The POS is always exclusive of tax, so we show the same for the payments page to avoid confusion.
+	 *
+	 * @param mixed  $value  Value of the option.
+	 * @param string $option Option name.
+	 */
+	public function tax_display_cart( $value, $option ): string {
+		return 'excl';
 	}
 }
