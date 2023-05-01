@@ -1,7 +1,9 @@
 import * as React from 'react';
 
-import { Icon } from '@wordpress/components';
-
+import Book from '../../assets/book.svg';
+import Question from '../../assets/comment-question.svg';
+import Discord from '../../assets/discord.svg';
+import Email from '../../assets/email.svg';
 import { t } from '../translations';
 
 const Footer = () => {
@@ -12,25 +14,33 @@ const Footer = () => {
 			</div>
 			<div className="wcpos-mt-1 sm:wcpos-mt-0 wcpos-space-y-2">
 				<p className="wcpos-flex wcpos-items-center wcpos-mt-0">
-					<Icon icon="book" className="wcpos-mr-2 wcpos-text-gray-500" />
+					<span className="wcpos-mr-2 wcpos-h-4 wcpos-w-4">
+						<Book fill="#3c434a" />
+					</span>
 					<a href="https://docs.wcpos.com" target="_blank" rel="noreferrer">
 						{t('Documentation', { _tags: 'wp-admin-settings' })}
 					</a>
 				</p>
 				<p className="wcpos-flex wcpos-items-center">
-					<Icon icon="feedback" className="wcpos-mr-2 wcpos-text-gray-500" />
+					<span className="wcpos-mr-2 wcpos-h-4 wcpos-w-4">
+						<Question fill="#3c434a" />
+					</span>
 					<a href="https://faq.wcpos.com" target="_blank" rel="noreferrer">
 						{t('Frequently Asked Questions', { _tags: 'wp-admin-settings' })}
 					</a>
 				</p>
 				<p className="wcpos-flex wcpos-items-center">
-					<Icon icon="email" className="wcpos-mr-2 wcpos-text-gray-500" />
+					<span className="wcpos-mr-2 wcpos-h-4 wcpos-w-4">
+						<Email fill="#3c434a" />
+					</span>
 					<a href="mailto:support@wcpos.com" target="_blank" rel="noreferrer">
 						support@wcpos.com
 					</a>
 				</p>
 				<p className="wcpos-flex wcpos-items-center">
-					<Icon icon="testimonial" className="wcpos-mr-2 wcpos-text-gray-500" />
+					<span className="wcpos-mr-2 wcpos-h-4 wcpos-w-4">
+						<Discord fill="#3c434a" />
+					</span>
 					<a href="https://wcpos.com/discord" target="_blank" rel="noreferrer">
 						<img
 							id="discord-badge"
