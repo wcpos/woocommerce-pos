@@ -21,9 +21,35 @@ class Receipt {
 
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
+
+		add_action( 'woocommerce_pos_receipt_head' , array( $this, 'receipt_head' ) );
+	}
+
+	/**
+	 * Adds a script to the head of the WordPress template when the
+	 * 'woocommerce_pos_receipt_head' action is triggered. The script listens for
+	 * a 'message' event with a specific action ('wcpos-print-receipt') and, upon
+	 * receiving such an event, triggers the browser's print functionality.
+	 *
+	 * Usage: Call `do_action( 'woocommerce_pos_receipt_head' );` at the desired
+	 * location in your template file to include the script.
+	 */
+	public function receipt_head(): void {
+		?>
+		<script>
+			window.addEventListener("message", ({data}) => {
+				if (data.action && data.action === "wcpos-print-receipt") {
+					window.print();
+				}
+			}, false);
+		</script>
+		<?php
 	}
 
 
+	/**
+	 * @return void
+	 */
 	public function get_template(): void {
 		try {
 			$order = wc_get_order( $this->order_id );

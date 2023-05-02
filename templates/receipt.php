@@ -136,6 +136,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 				margin-bottom: 3px;
 			}
 		</style>
+		<?php
+		/**
+		 * IMPORTANT!
+		 * This hook adds the javascript to print the receipt.
+		 */
+		do_action( 'woocommerce_pos_receipt_head' );
+		?>
 	</head>
 <body <?php body_class(); ?>>
 <div class="sales-receipt">
