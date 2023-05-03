@@ -29,9 +29,10 @@ class Stores extends Controller {
 			$this->get_store(),
 		);
 
-		return $data;
-
-//		return rest_ensure_response( $data );
+		/**
+		 *
+		 */
+		return apply_filters( 'woocommerce_pos_stores', $data, $this );
 	}
 
 

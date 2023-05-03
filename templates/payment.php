@@ -62,6 +62,15 @@
 				margin-bottom: 20px;
 			}
 
+			.cashier {
+				padding: 5px;
+			}
+
+			.cashier .cashier-name {
+				font-size: 14px;
+				font-weight: bold;
+			}
+
 			.current-user {
 				padding: 5px;
 				margin-bottom: 20px;
@@ -204,6 +213,11 @@
 <body <?php body_class(); ?>>
 <div class="woocommerce">
 <?php woocommerce_output_all_notices(); ?>
+
+	<div class="cashier">
+		<span><?php esc_html_e( 'Cashier: ', 'woocommerce-pos' ); ?></span>
+		<span class="cashier-name"><?php echo esc_html( $cashier->display_name ); ?></span>
+	</div>
 
 	<div class="current-user">
 		<span><?php esc_html_e( 'Paying as customer: ', 'woocommerce-pos' ); ?></span>

@@ -218,6 +218,12 @@ class Auth extends Controller {
 			);
 		}
 
+		/**
+		 * @TODO
+		 * I'm not sure if this is the best way, but I need the user to be logged in for subsequent processing
+		 */
+		wp_set_current_user( $user->ID );
+
 		/** Valid credentials, the user exists create the according Token */
 		$issued_at = time();
 

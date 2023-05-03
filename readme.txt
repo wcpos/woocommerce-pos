@@ -2,8 +2,8 @@
 Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
-Tested up to: 6
-Stable tag: 0.4.27
+Tested up to: 6.2
+Stable tag: 1.0.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -62,3 +62,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.0.0 =
+* Complete rewrite of the plugin with improved functionality and performance.
+* Although extensive testing has been done, there may still be bugs.
+* We recommend updating only when you have time to deal with potential issues.
+* You can always revert to the old version if necessary, https://wordpress.org/plugins/woocommerce-pos/advanced/
+* If you need assistance, join our Discord chat at https://wcpos.com/discord for support.

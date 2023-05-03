@@ -135,6 +135,10 @@ class Payment {
 				wp_die( esc_html__( 'Sorry, this order has already been paid for.', 'woocommerce-pos' ) );
 			}
 
+			// get cashier from order meta_data with key _pos_user
+			$cashier = $order->get_meta( '_pos_user', true );
+			$cashier = get_user_by( 'id', $cashier );
+
 			// set customer
 			wp_set_current_user( $order->get_customer_id() );
 

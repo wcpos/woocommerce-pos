@@ -119,7 +119,7 @@ class Frontend {
 				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
 			),
-			'store' => $store_settings->get_store(),
+			'stores' => $store_settings->get_stores(),
 		);
 
 		/**
