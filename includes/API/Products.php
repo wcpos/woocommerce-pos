@@ -4,6 +4,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Ramsey\Uuid\Uuid;
 use WC_Data;
+use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -85,6 +86,25 @@ class Products {
 		 */
 		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 		$data['barcode'] = $product->get_meta( $barcode_field );
+
+		/**
+		 * Truncate the product description
+		 */
+		$max_length = 100;
+		$plain_text_description = wp_strip_all_tags( $data['description'], true );
+		if ( strlen( $plain_text_description ) > $max_length ) {
+			$truncated_description = substr( $plain_text_description, 0, $max_length - 3 ) . '...';
+			$data['description'] = $truncated_description;
+		}
+
+		/**
+		 * Check the response size and log a debug message if it is over the maximum size.
+		 */
+		$response_size = strlen( serialize( $response->data ) );
+		$max_response_size = 10000;
+		if ( $response_size > $max_response_size ) {
+			Logger::log( "Product ID {$product->get_id()} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
+		}
 
 		/**
 		 * Reset the new response data
