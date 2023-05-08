@@ -192,5 +192,9 @@ class Frontend {
 		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
 			\define( 'DONOTCACHEPAGE', 'true' );
 		}
+
+		// disable Lite Speed Cache
+		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' );
+
 	}
 }
