@@ -49,4 +49,33 @@ class Product_Categories {
 
 		return $response;
 	}
+
+	/**
+	 * Returns array of all product category ids
+	 *
+	 * @param array $fields
+	 *
+	 * @return array
+	 */
+	public function get_all_posts( array $fields = array() ): array {
+		$args = array(
+			'taxonomy'   => 'product_cat',
+			'hide_empty' => false,
+			'fields'     => 'ids',
+		);
+
+		$product_category_ids = get_terms( $args );
+
+		// Convert the array of cat IDs to an array of objects with cat IDs as integers
+		return array_map( array( $this, 'format_id' ), $product_category_ids );
+	}
+
+	/**
+	 * @param string $product_category_id
+	 *
+	 * @return object
+	 */
+	private function format_id( string $product_category_id ): object {
+		return (object) array( 'id' => (int) $product_category_id );
+	}
 }

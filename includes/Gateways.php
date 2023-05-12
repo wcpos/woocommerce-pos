@@ -25,7 +25,7 @@ class Gateways {
 	 * BEWARE: some gateways/themes/plugins call this very early on every page!!
 	 * We cannot guarantee that $wp is set, so we cannot use woocommerce_pos_request.
 	 *
-	 * @param $gateways
+	 * @param array | null $gateways
 	 *
 	 * @return array
 	 */
@@ -49,11 +49,13 @@ class Gateways {
 	 * - Order and set default order
 	 * - Also going to remove icons from the gateways
 	 *
-	 * @param array $gateways
+	 * - BUG: a user with WooCommerce Blocks is getting null for $gateways?
+	 *
+	 * @param array | null $gateways
 	 *
 	 * @return array
 	 */
-	public function available_payment_gateways( array $gateways ): array {
+	public function available_payment_gateways( ?array $gateways ): array {
 		// early exit
 		if ( ! woocommerce_pos_request() ) {
 			return $gateways;
