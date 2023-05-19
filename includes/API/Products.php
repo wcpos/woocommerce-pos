@@ -107,6 +107,31 @@ class Products {
 		}
 
 		/**
+		 * If product is variable, add the max and min prices and add them to the meta data
+		 * @TODO - only need to update if there is a change
+		 */
+		if ( $product->is_type( 'variable' ) ) {
+			$product->update_meta_data( '_woocommerce_pos_variable_prices', wp_json_encode(
+				array(
+					'price' => array(
+						'min' => $product->get_variation_price(),
+						'max' => $product->get_variation_price( 'max' ),
+					),
+					'regular_price' => array(
+						'min' => $product->get_variation_regular_price(),
+						'max' => $product->get_variation_regular_price( 'max' ),
+					),
+					'sale_price' => array(
+						'min' => $product->get_variation_sale_price(),
+						'max' => $product->get_variation_sale_price( 'max' ),
+					),
+				)
+			) );
+			$product->save_meta_data();
+			$data['meta_data'] = $product->get_meta_data();
+		}
+
+		/**
 		 * Reset the new response data
 		 */
 		$response->set_data( $data );

@@ -133,6 +133,8 @@ class Init {
 	/**
 	 * Allow HEAD checks for WP API Link URL and server uptime
 	 * Fires once the requested HTTP headers for caching, content type, etc. have been sent.
+	 *
+	 * FIXME: Why is Link header not exposed sometimes on my development machine?
 	 */
 	public function send_headers(): void {
 		// some server convert HEAD to GET method, so use this query param instead
