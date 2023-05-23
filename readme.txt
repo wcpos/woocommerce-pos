@@ -63,6 +63,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.1.1 - 2023/05/xx =
+* Fix: remove private meta data from Order Preview modal
+
 = 1.1.0 - 2023/05/19 =
 * Fix: disable Lite Speed Cache for POS page
 * Fix: add id audit for product categories and tags

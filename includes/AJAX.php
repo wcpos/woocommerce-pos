@@ -5,48 +5,68 @@ namespace WCPOS\WooCommercePOS;
 class AJAX {
 
 	/**
-	 * Our hook for the Orders and Products admin will not register for AJAX requests.
-	 * We need to load the classes manually here.
+	 * WooCommerce AJAX actions that we need to hook into on the Product admin pages.
 	 *
-	 * @TODO Perhaps there a way to load for any AJAX request coming from a certain WooCommerce admin page?
+	 * @var string[]
+	 */
+	private $product_actions = array(
+		'load_variations',
+		'save_variations',
+	);
+
+	/**
+	 * WooCommerce AJAX actions that we need to hook into on the Order admin pages.
 	 *
-	 * See WC_AJAX::add_ajax_events()
+	 * @var string[]
+	 */
+	private $order_actions = array(
+		'add_order_item',
+		'add_order_fee',
+		'add_order_shipping',
+		'add_order_tax',
+		'add_coupon_discount',
+		'remove_order_coupon',
+		'remove_order_item',
+		'remove_order_tax',
+		'calc_line_taxes',
+		'save_order_items',
+		'load_order_items',
+		'get_order_details',
+	);
+
+	/**
+	 *
 	 */
 	public function __construct() {
-		$product_actions = array(
-			'woocommerce_load_variations',
-			'woocommerce_save_variations',
-		);
-		$order_actions = array(
-			'woocommerce_add_order_item',
-			'woocommerce_add_order_fee',
-			'woocommerce_add_order_shipping',
-			'woocommerce_add_order_tax',
-			'woocommerce_add_coupon_discount',
-			'woocommerce_remove_order_coupon',
-			'woocommerce_remove_order_item',
-			'woocommerce_remove_order_tax',
-			'woocommerce_calc_line_taxes',
-			'woocommerce_save_order_items',
-			'woocommerce_load_order_items',
-		);
+		$this->woocommerce_ajax_actions();
+	}
 
-		if ( $this->is_action_in_list( $product_actions ) ) {
-			new Admin\Products();
+	/**
+	 *
+	 */
+	private function woocommerce_ajax_actions() {
+		foreach ( $this->product_actions as $ajax_event ) {
+			add_action( 'wp_ajax_woocommerce_' . $ajax_event, array( $this, 'woocommerce_product_ajax' ), 9, 0 );
 		}
-
-		if ( $this->is_action_in_list( $order_actions ) ) {
-			new Admin\Orders();
+		foreach ( $this->order_actions as $ajax_event ) {
+			add_action( 'wp_ajax_woocommerce_' . $ajax_event, array( $this, 'woocommerce_order_ajax' ), 9, 0 );
 		}
 	}
 
 	/**
-	 * @TODO - add nonce checks
-	 *
-	 * @param $actions
-	 * @return bool
+	 * The Admin\Products class is not loaded for AJAX requests.
+	 * We need to load it manually here.
 	 */
-	private function is_action_in_list( $actions ) {
-		return isset( $_POST['action'] ) && in_array( $_POST['action'], $actions );
+	public function woocommerce_product_ajax() {
+		new Admin\Products();
 	}
+
+	/**
+	 * The Admin\Orders class is not loaded for AJAX requests.
+	 * We need to load it manually here.
+	 */
+	public function woocommerce_order_ajax() {
+		new Admin\Orders();
+	}
+
 }
