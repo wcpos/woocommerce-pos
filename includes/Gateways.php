@@ -49,7 +49,7 @@ class Gateways {
 	 * - Order and set default order
 	 * - Also going to remove icons from the gateways
 	 *
-	 * - BUG: a user with WooCommerce Blocks is getting null for $gateways?
+	 * - NOTE: lots of plugins/themes call this filter and I can't guarantee that $gateways is an array
 	 *
 	 * @param array | null $gateways
 	 *

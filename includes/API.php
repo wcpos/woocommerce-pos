@@ -195,8 +195,22 @@ class API {
 	 * @param WP_REST_Request                                  $request  Request used to generate the response.
 	 */
 	public function rest_request_before_callbacks( $response, $handler, $request ) {
-		$controller = get_class( $handler['callback'][0] );
+		/**
+		 * Here we attempt to determine the controller class from the handler.
+		 *
+		 * Note: the handler can be a closure, in which case we can't determine the controller.
+		 */
+		if ( isset( $handler['callback'] ) && is_array( $handler['callback'] ) && is_object( $handler['callback'][0] ) ) {
+			$controller = get_class( $handler['callback'][0] );
+		} else if ( is_object( $handler['callback'] ) ) {
+			$controller = get_class( $handler['callback'] );
+		} else {
+			return $response;
+		}
 
+		/**
+		 * If the controller is one of the WooCommerce REST API controllers, we can hijack the request
+		 */
 		switch ( $controller ) {
 			case 'WC_REST_Orders_Controller':
 				$this->wc_rest_api_handler = new API\Orders( $request );
