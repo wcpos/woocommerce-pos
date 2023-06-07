@@ -11,6 +11,9 @@ use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
 use WP_REST_Response;
+use function in_array;
+use function is_array;
+use function is_callable;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WC_Order_Query;
 use WP_Query;
@@ -33,6 +36,8 @@ class Orders {
 			$this->incoming_shop_order();
 		}
 
+		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
+		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'order_query' ), 10, 2 );
 		add_filter('woocommerce_rest_pre_insert_shop_order_object', array(
 			$this,
 			'pre_insert_shop_order_object',
@@ -49,6 +54,88 @@ class Orders {
 		add_filter( 'posts_clauses', array( $this, 'orderby_additions' ), 10, 2 );
 		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'tax_based_on' ), 10, 2 );
 	}
+
+	/**
+	 * Filters the response before executing any REST API callbacks.
+	 *
+	 * We can use this filter to bypass data validation checks
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Result to send to the client.
+	 *                                                                   Usually a WP_REST_Response or WP_Error.
+	 * @param array                                            $handler  Route handler used for the request.
+	 * @param WP_REST_Request                                  $request  Request used to generate the response.
+	 */
+	public function rest_request_before_callbacks( $response, $handler, $request ) {
+		if ( is_wp_error( $response ) ) {
+			// Check if the error code 'rest_invalid_param' exists
+			if ( $response->get_error_message( 'rest_invalid_param' ) ) {
+				// Get the error data for 'rest_invalid_param'
+				$error_data = $response->get_error_data( 'rest_invalid_param' );
+
+				// Check if the invalid parameter was 'line_items'
+				if ( array_key_exists( 'line_items', $error_data['params'] ) ) {
+					// Get the 'line_items' details
+					$line_items_details = $error_data['details']['line_items'];
+
+					// Check if 'line_items[X][quantity]' has 'rest_invalid_type'
+					// Use a regular expression to match 'line_items[X][quantity]', where X is a number
+					if ( $line_items_details['code'] === 'rest_invalid_type' &&
+						preg_match( '/^line_items\[\d+\]\[quantity\]$/', $line_items_details['data']['param'] ) ) {
+						if ( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) ) {
+							unset( $error_data['params']['line_items'], $error_data['details']['line_items'] );
+						}
+					}
+				}
+
+				// Check if the invalid parameter was 'billing'
+				if ( array_key_exists( 'billing', $error_data['params'] ) ) {
+					// Get the 'billing' details
+					$billing_details = $error_data['details']['billing'];
+
+					// Check if 'billing' has 'rest_invalid_email'
+					if ( $billing_details['code'] === 'rest_invalid_email' ) {
+						unset( $error_data['params']['billing'], $error_data['details']['billing'] );
+					}
+				}
+
+				// Check if the invalid parameter was 'orderby'
+				if ( array_key_exists( 'orderby', $error_data['params'] ) ) {
+					// Get the 'orderby' details
+					$orderby_details = $error_data['details']['orderby'];
+
+					// Get the 'orderby' request
+					$orderby_request = $request->get_param( 'orderby' );
+
+					// Extended 'orderby' values
+					$orderby_extended = array(
+						'status',
+						'customer_id',
+						'payment_method',
+						'total',
+					);
+
+					// Check if 'orderby' has 'rest_not_in_enum', but is in the extended 'orderby' values
+					if ( $orderby_details['code'] === 'rest_not_in_enum' && in_array( $orderby_request, $orderby_extended, true ) ) {
+						unset( $error_data['params']['orderby'], $error_data['details']['orderby'] );
+					}
+				}
+
+				// Check if $error_data['params'] is empty
+				if ( empty( $error_data['params'] ) ) {
+					return null;
+				} else {
+					// Remove old error data and add new error data
+					$error_message = 'Invalid parameter(s): ' . implode( ', ', array_keys( $error_data['params'] ) ) . '.';
+
+					$response->remove( 'rest_invalid_param' );
+					$response->add( 'rest_invalid_param', $error_message, $error_data );
+				}
+			}
+		}
+
+		return $response;
+	}
+
 
 
 	public function incoming_shop_order(): void {
@@ -95,6 +182,19 @@ class Orders {
 		$break = '';
 
 		return true;
+	}
+
+	/**
+	 * Filter the query arguments for a request.
+	 *
+	 * @param array           $args    Key value array of query var to query value.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array $args Key value array of query var to query value.
+	 */
+	public function order_query( $args, WP_REST_Request $request ) {
+
+		return $args;
 	}
 
 	/**
@@ -191,18 +291,18 @@ class Orders {
 			$variation  = wc_get_product( (int) $posted['variation_id'] );
 			$valid_keys = array();
 
-			if ( \is_callable( array( $variation, 'get_variation_attributes' ) ) ) {
+			if ( is_callable( array( $variation, 'get_variation_attributes' ) ) ) {
 				foreach ( $variation->get_variation_attributes() as $attribute_name => $attribute ) {
 					$valid_keys[] = str_replace( 'attribute_', '', $attribute_name );
 				}
 
-				if ( isset( $posted['meta_data'] ) && \is_array( $posted['meta_data'] ) ) {
+				if ( isset( $posted['meta_data'] ) && is_array( $posted['meta_data'] ) ) {
 					foreach ( $posted['meta_data'] as $meta ) {
 						// fix initial item creation
 						if ( isset( $meta['attr_id'] ) ) {
 							if ( 0 == $meta['attr_id'] ) {
 								// not a taxonomy
-								if ( \in_array( strtolower( $meta['display_key'] ), $valid_keys, true ) ) {
+								if ( in_array( strtolower( $meta['display_key'] ), $valid_keys, true ) ) {
 									$item->add_meta_data( strtolower( $meta['display_key'] ), $meta['display_value'], true );
 								}
 							} else {
@@ -219,7 +319,7 @@ class Orders {
 							}
 						}
 						// fix subsequent overwrites
-						if ( wc_attribute_taxonomy_id_by_name( $meta['key'] ) || \in_array( $meta['key'], $valid_keys, true ) ) {
+						if ( wc_attribute_taxonomy_id_by_name( $meta['key'] ) || in_array( $meta['key'], $valid_keys, true ) ) {
 							$item->add_meta_data( $meta['key'], $meta['value'], true );
 						}
 					}
@@ -295,28 +395,28 @@ class Orders {
 			// add option to order by status
 			if ( 'status' === $wp_query->query_vars['orderby'] ) {
 				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}posts AS order_posts ON {$wpdb->prefix}posts.ID = order_posts.ID ";
-				$clauses['orderby'] = " order_posts.post_status " . $order;
+				$clauses['orderby'] = ' order_posts.post_status ' . $order;
 			}
 
 			// add option to order by customer_id
 			if ( 'customer_id' === $wp_query->query_vars['orderby'] ) {
 				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS customer_meta ON {$wpdb->prefix}posts.ID = customer_meta.post_id ";
 				$clauses['where'] .= " AND customer_meta.meta_key = '_customer_user' ";
-				$clauses['orderby'] = " customer_meta.meta_value " . $order;
+				$clauses['orderby'] = ' customer_meta.meta_value ' . $order;
 			}
 
 			// add option to order by payment_method
 			if ( 'payment_method' === $wp_query->query_vars['orderby'] ) {
 				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS payment_method_meta ON {$wpdb->prefix}posts.ID = payment_method_meta.post_id ";
 				$clauses['where'] .= " AND payment_method_meta.meta_key = '_payment_method' ";
-				$clauses['orderby'] = " payment_method_meta.meta_value " . $order;
+				$clauses['orderby'] = ' payment_method_meta.meta_value ' . $order;
 			}
 
 			// add option to order by total
 			if ( 'total' === $wp_query->query_vars['orderby'] ) {
 				$clauses['join'] .= " LEFT JOIN {$wpdb->prefix}postmeta AS total_meta ON {$wpdb->prefix}posts.ID = total_meta.post_id ";
 				$clauses['where'] .= " AND total_meta.meta_key = '_order_total' ";
-				$clauses['orderby'] = " total_meta.meta_value+0 " . $order;
+				$clauses['orderby'] = ' total_meta.meta_value+0 ' . $order;
 			}
 		}
 

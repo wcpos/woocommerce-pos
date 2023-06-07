@@ -52,11 +52,10 @@ class API {
 		/*
 		 * These filters allow changes to the WC REST API response
 		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
+		 * Note: The rest_request_before_callbacks filter needs any early priority because we may use in the loaded classes
 		 */
-//		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
-		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
+		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 5, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
-		add_filter( 'rest_endpoints', array( $this, 'rest_endpoints' ), 99, 1 );
 
 		$this->prevent_messages();
 	}
@@ -78,6 +77,7 @@ class API {
 	 */
 	public function rest_allowed_cors_headers( array $allow_headers ): array {
 		$allow_headers[] = 'X-WCPOS';
+		$allow_headers[] = 'X-HTTP-Method-Override';
 
 		return $allow_headers;
 	}
@@ -180,14 +180,9 @@ class API {
 	/**
 	 * Filters the response before executing any REST API callbacks.
 	 *
-	 * Allows plugins to perform additional validation after a
-	 * request is initialized and matched to a registered route,
-	 * but before it is executed.
+	 * NOTE: route matching and authentication have run at this point.
 	 *
-	 * Note that this filter will not be called for requests that
-	 * fail to authenticate or match to a registered route.
-	 *
-	 * @since 4.7.0
+	 * We use this hook to determine the controller class and load our duck punches.
 	 *
 	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Result to send to the client.
 	 *                                                                   Usually a WP_REST_Response or WP_Error.
@@ -261,51 +256,5 @@ class API {
 		}
 
 		return $dispatch_result;
-	}
-
-	/**
-	 * Filters the array of available REST API endpoints.
-	 *
-	 * @param array $endpoints The available endpoints. An array of matching regex patterns, each mapped
-	 *                         to an array of callbacks for the endpoint. These take the format
-	 *                         `'/path/regex' => array( $callback, $bitmask )` or
-	 *                         `'/path/regex' => array( array( $callback, $bitmask ).
-	 *
-	 * @return array
-	 */
-	public function rest_endpoints( array $endpoints ): array {
-		// This is a hack to allow order creation without an email address
-		// @TODO - there must be a better way to this?
-		// @NOTE - WooCommercePOS\API\Orders is loaded after validation checks, so can't put it there
-		if ( isset( $endpoints['/wc/v3/orders'] ) ) {
-			$endpoints['/wc/v3/orders'][1]['args']['billing']['properties']['email']['format'] = '';
-			// add ordering by status, customer_id, payment_method and total to orders endpoint
-			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'status';
-			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'customer_id';
-			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'payment_method';
-			$endpoints['/wc/v3/orders'][0]['args']['orderby']['enum'][] = 'total';
-		}
-		if ( isset( $endpoints['/wc/v3/orders/(?P<id>[\d]+)'] ) ) {
-			$endpoints['/wc/v3/orders/(?P<id>[\d]+)'][1]['args']['billing']['properties']['email']['format'] = '';
-		}
-
-
-		// add ordering by meta_value to customers endpoint
-		if ( isset( $endpoints['/wc/v3/customers'] ) ) {
-			// allow ordering by first_name, last_name, email, role, username
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'first_name';
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'last_name';
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'email';
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'role';
-			$endpoints['/wc/v3/customers'][0]['args']['orderby']['enum'][] = 'username';
-		}
-
-		// add ordering by stock_quantity to products endpoint
-		if ( isset( $endpoints['/wc/v3/products'] ) ) {
-			// allow ordering by meta_value
-			$endpoints['/wc/v3/products'][0]['args']['orderby']['enum'][] = 'stock_quantity';
-		}
-
-		return $endpoints;
 	}
 }

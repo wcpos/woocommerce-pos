@@ -63,9 +63,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.1.1 - 2023/05/xx =
+= 1.2.0 - 2023/06/xx =
 * Improvement: remove private meta data from Order Preview modal
 * Bug Fix: 'Cannot use object of type Closure as array' in the API.php file
+* Bug Fix: Creating orders with decimal quantity
+* Bug Fix: Update product with decimal quantity
 
 = 1.1.0 - 2023/05/19 =
 * Fix: disable Lite Speed Cache for POS page

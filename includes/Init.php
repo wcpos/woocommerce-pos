@@ -138,7 +138,7 @@ class Init {
 	 */
 	public function send_headers(): void {
 		// some server convert HEAD to GET method, so use this query param instead
-		if ( isset( $_GET['wcpos_http_method'] ) && 'head' == $_GET['wcpos_http_method'] ) {
+		if ( isset( $_GET['_method'] ) && 'head' == strtolower( $_GET['_method'] ) ) {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
 		}

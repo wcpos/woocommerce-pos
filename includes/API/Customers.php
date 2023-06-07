@@ -23,9 +23,66 @@ class Customers {
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
 
+		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response' ), 10, 3 );
 		add_filter( 'users_where', array( $this, 'users_where' ), 10, 2 );
+	}
+
+	/**
+	 * Filters the response before executing any REST API callbacks.
+	 *
+	 * We can use this filter to bypass data validation checks
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Result to send to the client.
+	 *                                                                   Usually a WP_REST_Response or WP_Error.
+	 * @param array                                            $handler  Route handler used for the request.
+	 * @param WP_REST_Request                                  $request  Request used to generate the response.
+	 */
+	public function rest_request_before_callbacks( $response, $handler, $request ) {
+		if ( is_wp_error( $response ) ) {
+			// Check if the error code 'rest_invalid_param' exists
+			if ( $response->get_error_message( 'rest_invalid_param' ) ) {
+				// Get the error data for 'rest_invalid_param'
+				$error_data = $response->get_error_data( 'rest_invalid_param' );
+
+				// Check if the invalid parameter was 'orderby'
+				if ( array_key_exists( 'orderby', $error_data['params'] ) ) {
+					// Get the 'orderby' details
+					$orderby_details = $error_data['details']['orderby'];
+
+					// Get the 'orderby' request
+					$orderby_request = $request->get_param( 'orderby' );
+
+					// Extended 'orderby' values
+					$orderby_extended = array(
+						'first_name',
+						'last_name',
+						'email',
+						'role',
+						'username',
+					);
+
+					// Check if 'orderby' has 'rest_not_in_enum', but is in the extended 'orderby' values
+					if ( $orderby_details['code'] === 'rest_not_in_enum' && in_array( $orderby_request, $orderby_extended, true ) ) {
+						unset( $error_data['params']['orderby'], $error_data['details']['orderby'] );
+					}
+				}
+
+				// Check if $error_data['params'] is empty
+				if ( empty( $error_data['params'] ) ) {
+					return null;
+				} else {
+					// Remove old error data and add new error data
+					$error_message = 'Invalid parameter(s): ' . implode( ', ', array_keys( $error_data['params'] ) ) . '.';
+
+					$response->remove( 'rest_invalid_param' );
+					$response->add( 'rest_invalid_param', $error_message, $error_data );
+				}
+			}
+		}
+
+		return $response;
 	}
 
 
