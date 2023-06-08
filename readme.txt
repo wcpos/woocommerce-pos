@@ -20,7 +20,7 @@ You can see a demo of the WooCommerce POS plugin in action by going to [https://
 = REQUIREMENTS =
 * WordPress >= 5.6
 * WooCommerce >= 5.3
-* PHP >= 7.0
+* PHP >= 7.2
 
 == Installation ==
 
@@ -68,6 +68,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 * Bug Fix: 'Cannot use object of type Closure as array' in the API.php file
 * Bug Fix: Creating orders with decimal quantity
 * Bug Fix: Update product with decimal quantity
+* Fix: turn off PHP version check by composer, note that PHP 7.2+ is still required
 
 = 1.1.0 - 2023/05/19 =
 * Fix: disable Lite Speed Cache for POS page

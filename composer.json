@@ -29,6 +29,7 @@
     "vlucas/phpdotenv": "^v5.5.0"
   },
   "config": {
+    "platform-check": false,
     "process-timeout": 0,
     "optimize-autoloader": true,
     "vendor-dir": "vendor",
