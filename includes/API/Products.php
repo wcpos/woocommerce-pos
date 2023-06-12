@@ -11,6 +11,9 @@ use WP_REST_Response;
 use WC_Product_Query;
 use function is_array;
 
+/**
+ * @property string $search_term
+ */
 class Products {
 	private $request;
 
@@ -26,7 +29,7 @@ class Products {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'product_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'posts_search' ), 10, 2 );
-		add_filter( 'posts_clauses', array( $this, 'orderby_stock_quantity' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
 	}
@@ -213,21 +216,48 @@ class Products {
 	 * @return array $args Key value array of query var to query value.
 	 */
 	public function product_query( array $args, WP_REST_Request $request ): array {
-		// Note!: date_query is removed from the query, use 'after' and delete this filter
-
-		//		$params = $request->get_query_params();
-		//		if ( isset( $params['date_modified_gmt_after'] ) ) {
-		//			$date_query = array(
-		//				'column' => 'post_modified_gmt',
-		//				'after'  => $params['date_modified_gmt_after'],
-		//			);
-		//			array_push( $args['date_query'], $date_query );
-		// //			array_push( $args['after'], $date_query );
-		//
-		//		}
+		if ( ! empty( $request['search'] ) ) {
+			// We need to set the query up for a postmeta join
+			add_filter( 'posts_join', array( $this, 'barcode_postmeta_join' ), 10, 2 );
+			add_filter( 'posts_groupby', array( $this, 'barcode_postmeta_groupby' ), 10, 2 );
+		}
 
 		return $args;
 	}
+
+
+	/**
+	 * Filters the JOIN clause of the query.
+	 *
+	 * @param string $join  The JOIN clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 */
+	public function barcode_postmeta_join( string $join, WP_Query $query ): string {
+		global $wpdb;
+
+		if ( isset( $query->query_vars['s'] ) ) {
+			$join .= " LEFT JOIN {$wpdb->postmeta} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id";
+		}
+
+		return $join;
+	}
+
+	/**
+	 * Filters the GROUP BY clause of the query.
+	 *
+	 * @param string   $groupby The GROUP BY clause of the query.
+	 * @param WP_Query $query   The WP_Query instance (passed by reference).
+	 */
+	public function barcode_postmeta_groupby( string $groupby, WP_Query $query ): string {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) ) {
+			$groupby = "{$wpdb->posts}.ID";
+		}
+
+		return $groupby;
+	}
+
 
 	/**
 	 * Filters all query clauses at once, for convenience.
@@ -248,7 +278,7 @@ class Products {
 	 * }
 	 * @param WP_Query $wp_query   The WP_Query instance (passed by reference).
 	 */
-	public function orderby_stock_quantity( array $clauses, WP_Query $wp_query ): array {
+	public function posts_clauses( array $clauses, WP_Query $wp_query ): array {
 		global $wpdb;
 
 		// add option to order by stock quantity
@@ -271,33 +301,46 @@ class Products {
 
 
 	/**
-	 * Search SQL filter for matching against post title only.
+	 * Filter to adjust the WordPress search SQL query
+	 * - Search for the product title and SKU and barcode
+	 * - Do not search product description
 	 *
-	 * @param string   $search
+	 * @param string $search
 	 * @param WP_Query $wp_query
 	 */
-	public function posts_search( $search, $wp_query ): string {
-		if ( ! empty( $search ) && ! empty( $wp_query->query_vars['search_terms'] ) ) {
-			global $wpdb;
+	public function posts_search( string $search, WP_Query $wp_query ): string {
+		global $wpdb;
 
+		if ( ! empty( $search ) && ! empty( $wp_query->query_vars['search_terms'] ) ) {
 			$q = $wp_query->query_vars;
 			$n = ! empty( $q['exact'] ) ? '' : '%';
 
-			$search = array();
+			$search_array = array();
 
 			foreach ( (array) $q['search_terms'] as $term ) {
-				$search[] = $wpdb->prepare( "$wpdb->posts.post_title LIKE %s", $n . $wpdb->esc_like( $term ) . $n );
+				$like_term = $wpdb->esc_like( $term );
+				$search_array[] = $wpdb->prepare( "{$wpdb->posts}.post_title LIKE %s", $n . $like_term . $n );
+
+				// Search in _sku field
+				$search_array[] = $wpdb->prepare( "(wp_postmeta.meta_key = '_sku' AND wp_postmeta.meta_value LIKE %s)", $n . $like_term . $n );
+
+				// Search in barcode field
+				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+				if ( $barcode_field !== '_sku' ) {
+					$search_array[] = $wpdb->prepare( "(wp_postmeta.meta_key = %s AND wp_postmeta.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
+				}
 			}
 
 			if ( ! is_user_logged_in() ) {
-				$search[] = "$wpdb->posts.post_password = ''";
+				$search_array[] = "{$wpdb->posts}.post_password = ''";
 			}
 
-			$search = ' AND ' . implode( ' AND ', $search );
+			$search = ' AND (' . implode( ' OR ', $search_array ) . ')';
 		}
 
 		return $search;
 	}
+
 
 	/**
 	 * Returns array of all product ids, name.

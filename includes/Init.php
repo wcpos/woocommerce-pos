@@ -123,8 +123,19 @@ class Init {
 	 */
 	public function rest_pre_serve_request( bool $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
 		if ( 'OPTIONS' == $request->get_method() ) {
+			$allow_headers = array(
+				'Authorization',            // For user-agent authentication with a server.
+				'X-WP-Nonce',               // WordPress-specific header, used for CSRF protection.
+				'Content-Disposition',      // Informs how to process the response data.
+				'Content-MD5',              // For verifying data integrity.
+				'Content-Type',             // Specifies the media type of the resource.
+				'X-HTTP-Method-Override',   // Used to override the HTTP method.
+				'X-WCPOS',                  // Used to identify WCPOS requests.
+			);
+
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
-			$server->send_header( 'Access-Control-Allow-Headers', 'Authorization, X-WP-Nonce, Content-Disposition, Content-MD5, Content-Type, X-WCPOS' );
+			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );
+			$server->send_header( 'Access-Control-Allow-Headers', implode( ', ', $allow_headers ) );
 		}
 
 		return $served;
@@ -159,7 +170,7 @@ class Init {
 	 * It is programmatically turned off here for POS requests
 	 * This gets loaded and cached before the rest_api init hook, so we can't use the filter
 	 */
-	public function remove_wpseo_rest_api_links ( $wpseo_options ) {
+	public function remove_wpseo_rest_api_links( $wpseo_options ) {
 		if ( woocommerce_pos_request() ) {
 			$wpseo_options['remove_rest_api_links'] = true;
 			$wpseo_options['enable_headless_rest_endpoints'] = false;

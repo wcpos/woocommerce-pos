@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.2
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -63,11 +63,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.2.0 - 2023/06/xx =
-* Improvement: remove private meta data from Order Preview modal
+= 1.2.0 - 2023/06/12 =
+* Refactor: data replication to improve performance
+* Refactor: product search, search by sku and barcode for products now works
+    - Note: barcode search for variations is still not working, this will be addressed in a future release
 * Bug Fix: 'Cannot use object of type Closure as array' in the API.php file
 * Bug Fix: Creating orders with decimal quantity
 * Bug Fix: Update product with decimal quantity
+* Fix: remove private meta data from Order Preview modal
 * Fix: turn off PHP version check by composer, note that PHP 7.2+ is still required
 
 = 1.1.0 - 2023/05/19 =
