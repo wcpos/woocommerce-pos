@@ -10,35 +10,37 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
 class Menu {
 	/**
-	 * @vars string Unique menu identifier
+	 * @vars string Unique top level menu identifier
 	 */
-	private $toplevel_screen_id;
+	public $toplevel_screen_id;
+
+	/**
+	 * @vars string Unique top level menu identifier
+	 */
+	public $settings_screen_id;
 
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
-		add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
-		add_filter( 'custom_menu_order', '__return_true' );
+		if ( current_user_can( 'manage_woocommerce_pos' ) ) {
+			$this->register_pos_admin();
+			add_filter( 'custom_menu_order', '__return_true' );
+			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
+		}
+
+		add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
 	}
 
 	/**
-	 * Add POS to admin menu.
-	 *
-	 *  Fires before the administration menu loads in the admin.
-	 *
-	 * The hook fires before menus and sub-menus are removed based on user privileges.
+	 * Add POS to Admin sidebar.
 	 */
-	public function admin_menu(): void {
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			return;
-		}
-
+	private function register_pos_admin() {
 		$this->toplevel_screen_id = add_menu_page(
 			__( 'POS', 'woocommerce-pos' ),
 			__( 'POS', 'woocommerce-pos' ),
@@ -53,7 +55,18 @@ class Menu {
 			__( 'View POS', 'woocommerce-pos' ),
 			__( 'View POS', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
-			null,
+			null
+		);
+
+		$this->settings_screen_id = add_submenu_page(
+			PLUGIN_NAME,
+			// translators: wordpress
+			__( 'Settings' ),
+			// translators: wordpress
+			__( 'Settings' ),
+			'manage_woocommerce_pos',
+			PLUGIN_NAME . '-settings',
+			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
 		);
 
 		// adjust submenu
@@ -61,6 +74,14 @@ class Menu {
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
 		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
 		$pos_submenu[1][2] = woocommerce_pos_url();
+
+		/**
+		 * Allows Pro to hook into the POS admin menu.
+		 */
+		do_action( 'woocommerce_pos_register_pos_admin', array(
+			'toplevel' => $this->toplevel_screen_id,
+			'settings' => $this->settings_screen_id,
+		) );
 	}
 
 	/**
@@ -75,7 +96,7 @@ class Menu {
 	 *
 	 * @return array
 	 */
-	public function menu_order( $menu_order ) {
+	public function menu_order( array $menu_order ): array {
 		$woo = array_search( 'woocommerce', $menu_order, true );
 		$pos = array_search( PLUGIN_NAME, $menu_order, true );
 
@@ -89,7 +110,7 @@ class Menu {
 			$pos_submenu      = &$submenu[ PLUGIN_NAME ];
 			$pos_submenu[500] = $pos_submenu[1];
 			unset( $pos_submenu[1] );
-		};
+		}
 
 		return $menu_order;
 	}
@@ -115,8 +136,32 @@ class Menu {
 				return;
 			}
 			// Store remote HTML file in transient, expire after 24 hours
-			set_transient( 'remote_pro_page', $upgrade, 24 * \HOUR_IN_SECONDS );
+			set_transient( 'remote_pro_page', $upgrade, 24 * HOUR_IN_SECONDS );
 		}
 		include_once 'templates/upgrade.php';
+	}
+
+	/**
+	 * Add POS submenu to WooCommerce Analytics menu.
+	 */
+	public function analytics_menu_items( array $report_pages ): array {
+		// Find the position of the 'Orders' item
+		$position = array_search( 'Orders', array_column( $report_pages, 'title' ) );
+
+		// Use array_splice to add the new item
+		array_splice($report_pages, $position + 1, 0, array(
+			array(
+				'id'       => 'woocommerce-analytics-pos',
+				'title'    => __( 'POS', 'woocommerce-pos' ),
+				'parent'   => 'woocommerce-analytics',
+				'path'     => '/analytics/pos',
+				'nav_args' => array(
+					'order'  => 45,
+					'parent' => 'woocommerce-analytics',
+				),
+			),
+		));
+
+		return $report_pages;
 	}
 }

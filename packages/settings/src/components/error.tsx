@@ -3,8 +3,8 @@ import * as React from 'react';
 import { get } from 'lodash';
 import { FallbackProps } from 'react-error-boundary';
 
-import { t } from '../translations';
 import Notice from './notice';
+import { t } from '../translations';
 
 const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
 	const message = get(error, 'message', 'Unknown error');

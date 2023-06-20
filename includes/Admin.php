@@ -11,13 +11,22 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use Automattic\WooCommerce\Admin\PageController;
+
 class Admin {
+	/**
+	 * @vars string Unique menu identifier
+	 */
+	private $menu_ids;
+
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->init();
-		add_action( 'current_screen', array( $this, 'conditional_init' ) );
+		// NOTE: The admin_menu needs to hook the Analytics menu before WooCommerce calls the admin_menu hook.
+		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
+		add_action( 'current_screen', array( $this, 'current_screen' ) );
 	}
 
 	/**
@@ -25,10 +34,19 @@ class Admin {
 	 */
 	private function init(): void {
 		new Admin\Notices();
-		new Admin\Menu();
-		new Admin\Settings();
-		//		new Admin\Status();
-		//		new Admin\Gateways();
+	}
+
+	/**
+	 * Fires before the administration menu loads in the admin.
+	 *
+	 * @param string $context Empty context.
+	 */
+	public function admin_menu( $context ): void {
+		$menu = new Admin\Menu();
+		$this->menu_ids = array(
+			'toplevel' => $menu->toplevel_screen_id,
+			'settings' => $menu->settings_screen_id,
+		);
 	}
 
 	/**
@@ -36,7 +54,7 @@ class Admin {
 	 *
 	 * @param $current_screen
 	 */
-	public function conditional_init( $current_screen ): void {
+	public function current_screen( $current_screen ): void {
 		// Add setting to permalink page
 		if ( 'options-permalink' == $current_screen->id ) {
 			new Admin\Permalink();
@@ -56,5 +74,23 @@ class Admin {
 		if ( 'plugins' == $current_screen->id ) {
 			new Admin\Plugins();
 		}
+
+		// Load the Settings class
+		if ( isset( $this->menu_ids['settings'] ) && $this->menu_ids['settings'] == $current_screen->id ) {
+			new Admin\Settings();
+		}
+
+		// Load the Analytics class
+		// Note screen->id = woocommerce_page_wc-admin is used in many places and is not unique to the analytics page.
+		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
+			$wc_admin_page_controller = PageController::get_instance();
+			$wc_admin_current_page = $wc_admin_page_controller->get_current_page();
+			if ( is_array( $wc_admin_current_page ) ) {
+				if ( $wc_admin_current_page['id'] === 'woocommerce-analytics' || $wc_admin_current_page['parent'] === 'woocommerce-analytics' ) {
+					new Admin\Analytics();
+				}
+			}
+		}
 	}
+
 }

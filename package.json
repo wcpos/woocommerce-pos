@@ -1,58 +1,59 @@
 {
-	"name": "@wcpos/woocommerce-pos",
-	"version": "1.2.1",
-	"description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
-	"main": "index.js",
-	"workspaces": {
-		"packages": [
-			"packages/*"
-		]
-	},
-	"scripts": {
-		"wp-env": "wp-env",
-		"start": "wp-env start --xdebug=debug --debug",
-		"stop": "wp-env stop",
-		"cli": "wp-env run cli",
-		"wp": "wp-env run cli wp",
-		"pretest": "wp-env start --xdebug=coverage && wp-env run composer 'install --no-interaction'",
-		"lint:php": "composer run lint-report | cs2pr",
-		"lint": "run-s lint:*",
-		"test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
-		"test:unit": "run-s test:unit:*",
-		"test": "run-s test:*",
-		"build:docs": "jsdoc -c hookdoc-conf.json",
-		"prepare": "husky install",
-		"settings": "yarn workspace @wcpos/settings",
-		"edit-product": "yarn workspace @wcpos/edit-product",
-		"build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/wcpos/woocommerce-pos.git"
-	},
-	"keywords": [
-		"wordpress",
-		"woocommerce",
-		"ecommerce",
-		"point-of-sale"
-	],
-	"author": "kilbot",
-	"license": "ISC",
-	"bugs": {
-		"url": "https://github.com/wcpos/woocommerce-pos/issues"
-	},
-	"homepage": "https://wcpos.com",
-	"devDependencies": {
-		"@wordpress/babel-plugin-makepot": "5.12.0",
-		"@wordpress/env": "5.13.0",
-		"husky": "8.0.3",
-		"jsdoc": "^4.0.2",
-		"npm-run-all": "4.1.5",
-		"taffydb": "^2.7.3",
-		"wp-hookdoc": "0.2.0"
-	},
-	"packageManager": "yarn@3.2.1",
-	"eslintConfig": {
-		"extends": "@wcpos/eslint-config"
-	}
+  "name": "@wcpos/woocommerce-pos",
+  "version": "1.2.1",
+  "description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
+  "main": "index.js",
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ]
+  },
+  "scripts": {
+    "wp-env": "wp-env",
+    "start": "wp-env start --xdebug=debug --debug",
+    "stop": "wp-env stop",
+    "cli": "wp-env run cli",
+    "wp": "wp-env run cli wp",
+    "pretest": "wp-env start --xdebug=coverage && wp-env run composer 'install --no-interaction'",
+    "lint:php": "composer run lint-report | cs2pr",
+    "lint": "run-s lint:*",
+    "test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
+    "test:unit": "run-s test:unit:*",
+    "test": "run-s test:*",
+    "build:docs": "jsdoc -c hookdoc-conf.json",
+    "prepare": "husky install",
+    "settings": "yarn workspace @wcpos/settings",
+    "analytics": "yarn workspace @wcpos/analytics",
+    "edit-product": "yarn workspace @wcpos/edit-product",
+    "build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wcpos/woocommerce-pos.git"
+  },
+  "keywords": [
+    "wordpress",
+    "woocommerce",
+    "ecommerce",
+    "point-of-sale"
+  ],
+  "author": "kilbot",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wcpos/woocommerce-pos/issues"
+  },
+  "homepage": "https://wcpos.com",
+  "devDependencies": {
+    "@wordpress/babel-plugin-makepot": "5.19.0",
+    "@wordpress/env": "8.1.1",
+    "husky": "8.0.3",
+    "jsdoc": "^4.0.2",
+    "npm-run-all": "4.1.5",
+    "taffydb": "^2.7.3",
+    "wp-hookdoc": "0.2.0"
+  },
+  "packageManager": "yarn@3.2.1",
+  "eslintConfig": {
+    "extends": "@wcpos/eslint-config"
+  }
 }

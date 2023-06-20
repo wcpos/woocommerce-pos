@@ -17,31 +17,13 @@ use const WCPOS\WooCommercePOS\VERSION;
 class Settings {
 
 	public function __construct() {
-		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
-	}
-
-	/**
-	 * Add Settings page to admin menu.
-	 */
-	public function admin_menu(): void {
-		$page_hook_suffix = add_submenu_page(
-			PLUGIN_NAME,
-			// translators: wordpress
-			__( 'Settings' ),
-			// translators: wordpress
-			__( 'Settings' ),
-			'manage_woocommerce_pos',
-			PLUGIN_NAME . '-settings',
-			array( $this, 'display_settings_page' )
-		);
-
-		add_action( "load-{$page_hook_suffix}", array( $this, 'enqueue_assets' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
 	/**
 	 * Output the settings pages.
 	 */
-	public function display_settings_page(): void {
+	public static function display_settings_page(): void {
 		printf('<div id="woocommerce-pos-settings">
 			<div id="woocommerce-pos-js-error" class="wrap">
 				<h1>%s</h1>

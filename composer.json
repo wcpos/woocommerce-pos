@@ -23,6 +23,7 @@
   },
   "require": {
     "php": ">=7.2",
+    "ext-json": "*",
     "firebase/php-jwt": "v6.4.0",
     "ramsey/uuid": "^4.2.3",
     "salesforce/handlebars-php": "^3.0.1",
