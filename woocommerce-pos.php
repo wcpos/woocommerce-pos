@@ -3,7 +3,7 @@
  * Plugin Name:       WooCommerce POS
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           1.2.1
+ * Version:           1.2.2
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -21,14 +21,15 @@
 namespace WCPOS\WooCommercePOS;
 
 use Dotenv\Dotenv;
+use function define;
 
 // Define plugin constants.
-const VERSION = '1.2.1';
+const VERSION = '1.2.2';
 const PLUGIN_NAME = 'woocommerce-pos';
 const SHORT_NAME = 'wcpos';
-\define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
-\define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
-\define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
+define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
+define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
+define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 
 // Autoloader
 if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {

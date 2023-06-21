@@ -91,7 +91,9 @@ class Settings extends Settings_Controller {
 	/**
 	 * Settings constructor.
 	 */
-	public function __construct() {     }
+	public function __construct() {
+		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'payment_gateways_settings' ) );
+	}
 
 	/**
 	 * @return void
@@ -306,9 +308,15 @@ class Settings extends Settings_Controller {
 	 *
 	 */
 	public function get_license_settings() {
+		$settings = array();
+
+		if ( class_exists( '\WCPOS\WooCommercePOSPro' ) ) {
+			$settings = get_option( self::$db_prefix . 'license', array() );
+		}
+
 		$license_settings = array_replace_recursive(
 			self::$default_settings['license'],
-			get_option( self::$db_prefix . 'license', array() )
+			$settings
 		);
 
 		/**
@@ -328,9 +336,16 @@ class Settings extends Settings_Controller {
 	/**
 	 * @return array
 	 */
-	public function get_barcodes(): array {
+	public function get_barcodes( WP_REST_Request $request ): array {
 		global $wpdb;
 
+		// Get 'search' parameter from request
+		$search = $request->get_param( 'search' );
+
+		// maybe add custom barcode field
+		$custom_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+
+		// Prepare the basic query
 		$result = $wpdb->get_col(
 			"
 			SELECT DISTINCT(pm.meta_key)
@@ -342,10 +357,15 @@ class Settings extends Settings_Controller {
 			"
 		);
 
-		// maybe add custom barcode field
-		$custom_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 		if ( ! empty( $custom_field ) ) {
 			$result[] = $custom_field;
+		}
+
+		// Filter the results
+		if ( ! empty( $search ) ) {
+			$result = array_filter( $result, function( $item ) use ( $search ) {
+				return stripos( $item, $search ) !== false;
+			});
 		}
 
 		sort( $result );
@@ -600,5 +620,20 @@ class Settings extends Settings_Controller {
 	 */
 	public function access_permission_check() {
          return current_user_can( 'promote_users' );
+	}
+
+	/**
+	 *
+	 */
+	public function payment_gateways_settings( $options ) {
+		foreach ( $options['gateways'] as $gateway_id => &$gateway_data ) {
+			if ( ! in_array( $gateway_id, array( 'pos_cash', 'pos_card' ) ) ) {
+				$gateway_data['enabled'] = false;
+			}
+		}
+		if ( ! in_array( $options['default_gateway'], array( 'pos_cash', 'pos_card' ) ) ) {
+			$options['default_gateway'] = 'pos_cash';
+		}
+		return $options;
 	}
 }

@@ -4,10 +4,11 @@ import { Button, FormToggle } from '@wordpress/components';
 import { map, sortBy, keyBy } from 'lodash';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
+import GatewayModal from './gateway-modal';
 import DragIcon from '../../../assets/drag-icon.svg';
+import Notice from '../../components/notice';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
-import GatewayModal from './gateway-modal';
 
 import type {
 	DraggableProvided,
@@ -53,6 +54,7 @@ const Gateways = () => {
 	const { data, mutate } = useSettingsApi('payment-gateways');
 	const [isOpen, setOpen] = React.useState(false);
 	const modalGateway = React.useRef<GatewayProps>(null);
+	const proEnabled = data?.pro_enabled;
 
 	/**
 	 * Sort gateways by order.
@@ -85,123 +87,144 @@ const Gateways = () => {
 	);
 
 	return (
-		<div className="wcpos-overflow-hidden wcpos-border wcpos-border-gray-200 sm:wcpos-rounded-lg">
-			<DragDropContext onDragEnd={onDragEnd}>
-				<table className="wcpos-min-w-full wcpos-divide-y wcpos-divide-gray-200">
-					<thead className="wcpos-bg-gray-50">
-						<tr>
-							<th scope="col"></th>
-							<th
-								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
-							>
-								{t('Default', { _tags: 'wp-admin-settings' })}
-							</th>
-							<th
-								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
-							>
-								{t('Gateway', { _tags: 'wp-admin-settings' })}
-							</th>
-							<th
-								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
-							>
-								{t('Gateway ID', { _tags: 'wp-admin-settings' })}
-							</th>
-							<th
-								scope="col"
-								className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
-							>
-								{t('Enabled', { _tags: 'wp-admin-settings' })}
-							</th>
-							<th scope="col"></th>
-						</tr>
-					</thead>
-					<Droppable droppableId="woocommerce-pos-gateways">
-						{(provided: DroppableProvided) => (
-							<tbody
-								{...provided.droppableProps}
-								ref={provided.innerRef}
-								className="wcpos-bg-white wcpos-divide-y wcpos-divide-gray-200"
-							>
-								{map(gateways, (item, index) => (
-									<Draggable key={item.id} draggableId={item.id} index={index}>
-										{(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-											<tr
-												ref={provided.innerRef}
-												{...provided.draggableProps}
-												{...provided.dragHandleProps}
-												style={getItemStyle(
-													snapshot.isDragging,
-													provided.draggableProps.style,
-													index
-												)}
-											>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
-													<DragIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400 wcpos-fill-current" />
-												</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
-													<input
-														type="radio"
-														value={item.id}
-														checked={data?.default_gateway === item.id}
-														disabled={!item.enabled}
-														className=""
-														onChange={() => {
-															mutate({ default_gateway: item.id });
-														}}
-													/>
-												</td>
-												<td className="wcpos-px-4 wcpos-py-2 text-ellipsis overflow-hidden">
-													<strong>{item.title}</strong>
-												</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">{item.id}</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
-													<FormToggle
-														label=""
-														checked={item.enabled}
-														onChange={() => {
-															mutate({
-																gateways: {
-																	[item.id]: {
-																		enabled: !item.enabled,
-																	},
-																},
-															});
-														}}
-													/>
-												</td>
-												<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-right">
-													<Button
-														variant="secondary"
-														onClick={() => {
-															// @ts-ignore
-															modalGateway.current = item;
-															setOpen(true);
-														}}
-													>
-														{t('Settings', { _tags: 'wp-admin-settings' })}
-													</Button>
-												</td>
-											</tr>
-										)}
-									</Draggable>
-								))}
-								{provided.placeholder}
-							</tbody>
-						)}
-					</Droppable>
-				</table>
-			</DragDropContext>
-			{isOpen && modalGateway.current && (
-				<GatewayModal
-					gateway={modalGateway.current}
-					mutate={mutate}
-					closeModal={() => setOpen(false)}
-				/>
+		<>
+			{proEnabled ? (
+				''
+			) : (
+				<div className="wcpos-pb-5">
+					<Notice status="info" isDismissible={false}>
+						{t('To enable all WooCommerce gateways please enable the Pro plugin.', {
+							_tags: 'wp-admin-settings',
+						})}{' '}
+						<a href="https://wcpos.com/pro">
+							{t('Upgrade to WooCommerce POS Pro', {
+								_tags: 'wp-admin-settings',
+							})}
+						</a>
+						.
+					</Notice>
+				</div>
 			)}
-		</div>
+			<div className="wcpos-overflow-hidden wcpos-border wcpos-border-gray-200 sm:wcpos-rounded-lg">
+				<DragDropContext onDragEnd={onDragEnd}>
+					<table className="wcpos-min-w-full wcpos-divide-y wcpos-divide-gray-200">
+						<thead className="wcpos-bg-gray-50">
+							<tr>
+								<th scope="col"></th>
+								<th
+									scope="col"
+									className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
+								>
+									{t('Default', { _tags: 'wp-admin-settings' })}
+								</th>
+								<th
+									scope="col"
+									className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
+								>
+									{t('Gateway', { _tags: 'wp-admin-settings' })}
+								</th>
+								<th
+									scope="col"
+									className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-left"
+								>
+									{t('Gateway ID', { _tags: 'wp-admin-settings' })}
+								</th>
+								<th
+									scope="col"
+									className="wcpos-px-4 wcpos-py-2 text-left wcpos-text-xs wcpos-font-medium wcpos-text-gray-500 wcpos-uppercase wcpos-tracking-wider wcpos-text-center"
+								>
+									{t('Enabled', { _tags: 'wp-admin-settings' })}
+								</th>
+								<th scope="col"></th>
+							</tr>
+						</thead>
+						<Droppable droppableId="woocommerce-pos-gateways">
+							{(provided: DroppableProvided) => (
+								<tbody
+									{...provided.droppableProps}
+									ref={provided.innerRef}
+									className="wcpos-bg-white wcpos-divide-y wcpos-divide-gray-200"
+								>
+									{map(gateways, (item, index) => (
+										<Draggable key={item.id} draggableId={item.id} index={index}>
+											{(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+												<tr
+													ref={provided.innerRef}
+													{...provided.draggableProps}
+													{...provided.dragHandleProps}
+													style={getItemStyle(
+														snapshot.isDragging,
+														provided.draggableProps.style,
+														index
+													)}
+												>
+													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
+														<DragIcon className="wcpos-w-5 wcpos-h-5 wcpos-text-gray-400 wcpos-fill-current" />
+													</td>
+													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
+														<input
+															type="radio"
+															value={item.id}
+															checked={data?.default_gateway === item.id}
+															disabled={!item.enabled}
+															className=""
+															onChange={() => {
+																mutate({ default_gateway: item.id });
+															}}
+														/>
+													</td>
+													<td className="wcpos-px-4 wcpos-py-2 text-ellipsis overflow-hidden">
+														<strong>{item.title}</strong>
+													</td>
+													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap">
+														{item.id}
+													</td>
+													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-center">
+														<FormToggle
+															label=""
+															checked={item.enabled}
+															onChange={() => {
+																mutate({
+																	gateways: {
+																		[item.id]: {
+																			enabled: !item.enabled,
+																		},
+																	},
+																});
+															}}
+														/>
+													</td>
+													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-right">
+														<Button
+															variant="secondary"
+															onClick={() => {
+																// @ts-ignore
+																modalGateway.current = item;
+																setOpen(true);
+															}}
+														>
+															{t('Settings', { _tags: 'wp-admin-settings' })}
+														</Button>
+													</td>
+												</tr>
+											)}
+										</Draggable>
+									))}
+									{provided.placeholder}
+								</tbody>
+							)}
+						</Droppable>
+					</table>
+				</DragDropContext>
+				{isOpen && modalGateway.current && (
+					<GatewayModal
+						gateway={modalGateway.current}
+						mutate={mutate}
+						closeModal={() => setOpen(false)}
+					/>
+				)}
+			</div>
+		</>
 	);
 };
 

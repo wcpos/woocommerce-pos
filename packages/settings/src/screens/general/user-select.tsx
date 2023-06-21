@@ -2,8 +2,8 @@ import * as React from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { ComboboxControl } from '@wordpress/components';
 
+import Combobox from '../../components/combobox';
 import useNotices from '../../hooks/use-notices';
 import { t } from '../../translations';
 
@@ -24,12 +24,13 @@ interface User {
 const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
 	const guestUser: User = { id: 0, name: t('Guest', { _tags: 'wp-admin-settings' }) };
 	const { setNotice } = useNotices();
+	const [query, setQuery] = React.useState('');
 
-	const { data } = useQuery<User[]>({
-		queryKey: ['users'],
+	const { data, isFetching } = useQuery<User[]>({
+		queryKey: ['users', query],
 		queryFn: async () => {
 			const response = await apiFetch<Record<string, unknown>>({
-				path: `wp/v2/users`,
+				path: `wp/v2/users?search=${encodeURIComponent(query)}`,
 				method: 'GET',
 			}).catch((err) => {
 				console.error(err);
@@ -61,14 +62,15 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 	}, [data]);
 
 	return (
-		<ComboboxControl
+		<Combobox
 			value={String(selected || 0)}
 			options={options}
-			onChange={(value) => {
+			onChange={({ value }) => {
 				const id = value ? Number(value) : 0;
 				onSelect(id);
 			}}
-			allowReset={false}
+			onSearch={(value) => setQuery(value)}
+			loading={isFetching}
 		/>
 	);
 };

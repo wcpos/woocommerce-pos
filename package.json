@@ -1,6 +1,6 @@
 {
   "name": "@wcpos/woocommerce-pos",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
   "main": "index.js",
   "workspaces": {
@@ -25,7 +25,7 @@
     "settings": "yarn workspace @wcpos/settings",
     "analytics": "yarn workspace @wcpos/analytics",
     "edit-product": "yarn workspace @wcpos/edit-product",
-    "build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build"
+    "build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build && yarn workspace @wcpos/analytics build"
   },
   "repository": {
     "type": "git",
