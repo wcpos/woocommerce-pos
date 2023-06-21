@@ -34,7 +34,7 @@ class Menu {
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
 		}
 
-		add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
+//		add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
 	}
 
 	/**
