@@ -7,9 +7,12 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
+use Firebase\JWT\JWT as FirebaseJWT;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Stores;
 
+use function define;
+use function defined;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -88,6 +91,27 @@ class Frontend {
 			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
 		}
 
+//		$issued_at = time();
+//		$not_before = $issued_at;
+//		$expire = $issued_at + ( 60 * 60 * 24 * 7 ); // 7 days
+//		$token = array(
+//			'iss'  => get_bloginfo( 'url' ),
+//			'iat'  => $issued_at,
+//			'nbf'  => $not_before,
+//			'exp'  => $expire,
+//			'data' => array(
+//				'user' => array(
+//					'id' => $user->ID,
+//				),
+//			),
+//		);
+//		$secret_key = get_option( 'woocommerce_pos_secret_key' );
+//		if ( false === $secret_key || empty( $secret_key ) ) {
+//			$secret_key = wp_generate_password( 64, true, true );
+//			update_option( 'woocommerce_pos_secret_key', $secret_key );
+//		}
+//		$jwt = FirebaseJWT::encode( $token, $secret_key, 'HS256' );
+
 		$vars = array(
 			'version'        => VERSION,
 			'manifest'       => $github_url . 'metadata.json',
@@ -118,6 +142,7 @@ class Frontend {
 				'last_access'  => '',
 				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
+//				'jwt'		   => $jwt,
 			),
 			'stores' => $store_settings->get_stores(),
 		);
@@ -184,13 +209,13 @@ class Frontend {
 	 */
 	private function no_cache(): void {
 		// disable W3 Total Cache minify
-		if ( ! \defined( 'DONOTMINIFY' ) ) {
-			\define( 'DONOTMINIFY', 'true' );
+		if ( ! defined( 'DONOTMINIFY' ) ) {
+			define( 'DONOTMINIFY', 'true' );
 		}
 
 		// disable WP Super Cache
-		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
-			\define( 'DONOTCACHEPAGE', 'true' );
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', 'true' );
 		}
 
 		// disable Lite Speed Cache

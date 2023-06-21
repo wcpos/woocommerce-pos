@@ -1,13 +1,13 @@
 <?php
 /**
- * POS Order Pay template.
+ * POS Order Received template.
  *
- * This template can be overridden by copying it to yourtheme/woocommerce-pos/pay.php.
+ * This template can be overridden by copying it to yourtheme/woocommerce-pos/received.php.
  *
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-\defined( 'ABSPATH' ) || exit;
+defined( 'ABSPATH' ) || exit;
 ?>
 <!doctype html>
 <html <?php language_attributes(); ?>>
