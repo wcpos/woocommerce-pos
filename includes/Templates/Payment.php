@@ -8,6 +8,8 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use function define;
+use function defined;
 
 class Payment {
 	/**
@@ -111,8 +113,8 @@ class Payment {
 
 
 	public function get_template(): void {
-		if ( ! \defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
-			\define( 'WOOCOMMERCE_CHECKOUT', true );
+		if ( ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
+			define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
 //		if ( ! $this->gateway_id ) {
@@ -139,7 +141,16 @@ class Payment {
 			$cashier = $order->get_meta( '_pos_user', true );
 			$cashier = get_user_by( 'id', $cashier );
 
-			// set customer
+			// create nonce for cashier to apply coupons
+			$coupon_nonce = wp_create_nonce( 'pos_coupon_action' );
+
+			/**
+			 * The wp_set_current_user() function changes the global user object but it does not authenticate the user
+			 * for the current session. This means that it will not affect nonce creation or validation because WordPress
+			 * nonces are tied to the user's session.
+			 *
+			 * @TODO - is this the best way to do this?
+			 */
 			wp_set_current_user( $order->get_customer_id() );
 
 			// create nonce for customer

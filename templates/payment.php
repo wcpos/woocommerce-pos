@@ -276,7 +276,7 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="coupons">
 		<form method="post" action="">
-			<?php wp_nonce_field( 'pos_coupon_action', 'pos_coupon_nonce' ); ?>
+			<input type="hidden" name="pos_coupon_nonce" value="<?php echo $coupon_nonce; ?>" />
 			<input type="text" name="pos_coupon_code" class="input-text" placeholder="<?php esc_attr_e( 'Coupon code', 'woocommerce' ); ?>" id="pos_coupon_code" value="" />
 			<button type="submit" class="button" name="pos_apply_coupon" value="<?php esc_attr_e( 'Apply coupon', 'woocommerce' ); ?>">
 				<?php esc_html_e( 'Apply coupon', 'woocommerce' ); ?>

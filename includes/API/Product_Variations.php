@@ -9,6 +9,9 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WC_Product_Query;
 use WCPOS\WooCommercePOS\Logger;
+use function image_downsize;
+use function is_array;
+use function wp_get_attachment_metadata;
 
 class Product_Variations {
 	private $request;
@@ -22,6 +25,7 @@ class Product_Variations {
 		$this->request = $request;
 
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'product_response' ), 10, 3 );
+		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
 	}
 
 	/**
@@ -120,11 +124,46 @@ class Product_Variations {
 			$image = wp_get_attachment_image_src( $thumb_id, 'shop_thumbnail' );
 		}
 
-		if ( \is_array( $image ) ) {
+		if ( is_array( $image ) ) {
 			return $image[0];
 		}
 
 		return wc_placeholder_img_src();
+	}
+
+	/**
+	 * Filters the attachment image source result.
+	 * The WC REST API returns 'full' images by default, but we want to return 'shop_thumbnail' images.
+	 *
+	 * @param array|false  $image         {
+	 *     Array of image data, or boolean false if no image is available.
+	 *
+	 *     @type string $0 Image source URL.
+	 *     @type int    $1 Image width in pixels.
+	 *     @type int    $2 Image height in pixels.
+	 *     @type bool   $3 Whether the image is a resized image.
+	 * }
+	 * @param int          $attachment_id Image attachment ID.
+	 * @param string|int[] $size          Requested image size. Can be any registered image size name, or
+	 *                                    an array of width and height values in pixels (in that order).
+	 * @param bool         $icon          Whether the image should be treated as an icon.
+	 */
+	public function product_image_src( $image, int $attachment_id, $size, bool $icon ) {
+		// Get the metadata for the attachment.
+		$metadata = wp_get_attachment_metadata( $attachment_id );
+
+		// Use the 'woocommerce_gallery_thumbnail' size if it exists.
+		if ( isset( $metadata['sizes']['woocommerce_gallery_thumbnail'] ) ) {
+			return image_downsize( $attachment_id, 'woocommerce_gallery_thumbnail' );
+		}
+		// If 'woocommerce_gallery_thumbnail' doesn't exist, try the 'thumbnail' size.
+		else if ( isset( $metadata['sizes']['thumbnail'] ) ) {
+			return image_downsize( $attachment_id, 'thumbnail' );
+		}
+		// If neither 'woocommerce_gallery_thumbnail' nor 'thumbnail' sizes exist, return the original $image.
+		else {
+			return $image;
+		}
 	}
 
 	/**
