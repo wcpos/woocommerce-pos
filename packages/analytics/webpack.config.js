@@ -101,7 +101,7 @@ module.exports = function (_env, argv) {
 			extensions: ['.tsx', '.ts', '.js'],
 		},
 		plugins: [
-			new ForkTsCheckerWebpackPlugin(),
+			// new ForkTsCheckerWebpackPlugin(),
 			// new ESLintPlugin({
 			// 	extensions: ["js", "jsx", "ts", "tsx"],
 			// }),
