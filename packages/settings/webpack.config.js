@@ -39,19 +39,37 @@ module.exports = function (_env, argv) {
 		},
 		module: {
 			rules: [
+				// {
+				// 	test: /\.(ts|js)x?$/i,
+				// 	exclude: /node_modules/,
+				// 	use: {
+				// 		loader: 'babel-loader',
+				// 		options: {
+				// 			presets: [
+				// 				['@babel/preset-env', { modules: false }],
+				// 				'@babel/preset-react',
+				// 				'@babel/preset-typescript',
+				// 			],
+				// 		},
+				// 	},
+				// },
 				{
 					test: /\.(ts|js)x?$/i,
 					exclude: /node_modules/,
-					use: {
-						loader: 'babel-loader',
-						options: {
-							presets: [
-								['@babel/preset-env', { modules: false }],
-								'@babel/preset-react',
-								'@babel/preset-typescript',
-							],
+					use: [
+						{
+							loader: 'babel-loader',
+							options: {
+								presets: [['@babel/preset-env', { modules: false }], '@babel/preset-react'],
+							},
 						},
-					},
+						{
+							loader: 'ts-loader',
+							options: {
+								transpileOnly: true,
+							},
+						},
+					],
 				},
 				{
 					test: /\.s[ac]ss$/i,
