@@ -4,6 +4,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Ramsey\Uuid\Uuid;
 use WC_Data;
+use WC_Product;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
 use WP_REST_Request;
@@ -18,6 +19,7 @@ use function wp_get_attachment_metadata;
  */
 class Products {
 	private $request;
+	private $uuids;
 
 	/**
 	 * Products constructor.
@@ -26,6 +28,7 @@ class Products {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
+		$this->uuids = $this->get_all_uuids();
 
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
@@ -35,6 +38,82 @@ class Products {
 		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
 		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
+
+//		add_filter('rest_pre_echo_response', function($result, $server, $request) {
+//			$logger = wc_get_logger();
+//			$test = wp_json_encode( $result, 0 );
+//			if(is_array($result)) {
+//				foreach($result as $record) {
+//					if(is_array($record) && isset($record['meta_data'])) {
+//						$test = wp_json_encode( $record, 0 );
+//						$logger->info($test, array('source' => 'wcpos-support-3'));
+//					}
+//				}
+//			}
+//			return $result;
+//		}, 10, 3);
+
+//		add_filter('rest_pre_serve_request', function($served, $result, $request, $server) {
+//			$logger = wc_get_logger();
+////			$logger->info(wp_json_encode($result), array('source' => 'wcpos-support'));
+//			$data = $result->get_data();
+//			if(is_array($data)) {
+//				foreach($data as $record) {
+//					if(isset($record['meta_data'])) {
+//						$logger->info(wp_json_encode($record['meta_data']), array('source' => 'wcpos-support'));
+//					}
+//				}
+//			}
+//			return $served;
+//		}, 10, 4);
+	}
+
+	/**
+	 * Note: this gets all postmeta uuids, including orders, we're just interested in doing a check sanity check
+	 * This addresses a bug where I have seen two products with the same uuid
+	 *
+	 * @return array
+	 */
+	private function get_all_uuids() : array {
+		global $wpdb;
+		$result = $wpdb->get_col(
+			"
+            SELECT meta_value
+            FROM $wpdb->postmeta
+            WHERE meta_key = '_woocommerce_pos_uuid'
+            "
+		);
+		return $result;
+	}
+
+	/**
+	 * Make sure the product has a uuid
+	 */
+	private function maybe_add_uuid( WC_Product $product ) {
+		$uuids = get_post_meta( $product->get_id(), '_woocommerce_pos_uuid', false );
+		$uuid_counts = array_count_values( $this->uuids );
+
+		if ( empty( $uuids ) ) {
+			$this->add_uuid_meta_data( $product );
+		}
+
+		if ( count( $uuids ) > 1 || count( $uuids ) === 1 && $uuid_counts[ $uuids[0] ] > 1 ) {
+			delete_post_meta( $product->get_id(), '_woocommerce_pos_uuid' );
+			$this->add_uuid_meta_data( $product );
+		}
+	}
+
+	/**
+	 *
+	 */
+	private function add_uuid_meta_data( WC_Product $product ) {
+		$uuid = Uuid::uuid4()->toString();
+		while ( in_array( $uuid, $this->uuids ) ) { // ensure the new UUID is unique
+			$uuid = Uuid::uuid4()->toString();
+		}
+		$this->uuids[] = $uuid; // update the UUID list
+		$product->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$product->save_meta_data();
 	}
 
 	/**
@@ -133,24 +212,18 @@ class Products {
 	 * Filter the product response.
 	 *
 	 * @param WP_REST_Response $response The response object.
-	 * @param WC_Data          $product  Product data.
+	 * @param WC_Product       $product  Product data.
 	 * @param WP_REST_Request  $request  Request object.
 	 *
 	 * @return WP_REST_Response $response The response object.
 	 */
-	public function product_response( WP_REST_Response $response, WC_Data $product, WP_REST_Request $request ): WP_REST_Response {
+	public function product_response( WP_REST_Response $response, WC_Product $product, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
 		/**
 		 * Make sure the product has a uuid
 		 */
-		$uuid = $product->get_meta( '_woocommerce_pos_uuid' );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			$product->update_meta_data( '_woocommerce_pos_uuid', $uuid );
-			$product->save_meta_data();
-			$data['meta_data'] = $product->get_meta_data();
-		}
+		$this->maybe_add_uuid( $product );
 
 		/**
 		 * Add barcode field
@@ -172,7 +245,7 @@ class Products {
 		 * Check the response size and log a debug message if it is over the maximum size.
 		 */
 		$response_size = strlen( serialize( $response->data ) );
-		$max_response_size = 10000;
+		$max_response_size = 100000;
 		if ( $response_size > $max_response_size ) {
 			Logger::log( "Product ID {$product->get_id()} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
 		}
@@ -182,29 +255,44 @@ class Products {
 		 * @TODO - only need to update if there is a change
 		 */
 		if ( $product->is_type( 'variable' ) ) {
-			$product->update_meta_data( '_woocommerce_pos_variable_prices', wp_json_encode(
-				array(
-					'price' => array(
-						'min' => $product->get_variation_price(),
-						'max' => $product->get_variation_price( 'max' ),
-					),
-					'regular_price' => array(
-						'min' => $product->get_variation_regular_price(),
-						'max' => $product->get_variation_regular_price( 'max' ),
-					),
-					'sale_price' => array(
-						'min' => $product->get_variation_sale_price(),
-						'max' => $product->get_variation_sale_price( 'max' ),
-					),
-				)
-			) );
-			$product->save_meta_data();
-			$data['meta_data'] = $product->get_meta_data();
+			// Initialize price variables
+			$price_array = array(
+				'price' => array(
+					'min' => $product->get_variation_price(),
+					'max' => $product->get_variation_price( 'max' ),
+				),
+				'regular_price' => array(
+					'min' => $product->get_variation_regular_price(),
+					'max' => $product->get_variation_regular_price( 'max' ),
+				),
+				'sale_price' => array(
+					'min' => $product->get_variation_sale_price(),
+					'max' => $product->get_variation_sale_price( 'max' ),
+				),
+			);
+
+			// Try encoding the array into JSON
+			$encoded_price = wp_json_encode( $price_array );
+
+			// Check if the encoding was successful
+			if ( $encoded_price === false ) {
+				// JSON encode failed, log the original array for debugging
+				Logger::log( 'JSON encoding of price array failed: ' . json_last_error_msg(), $price_array );
+			} else {
+				// Update the meta data with the successfully encoded price data
+				$product->update_meta_data( '_woocommerce_pos_variable_prices', $encoded_price );
+				$product->save_meta_data();
+			}
 		}
+
 
 		/**
 		 * Reset the new response data
+		 * BUG FIX: some servers are not returning the correct meta_data if it is left as WC_Meta_Data objects
 		 */
+		$data['meta_data'] = array_map( function( $meta_data ) {
+			return $meta_data->get_data();
+		}, $product->get_meta_data());
 		$response->set_data( $data );
 
 		return $response;
