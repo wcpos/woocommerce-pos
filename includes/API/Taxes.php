@@ -2,10 +2,10 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WP_Error;
 use WP_REST_Request;
 
-class Taxes {
-	private $request;
+class Taxes extends Abstracts\WC_Rest_API_Modifier {
 
 	/**
 	 * Taxes constructor.
@@ -40,27 +40,20 @@ class Taxes {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array|void
+	 * @return array|WP_Error
 	 */
-	public function get_all_posts( array $fields = array() ) {
+	public function get_all_posts( array $fields = array() ): array {
 		global $wpdb;
 
-		$all_posts = $wpdb->get_results( '
+        $results = $wpdb->get_results( '
 			SELECT tax_rate_id as id FROM ' . $wpdb->prefix . 'woocommerce_tax_rates
-		' );
+		', ARRAY_A );
 
-		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $all_posts );
-	}
+        // Convert array of arrays into array of strings (ids)
+        $all_ids = array_map( function( $item ) {
+            return strval( $item['id'] );
+        }, $results );
 
-	/**
-	 * @param object $record
-	 *
-	 * @return object
-	 */
-	private function format_id( $record ) {
-		$record->id = (int) $record->id;
-
-		return $record;
+        return array_map( array( $this, 'format_id' ), $all_ids );
 	}
 }

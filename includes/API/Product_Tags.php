@@ -2,12 +2,15 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use Exception;
 use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
-class Product_Tags {
-	private $request;
+class Product_Tags extends Abstracts\WC_Rest_API_Modifier {
+    use Traits\Uuid_Handler;
 
 	/**
 	 * Customers constructor.
@@ -32,20 +35,11 @@ class Product_Tags {
 	public function product_tags_response( WP_REST_Response $response, object $item, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		/**
-		 * Make sure the product has a uuid
-		 */
-		$uuid = get_term_meta( $item->term_id, '_woocommerce_pos_uuid', true );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			add_term_meta( $item->term_id, '_woocommerce_pos_uuid', $uuid, true );
-		}
-		$data['uuid'] = $uuid;
+        // Make sure the term has a uuid
+        $data['uuid'] = $this->get_term_uuid( $item );
 
-		/**
-		 * Reset the new response data
-		 */
-		$response->set_data( $data );
+        // Reset the new response data
+        $response->set_data( $data );
 
 		return $response;
 	}
@@ -55,7 +49,7 @@ class Product_Tags {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array
+	 * @return array|WP_Error
 	 */
 	public function get_all_posts( array $fields = array() ): array {
 		$args = array(
@@ -64,18 +58,16 @@ class Product_Tags {
 			'fields'     => 'ids',
 		);
 
-		$product_tag_ids = get_terms( $args );
-
-		// Convert the array of tag IDs to an array of objects with tag IDs as integers
-		return array_map( array( $this, 'format_id' ), $product_tag_ids );
-	}
-
-	/**
-	 * @param string $product_tag_id
-	 *
-	 * @return object
-	 */
-	private function format_id( string $product_tag_id ): object {
-		return (object) array( 'id' => (int) $product_tag_id );
+		try {
+			$product_tag_ids = get_terms( $args );
+			return array_map( array( $this, 'format_id' ), $product_tag_ids );
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching product IDs: ' . $e->getMessage() );
+			return new WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching product tags IDs.',
+				array( 'status' => 500 )
+			);
+		}
 	}
 }

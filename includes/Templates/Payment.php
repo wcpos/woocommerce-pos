@@ -105,7 +105,7 @@ class Payment {
 
 			// Check if the source URL contains the active theme's directory
 			if ( strpos( $src, $active_theme_directory ) !== false || in_array( $handle, $exclude_list ) ) {
-				wp_dequeue_style( $handle );
+				wp_dequeue_script( $handle );
 			}
 		}
 

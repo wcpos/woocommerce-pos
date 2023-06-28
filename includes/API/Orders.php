@@ -9,6 +9,8 @@ use WC_Order;
 use WC_Order_Item;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
+use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
 use function in_array;
@@ -18,8 +20,8 @@ use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WC_Order_Query;
 use WP_Query;
 
-class Orders {
-	private $request;
+class Orders extends Abstracts\WC_Rest_API_Modifier {
+    use Traits\Uuid_Handler;
 
 	private $posted;
 
@@ -31,6 +33,7 @@ class Orders {
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
 		$this->posted  = $this->request->get_json_params();
+        $this->uuids = $this->get_all_postmeta_uuids();
 
 		if ( 'POST' == $request->get_method() ) {
 			$this->incoming_shop_order();
@@ -218,25 +221,10 @@ class Orders {
 	public function order_response( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		/**
-		 * make sure the order has a uuid
-		 */
-		$uuid = $order->get_meta( '_woocommerce_pos_uuid' );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			$order->update_meta_data( '_woocommerce_pos_uuid', $uuid );
-			$order->save_meta_data();
-			$data['meta_data'] = $order->get_meta_data();
-		}
+        // Add UUID to order
+        $this->maybe_add_post_uuid( $order );
 
-		/**
-		 * reset the new response data
-		 */
-		$response->set_data( $data );
-
-		/**
-		 * Add link for order payment.
-		 */
+		// Add payment link to the order.
 		$pos_payment_url = add_query_arg(array(
 			'pay_for_order' => true,
 			'key'           => $order->get_order_key(),
@@ -244,11 +232,18 @@ class Orders {
 
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
 
-		/**
-		 * Add link for order receipt.
-		 */
+		// Add receipt link to the order.
 		$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
 		$response->add_link( 'receipt', $pos_receipt_url );
+
+        /**
+         * Make sure we parse the meta data before returning the response
+         */
+        $order->save_meta_data(); // make sure the meta data is saved
+        $data['meta_data'] = $this->parse_meta_data( $order );
+
+        $response->set_data( $data );
+        $this->log_large_rest_response( $response, $order );
 
 		return $response;
 	}
@@ -261,15 +256,7 @@ class Orders {
 	 */
 	public function order_get_items( array $items, WC_Order $order, array $item_type ): array {
 		foreach ( $items as $item ) {
-			/**
-			 * make sure the cart items have a uuid
-			 */
-			$uuid = $item->get_meta( '_woocommerce_pos_uuid' );
-			if ( ! $uuid ) {
-				$uuid = Uuid::uuid4()->toString();
-				$item->update_meta_data( '_woocommerce_pos_uuid', $uuid );
-				$item->save_meta_data();
-			}
+			$this->maybe_add_order_item_uuid( $item );
 		}
 
 		return $items;
@@ -428,7 +415,7 @@ class Orders {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array
+	 * @return array|WP_Error
 	 */
 	public function get_all_posts( array $fields = array() ): array {
 		$args = array(
@@ -441,21 +428,14 @@ class Orders {
 
 		try {
 			$order_ids = $order_query->get_orders();
+			return array_map( array( $this, 'format_id' ), $order_ids );
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
-			return array(); // Return an empty array in case of an error
+			return new WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching order IDs.',
+				array( 'status' => 500 )
+			);
 		}
-
-		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $order_ids );
-	}
-
-	/**
-	 * @param string $order_id
-	 *
-	 * @return object
-	 */
-	private function format_id( string $order_id ): object {
-		return (object) array( 'id' => (int) $order_id );
 	}
 }

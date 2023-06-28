@@ -6,14 +6,14 @@ use Exception;
 use Ramsey\Uuid\Uuid;
 use WC_Customer;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_User;
 use WP_User_Query;
-use WP_Meta_Query;
 
-class Customers {
-	private $request;
+class Customers extends Abstracts\WC_Rest_API_Modifier {
+    use Traits\Uuid_Handler;
 
 	/**
 	 * Customers constructor.
@@ -22,6 +22,7 @@ class Customers {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
+        $this->uuids = $this->get_all_usermeta_uuids();
 
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
@@ -96,43 +97,30 @@ class Customers {
 	public function customer_response( WP_REST_Response $response, WP_User $user_data, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		/**
-		 * Make sure the customer has a uuid
-		 */
-		$uuid = get_user_meta( $user_data->ID, '_woocommerce_pos_uuid', true );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			update_user_meta( $user_data->ID, '_woocommerce_pos_uuid', $uuid );
-			try {
-				$customer = new WC_Customer( $user_data->ID );
-				$data['meta_data'] = $customer->get_meta_data();
-			} catch ( Exception $e ) {
-				Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
-			}
-		}
+        // Add the uuid to the response
+        $this->maybe_add_user_uuid( $user_data );
 
-		/**
-		 * In the WC REST Customers Controller -> get_formatted_item_data_core function, the customer's
-		 * meta_data is only added for administrators. I assume this is for privacy/security reasons.
-		 *
-		 * Cashiers are not always administrators so we need to add the meta_data for uuids.
-		 * @TODO - are there any other meta_data we need to add?
-		 */
-		if ( empty( $data['meta_data'] ) ) {
-			try {
-				$customer = new WC_Customer( $user_data->ID );
-				$data['meta_data'] = array_values( array_filter( $customer->get_meta_data(), function ( $meta ) {
-					return '_woocommerce_pos_uuid' === $meta->key;
-				}));
-			} catch ( Exception $e ) {
-				Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
-			}
-		}
+        /**
+         * Add the customer meta data to the response
+         *
+         * In the WC REST Customers Controller -> get_formatted_item_data_core function, the customer's
+         * meta_data is only added for administrators. I assume this is for privacy/security reasons.
+         *
+         * NOTE: for now we are only adding the uuid meta_data
+         * @TODO - are there any other meta_data we need to add?
+         */
+        try {
+            $customer = new WC_Customer( $user_data->ID );
+            $data['meta_data'] = array_values( array_filter( $customer->get_meta_data(), function ( $meta ) {
+                return '_woocommerce_pos_uuid' === $meta->key;
+            }));
+        } catch ( Exception $e ) {
+            Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
+        }
 
-		/**
-		 * Reset the new response data
-		 */
-		$response->set_data( $data );
+        // Set any changes to the response data
+        $response->set_data( $data );
+        $this->log_large_rest_response( $response, $product );
 
 		return $response;
 	}
@@ -262,9 +250,9 @@ class Customers {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array|void
+	 * @return array|WP_Error
 	 */
-	public function get_all_posts( array $fields = array() ) {
+	public function get_all_posts( array $fields = array() ): array {
 		$args = array(
 			'fields' => 'ID', // Only return user IDs
 		);
@@ -275,18 +263,17 @@ class Customers {
 		}
 
 		$user_query = new WP_User_Query( $args );
-		$user_ids = $user_query->get_results();
 
-		// wpdb returns id as string, we need int
-		return array_map( array( $this, 'format_id' ), $user_ids );
-	}
-
-	/**
-	 * @param int $user_id
-	 *
-	 * @return object
-	 */
-	private function format_id( $user_id ): object {
-		return (object) array( 'id' => (int) $user_id );
+		try {
+			$user_ids = $user_query->get_results();
+			return array_map( array( $this, 'format_id' ), $user_ids );
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
+			return new WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching customer IDs.',
+				array( 'status' => 500 )
+			);
+		}
 	}
 }

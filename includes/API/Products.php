@@ -2,24 +2,22 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-use Ramsey\Uuid\Uuid;
+use Exception;
 use WC_Data;
 use WC_Product;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
+use WP_HTTP_Response;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
-use WC_Product_Query;
-use function image_downsize;
-use function is_array;
-use function wp_get_attachment_metadata;
 
 /**
  * @property string $search_term
  */
-class Products {
-	private $request;
-	private $uuids;
+class Products extends Abstracts\WC_Rest_API_Modifier {
+	use Traits\Product_Helpers;
+    use Traits\Uuid_Handler;
 
 	/**
 	 * Products constructor.
@@ -28,7 +26,8 @@ class Products {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
-		$this->uuids = $this->get_all_uuids();
+		$this->uuids = $this->get_all_postmeta_uuids();
+        $this->add_product_image_src_filter();
 
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
@@ -37,83 +36,6 @@ class Products {
 		add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
-		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
-
-//		add_filter('rest_pre_echo_response', function($result, $server, $request) {
-//			$logger = wc_get_logger();
-//			$test = wp_json_encode( $result, 0 );
-//			if(is_array($result)) {
-//				foreach($result as $record) {
-//					if(is_array($record) && isset($record['meta_data'])) {
-//						$test = wp_json_encode( $record, 0 );
-//						$logger->info($test, array('source' => 'wcpos-support-3'));
-//					}
-//				}
-//			}
-//			return $result;
-//		}, 10, 3);
-
-//		add_filter('rest_pre_serve_request', function($served, $result, $request, $server) {
-//			$logger = wc_get_logger();
-////			$logger->info(wp_json_encode($result), array('source' => 'wcpos-support'));
-//			$data = $result->get_data();
-//			if(is_array($data)) {
-//				foreach($data as $record) {
-//					if(isset($record['meta_data'])) {
-//						$logger->info(wp_json_encode($record['meta_data']), array('source' => 'wcpos-support'));
-//					}
-//				}
-//			}
-//			return $served;
-//		}, 10, 4);
-	}
-
-	/**
-	 * Note: this gets all postmeta uuids, including orders, we're just interested in doing a check sanity check
-	 * This addresses a bug where I have seen two products with the same uuid
-	 *
-	 * @return array
-	 */
-	private function get_all_uuids() : array {
-		global $wpdb;
-		$result = $wpdb->get_col(
-			"
-            SELECT meta_value
-            FROM $wpdb->postmeta
-            WHERE meta_key = '_woocommerce_pos_uuid'
-            "
-		);
-		return $result;
-	}
-
-	/**
-	 * Make sure the product has a uuid
-	 */
-	private function maybe_add_uuid( WC_Product $product ) {
-		$uuids = get_post_meta( $product->get_id(), '_woocommerce_pos_uuid', false );
-		$uuid_counts = array_count_values( $this->uuids );
-
-		if ( empty( $uuids ) ) {
-			$this->add_uuid_meta_data( $product );
-		}
-
-		if ( count( $uuids ) > 1 || count( $uuids ) === 1 && $uuid_counts[ $uuids[0] ] > 1 ) {
-			delete_post_meta( $product->get_id(), '_woocommerce_pos_uuid' );
-			$this->add_uuid_meta_data( $product );
-		}
-	}
-
-	/**
-	 *
-	 */
-	private function add_uuid_meta_data( WC_Product $product ) {
-		$uuid = Uuid::uuid4()->toString();
-		while ( in_array( $uuid, $this->uuids ) ) { // ensure the new UUID is unique
-			$uuid = Uuid::uuid4()->toString();
-		}
-		$this->uuids[] = $uuid; // update the UUID list
-		$product->update_meta_data( '_woocommerce_pos_uuid', $uuid );
-		$product->save_meta_data();
 	}
 
 	/**
@@ -220,35 +142,15 @@ class Products {
 	public function product_response( WP_REST_Response $response, WC_Product $product, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		/**
-		 * Make sure the product has a uuid
-		 */
-		$this->maybe_add_uuid( $product );
+        // Add the UUID to the product response
+        $this->maybe_add_post_uuid( $product );
 
-		/**
-		 * Add barcode field
-		 */
-		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-		$data['barcode'] = $product->get_meta( $barcode_field );
+		// Add the barcode to the product response
+		$data['barcode'] = $this->get_barcode( $product );
 
-		/**
-		 * Truncate the product description
-		 */
-		$max_length = 100;
-		$plain_text_description = wp_strip_all_tags( $data['description'], true );
-		if ( strlen( $plain_text_description ) > $max_length ) {
-			$truncated_description = substr( $plain_text_description, 0, $max_length - 3 ) . '...';
-			$data['description'] = $truncated_description;
-		}
-
-		/**
-		 * Check the response size and log a debug message if it is over the maximum size.
-		 */
-		$response_size = strlen( serialize( $response->data ) );
-		$max_response_size = 100000;
-		if ( $response_size > $max_response_size ) {
-			Logger::log( "Product ID {$product->get_id()} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
-		}
+        // Truncate the product description and short_description
+        $data['description'] = $this->truncate_text( $data['description'] );
+        $data['short_description'] = $this->truncate_text( $data['short_description'] );
 
 		/**
 		 * If product is variable, add the max and min prices and add them to the meta data
@@ -281,19 +183,18 @@ class Products {
 			} else {
 				// Update the meta data with the successfully encoded price data
 				$product->update_meta_data( '_woocommerce_pos_variable_prices', $encoded_price );
-				$product->save_meta_data();
 			}
 		}
 
-
 		/**
-		 * Reset the new response data
-		 * BUG FIX: some servers are not returning the correct meta_data if it is left as WC_Meta_Data objects
+		 * Make sure we parse the meta data before returning the response
 		 */
-		$data['meta_data'] = array_map( function( $meta_data ) {
-			return $meta_data->get_data();
-		}, $product->get_meta_data());
+        $product->save_meta_data(); // make sure the meta data is saved
+		$data['meta_data'] = $this->parse_meta_data( $product );
+
+        // Set any changes to the response data
 		$response->set_data( $data );
+        $this->log_large_rest_response( $response, $product );
 
 		return $response;
 	}
@@ -438,7 +339,7 @@ class Products {
 	 *
 	 * @param array $fields
 	 *
-	 * @return array
+	 * @return array|WP_Error
 	 */
 	public function get_all_posts( array $fields = array() ): array {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
@@ -466,75 +367,18 @@ class Products {
 		}
 
 		$product_query = new WP_Query( $args );
-		$product_ids = $product_query->posts;
 
-		// Convert the array of product IDs to an array of objects with product IDs as integers
-		return array_map( array( $this, 'format_id' ), $product_ids );
-	}
-
-	/**
-	 * Returns thumbnail if it exists, if not, returns the WC placeholder image.
-	 *
-	 * @param int $id
-	 *
-	 * @return string
-	 */
-	private function get_thumbnail( int $id ): string {
-		$image    = false;
-		$thumb_id = get_post_thumbnail_id( $id );
-
-		if ( $thumb_id ) {
-			$image = wp_get_attachment_image_src( $thumb_id, 'shop_thumbnail' );
-		}
-
-		if ( is_array( $image ) ) {
-			return $image[0];
-		}
-
-		return wc_placeholder_img_src();
-	}
-
-	/**
-	 * Filters the attachment image source result.
-	 * The WC REST API returns 'full' images by default, but we want to return 'shop_thumbnail' images.
-	 *
-	 * @param array|false  $image         {
-	 *     Array of image data, or boolean false if no image is available.
-	 *
-	 *     @type string $0 Image source URL.
-	 *     @type int    $1 Image width in pixels.
-	 *     @type int    $2 Image height in pixels.
-	 *     @type bool   $3 Whether the image is a resized image.
-	 * }
-	 * @param int          $attachment_id Image attachment ID.
-	 * @param string|int[] $size          Requested image size. Can be any registered image size name, or
-	 *                                    an array of width and height values in pixels (in that order).
-	 * @param bool         $icon          Whether the image should be treated as an icon.
-	 */
-	public function product_image_src( $image, int $attachment_id, $size, bool $icon ) {
-		// Get the metadata for the attachment.
-		$metadata = wp_get_attachment_metadata( $attachment_id );
-
-		// Use the 'woocommerce_gallery_thumbnail' size if it exists.
-		if ( isset( $metadata['sizes']['woocommerce_gallery_thumbnail'] ) ) {
-			return image_downsize( $attachment_id, 'woocommerce_gallery_thumbnail' );
-		}
-		// If 'woocommerce_gallery_thumbnail' doesn't exist, try the 'thumbnail' size.
-		else if ( isset( $metadata['sizes']['thumbnail'] ) ) {
-			return image_downsize( $attachment_id, 'thumbnail' );
-		}
-		// If neither 'woocommerce_gallery_thumbnail' nor 'thumbnail' sizes exist, return the original $image.
-		else {
-			return $image;
+		try {
+			$product_ids = $product_query->posts;
+			return array_map( array( $this, 'format_id' ), $product_ids );
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching product IDs: ' . $e->getMessage() );
+			return new WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching product IDs.',
+				array( 'status' => 500 )
+			);
 		}
 	}
 
-	/**
-	 * @param string $product_id
-	 *
-	 * @return object
-	 */
-	private function format_id( string $product_id ): object {
-		return (object) array( 'id' => (int) $product_id );
-	}
 }
