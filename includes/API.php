@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Services\Auth;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -23,10 +24,26 @@ class API {
 	 * @var array
 	 */
 	protected $controllers = array();
-	private $wc_rest_api_handler;
+
+    /**
+     * @var
+     */
+    protected $wc_rest_api_handler;
+
+    /**
+     * @var
+     */
+    protected $auth_service;
+
+    /**
+     * @var bool
+     */
+    protected $is_auth_checked = false;
 
 
-	public function __construct() {
+    public function __construct() {
+        $this->auth_service = new Auth();
+
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
 			'auth'     => new API\Auth(),
@@ -45,6 +62,7 @@ class API {
 
 		// Adds authentication to for JWT bearer tokens
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+        add_filter( 'rest_authentication_errors', array( $this, 'rest_authentication_errors' ), 50, 1 );
 
 		// Adds uuid for the WordPress install
 		add_filter( 'rest_index', array( $this, 'rest_index' ), 10, 1 );
@@ -107,26 +125,61 @@ class API {
 	 * @return false|int|void
 	 */
 	public function determine_current_user( $user_id ) {
+        $this->is_auth_checked = true;
 		if ( ! empty( $user_id ) ) {
 			return $user_id;
 		}
 
-		// extract Bearer token from Authorization Header
-		list($token) = sscanf( $this->get_auth_header(), 'Bearer %s' );
-
-		if ( $token ) {
-			$decoded_token = $this->controllers['auth']->validate_token( $token, false );
-
-			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
-				return $user_id;
-			}
-			$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
-
-			return absint( $user );
-		}
-
-		return $user_id;
+		return $this->authenticate( $user_id );
 	}
+
+    /**
+     * It's possible that the determine_current_user filter above is not called
+     * https://github.com/woocommerce/woocommerce/issues/26847
+     *
+     * We need to make sure our
+     */
+    public function rest_authentication_errors( $errors ) {
+        // Pass through other errors
+        if ( ! empty( $error ) ) {
+            return $error;
+        }
+
+        // check if determine_current_user has been called
+        if ( ! $this->is_auth_checked ) {
+            // Authentication hasn't occurred during `determine_current_user`, so check auth.
+            $user_id = $this->authenticate( false );
+            if ( $user_id ) {
+                wp_set_current_user( $user_id );
+                return true;
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param int|false $user_id User ID if one has been determined, false otherwise.
+     *
+     * @return integer
+     */
+    private function authenticate( $user_id ) {
+        // extract Bearer token from Authorization Header
+        list($token) = sscanf( $this->get_auth_header(), 'Bearer %s' );
+
+        if ( $token ) {
+            $decoded_token = $this->auth_service->validate_token( $token );
+
+            if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
+                return $user_id;
+            }
+            $user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
+
+            return absint( $user );
+        }
+
+        return $user_id;
+    }
 
 	/**
 	 * @return false|string
@@ -147,6 +200,7 @@ class API {
 	 * Add uuid to the WP REST API index.
 	 *
 	 * @param WP_REST_Response $response Response data
+     *
 	 * @return WP_REST_Response
 	 */
 	public function rest_index( WP_REST_Response $response ): WP_REST_Response {

@@ -194,7 +194,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 
         // Set any changes to the response data
 		$response->set_data( $data );
-        $this->log_large_rest_response( $response, $product );
+        // $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
 	}

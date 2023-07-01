@@ -4,7 +4,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use WC_Admin_Settings;
 
-class Stores extends Controller {
+class Stores extends Abstracts\Controller {
 	/**
 	 * Stores constructor.
 	 */

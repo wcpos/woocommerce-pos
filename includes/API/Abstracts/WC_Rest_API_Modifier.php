@@ -55,13 +55,13 @@ abstract class WC_Rest_API_Modifier {
      * This is just a helper function to try and alert us to these large responses
      *
      * @param WP_REST_Response $response
-     * @param WC_Data $object
+     * @param int $id
      */
-    protected function log_large_rest_response( WP_REST_Response $response, WC_Data $object ) {
+    protected function log_large_rest_response( WP_REST_Response $response, int $id ) {
         $response_size = strlen( serialize( $response->data ) );
         $max_response_size = 100000;
         if ( $response_size > $max_response_size ) {
-            Logger::log( "Object ID {$object->get_id()} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
+            Logger::log( "ID {$id} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
         }
     }
 }

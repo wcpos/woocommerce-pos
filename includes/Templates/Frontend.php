@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Templates;
 
-use Firebase\JWT\JWT as FirebaseJWT;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Stores;
 
@@ -15,9 +14,17 @@ use function define;
 use function defined;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
+use WCPOS\WooCommercePOS\Services\Auth;
 
 class Frontend {
+    /**
+     *
+     */
+    protected $auth_service;
+
+
 	public function __construct() {
+        $this->auth_service = new Auth();
 	}
 
 
@@ -46,11 +53,18 @@ class Frontend {
 		// last chance before template is rendered
 		do_action( 'woocommerce_pos_template_redirect' );
 
+        // if modal login
+        if ( isset( $_GET['modal'] ) && $_GET['modal'] === '1' ) {
+            $this->modal_login();
+            exit;
+        }
+
 		// add head & footer actions
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
 
 		include woocommerce_pos_locate_template( 'pos.php' );
+        exit;
 	}
 
 	/**
@@ -90,27 +104,6 @@ class Frontend {
 			$user_uuid = Uuid::uuid4()->toString();
 			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
 		}
-
-//		$issued_at = time();
-//		$not_before = $issued_at;
-//		$expire = $issued_at + ( 60 * 60 * 24 * 7 ); // 7 days
-//		$token = array(
-//			'iss'  => get_bloginfo( 'url' ),
-//			'iat'  => $issued_at,
-//			'nbf'  => $not_before,
-//			'exp'  => $expire,
-//			'data' => array(
-//				'user' => array(
-//					'id' => $user->ID,
-//				),
-//			),
-//		);
-//		$secret_key = get_option( 'woocommerce_pos_secret_key' );
-//		if ( false === $secret_key || empty( $secret_key ) ) {
-//			$secret_key = wp_generate_password( 64, true, true );
-//			update_option( 'woocommerce_pos_secret_key', $secret_key );
-//		}
-//		$jwt = FirebaseJWT::encode( $token, $secret_key, 'HS256' );
 
 		$vars = array(
 			'version'        => VERSION,
@@ -222,4 +215,33 @@ class Frontend {
 		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' );
 
 	}
+
+    private function modal_login() {
+        $user = wp_get_current_user();
+        $user_data = $this->auth_service->get_user_data( $user );
+        $credentials = wp_json_encode( $user_data );
+
+        echo "<script>
+	(function() {
+        // Parse the order JSON from PHP
+        var credentials = " . $credentials . " 
+
+        // Check if postMessage function exists for window.top
+        if (typeof window.top.postMessage === 'function') {
+            window.top.postMessage({
+                action: 'wcpos-wp-credentials',
+                payload: credentials
+            }, '*');
+        }
+
+        // Check if ReactNativeWebView object and postMessage function exists
+        if (typeof window.ReactNativeWebView !== 'undefined' && typeof window.ReactNativeWebView.postMessage === 'function') {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                action: 'wcpos-wp-credentials',
+                payload: credentials
+            }));
+        }
+    })();
+</script>" . "\n";
+    }
 }

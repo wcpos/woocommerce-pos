@@ -243,7 +243,7 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
         $data['meta_data'] = $this->parse_meta_data( $order );
 
         $response->set_data( $data );
-        $this->log_large_rest_response( $response, $order );
+        // $this->log_large_rest_response( $response, $order->get_id() );
 
 		return $response;
 	}

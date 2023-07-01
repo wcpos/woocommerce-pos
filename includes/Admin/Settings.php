@@ -16,7 +16,13 @@ use const WCPOS\WooCommercePOS\VERSION;
 
 class Settings {
 
+    /**
+     * @var
+     */
+    protected $settings_service;
+
 	public function __construct() {
+        $this->settings_service = new \WCPOS\WooCommercePOS\Services\Settings();
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
@@ -55,30 +61,6 @@ class Settings {
 			VERSION
 		);
 
-
-		/**
-		 * unpkg.com is unreliable, so we're packaging these dependencies
-		 */
-//		wp_enqueue_script(
-//			PLUGIN_NAME . '-react-query',
-//			'https://unpkg.com/@tanstack/react-query@4/build/umd/index.production.js',
-//			array(
-//				'react',
-//				'react-dom',
-//			),
-//			VERSION
-//		);
-//
-//		wp_enqueue_script(
-//			PLUGIN_NAME . '-react-beautiful-dnd',
-//			'https://unpkg.com/react-beautiful-dnd@13.1.1/dist/react-beautiful-dnd.js',
-//			array(
-//				'react',
-//				'react-dom',
-//			),
-//			VERSION
-//		);
-
 		wp_enqueue_script(
 			PLUGIN_NAME . '-transifex',
 			'https://cdn.jsdelivr.net/npm/@transifex/native/dist/browser.native.min.js',
@@ -103,7 +85,10 @@ class Settings {
 			true
 		);
 
-		if ( $is_development ) {
+        // Add inline script
+        wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
+
+        if ( $is_development ) {
 			wp_enqueue_script(
 				'webpack-live-reload',
 				'http://localhost:35729/livereload.js',
@@ -116,13 +101,25 @@ class Settings {
 		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
 
+    /**
+     * @return string
+     */
+    private function inline_script(): string {
+        $barcodes = array_values( $this->settings_service->get_barcodes() );
+        $order_statuses = $this->settings_service->get_order_statuses();
+        return sprintf( 'var wcpos = wcpos || {}; wcpos.settings = {
+            barcodes: %s,
+            order_statuses: %s
+        }', json_encode( $barcodes ), json_encode( $order_statuses ) );
+    }
+
 	/**
 	 * Delete settings in WP options table
 	 *
 	 * @param $id
 	 * @return bool
 	 */
-	public static function delete_settings($id ) {
+	public static function delete_settings( $id ): bool {
 		return delete_option( 'woocommerce_pos_' . $id );
 	}
 

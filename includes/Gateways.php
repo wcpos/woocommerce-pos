@@ -10,8 +10,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\API\Settings;
-
 class Gateways {
 
 
@@ -62,8 +60,8 @@ class Gateways {
 		}
 
 		// use POS settings
-		$api = new Settings();
-		$settings = $api->get_payment_gateways_settings();
+        $settings_service = new Services\Settings();
+		$settings = $settings_service->get_payment_gateways_settings();
 
 		// Get all payment gateways
 		$all_gateways = WC()->payment_gateways->payment_gateways;

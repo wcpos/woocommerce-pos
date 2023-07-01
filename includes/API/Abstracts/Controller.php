@@ -12,13 +12,13 @@
  * @see     https://developer.wordpress.org/rest-api/extending-the-rest-api/controller-classes/
  */
 
-namespace WCPOS\WooCommercePOS\API;
-
-use const WCPOS\WooCommercePOS\SHORT_NAME;
+namespace WCPOS\WooCommercePOS\API\Abstracts;
 
 use WP_REST_Controller;
+use function defined;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
-if ( ! \defined( 'ABSPATH' ) ) {
+if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
@@ -26,8 +26,6 @@ if ( ! \defined( 'ABSPATH' ) ) {
  * Abstract Rest Controller Class.
  *
  * @extends  WP_REST_Controller
- *
- * @version  2.6.0
  */
 abstract class Controller extends WP_REST_Controller {
 	/**

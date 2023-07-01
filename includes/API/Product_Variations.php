@@ -56,7 +56,7 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
         $data['meta_data'] = $this->parse_meta_data( $product );
 
         $response->set_data( $data );
-        $this->log_large_rest_response( $response, $product );
+        // $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
 	}
