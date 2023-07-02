@@ -27,7 +27,8 @@
     "firebase/php-jwt": "v6.4.0",
     "ramsey/uuid": "^4.2.3",
     "salesforce/handlebars-php": "^3.0.1",
-    "vlucas/phpdotenv": "^v5.5.0"
+    "vlucas/phpdotenv": "^v5.5.0",
+    "yahnis-elsts/plugin-update-checker": "^5.1"
   },
   "config": {
     "platform": {

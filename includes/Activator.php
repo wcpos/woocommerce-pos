@@ -10,14 +10,24 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use function add_action;
+use function add_role;
+use function admin_url;
+use function class_exists;
+use function deactivate_plugins;
+use function defined;
+use function did_action;
+use function function_exists;
+use function is_admin;
+use function is_multisite;
+use function register_activation_hook;
+use function restore_current_blog;
+use function sprintf;
+use function switch_to_blog;
+use function version_compare;
 use const DOING_AJAX;
 
 class Activator {
-	// minimum requirements
-	public const WC_MIN_VERSION  = '5.3';
-	public const PHP_MIN_VERSION = '7.0';
-
-
 	public function __construct() {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
 		add_action( 'wpmu_new_blog', array( $this, 'activate_new_site' ) );
@@ -31,12 +41,13 @@ class Activator {
 		// Check for min requirements to run
 		if ( $this->php_check() && $this->woocommerce_check() ) {
 			// check permalinks
-			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
+			if ( is_admin() && ( ! defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
 				$this->permalink_check();
 			}
 
 			// Init update script if required
 			$this->version_check();
+            $this->pro_version_check();
 
 			// resolve plugin plugins
 			$this->plugin_check();
@@ -51,7 +62,7 @@ class Activator {
 	 * @param $network_wide
 	 */
 	public function activate( $network_wide ): void {
-		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
 			if ( $network_wide ) {
 				// Get all blog ids
 				$blog_ids = $this->get_blog_ids();
@@ -79,8 +90,8 @@ class Activator {
 
 		// add pos capabilities to non POS roles
 		$this->add_pos_capability(array(
-			'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
-			'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+            'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+            'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
 		));
 
 		// set the auto redirection on next page load
@@ -107,14 +118,14 @@ class Activator {
 	 */
 	private function php_check() {
 		$php_version = PHP_VERSION;
-		if ( version_compare( $php_version, self::PHP_MIN_VERSION, '>' ) ) {
+		if ( version_compare( $php_version, PHP_MIN_VERSION, '>' ) ) {
 			return true;
 		}
 
 		$message = sprintf(
-			__( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
-			self::PHP_MIN_VERSION,
-			'http://www.wpupdatephp.com/update/'
+            __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
+            PHP_MIN_VERSION,
+            'http://www.wpupdatephp.com/update/'
 		) . ' &raquo;';
 
 		Admin\Notices::add( $message );
@@ -124,15 +135,15 @@ class Activator {
 	 * Check min version of WooCommerce installed.
 	 */
 	private function woocommerce_check() {
-		if ( class_exists( '\WooCommerce' ) && version_compare( WC()->version, self::WC_MIN_VERSION, '>=' ) ) {
+		if ( class_exists( '\WooCommerce' ) && version_compare( WC()->version, WC_MIN_VERSION, '>=' ) ) {
 			return true;
 		}
 
 		$message = sprintf(
-			__( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
-			'http://wordpress.org/plugins/woocommerce/',
-			self::WC_MIN_VERSION,
-			admin_url( 'plugins.php' )
+            __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+            'http://wordpress.org/plugins/woocommerce/',
+            WC_MIN_VERSION,
+            admin_url( 'plugins.php' )
 		) . ' &raquo;';
 
 		Admin\Notices::add( $message );
@@ -159,9 +170,9 @@ class Activator {
 	 * Check version number, runs every admin page load.
 	 */
 	private function version_check(): void {
-		$old = Admin\Settings::get_db_version();
+		$old = Services\Settings::get_db_version();
 		if ( version_compare( $old, VERSION, '<' ) ) {
-			Admin\Settings::bump_versions();
+			Services\Settings::bump_versions();
 			$this->db_upgrade( $old, VERSION );
 		}
 	}
@@ -173,9 +184,9 @@ class Activator {
 	 */
 	private function plugin_check(): void {
 		// disable NextGEN Gallery resource manager
-//		if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
-//			\define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
-//		}
+		//      if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
+		//          \define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
+		//      }
 	}
 
 	/**
@@ -207,17 +218,17 @@ class Activator {
 			'publish_shop_orders'       => true,
 			'list_users'                => true,
 			'read_private_shop_coupons' => true,
-			'manage_product_terms' 		=> true,
+			'manage_product_terms'      => true,
 		);
 
 		add_role(
-			'cashier',
-			__( 'Cashier', 'woocommerce-pos' ),
-			$cashier_capabilities
+            'cashier',
+            __( 'Cashier', 'woocommerce-pos' ),
+            $cashier_capabilities
 		);
 
 		$this->add_pos_capability(array(
-			'cashier' => array( 'access_woocommerce_pos' ),
+            'cashier' => array( 'access_woocommerce_pos' ),
 		));
 	}
 
@@ -252,9 +263,39 @@ class Activator {
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&
-				 version_compare( $version, $current, '<=' ) ) {
+			 version_compare( $version, $current, '<=' ) ) {
 				include $updater;
 			}
 		}
 	}
+
+    /**
+     * If \WCPOS\WooCommercePOSPro\ is installed, check the version is above MIN_PRO_VERSION
+     */
+	private function pro_version_check() {
+        if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
+			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) {
+                /**
+                 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
+                 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
+                 */
+                if ( ! function_exists( 'deactivate_plugins' ) ) {
+                    require_once( ABSPATH . '/wp-admin/includes/plugin.php' );
+                }
+
+				// WooCommerce POS Pro is activated, but the version is too low
+				deactivate_plugins( 'woocommerce-pos-pro/woocommerce-pos-pro.php' );
+
+				$message = sprintf(
+                    __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce POS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce POS Pro</a>', 'woocommerce-pos' ),
+                    'https://wcpos.com/my-account',
+                    MIN_PRO_VERSION,
+                    admin_url( 'plugins.php' )
+				) . ' &raquo;';
+
+				Admin\Notices::add( $message );
+			}
+		}
+	}
+
 }

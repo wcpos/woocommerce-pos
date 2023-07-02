@@ -31,6 +31,11 @@ define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'wooco
 define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
 define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 
+// minimum requirements
+const WC_MIN_VERSION  = '5.3';
+const PHP_MIN_VERSION = '7.2';
+const MIN_PRO_VERSION = '1.2.0';
+
 // Autoloader
 if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 	require_once __DIR__ . '/vendor/autoload.php';

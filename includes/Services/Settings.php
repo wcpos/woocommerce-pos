@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WC_Payment_Gateways;
 use WP_Error;
 use WP_REST_Request;
+use const WCPOS\WooCommercePOS\VERSION;
 
 class Settings {
 
@@ -315,5 +316,45 @@ class Settings {
          * @hook woocommerce_pos_payment_gateways_settings
          */
         return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+    }
+
+    /**
+     * Delete settings in WP options table
+     *
+     * @param $id
+     * @return bool
+     */
+    public static function delete_settings( $id ): bool {
+        return delete_option( 'woocommerce_pos_' . $id );
+    }
+
+    /**
+     * Delete all settings in WP options table
+     */
+    public static function delete_all_settings() {
+        global $wpdb;
+        $wpdb->query(
+            $wpdb->prepare( "
+        DELETE FROM {$wpdb->options}
+        WHERE option_name
+        LIKE '%s'",
+                'woocommerce_pos_%'
+            )
+        );
+    }
+
+    /**
+     * @return string
+     */
+    public static function get_db_version(): string {
+        return get_option( 'woocommerce_pos_db_version', '0' );
+    }
+
+    /**
+     * updates db to new version number
+     * bumps the idb version number
+     */
+    public static function bump_versions() {
+        add_option( 'woocommerce_pos_db_version', VERSION, '', 'no' );
     }
 }
