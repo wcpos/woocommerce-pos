@@ -1,7 +1,6 @@
 import * as React from 'react';
 
 import Combobox from '../../components/combobox';
-import useNotices from '../../hooks/use-notices';
 
 interface BarcodeSelectProps {
 	selected: string;
@@ -13,12 +12,14 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 	const barcodes = window?.wcpos?.settings?.barcodes;
 
 	const options = React.useMemo(() => {
-		return (barcodes || []).map((option) => {
-			return {
-				value: option,
-				label: option,
-			};
-		});
+		return (barcodes || [])
+			.filter((barcode) => barcode.toLowerCase().includes(query.toLowerCase()))
+			.map((option) => {
+				return {
+					value: option,
+					label: option,
+				};
+			});
 	}, [barcodes, query]);
 
 	return (

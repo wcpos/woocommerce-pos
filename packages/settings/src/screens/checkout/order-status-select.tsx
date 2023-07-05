@@ -1,11 +1,6 @@
 import * as React from 'react';
 
-import { useQuery } from '@tanstack/react-query';
-import apiFetch from '@wordpress/api-fetch';
-import { map } from 'lodash';
-
 import Select from '../../components/select';
-import useNotices from '../../hooks/use-notices';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
@@ -13,31 +8,11 @@ interface OrderStatusSelectProps {
 }
 
 const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) => {
-	const { setNotice } = useNotices();
+	const order_statuses = window?.wcpos?.settings?.order_statuses;
 
-	const { data: options } = useQuery({
-		queryKey: ['order-statuses'],
-		queryFn: async () => {
-			const response = await apiFetch<Record<string, string>>({
-				path: `wcpos/v1/settings/checkout/order-statuses?wcpos=1`,
-				method: 'GET',
-			}).catch((err) => {
-				console.error(err);
-				return err;
-			});
-
-			// if we have an error response, set the notice
-			if (response?.code && response?.message) {
-				setNotice({ type: 'error', message: response?.message });
-			}
-
-			return map(response, (label, value) => ({
-				label,
-				value,
-			}));
-		},
-		placeholderData: [],
-	});
+	const options = React.useMemo(() => {
+		return Object.entries(order_statuses).map(([value, label]) => ({ value, label }));
+	}, [order_statuses]);
 
 	return (
 		<Select

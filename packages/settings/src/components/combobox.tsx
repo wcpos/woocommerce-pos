@@ -43,9 +43,19 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 	/**
 	 *
 	 */
+	const handleChange = (option) => {
+		onSearch('');
+		onChange(option);
+	};
+
+	/**
+	 *
+	 */
 	React.useEffect(() => {
 		const handleFocus = () => {
-			inputRef.current.select();
+			if (inputRef.current) {
+				inputRef.current.select();
+			}
 		};
 
 		const node = inputRef.current;
@@ -61,9 +71,10 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 	 *
 	 */
 	return (
-		<CB value={selected} onChange={onChange}>
+		<CB value={selected} onChange={handleChange}>
 			<div className="wcpos-relative">
-				<div
+				<CB.Button
+					as="div"
 					className={classNames([
 						'wcpos-relative',
 						'wcpos-w-full',
@@ -99,8 +110,9 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 						displayValue={(option) => option.label}
 						onChange={handleSearch}
 						placeholder={placeholder}
+						data-1p-ignore
 					/>
-					<CB.Button
+					<span
 						className={classNames([
 							'wcpos-absolute',
 							'wcpos-inset-y-0',
@@ -112,8 +124,8 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 						])}
 					>
 						<ChevronDown className="wcpos-h-5 w-5" aria-hidden="true" />
-					</CB.Button>
-				</div>
+					</span>
+				</CB.Button>
 				<Transition
 					as={React.Fragment}
 					leave="transition ease-in duration-100"

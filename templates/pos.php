@@ -7,7 +7,7 @@
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-\defined( 'ABSPATH' ) || exit;
+defined( 'ABSPATH' ) || exit;
 ?>
 <!DOCTYPE html>
 <html>

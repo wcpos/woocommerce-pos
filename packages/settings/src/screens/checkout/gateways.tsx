@@ -192,6 +192,7 @@ const Gateways = () => {
 																	},
 																});
 															}}
+															disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 														/>
 													</td>
 													<td className="wcpos-px-4 wcpos-py-2 wcpos-whitespace-nowrap wcpos-text-right">
@@ -202,6 +203,7 @@ const Gateways = () => {
 																modalGateway.current = item;
 																setOpen(true);
 															}}
+															disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 														>
 															{t('Settings', { _tags: 'wp-admin-settings' })}
 														</Button>

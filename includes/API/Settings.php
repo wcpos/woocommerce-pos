@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\API;
 use Closure;
 use WP_Error;
 use WP_REST_Request;
+use WP_REST_Response;
 use WP_REST_Server;
 use function in_array;
 use function is_array;
@@ -38,10 +39,10 @@ class Settings extends Abstracts\Controller {
     /**
      * BACKWARD COMPATIBILITY: Remove this method in the future
      */
-//    public function get_settings( $id ) {
-//      $settings = $this->settings_service->get_settings( $id );
-//      return $settings;
-//    }
+	//    public function get_settings( $id ) {
+	//      $settings = $this->settings_service->get_settings( $id );
+	//      return $settings;
+	//    }
 
 	/**
 	 * @return void
@@ -67,15 +68,15 @@ class Settings extends Abstracts\Controller {
 			)
 		);
 
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/general/barcodes',
-			array(
-				'methods' => WP_REST_Server::READABLE,
-				'callback' => array( $this, 'get_barcodes' ),
-				'permission_callback' => array( $this, 'read_permission_check' ),
-			)
-		);
+		//      register_rest_route(
+		//          $this->namespace,
+		//          '/' . $this->rest_base . '/general/barcodes',
+		//          array(
+		//              'methods' => WP_REST_Server::READABLE,
+		//              'callback' => array( $this, 'get_barcodes' ),
+		//              'permission_callback' => array( $this, 'read_permission_check' ),
+		//          )
+		//      );
 
 		register_rest_route(
 			$this->namespace,
@@ -252,6 +253,105 @@ class Settings extends Abstracts\Controller {
 		);
 	}
 
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
+    public function get_general_settings( WP_REST_Request $request ) {
+        $general_settings = $this->settings_service->get_general_settings();
+
+        if ( is_wp_error( $general_settings ) ) {
+            return $general_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $general_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
+
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
+    public function get_checkout_settings( WP_REST_Request $request ) {
+        $checkout_settings = $this->settings_service->get_checkout_settings();
+
+        if ( is_wp_error( $checkout_settings ) ) {
+            return $checkout_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $checkout_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
+
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
+    public function get_payment_gateways_settings( WP_REST_Request $request ) {
+        $payment_gateways_settings = $this->settings_service->get_payment_gateways_settings();
+
+        if ( is_wp_error( $payment_gateways_settings ) ) {
+            return $payment_gateways_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $payment_gateways_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
+
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
+    public function get_access_settings( WP_REST_Request $request ) {
+        $access_settings = $this->settings_service->get_access_settings();
+
+        if ( is_wp_error( $access_settings ) ) {
+            return $access_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $access_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
+
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
+    public function get_license_settings( WP_REST_Request $request ) {
+        $license_settings = $this->settings_service->get_license_settings();
+
+        if ( is_wp_error( $license_settings ) ) {
+            return $license_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $license_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
 
 
 	/**
@@ -272,7 +372,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->get_general_settings(), $request->get_json_params() );
+		$settings = array_replace_recursive( $this->settings_service->get_general_settings(), $request->get_json_params() );
 		return $this->settings_service->save_settings( 'general', $settings );
 	}
 
@@ -284,7 +384,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->get_checkout_settings(), $request->get_json_params() );
+		$settings = array_replace_recursive( $this->settings_service->get_checkout_settings(), $request->get_json_params() );
 		return $this->settings_service->save_settings( 'checkout', $settings );
 	}
 
