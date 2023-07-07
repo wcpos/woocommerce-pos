@@ -51,9 +51,9 @@ class Gateways {
 	 *
 	 * @param array | null $gateways
 	 *
-	 * @return array
+	 * @return array | null
 	 */
-	public function available_payment_gateways( ?array $gateways ): array {
+	public function available_payment_gateways( ?array $gateways ): ?array {
 		// early exit
 		if ( ! woocommerce_pos_request() ) {
 			return $gateways;

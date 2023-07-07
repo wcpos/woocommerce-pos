@@ -153,7 +153,7 @@ class Frontend {
 		 */
 		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_bundle    = 'http://localhost:19000/index.bundle?platform=web&dev=true&hot=false';
+		$dev_bundle    = 'http://localhost:8081/index.bundle?platform=web&dev=true&hot=false';
 
 		// getScript helper and initialProps
 		echo "<script>

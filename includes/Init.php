@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use function defined;
 use const DOING_AJAX;
 
 use WP_HTTP_Response;
@@ -27,6 +28,7 @@ class Init {
 
 		// Init hooks
 		add_action( 'init', array( $this, 'init' ) );
+        add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
@@ -37,7 +39,6 @@ class Init {
 		// Hack - remove when possible
 		add_filter( 'woocommerce_rest_shop_order_schema', array( $this, 'shop_order_schema' ), 10, 1 );
 		add_filter( 'option_wpseo', array( $this, 'remove_wpseo_rest_api_links' ), 10, 1 );
-
 	}
 
 	/**
@@ -66,16 +67,8 @@ class Init {
 		//      new Customers();
 		new Orders();
 
-		// AJAX only
-		if ( is_admin() && ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
-			 new AJAX();
-		}
-
-		if ( is_admin() && ! ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
-			// admin only
-			new Admin();
-		} else {
-			// frontend only
+        // frontend only
+        if ( ! is_admin() ) {
 			new Templates();
 			new Form_Handler();
 		}
@@ -83,6 +76,20 @@ class Init {
 		// load integrations
 		$this->integrations();
 	}
+
+    /**
+     *
+     */
+    public function admin_init(): void {
+        if ( defined( '\DOING_AJAX' ) && DOING_AJAX ) {
+            new AJAX();
+        }
+
+        if ( ! ( defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
+            // admin only
+            new Admin();
+        }
+    }
 
 	/**
 	 * Loads the POS API and duck punches the WC REST API.

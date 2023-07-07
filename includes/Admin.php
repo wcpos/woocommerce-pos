@@ -55,24 +55,29 @@ class Admin {
 	 * @param $current_screen
 	 */
 	public function current_screen( $current_screen ): void {
-		// Add setting to permalink page
-		if ( 'options-permalink' == $current_screen->id ) {
-			new Admin\Permalink();
-		}
 
-		// Edit products page
-		if ( 'product' == $current_screen->id ) {
-			new Admin\Products();
-		}
+        switch ( $current_screen->id ) {
+            case 'options-permalink': // Add setting to permalink page
+                new Admin\Permalink();
+                break;
 
-		// Add POS settings to orders pages
-		if ( $current_screen->id == 'shop_order' || $current_screen->id == 'edit-shop_order' ) {
-			new Admin\Orders();
-		}
+            case 'product': // Single product page
+                new Admin\Products\Single_Product();
+                break;
 
-		// Customise plugins page
-		if ( 'plugins' == $current_screen->id ) {
-			new Admin\Plugins();
+            case 'edit-product': // List products page
+                new Admin\Products\List_Products();
+                break;
+
+            case 'shop_order': // Add POS settings to orders pages
+            case 'edit-shop_order': // Add POS settings to orders pages
+                new Admin\Orders();
+                break;
+
+            case 'plugins': // Customise plugins page
+                new Admin\Plugins();
+                break;
+
 		}
 
 		// Load the Settings class

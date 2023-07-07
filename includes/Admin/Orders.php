@@ -46,6 +46,9 @@ class Orders {
 		return $is_editable;
 	}
 
+    /**
+     *
+     */
     public function order_filter_dropdown() {
         $selected = isset( $_GET['pos_order'] ) ? $_GET['pos_order'] : '';
 
@@ -64,6 +67,10 @@ class Orders {
         echo '</select>';
     }
 
+    /**
+     * @param WP_Query $query
+     * @return void
+     */
     public function parse_query( WP_Query $query ) {
         if ( isset( $_GET['pos_order'] ) && $_GET['pos_order'] != '' ) {
             $meta_query = array( 'relation' => 'AND' );

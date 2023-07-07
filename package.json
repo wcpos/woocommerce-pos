@@ -24,7 +24,6 @@
     "prepare": "husky install",
     "settings": "yarn workspace @wcpos/settings",
     "analytics": "yarn workspace @wcpos/analytics",
-    "edit-product": "yarn workspace @wcpos/edit-product",
     "build:js": "yarn workspace @wcpos/settings build && yarn workspace @wcpos/edit-product build && yarn workspace @wcpos/analytics build"
   },
   "repository": {

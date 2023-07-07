@@ -9,10 +9,19 @@ class AJAX {
 	 *
 	 * @var string[]
 	 */
-	private $product_actions = array(
-		'load_variations',
-		'save_variations',
+	private $single_product_actions = array(
+		'woocommerce_load_variations',
+		'woocommerce_save_variations',
 	);
+
+    /**
+     * WooCommerce AJAX actions that we need to hook into on the Product admin pages.
+     *
+     * @var string[]
+     */
+    private $list_products_actions = array(
+        // 'inline-save', // this is a core WordPress action and it won't call our hook
+    );
 
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Order admin pages.
@@ -20,52 +29,72 @@ class AJAX {
 	 * @var string[]
 	 */
 	private $order_actions = array(
-		'add_order_item',
-		'add_order_fee',
-		'add_order_shipping',
-		'add_order_tax',
-		'add_coupon_discount',
-		'remove_order_coupon',
-		'remove_order_item',
-		'remove_order_tax',
-		'calc_line_taxes',
-		'save_order_items',
-		'load_order_items',
-		'get_order_details',
+		'woocommerce_add_order_item',
+		'woocommerce_add_order_fee',
+		'woocommerce_add_order_shipping',
+		'woocommerce_add_order_tax',
+		'woocommerce_add_coupon_discount',
+		'woocommerce_remove_order_coupon',
+		'woocommerce_remove_order_item',
+		'woocommerce_remove_order_tax',
+		'woocommerce_calc_line_taxes',
+		'woocommerce_save_order_items',
+		'woocommerce_load_order_items',
+		'woocommerce_get_order_details',
 	);
 
 	/**
 	 *
 	 */
 	public function __construct() {
-		$this->woocommerce_ajax_actions();
-	}
+        if ( ! isset( $_POST['action'] ) ) {
+            return;
+        }
+
+        if ( $_POST['action'] == 'heartbeat' ) {
+            return;
+        }
+
+        foreach ( $this->single_product_actions as $ajax_event ) {
+            add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_single_product_class' ), 9 );
+        }
+        foreach ( $this->list_products_actions as $ajax_event ) {
+            add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_list_products_class' ), 9 );
+        }
+        foreach ( $this->order_actions as $ajax_event ) {
+            add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_orders_class' ), 9 );
+        }
+
+        // we need to hook into these actions to save our custom fields via AJAX
+        add_action( 'woocommerce_product_quick_edit_save',
+            array(
+				'\WCPOS\WooCommercePOS\Admin\Products\List_Products',
+				'quick_edit_save',
+            )
+        );
+    }
 
 	/**
-	 *
-	 */
-	private function woocommerce_ajax_actions() {
-		foreach ( $this->product_actions as $ajax_event ) {
-			add_action( 'wp_ajax_woocommerce_' . $ajax_event, array( $this, 'woocommerce_product_ajax' ), 9, 0 );
-		}
-		foreach ( $this->order_actions as $ajax_event ) {
-			add_action( 'wp_ajax_woocommerce_' . $ajax_event, array( $this, 'woocommerce_order_ajax' ), 9, 0 );
-		}
-	}
-
-	/**
-	 * The Admin\Products class is not loaded for AJAX requests.
+	 * The Admin\Products\Single_Product class is not loaded for AJAX requests.
 	 * We need to load it manually here.
 	 */
-	public function woocommerce_product_ajax() {
-		new Admin\Products();
+	public function load_single_product_class() {
+		new Admin\Products\Single_Product();
 	}
+
+    /**
+     * The Admin\Products\List_Products class is not loaded for AJAX requests.
+     * We need to load it manually here.
+     */
+    public function load_list_products_class() {
+        //
+    }
 
 	/**
 	 * The Admin\Orders class is not loaded for AJAX requests.
 	 * We need to load it manually here.
 	 */
-	public function woocommerce_order_ajax() {
+	public function load_orders_class() {
 		new Admin\Orders();
 	}
 
