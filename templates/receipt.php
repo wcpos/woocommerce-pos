@@ -3,7 +3,6 @@
  * Sales Receipt Template
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/receipt.php.
- *
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 

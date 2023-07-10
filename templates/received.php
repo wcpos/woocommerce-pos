@@ -3,7 +3,6 @@
  * POS Order Received template.
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/received.php.
- *
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 

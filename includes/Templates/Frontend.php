@@ -53,12 +53,6 @@ class Frontend {
 		// last chance before template is rendered
 		do_action( 'woocommerce_pos_template_redirect' );
 
-        // if modal login
-        if ( isset( $_GET['modal'] ) && $_GET['modal'] === '1' ) {
-            $this->modal_login();
-            exit;
-        }
-
 		// add head & footer actions
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
@@ -75,7 +69,7 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function login_url( $login_url ) {
-		return add_query_arg( SHORT_NAME, '1', $login_url );
+        return add_query_arg( SHORT_NAME, '1', $login_url );
 	}
 
 	/**
@@ -135,7 +129,7 @@ class Frontend {
 				'last_access'  => '',
 				'avatar_url'   => get_avatar_url( $user->ID ),
 				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
-//				'jwt'		   => $jwt,
+		//              'jwt'          => $jwt,
 			),
 			'stores' => $store_settings->get_stores(),
 		);
@@ -215,33 +209,4 @@ class Frontend {
 		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' );
 
 	}
-
-    private function modal_login() {
-        $user = wp_get_current_user();
-        $user_data = $this->auth_service->get_user_data( $user );
-        $credentials = wp_json_encode( $user_data );
-
-        echo "<script>
-	(function() {
-        // Parse the order JSON from PHP
-        var credentials = " . $credentials . " 
-
-        // Check if postMessage function exists for window.top
-        if (typeof window.top.postMessage === 'function') {
-            window.top.postMessage({
-                action: 'wcpos-wp-credentials',
-                payload: credentials
-            }, '*');
-        }
-
-        // Check if ReactNativeWebView object and postMessage function exists
-        if (typeof window.ReactNativeWebView !== 'undefined' && typeof window.ReactNativeWebView.postMessage === 'function') {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-                action: 'wcpos-wp-credentials',
-                payload: credentials
-            }));
-        }
-    })();
-</script>" . "\n";
-    }
 }

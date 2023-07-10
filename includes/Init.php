@@ -160,7 +160,7 @@ class Init {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
-	}
+    }
 
 	/**
 	 * Loads POS integrations with third party plugins.
