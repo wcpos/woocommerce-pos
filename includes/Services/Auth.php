@@ -9,6 +9,7 @@ use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Stores;
 use WP_Error;
 use WP_User;
+use const DAY_IN_SECONDS;
 
 class Auth {
     /**

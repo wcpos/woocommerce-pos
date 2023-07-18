@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Services\Auth;
+use WP_User;
 
 class Login {
     /**
@@ -25,7 +26,9 @@ class Login {
         header( 'Content-Security-Policy: frame-ancestors http://localhost:* https://localhost:*' );
     }
 
-
+    /**
+     * @return void
+     */
     public function get_template(): void {
         $login_attempt = isset( $_POST['_wpnonce'] ) && wp_verify_nonce( $_POST['_wpnonce'], 'woocommerce_pos_login' );
 
@@ -35,7 +38,7 @@ class Login {
             $creds = array();
             $creds['user_login'] = $_POST['log'];
             $creds['user_password'] = $_POST['pwd'];
-//            $creds['remember'] = isset( $_POST['rememberme'] );
+			//            $creds['remember'] = isset( $_POST['rememberme'] );
 
             $user = wp_signon( $creds, false );
 
@@ -44,7 +47,7 @@ class Login {
                     $error_string .= '<p class="error">' . $error[0] . '</p>';
                 }
             } else {
-                $this->login_success();
+                $this->login_success( $user );
                 exit;
             }
         }
@@ -62,10 +65,11 @@ class Login {
     /**
      * Login success
      *
+     * @param WP_User $user
+     *
      * @return void
      */
-    private function login_success() {
-        $user = wp_get_current_user();
+    private function login_success( WP_User $user ) {
         $user_data = $this->auth_service->get_user_data( $user );
         $credentials = wp_json_encode( $user_data );
 

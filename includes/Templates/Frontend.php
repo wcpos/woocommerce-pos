@@ -28,6 +28,9 @@ class Frontend {
 	}
 
 
+    /**
+     * @return void
+     */
 	public function get_template(): void {
 		// force ssl
 		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {

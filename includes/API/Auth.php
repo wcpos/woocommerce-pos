@@ -43,19 +43,24 @@ class Auth extends Abstracts\Controller {
 	 */
 	public function register_routes(): void {
 		// Generate JWT token
-//		register_rest_route(
-//			$this->namespace,
-//			'/' . $this->rest_base . '/authorize',
-//			array(
-//				'methods'             => WP_REST_Server::READABLE,
-//				'callback'            => array( $this, 'generate_token' ),
-//				'permission_callback' => function ( WP_REST_Request $request ) {
-//					$authorization = $request->get_header( 'authorization' );
-//
-//					return ! is_null( $authorization );
-//				},
-//			)
-//		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/authorize',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'generate_token' ),
+				'permission_callback' => function ( WP_REST_Request $request ) {
+                    // special case for user=demo param
+                    if ( $request->get_param( 'user' ) === 'demo' ) {
+                        return true;
+                    }
+
+					$authorization = $request->get_header( 'authorization' );
+
+					return ! is_null( $authorization );
+				},
+			)
+		);
 
 		// Validate JWT token
 		register_rest_route(
@@ -125,20 +130,20 @@ class Auth extends Abstracts\Controller {
 		/** Try to authenticate the user with the passed credentials*/
 		$user = wp_authenticate( $username, $password );
 
-		// If the authentication fails return a error
+		// If the authentication fails return an error
 		if ( is_wp_error( $user ) ) {
 			$error_code = $user->get_error_code();
 
-			return new WP_Error(
+			$data = new WP_Error(
 				'woocommerce_pos_' . $error_code,
 				$user->get_error_message( $error_code ),
 				array(
 					'status' => 403,
 				)
 			);
-		}
-
-		$data = $this->auth_service->generate_token( $user );
+		} else {
+            $data = $this->auth_service->generate_token( $user );
+        }
 
 		/**
 		 * Let the user modify the data before sending it back
