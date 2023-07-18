@@ -81,11 +81,10 @@ class Init {
      */
     public function admin_init(): void {
         if ( defined( '\DOING_AJAX' ) && DOING_AJAX ) {
+            // AJAX requests
             new AJAX();
-        }
-
-        if ( ! ( defined( '\DOING_AJAX' ) && DOING_AJAX ) ) {
-            // admin only
+        } else {
+            // Non-AJAX (Admin) requests
             new Admin();
         }
     }
