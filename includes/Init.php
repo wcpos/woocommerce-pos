@@ -28,7 +28,6 @@ class Init {
 
 		// Init hooks
 		add_action( 'init', array( $this, 'init' ) );
-        add_action( 'admin_init', array( $this, 'admin_init' ) );
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
@@ -72,22 +71,22 @@ class Init {
 			new Form_Handler();
 		}
 
+        /**
+         * NOTE: admin_menu runs before admin_init, so we need to load the Admin class here
+         */
+        if ( is_admin() ) {
+            if ( defined( '\DOING_AJAX' ) && DOING_AJAX ) {
+                // AJAX requests
+                new AJAX();
+            } else {
+                // Non-AJAX (Admin) requests
+                new Admin();
+            }
+        }
+
 		// load integrations
 		$this->integrations();
 	}
-
-    /**
-     *
-     */
-    public function admin_init(): void {
-        if ( defined( '\DOING_AJAX' ) && DOING_AJAX ) {
-            // AJAX requests
-            new AJAX();
-        } else {
-            // Non-AJAX (Admin) requests
-            new Admin();
-        }
-    }
 
 	/**
 	 * Loads the POS API and duck punches the WC REST API.

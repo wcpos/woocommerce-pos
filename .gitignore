@@ -23,7 +23,7 @@ assets/css/*
 assets/asset-manifest.json
 assets/static
 assets/report.html
-.yarn.lock
+yarn.lock
 .yarn/install-state.gz
 .yarn/cache
 hookdocs

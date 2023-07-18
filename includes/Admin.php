@@ -38,10 +38,8 @@ class Admin {
 
 	/**
 	 * Fires before the administration menu loads in the admin.
-	 *
-	 * @param string $context Empty context.
 	 */
-	public function admin_menu( $context ): void {
+	public function admin_menu(): void {
 		$menu = new Admin\Menu();
 		$this->menu_ids = array(
 			'toplevel' => $menu->toplevel_screen_id,
