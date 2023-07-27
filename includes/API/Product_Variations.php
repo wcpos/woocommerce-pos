@@ -22,7 +22,7 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
-        $this->get_all_postmeta_uuids();
+        $this->uuids = $this->get_all_postmeta_uuids();
         $this->add_product_image_src_filter();
 
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'product_response' ), 10, 3 );
