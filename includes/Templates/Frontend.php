@@ -89,6 +89,7 @@ class Frontend {
 		$user           = wp_get_current_user();
 		$store_settings = new Stores();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
+        $auth_service   = new Auth();
 
 		$site_uuid = get_option( 'woocommerce_pos_uuid' );
 		if ( ! $site_uuid ) {
@@ -120,20 +121,7 @@ class Frontend {
 				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
 				'locale'          => get_locale(),
 			),
-			'wp_credentials' => array(
-				'uuid' => $user_uuid,
-				'id'           => $user->ID,
-				'username'     => $user->user_login,
-				'first_name'   => $user->user_firstname,
-				'last_name'    => $user->user_lastname,
-				'email'        => $user->user_email,
-				'display_name' => $user->display_name,
-				'nice_name'    => $user->user_nicename,
-				'last_access'  => '',
-				'avatar_url'   => get_avatar_url( $user->ID ),
-				'wp_nonce'     => wp_create_nonce( 'wp_rest' ),
-		//              'jwt'          => $jwt,
-			),
+			'wp_credentials' => $auth_service->get_user_data( $user ),
 			'stores' => $store_settings->get_stores(),
 		);
 
