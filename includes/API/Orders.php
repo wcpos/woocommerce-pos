@@ -88,6 +88,13 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
 							unset( $error_data['params']['line_items'], $error_data['details']['line_items'] );
 						}
 					}
+
+                    // Check if 'line_items[X][parent_name]' has 'rest_invalid_type'
+                    // Use a regular expression to match 'line_items[X][parent_name]', where X is a number
+                    if ( $line_items_details['code'] === 'rest_invalid_type' &&
+                        preg_match( '/^line_items\[\d+\]\[parent_name\]$/', $line_items_details['data']['param'] ) ) {
+                            unset( $error_data['params']['line_items'], $error_data['details']['line_items'] );
+                    }
 				}
 
 				// Check if the invalid parameter was 'billing'

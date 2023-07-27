@@ -18,7 +18,9 @@ class Received {
 
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
-	}
+
+        add_filter('show_admin_bar', '__return_false');
+    }
 
 
 	public function get_template(): void {

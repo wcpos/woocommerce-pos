@@ -34,24 +34,6 @@ class Init {
 		// Headers for API discoverability
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
-
-		// Hack - remove when possible
-		add_filter( 'woocommerce_rest_shop_order_schema', array( $this, 'shop_order_schema' ), 10, 1 );
-	}
-
-	/**
-	 * Hack to fix the shop order schema.
-	 *
-	 * @TODO - submit a PR to WooCommerce
-	 */
-	public function shop_order_schema( array $schema ): array {
-		if ( isset( $schema['line_items']['items']['properties']['parent_name']['type'] ) ) {
-			if ( 'string' === $schema['line_items']['items']['properties']['parent_name']['type'] ) {
-				$schema['line_items']['items']['properties']['parent_name']['type'] = 'mixed';
-			}
-		}
-
-		return $schema;
 	}
 
 	/**

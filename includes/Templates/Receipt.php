@@ -22,7 +22,8 @@ class Receipt {
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
 
-		add_action( 'woocommerce_pos_receipt_head' , array( $this, 'receipt_head' ) );
+		add_filter( 'show_admin_bar', '__return_false' );
+		add_action( 'woocommerce_pos_receipt_head', array( $this, 'receipt_head' ) );
 	}
 
 	/**
@@ -59,9 +60,9 @@ class Receipt {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-//			if ( ! $order->is_paid() ) {
-//				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-//			}
+			//          if ( ! $order->is_paid() ) {
+			//              wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
+			//          }
 
 			if ( isset( $_GET['template'] ) ) {
 				if ( 'legacy' === $_GET['template'] ) {

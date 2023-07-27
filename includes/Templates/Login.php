@@ -23,7 +23,7 @@ class Login {
      * @return void
      */
     private function send_headers() {
-        header( 'Content-Security-Policy: frame-ancestors http://localhost:* https://localhost:*' );
+        header( 'Content-Security-Policy: frame-ancestors *' );
     }
 
     /**

@@ -33,6 +33,20 @@ class Settings {
             'order_status' => 'wc-completed',
             'admin_emails' => true,
             'customer_emails' => true,
+            // this is used in the POS, not in WP Admin (at the moment)
+            'dequeue_script_handles' => array(
+                'admin-bar',
+                'wc-add-to-cart',
+            ),
+            'dequeue_style_handles' => array(
+                'admin-bar',
+                'woocommerce-general',
+                'woocommerce-inline',
+                'woocommerce-layout',
+                'woocommerce-smallscreen',
+                'woocommerce-blocktheme',
+                'wp-block-library',
+            ),
         ),
         'payment_gateways' => array(
             'default_gateway' => 'pos_cash',

@@ -52,8 +52,48 @@ defined( 'ABSPATH' ) || exit;
 			margin-bottom: 4px;
 		}
 
+    .woocommerce-pos-troubleshooting {
+        border-left: 4px solid #007cba; /* For the blue vertical line */
+        padding: 5px 10px; /* Padding around the text */
+        background: #fff; /* White background */
+        box-shadow: 0 1px 1px rgba(0,0,0,.04); /* Subtle shadow effect */
+    }
 
-		.woocommerce-error {
+		.woocommerce-pos-troubleshooting p.link {
+				margin: 0;
+		}
+
+    .woocommerce-pos-troubleshooting h3 {
+        margin: 0.5em 0;
+        padding: 0;
+        font-size: 1em;
+        font-weight: 600;
+    }
+
+    .woocommerce-pos-troubleshooting div {
+        flex: 1;
+        margin-right: 20px;
+    }
+
+    .woocommerce-pos-troubleshooting input[type="checkbox"] {
+        margin-right: 5px;
+    }
+
+    .woocommerce-pos-troubleshooting button {
+        margin-top: 20px;
+        background: #007cba;
+        border: none;
+        color: #fff;
+        padding: 10px 15px;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+
+    .woocommerce-pos-troubleshooting button:hover {
+        background: #005a87;
+    }
+
+    .woocommerce-error {
 			background-color: #f8d7da;
 			color: #721c24;
 			border-color: #f5c6cb;
@@ -217,8 +257,61 @@ defined( 'ABSPATH' ) || exit;
 </head>
 
 <body <?php body_class(); ?>>
-<div class="woocommerce">
+<div class="woocommerce"><?php
+    global $wp_styles, $wp_scripts;
+    $styleHandles = $wp_styles->queue;
+    $scriptHandles = $wp_scripts->queue;
+
+    $style_exclude_list = apply_filters(
+        'woocommerce_pos_payment_template_dequeue_style_handles',
+        woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
+    );
+
+    $script_exclude_list = apply_filters(
+        'woocommerce_pos_payment_template_dequeue_script_handles',
+        woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
+    );
+
+    $mergedStyleHandles = array_unique(array_merge($styleHandles, $style_exclude_list));
+    $mergedScriptHandles = array_unique(array_merge($scriptHandles, $script_exclude_list));
+	?>
+
+	<div class="woocommerce-pos-troubleshooting notice notice-warning is-dismissible">
+		<p class="link">
+			<a href="#" class="toggle-troubleshooting"><?php _e('Having problems with the checkout?', 'woocommerce-pos'); ?></a>
+		</p>
+		<form id="troubleshooting-form" method="POST" style="display: none;">
+			<p><?php _e('Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts.', 'woocommerce-pos'); ?></p>
+			<div style="display: flex; justify-content: space-between;">
+				<div>
+					<h3><?php _e('Styles', 'woocommerce-pos'); ?></h3>
+            <?php foreach ($mergedStyleHandles as $handle) :
+                $checked = !in_array($handle, $style_exclude_list) ? 'checked' : '';
+                ?>
+							<input type="checkbox" id="<?php echo $handle; ?>" name="styles[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
+							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
+							<input type="hidden" name="all_styles[]" value="<?php echo $handle; ?>"><br>
+            <?php endforeach; ?>
+				</div>
+				<div>
+					<h3><?php _e('Scripts', 'woocommerce-pos'); ?></h3>
+            <?php foreach ($mergedScriptHandles as $handle) :
+                $checked = !in_array($handle, $script_exclude_list) ? 'checked' : '';
+                ?>
+							<input type="checkbox" id="<?php echo $handle; ?>" name="scripts[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
+							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
+							<input type="hidden" name="all_scripts[]" value="<?php echo $handle; ?>"><br>
+            <?php endforeach; ?>
+				</div>
+			</div>
+			<?php wp_nonce_field( 'troubleshooting_form_action', 'troubleshooting_form_nonce' ); ?>
+			<button type="submit"><?php _e('Submit', 'woocommerce-pos'); ?></button>
+			<a href="#" class="toggle-troubleshooting"><?php _e('Close', 'woocommerce-pos'); ?></a>
+		</form>
+	</div>
+
 	<?php woocommerce_output_all_notices(); ?>
+
 	<div class="cashier">
 		<span><?php esc_html_e( 'Cashier: ', 'woocommerce-pos' ); ?></span>
 		<span class="cashier-name"><?php echo esc_html( $cashier->display_name ); ?></span>
@@ -305,6 +398,13 @@ defined( 'ABSPATH' ) || exit;
 	document.querySelector('.current-user .user-name').addEventListener('click', () => {
 		const addressFields = document.querySelector('.address-fields');
 		addressFields.style.display = addressFields.style.display === 'none' ? 'block' : 'none';
+	});
+	document.querySelectorAll('.toggle-troubleshooting').forEach(item => {
+		item.addEventListener('click', event => {
+			event.preventDefault();
+			const form = document.getElementById('troubleshooting-form');
+			form.style.display = form.style.display === 'none' ? 'block' : 'none';
+		});
 	});
 </script>
 
