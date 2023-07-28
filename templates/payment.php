@@ -304,7 +304,7 @@ defined( 'ABSPATH' ) || exit;
             <?php endforeach; ?>
 				</div>
 			</div>
-			<?php wp_nonce_field( 'troubleshooting_form_action', 'troubleshooting_form_nonce' ); ?>
+			<input type="hidden" name="troubleshooting_form_nonce" value="<?php echo $troubleshooting_form_nonce; ?>" />
 			<button type="submit"><?php _e('Submit', 'woocommerce-pos'); ?></button>
 			<a href="#" class="toggle-troubleshooting"><?php _e('Close', 'woocommerce-pos'); ?></a>
 		</form>

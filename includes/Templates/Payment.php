@@ -116,7 +116,7 @@ class Payment {
         // Check if our form has been submitted
         if ( isset( $_POST['troubleshooting_form_nonce'] ) ) {
             // Verify the nonce
-            if ( ! wp_verify_nonce( $_POST['troubleshooting_form_nonce'], 'troubleshooting_form_action' ) ) {
+            if ( ! wp_verify_nonce( $_POST['troubleshooting_form_nonce'], 'troubleshooting_form_nonce' ) ) {
                 // Nonce doesn't verify, we should stop execution here
                 die( 'Nonce value cannot be verified.' );
             }
@@ -191,6 +191,7 @@ class Payment {
 
 			// create nonce for cashier to apply coupons
 			$coupon_nonce = wp_create_nonce( 'pos_coupon_action' );
+            $troubleshooting_form_nonce = wp_create_nonce( 'troubleshooting_form_nonce' );
 
 			/**
 			 * The wp_set_current_user() function changes the global user object but it does not authenticate the user
