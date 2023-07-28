@@ -112,6 +112,9 @@ class Payment {
     }
 
 
+    /**
+     * @return void
+     */
     private function check_troubleshooting_form_submission() {
         // Check if our form has been submitted
         if ( isset( $_POST['troubleshooting_form_nonce'] ) ) {
@@ -132,6 +135,8 @@ class Payment {
             // Sanitize styles array
             if ( isset( $_POST['styles'] ) && is_array( $_POST['styles'] ) ) {
                 $sanitized_data['styles'] = array_map( 'sanitize_text_field', $_POST['styles'] );
+            } else {
+                $sanitized_data['styles'] = array();  // consider all styles unchecked if 'styles' is not submitted
             }
 
             // Sanitize all_scripts array
@@ -142,24 +147,32 @@ class Payment {
             // Sanitize scripts array
             if ( isset( $_POST['scripts'] ) && is_array( $_POST['scripts'] ) ) {
                 $sanitized_data['scripts'] = array_map( 'sanitize_text_field', $_POST['scripts'] );
+            } else {
+                $sanitized_data['scripts'] = array();  // consider all scripts unchecked if 'scripts' is not submitted
             }
 
             // Calculate unchecked styles and scripts
-            $unchecked_styles = isset( $sanitized_data['all_styles'], $sanitized_data['styles'] ) ? array_diff( $sanitized_data['all_styles'], $sanitized_data['styles'] ) : array();
-            $unchecked_scripts = isset( $sanitized_data['all_scripts'], $sanitized_data['scripts'] ) ? array_diff( $sanitized_data['all_scripts'], $sanitized_data['scripts'] ) : array();
+            $unchecked_styles = isset( $sanitized_data['all_styles'] ) ? array_diff( $sanitized_data['all_styles'], $sanitized_data['styles'] ) : array();
+            $unchecked_scripts = isset( $sanitized_data['all_scripts'] ) ? array_diff( $sanitized_data['all_scripts'], $sanitized_data['scripts'] ) : array();
 
             // @TODO - the save settings function should allow saving by key
             $settings = new Settings();
             $checkout_settings = $settings->get_checkout_settings();
-            $new_settings = array_replace_recursive(
+            $new_settings = array_merge(
                 $checkout_settings,
-                array( 'dequeue_style_handles' => $unchecked_styles ),
-                array( 'dequeue_script_handles' => $unchecked_scripts )
+                array(
+                    'dequeue_style_handles' => $unchecked_styles,
+                    'dequeue_script_handles' => $unchecked_scripts,
+                )
             );
             $settings->save_settings( 'checkout', $new_settings );
         }
     }
 
+
+    /**
+     * @return void
+     */
     public function get_template(): void {
 		if ( ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
 			define( 'WOOCOMMERCE_CHECKOUT', true );

@@ -142,10 +142,15 @@ class Settings {
      * @return array
      */
     public function get_general_settings(): array {
-        $general_settings = array_replace_recursive(
-            self::$default_settings['general'],
-            get_option( self::$db_prefix . 'general', array() )
-        );
+        $default_settings = self::$default_settings['general'];
+        $settings = get_option( self::$db_prefix . 'general', array() );
+
+        // if the key does not exist in db settings, use the default settings
+        foreach ( $default_settings as $key => $value ) {
+            if ( ! array_key_exists( $key, $settings ) ) {
+                $settings[ $key ] = $value;
+            }
+        }
 
         /**
          * Filters the general settings.
@@ -155,17 +160,22 @@ class Settings {
          * @since 1.0.0
          * @hook woocommerce_pos_general_settings
          */
-        return apply_filters( 'woocommerce_pos_general_settings', $general_settings );
+        return apply_filters( 'woocommerce_pos_general_settings', $settings );
     }
 
     /**
      * @return array
      */
     public function get_checkout_settings(): array {
-        $checkout_settings = array_replace_recursive(
-            self::$default_settings['checkout'],
-            get_option( self::$db_prefix . 'checkout', array() )
-        );
+        $default_settings = self::$default_settings['checkout'];
+        $settings = get_option( self::$db_prefix . 'checkout', array() );
+
+        // if the key does not exist in db settings, use the default settings
+        foreach ( $default_settings as $key => $value ) {
+            if ( ! array_key_exists( $key, $settings ) ) {
+                $settings[ $key ] = $value;
+            }
+        }
 
         /**
          * Filters the checkout settings.
@@ -175,7 +185,7 @@ class Settings {
          * @since 1.0.0
          * @hook woocommerce_pos_checkout_settings
          */
-        return apply_filters( 'woocommerce_pos_checkout_settings', $checkout_settings );
+        return apply_filters( 'woocommerce_pos_checkout_settings', $settings );
     }
 
     /**
