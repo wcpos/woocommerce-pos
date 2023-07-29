@@ -102,8 +102,10 @@ class API {
 
 	/**
 	 * Add Access Control Allow Headers for POS app.
+     *
+     * NOTE: I have seen this filter called with NULL for $served, which is not expected
 	 *
-	 * @param bool             $served  Whether the request has already been served.
+	 * @param mixed            $served  Whether the request has already been served.
 	 *                                  Default false.
 	 * @param WP_HTTP_Response $result  Result to send to the client. Usually a `WP_REST_Response`.
 	 * @param WP_REST_Request  $request Request used to generate the response.
@@ -111,7 +113,13 @@ class API {
 	 *
 	 * @return bool $served
 	 */
-	public function rest_pre_serve_request( bool $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
+	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
+        // Check if served is a boolean
+        if ( ! is_bool( $served ) ) {
+            Logger::log( "Warning: 'rest_pre_serve_request' filter received a non-boolean value for 'served'. Defaulting to 'false'." );
+            $served = false; // Default value if not provided correctly
+        }
+        
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
 
 		return $served;
@@ -192,6 +200,12 @@ class API {
 		if ( ! $header && isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
 			$header = sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		}
+
+        // Check for authorization param in URL
+        // @TODO - add setting to enable this
+        if ( ! $header && isset( $_GET['authorization'] ) ) {
+            $header = sanitize_text_field( $_GET['authorization'] );
+        }
 
 		return $header;
 	}

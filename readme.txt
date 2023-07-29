@@ -63,6 +63,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.3.6 = 2023/07/ =
+* Fix: rest_pre_serve_request critical error reported by some users
+
 = 1.3.4 and 1.3.5 - 2023/07/29 =
 * Urgent Fix: product descriptions being truncated to 100 characters
 
