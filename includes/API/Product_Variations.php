@@ -47,7 +47,7 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
         $data['barcode'] = $this->get_barcode( $product );
 
         // Truncate the product description and short_description
-        $data['description'] = $this->truncate_text( $data['description'] );
+//        $data['description'] = $this->truncate_text( $data['description'] );
 
         /**
          * Make sure we parse the meta data before returning the response

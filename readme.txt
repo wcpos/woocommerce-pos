@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.3
-Stable tag: 1.3.3
+Stable tag: 1.3.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -63,8 +63,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.3.4 - 2023/07/29 =
+* Urgent Fix: product descriptions being truncated to 100 characters
+
 = 1.3.3 - 2023/07/28 =
-* Fix: "Nonce value cannot be verified" when dequeue-ing scripts and styles onPOS checkout modal
+* Fix: "Nonce value cannot be verified" when dequeue-ing scripts and styles in POS checkout modal
 
 = 1.3.2 - 2023/07/27 =
 * Urgent Fix for variations not downloading for some users

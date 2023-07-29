@@ -82,13 +82,13 @@ trait Product_Helpers {
      * @param string $text
      * @return string
      */
-    private function truncate_text( string $text ): string {
-        $max_length = 100;
-        $result = wp_strip_all_tags( $text, true );
-        if ( strlen( $result ) > $max_length ) {
-            $result = substr( $result, 0, $max_length - 3 ) . '...';
-        }
-        return $result;
-    }
+//    private function truncate_text( string $text ): string {
+//        $max_length = 100;
+//        $result = wp_strip_all_tags( $text, true );
+//        if ( strlen( $result ) > $max_length ) {
+//            $result = substr( $result, 0, $max_length - 3 ) . '...';
+//        }
+//        return $result;
+//    }
 
 }

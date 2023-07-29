@@ -149,8 +149,8 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		$data['barcode'] = $this->get_barcode( $product );
 
         // Truncate the product description and short_description
-        $data['description'] = $this->truncate_text( $data['description'] );
-        $data['short_description'] = $this->truncate_text( $data['short_description'] );
+//        $data['description'] = $this->truncate_text( $data['description'] );
+//        $data['short_description'] = $this->truncate_text( $data['short_description'] );
 
 		/**
 		 * If product is variable, add the max and min prices and add them to the meta data
