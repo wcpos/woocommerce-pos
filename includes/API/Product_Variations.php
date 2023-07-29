@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\API;
 use Exception;
 use Ramsey\Uuid\Uuid;
 use WC_Data;
+use WC_Product_Variation;
 use WP_Error;
 use WP_Query;
 use WP_REST_Request;
@@ -26,7 +27,8 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
         $this->add_product_image_src_filter();
 
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'product_response' ), 10, 3 );
-	}
+        add_filter( 'woocommerce_rest_pre_insert_product_variation_object', array( $this, 'prevent_variation_description_update' ), 10, 3 );
+    }
 
 	/**
 	 * Filter the product response.
@@ -46,9 +48,6 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
         // Add the barcode to the product response
         $data['barcode'] = $this->get_barcode( $product );
 
-        // Truncate the product description and short_description
-//        $data['description'] = $this->truncate_text( $data['description'] );
-
         /**
          * Make sure we parse the meta data before returning the response
          */
@@ -60,6 +59,33 @@ class Product_Variations extends Abstracts\WC_Rest_API_Modifier {
 
 		return $response;
 	}
+
+    /**
+     * Filters the product variation object before it is inserted or updated via the REST API.
+     *
+     * This filter is used to prevent the description field
+     * from being updated when a product variation is updated via the REST API. It does this by
+     * resetting this field to its current value in the database before the
+     * product variation object is updated.
+     *
+     * @param WC_Product_Variation $variation The product variation object that is being inserted or updated.
+     *                                        This object is mutable.
+     * @param WP_REST_Request $request   The request object.
+     * @param bool $creating  If is creating a new object.
+     *
+     * @return WC_Product_Variation The modified product variation object.
+     */
+    public function prevent_variation_description_update( WC_Product_Variation $variation, WP_REST_Request $request, bool $creating ): WC_Product_Variation {
+        // If variation is being updated
+        if ( ! $creating ) {
+            $original_variation = wc_get_product( $variation->get_id() );
+
+            // Reset the description to the original value
+            $variation->set_description( $original_variation->get_description() );
+        }
+
+        return $variation;
+    }
 
 	/**
 	 * Returns array of all product ids, name.

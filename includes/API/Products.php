@@ -36,6 +36,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
+        add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'prevent_description_update' ), 10, 3 );
 	}
 
 	/**
@@ -114,6 +115,38 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		return $response;
 	}
 
+
+    /**
+     * Filters the product object before it is inserted or updated via the REST API.
+     *
+     * This filter is used to prevent the description and short_description fields
+     * from being updated when a product is updated via the REST API. It does this by
+     * resetting these fields to their current values in the database before the
+     * product object is updated.
+     *
+     * Ask me why this is here 😓
+     *
+     * @param WC_Product $product  The product object that is being inserted or updated.
+     *                                   This object is mutable.
+     * @param WP_REST_Request $request  The request object.
+     * @param bool $creating If is creating a new object.
+     *
+     * @return WC_Product The modified product object.
+     */
+    public function prevent_description_update( WC_Product $product, WP_REST_Request $request, bool $creating ): WC_Product {
+        // If product is being updated
+        if ( ! $creating ) {
+            $original_product = wc_get_product( $product->get_id() );
+
+            // Reset the description and short description to the original values
+            $product->set_description( $original_product->get_description() );
+            $product->set_short_description( $original_product->get_short_description() );
+        }
+
+        return $product;
+    }
+
+
 	/**
 	 * Fires after a single object is created or updated via the REST API.
 	 *
@@ -147,10 +180,6 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 
 		// Add the barcode to the product response
 		$data['barcode'] = $this->get_barcode( $product );
-
-        // Truncate the product description and short_description
-//        $data['description'] = $this->truncate_text( $data['description'] );
-//        $data['short_description'] = $this->truncate_text( $data['short_description'] );
 
 		/**
 		 * If product is variable, add the max and min prices and add them to the meta data
@@ -319,7 +348,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 				// Search in barcode field
 				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 				if ( $barcode_field !== '_sku' ) {
-					$search_array[] = $wpdb->prepare( "(wp_postmeta.meta_key = %s AND wp_postmeta.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
+					$search_array[] = $wpdb->prepare( '(wp_postmeta.meta_key = %s AND wp_postmeta.meta_value LIKE %s)', $barcode_field, $n . $like_term . $n );
 				}
 			}
 
