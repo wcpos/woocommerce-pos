@@ -61,6 +61,9 @@ class Settings {
                 ),
             ),
         ),
+        'tools' => array(
+            'use_jwt_as_param' => false,
+        ),
         'license' => array(),
     );
 
@@ -227,6 +230,31 @@ class Settings {
          * @hook woocommerce_pos_access_settings
          */
         return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
+    }
+
+    /**
+     * @return array
+     */
+    public function get_tools_settings(): array {
+        $default_settings = self::$default_settings['tools'];
+        $settings = get_option( self::$db_prefix . 'tools', array() );
+
+        // if the key does not exist in db settings, use the default settings
+        foreach ( $default_settings as $key => $value ) {
+            if ( ! array_key_exists( $key, $settings ) ) {
+                $settings[ $key ] = $value;
+            }
+        }
+
+        /**
+         * Filters the tools settings.
+         *
+         * @param {array} $settings
+         * @returns {array} $settings
+         * @since 1.3.6
+         * @hook woocommerce_pos_general_settings
+         */
+        return apply_filters( 'woocommerce_pos_tools_settings', $settings );
     }
 
     /**

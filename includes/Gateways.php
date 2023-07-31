@@ -15,7 +15,7 @@ class Gateways {
 
 	public function __construct() {
 		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
-		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ) );
+		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ), 99 );
 	}
 
 	/**

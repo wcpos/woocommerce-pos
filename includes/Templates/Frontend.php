@@ -120,6 +120,7 @@ class Frontend {
 				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
 				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
 				'locale'          => get_locale(),
+                'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
 			'stores' => $store_settings->get_stores(),

@@ -13,6 +13,7 @@ const placeholders = {
 	},
 	access: {},
 	license: {},
+	tools: {},
 };
 
 type PlaceholderKeys = keyof typeof placeholders;

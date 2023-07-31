@@ -161,6 +161,26 @@ class Settings extends Abstracts\Controller {
 			)
 		);
 
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/tools',
+            array(
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => array( $this, 'get_tools_settings' ),
+                'permission_callback' => array( $this, 'read_permission_check' ),
+            )
+        );
+
+        register_rest_route(
+            $this->namespace,
+            '/' . $this->rest_base . '/tools',
+            array(
+                'methods' => WP_REST_Server::EDITABLE,
+                'callback' => array( $this, 'update_tools_settings' ),
+                'permission_callback' => array( $this, 'access_permission_check' ),
+            )
+        );
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/license',
@@ -337,6 +357,26 @@ class Settings extends Abstracts\Controller {
      * @param WP_REST_Request $request
      * @return array|WP_REST_Response
      */
+    public function get_tools_settings( WP_REST_Request $request ) {
+        $tools_settings = $this->settings_service->get_tools_settings();
+
+        if ( is_wp_error( $tools_settings ) ) {
+            return $tools_settings;
+        }
+
+        // Create the response object
+        $response = new WP_REST_Response( $tools_settings );
+
+        // Set the status code of the response
+        $response->set_status( 200 );
+
+        return $response;
+    }
+
+    /**
+     * @param WP_REST_Request $request
+     * @return array|WP_REST_Response
+     */
     public function get_license_settings( WP_REST_Request $request ) {
         $license_settings = $this->settings_service->get_license_settings();
 
@@ -434,7 +474,17 @@ class Settings extends Abstracts\Controller {
 		return $this->settings_service->get_access_settings();
 	}
 
-
+    /**
+     * POST data comes in as PATCH, ie: partial, so we need to merge with existing data.
+     *
+     * @param WP_REST_Request $request
+     *
+     * @return array|WP_Error
+     */
+    public function update_tools_settings( WP_REST_Request $request ) {
+        $settings = array_replace_recursive( $this->settings_service->get_tools_settings(), $request->get_json_params() );
+        return $this->settings_service->save_settings( 'tools', $settings );
+    }
 
 	/**
 	 * @TODO - who can read settings?

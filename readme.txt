@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.3
-Stable tag: 1.3.5
+Stable tag: 1.3.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -63,8 +63,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.3.6 = 2023/07/ =
+= 1.3.6 = 2023/07/31 =
 * Fix: rest_pre_serve_request critical error reported by some users
+* Fix: change 'woocommerce_available_payment_gateways' filter priority to 99
+* Add: setting for servers that don't allow Authorization header
 
 = 1.3.4 and 1.3.5 - 2023/07/29 =
 * Urgent Fix: product descriptions being truncated to 100 characters
