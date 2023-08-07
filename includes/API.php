@@ -60,8 +60,11 @@ class API {
 		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 10, 4 );
 
-		// Adds authentication to for JWT bearer tokens
-		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ) );
+		/**
+         * Adds authentication to for JWT bearer tokens
+         * - We run determine_current_user at 20 to allow other plugins to run first
+         */
+		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ), 20 );
         add_filter( 'rest_authentication_errors', array( $this, 'rest_authentication_errors' ), 50, 1 );
 
 		// Adds uuid for the WordPress install
@@ -202,7 +205,6 @@ class API {
 		}
 
         // Check for authorization param in URL
-        // @TODO - add setting to enable this
         if ( ! $header && isset( $_GET['authorization'] ) ) {
             $header = sanitize_text_field( $_GET['authorization'] );
         }

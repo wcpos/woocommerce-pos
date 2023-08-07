@@ -64,7 +64,6 @@ class Settings {
         'tools' => array(
             'use_jwt_as_param' => false,
         ),
-        'license' => array(),
     );
 
     /**
@@ -261,17 +260,6 @@ class Settings {
      *
      */
     public function get_license_settings() {
-        $settings = array();
-
-        if ( class_exists( '\WCPOS\WooCommercePOSPro' ) ) {
-            $settings = get_option( self::$db_prefix . 'license', array() );
-        }
-
-        $license_settings = array_replace_recursive(
-            self::$default_settings['license'],
-            $settings
-        );
-
         /**
          * Filters the license settings.
          *
@@ -280,7 +268,7 @@ class Settings {
          * @since 1.0.0
          * @hook woocommerce_pos_license_settings
          */
-        return apply_filters( 'woocommerce_pos_license_settings', $license_settings );
+        return apply_filters( 'woocommerce_pos_license_settings', array() );
     }
 
     /**

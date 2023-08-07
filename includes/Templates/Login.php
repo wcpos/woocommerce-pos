@@ -14,16 +14,8 @@ class Login {
 
     public function __construct() {
         $this->auth_service = new Auth();
-        $this->send_headers();
-    }
 
-    /**
-     * Send headers
-     *
-     * @return void
-     */
-    private function send_headers() {
-        header( 'Content-Security-Policy: frame-ancestors *' );
+        remove_action( 'login_init', 'send_frame_options_header', 10 );
     }
 
     /**
