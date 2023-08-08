@@ -1,6 +1,6 @@
 {
   "name": "@wcpos/woocommerce-pos",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "A simple front-end for taking WooCommerce orders at the Point of Sale.",
   "main": "index.js",
   "workspaces": {
