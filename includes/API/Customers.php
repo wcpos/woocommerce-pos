@@ -28,7 +28,7 @@ class Customers extends Abstracts\WC_Rest_API_Modifier {
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'customer_query' ), 10, 2 );
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'customer_response' ), 10, 3 );
 		add_filter( 'users_where', array( $this, 'users_where' ), 10, 2 );
-	}
+    }
 
 	/**
 	 * Filters the response before executing any REST API callbacks.

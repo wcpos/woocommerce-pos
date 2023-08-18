@@ -78,6 +78,9 @@ class API {
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 5, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 
+        //
+        add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
+
 		$this->prevent_messages();
 	}
 
@@ -244,6 +247,37 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
+        // Get 'include' parameter from request
+        $include = $request->get_param( 'include' );
+
+        if ( $include ) {
+            // Convert to array if it's not
+            $include_array = is_array( $include ) ? $include : explode( ',', $include );
+            $include_string = implode( ',', $include_array );
+
+            // If the length of the 'include' string exceeds 10,000 characters, create a new array
+            if ( strlen( $include_string ) > 10000 ) {
+                shuffle( $include_array ); // Shuffle the IDs to randomize
+
+                // Construct a random array of no more than 10,000 characters
+                $max_include_length = 10000;
+                $new_include_string = '';
+                $random_include_array = array();
+
+                foreach ( $include_array as $id ) {
+                    if ( strlen( $new_include_string . $id ) < $max_include_length ) {
+                        $new_include_string .= $id . ',';
+                        $random_include_array[] = $id;
+                    } else {
+                        break; // Stop when we reach the maximum length
+                    }
+                }
+
+                // Set modified 'include' parameter back to request
+                $request->set_param( 'include', $random_include_array );
+            }
+        }
+
 		return $result;
 	}
 
