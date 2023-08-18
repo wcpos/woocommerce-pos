@@ -63,6 +63,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.3.9 - 2023/08/XX =
+* Fix: pos meta data showing in WP Admin order quick view
+* Fix: cashier uuid not unique for multisite installs
+
 = 1.3.8 - 2023/08/08 =
 * Fix: login modal for desktop application
 

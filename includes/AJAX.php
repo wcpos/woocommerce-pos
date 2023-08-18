@@ -47,7 +47,7 @@ class AJAX {
 	 *
 	 */
 	public function __construct() {
-        if ( ! isset( $_POST['action'] ) ) {
+        if ( ! isset( $_REQUEST['action'] ) ) {
             return;
         }
 

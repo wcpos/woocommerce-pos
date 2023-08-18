@@ -166,16 +166,8 @@ class Auth {
      * @return array
      */
     public function get_user_data( WP_User $user ): array {
-        $uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
-        if ( ! $uuid ) {
-            $uuid = Uuid::uuid4()->toString();
-            update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
-        }
-
-        $store_settings = new Stores();
-
         $data = array(
-            'uuid'         => $uuid,
+            'uuid'         => $this->get_user_uuid( $user ),
             'id'           => $user->ID,
             'jwt'          => $this->generate_token( $user ),
             'username'     => $user->user_login,
@@ -189,6 +181,29 @@ class Auth {
         );
 
         return $data;
+    }
+
+    /**
+     * Note: usermeta is shared across all sites in a network, this can cause issues in the POS.
+     * We need to make sure that the user uuid is unique per site.
+     *
+     * @param WP_User $user
+     * @return string
+     */
+    private function get_user_uuid( WP_User $user ): string {
+        $meta_key = '_woocommerce_pos_uuid';
+
+        if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+            $meta_key = $meta_key . '_' . get_current_blog_id();
+        }
+
+        $uuid = get_user_meta( $user->ID, $meta_key, true );
+        if ( ! $uuid ) {
+            $uuid = Uuid::uuid4()->toString();
+            update_user_meta( $user->ID, $meta_key, $uuid );
+        }
+
+        return $uuid;
     }
 
     /**
