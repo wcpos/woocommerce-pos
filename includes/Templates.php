@@ -32,9 +32,9 @@ class Templates {
 
 
 	public function __construct() {
-		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '/?';
+        $this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
         $this->pos_login_regex    = '^wcpos-login/?';
-		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
+        $this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
 
         $this->add_rewrite_rules();
 
