@@ -2,6 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\API\Traits;
 
+use Exception;
 use Ramsey\Uuid\Uuid;
 use WC_Data;
 use WC_Order_Item;
@@ -60,7 +61,7 @@ trait Uuid_Handler {
         $uuid_counts = array_count_values( $this->uuids );
 
         // if there is no uuid, add one, ie: new product
-        if ( empty( $uuids ) ) {
+        if ( empty( $uuids ) || empty( $uuids[0] ) ) {
             $object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
         }
 
@@ -79,7 +80,7 @@ trait Uuid_Handler {
         $uuids = get_user_meta( $user->ID, '_woocommerce_pos_uuid', false );
         $uuid_counts = array_count_values( $this->uuids );
 
-        if ( empty( $uuids ) ) {
+        if ( empty( $uuids ) || empty( $uuids[0] ) ) {
             update_user_meta( $user->ID, '_woocommerce_pos_uuid', $this->create_uuid() );
         }
 
@@ -124,13 +125,21 @@ trait Uuid_Handler {
      * @return string
      */
     private function create_uuid(): string {
-        $uuid = Uuid::uuid4()->toString();
-        while ( in_array( $uuid, $this->uuids ) ) { // ensure the new UUID is unique
-            Logger::log( 'This should not happen!!' );
+        try {
             $uuid = Uuid::uuid4()->toString();
+            while ( in_array( $uuid, $this->uuids ) ) { // ensure the new UUID is unique
+                Logger::log( 'This should not happen!!' );
+                $uuid = Uuid::uuid4()->toString();
+            }
+            $this->uuids[] = $uuid; // update the UUID list
+            return $uuid;
+        } catch ( Exception $e ) {
+            // Log the error message
+            Logger::log( 'UUID generation failed: ' . $e->getMessage() );
+
+            // Return a fallback value
+            return 'fallback-uuid-' . time();
         }
-        $this->uuids[] = $uuid; // update the UUID list
-        return $uuid;
     }
 
 }
