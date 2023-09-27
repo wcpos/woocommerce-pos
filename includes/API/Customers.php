@@ -193,55 +193,52 @@ class Customers extends Abstracts\WC_Rest_API_Modifier {
 		return $prepared_args;
 	}
 
-	public function modify_user_query( $user_query ) {
-		if ( isset( $user_query->query_vars['_search_term'] ) && ! empty( $user_query->query_vars['_search_term'] ) ) {
-			$search_term = $user_query->query_vars['_search_term'];
+    public function modify_user_query( $user_query ) {
+        if ( isset( $user_query->query_vars['_search_term'] ) && ! empty( $user_query->query_vars['_search_term'] ) ) {
+            $search_term = $user_query->query_vars['_search_term'];
 
-			global $wpdb;
+            global $wpdb;
 
-			$like = '%' . $wpdb->esc_like( $search_term ) . '%';
+            $like_term = '%' . $wpdb->esc_like( $search_term ) . '%';
 
-			$meta_conditions = "
-			( wp_usermeta.meta_key = '_woocommerce_pos_uuid' AND wp_usermeta.meta_value LIKE '{$like}' )
+            $meta_conditions = $wpdb->prepare(
+                "({$wpdb->usermeta}.meta_key = '_woocommerce_pos_uuid' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'first_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'first_name' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'last_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'last_name' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'billing_first_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'billing_first_name' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'billing_last_name' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'billing_last_name' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'billing_email' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'billing_email' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'billing_company' AND wp_usermeta.meta_value LIKE '{$like}' )
+			({$wpdb->usermeta}.meta_key = 'billing_company' AND {$wpdb->usermeta}.meta_value LIKE %s)
 			OR
-			( wp_usermeta.meta_key = 'billing_phone' AND wp_usermeta.meta_value LIKE '{$like}' )
-			";
+			({$wpdb->usermeta}.meta_key = 'billing_phone' AND {$wpdb->usermeta}.meta_value LIKE %s)",
+                $like_term, $like_term, $like_term, $like_term, $like_term, $like_term, $like_term, $like_term
+            );
 
-			// Add conditions for user email, username, and ID
-			$user_conditions = "
-			( {$wpdb->users}.user_email LIKE '{$like}' )
+            $user_conditions = $wpdb->prepare(
+                "({$wpdb->users}.user_email LIKE %s)
 			OR
-			( {$wpdb->users}.user_login LIKE '{$like}' )
+			({$wpdb->users}.user_login LIKE %s)
 			OR
-			( {$wpdb->users}.ID = '{$search_term}' )
-			";
+			({$wpdb->users}.ID = %d)",
+                $like_term, $like_term, $search_term
+            );
 
-			// Combine meta_conditions and user_conditions
-			$all_conditions = "({$meta_conditions}) OR ({$user_conditions})";
+            $all_conditions = "($meta_conditions) OR ($user_conditions)";
 
-			// Append the all_conditions to the original query_where
-			$user_query->query_where .= " AND ( {$all_conditions} )";
+            $user_query->query_where .= " AND ( {$all_conditions} )";
 
-			remove_action( 'pre_user_query', array( $this, 'modify_user_query' ) );
-		}
-	}
-
+            remove_action( 'pre_user_query', array( $this, 'modify_user_query' ) );
+        }
+    }
 
 
-
-	/**
+    /**
 	 * Returns array of all customer ids.
 	 *
 	 * Note: user queries are a little more complicated than post queries, for example,

@@ -343,12 +343,12 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 				$search_array[] = $wpdb->prepare( "{$wpdb->posts}.post_title LIKE %s", $n . $like_term . $n );
 
 				// Search in _sku field
-				$search_array[] = $wpdb->prepare( "(wp_postmeta.meta_key = '_sku' AND wp_postmeta.meta_value LIKE %s)", $n . $like_term . $n );
+                $search_array[] = $wpdb->prepare( "({$wpdb->postmeta}.meta_key = '_sku' AND {$wpdb->postmeta}.meta_value LIKE %s)", $n . $like_term . $n );
 
 				// Search in barcode field
 				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 				if ( $barcode_field !== '_sku' ) {
-					$search_array[] = $wpdb->prepare( '(wp_postmeta.meta_key = %s AND wp_postmeta.meta_value LIKE %s)', $barcode_field, $n . $like_term . $n );
+                    $search_array[] = $wpdb->prepare( "({$wpdb->postmeta}.meta_key = %s AND {$wpdb->postmeta}.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
 				}
 			}
 
