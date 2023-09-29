@@ -257,7 +257,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		global $wpdb;
 
 		if ( isset( $query->query_vars['s'] ) ) {
-			$join .= " LEFT JOIN {$wpdb->postmeta} ON {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id";
+            $join .= " LEFT JOIN {$wpdb->postmeta} AS postmeta_barcode ON {$wpdb->posts}.ID = postmeta_barcode.post_id";
 		}
 
 		return $join;
@@ -348,7 +348,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 				// Search in barcode field
 				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 				if ( $barcode_field !== '_sku' ) {
-                    $search_array[] = $wpdb->prepare( "({$wpdb->postmeta}.meta_key = %s AND {$wpdb->postmeta}.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
+                    $search_array[] = $wpdb->prepare( "(postmeta_barcode.meta_key = %s AND postmeta_barcode.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
 				}
 			}
 
