@@ -17,7 +17,7 @@
     "pretest": "wp-env start --xdebug=coverage && wp-env run composer 'install --no-interaction'",
     "lint:php": "composer run lint-report | cs2pr",
     "lint": "run-s lint:*",
-    "test:unit:php": "wp-env run phpunit 'phpunit -c /var/www/html/wp-content/plugins/woocommerce-pos/.phpunit.xml.dist --verbose'",
+    "test:unit:php": "wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli vendor/bin/phpunit -c .phpunit.xml.dist --verbose",
     "test:unit": "run-s test:unit:*",
     "test": "run-s test:*",
     "build:docs": "jsdoc -c hookdoc-conf.json",
