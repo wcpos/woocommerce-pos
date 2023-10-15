@@ -25,6 +25,8 @@ jobs:
           tools: composer, cs2pr, phpcs
 
       - name: Build
+        env:
+          YARN_ENABLE_IMMUTABLE_INSTALLS: false
         run: |
           yarn install
           composer install

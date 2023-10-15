@@ -30,7 +30,7 @@ return $config
 		],
 
 		// Casing.
-		'class_reference_name_casing' => true,
+		// 'class_reference_name_casing' => true,
 		'constant_case' => ['case' => 'lower'],
 
 		// Cast Notation.
@@ -56,11 +56,11 @@ return $config
 		//'multiline_comment_opening_closing' => true,
 		'no_empty_comment' => true,
 		'no_trailing_whitespace_in_comment' => true,
-		'single_line_comment_spacing' => true,
+		// 'single_line_comment_spacing' => true,
 		'single_line_comment_style' => true,
 
 		// Control Structure
-		'control_structure_braces' => true,
+		// 'control_structure_braces' => true,
 		'control_structure_continuation_position' => true,
 		'elseif' => true,
 		'include' => true,
@@ -81,7 +81,7 @@ return $config
 		'lambda_not_used_import' => true,
 		'native_function_invocation' => true,
 		'no_spaces_after_function_name' => true,
-		'no_trailing_comma_in_singleline_function_call' => true,
+		// 'no_trailing_comma_in_singleline_function_call' => true,
 		'no_unreachable_default_argument_value' => true,
 		'nullable_type_declaration_for_default_null_value' => true,
 		'return_type_declaration' => true,
@@ -180,7 +180,7 @@ return $config
 		// Whitespace.
 		'array_indentation' => true,
 		'blank_line_before_statement' => true,
-		'blank_line_between_import_groups' => true,
+		// 'blank_line_between_import_groups' => true,
 		'compact_nullable_typehint' => true,
 		'indentation_type' => true,
 		'line_ending' => true,
@@ -190,7 +190,7 @@ return $config
 		'no_trailing_whitespace' => true,
 		//'no_whitespace_in_blank_line' => true,
 		'single_blank_line_at_eof' => true,
-		'statement_indentation' => true,
+		// 'statement_indentation' => true,
 		//'types_spaces' => true,
 
 	])

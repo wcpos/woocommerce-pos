@@ -17,7 +17,7 @@ use WP_REST_Response;
  */
 class Products extends Abstracts\WC_Rest_API_Modifier {
 	use Traits\Product_Helpers;
-    use Traits\Uuid_Handler;
+	use Traits\Uuid_Handler;
 
 	/**
 	 * Products constructor.
@@ -26,8 +26,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
-		$this->uuids = $this->get_all_postmeta_uuids();
-        $this->add_product_image_src_filter();
+		$this->add_product_image_src_filter();
 
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'product_response' ), 10, 3 );
@@ -36,11 +35,12 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 		add_filter( 'woocommerce_rest_product_schema', array( $this, 'add_barcode_to_product_schema' ) );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'insert_product_object' ), 10, 3 );
-        add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'prevent_description_update' ), 10, 3 );
+		add_filter( 'woocommerce_rest_pre_insert_product_object', array( $this, 'prevent_description_update' ), 10, 3 );
 	}
 
 	/**
 	 * @param $schema
+	 *
 	 * @return array
 	 */
 	public function add_barcode_to_product_schema( $schema ): array {
@@ -49,6 +49,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			'type'        => 'string',
 			'context'     => array( 'view', 'edit' ),
 		);
+
 		return $schema;
 	}
 
@@ -57,7 +58,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	 *
 	 * We can use this filter to bypass data validation checks
 	 *
-	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Result to send to the client.
+	 * @param mixed|WP_Error|WP_HTTP_Response|WP_REST_Response $response Result to send to the client.
 	 *                                                                   Usually a WP_REST_Response or WP_Error.
 	 * @param array                                            $handler  Route handler used for the request.
 	 * @param WP_REST_Request                                  $request  Request used to generate the response.
@@ -70,18 +71,18 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 				$error_data = $response->get_error_data( 'rest_invalid_param' );
 
 				// Check if the invalid parameter was 'line_items'
-				if ( array_key_exists( 'stock_quantity', $error_data['params'] ) ) {
+				if ( \array_key_exists( 'stock_quantity', $error_data['params'] ) ) {
 					// Get the 'line_items' details
 					$line_items_details = $error_data['details']['stock_quantity'];
 
-					//
-					if ( $line_items_details['code'] === 'rest_invalid_type' && woocommerce_pos_get_settings( 'general', 'decimal_qty' ) ) {
-							unset( $error_data['params']['stock_quantity'], $error_data['details']['stock_quantity'] );
+					
+					if ( 'rest_invalid_type' === $line_items_details['code'] && woocommerce_pos_get_settings( 'general', 'decimal_qty' ) ) {
+						unset( $error_data['params']['stock_quantity'], $error_data['details']['stock_quantity'] );
 					}
 				}
 
 				// Check if the invalid parameter was 'orderby'
-				if ( array_key_exists( 'orderby', $error_data['params'] ) ) {
+				if ( \array_key_exists( 'orderby', $error_data['params'] ) ) {
 					// Get the 'orderby' details
 					$orderby_details = $error_data['details']['orderby'];
 
@@ -94,7 +95,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 					);
 
 					// Check if 'orderby' has 'rest_not_in_enum', but is in the extended 'orderby' values
-					if ( $orderby_details['code'] === 'rest_not_in_enum' && in_array( $orderby_request, $orderby_extended, true ) ) {
+					if ( 'rest_not_in_enum' === $orderby_details['code'] && \in_array( $orderby_request, $orderby_extended, true ) ) {
 						unset( $error_data['params']['orderby'], $error_data['details']['orderby'] );
 					}
 				}
@@ -102,13 +103,12 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 				// Check if $error_data['params'] is empty
 				if ( empty( $error_data['params'] ) ) {
 					return null;
-				} else {
-					// Remove old error data and add new error data
-					$error_message = 'Invalid parameter(s): ' . implode( ', ', array_keys( $error_data['params'] ) ) . '.';
-
-					$response->remove( 'rest_invalid_param' );
-					$response->add( 'rest_invalid_param', $error_message, $error_data );
 				}
+				// Remove old error data and add new error data
+				$error_message = 'Invalid parameter(s): ' . implode( ', ', array_keys( $error_data['params'] ) ) . '.';
+
+				$response->remove( 'rest_invalid_param' );
+				$response->add( 'rest_invalid_param', $error_message, $error_data );
 			}
 		}
 
@@ -116,47 +116,47 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	}
 
 
-    /**
-     * Filters the product object before it is inserted or updated via the REST API.
-     *
-     * This filter is used to prevent the description and short_description fields
-     * from being updated when a product is updated via the REST API. It does this by
-     * resetting these fields to their current values in the database before the
-     * product object is updated.
-     *
-     * Ask me why this is here 😓
-     *
-     * @param WC_Product $product  The product object that is being inserted or updated.
-     *                                   This object is mutable.
-     * @param WP_REST_Request $request  The request object.
-     * @param bool $creating If is creating a new object.
-     *
-     * @return WC_Product The modified product object.
-     */
-    public function prevent_description_update( WC_Product $product, WP_REST_Request $request, bool $creating ): WC_Product {
-        // If product is being updated
-        if ( ! $creating ) {
-            $original_product = wc_get_product( $product->get_id() );
+	/**
+	 * Filters the product object before it is inserted or updated via the REST API.
+	 *
+	 * This filter is used to prevent the description and short_description fields
+	 * from being updated when a product is updated via the REST API. It does this by
+	 * resetting these fields to their current values in the database before the
+	 * product object is updated.
+	 *
+	 * Ask me why this is here 😓
+	 *
+	 * @param WC_Product      $product  The product object that is being inserted or updated.
+	 *                                  This object is mutable.
+	 * @param WP_REST_Request $request  The request object.
+	 * @param bool            $creating If is creating a new object.
+	 *
+	 * @return WC_Product The modified product object.
+	 */
+	public function prevent_description_update( WC_Product $product, WP_REST_Request $request, bool $creating ): WC_Product {
+		// If product is being updated
+		if ( ! $creating ) {
+			$original_product = wc_get_product( $product->get_id() );
 
-            // Reset the description and short description to the original values
-            $product->set_description( $original_product->get_description() );
-            $product->set_short_description( $original_product->get_short_description() );
-        }
+			// Reset the description and short description to the original values
+			$product->set_description( $original_product->get_description() );
+			$product->set_short_description( $original_product->get_short_description() );
+		}
 
-        return $product;
-    }
+		return $product;
+	}
 
 
 	/**
 	 * Fires after a single object is created or updated via the REST API.
 	 *
-	 * @param WC_Data         $object    Inserted object.
-	 * @param WP_REST_Request $request   Request object.
-	 * @param boolean $creating  True when creating object, false when updating.
+	 * @param WC_Data         $object   Inserted object.
+	 * @param WP_REST_Request $request  Request object.
+	 * @param bool            $creating True when creating object, false when updating.
 	 */
-	public function insert_product_object( WC_Data $object, WP_REST_Request $request, bool $creating ) {
+	public function insert_product_object( WC_Data $object, WP_REST_Request $request, bool $creating ): void {
 		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-		$barcode = $request->get_param( 'barcode' );
+		$barcode       = $request->get_param( 'barcode' );
 		if ( $barcode ) {
 			$object->update_meta_data( $barcode_field, $barcode );
 			$object->save_meta_data();
@@ -175,13 +175,13 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	public function product_response( WP_REST_Response $response, WC_Product $product, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-        // Add the UUID to the product response
-        $this->maybe_add_post_uuid( $product );
+		// Add the UUID to the product response
+		$this->maybe_add_post_uuid( $product );
 
 		// Add the barcode to the product response
 		$data['barcode'] = $this->get_barcode( $product );
 
-		/**
+		/*
 		 * If product is variable, add the max and min prices and add them to the meta data
 		 * @TODO - only need to update if there is a change
 		 */
@@ -206,7 +206,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			$encoded_price = wp_json_encode( $price_array );
 
 			// Check if the encoding was successful
-			if ( $encoded_price === false ) {
+			if ( false === $encoded_price ) {
 				// JSON encode failed, log the original array for debugging
 				Logger::log( 'JSON encoding of price array failed: ' . json_last_error_msg(), $price_array );
 			} else {
@@ -215,15 +215,13 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			}
 		}
 
-		/**
-		 * Make sure we parse the meta data before returning the response
-		 */
-        $product->save_meta_data(); // make sure the meta data is saved
+		// Make sure we parse the meta data before returning the response
+		$product->save_meta_data(); // make sure the meta data is saved
 		$data['meta_data'] = $this->parse_meta_data( $product );
 
-        // Set any changes to the response data
+		// Set any changes to the response data
 		$response->set_data( $data );
-        // $this->log_large_rest_response( $response, $product->get_id() );
+		// $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
 	}
@@ -250,14 +248,14 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	/**
 	 * Filters the JOIN clause of the query.
 	 *
-	 * @param string $join  The JOIN clause of the query.
+	 * @param string   $join  The JOIN clause of the query.
 	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 */
 	public function barcode_postmeta_join( string $join, WP_Query $query ): string {
 		global $wpdb;
 
 		if ( isset( $query->query_vars['s'] ) ) {
-            $join .= " LEFT JOIN {$wpdb->postmeta} AS postmeta_barcode ON {$wpdb->posts}.ID = postmeta_barcode.post_id";
+			$join .= " LEFT JOIN {$wpdb->postmeta} AS postmeta_barcode ON {$wpdb->posts}.ID = postmeta_barcode.post_id";
 		}
 
 		return $join;
@@ -287,17 +285,18 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	 * fields (SELECT), and LIMIT clauses.
 	 *
 	 * @param string[] $clauses {
-	 *     Associative array of the clauses for the query.
+	 *                          Associative array of the clauses for the query.
 	 *
-	 *     @type string $where    The WHERE clause of the query.
-	 *     @type string $groupby  The GROUP BY clause of the query.
-	 *     @type string $join     The JOIN clause of the query.
-	 *     @type string $orderby  The ORDER BY clause of the query.
-	 *     @type string $distinct The DISTINCT clause of the query.
-	 *     @type string $fields   The SELECT clause of the query.
-	 *     @type string $limits   The LIMIT clause of the query.
+	 *     @var string    The WHERE clause of the query.
+	 *     @var string  The GROUP BY clause of the query.
+	 *     @var string     The JOIN clause of the query.
+	 *     @var string  The ORDER BY clause of the query.
+	 *     @var string The DISTINCT clause of the query.
+	 *     @var string   The SELECT clause of the query.
+	 *     @var string   The LIMIT clause of the query.
 	 * }
-	 * @param WP_Query $wp_query   The WP_Query instance (passed by reference).
+	 *
+	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
 	public function posts_clauses( array $clauses, WP_Query $wp_query ): array {
 		global $wpdb;
@@ -308,7 +307,7 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			$clauses['join'] .= " LEFT JOIN {$wpdb->postmeta} AS stock_meta ON {$wpdb->posts}.ID = stock_meta.post_id AND stock_meta.meta_key='_stock'";
 
 			// Order the query results: records with _stock meta_value first, then NULL, then items without _stock meta_key
-			$order = isset( $wp_query->query_vars['order'] ) ? $wp_query->query_vars['order'] : 'DESC';
+			$order               = $wp_query->query_vars['order'] ?? 'DESC';
 			$clauses['orderby']  = 'CASE';
 			$clauses['orderby'] .= ' WHEN stock_meta.meta_value IS NOT NULL THEN 1';
 			$clauses['orderby'] .= ' WHEN stock_meta.meta_value IS NULL THEN 2';
@@ -324,9 +323,9 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	/**
 	 * Filter to adjust the WordPress search SQL query
 	 * - Search for the product title and SKU and barcode
-	 * - Do not search product description
+	 * - Do not search product description.
 	 *
-	 * @param string $search
+	 * @param string   $search
 	 * @param WP_Query $wp_query
 	 */
 	public function posts_search( string $search, WP_Query $wp_query ): string {
@@ -339,16 +338,16 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			$search_array = array();
 
 			foreach ( (array) $q['search_terms'] as $term ) {
-				$like_term = $wpdb->esc_like( $term );
+				$like_term      = $wpdb->esc_like( $term );
 				$search_array[] = $wpdb->prepare( "{$wpdb->posts}.post_title LIKE %s", $n . $like_term . $n );
 
 				// Search in _sku field
-                $search_array[] = $wpdb->prepare( "({$wpdb->postmeta}.meta_key = '_sku' AND {$wpdb->postmeta}.meta_value LIKE %s)", $n . $like_term . $n );
+				$search_array[] = $wpdb->prepare( "({$wpdb->postmeta}.meta_key = '_sku' AND {$wpdb->postmeta}.meta_value LIKE %s)", $n . $like_term . $n );
 
 				// Search in barcode field
 				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-				if ( $barcode_field !== '_sku' ) {
-                    $search_array[] = $wpdb->prepare( "(postmeta_barcode.meta_key = %s AND postmeta_barcode.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
+				if ( '_sku' !== $barcode_field ) {
+					$search_array[] = $wpdb->prepare( "(postmeta_barcode.meta_key = %s AND postmeta_barcode.meta_value LIKE %s)", $barcode_field, $n . $like_term . $n );
 				}
 			}
 
@@ -374,22 +373,22 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
 		$args = array(
-			'post_type' => 'product',
-			'post_status' => 'publish',
+			'post_type'      => 'product',
+			'post_status'    => 'publish',
 			'posts_per_page' => -1,
-			'fields' => 'ids',
+			'fields'         => 'ids',
 		);
 
 		if ( $pos_only_products ) {
 			$args['meta_query'] = array(
 				'relation' => 'OR',
 				array(
-					'key' => '_pos_visibility',
+					'key'     => '_pos_visibility',
 					'compare' => 'NOT EXISTS',
 				),
 				array(
-					'key' => '_pos_visibility',
-					'value' => 'online_only',
+					'key'     => '_pos_visibility',
+					'value'   => 'online_only',
 					'compare' => '!=',
 				),
 			);
@@ -399,9 +398,11 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 
 		try {
 			$product_ids = $product_query->posts;
+
 			return array_map( array( $this, 'format_id' ), $product_ids );
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product IDs: ' . $e->getMessage() );
+
 			return new WP_Error(
 				'woocommerce_pos_rest_cannot_fetch',
 				'Error fetching product IDs.',
@@ -409,5 +410,4 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 			);
 		}
 	}
-
 }
