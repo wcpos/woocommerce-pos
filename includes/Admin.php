@@ -17,7 +17,7 @@ class Admin {
 	/**
 	 * @vars string Unique menu identifier
 	 */
-	private $menu_ids;
+	private $menu_ids = array();
 
 	/**
 	 * Constructor.
@@ -30,17 +30,10 @@ class Admin {
 	}
 
 	/**
-	 * Load admin subclasses.
-	 */
-	private function init(): void {
-		new Admin\Notices();
-	}
-
-	/**
 	 * Fires before the administration menu loads in the admin.
 	 */
 	public function admin_menu(): void {
-		$menu = new Admin\Menu();
+		$menu           = new Admin\Menu();
 		$this->menu_ids = array(
 			'toplevel' => $menu->toplevel_screen_id,
 			'settings' => $menu->settings_screen_id,
@@ -53,33 +46,37 @@ class Admin {
 	 * @param $current_screen
 	 */
 	public function current_screen( $current_screen ): void {
+		switch ( $current_screen->id ) {
+			case 'options-permalink': // Add setting to permalink page
+				new Admin\Permalink();
 
-        switch ( $current_screen->id ) {
-            case 'options-permalink': // Add setting to permalink page
-                new Admin\Permalink();
-                break;
+				break;
 
-            case 'product': // Single product page
-                new Admin\Products\Single_Product();
-                break;
+			case 'product': // Single product page
+				new Admin\Products\Single_Product();
 
-            case 'edit-product': // List products page
-                new Admin\Products\List_Products();
-                break;
+				break;
 
-            case 'shop_order': // Add POS settings to orders pages
-            case 'edit-shop_order': // Add POS settings to orders pages
-                new Admin\Orders();
-                break;
+			case 'edit-product': // List products page
+				new Admin\Products\List_Products();
 
-            case 'plugins': // Customise plugins page
-                new Admin\Plugins();
-                break;
+				break;
+
+			case 'shop_order': // Add POS settings to orders pages
+			case 'edit-shop_order': // Add POS settings to orders pages
+				new Admin\Orders();
+
+				break;
+
+			case 'plugins': // Customise plugins page
+				new Admin\Plugins();
+
+				break;
 
 		}
 
 		// Load the Settings class
-		if ( isset( $this->menu_ids['settings'] ) && $this->menu_ids['settings'] == $current_screen->id ) {
+		if ( \array_key_exists( 'settings', $this->menu_ids ) && $this->menu_ids['settings'] == $current_screen->id ) {
 			new Admin\Settings();
 		}
 
@@ -87,13 +84,23 @@ class Admin {
 		// Note screen->id = woocommerce_page_wc-admin is used in many places and is not unique to the analytics page.
 		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
 			$wc_admin_page_controller = PageController::get_instance();
-			$wc_admin_current_page = $wc_admin_page_controller->get_current_page();
-			if ( is_array( $wc_admin_current_page ) ) {
-				if ( $wc_admin_current_page['id'] === 'woocommerce-analytics' || $wc_admin_current_page['parent'] === 'woocommerce-analytics' ) {
+			$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
+			
+			if ( \is_array( $wc_admin_current_page ) ) {
+				$id     = $wc_admin_current_page['id']     ?? null;
+				$parent = $wc_admin_current_page['parent'] ?? null;
+					
+				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {
 					new Admin\Analytics();
 				}
 			}
 		}
 	}
 
+	/**
+	 * Load admin subclasses.
+	 */
+	private function init(): void {
+		new Admin\Notices();
+	}
 }
