@@ -35,8 +35,11 @@ jobs:
         run: |
           vendor/bin/phpcs -i
           vendor/bin/phpcs --config-show
+          vendor/bin/phpcs --report=checkstyle | cs2pr
           npm run lint
         continue-on-error: true
 
       - name: Running the tests
-        run: npm run test
+        run: | 
+          npm run test
+          cat phpunit.xml | cs2pr

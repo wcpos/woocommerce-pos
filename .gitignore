@@ -27,3 +27,4 @@ yarn.lock
 .yarn/install-state.gz
 .yarn/cache
 hookdocs
+*.cache
