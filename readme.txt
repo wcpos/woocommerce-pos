@@ -20,7 +20,7 @@ You can see a demo of the WooCommerce POS plugin in action by going to [https://
 = REQUIREMENTS =
 * WordPress >= 5.6
 * WooCommerce >= 5.3
-* PHP >= 7.2
+* PHP >= 7.4
 
 == Installation ==
 

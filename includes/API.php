@@ -46,10 +46,11 @@ class API {
 
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
-			'auth'     => new API\Auth(),
-			'settings' => new API\Settings(),
-			'stores'   => new API\Stores(),
-			'emails'   => new API\Order_Emails(),
+			'auth'            => new API\Auth(),
+			'settings'        => new API\Settings(),
+			'stores'          => new API\Stores(),
+			'emails'          => new API\Order_Emails(),
+			'test_controller' => new API\Test_Controller(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
@@ -266,12 +267,13 @@ class API {
 	 * @param WP_REST_Request                                  $request  Request used to generate the response.
 	 */
 	public function rest_request_before_callbacks( $response, $handler, $request ) {
-		/*
-		 * Here we attempt to determine the controller class from the handler.
-		 *
-		 * Note: the handler can be a closure, in which case we can't determine the controller.
-		 */
-		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && \is_object( $handler['callback'][0] ) ) {
+		// The handler can be a closure, in which case we can't determine the controller.
+		if ( ! \is_array( $handler ) || ! \array_key_exists('callback', $handler)) {
+			return $response;
+		}
+	
+		// Here we attempt to determine the controller class from the handler.
+		if ( \is_array( $handler['callback'] ) && \is_object( $handler['callback'][0] ) ) {
 			$controller = \get_class( $handler['callback'][0] );
 		} elseif ( \is_object( $handler['callback'] ) ) {
 			$controller = \get_class( $handler['callback'] );
@@ -280,39 +282,22 @@ class API {
 		}
 
 		// If the controller is one of the WooCommerce REST API controllers, we can hijack the request
-		switch ( $controller ) {
-			case 'WC_REST_Orders_Controller':
-				$this->wc_rest_api_handler = new API\Orders( $request );
+		$controller_mappings = array(
+			'WC_REST_Orders_Controller'             => 'WCPOS\WooCommercePOS\API\Orders',
+			'WC_REST_Products_Controller'           => 'WCPOS\WooCommercePOS\API\Products',
+			'WC_REST_Product_Variations_Controller' => 'WCPOS\WooCommercePOS\API\Product_Variations',
+			'WC_REST_Customers_Controller'          => 'WCPOS\WooCommercePOS\API\Customers',
+			'WC_REST_Taxes_Controller'              => 'WCPOS\WooCommercePOS\API\Taxes',
+			'WC_REST_Payment_Gateways_Controller'   => 'WCPOS\WooCommercePOS\API\Payment_Gateways',
+			'WC_REST_Product_Categories_Controller' => 'WCPOS\WooCommercePOS\API\Product_Categories',
+			'WC_REST_Product_Tags_Controller'       => 'WCPOS\WooCommercePOS\API\Product_Tags',
+		);
 
-				break;
-			case 'WC_REST_Products_Controller':
-				$this->wc_rest_api_handler = new API\Products( $request );
+		if ( \array_key_exists( $controller, $controller_mappings ) ) {
+			$handler_class             = $controller_mappings[$controller];
+			$this->wc_rest_api_handler = new $handler_class($request);
 
-				break;
-			case 'WC_REST_Product_Variations_Controller':
-				$this->wc_rest_api_handler = new API\Product_Variations( $request );
-
-				break;
-			case 'WC_REST_Customers_Controller':
-				$this->wc_rest_api_handler = new API\Customers( $request );
-
-				break;
-			case 'WC_REST_Taxes_Controller':
-				$this->wc_rest_api_handler = new API\Taxes( $request );
-
-				break;
-			case 'WC_REST_Payment_Gateways_Controller':
-				$this->wc_rest_api_handler = new API\Payment_Gateways( $request );
-
-				break;
-			case 'WC_REST_Product_Categories_Controller':
-				$this->wc_rest_api_handler = new API\Product_Categories( $request );
-
-				break;
-			case 'WC_REST_Product_Tags_Controller':
-				$this->wc_rest_api_handler = new API\Product_Tags( $request );
-
-				break;
+			do_action( 'woocommerce_pos_rest_request_before_callbacks', $controller, $request, $this->wc_rest_api_handler );
 		}
 
 		return $response;
@@ -320,6 +305,10 @@ class API {
 
 	/**
 	 * Filters the REST API dispatch request result.
+	 *
+	 * @TODO - Should I use this hook instead of rest_request_before_callbacks?
+	 * I could load the POS Handler and then return call_user_func( $handler['callback'], $request )
+	 * - Pro is that route may be cleaner and less flakey than the above method
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
 	 * @param WP_REST_Request $request         Request used to generate the response.

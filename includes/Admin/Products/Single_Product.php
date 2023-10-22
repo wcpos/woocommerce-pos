@@ -12,10 +12,6 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
-use function defined;
-use function in_array;
-use function is_array;
-use function WCPOS\WooCommercePOS\Admin\is_pos;
 use const DOING_AUTOSAVE;
 
 class Single_Product {
@@ -30,9 +26,7 @@ class Single_Product {
 	private $options;
 
 
-	/**
-	 *
-	 */
+	
 	public function __construct() {
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 
@@ -117,7 +111,7 @@ class Single_Product {
 	 */
 	public function save_post( $post_id, $post ): void {
 		// If this is an autosave, our form has not been submitted, so we don't want to do anything.
-		if ( defined( '\DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		if ( \defined( '\DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 			return;
 		}
 
@@ -126,10 +120,10 @@ class Single_Product {
 			return;
 		}
 
-        // Make sure the current user has permission to edit the post
-        if ( ! current_user_can( 'edit_post', $post_id ) ) {
-            return;
-        }
+		// Make sure the current user has permission to edit the post
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
 
 		// Get the product and save
 		if ( isset( $_POST['_pos_visibility'] ) ) {

@@ -6,15 +6,13 @@
 
 	<description>Starting Point Rule Set.</description>
 
-	<config name="installed_paths" value="vendor/phpcompatibility/phpcompatibility-wp/PHPCompatibilityWP,vendor/phpcompatibility/phpcompatibility-paragonie,vendor/phpcompatibility/php-compatibility,vendor/wp-coding-standards/wpcs,vendor/woocommerce/woocommerce-sniffs/src/WooCommerce,vendor/woocommerce/woocommerce-sniffs/src/WooCommerce-Core,vendor/automattic/vipwpcs/WordPressVIPMinimum" />
-
 	<!-- What to scan -->
 	<file>vendor/autoload.php</file>
 	<file>woocommerce-pos.php</file>
 	<file>includes/</file>
 
-	<!-- sniff both PHP and JS -->
-	<arg name="extensions" value="php/PHP,js/JS,jsx/JS,ts/JS,tsx/JS"/>
+	<!-- sniff PHP -->
+	<arg name="extensions" value="php/PHP"/>
 
 	<!-- Show sniff codes in all reports, and progress when running -->
 	<arg value="snp"/>
@@ -34,13 +32,23 @@
 	<config name="testVersion" value="7.3-"/>
 	<!-- @see https://github.com/PHPCompatibility/PHPCompatibilityWP#how-to-use -->
 	<rule ref="PHPCompatibilityWP"/>
-	<rule ref="WordPress-Extra"/>
-	<rule ref="WordPress-Docs"/>
-	<rule ref="WooCommerce-Core" />
 
-	<!-- Turns on the WordPress Standard -->
-	<rule ref="WordPress">
-		<exclude-pattern>*/js/*</exclude-pattern>
+	<!-- Include the WordPress-Extra standard. -->
+	<!-- @see https://github.com/WordPress/WordPress-Coding-Standards -->
+	<rule ref="WordPress-Extra">
+		<!--
+		We may want a middle ground though. The best way to do this is add the
+		entire ruleset, then rule by rule, remove ones that don't suit a project.
+		We can do this by running `phpcs` with the '-s' flag, which allows us to
+		see the names of the sniffs reporting errors.
+		Once we know the sniff names, we can opt to exclude sniffs which don't
+		suit our project like so.
+
+		The below two examples just show how you can exclude rules/error codes.
+		They are not intended as advice about which sniffs to exclude.
+		-->
+
+		<!-- <exclude-pattern>*/js/*</exclude-pattern>
 		<exclude name="Generic.Commenting"/>
 		<exclude name="Generic.PHP.DisallowShortOpenTag.EchoFound"/>
 		<exclude name="Generic.WhiteSpace.DisallowSpaceIndent.SpacesUsed"/>
@@ -54,9 +62,14 @@
 		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
 		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
 		<exclude name="WordPress.NamingConventions.ValidHookName.UseUnderscores"/>
-		<exclude name="WordPress.Variables.GlobalVariables.OverrideProhibited"/>
+		<exclude name="WordPress.Variables.GlobalVariables.OverrideProhibited"/> -->
 	</rule>
 
+	<!-- Let's also check that everything is properly documented. -->
+	<rule ref="WordPress-Docs"/>
+
+	<!-- Add in some extra rules from other standards. -->
+	<rule ref="Generic.Commenting.Todo"/>
 
 	<!-- wp_verify_nonce() handles casting on it's own and does not need extra overhead -->
 	<rule ref="WordPress.Security.ValidatedSanitizedInput">
@@ -65,11 +78,6 @@
 				<element value="wp_verify_nonce"/>
 			</property>
 		</properties>
-	</rule>
-
-	<!-- Test against JS XXS https://vip.wordpress.com/documentation/vip-go/vip-code-review/javascript-security-best-practices/ -->
-	<rule ref="WordPressVIPMinimum.JS">
-		<type>error</type>
 	</rule>
 
 	<rule ref="WordPress.Files.FileName">

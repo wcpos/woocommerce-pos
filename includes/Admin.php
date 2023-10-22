@@ -12,6 +12,13 @@
 namespace WCPOS\WooCommercePOS;
 
 use Automattic\WooCommerce\Admin\PageController;
+use WCPOS\WooCommercePOS\Admin\Analytics;
+use WCPOS\WooCommercePOS\Admin\Notices;
+use WCPOS\WooCommercePOS\Admin\Permalink;
+use WCPOS\WooCommercePOS\Admin\Plugins;
+use WCPOS\WooCommercePOS\Admin\Products\List_Products;
+use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
+use WCPOS\WooCommercePOS\Admin\Settings;
 
 class Admin {
 	/**
@@ -48,28 +55,28 @@ class Admin {
 	public function current_screen( $current_screen ): void {
 		switch ( $current_screen->id ) {
 			case 'options-permalink': // Add setting to permalink page
-				new Admin\Permalink();
+				new Permalink();
 
 				break;
 
 			case 'product': // Single product page
-				new Admin\Products\Single_Product();
+				new Single_Product();
 
 				break;
 
 			case 'edit-product': // List products page
-				new Admin\Products\List_Products();
+				new List_Products();
 
 				break;
 
 			case 'shop_order': // Add POS settings to orders pages
 			case 'edit-shop_order': // Add POS settings to orders pages
-				new Admin\Orders();
+				new Orders();
 
 				break;
 
 			case 'plugins': // Customise plugins page
-				new Admin\Plugins();
+				new Plugins();
 
 				break;
 
@@ -77,7 +84,7 @@ class Admin {
 
 		// Load the Settings class
 		if ( \array_key_exists( 'settings', $this->menu_ids ) && $this->menu_ids['settings'] == $current_screen->id ) {
-			new Admin\Settings();
+			new Settings();
 		}
 
 		// Load the Analytics class
@@ -91,7 +98,7 @@ class Admin {
 				$parent = $wc_admin_current_page['parent'] ?? null;
 					
 				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {
-					new Admin\Analytics();
+					new Analytics();
 				}
 			}
 		}
@@ -101,6 +108,6 @@ class Admin {
 	 * Load admin subclasses.
 	 */
 	private function init(): void {
-		new Admin\Notices();
+		new Notices();
 	}
 }

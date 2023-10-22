@@ -10,27 +10,22 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Stores;
 
-use function define;
-use function defined;
+use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
-use WCPOS\WooCommercePOS\Services\Auth;
 
 class Frontend {
-    /**
-     *
-     */
-    protected $auth_service;
+	protected $auth_service;
 
 
 	public function __construct() {
-        $this->auth_service = new Auth();
+		$this->auth_service = new Auth();
 	}
 
 
-    /**
-     * @return void
-     */
+	/**
+	 * @return void
+	 */
 	public function get_template(): void {
 		// force ssl
 		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
@@ -61,7 +56,7 @@ class Frontend {
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
 
 		include woocommerce_pos_locate_template( 'pos.php' );
-        exit;
+		exit;
 	}
 
 	/**
@@ -72,7 +67,7 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function login_url( $login_url ) {
-        return add_query_arg( SHORT_NAME, '1', $login_url );
+		return add_query_arg( SHORT_NAME, '1', $login_url );
 	}
 
 	/**
@@ -89,7 +84,7 @@ class Frontend {
 		$user           = wp_get_current_user();
 		$store_settings = new Stores();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
-        $auth_service   = new Auth();
+		$auth_service   = new Auth();
 
 		$site_uuid = get_option( 'woocommerce_pos_uuid' );
 		if ( ! $site_uuid ) {
@@ -108,22 +103,22 @@ class Frontend {
 			'manifest'       => $github_url . 'metadata.json',
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => wp_logout_url( woocommerce_pos_url() ),
-			'site' => array(
-				'uuid' => $site_uuid,
-				'url'             => get_option( 'siteurl' ),
-				'name'            => get_option( 'blogname' ),
-				'description'     => get_option( 'blogdescription' ),
-				'home'            => home_url(),
-				'gmt_offset'      => get_option( 'gmt_offset' ),
-				'timezone_string' => get_option( 'timezone_string' ),
-				'wp_api_url'      => get_rest_url(),
-				'wc_api_url'      => get_rest_url( null, 'wc/v3' ),
-				'wc_api_auth_url' => get_rest_url( null, 'wcpos/v1/jwt' ),
-				'locale'          => get_locale(),
-                'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
+			'site'           => array(
+				'uuid'               => $site_uuid,
+				'url'                => get_option( 'siteurl' ),
+				'name'               => get_option( 'blogname' ),
+				'description'        => get_option( 'blogdescription' ),
+				'home'               => home_url(),
+				'gmt_offset'         => get_option( 'gmt_offset' ),
+				'timezone_string'    => get_option( 'timezone_string' ),
+				'wp_api_url'         => get_rest_url(),
+				'wc_api_url'         => get_rest_url( null, 'wc/v3' ),
+				'wc_api_auth_url'    => get_rest_url( null, 'wcpos/v1/jwt' ),
+				'locale'             => get_locale(),
+				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
-			'stores' => $store_settings->get_stores(),
+			'stores'         => $store_settings->get_stores(),
 		);
 
 		/**
@@ -188,17 +183,16 @@ class Frontend {
 	 */
 	private function no_cache(): void {
 		// disable W3 Total Cache minify
-		if ( ! defined( 'DONOTMINIFY' ) ) {
-			define( 'DONOTMINIFY', 'true' );
+		if ( ! \defined( 'DONOTMINIFY' ) ) {
+			\define( 'DONOTMINIFY', 'true' );
 		}
 
 		// disable WP Super Cache
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
-			define( 'DONOTCACHEPAGE', 'true' );
+		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
+			\define( 'DONOTCACHEPAGE', 'true' );
 		}
 
 		// disable Lite Speed Cache
 		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' );
-
 	}
 }
