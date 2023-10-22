@@ -1,6 +1,6 @@
 <?php
 
-namespace WCPOS\WooCommercePOS\Tests;
+namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
 use WP_REST_Request;
@@ -110,7 +110,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	public function test_get_license_default_settings(): void {
-		$settings = $this->api->get_license_settings( $this->mock_rest_request() );
+		$response = $this->api->get_license_settings( $this->mock_rest_request() );
+		$settings = $response->get_data();
 		$this->assertEmpty( $settings );
 	}
 

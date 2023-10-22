@@ -38,53 +38,6 @@ class Menu {
 	}
 
 	/**
-	 * Add POS to Admin sidebar.
-	 */
-	private function register_pos_admin() {
-		$this->toplevel_screen_id = add_menu_page(
-			__( 'POS', 'woocommerce-pos' ),
-			__( 'POS', 'woocommerce-pos' ),
-			'manage_woocommerce_pos',
-			PLUGIN_NAME,
-			array( $this, 'display_upgrade_page' ),
-            'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjYwIDEyNjAiPgo8cGF0aCBmaWxsPSIjYTdhYWFkIiBkPSJNMTE3MCwwaC05MEg5MDBINzIwSDU0MEgzNjBIMTgwSDkwQzMwLDAsMCwzMCwwLDkwdjE4MGMwLDQ5LjcsNDAuMyw5MCw5MCw5MHM5MC00MC4zLDkwLTkwVjkwaDE4MHYxODAKCWMwLDQ5LjcsNDAuMyw5MCw5MCw5MHM5MC00MC4zLDkwLTkwVjkwaDE4MHYxODBjMCw0OS43LDQwLjMsOTAsOTAsOTBzOTAtNDAuMyw5MC05MFY5MGgxODB2MTgwYzAsNDkuNyw0MC4zLDkwLDkwLDkwczkwLTQwLjMsOTAtOTAKCVY5MEMxMjYwLDMwLDEyMzAsMCwxMTcwLDB6Ii8+CjxwYXRoIGZpbGw9IiNhN2FhYWQiIGQ9Ik0xMDgwLDM2MGMtNDUsNDUtMTM1LDQ1LTE4MCwwYy00NSw0NS0xMzUsNDUtMTgwLDBjLTQ1LDQ1LTEzNSw0NS0xODAsMGMtNDUsNDUtMTM1LDQ1LTE4MCwwYy00NSw0NS0xMzUsNDUtMTgwLDAKCWMtNDUsNDUtMTM1LDQ1LTE4MCwwdjkwMGwzNjAtMjcwaDgxMGM2MCwwLDkwLTMwLDkwLTkwVjM2MEMxMjE1LDQwNSwxMTI1LDQwNSwxMDgwLDM2MHogTTI2MC41LDgyOGMtMzUuNSwwLTY4LjUtMTEuMy05NS41LTMwLjQKCXYxMjUuOWMwLDE5LjMtMTUuNywzNS0zNSwzNXMtMzUtMTUuNy0zNS0zNVY1MzJjMC0xOS4zLDE1LjctMzUsMzUtMzVjMTcuOCwwLDMyLjYsMTMuMywzNC43LDMwLjZjMjcuMS0xOS4zLDYwLjEtMzAuNiw5NS44LTMwLjYKCWM5MS4zLDAsMTY1LjUsNzQuMiwxNjUuNSwxNjUuNVMzNTEuOCw4MjgsMjYwLjUsODI4eiBNNjMwLDgyOGMtOTEuNSwwLTE2Ni03NC41LTE2Ni0xNjZjMC05MS41LDc0LjUtMTY2LDE2Ni0xNjYKCWM5MS41LDAsMTY2LDc0LjUsMTY2LDE2NkM3OTYsNzUzLjUsNzIxLjUsODI4LDYzMCw4Mjh6IE05MTguMyw2MTMuOWMxMS41LDUuOCwzNS4xLDEyLjYsODIuMiwxMi42YzQ5LjUsMCw4Ni42LDYuNSwxMTMuNSwyMAoJYzMzLjUsMTYuOCw1Miw0NS4zLDUyLDgwLjJzLTE4LjUsNjMuNS01Miw4MC4yYy0yNi45LDEzLjUtNjQuMSwyMC0xMTMuNSwyMEM5NDYsODI3LDg5Niw4MTMuNiw4NTIsNzg3LjJjLTE2LjYtOS45LTIyLTMxLjQtMTItNDgKCWM5LjktMTYuNiwzMS40LTIyLDQ4LTEyYzMzLDE5LjgsNzAuOCwyOS44LDExMi41LDI5LjhjNDcuMSwwLDcwLjctNi45LDgyLjItMTIuNmM3LjMtMy42LDEzLjMtNy41LDEzLjMtMTcuNnMtNi0xNC0xMy4zLTE3LjYKCWMtMTEuNS01LjgtMzUuMS0xMi42LTgyLjItMTIuNmMtNDkuNSwwLTg2LjYtNi41LTExMy41LTIwYy0zMy41LTE2LjgtNTItNDUuMy01Mi04MC4yYzAtMzUsMTguNS02My41LDUyLTgwLjIKCWMyNi45LTEzLjUsNjQuMS0yMCwxMTMuNS0yMGM1NC41LDAsMTA0LjUsMTMuNCwxNDguNSwzOS44YzE2LjYsOS45LDIyLDMxLjQsMTIsNDhjLTkuOSwxNi42LTMxLjQsMjEuOS00OCwxMgoJYy0zMy0xOS44LTcwLjgtMjkuOC0xMTIuNS0yOS44Yy00Ny4xLDAtNzAuNyw2LjktODIuMiwxMi42Yy03LjMsMy42LTEzLjMsNy41LTEzLjMsMTcuNlM5MTEsNjEwLjMsOTE4LjMsNjEzLjl6Ii8+CjxjaXJjbGUgZmlsbD0iI2E3YWFhZCIgY3g9IjYzMCIgY3k9IjY2MiIgcj0iOTYiLz4KPGNpcmNsZSBmaWxsPSIjYTdhYWFkIiBjeD0iMjYwLjUiIGN5PSI2NjIuNSIgcj0iOTUuNSIvPgo8L3N2Zz4K'
-        );
-
-		add_submenu_page(
-			PLUGIN_NAME,
-			__( 'View POS', 'woocommerce-pos' ),
-			__( 'View POS', 'woocommerce-pos' ),
-			'manage_woocommerce_pos',
-			null
-		);
-
-		$this->settings_screen_id = add_submenu_page(
-			PLUGIN_NAME,
-			// translators: wordpress
-			__( 'Settings' ),
-			// translators: wordpress
-			__( 'Settings' ),
-			'manage_woocommerce_pos',
-			PLUGIN_NAME . '-settings',
-			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
-		);
-
-		// adjust submenu
-		global $submenu;
-		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
-		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
-		$pos_submenu[1][2] = woocommerce_pos_url();
-
-		/**
-		 * Allows Pro to hook into the POS admin menu.
-		 */
-		do_action( 'woocommerce_pos_register_pos_admin', array(
-			'toplevel' => $this->toplevel_screen_id,
-			'settings' => $this->settings_screen_id,
-		) );
-	}
-
-	/**
 	 * Filters the order of administration menu items.
 	 *
 	 * A truthy value must first be passed to the {@see 'custom_menu_order'} filter
@@ -146,7 +99,7 @@ class Menu {
 	 */
 	public function analytics_menu_items( array $report_pages ): array {
 		// Find the position of the 'Orders' item
-		$position = array_search( 'Orders', array_column( $report_pages, 'title' ) );
+		$position = array_search( 'Orders', array_column( $report_pages, 'title' ), true );
 
 		// Use array_splice to add the new item
 		array_splice($report_pages, $position + 1, 0, array(
@@ -163,5 +116,50 @@ class Menu {
 		));
 
 		return $report_pages;
+	}
+
+	/**
+	 * Add POS to Admin sidebar.
+	 */
+	private function register_pos_admin(): void {
+		$this->toplevel_screen_id = add_menu_page(
+			__( 'POS', 'woocommerce-pos' ),
+			__( 'POS', 'woocommerce-pos' ),
+			'manage_woocommerce_pos',
+			PLUGIN_NAME,
+			array( $this, 'display_upgrade_page' ),
+			'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjYwIDEyNjAiPgo8cGF0aCBmaWxsPSIjYTdhYWFkIiBkPSJNMTE3MCwwaC05MEg5MDBINzIwSDU0MEgzNjBIMTgwSDkwQzMwLDAsMCwzMCwwLDkwdjE4MGMwLDQ5LjcsNDAuMyw5MCw5MCw5MHM5MC00MC4zLDkwLTkwVjkwaDE4MHYxODAKCWMwLDQ5LjcsNDAuMyw5MCw5MCw5MHM5MC00MC4zLDkwLTkwVjkwaDE4MHYxODBjMCw0OS43LDQwLjMsOTAsOTAsOTBzOTAtNDAuMyw5MC05MFY5MGgxODB2MTgwYzAsNDkuNyw0MC4zLDkwLDkwLDkwczkwLTQwLjMsOTAtOTAKCVY5MEMxMjYwLDMwLDEyMzAsMCwxMTcwLDB6Ii8+CjxwYXRoIGZpbGw9IiNhN2FhYWQiIGQ9Ik0xMDgwLDM2MGMtNDUsNDUtMTM1LDQ1LTE4MCwwYy00NSw0NS0xMzUsNDUtMTgwLDBjLTQ1LDQ1LTEzNSw0NS0xODAsMGMtNDUsNDUtMTM1LDQ1LTE4MCwwYy00NSw0NS0xMzUsNDUtMTgwLDAKCWMtNDUsNDUtMTM1LDQ1LTE4MCwwdjkwMGwzNjAtMjcwaDgxMGM2MCwwLDkwLTMwLDkwLTkwVjM2MEMxMjE1LDQwNSwxMTI1LDQwNSwxMDgwLDM2MHogTTI2MC41LDgyOGMtMzUuNSwwLTY4LjUtMTEuMy05NS41LTMwLjQKCXYxMjUuOWMwLDE5LjMtMTUuNywzNS0zNSwzNXMtMzUtMTUuNy0zNS0zNVY1MzJjMC0xOS4zLDE1LjctMzUsMzUtMzVjMTcuOCwwLDMyLjYsMTMuMywzNC43LDMwLjZjMjcuMS0xOS4zLDYwLjEtMzAuNiw5NS44LTMwLjYKCWM5MS4zLDAsMTY1LjUsNzQuMiwxNjUuNSwxNjUuNVMzNTEuOCw4MjgsMjYwLjUsODI4eiBNNjMwLDgyOGMtOTEuNSwwLTE2Ni03NC41LTE2Ni0xNjZjMC05MS41LDc0LjUtMTY2LDE2Ni0xNjYKCWM5MS41LDAsMTY2LDc0LjUsMTY2LDE2NkM3OTYsNzUzLjUsNzIxLjUsODI4LDYzMCw4Mjh6IE05MTguMyw2MTMuOWMxMS41LDUuOCwzNS4xLDEyLjYsODIuMiwxMi42YzQ5LjUsMCw4Ni42LDYuNSwxMTMuNSwyMAoJYzMzLjUsMTYuOCw1Miw0NS4zLDUyLDgwLjJzLTE4LjUsNjMuNS01Miw4MC4yYy0yNi45LDEzLjUtNjQuMSwyMC0xMTMuNSwyMEM5NDYsODI3LDg5Niw4MTMuNiw4NTIsNzg3LjJjLTE2LjYtOS45LTIyLTMxLjQtMTItNDgKCWM5LjktMTYuNiwzMS40LTIyLDQ4LTEyYzMzLDE5LjgsNzAuOCwyOS44LDExMi41LDI5LjhjNDcuMSwwLDcwLjctNi45LDgyLjItMTIuNmM3LjMtMy42LDEzLjMtNy41LDEzLjMtMTcuNnMtNi0xNC0xMy4zLTE3LjYKCWMtMTEuNS01LjgtMzUuMS0xMi42LTgyLjItMTIuNmMtNDkuNSwwLTg2LjYtNi41LTExMy41LTIwYy0zMy41LTE2LjgtNTItNDUuMy01Mi04MC4yYzAtMzUsMTguNS02My41LDUyLTgwLjIKCWMyNi45LTEzLjUsNjQuMS0yMCwxMTMuNS0yMGM1NC41LDAsMTA0LjUsMTMuNCwxNDguNSwzOS44YzE2LjYsOS45LDIyLDMxLjQsMTIsNDhjLTkuOSwxNi42LTMxLjQsMjEuOS00OCwxMgoJYy0zMy0xOS44LTcwLjgtMjkuOC0xMTIuNS0yOS44Yy00Ny4xLDAtNzAuNyw2LjktODIuMiwxMi42Yy03LjMsMy42LTEzLjMsNy41LTEzLjMsMTcuNlM5MTEsNjEwLjMsOTE4LjMsNjEzLjl6Ii8+CjxjaXJjbGUgZmlsbD0iI2E3YWFhZCIgY3g9IjYzMCIgY3k9IjY2MiIgcj0iOTYiLz4KPGNpcmNsZSBmaWxsPSIjYTdhYWFkIiBjeD0iMjYwLjUiIGN5PSI2NjIuNSIgcj0iOTUuNSIvPgo8L3N2Zz4K'
+		);
+
+		add_submenu_page(
+			PLUGIN_NAME,
+			__( 'View POS', 'woocommerce-pos' ),
+			__( 'View POS', 'woocommerce-pos' ),
+			'manage_woocommerce_pos',
+			null
+		);
+
+		$this->settings_screen_id = add_submenu_page(
+			PLUGIN_NAME,
+			// translators: wordpress
+			__( 'Settings' ),
+			// translators: wordpress
+			__( 'Settings' ),
+			'manage_woocommerce_pos',
+			PLUGIN_NAME . '-settings',
+			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
+		);
+
+		// adjust submenu
+		global $submenu;
+		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
+		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
+		$pos_submenu[1][2] = woocommerce_pos_url();
+
+		// Allows Pro to hook into the POS admin menu.
+		do_action( 'woocommerce_pos_register_pos_admin', array(
+			'toplevel' => $this->toplevel_screen_id,
+			'settings' => $this->settings_screen_id,
+		) );
 	}
 }

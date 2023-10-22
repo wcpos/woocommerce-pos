@@ -287,14 +287,14 @@ class Products extends Abstracts\WC_Rest_API_Modifier {
 	 * @param string[] $clauses {
 	 *                          Associative array of the clauses for the query.
 	 *
-	 *     @var string    The WHERE clause of the query.
-	 *     @var string  The GROUP BY clause of the query.
-	 *     @var string     The JOIN clause of the query.
-	 *     @var string  The ORDER BY clause of the query.
-	 *     @var string The DISTINCT clause of the query.
-	 *     @var string   The SELECT clause of the query.
-	 *     @var string   The LIMIT clause of the query.
-	 * }
+	 * @var string The WHERE clause of the query.
+	 * @var string The GROUP BY clause of the query.
+	 * @var string The JOIN clause of the query.
+	 * @var string The ORDER BY clause of the query.
+	 * @var string The DISTINCT clause of the query.
+	 * @var string The SELECT clause of the query.
+	 * @var string The LIMIT clause of the query.
+	 *             }
 	 *
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
