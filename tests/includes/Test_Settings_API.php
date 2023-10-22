@@ -41,7 +41,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	public function test_get_general_default_settings(): void {
-		$settings = $this->api->get_general_settings( $this->mock_rest_request() );
+		$response = $this->api->get_general_settings( $this->mock_rest_request() );
+		$settings = $response->get_data();
 		$this->assertTrue( $settings['force_ssl'] );
 		$this->assertFalse( $settings['pos_only_products'] );
 		$this->assertTrue( $settings['generate_username'] );
@@ -51,14 +52,16 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	public function test_get_checkout_default_settings(): void {
-		$settings = $this->api->get_checkout_settings( $this->mock_rest_request() );
+		$response = $this->api->get_checkout_settings( $this->mock_rest_request() );
+		$settings = $response->get_data();
 		$this->assertEquals( 'wc-completed', $settings['order_status'] );
 		$this->assertTrue( $settings['admin_emails'] );
 		$this->assertTrue( $settings['customer_emails'] );
 	}
 
 	public function test_get_payment_gateways_default_settings(): void {
-		$settings = $this->api->get_payment_gateways_settings( $this->mock_rest_request() );
+		$response = $this->api->get_payment_gateways_settings( $this->mock_rest_request() );
+		$settings = $response->get_data();
 		$this->assertEquals( 'pos_cash', $settings['default_gateway'] );
 		$this->assertIsArray( $settings['gateways'] );
 
@@ -68,7 +71,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	public function test_get_access_default_settings(): void {
-		$settings      = $this->api->get_access_settings( $this->mock_rest_request() );
+		$response      = $this->api->get_access_settings( $this->mock_rest_request() );
+		$settings      = $response->get_data();
 		$administrator = $settings['administrator'];
 
 		$this->assertTrue( $administrator['capabilities']['wcpos']['access_woocommerce_pos'] );

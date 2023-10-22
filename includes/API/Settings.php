@@ -406,6 +406,8 @@ class Settings extends Abstracts\Controller {
 	/**
 	 * POST data comes in as PATCH, ie: partial, so we need to merge with existing data.
 	 *
+	 * @TODO - shouldn't the update return a WP_REST_Response?
+	 *
 	 * @param WP_REST_Request $request
 	 *
 	 * @return array|WP_Error
@@ -419,6 +421,8 @@ class Settings extends Abstracts\Controller {
 
 
 	/**
+	 * @TODO - shouldn't the update return a WP_REST_Response?
+	 *
 	 * @param WP_REST_Request $request
 	 *
 	 * @return array|WP_Error
@@ -432,6 +436,8 @@ class Settings extends Abstracts\Controller {
 
 
 	/**
+	 * @TODO - shouldn't the update return a WP_REST_Response?
+	 *
 	 * @param WP_REST_Request $request
 	 *
 	 * @return array
@@ -477,6 +483,8 @@ class Settings extends Abstracts\Controller {
 
 	/**
 	 * POST data comes in as PATCH, ie: partial, so we need to merge with existing data.
+	 *
+	 * @TODO - shouldn't the update return a WP_REST_Response?
 	 *
 	 * @param WP_REST_Request $request
 	 *
