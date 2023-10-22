@@ -50,7 +50,7 @@ class API {
 			'settings'        => new API\Settings(),
 			'stores'          => new API\Stores(),
 			'emails'          => new API\Order_Emails(),
-			'test_controller' => new API\Test_Controller(),
+			'test_controller' => new API\Products_Controller(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
