@@ -1,96 +1,199 @@
 <?php
 
-// Require composer dependencies.
-require_once \dirname(__FILE__, 2) . '/vendor/autoload.php';
+namespace WCPOS\WooCommercePOS\Tests;
 
-// If we're running in WP's build directory, ensure that WP knows that, too.
-if ('build' === getenv('LOCAL_DIR')) {
-	\define('WP_RUN_CORE_TESTS', true);
-}
+use Automattic\WooCommerce\Proxies\LegacyProxy;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\CodeHacker;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\BypassFinalsHack;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
+use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProxy;
+use ReflectionException;
+use ReflectionProperty;
 
-// Determine the tests directory (from a WP dev checkout).
-// Try the WP_TESTS_DIR environment variable first.
-$_tests_dir = getenv('WP_TESTS_DIR');
+class Bootstrap {
+	public $tests_dir;
+	public $plugin_dir;
+	protected static $instance = null;
 
-// Next, try the WP_PHPUNIT composer package.
-if ( ! $_tests_dir) {
-	$_tests_dir = getenv('WP_PHPUNIT__DIR');
-}
+	public function __construct() {
+		ini_set( 'display_errors', 'on' );
+		error_reporting( E_ALL );
+		$this->tests_dir  = $this->get_test_dir();
+		$this->plugin_dir = \dirname(__FILE__, 2);
 
-// See if we're installed inside an existing WP dev instance.
-if ( ! $_tests_dir) {
-	$_try_tests_dir = \dirname(__FILE__) . '/../../../../../tests/phpunit';
-	if (file_exists($_try_tests_dir . '/includes/functions.php')) {
-		$_tests_dir = $_try_tests_dir;
-	}
-}
-// Fallback.
-if ( ! $_tests_dir) {
-	$_tests_dir = '/tmp/wordpress-tests-lib';
-}
+		// Require composer dependencies.
+		require_once $this->plugin_dir . '/vendor/autoload.php';
 
-// Give access to tests_add_filter() function.
-require_once $_tests_dir . '/includes/functions.php';
+		
+		$this->initialize_code_hacker();
 
-// Do not try to load JavaScript files from an external URL - this takes a
-// while.
-\define('GUTENBERG_LOAD_VENDOR_SCRIPTS', false);
+		// Give access to tests_add_filter() function.
+		require_once $this->tests_dir . '/includes/functions.php';
 
-/**
- * Manually load the plugin being tested.
- */
-function _manually_load_plugin(): void {
-	require \dirname(__FILE__, 2) . '/woocommerce-pos.php';
-	require_once \dirname(__FILE__, 2) . '/includes/wcpos-functions.php';
-}
+		// Do not try to load JavaScript files from an external URL - this takes a
+		// while.
+		\define('GUTENBERG_LOAD_VENDOR_SCRIPTS', false);
 
-tests_add_filter('muplugins_loaded', '_manually_load_plugin');
+		tests_add_filter('muplugins_loaded', array( $this, 'manually_load_plugin' ) );
+		tests_add_filter('muplugins_loaded', array( $this, 'install_woocommerce' ) );
+		
 
-/**
- * Install WooCommerce.
- */
-function install_woocommerce(): void {
-	require \dirname(__FILE__, 2) . '/../woocommerce/woocommerce.php';
-	// Clean existing install first.
-	//  define( 'WP_UNINSTALL_PLUGIN', true );
-	//  define( 'WC_REMOVE_ALL_DATA', true );
-	//  require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
-	//  WC_Install::install();
-	//  echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
-}
+		// Start up the WP testing environment.
+		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
+		require $this->tests_dir . '/includes/bootstrap.php';
+		$this->includes();
 
-tests_add_filter('muplugins_loaded', 'install_woocommerce');
+		// re-initialize dependency injection, this needs to be the last operation after everything else is in place.
+		$this->initialize_dependency_injection();
 
-/**
- * Adds a wp_die handler for use during tests.
- *
- * If bootstrap.php triggers wp_die, it will not cause the script to fail. This
- * means that tests will look like they passed even though they should have
- * failed. So we throw an exception if WordPress dies during test setup. This
- * way the failure is observable.
- *
- * @param string|WP_Error $message The error message.
- *
- * @throws Exception When a `wp_die()` occurs.
- */
-function fail_if_died($message): void {
-	if (is_wp_error($message)) {
-		$message = $message->get_error_message();
+		// Use existing behavior for wp_die during actual test execution.
+		remove_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) );
 	}
 
-	throw new Exception('WordPress died: ' . $message);
+	/**
+	 * Determine the tests directory (from a WP dev checkout).
+	 */
+	public function get_test_dir(): string {
+		// Try the WP_TESTS_DIR environment variable first.
+		$_tests_dir = getenv('WP_TESTS_DIR');
+
+		// Next, try the WP_PHPUNIT composer package.
+		if ( ! $_tests_dir) {
+			$_tests_dir = getenv('WP_PHPUNIT__DIR');
+		}
+
+		// See if we're installed inside an existing WP dev instance.
+		if ( ! $_tests_dir) {
+			$_try_tests_dir = \dirname(__FILE__) . '/../../../../../tests/phpunit';
+			if (file_exists($_try_tests_dir . '/includes/functions.php')) {
+				$_tests_dir = $_try_tests_dir;
+			}
+		}
+		// Fallback.
+		if ( ! $_tests_dir) {
+			$_tests_dir = '/tmp/wordpress-tests-lib';
+		}
+
+		return $_tests_dir;
+	}
+
+	/**
+	 * Manually load the plugin being tested.
+	 */
+	public function manually_load_plugin(): void {
+		require $this->plugin_dir . '/woocommerce-pos.php';
+		require_once $this->plugin_dir . '/includes/wcpos-functions.php';
+	}
+
+	/**
+	 * Install WooCommerce.
+	 */
+	public function install_woocommerce(): void {
+		require $this->plugin_dir . '/../woocommerce/woocommerce.php';
+		// Clean existing install first.
+		//  define( 'WP_UNINSTALL_PLUGIN', true );
+		//  define( 'WC_REMOVE_ALL_DATA', true );
+		//  require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
+		//  WC_Install::install();
+		//  echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
+	}
+
+	/**
+	 * Load the WooCommerce test framework so we can reuse some of its functionality.
+	 */
+	public function includes(): void {
+		require_once $this->plugin_dir . '/tests/framework/wp-http-testcase.php';
+		require_once $this->plugin_dir . '/tests/framework/class-wc-unit-test-case.php';
+		require_once $this->plugin_dir . '/tests/framework/class-wc-rest-unit-test-case.php';
+		require_once $this->plugin_dir . '/tests/framework/class-wc-unit-test-factory.php';
+		require_once $this->plugin_dir . '/tests/framework/class-wp-test-spy-rest-server.php';
+	}
+
+	/**
+	 * Adds a wp_die handler for use during tests.
+	 *
+	 * If bootstrap.php triggers wp_die, it will not cause the script to fail. This
+	 * means that tests will look like they passed even though they should have
+	 * failed. So we throw an exception if WordPress dies during test setup. This
+	 * way the failure is observable.
+	 *
+	 * @param string|WP_Error $message The error message.
+	 *
+	 * @throws Exception When a `wp_die()` occurs.
+	 */
+	public function fail_if_died($message): void {
+		if (is_wp_error($message)) {
+			$message = $message->get_error_message();
+		}
+
+		throw new \Exception('WordPress died: ' . $message);
+	}
+
+	public static function instance() {
+		if ( \is_null( self::$instance ) ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
+	}
+
+	/**
+	 * Initialize the code hacker.
+	 *
+	 * @throws Exception Error when initializing one of the hacks.
+	 */
+	private function initialize_code_hacker(): void {
+		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/CodeHacker.php';
+		
+		CodeHacker::initialize( array( __DIR__ . '/../../includes/' ) );
+
+		$replaceable_functions = include_once __DIR__ . '/mockable-functions.php';
+		if ( ! empty( $replaceable_functions ) ) {
+			FunctionsMockerHack::initialize( $replaceable_functions );
+			CodeHacker::add_hack( FunctionsMockerHack::get_hack_instance() );
+		}
+
+		$mockable_static_classes = include_once __DIR__ . '/classes-with-mockable-static-methods.php';
+		if ( ! empty( $mockable_static_classes ) ) {
+			StaticMockerHack::initialize( $mockable_static_classes );
+			CodeHacker::add_hack( StaticMockerHack::get_hack_instance() );
+		}
+
+		CodeHacker::add_hack( new BypassFinalsHack() );
+
+		CodeHacker::enable();
+	}
+
+	/**
+	 * Re-initialize the dependency injection engine.
+	 *
+	 * The dependency injection engine has been already initialized as part of the Woo initialization, but we need
+	 * to replace the registered read-only container with a fully configurable one for testing.
+	 * To this end we hack a bit and use reflection to grab the underlying container that the read-only one stores
+	 * in a private property.
+	 *
+	 * Additionally, we replace the legacy/function proxies with mockable versions to easily replace anything
+	 * in tests as appropriate.
+	 *
+	 * @throws \Exception The Container class doesn't have a 'container' property.
+	 */
+	private function initialize_dependency_injection(): void {
+		require_once $this->plugin_dir . '/tests/Tools/DependencyManagement/MockableLegacyProxy.php';
+
+		try {
+			$inner_container_property = new ReflectionProperty( \Automattic\WooCommerce\Container::class, 'container' );
+		} catch ( ReflectionException $ex ) {
+			throw new \Exception( "Error when trying to get the private 'container' property from the " . \Automattic\WooCommerce\Container::class . ' class using reflection during unit testing bootstrap, has the property been removed or renamed?' );
+		}
+
+		$inner_container_property->setAccessible( true );
+		$inner_container = $inner_container_property->getValue( wc_get_container() );
+
+		$inner_container->replace( LegacyProxy::class, MockableLegacyProxy::class );
+
+		$GLOBALS['wc_container'] = $inner_container;
+	}
 }
 
-tests_add_filter('wp_die_handler', 'fail_if_died');
-
-$GLOBALS['wp_tests_options'] = array(
-	'gutenberg-experiments' => array(
-		'gutenberg-widget-experiments' => '1',
-	),
-);
-
-// Start up the WP testing environment.
-require $_tests_dir . '/includes/bootstrap.php';
-
-// Use existing behavior for wp_die during actual test execution.
-remove_filter('wp_die_handler', 'fail_if_died');
+Bootstrap::instance();

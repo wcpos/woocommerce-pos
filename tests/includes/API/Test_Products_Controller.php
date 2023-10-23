@@ -6,9 +6,6 @@ use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API\Products_Controller;
 
-require_once \WC_UNIT_TEST_PATH . '/includes/wp-http-testcase.php';
-require_once \WC_UNIT_TEST_PATH . '/framework/class-wc-rest-unit-test-case.php';
-
 /**
  * @internal
  *
