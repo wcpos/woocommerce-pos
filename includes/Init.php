@@ -10,12 +10,10 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use function defined;
 use const DOING_AJAX;
 
 use WP_HTTP_Response;
 use WP_REST_Request;
-
 use WP_REST_Server;
 
 class Init {
@@ -47,24 +45,22 @@ class Init {
 		//      new Customers();
 		new Orders();
 
-        // frontend only
-        if ( ! is_admin() ) {
+		// frontend only
+		if ( ! is_admin() ) {
 			new Templates();
 			new Form_Handler();
 		}
 
-        /**
-         * NOTE: admin_menu runs before admin_init, so we need to load the Admin class here
-         */
-        if ( is_admin() ) {
-            if ( defined( '\DOING_AJAX' ) && DOING_AJAX ) {
-                // AJAX requests
-                new AJAX();
-            } else {
-                // Non-AJAX (Admin) requests
-                new Admin();
-            }
-        }
+		// NOTE: admin_menu runs before admin_init, so we need to load the Admin class here
+		if ( is_admin() ) {
+			if ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) {
+				// AJAX requests
+				new AJAX();
+			} else {
+				// Non-AJAX (Admin) requests
+				new Admin();
+			}
+		}
 
 		// load integrations
 		$this->integrations();
@@ -139,7 +135,7 @@ class Init {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
-    }
+	}
 
 	/**
 	 * Loads POS integrations with third party plugins.
@@ -150,11 +146,9 @@ class Init {
 		//          new Integrations\Bookings();
 		//      }
 
-        // Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
-        if ( class_exists( 'WPSEO_Options' ) ) {
+		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
+		if ( class_exists( 'WPSEO_Options' ) ) {
 			new Integrations\WPSEO();
-        }
+		}
 	}
-
-
 }

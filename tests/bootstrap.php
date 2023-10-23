@@ -108,6 +108,9 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/framework/class-wc-rest-unit-test-case.php';
 		require_once $this->plugin_dir . '/tests/framework/class-wc-unit-test-factory.php';
 		require_once $this->plugin_dir . '/tests/framework/class-wp-test-spy-rest-server.php';
+
+		// Helpers
+		require_once $this->plugin_dir . '/tests/Helpers/ProductHelper.php';
 	}
 
 	/**
