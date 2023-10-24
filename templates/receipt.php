@@ -1,12 +1,12 @@
 <?php
 /**
- * Sales Receipt Template
+ * Sales Receipt Template.
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/receipt.php.
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-if ( ! defined( 'ABSPATH' ) ) {
+if ( ! \defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly
 }
 ?>
@@ -145,21 +145,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 		 * This hook adds the javascript to print the receipt.
 		 */
 		do_action( 'woocommerce_pos_receipt_head' );
-		?>
+?>
 	</head>
 <body <?php body_class(); ?>>
 <div class="sales-receipt">
 	<div class="header">
 		<?php
-		$header_image = get_theme_mod( 'custom_logo' );
-		if ( $header_image ) :
-			$image_attributes = wp_get_attachment_image_src( $header_image, 'full' );
-			$src = $image_attributes[0];
-			?>
+$header_image = get_theme_mod( 'custom_logo' );
+if ( $header_image ) {
+	$image_attributes = wp_get_attachment_image_src( $header_image, 'full' );
+	$src              = $image_attributes[0];
+	?>
 			<img src="<?php echo esc_url( $src ); ?>" alt="<?php bloginfo( 'name' ); ?>">
-		<?php else: ?>
+		<?php } else { ?>
 			<h1><?php bloginfo( 'name' ); ?></h1>
-		<?php endif; ?>
+		<?php } ?>
 		<h2><?php esc_html_e( 'Tax Receipt', 'woocommerce-pos' ); ?></h2>
 	</div>
 
@@ -173,20 +173,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<strong><?php echo esc_html( wc_format_datetime( $order->get_date_created(), 'F j, Y, g:i a' ) ); ?></strong>
 		</li>
 		<?php
-			// if order has meta value _pos_user, get the user id and display the user name
-			$pos_user = $order->get_meta( '_pos_user' );
-			if ( $pos_user ) {
-				$user = get_user_by( 'id', $pos_user );
-				$user_name = $user->display_name;
-				echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
-			}
-		?>
-		<?php if ( $order->get_payment_method_title() ) : ?>
+	// if order has meta value _pos_user, get the user id and display the user name
+	$pos_user = $order->get_meta( '_pos_user' );
+if ( $pos_user ) {
+	$user      = get_user_by( 'id', $pos_user );
+	$user_name = $user->display_name;
+	echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
+}
+?>
+		<?php if ( $order->get_payment_method_title() ) { ?>
 			<li class="method">
 				<?php esc_html_e( 'Payment method:', 'woocommerce' ); ?>
 				<strong><?php echo wp_kses_post( $order->get_payment_method_title() ); ?></strong>
 			</li>
-		<?php endif; ?>
+		<?php } ?>
 	</ul>
 
 	<table>
@@ -207,12 +207,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<?php
 					echo wp_kses_post( apply_filters( 'woocommerce_order_item_name', $item->get_name(), $item, false ) );
 
-					do_action( 'woocommerce_order_item_meta_start', $item_id, $item, $order, false );
+		do_action( 'woocommerce_order_item_meta_start', $item_id, $item, $order, false );
 
-					wc_display_item_meta( $item );
+		wc_display_item_meta( $item );
 
-					do_action( 'woocommerce_order_item_meta_end', $item_id, $item, $order, false );
-				?>
+		do_action( 'woocommerce_order_item_meta_end', $item_id, $item, $order, false );
+		?>
 			</td>
 			<td><?php echo esc_html( $item->get_quantity() ); ?></td>
 			<td><?php echo wp_kses_post( wc_price( $product->get_price() ) ); ?></td>
@@ -225,39 +225,39 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<th colspan="3"><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></th>
 				<td><?php echo wp_kses_post( wc_price( $order->get_subtotal() ) ); ?></td>
 			</tr>
-			<?php if ( $order->get_shipping_total() > 0 ) : ?>
+			<?php if ( $order->get_shipping_total() > 0 ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Shipping', 'woocommerce' ); ?></th>
 					<td><?php echo wp_kses_post( wc_price( $order->get_shipping_total() ) ); ?></td>
 				</tr>
-			<?php endif; ?>
-			<?php foreach ( $order->get_fees() as $fee ) : ?>
+			<?php } ?>
+			<?php foreach ( $order->get_fees() as $fee ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Fee', 'woocommerce' ); ?></th>
 					<td><?php echo wp_kses_post( wc_price( $fee->get_total() ) ); ?></td>
 				</tr>
-			<?php endforeach; ?>
-			<?php if ( $order->get_total_discount() > 0 ) : ?>
+			<?php } ?>
+			<?php if ( $order->get_total_discount() > 0 ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Discount', 'woocommerce' ); ?></th>
 					<td><?php echo wp_kses_post( wc_price( $order->get_total_discount() ) ); ?></td>
 				</tr>
-			<?php endif; ?>
-			<?php if ( wc_tax_enabled() ) : ?>
-				<?php if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) : ?>
-					<?php foreach ( $order->get_tax_totals() as $code => $tax ) : ?>
+			<?php } ?>
+			<?php if ( wc_tax_enabled() ) { ?>
+				<?php if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) { ?>
+					<?php foreach ( $order->get_tax_totals() as $code => $tax ) { ?>
 						<tr>
 							<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
 							<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
 						</tr>
-					<?php endforeach; ?>
-				<?php else : ?>
+					<?php } ?>
+				<?php } else { ?>
 					<tr>
 						<th colspan="3"><?php echo esc_html( WC()->countries->tax_or_vat() ); ?></th>
 						<td><?php echo wp_kses_post( wc_price( $order->get_total_tax() ) ); ?></td>
 					</tr>
-				<?php endif; ?>
-			<?php endif; ?>
+				<?php } ?>
+			<?php } ?>
 			<tr>
 				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
 				<td><?php echo wp_kses_post( wc_price( $order->get_total() ) ); ?></td>
@@ -277,13 +277,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<address>
 						<?php echo wp_kses_post( $order->get_formatted_billing_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
 
-						<?php if ( $order->get_billing_phone() ) : ?>
+						<?php if ( $order->get_billing_phone() ) { ?>
 							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_billing_phone() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 
-						<?php if ( $order->get_billing_email() ) : ?>
+						<?php if ( $order->get_billing_email() ) { ?>
 							<p class="woocommerce-customer-details--email"><?php echo esc_html( $order->get_billing_email() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 					</address>
 
 				</div><!-- /.col-1 -->
@@ -293,9 +293,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<address>
 						<?php echo wp_kses_post( $order->get_formatted_shipping_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
 
-						<?php if ( $order->get_shipping_phone() ) : ?>
+						<?php if ( $order->get_shipping_phone() ) { ?>
 							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_shipping_phone() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 					</address>
 				</div><!-- /.col-2 -->
 
@@ -308,12 +308,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</section>
 	</div>
 
-<?php if ( $order->get_customer_note() ) : ?>
+<?php if ( $order->get_customer_note() ) { ?>
 	<div class="customer-notes">
 		<h4 class="section-title"><?php esc_html_e( 'Customer Notes', 'woocommerce' ); ?></h4>
 		<p><?php echo wp_kses_post( nl2br( $order->get_customer_note() ) ); ?></p>
 	</div>
-<?php endif; ?>
+<?php } ?>
 
 	<div class="footer">
 	<p><?php esc_html_e( 'Thank you for your purchase!', 'woocommerce' ); ?></p>

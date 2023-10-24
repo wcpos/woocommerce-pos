@@ -50,7 +50,7 @@ class API {
 			'settings'        => new API\Settings(),
 			'stores'          => new API\Stores(),
 			'emails'          => new API\Order_Emails(),
-			'test_controller' => new API\Products_Controller(),
+			'products'        => new API\Products_Controller(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
@@ -76,7 +76,7 @@ class API {
 		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
 		 * Note: The rest_request_before_callbacks filter needs any early priority because we may use in the loaded classes
 		 */
-		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 5, 3 );
+		// add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 5, 3 );
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 
 		
@@ -318,15 +318,36 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		$params = $request->get_params();
+		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
+			/*
+			 * If $handler['callback'][0] matches one of our controllers we add a filter for $dispatch_result.
+			 * This allows our POS endpoints to modify the response of the WooCommerce REST API.
+			 */
+			foreach ( $this->controllers as $key => $controller_class ) {
+				if ( $handler['callback'][0] === $controller_class ) {
+					/**
+					 * Filters the dispatch result for a request.
+					 */
+					$dispatch_result = apply_filters( "woocommerce_pos_rest_dispatch_{$key}_request", $dispatch_result, $request, $route, $handler );
 
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			if ( $this->wc_rest_api_handler ) {
-				$dispatch_result = $this->wc_rest_api_handler->get_all_posts( $params['fields'] );
+					break;
+				}
 			}
 		}
-
+			
 		return $dispatch_result;
+
+
+
+		// $params = $request->get_params();
+
+		// if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
+		// 	if ( $this->wc_rest_api_handler ) {
+		// 		$dispatch_result = $this->wc_rest_api_handler->get_all_posts( $params['fields'] );
+		// 	}
+		// }
+
+		// return $dispatch_result;
 	}
 
 	/**

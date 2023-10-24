@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
+use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Products_Controller;
 use WP_REST_Request;
 use WP_User;
@@ -36,7 +37,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 			)
 		);
 
-		$this->endpoint->register_routes();
+		new Api();
 		wp_set_current_user( $this->user );
 	}
 
@@ -152,6 +153,8 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 			'menu_order',
 			'meta_data',
 			'post_password',
+			// Added by WCPOS.
+			'barcode',
 		);
 	}
 
@@ -168,5 +171,11 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
 
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
+	}
+
+	public function test_product_api_schema(): void {
+		$schema = $this->endpoint->get_item_schema();
+
+		$this->assertArrayHasKey( 'barcode', $schema['properties'] );
 	}
 }
