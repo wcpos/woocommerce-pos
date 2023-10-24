@@ -178,4 +178,18 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 
 		$this->assertArrayHasKey( 'barcode', $schema['properties'] );
 	}
+
+	public function test_product_api_get_all_ids(): void {
+		$product  = ProductHelper::create_simple_product();
+		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array('id') );
+
+		$response = $this->server->dispatch( $request );
+		print_r($response->get_data());
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals( array( (object) array( 'id' => $product->get_id() ) ), $response->get_data() );
+	}
 }

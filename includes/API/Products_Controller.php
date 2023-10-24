@@ -8,9 +8,11 @@ if ( ! class_exists('WC_REST_Products_Controller') ) {
 	return;
 }
 
+use Exception;
 use WC_Product;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -57,6 +59,18 @@ class Products_Controller extends WC_REST_Products_Controller {
 	}
 
 	/**
+	 * Modify the collection params.
+	 */
+	public function get_collection_params() {
+		$params = parent::get_collection_params();
+		
+		// Modify the per_page argument to allow -1
+		$params['per_page']['minimum'] = -1;
+		
+		return $params;
+	}
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
@@ -66,6 +80,12 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ): mixed {
 		$this->wcpos_register_wc_rest_api_hooks();
+		$params = $request->get_params();
+
+		// Optimised query for getting all product IDs
+		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
+			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
+		}
 
 		return $dispatch_result;
 	}
@@ -138,5 +158,54 @@ class Products_Controller extends WC_REST_Products_Controller {
 		// $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
+	}
+
+	/**
+	 * Returns array of all product ids, name.
+	 *
+	 * @param array $fields
+	 *
+	 * @return array|WP_Error
+	 */
+	public function wcpos_get_all_posts( array $fields = array() ): array {
+		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+
+		$args = array(
+			'post_type'      => 'product',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+		);
+
+		if ( $pos_only_products ) {
+			$args['meta_query'] = array(
+				'relation' => 'OR',
+				array(
+					'key'     => '_pos_visibility',
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => '_pos_visibility',
+					'value'   => 'online_only',
+					'compare' => '!=',
+				),
+			);
+		}
+
+		$product_query = new WP_Query( $args );
+
+		try {
+			$product_ids = $product_query->posts;
+
+			return array_map( array( $this, 'wcpos_format_id' ), $product_ids );
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching product IDs: ' . $e->getMessage() );
+
+			return new \WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching product IDs.',
+				array( 'status' => 500 )
+			);
+		}
 	}
 }
