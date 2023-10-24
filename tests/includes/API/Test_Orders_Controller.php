@@ -2,11 +2,11 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
-use WCPOS\WooCommercePOS\API\Products_Controller;
+use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WP_REST_Request;
 use WP_User;
 
@@ -15,9 +15,9 @@ use WP_User;
  *
  * @coversNothing
  */
-class Test_Products_Controller extends WC_REST_Unit_Test_Case {
+class Test_Orders_Controller extends WC_REST_Unit_Test_Case {
 	/**
-	 * @var Products_Controller
+	 * @var Orders_Controller
 	 */
 	protected $endpoint;
 
@@ -30,7 +30,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
 
-		$this->endpoint = new Products_Controller();
+		$this->endpoint = new Orders_Controller();
 		$this->user     = $this->factory->user->create(
 			array(
 				'role' => 'administrator',
@@ -45,7 +45,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		parent::tearDown();
 	}
 
-	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products' ) {
+	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/orders' ) {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
 		$request->set_method( $method );
@@ -67,7 +67,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$rest_base_property = $reflection->getProperty('rest_base');
 		$rest_base_property->setAccessible(true);
 		
-		$this->assertEquals('products', $rest_base_property->getValue($this->endpoint));
+		$this->assertEquals('orders', $rest_base_property->getValue($this->endpoint));
 	}
 
 	/**
@@ -83,86 +83,65 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	/**
 	 * Get all expected fields.
 	 */
+	/**
+	 * Get all expected fields.
+	 */
 	public function get_expected_response_fields() {
 		return array(
 			'id',
-			'name',
-			'slug',
-			'permalink',
+			'parent_id',
+			'number',
+			'order_key',
+			'created_via',
+			'version',
+			'status',
+			'currency',
 			'date_created',
 			'date_created_gmt',
 			'date_modified',
 			'date_modified_gmt',
-			'type',
-			'status',
-			'featured',
-			'catalog_visibility',
-			'description',
-			'short_description',
-			'sku',
-			'price',
-			'regular_price',
-			'sale_price',
-			'date_on_sale_from',
-			'date_on_sale_from_gmt',
-			'date_on_sale_to',
-			'date_on_sale_to_gmt',
-			'price_html',
-			'on_sale',
-			'purchasable',
-			'total_sales',
-			'virtual',
-			'downloadable',
-			'downloads',
-			'download_limit',
-			'download_expiry',
-			'external_url',
-			'button_text',
-			'tax_status',
-			'tax_class',
-			'manage_stock',
-			'stock_quantity',
-			'stock_status',
-			'backorders',
-			'backorders_allowed',
-			'backordered',
-			'low_stock_amount',
-			'sold_individually',
-			'weight',
-			'dimensions',
-			'shipping_required',
-			'shipping_taxable',
-			'shipping_class',
-			'shipping_class_id',
-			'reviews_allowed',
-			'average_rating',
-			'rating_count',
-			'related_ids',
-			'upsell_ids',
-			'cross_sell_ids',
-			'parent_id',
-			'purchase_note',
-			'categories',
-			'tags',
-			'images',
-			'has_options',
-			'attributes',
-			'default_attributes',
-			'variations',
-			'grouped_products',
-			'menu_order',
+			'discount_total',
+			'discount_tax',
+			'shipping_total',
+			'shipping_tax',
+			'cart_tax',
+			'total',
+			'total_tax',
+			'prices_include_tax',
+			'customer_id',
+			'customer_ip_address',
+			'customer_user_agent',
+			'customer_note',
+			'billing',
+			'shipping',
+			'payment_method',
+			'payment_method_title',
+			'transaction_id',
+			'date_paid',
+			'date_paid_gmt',
+			'date_completed',
+			'date_completed_gmt',
+			'cart_hash',
 			'meta_data',
-			'post_password',
-			// Added by WCPOS.
-			'barcode',
+			'line_items',
+			'tax_lines',
+			'shipping_lines',
+			'fee_lines',
+			'coupon_lines',
+			'currency_symbol',
+			'refunds',
+			'payment_url',
+			'is_editable',
+			'needs_payment',
+			'needs_processing',
 		);
 	}
 
-	public function test_product_api_get_all_fields(): void {
+	public function test_order_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
-		$product  = ProductHelper::create_simple_product();
-		$response = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() ) );
+		$product  = OrderHelper::create_order( $this->user );
+		$response = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders/' . $product->get_id() ) );
 
 		$this->assertEquals( 200, $response->get_status() );
 
@@ -173,15 +152,9 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
-	public function test_product_api_schema(): void {
-		$schema = $this->endpoint->get_item_schema();
-
-		$this->assertArrayHasKey( 'barcode', $schema['properties'] );
-	}
-
-	public function test_product_api_get_all_ids(): void {
-		$product  = ProductHelper::create_simple_product();
-		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+	public function test_order_api_get_all_ids(): void {
+		$order    = OrderHelper::create_order( $this->user );
+		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
 
@@ -189,6 +162,6 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 
-		$this->assertEquals( array( (object) array( 'id' => $product->get_id() ) ), $response->get_data() );
+		$this->assertEquals( array( (object) array( 'id' => $order->get_id() ) ), $response->get_data() );
 	}
 }

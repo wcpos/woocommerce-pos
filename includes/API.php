@@ -51,6 +51,7 @@ class API {
 			'stores'          => new API\Stores(),
 			'emails'          => new API\Order_Emails(),
 			'products'        => new API\Products_Controller(),
+			'orders'          => new API\Orders_Controller(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
@@ -71,15 +72,8 @@ class API {
 		// Adds uuid for the WordPress install
 		add_filter( 'rest_index', array( $this, 'rest_index' ), 10, 1 );
 
-		/*
-		 * These filters allow changes to the WC REST API response
-		 * Note: I needed to init WC API patches earlier than rest_dispatch_request for validation patch
-		 * Note: The rest_request_before_callbacks filter needs any early priority because we may use in the loaded classes
-		 */
-		// add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 5, 3 );
+		// These filters allow changes to the WC REST API response
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
-
-		
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 
 		$this->prevent_messages();
@@ -255,55 +249,6 @@ class API {
 	}
 
 	/**
-	 * Filters the response before executing any REST API callbacks.
-	 *
-	 * NOTE: route matching and authentication have run at this point.
-	 *
-	 * We use this hook to determine the controller class and load our duck punches.
-	 *
-	 * @param mixed|WP_Error|WP_HTTP_Response|WP_REST_Response $response Result to send to the client.
-	 *                                                                   Usually a WP_REST_Response or WP_Error.
-	 * @param array                                            $handler  Route handler used for the request.
-	 * @param WP_REST_Request                                  $request  Request used to generate the response.
-	 */
-	public function rest_request_before_callbacks( $response, $handler, $request ) {
-		// The handler can be a closure, in which case we can't determine the controller.
-		if ( ! \is_array( $handler ) || ! \array_key_exists('callback', $handler)) {
-			return $response;
-		}
-	
-		// Here we attempt to determine the controller class from the handler.
-		if ( \is_array( $handler['callback'] ) && \is_object( $handler['callback'][0] ) ) {
-			$controller = \get_class( $handler['callback'][0] );
-		} elseif ( \is_object( $handler['callback'] ) ) {
-			$controller = \get_class( $handler['callback'] );
-		} else {
-			return $response;
-		}
-
-		// If the controller is one of the WooCommerce REST API controllers, we can hijack the request
-		$controller_mappings = array(
-			'WC_REST_Orders_Controller'             => 'WCPOS\WooCommercePOS\API\Orders',
-			'WC_REST_Products_Controller'           => 'WCPOS\WooCommercePOS\API\Products',
-			'WC_REST_Product_Variations_Controller' => 'WCPOS\WooCommercePOS\API\Product_Variations',
-			'WC_REST_Customers_Controller'          => 'WCPOS\WooCommercePOS\API\Customers',
-			'WC_REST_Taxes_Controller'              => 'WCPOS\WooCommercePOS\API\Taxes',
-			'WC_REST_Payment_Gateways_Controller'   => 'WCPOS\WooCommercePOS\API\Payment_Gateways',
-			'WC_REST_Product_Categories_Controller' => 'WCPOS\WooCommercePOS\API\Product_Categories',
-			'WC_REST_Product_Tags_Controller'       => 'WCPOS\WooCommercePOS\API\Product_Tags',
-		);
-
-		if ( \array_key_exists( $controller, $controller_mappings ) ) {
-			$handler_class             = $controller_mappings[$controller];
-			$this->wc_rest_api_handler = new $handler_class($request);
-
-			do_action( 'woocommerce_pos_rest_request_before_callbacks', $controller, $request, $this->wc_rest_api_handler );
-		}
-
-		return $response;
-	}
-
-	/**
 	 * Filters the REST API dispatch request result.
 	 *
 	 * @TODO - Should I use this hook instead of rest_request_before_callbacks?
@@ -336,18 +281,6 @@ class API {
 		}
 			
 		return $dispatch_result;
-
-
-
-		// $params = $request->get_params();
-
-		// if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-		// 	if ( $this->wc_rest_api_handler ) {
-		// 		$dispatch_result = $this->wc_rest_api_handler->get_all_posts( $params['fields'] );
-		// 	}
-		// }
-
-		// return $dispatch_result;
 	}
 
 	/**

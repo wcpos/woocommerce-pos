@@ -111,6 +111,10 @@ class Bootstrap {
 
 		// Helpers
 		require_once $this->plugin_dir . '/tests/Helpers/ProductHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/OrderHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/CustomerHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/CouponHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/ShippingHelper.php';
 	}
 
 	/**
