@@ -39,7 +39,9 @@ class Products_Controller extends WC_REST_Products_Controller {
 	public function __construct() {
 		add_filter( 'woocommerce_pos_rest_dispatch_products_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
 
-		parent::__construct();
+		if ( method_exists( parent::class, '__construct' ) ) {
+			parent::__construct();
+		}
 	}
 
 	/**

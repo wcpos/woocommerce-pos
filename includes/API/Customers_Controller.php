@@ -4,22 +4,22 @@ namespace WCPOS\WooCommercePOS\API;
 
 \defined('ABSPATH') || die;
 
-if ( ! class_exists('WC_REST_Orders_Controller') ) {
+if ( ! class_exists('WC_REST_Customers_Controller') ) {
 	return;
 }
 
 use Exception;
-use WC_Order_Query;
-use WC_REST_Orders_Controller;
+use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
+use WP_User_Query;
 
 /**
- * Orders controller class.
+ * Product Tgas controller class.
  *
- * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Products_Controller methods
+ * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Customers_Controller methods
  */
-class Orders_Controller extends WC_REST_Orders_Controller {
+class Customers_Controller extends WC_REST_Customers_Controller {
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -34,23 +34,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_orders_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
+		add_filter( 'woocommerce_pos_rest_dispatch_customers_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
 		}
-	}
-
-	/**
-	 * Modify the collection params.
-	 */
-	public function get_collection_params() {
-		$params = parent::get_collection_params();
-		
-		// Modify the per_page argument to allow -1
-		$params['per_page']['minimum'] = -1;
-		
-		return $params;
 	}
 
 	/**
@@ -80,31 +68,38 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Returns array of all order ids.
+	 * Returns array of all customer ids.
+	 *
+	 * Note: user queries are a little more complicated than post queries, for example,
+	 * multisite would return all users from all sites, not just the current site.
+	 * Also, querying by role is not as simple as querying by post type.
 	 *
 	 * @param array $fields
 	 *
 	 * @return array|WP_Error
 	 */
-	public function wcpos_get_all_posts(array $fields = array() ): array {
+	public function wcpos_get_all_posts( array $fields = array() ): array {
 		$args = array(
-			'limit'  => -1,
-			'return' => 'ids',
-			'status' => array_keys( wc_get_order_statuses() ), // Get valid order statuses
+			'fields' => 'ID', // Only return user IDs
 		);
+		$roles = 'all'; // @TODO: could be an array of roles, like ['customer', 'cashier']
 
-		$order_query = new WC_Order_Query( $args );
+		if ( 'all' !== $roles ) {
+			$args['role__in'] = $roles;
+		}
+
+		$user_query = new WP_User_Query( $args );
 
 		try {
-			$order_ids = $order_query->get_orders();
+			$user_ids = $user_query->get_results();
 
-			return array_map( array( $this, 'wcpos_format_id' ), $order_ids );
+			return array_map( array( $this, 'wcpos_format_id' ), $user_ids );
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
 
 			return new \WP_Error(
 				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching order IDs.',
+				'Error fetching customer IDs.',
 				array( 'status' => 500 )
 			);
 		}

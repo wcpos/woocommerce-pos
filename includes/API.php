@@ -46,12 +46,17 @@ class API {
 
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
-			'auth'            => new API\Auth(),
-			'settings'        => new API\Settings(),
-			'stores'          => new API\Stores(),
-			'emails'          => new API\Order_Emails(),
-			'products'        => new API\Products_Controller(),
-			'orders'          => new API\Orders_Controller(),
+			'auth'                  => new API\Auth(),
+			'settings'              => new API\Settings(),
+			'stores'                => new API\Stores(),
+			'emails'                => new API\Order_Emails(),
+			'products'              => new API\Products_Controller(),
+			'product_variations'    => new API\Product_Variations_Controller(),
+			'orders'                => new API\Orders_Controller(),
+			'customers'             => new API\Customers_Controller(),
+			'product_tags'          => new API\Product_Tags_Controller(),
+			'product_categories'    => new API\Product_Categories_Controller(),
+			'taxes'                 => new API\Taxes_Controller(),
 		);
 
 		foreach ( $this->controllers as $key => $controller_class ) {
