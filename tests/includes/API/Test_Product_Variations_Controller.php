@@ -2,6 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
@@ -44,7 +45,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		parent::tearDown();
 	}
 
-	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products' ) {
+	public function get_wp_rest_request( $method, $path ) {
 		$request = new WP_REST_Request();
 		$request->set_header( 'X-WCPOS', '1' );
 		$request->set_method( $method );
@@ -78,5 +79,96 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/(?P<id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/batch', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/generate', $routes );
+	}
+
+	/**
+	 * Get all expected fields.
+	 */
+	public function get_expected_response_fields() {
+		return array(
+			'id',
+			'date_created',
+			'date_created_gmt',
+			'date_modified',
+			'date_modified_gmt',
+			'description',
+			'permalink',
+			'sku',
+			'price',
+			'regular_price',
+			'sale_price',
+			'date_on_sale_from',
+			'date_on_sale_from_gmt',
+			'date_on_sale_to',
+			'date_on_sale_to_gmt',
+			'on_sale',
+			'status',
+			'purchasable',
+			'virtual',
+			'downloadable',
+			'downloads',
+			'download_limit',
+			'download_expiry',
+			'tax_status',
+			'tax_class',
+			'manage_stock',
+			'stock_quantity',
+			'stock_status',
+			'backorders',
+			'backorders_allowed',
+			'backordered',
+			'low_stock_amount',
+			'weight',
+			'dimensions',
+			'shipping_class',
+			'shipping_class_id',
+			'image',
+			'attributes',
+			'menu_order',
+			'meta_data',
+			'_links',
+		);
+	}
+
+	public function test_order_api_get_all_fields(): void {
+		$expected_response_fields = $this->get_expected_response_fields();
+
+		$product     = ProductHelper::create_variation_product();
+		$response    = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() . '/variations' ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$variations = $response->get_data();
+		$this->assertEquals( 2, \count( $variations ) );
+		$response_fields = array_keys( $variations[0] );
+
+		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
+
+		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
+	}
+
+	/**
+	 * Test getting all customer IDs.
+	 */
+	public function test_order_api_get_all_ids(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$this->assertEquals( 2, \count( $variation_ids ) );
+		
+
+		$request     = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array('id') );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals(
+			array(
+				(object) array( 'id' => $variation_ids[1] ),
+				(object) array( 'id' => $variation_ids[0] ),
+			),
+			$response->get_data()
+		);
 	}
 }
