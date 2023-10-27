@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Ramsey\Uuid\Uuid;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
@@ -190,5 +191,75 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$this->assertEquals( array( (object) array( 'id' => $product->get_id() ) ), $response->get_data() );
+	}
+
+	/**
+	 * Each product needs a UUID.
+	 */
+	public function test_product_response_contains_uuid_meta_data(): void {
+		$product  = ProductHelper::create_simple_product();
+		$request  = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id());
+		$response = $this->server->dispatch($request);
+
+		$data = $response->get_data();
+
+		$this->assertEquals(200, $response->get_status());
+
+		$found      = false;
+		$uuid_value = '';
+		$count      = 0;
+
+		// Look for the _woocommerce_pos_uuid key in meta_data
+		foreach ($data['meta_data'] as $meta) {
+			if ('_woocommerce_pos_uuid' === $meta['key']) {
+				$count++;
+				$uuid_value = $meta['value'];
+			}
+		}
+
+		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
+		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+	}
+
+	public function test_orderby_sku(): void {
+		$product1  = ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
+		$product2  = ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
+		$product3  = ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
+		$product4  = ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'sku' );
+
+		$this->assertEquals( $skus, array( '123456789', '987654321', 'alpha', 'zeta' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'sku' );
+
+		$this->assertEquals( $skus, array( 'zeta', 'alpha', '987654321', '123456789' ) );
+	}
+
+	public function test_orderby_stock_status(): void {
+		$product1  = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
+		$product2  = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_status' );
+
+		$this->assertEquals( $skus, array( 'instock', 'outofstock' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_status' );
+
+		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
 	}
 }

@@ -5,15 +5,15 @@
 
 namespace Automattic\WooCommerce\RestApi\UnitTests\Helpers;
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 
-use WC_Product_Simple;
+use WC_Cache_Helper;
+use WC_Product_Attribute;
 use WC_Product_External;
 use WC_Product_Grouped;
+use WC_Product_Simple;
 use WC_Product_Variable;
 use WC_Product_Variation;
-use WC_Product_Attribute;
-use WC_Cache_Helper;
 
 /**
  * Class ProductHelper.
@@ -21,14 +21,13 @@ use WC_Cache_Helper;
  * This helper class should ONLY be used for unit tests!.
  */
 class ProductHelper {
-
 	/**
 	 * Delete a product.
 	 *
 	 * @param int $product_id ID to delete.
 	 */
-	public static function delete_product( $product_id ) {
-		$product = \wc_get_product( $product_id );
+	public static function delete_product( $product_id ): void {
+		$product = wc_get_product( $product_id );
 		if ( $product ) {
 			$product->delete( true );
 		}
@@ -38,38 +37,48 @@ class ProductHelper {
 	 * Create simple product.
 	 *
 	 * @since 2.3
-	 * @param bool $save Save or return object.
+	 *
+	 * @param bool  $save Save or return object.
+	 * @param mixed $args
+	 *
 	 * @return WC_Product_Simple
 	 */
-	public static function create_simple_product( $save = true ) {
-		$product = new WC_Product_Simple();
-		$product->set_props(
-			array(
-				'name'          => 'Dummy Product',
-				'regular_price' => 10,
-				'price'         => 10,
-				'sku'           => 'DUMMY SKU',
-				'manage_stock'  => false,
-				'tax_status'    => 'taxable',
-				'downloadable'  => false,
-				'virtual'       => false,
-				'stock_status'  => 'instock',
-				'weight'        => '1.1',
-			)
+	public static function create_simple_product( $args = array(), $save = true ) {
+		// Default properties
+		$defaults = array(
+			'name'          => 'Dummy Product',
+			'regular_price' => 10,
+			'price'         => 10,
+			'sku'           => 'DUMMY SKU',
+			'manage_stock'  => false,
+			'tax_status'    => 'taxable',
+			'downloadable'  => false,
+			'virtual'       => false,
+			'stock_status'  => 'instock',
+			'weight'        => '1.1',
 		);
-
+	
+		// Merge default properties with user-provided args
+		$props = wp_parse_args( $args, $defaults );
+	
+		$product = new WC_Product_Simple();
+		$product->set_props( $props );
+	
 		if ( $save ) {
 			$product->save();
-			return \wc_get_product( $product->get_id() );
-		} else {
-			return $product;
+
+			return wc_get_product( $product->get_id() );
 		}
+
+		return $product;
 	}
+	
 
 	/**
 	 * Create external product.
 	 *
 	 * @since 3.0.0
+	 *
 	 * @return WC_Product_External
 	 */
 	public static function create_external_product() {
@@ -85,13 +94,14 @@ class ProductHelper {
 		);
 		$product->save();
 
-		return \wc_get_product( $product->get_id() );
+		return wc_get_product( $product->get_id() );
 	}
 
 	/**
 	 * Create grouped product.
 	 *
 	 * @since 3.0.0
+	 *
 	 * @return WC_Product_Grouped
 	 */
 	public static function create_grouped_product() {
@@ -107,7 +117,7 @@ class ProductHelper {
 		$product->set_children( array( $simple_product_1->get_id(), $simple_product_2->get_id() ) );
 		$product->save();
 
-		return \wc_get_product( $product->get_id() );
+		return wc_get_product( $product->get_id() );
 	}
 
 	/**
@@ -162,7 +172,7 @@ class ProductHelper {
 		$variation_2->set_attributes( array( 'pa_size' => 'large' ) );
 		$variation_2->save();
 
-		return \wc_get_product( $product->get_id() );
+		return wc_get_product( $product->get_id() );
 	}
 
 	/**
@@ -171,37 +181,38 @@ class ProductHelper {
 	 * @since 2.3
 	 *
 	 * @param string        $raw_name Name of attribute to create.
-	 * @param array(string) $terms          Terms to create for the attribute.
+	 * @param array(string) $terms    Terms to create for the attribute.
+	 *
 	 * @return array
 	 */
 	public static function create_attribute( $raw_name = 'size', $terms = array( 'small' ) ) {
 		global $wpdb, $wc_product_attributes;
 
 		// Make sure caches are clean.
-		\delete_transient( 'wc_attribute_taxonomies' );
+		delete_transient( 'wc_attribute_taxonomies' );
 		if ( method_exists( '\WC_Cache_Helper', 'invalidate_cache_group' ) ) {
-			\WC_Cache_Helper::invalidate_cache_group( 'woocommerce-attributes' );
+			WC_Cache_Helper::invalidate_cache_group( 'woocommerce-attributes' );
 		} else {
-			\WC_Cache_Helper::incr_cache_prefix( 'woocommerce-attributes' );
+			WC_Cache_Helper::incr_cache_prefix( 'woocommerce-attributes' );
 		}
 
 		// These are exported as labels, so convert the label to a name if possible first.
-		$attribute_labels = \wp_list_pluck( wc_get_attribute_taxonomies(), 'attribute_label', 'attribute_name' );
-		$attribute_name   = \array_search( $raw_name, $attribute_labels, true );
+		$attribute_labels = wp_list_pluck( wc_get_attribute_taxonomies(), 'attribute_label', 'attribute_name' );
+		$attribute_name   = array_search( $raw_name, $attribute_labels, true );
 
 		if ( ! $attribute_name ) {
-			$attribute_name = \wc_sanitize_taxonomy_name( $raw_name );
+			$attribute_name = wc_sanitize_taxonomy_name( $raw_name );
 		}
 
-		$attribute_id = \wc_attribute_taxonomy_id_by_name( $attribute_name );
+		$attribute_id = wc_attribute_taxonomy_id_by_name( $attribute_name );
 
 		if ( ! $attribute_id ) {
-			$taxonomy_name = \wc_attribute_taxonomy_name( $attribute_name );
+			$taxonomy_name = wc_attribute_taxonomy_name( $attribute_name );
 
 			// Degister taxonomy which other tests may have created...
-			\unregister_taxonomy( $taxonomy_name );
+			unregister_taxonomy( $taxonomy_name );
 
-			$attribute_id = \wc_create_attribute(
+			$attribute_id = wc_create_attribute(
 				array(
 					'name'         => $raw_name,
 					'slug'         => $attribute_name,
@@ -212,7 +223,7 @@ class ProductHelper {
 			);
 
 			// Register as taxonomy.
-			\register_taxonomy(
+			register_taxonomy(
 				$taxonomy_name,
 				apply_filters( 'woocommerce_taxonomy_objects_' . $taxonomy_name, array( 'product' ) ),
 				apply_filters(
@@ -232,12 +243,12 @@ class ProductHelper {
 			// Set product attributes global.
 			$wc_product_attributes = array();
 
-			foreach ( \wc_get_attribute_taxonomies() as $taxonomy ) {
-				$wc_product_attributes[ \wc_attribute_taxonomy_name( $taxonomy->attribute_name ) ] = $taxonomy;
+			foreach ( wc_get_attribute_taxonomies() as $taxonomy ) {
+				$wc_product_attributes[ wc_attribute_taxonomy_name( $taxonomy->attribute_name ) ] = $taxonomy;
 			}
 		}
 
-		$attribute = \wc_get_attribute( $attribute_id );
+		$attribute = wc_get_attribute( $attribute_id );
 		$return    = array(
 			'attribute_name'     => $attribute->name,
 			'attribute_taxonomy' => $attribute->slug,
@@ -246,7 +257,7 @@ class ProductHelper {
 		);
 
 		foreach ( $terms as $term ) {
-			$result = \term_exists( $term, $attribute->slug );
+			$result = term_exists( $term, $attribute->slug );
 
 			if ( ! $result ) {
 				$result               = wp_insert_term( $term, $attribute->slug );
@@ -266,10 +277,10 @@ class ProductHelper {
 	 *
 	 * @since 2.3
 	 */
-	public static function delete_attribute( $attribute_id ) {
+	public static function delete_attribute( $attribute_id ): void {
 		global $wpdb;
 
-		$attribute_id = \absint( $attribute_id );
+		$attribute_id = absint( $attribute_id );
 
 		$wpdb->query(
 			$wpdb->prepare( "DELETE FROM {$wpdb->prefix}woocommerce_attribute_taxonomies WHERE attribute_id = %d", $attribute_id )
@@ -280,9 +291,11 @@ class ProductHelper {
 	 * Creates a new product review on a specific product.
 	 *
 	 * @since 3.0
-	 * @param int    $product_id integer Product ID that the review is for.
+	 *
+	 * @param int    $product_id     integer Product ID that the review is for.
 	 * @param string $review_content string Content to use for the product review.
-	 * @return integer Product Review ID.
+	 *
+	 * @return int Product Review ID.
 	 */
 	public static function create_product_review( $product_id, $review_content = 'Review content here' ) {
 		$data = array(
@@ -295,16 +308,18 @@ class ProductHelper {
 			'comment_approved'     => 1,
 			'comment_type'         => 'review',
 		);
-		return \wp_insert_comment( $data );
+
+		return wp_insert_comment( $data );
 	}
 
 	/**
 	 * A helper function for hooking into save_post during the test_product_meta_save_post test.
+	 *
 	 * @since 3.0.1
 	 *
 	 * @param int $id ID to update.
 	 */
-	public static function save_post_test_update_meta_data_direct( $id ) {
-		\update_post_meta( $id, '_test2', 'world' );
+	public static function save_post_test_update_meta_data_direct( $id ): void {
+		update_post_meta( $id, '_test2', 'world' );
 	}
 }

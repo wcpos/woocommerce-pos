@@ -9,10 +9,12 @@ if ( ! class_exists('WC_REST_Product_Variations_Controller') ) {
 }
 
 use Exception;
+use WC_Data;
 use WC_REST_Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
 use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Product Tgas controller class.
@@ -20,6 +22,7 @@ use WP_REST_Request;
  * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Product_Variations_Controller methods
  */
 class Product_Variations_Controller extends WC_REST_Product_Variations_Controller {
+	use Traits\Product_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
 
@@ -65,6 +68,35 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * Register hooks to modify WC REST API response.
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
+		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
+	}
+
+	/**
+	 * Filter the variation response.
+	 *
+	 * @param WP_REST_Response $response  The response object.
+	 * @param WC_Data          $variation Product data.
+	 * @param WP_REST_Request  $request   Request object.
+	 *
+	 * @return WP_REST_Response $response The response object.
+	 */
+	public function wcpos_variation_response( WP_REST_Response $response, WC_Data $variation, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		// Add the UUID to the product response
+		$this->maybe_add_post_uuid( $variation );
+
+		// Add the barcode to the product response
+		$data['barcode'] = $this->get_barcode( $variation );
+
+		// Make sure we parse the meta data before returning the response
+		$variation->save_meta_data(); // make sure the meta data is saved
+		$data['meta_data'] = $this->wcpos_parse_meta_data( $variation );
+
+		$response->set_data( $data );
+
+		return $response;
 	}
 
 	/**

@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
+use Ramsey\Uuid\Uuid;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
@@ -103,7 +104,7 @@ class Test_Customers_Controller extends WC_REST_Unit_Test_Case {
 		);
 	}
 
-	public function test_order_api_get_all_fields(): void {
+	public function test_customer_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$customer    = CustomerHelper::create_customer();
@@ -121,7 +122,7 @@ class Test_Customers_Controller extends WC_REST_Unit_Test_Case {
 	/**
 	 * Test getting all customer IDs.
 	 */
-	public function test_order_api_get_all_ids(): void {
+	public function test_customer_api_get_all_ids(): void {
 		$customer    = CustomerHelper::create_customer();
 		$request     = $this->get_wp_rest_request( 'GET', '/wcpos/v1/customers' );
 		$request->set_param( 'posts_per_page', -1 );
@@ -138,5 +139,55 @@ class Test_Customers_Controller extends WC_REST_Unit_Test_Case {
 				(object) array( 'id' => 7 ), // from above test?
 			), $response->get_data()
 		);
+	}
+
+	/**
+	 * Each custoemr needs a UUID.
+	 */
+	public function test_customer_response_contains_uuid_meta_data(): void {
+		$customer = CustomerHelper::create_customer();
+		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/customers/' . $customer->get_id() );
+		$response = $this->server->dispatch($request);
+
+		$data = $response->get_data();
+
+		$this->assertEquals(200, $response->get_status());
+
+		$found      = false;
+		$uuid_value = '';
+		$count      = 0;
+
+		// Look for the _woocommerce_pos_uuid key in meta_data
+		foreach ($data['meta_data'] as $meta) {
+			if ('_woocommerce_pos_uuid' === $meta['key']) {
+				$count++;
+				$uuid_value = $meta['value'];
+			}
+		}
+
+		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
+		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+	}
+
+	/**
+	 * Test first_name orderby.
+	 */
+	public function test_orderby_first_name_fields(): void {
+		// Create some customers
+		$customer1 = CustomerHelper::create_customer(array('first_name' => 'Alice'));
+		$customer2 = CustomerHelper::create_customer(array('first_name' => 'Zara'));
+		$customer3 = CustomerHelper::create_customer(array('first_name' => 'Bob'));
+
+		// Order by 'first_name' ascending
+		$request = $this->get_wp_rest_request('GET', '/wcpos/v1/customers');
+		$request->set_param('orderby', 'first_name');
+		$request->set_param('order', 'asc');
+		$response = $this->server->dispatch($request);
+		$data     = $response->get_data();
+
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals('Alice', $data[0]['first_name']);
+		$this->assertEquals('Bob', $data[1]['first_name']);
+		$this->assertEquals('Zara', $data[2]['first_name']);
 	}
 }

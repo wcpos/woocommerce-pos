@@ -2,7 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Ramsey\Uuid\Uuid;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
@@ -140,7 +142,7 @@ class Test_Orders_Controller extends WC_REST_Unit_Test_Case {
 	public function test_order_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
-		$product  = OrderHelper::create_order( $this->user );
+		$product  = OrderHelper::create_order();
 		$response = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders/' . $product->get_id() ) );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -153,7 +155,7 @@ class Test_Orders_Controller extends WC_REST_Unit_Test_Case {
 	}
 
 	public function test_order_api_get_all_ids(): void {
-		$order    = OrderHelper::create_order( $this->user );
+		$order    = OrderHelper::create_order();
 		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
@@ -163,5 +165,94 @@ class Test_Orders_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$this->assertEquals( array( (object) array( 'id' => $order->get_id() ) ), $response->get_data() );
+	}
+
+	/**
+	 * Each order needs a UUID.
+	 */
+	public function test_order_response_contains_uuid_meta_data(): void {
+		$order     = OrderHelper::create_order();
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders/' . $order->get_id() );
+		$response  = $this->server->dispatch($request);
+
+		$data = $response->get_data();
+
+		$this->assertEquals(200, $response->get_status());
+
+		$found      = false;
+		$uuid_value = '';
+		$count      = 0;
+
+		// Look for the _woocommerce_pos_uuid key in meta_data
+		foreach ($data['meta_data'] as $meta) {
+			if ('_woocommerce_pos_uuid' === $meta['key']) {
+				$count++;
+				$uuid_value = $meta['value'];
+			}
+		}
+
+		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
+		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+	}
+
+	public function test_orderby_status(): void {
+		$order1    = OrderHelper::create_order( array( 'status' => 'pending' ) );
+		$order2    = OrderHelper::create_order( array( 'status' => 'completed' ) );
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
+		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'asc' ) );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		$statuses = wp_list_pluck( $data, 'status' );
+
+		$this->assertEquals( $statuses, array( 'completed', 'pending' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'desc' ) );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		$statuses = wp_list_pluck( $data, 'status' );
+
+		$this->assertEquals( $statuses, array( 'pending', 'completed' ) );
+	}
+
+	public function test_orderby_customer(): void {
+		$customer  = CustomerHelper::create_customer();
+		$order1    = OrderHelper::create_order( array( 'customer_id' => $customer->get_id() ) );
+		$order2    = OrderHelper::create_order();
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
+		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$customer_ids = wp_list_pluck( $data, 'customer_id' );
+
+		$this->assertEquals( $customer_ids, array( 1, $customer->get_id() ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$customer_ids = wp_list_pluck( $data, 'customer_id' );
+
+		$this->assertEquals( $customer_ids, array( $customer->get_id(), 1 ) );
+	}
+
+	public function test_orderby_payment_method(): void {
+		$order1    = OrderHelper::create_order( array( 'payment_method' => 'pos_cash' ) );
+		$order2    = OrderHelper::create_order( array( 'payment_method' => 'pos_card' ) );
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
+		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'asc' ) );
+		$response        = rest_get_server()->dispatch( $request );
+		$data            = $response->get_data();
+		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
+
+		$this->assertEquals( $payment_methods, array( 'Card', 'Cash' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'desc' ) );
+		$response        = rest_get_server()->dispatch( $request );
+		$data            = $response->get_data();
+		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
+
+		$this->assertEquals( $payment_methods, array( 'Cash', 'Card' ) );
 	}
 }

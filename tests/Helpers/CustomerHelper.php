@@ -5,7 +5,7 @@
 
 namespace Automattic\WooCommerce\RestApi\UnitTests\Helpers;
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 
 use WC_Customer;
 
@@ -15,7 +15,6 @@ use WC_Customer;
  * This helper class should ONLY be used for unit tests!.
  */
 class CustomerHelper {
-
 	/**
 	 * Create a mock customer for testing purposes.
 	 *
@@ -43,35 +42,50 @@ class CustomerHelper {
 
 		self::set_customer_details( $customer_data );
 
-		$customer = new WC_Customer( 0, true );
-
-		return $customer;
+		return new WC_Customer( 0, true );
 	}
 
 	/**
 	 * Creates a customer in the tests DB.
+	 *
+	 * @param array $args Associative array of customer properties.
 	 */
-	public static function create_customer( $username = 'testcustomer', $password = 'hunter2', $email = 'test@woo.local' ) {
+	public static function create_customer($args = array()) {
+		$random_suffix = wp_generate_password( 8, false );
+
+		$defaults = array(
+			'username'           => 'testcustomer_' . $random_suffix,
+			'password'           => $random_suffix,
+			'email'              => 'test' . $random_suffix . '@woo.local',
+			'first_name'         => 'Justin',
+			'billing_country'    => 'US',
+			'billing_state'      => 'CA',
+			'billing_postcode'   => '94110',
+			'billing_city'       => 'San Francisco',
+			'billing_address'    => '123 South Street',
+			'billing_address_2'  => 'Apt 1',
+			'shipping_country'   => 'US',
+			'shipping_state'     => 'CA',
+			'shipping_postcode'  => '94110',
+			'shipping_city'      => 'San Francisco',
+			'shipping_address'   => '123 South Street',
+			'shipping_address_2' => 'Apt 1',
+		);
+
+		$args = wp_parse_args($args, $defaults);
+
 		$customer = new WC_Customer();
-		$customer->set_billing_country( 'US' );
-		$customer->set_first_name( 'Justin' );
-		$customer->set_billing_state( 'CA' );
-		$customer->set_billing_postcode( '94110' );
-		$customer->set_billing_city( 'San Francisco' );
-		$customer->set_billing_address( '123 South Street' );
-		$customer->set_billing_address_2( 'Apt 1' );
-		$customer->set_shipping_country( 'US' );
-		$customer->set_shipping_state( 'CA' );
-		$customer->set_shipping_postcode( '94110' );
-		$customer->set_shipping_city( 'San Francisco' );
-		$customer->set_shipping_address( '123 South Street' );
-		$customer->set_shipping_address_2( 'Apt 1' );
-		$customer->set_username( $username );
-		$customer->set_password( $password );
-		$customer->set_email( $email );
+		foreach ($args as $key => $value) {
+			if (method_exists($customer, "set_{$key}")) {
+				\call_user_func(array($customer, "set_{$key}"), $value);
+			}
+		}
+
 		$customer->save();
+
 		return $customer;
 	}
+
 
 	/**
 	 * Get the expected output for the store's base location settings.
@@ -113,17 +127,19 @@ class CustomerHelper {
 	 * Set the the current customer's billing details in the session.
 	 *
 	 * @param string $default_shipping_method Shipping Method slug
+	 * @param mixed  $customer_details
 	 */
-	public static function set_customer_details( $customer_details ) {
+	public static function set_customer_details( $customer_details ): void {
 		WC()->session->set( 'customer', array_map( 'strval', $customer_details ) );
 	}
 
 	/**
 	 * Set the user's chosen shipping method.
 	 *
-	 * @param string $chosen_shipping_method Shipping Method slug
+	 * @param string $chosen_shipping_method  Shipping Method slug
+	 * @param mixed  $chosen_shipping_methods
 	 */
-	public static function set_chosen_shipping_methods( $chosen_shipping_methods ) {
+	public static function set_chosen_shipping_methods( $chosen_shipping_methods ): void {
 		WC()->session->set( 'chosen_shipping_methods', $chosen_shipping_methods );
 	}
 
@@ -132,7 +148,7 @@ class CustomerHelper {
 	 *
 	 * @param string $default_shipping_method Shipping Method slug
 	 */
-	public static function set_tax_based_on( $default_shipping_method ) {
+	public static function set_tax_based_on( $default_shipping_method ): void {
 		update_option( 'woocommerce_tax_based_on', $default_shipping_method );
 	}
 }

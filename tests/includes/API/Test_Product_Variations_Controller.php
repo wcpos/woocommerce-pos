@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Ramsey\Uuid\Uuid;
 use ReflectionClass;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\API;
@@ -127,10 +128,12 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 			'menu_order',
 			'meta_data',
 			'_links',
+			// Added by WCPOS.
+			'barcode',
 		);
 	}
 
-	public function test_order_api_get_all_fields(): void {
+	public function test_variation_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$product     = ProductHelper::create_variation_product();
@@ -149,7 +152,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 	/**
 	 * Test getting all customer IDs.
 	 */
-	public function test_order_api_get_all_ids(): void {
+	public function test_variation_api_get_all_ids(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 		$this->assertEquals( 2, \count( $variation_ids ) );
@@ -170,5 +173,34 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 			),
 			$response->get_data()
 		);
+	}
+
+	/**
+	 * Each variation needs a UUID.
+	 */
+	public function test_variation_response_contains_uuid_meta_data(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$response      = $this->server->dispatch($request);
+
+		$data = $response->get_data();
+
+		$this->assertEquals(200, $response->get_status());
+
+		$found      = false;
+		$uuid_value = '';
+		$count      = 0;
+
+		// Look for the _woocommerce_pos_uuid key in meta_data
+		foreach ($data['meta_data'] as $meta) {
+			if ('_woocommerce_pos_uuid' === $meta['key']) {
+				$count++;
+				$uuid_value = $meta['value'];
+			}
+		}
+
+		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
+		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
 	}
 }

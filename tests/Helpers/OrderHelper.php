@@ -2,13 +2,11 @@
 
 /**
  * Orders helper.
- *
- * @package Automattic\WooCommerce\RestApi\UnitTests\Helpers
  */
 
 namespace Automattic\WooCommerce\RestApi\UnitTests\Helpers;
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 
 use Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController;
 use Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer;
@@ -18,11 +16,11 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Data_Store;
 use WC_Mock_Payment_Gateway;
 use WC_Order;
-use WC_Product;
-use WC_Tax;
-use WC_Shipping_Rate;
-use WC_Order_Item_Shipping;
 use WC_Order_Item_Product;
+use WC_Order_Item_Shipping;
+use WC_Product;
+use WC_Shipping_Rate;
+use WC_Tax;
 
 /**
  * Class OrderHelper.
@@ -30,14 +28,12 @@ use WC_Order_Item_Product;
  * This helper class should ONLY be used for unit tests!.
  */
 class OrderHelper {
-
 	/**
 	 * Delete a product.
 	 *
 	 * @param int $order_id ID of the order to delete.
 	 */
-	public static function delete_order( $order_id ) {
-
+	public static function delete_order( $order_id ): void {
 		$order = wc_get_order( $order_id );
 
 		// Delete all products in the order.
@@ -55,27 +51,40 @@ class OrderHelper {
 	 * Create a order.
 	 *
 	 * @param int        $customer_id Customer ID.
-	 * @param WC_Product $product Product object.
+	 * @param WC_Product $product     Product object.
+	 * @param mixed      $args
 	 *
 	 * @return WC_Order WC_Order object.
+	 *
 	 * @version 3.0 New parameter $product.
 	 *
 	 * @since   2.4
 	 */
-	public static function create_order( $customer_id = 1, $product = null ) {
-
-		if ( ! is_a( $product, 'WC_Product' ) ) {
-			$product = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
+	public static function create_order( $args = array() ) {
+		// Set default values
+		$defaults = array(
+			'customer_id'    => 1,
+			'product'        => null,
+			'status'         => 'pending',
+			'payment_method' => 'bacs',
+		);
+	
+		// Merge default values with incoming arguments
+		$args = wp_parse_args( $args, $defaults );
+	
+		if ( ! is_a( $args['product'], 'WC_Product' ) ) {
+			$args['product'] = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper::create_simple_product();
 		}
-
+	
 		ShippingHelper::create_simple_flat_rate();
-
+	
 		$order_data = array(
-			'status'        => 'pending',
-			'customer_id'   => $customer_id,
+			'status'        => $args['status'],
+			'customer_id'   => $args['customer_id'],
 			'customer_note' => '',
 			'total'         => '',
 		);
+	
 
 		$_SERVER['REMOTE_ADDR'] = '127.0.0.1'; // Required, else wc_create_order throws an exception.
 		$order                  = wc_create_order( $order_data );
@@ -84,10 +93,10 @@ class OrderHelper {
 		$item = new WC_Order_Item_Product();
 		$item->set_props(
 			array(
-				'product'  => $product,
+				'product'  => $args['product'],
 				'quantity' => 4,
-				'subtotal' => wc_get_price_excluding_tax( $product, array( 'qty' => 4 ) ),
-				'total'    => wc_get_price_excluding_tax( $product, array( 'qty' => 4 ) ),
+				'subtotal' => wc_get_price_excluding_tax( $args['product'], array( 'qty' => 4 ) ),
+				'total'    => wc_get_price_excluding_tax( $args['product'], array( 'qty' => 4 ) ),
 			)
 		);
 		$item->save();
@@ -125,7 +134,9 @@ class OrderHelper {
 
 		// Set payment gateway.
 		$payment_gateways = WC()->payment_gateways->payment_gateways();
-		$order->set_payment_method( $payment_gateways['bacs'] );
+		if ( isset( $payment_gateways[ $args['payment_method'] ] ) ) {
+			$order->set_payment_method( $payment_gateways[ $args['payment_method'] ] );
+		}
 
 		// Set totals.
 		$order->set_shipping_total( 10 );
@@ -142,7 +153,7 @@ class OrderHelper {
 	/**
 	 * Helper method to drop custom tables if present.
 	 */
-	public static function delete_order_custom_tables() {
+	public static function delete_order_custom_tables(): void {
 		$synchronizer = wc_get_container()
 			->get( DataSynchronizer::class );
 		if ( $synchronizer->check_orders_table_exists() ) {
@@ -153,10 +164,11 @@ class OrderHelper {
 	/**
 	 * Enables or disables the custom orders table across WP temporarily.
 	 *
-	 * @param boolean $enabled TRUE to enable COT or FALSE to disable.
+	 * @param bool $enabled TRUE to enable COT or FALSE to disable.
+	 *
 	 * @return void
 	 */
-	public static function toggle_cot_feature_and_usage( bool $enabled ) {
+	public static function toggle_cot_feature_and_usage( bool $enabled ): void {
 		$features_controller = wc_get_container()->get( Featurescontroller::class );
 		$features_controller->change_feature_enable( 'custom_order_tables', $enabled );
 
@@ -165,13 +177,13 @@ class OrderHelper {
 
 		// Confirm things are really correct.
 		$wc_data_store = WC_Data_Store::load( 'order' );
-		assert( is_a( $wc_data_store->get_current_class_name(), OrdersTableDataStore::class, true ) === $enabled, 'data store\'s classname is "' . $wc_data_store->get_current_class_name() . '", but $enabled is "' . ( $enabled ? 'true' : 'false' ) . '"' );
+		\assert( is_a( $wc_data_store->get_current_class_name(), OrdersTableDataStore::class, true ) === $enabled, 'data store\'s classname is "' . $wc_data_store->get_current_class_name() . '", but $enabled is "' . ( $enabled ? 'true' : 'false' ) . '"' );
 	}
 
 	/**
 	 * Helper method to create custom tables if not present.
 	 */
-	public static function create_order_custom_table_if_not_exist() {
+	public static function create_order_custom_table_if_not_exist(): void {
 		$synchronizer = wc_get_container()->get( DataSynchronizer::class );
 		if ( ! $synchronizer->check_orders_table_exists() ) {
 			$synchronizer->create_database_tables();
@@ -206,8 +218,8 @@ class OrderHelper {
 		$order = self::create_order();
 		// Make sure this is a wp_post order.
 		$post = get_post( $order->get_id() );
-		assert( isset( $post ) );
-		assert( 'shop_order' === $post->post_type );
+		\assert( isset( $post ) );
+		\assert( 'shop_order' === $post->post_type );
 
 		$order->save();
 
@@ -263,18 +275,18 @@ class OrderHelper {
 	/**
 	 * Helper method to allow switching data stores.
 	 *
-	 * @param WC_Order       $order Order object.
-	 * @param \WC_Data_Store $data_store Data store object to switch order to.
+	 * @param WC_Order      $order      Order object.
+	 * @param WC_Data_Store $data_store Data store object to switch order to.
 	 */
-	public static function switch_data_store( $order, $data_store ) {
-		$update_data_store_func = function ( $data_store ) {
+	public static function switch_data_store( $order, $data_store ): void {
+		$update_data_store_func = function ( $data_store ): void {
 			// Each order object contains a reference to its data store, but this reference is itself
 			// held inside of an instance of WC_Data_Store, so we create that first.
 			$data_store_wrapper = WC_Data_Store::load( 'order' );
 
 			// Bind $data_store to our WC_Data_Store.
-			( function ( $data_store ) {
-				$this->current_class_name = get_class( $data_store );
+			( function ( $data_store ): void {
+				$this->current_class_name = \get_class( $data_store );
 				$this->instance           = $data_store;
 			} )->call( $data_store_wrapper, $data_store );
 
@@ -288,9 +300,9 @@ class OrderHelper {
 	/**
 	 * Creates a complex order with address info, line items, etc.
 	 *
-	 * @param \WC_Data_Store $data_store Data store object to use in creating order.
+	 * @param WC_Data_Store $data_store Data store object to use in creating order.
 	 *
-	 * @return \WC_Order Order object.
+	 * @return WC_Order Order object.
 	 */
 	public static function create_complex_data_store_order( $data_store = null ) {
 		$order = new WC_Order();

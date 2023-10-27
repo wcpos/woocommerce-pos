@@ -68,6 +68,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 		
 		// Modify the per_page argument to allow -1
 		$params['per_page']['minimum'] = -1;
+		$params['orderby']['enum']     = array_merge(
+			$params['orderby']['enum'],
+			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
+		);
 		
 		return $params;
 	}
@@ -97,6 +101,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
+		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
 	}
 
 	/**
@@ -209,5 +214,45 @@ class Products_Controller extends WC_REST_Products_Controller {
 				array( 'status' => 500 )
 			);
 		}
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args          = parent::prepare_objects_query( $request );
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+
+		// Add custom 'orderby' options
+		if ( isset( $request['orderby'] ) ) {
+			switch ( $request['orderby'] ) {
+				case 'sku':
+					$args['meta_key'] = '_sku';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'barcode':
+					$args['meta_key'] = '_sku' !== $barcode_field ? $barcode_field : '_sku';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'stock_quantity':
+					$args['meta_key'] = '_stock';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'stock_status':
+					$args['meta_key'] = '_stock_status';
+					$args['orderby']  = 'meta_value';
+
+					break;
+			}
+		}
+
+		return $args;
 	}
 }

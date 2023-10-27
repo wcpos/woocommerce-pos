@@ -9,10 +9,12 @@ if ( ! class_exists('WC_REST_Orders_Controller') ) {
 }
 
 use Exception;
+use WC_Order;
 use WC_Order_Query;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Orders controller class.
@@ -49,7 +51,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		
 		// Modify the per_page argument to allow -1
 		$params['per_page']['minimum'] = -1;
-		
+		$params['orderby']['enum']     = array_merge(
+			$params['orderby']['enum'],
+			array( 'status', 'customer_id', 'payment_method', 'total' )
+		);
+
 		return $params;
 	}
 
@@ -77,6 +83,42 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Register hooks to modify WC REST API response.
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
+	}
+
+	/**
+	 * @param WP_REST_Response $response The response object.
+	 * @param WC_Order         $order    Object data.
+	 * @param WP_REST_Request  $request  Request object.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function wcpos_order_response( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		// Add UUID to order
+		$this->maybe_add_post_uuid( $order );
+
+		// Add payment link to the order.
+		$pos_payment_url = add_query_arg(array(
+			'pay_for_order' => true,
+			'key'           => $order->get_order_key(),
+		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ));
+
+		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
+
+		// Add receipt link to the order.
+		$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
+		$response->add_link( 'receipt', $pos_receipt_url );
+
+		// Make sure we parse the meta data before returning the response
+		$order->save_meta_data(); // make sure the meta data is saved
+		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
+
+		$response->set_data( $data );
+		// $this->log_large_rest_response( $response, $order->get_id() );
+
+		return $response;
 	}
 
 	/**
@@ -108,5 +150,43 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				array( 'status' => 500 )
 			);
 		}
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args = parent::prepare_objects_query( $request );
+
+		// Add custom 'orderby' options
+		if ( isset( $request['orderby'] ) ) {
+			switch ( $request['orderby'] ) {
+				case 'status':
+					$args['orderby'] = 'post_status';
+
+					break;
+				case 'customer_id':
+					$args['meta_key'] = '_customer_user';
+					$args['orderby']  = 'meta_value_num';
+
+					break;
+				case 'payment_method':
+					$args['meta_key'] = '_payment_method_title';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'total':
+					$args['meta_key'] = '_order_total';
+					$args['orderby']  = 'meta_value';
+
+					break;
+			}
+		}
+
+		return $args;
 	}
 }
