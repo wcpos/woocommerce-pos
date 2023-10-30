@@ -270,7 +270,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Orerby.
+	 * Orderby.
 	 */
 	public function test_orderby_sku(): void {
 		$product1  = ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
@@ -292,6 +292,38 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$skus         = wp_list_pluck( $data, 'sku' );
 
 		$this->assertEquals( $skus, array( 'zeta', 'alpha', '987654321', '123456789' ) );
+	}
+
+	public function test_orderby_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => '_barcode',
+			);
+		});
+
+		$product1  = ProductHelper::create_simple_product();
+		$product1->update_meta_data( '_barcode', 'alpha' );
+		$product1->save_meta_data();
+
+		$product2  = ProductHelper::create_simple_product();
+		$product2->update_meta_data( '_barcode', 'zeta' );
+		$product2->save_meta_data();
+
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
+		$response         = rest_get_server()->dispatch( $request );
+		$data             = $response->get_data();
+		$barcodes         = wp_list_pluck( $data, 'barcode' );
+
+		$this->assertEquals( $barcodes, array( 'alpha', 'zeta' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'desc' ) );
+		$response         = rest_get_server()->dispatch( $request );
+		$data             = $response->get_data();
+		$barcodes         = wp_list_pluck( $data, 'barcode' );
+
+		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
 	}
 
 	public function test_orderby_stock_status(): void {
