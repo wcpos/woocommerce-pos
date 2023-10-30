@@ -67,6 +67,8 @@ class OrderHelper {
 			'product'        => null,
 			'status'         => 'pending',
 			'payment_method' => 'bacs',
+			'customer_note'  => '',
+			'total'          => '',
 		);
 	
 		// Merge default values with incoming arguments
@@ -77,17 +79,9 @@ class OrderHelper {
 		}
 	
 		ShippingHelper::create_simple_flat_rate();
-	
-		$order_data = array(
-			'status'        => $args['status'],
-			'customer_id'   => $args['customer_id'],
-			'customer_note' => '',
-			'total'         => '',
-		);
-	
 
 		$_SERVER['REMOTE_ADDR'] = '127.0.0.1'; // Required, else wc_create_order throws an exception.
-		$order                  = wc_create_order( $order_data );
+		$order                  = wc_create_order( $args );
 
 		// Add order products.
 		$item = new WC_Order_Item_Product();
@@ -144,7 +138,7 @@ class OrderHelper {
 		$order->set_discount_tax( 0 );
 		$order->set_cart_tax( 0 );
 		$order->set_shipping_tax( 0 );
-		$order->set_total( 50 ); // 4 x $10 simple helper product.
+		$order->set_total( $args['total'] ?? 50 );
 		$order->save();
 
 		return $order;

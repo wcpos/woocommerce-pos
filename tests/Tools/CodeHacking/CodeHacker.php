@@ -1,16 +1,15 @@
 <?php
 /**
  * CodeHacker class file.
- *
- * @package WooCommerce\Testing
  */
 
 //phpcs:disable WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors.Discouraged
 
 namespace Automattic\WooCommerce\Testing\Tools\CodeHacking;
 
-use ReflectionObject;
+use Exception;
 use ReflectionException;
+use ReflectionObject;
 
 /**
  * CodeHacker - allows to hack (alter on the fly) the content of PHP code files.
@@ -31,9 +30,8 @@ use ReflectionException;
  * For using with PHPUnit, see CodeHackerTestHook.
  */
 final class CodeHacker {
-
-	const PROTOCOL                     = 'file';
-	const HACK_CALLBACK_ARGUMENT_COUNT = 2;
+	public const PROTOCOL                     = 'file';
+	public const HACK_CALLBACK_ARGUMENT_COUNT = 2;
 
 	/**
 	 * Value of "context" parameter to be passed to the native PHP filesystem related functions.
@@ -73,7 +71,7 @@ final class CodeHacker {
 	/**
 	 * Enable the code hacker.
 	 */
-	public static function enable() {
+	public static function enable(): void {
 		if ( ! self::$enabled ) {
 			stream_wrapper_unregister( self::PROTOCOL );
 			stream_wrapper_register( self::PROTOCOL, __CLASS__ );
@@ -84,7 +82,7 @@ final class CodeHacker {
 	/**
 	 * Disable the code hacker.
 	 */
-	public static function disable() {
+	public static function disable(): void {
 		if ( self::$enabled ) {
 			stream_wrapper_restore( self::PROTOCOL );
 			self::$enabled = false;
@@ -103,9 +101,9 @@ final class CodeHacker {
 	/**
 	 * Execute the 'reset()' method in all the registered hacks.
 	 */
-	public static function reset_hacks() {
+	public static function reset_hacks(): void {
 		foreach ( self::$hacks as $hack ) {
-			call_user_func( array( $hack, 'reset' ) );
+			\call_user_func( array( $hack, 'reset' ) );
 		}
 	}
 
@@ -113,53 +111,31 @@ final class CodeHacker {
 	 * Register a new hack.
 	 *
 	 * @param mixed $hack A function with signature "hack($code, $path)" or an object containing a method with that signature.
-	 * @throws \Exception Invalid input.
+	 *
+	 * @throws Exception Invalid input.
 	 */
-	public static function add_hack( $hack ) {
+	public static function add_hack( $hack ): void {
 		if ( ! self::is_valid_hack_object( $hack ) ) {
-			$class = get_class( $hack );
-			throw new \Exception( "CodeHacker::add_hack for instance of $class: Hacks must be objects having a 'process(\$text, \$path)' method and a 'reset()' method." );
+			$class = \get_class( $hack );
+
+			throw new Exception( "CodeHacker::add_hack for instance of $class: Hacks must be objects having a 'process(\$text, \$path)' method and a 'reset()' method." );
 		}
 
 		self::$hacks[] = $hack;
 	}
 
 	/**
-	 * Check if the supplied argument is a valid hack object (has a public "hack" method with two mandatory arguments).
-	 *
-	 * @param mixed $callback Argument to check.
-	 *
-	 * @return bool rue if the argument is a valid hack object, false otherwise.
-	 */
-	private static function is_valid_hack_object( $callback ) {
-		if ( ! is_object( $callback ) ) {
-			return false;
-		}
-
-		$ro = new ReflectionObject( ( $callback ) );
-		try {
-			$rm                    = $ro->getMethod( 'hack' );
-			$has_valid_hack_method = $rm->isPublic() && ! $rm->isStatic() && 2 === $rm->getNumberOfRequiredParameters();
-
-			$rm                     = $ro->getMethod( 'reset' );
-			$has_valid_reset_method = $rm->isPublic() && ! $rm->isStatic() && 0 === $rm->getNumberOfRequiredParameters();
-
-			return $has_valid_hack_method && $has_valid_reset_method;
-		} catch ( ReflectionException $exception ) {
-			return false;
-		}
-	}
-
-	/**
 	 * Initialize the code hacker.
 	 *
 	 * @param array $paths Paths of the directories containing the files to hack.
-	 * @throws \Exception Invalid input.
+	 *
+	 * @throws Exception Invalid input.
 	 */
-	public static function initialize( array $paths ) {
-		if ( ! is_array( $paths ) || empty( $paths ) ) {
-			throw new \Exception( 'CodeHacker::initialize - $paths must be a non-empty array with the directories containing the files to be hacked.' );
+	public static function initialize( array $paths ): void {
+		if ( ! \is_array( $paths ) || empty( $paths ) ) {
+			throw new Exception( 'CodeHacker::initialize - $paths must be a non-empty array with the directories containing the files to be hacked.' );
 		}
+		
 		self::$paths_with_files_to_hack = array_map(
 			function( $path ) {
 				return realpath( $path );
@@ -171,14 +147,14 @@ final class CodeHacker {
 	/**
 	 * Close directory handle.
 	 */
-	public function dir_closedir() {
+	public function dir_closedir(): void {
 		closedir( $this->handle );
 	}
 
 	/**
 	 * Open directory handle.
 	 *
-	 * @param string $path Specifies the URL that was passed to opendir().
+	 * @param string $path    Specifies the URL that was passed to opendir().
 	 * @param int    $options Whether or not to enforce safe_mode (0x04).
 	 *
 	 * @return bool TRUE on success or FALSE on failure.
@@ -187,6 +163,7 @@ final class CodeHacker {
 		$this->handle = $this->context
 			? $this->native( 'opendir', $path, $this->context )
 			: $this->native( 'opendir', $path );
+
 		return (bool) $this->handle;
 	}
 
@@ -202,7 +179,7 @@ final class CodeHacker {
 	/**
 	 * Rewind directory handle.
 	 *
-	 * @return TRUE on success or FALSE on failure.
+	 * @return true on success or FALSE on failure.
 	 */
 	public function dir_rewinddir() {
 		return rewinddir( $this->handle );
@@ -211,14 +188,15 @@ final class CodeHacker {
 	/**
 	 * Create a directory.
 	 *
-	 * @param string $path Directory which should be created.
-	 * @param int    $mode The value passed to mkdir().
+	 * @param string $path    Directory which should be created.
+	 * @param int    $mode    The value passed to mkdir().
 	 * @param int    $options A bitwise mask of values, such as STREAM_MKDIR_RECURSIVE.
 	 *
 	 * @return bool TRUE on success or FALSE on failure.
 	 */
 	public function mkdir( $path, $mode, $options ) {
 		$recursive = (bool) ( $options & STREAM_MKDIR_RECURSIVE );
+
 		return $this->native( 'mkdir', $path, $mode, $recursive, $this->context );
 	}
 
@@ -226,7 +204,7 @@ final class CodeHacker {
 	 * Renames a file or directory.
 	 *
 	 * @param string $path_from The URL to the current file.
-	 * @param string $path_to The URL which the path_from should be renamed to.
+	 * @param string $path_to   The URL which the path_from should be renamed to.
 	 *
 	 * @return bool TRUE on success or FALSE on failure.
 	 */
@@ -237,7 +215,7 @@ final class CodeHacker {
 	/**
 	 * Removes a directory.
 	 *
-	 * @param string $path The directory URL which should be removed.
+	 * @param string $path    The directory URL which should be removed.
 	 * @param int    $options A bitwise mask of values, such as STREAM_MKDIR_RECURSIVE.
 	 *
 	 * @return bool TRUE on success or FALSE on failure.
@@ -260,7 +238,7 @@ final class CodeHacker {
 	/**
 	 * Close a resource.
 	 */
-	public function stream_close() {
+	public function stream_close(): void {
 		fclose( $this->handle );
 	}
 
@@ -298,9 +276,9 @@ final class CodeHacker {
 	/**
 	 * Change stream metadata.
 	 *
-	 * @param string $path The file path or URL to set metadata. Note that in the case of a URL, it must be a :// delimited URL. Other URL forms are not supported.
+	 * @param string $path   The file path or URL to set metadata. Note that in the case of a URL, it must be a :// delimited URL. Other URL forms are not supported.
 	 * @param int    $option STREAM_META_TOUCH, STREAM_META_OWNER_NAME, STREAM_META_OWNER, STREAM_META_GROUP_NAME, STREAM_META_GROUP, or STREAM_META_ACCESS.
-	 * @param mixed  $value Depends on $option.
+	 * @param mixed  $value  Depends on $option.
 	 *
 	 * @return bool TRUE on success or FALSE on failure. If option is not implemented, FALSE should be returned.
 	 */
@@ -308,6 +286,7 @@ final class CodeHacker {
 		switch ( $option ) {
 			case STREAM_META_TOUCH:
 				$value += array( null, null );
+
 				return $this->native( 'touch', $path, $value[0], $value[1] );
 			case STREAM_META_OWNER_NAME:
 			case STREAM_META_OWNER:
@@ -323,9 +302,9 @@ final class CodeHacker {
 	/**
 	 *  Opens file or URL. Note that this is where the hacking actually happens.
 	 *
-	 * @param string $path Specifies the URL that was passed to the original function.
-	 * @param string $mode The mode used to open the file, as detailed for fopen().
-	 * @param int    $options Holds additional flags set by the streams API: STREAM_USE_PATH, STREAM_REPORT_ERRORS.
+	 * @param string $path        Specifies the URL that was passed to the original function.
+	 * @param string $mode        The mode used to open the file, as detailed for fopen().
+	 * @param int    $options     Holds additional flags set by the streams API: STREAM_USE_PATH, STREAM_REPORT_ERRORS.
 	 * @param string $opened_path If the path is opened successfully, and STREAM_USE_PATH is set in options, opened_path should be set to the full path of the file/resource that was actually opened.
 	 *
 	 * @return bool TRUE on success or FALSE on failure.
@@ -342,12 +321,14 @@ final class CodeHacker {
 				$this->handle = tmpfile();
 				$this->native( 'fwrite', $this->handle, $modified );
 				$this->native( 'fseek', $this->handle, 0 );
+
 				return true;
 			}
 		}
 		$this->handle = $this->context
 			? $this->native( 'fopen', $path, $mode, $use_path, $this->context )
 			: $this->native( 'fopen', $path, $mode, $use_path );
+
 		return (bool) $this->handle;
 	}
 
@@ -371,17 +352,17 @@ final class CodeHacker {
 	 * @return bool TRUE if the position was updated, FALSE otherwise.
 	 */
 	public function stream_seek( $offset, $whence = SEEK_SET ) {
-		return fseek( $this->handle, $offset, $whence ) === 0;
+		return 0 === fseek( $this->handle, $offset, $whence );
 	}
 
 	/**
 	 *  Change stream options.
 	 *
 	 * @param int $option STREAM_OPTION_BLOCKING, STREAM_OPTION_READ_TIMEOUT, or STREAM_OPTION_WRITE_BUFFER.
-	 * @param int $arg1 Depends on $option.
-	 * @param int $arg2 Depends on $option.
+	 * @param int $arg1   Depends on $option.
+	 * @param int $arg2   Depends on $option.
 	 */
-	public function stream_set_option( $option, $arg1, $arg2 ) {
+	public function stream_set_option( $option, $arg1, $arg2 ): void {
 	}
 
 	/**
@@ -438,16 +419,44 @@ final class CodeHacker {
 	/**
 	 * Retrieve information about a file.
 	 *
-	 * @param string $path The file path or URL to stat. Note that in the case of a URL, it must be a :// delimited URL. Other URL forms are not supported.
+	 * @param string $path  The file path or URL to stat. Note that in the case of a URL, it must be a :// delimited URL. Other URL forms are not supported.
 	 * @param int    $flags Holds additional flags set by the streams API. It can hold one or more of the following values OR'd together.
 	 *
 	 * @return mixed Should return as many elements as stat() does. Unknown or unavailable values should be set to a rational value (usually 0). Pay special attention to mode as documented under stat().
 	 */
 	public function url_stat( $path, $flags ) {
 		$func = $flags & STREAM_URL_STAT_LINK ? 'lstat' : 'stat';
+
 		return $flags & STREAM_URL_STAT_QUIET
 			? @$this->native( $func, $path )
 			: $this->native( $func, $path );
+	}
+
+	/**
+	 * Check if the supplied argument is a valid hack object (has a public "hack" method with two mandatory arguments).
+	 *
+	 * @param mixed $callback Argument to check.
+	 *
+	 * @return bool rue if the argument is a valid hack object, false otherwise.
+	 */
+	private static function is_valid_hack_object( $callback ) {
+		if ( ! \is_object( $callback ) ) {
+			return false;
+		}
+
+		$ro = new ReflectionObject( ( $callback ) );
+
+		try {
+			$rm                    = $ro->getMethod( 'hack' );
+			$has_valid_hack_method = $rm->isPublic() && ! $rm->isStatic() && 2 === $rm->getNumberOfRequiredParameters();
+
+			$rm                     = $ro->getMethod( 'reset' );
+			$has_valid_reset_method = $rm->isPublic() && ! $rm->isStatic() && 0 === $rm->getNumberOfRequiredParameters();
+
+			return $has_valid_hack_method && $has_valid_reset_method;
+		} catch ( ReflectionException $exception ) {
+			return false;
+		}
 	}
 
 	/**
@@ -459,9 +468,10 @@ final class CodeHacker {
 	 */
 	private function native( $func ) {
 		stream_wrapper_restore( self::PROTOCOL );
-		$res = call_user_func_array( $func, array_slice( func_get_args(), 1 ) );
+		$res = \call_user_func_array( $func, \array_slice( \func_get_args(), 1 ) );
 		stream_wrapper_unregister( self::PROTOCOL );
 		stream_wrapper_register( self::PROTOCOL, __CLASS__ );
+
 		return $res;
 	}
 
@@ -475,8 +485,8 @@ final class CodeHacker {
 	 */
 	private static function hack( $code, $path ) {
 		foreach ( self::$hacks as $hack ) {
-			if ( is_callable( $hack ) ) {
-				$code = call_user_func( $hack, $code, $path );
+			if ( \is_callable( $hack ) ) {
+				$code = \call_user_func( $hack, $code, $path );
 			} else {
 				$code = $hack->hack( $code, $path );
 			}
@@ -490,22 +500,22 @@ final class CodeHacker {
 	 *
 	 * @param string $path File path to check.
 	 *
-	 * @return bool TRUE if there's an entry in the white list that ends with $path, FALSE otherwise.
+	 * @throws Exception The class is not initialized.
 	 *
-	 * @throws \Exception The class is not initialized.
+	 * @return bool TRUE if there's an entry in the white list that ends with $path, FALSE otherwise.
 	 */
 	private static function path_in_list_of_paths_to_hack( $path ) {
 		if ( empty( self::$paths_with_files_to_hack ) ) {
-			throw new \Exception( "CodeHacker is not initialized, it must initialized by invoking 'initialize'" );
+			throw new Exception( "CodeHacker is not initialized, it must initialized by invoking 'initialize'" );
 		}
 		foreach ( self::$paths_with_files_to_hack as $white_list_item ) {
-			if ( substr( $path, 0, strlen( $white_list_item ) ) === $white_list_item ) {
+			if ( substr( $path, 0, \strlen( $white_list_item ) ) === $white_list_item ) {
 				return true;
 			}
 		}
+
 		return false;
 	}
 }
 
 //phpcs:enable WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors.Discouraged
-

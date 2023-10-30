@@ -120,7 +120,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$this->maybe_add_post_uuid( $product );
 
 		// Add the barcode to the product response
-		$data['barcode'] = $this->get_barcode( $product );
+		$data['barcode'] = $this->wcpos_get_barcode( $product );
 
 		/*
 		 * If product is variable, add the max and min prices and add them to the meta data

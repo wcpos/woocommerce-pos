@@ -1,11 +1,11 @@
 <?php
 /**
  * StaticMockerHack class file.
- *
- * @package WooCommerce\Testing
  */
 
 namespace Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks;
+
+use Exception;
 
 /**
  * Hack to mock public static methods and properties.
@@ -48,19 +48,9 @@ final class StaticMockerHack extends CodeHack {
 	private static $instance;
 
 	/**
-	 * Initializes the class.
-	 *
-	 * @param array $mockable_classes An associative array of class name => array of class methods.
-	 *
-	 * @throws \Exception $mockable_functions is not an array or is empty.
+	 * @var array Associative array of class name => associative array of method name => callback.
 	 */
-	public static function initialize( $mockable_classes ) {
-		if ( ! is_array( $mockable_classes ) || empty( $mockable_classes ) ) {
-			throw new \Exception( 'StaticMockerHack::initialize:: $mockable_classes must be a non-empty associative array of class name => array of class methods.' );
-		}
-
-		self::$instance = new StaticMockerHack( $mockable_classes );
-	}
+	private $method_mocks = array();
 
 	/**
 	 * StaticMockerHack constructor.
@@ -72,12 +62,53 @@ final class StaticMockerHack extends CodeHack {
 	}
 
 	/**
+	 * Handler for undefined static methods on this class, it invokes the mock for the method if both the class and the method are registered, or the original method in the original class if not.
+	 *
+	 * @param string $name      Name of the method.
+	 * @param array  $arguments Arguments for the function.
+	 *
+	 * @throws Exception Invalid method name.
+	 *
+	 * @return mixed The return value from the invoked callback or method.
+	 */
+	public static function __callStatic( $name, $arguments ) {
+		preg_match( '/invoke__(.+)__for__(.+)/', $name, $matches );
+		if ( empty( $matches ) ) {
+			throw new Exception( 'Invalid method ' . __CLASS__ . "::{$name}" );
+		}
+
+		$class_name  = $matches[2];
+		$method_name = $matches[1];
+
+		if ( \array_key_exists( $class_name, self::$instance->method_mocks ) && \array_key_exists( $method_name, self::$instance->method_mocks[ $class_name ] ) ) {
+			return \call_user_func_array( self::$instance->method_mocks[ $class_name ][ $method_name ], $arguments );
+		}
+
+		return \call_user_func_array( "{$class_name}::{$method_name}", $arguments );
+	}
+
+	/**
+	 * Initializes the class.
+	 *
+	 * @param array $mockable_classes An associative array of class name => array of class methods.
+	 *
+	 * @throws Exception $mockable_functions is not an array or is empty.
+	 */
+	public static function initialize( $mockable_classes ): void {
+		if ( ! \is_array( $mockable_classes ) || empty( $mockable_classes ) ) {
+			throw new Exception( 'StaticMockerHack::initialize:: $mockable_classes must be a non-empty associative array of class name => array of class methods.' );
+		}
+
+		self::$instance = new self( $mockable_classes );
+	}
+
+	/**
 	 * Hacks code by replacing eligible method invocations with an invocation a static method on this class composed from the class and the method names.
 	 *
 	 * @param string $code The code to hack.
 	 * @param string $path The path of the file containing the code to hack.
-	 * @return string The hacked code.
 	 *
+	 * @return string The hacked code.
 	 */
 	public function hack( $code, $path ) {
 		$last_item = null;
@@ -88,7 +119,7 @@ final class StaticMockerHack extends CodeHack {
 
 		// phpcs:ignore WordPress.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
 		while ( $current_token = current( $tokens ) ) {
-			if ( $this->is_token_of_type( $current_token, T_STRING ) && in_array( $current_token[1], $this->mockable_classes, true ) ) {
+			if ( $this->is_token_of_type( $current_token, T_STRING ) && \in_array( $current_token[1], $this->mockable_classes, true ) ) {
 				$class_name = $current_token[1];
 				$next_token = next( $tokens );
 				if ( $this->is_token_of_type( $next_token, T_DOUBLE_COLON ) ) {
@@ -109,34 +140,29 @@ final class StaticMockerHack extends CodeHack {
 	}
 
 	/**
-	 * @var array Associative array of class name => associative array of method name => callback.
-	 */
-	private $method_mocks = array();
-
-	/**
 	 * Register method mocks.
 	 *
 	 * @param array $mocks Mocks as an associative array of class name => associative array of method name => mock method with the same arguments as the original method.
 	 *
-	 * @throws \Exception Invalid input.
+	 * @throws Exception Invalid input.
 	 */
-	public function register_method_mocks( $mocks ) {
+	public function register_method_mocks( $mocks ): void {
 		$exception_text = 'StaticMockerHack::register_method_mocks: $mocks must be an associative array of class name => associative array of method name => callable.';
 
-		if ( ! is_array( $mocks ) ) {
-			throw new \Exception( $exception_text );
+		if ( ! \is_array( $mocks ) ) {
+			throw new Exception( $exception_text );
 		}
 
 		foreach ( $mocks as $class_name => $class_mocks ) {
-			if ( ! is_string( $class_name ) || ! is_array( $class_mocks ) ) {
-				throw new \Exception( $exception_text );
+			if ( ! \is_string( $class_name ) || ! \is_array( $class_mocks ) ) {
+				throw new Exception( $exception_text );
 			}
 			foreach ( $class_mocks as $method_name => $method_mock ) {
-				if ( ! is_string( $method_name ) || ! is_callable( $method_mock ) ) {
-					throw new \Exception( $exception_text );
+				if ( ! \is_string( $method_name ) || ! \is_callable( $method_mock ) ) {
+					throw new Exception( $exception_text );
 				}
-				if ( ! in_array( $class_name, $this->mockable_classes, true ) ) {
-					throw new \Exception( "FunctionsMockerHack::add_function_mocks: Can't mock methods of the '$class_name' class since it isn't in the list of mockable classes supplied to 'initialize'." );
+				if ( ! \in_array( $class_name, $this->mockable_classes, true ) ) {
+					throw new Exception( "FunctionsMockerHack::add_function_mocks: Can't mock methods of the '$class_name' class since it isn't in the list of mockable classes supplied to 'initialize'." );
 				}
 
 				$this->method_mocks[ $class_name ][ $method_name ] = $method_mock;
@@ -149,43 +175,17 @@ final class StaticMockerHack extends CodeHack {
 	 *
 	 * @param array $mocks Mocks as an associative array of class name => associative array of method name => mock method with the same arguments as the original method.
 	 *
-	 * @throws \Exception Invalid input.
+	 * @throws Exception Invalid input.
 	 */
-	public static function add_method_mocks( $mocks ) {
+	public static function add_method_mocks( $mocks ): void {
 		self::$instance->register_method_mocks( $mocks );
 	}
 
 	/**
 	 * Unregister all the registered method mocks.
 	 */
-	public function reset() {
+	public function reset(): void {
 		$this->method_mocks = array();
-	}
-
-	/**
-	 * Handler for undefined static methods on this class, it invokes the mock for the method if both the class and the method are registered, or the original method in the original class if not.
-	 *
-	 * @param string $name Name of the method.
-	 * @param array  $arguments Arguments for the function.
-	 *
-	 * @return mixed The return value from the invoked callback or method.
-	 *
-	 * @throws \Exception Invalid method name.
-	 */
-	public static function __callStatic( $name, $arguments ) {
-		preg_match( '/invoke__(.+)__for__(.+)/', $name, $matches );
-		if ( empty( $matches ) ) {
-			throw new \Exception( 'Invalid method ' . __CLASS__ . "::{$name}" );
-		}
-
-		$class_name  = $matches[2];
-		$method_name = $matches[1];
-
-		if ( array_key_exists( $class_name, self::$instance->method_mocks ) && array_key_exists( $method_name, self::$instance->method_mocks[ $class_name ] ) ) {
-			return call_user_func_array( self::$instance->method_mocks[ $class_name ][ $method_name ], $arguments );
-		} else {
-			return call_user_func_array( "{$class_name}::{$method_name}", $arguments );
-		}
 	}
 
 	/**

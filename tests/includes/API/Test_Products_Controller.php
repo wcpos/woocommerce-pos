@@ -11,6 +11,13 @@ use WCPOS\WooCommercePOS\API\Products_Controller;
 use WP_REST_Request;
 use WP_User;
 
+function woocommerce_pos_get_settings( $group, $field ) {
+	if ( 'general' === $group && 'barcode' === $field) {
+	}
+
+	return array('option' => 'mock_value');
+}
+
 /**
  * @internal
  *
@@ -27,7 +34,6 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	 */
 	protected $user;
 
-	
 	public function setup(): void {
 		parent::setUp();
 
@@ -45,6 +51,12 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		parent::tearDown();
 	}
+
+	// public function test_something(): void {
+	// 	// Your test logic here
+	// 	$result = woocommerce_pos_get_settings('group', 'key');
+	// 	$this->assertEquals('mocked_value', $result);
+	// }
 
 	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products' ) {
 		$request = new WP_REST_Request();
@@ -221,6 +233,45 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
 	}
 
+	/**
+	 * Barcode.
+	 */
+	public function test_get_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => 'foo',
+			);
+		});
+
+		$product  = ProductHelper::create_simple_product();
+		$product->update_meta_data( 'foo', 'bar' );
+		$this->assertEquals( 'bar', $this->endpoint->wcpos_get_barcode( $product ) );
+	}
+
+
+	public function test_product_response_contains_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => '_some_field',
+			);
+		});
+
+		$product  = ProductHelper::create_simple_product();
+		$product->update_meta_data( '_some_field', 'some_string' );
+		$product->save_meta_data();
+		$request  = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id());
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 'some_string', $data['barcode'] );
+	}
+
+	/**
+	 * Orerby.
+	 */
 	public function test_orderby_sku(): void {
 		$product1  = ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
 		$product2  = ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );

@@ -255,4 +255,24 @@ class Test_Orders_Controller extends WC_REST_Unit_Test_Case {
 
 		$this->assertEquals( $payment_methods, array( 'Cash', 'Card' ) );
 	}
+
+	public function test_orderby_total(): void {
+		$order1    = OrderHelper::create_order( array( 'total' => 100 ) );
+		$order2    = OrderHelper::create_order( array( 'total' => 200 ) );
+		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/orders' );
+		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'asc' ) );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		$totals   = wp_list_pluck( $data, 'total' );
+
+		$this->assertEquals( $totals, array( 100, 200 ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'desc' ) );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		$totals   = wp_list_pluck( $data, 'total' );
+
+		$this->assertEquals( $totals, array( 200, 100 ) );
+	}
 }

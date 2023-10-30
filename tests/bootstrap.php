@@ -24,9 +24,11 @@ class Bootstrap {
 
 		// Require composer dependencies.
 		require_once $this->plugin_dir . '/vendor/autoload.php';
-
-		
 		$this->initialize_code_hacker();
+
+		// Bootstrap WP_Mock to initialize built-in features
+		// NOTE: CodeHacker and WP_Mock are not compatible :(
+		// WP_Mock::bootstrap();
 
 		// Give access to tests_add_filter() function.
 		require_once $this->tests_dir . '/includes/functions.php';
@@ -151,9 +153,19 @@ class Bootstrap {
 	 * @throws Exception Error when initializing one of the hacks.
 	 */
 	private function initialize_code_hacker(): void {
+		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/Hacks/CodeHack.php';
+		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/Hacks/BypassFinalsHack.php';
+		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/Hacks/FunctionsMockerHack.php';
+		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/Hacks/StaticMockerHack.php';
 		require_once $this->plugin_dir . '/tests/Tools/CodeHacking/CodeHacker.php';
-		
-		CodeHacker::initialize( array( __DIR__ . '/../../includes/' ) );
+
+		/*
+		 * I can't get CodeHacker to work with my includes
+		 * But it needs to be here otherwise I can't use the WC TEST Helpers
+		 *
+		 * Why is everything in WordPress such a fucking nightmare to work with?
+		 */
+		CodeHacker::initialize( array( __DIR__ . '/../includes/' ) );
 
 		$replaceable_functions = include_once __DIR__ . '/mockable-functions.php';
 		if ( ! empty( $replaceable_functions ) ) {

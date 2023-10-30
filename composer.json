@@ -55,7 +55,6 @@
     }
   },
   "autoload-dev": {
-    "classmap": ["tests/Tools/CodeHacking"],
     "psr-4": {
       "WCPOS\\WooCommercePOS\\Tests\\": "tests/includes/"
     }

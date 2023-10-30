@@ -3,9 +3,9 @@
 /**
  * POS Product Class.
  *
- * @author   Paul Kilmurray <paul@kilbot.com>
+ * @author Paul Kilmurray <paul@kilbot.com>
  *
- * @see     https://wcpos.com
+ * @see    https://wcpos.com
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -20,7 +20,11 @@ class Products {
 		add_action( 'pre_get_posts', array( $this, 'hide_pos_products' ) );
 //		add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );
 
-		$this->init();
+		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
+		if ( \is_bool( $allow_decimal_quantities ) && $allow_decimal_quantities ) {
+			remove_filter( 'woocommerce_stock_amount', 'intval' );
+			add_filter( 'woocommerce_stock_amount', 'floatval' );
+		}
 	}
 
 	/**
@@ -100,16 +104,5 @@ class Products {
 		}
 
 		return $args;
-	}
-
-	/**
-	 * Load Product subclasses.
-	 */
-	private function init(): void {
-		// decimal quantities
-		if ( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) ) {
-			remove_filter( 'woocommerce_stock_amount', 'intval' );
-			add_filter( 'woocommerce_stock_amount', 'floatval' );
-		}
 	}
 }

@@ -48,6 +48,16 @@ trait Product_Helpers {
 	}
 
 	/**
+	 * @param WC_Product|WC_Product_Variation $object
+	 */
+	public function wcpos_get_barcode( $object ) {
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+
+		// _sku is_internal_meta_key, don't use get_meta() for this.
+		return '_sku' === $barcode_field ? $object->get_sku() : $object->get_meta( $barcode_field );
+	}
+
+	/**
 	 * OLD CODE
 	 * Returns thumbnail if it exists, if not, returns the WC placeholder image.
 	 *
@@ -68,15 +78,5 @@ trait Product_Helpers {
 		}
 
 		return wc_placeholder_img_src();
-	}
-
-	/**
-	 * @param WC_Product|WC_Product_Variation $object
-	 */
-	private function get_barcode( $object ) {
-		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-
-		// _sku is_internal_meta_key, don't use get_meta() for this.
-		return '_sku' === $barcode_field ? $object->get_sku() : $object->get_meta( $barcode_field );
 	}
 }

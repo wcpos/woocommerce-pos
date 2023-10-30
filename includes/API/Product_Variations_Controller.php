@@ -88,7 +88,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$this->maybe_add_post_uuid( $variation );
 
 		// Add the barcode to the product response
-		$data['barcode'] = $this->get_barcode( $variation );
+		$data['barcode'] = $this->wcpos_get_barcode( $variation );
 
 		// Make sure we parse the meta data before returning the response
 		$variation->save_meta_data(); // make sure the meta data is saved

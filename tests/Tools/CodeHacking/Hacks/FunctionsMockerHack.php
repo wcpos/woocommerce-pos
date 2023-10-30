@@ -1,14 +1,11 @@
 <?php
 /**
  * FunctionsMockerHack class file.
- *
- * @package WooCommerce\Testing
  */
 
 namespace Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks;
 
-use ReflectionMethod;
-use ReflectionClass;
+use Exception;
 
 /**
  * Hack to mock standalone functions.
@@ -34,7 +31,7 @@ use ReflectionClass;
  * (and they shouldn't!), test code files aren't hacked, therefore the original functions are always
  * executed inside tests (and thus the above example won't stack-overflow).
  */
-final class FunctionsMockerHack extends CodeHack {
+class FunctionsMockerHack extends CodeHack {
 	/**
 	 * An array containing the names of the functions that will become mockable.
 	 *
@@ -62,19 +59,9 @@ final class FunctionsMockerHack extends CodeHack {
 	private static $instance;
 
 	/**
-	 * Initializes the class.
-	 *
-	 * @param array $mockable_functions An array containing the names of the functions that will become mockable.
-	 *
-	 * @throws \Exception $mockable_functions is not an array or is empty.
+	 * @var array Functions that can be mocked, associative array of function name => callback.
 	 */
-	public static function initialize( $mockable_functions ) {
-		if ( ! is_array( $mockable_functions ) || empty( $mockable_functions ) ) {
-			throw new \Exception( 'FunctionsMockeHack::initialize: $mockable_functions must be a non-empty array of function names.' );
-		}
-
-		self::$instance = new FunctionsMockerHack( $mockable_functions );
-	}
+	private $function_mocks = array();
 
 	/**
 	 * FunctionsMockerHack constructor.
@@ -86,27 +73,59 @@ final class FunctionsMockerHack extends CodeHack {
 	}
 
 	/**
+	 * Handler for undefined static methods on this class, it invokes the mock for the function if registered or the original function if not.
+	 *
+	 * @param string $name      Name of the function.
+	 * @param array  $arguments Arguments for the function.
+	 *
+	 * @return mixed The return value from the invoked callback or function.
+	 */
+	public static function __callStatic( $name, $arguments ) {
+		if ( \array_key_exists( $name, self::$instance->function_mocks ) ) {
+			return \call_user_func_array( self::$instance->function_mocks[ $name ], $arguments );
+		}
+
+		return \call_user_func_array( $name, $arguments );
+	}
+
+	/**
+	 * Initializes the class.
+	 *
+	 * @param array $mockable_functions An array containing the names of the functions that will become mockable.
+	 *
+	 * @throws Exception $mockable_functions is not an array or is empty.
+	 */
+	public static function initialize( $mockable_functions ): void {
+		if ( ! \is_array( $mockable_functions ) || empty( $mockable_functions ) ) {
+			throw new Exception( 'FunctionsMockeHack::initialize: $mockable_functions must be a non-empty array of function names.' );
+		}
+
+		self::$instance = new self( $mockable_functions );
+	}
+
+	/**
 	 * Hacks code by replacing eligible function invocations with an invocation to this class' static method with the same name.
 	 *
 	 * @param string $code The code to hack.
 	 * @param string $path The path of the file containing the code to hack.
+	 *
 	 * @return string The hacked code.
 	 */
 	public function hack( $code, $path ) {
-		$tokens = $this->tokenize( $code );
-		$code   = '';
+		$tokens                                          = $this->tokenize( $code );
+		$code                                            = '';
 		$previous_token_is_non_global_function_qualifier = false;
 
 		foreach ( $tokens as $token ) {
 			$token_type = $this->token_type_of( $token );
 			if ( T_WHITESPACE === $token_type ) {
 				$code .= $this->token_to_string( $token );
-			} elseif ( T_STRING === $token_type && ! $previous_token_is_non_global_function_qualifier && in_array( $token[1], $this->mockable_functions, true ) ) {
+			} elseif ( T_STRING === $token_type && ! $previous_token_is_non_global_function_qualifier && \in_array( $token[1], $this->mockable_functions, true ) ) {
 				$code .= __CLASS__ . "::{$token[1]}";
 				$previous_token_is_non_global_function_qualifier = false;
 			} else {
 				$code .= $this->token_to_string( $token );
-				$previous_token_is_non_global_function_qualifier = in_array( $token_type, self::$non_global_function_tokens, true );
+				$previous_token_is_non_global_function_qualifier = \in_array( $token_type, self::$non_global_function_tokens, true );
 			}
 		}
 
@@ -114,28 +133,23 @@ final class FunctionsMockerHack extends CodeHack {
 	}
 
 	/**
-	 * @var array Functions that can be mocked, associative array of function name => callback.
-	 */
-	private $function_mocks = array();
-
-	/**
 	 * Register function mocks.
 	 *
 	 * @param array $mocks Mocks as an associative array of function name => mock function with the same arguments as the original function.
 	 *
-	 * @throws \Exception Invalid input.
+	 * @throws Exception Invalid input.
 	 */
-	public function register_function_mocks( $mocks ) {
-		if ( ! is_array( $mocks ) ) {
-			throw new \Exception( 'FunctionsMockerHack::add_function_mocks: $mocks must be an associative array of function name => callable.' );
+	public function register_function_mocks( $mocks ): void {
+		if ( ! \is_array( $mocks ) ) {
+			throw new Exception( 'FunctionsMockerHack::add_function_mocks: $mocks must be an associative array of function name => callable.' );
 		}
 
 		foreach ( $mocks as $function_name => $mock ) {
-			if ( ! in_array( $function_name, $this->mockable_functions, true ) ) {
-				throw new \Exception( "FunctionsMockerHack::add_function_mocks: Can't mock '$function_name' since it isn't in the list of mockable functions supplied to 'initialize'." );
+			if ( ! \in_array( $function_name, $this->mockable_functions, true ) ) {
+				throw new Exception( "FunctionsMockerHack::add_function_mocks: Can't mock '$function_name' since it isn't in the list of mockable functions supplied to 'initialize'." );
 			}
-			if ( ! is_callable( $mock ) ) {
-				throw new \Exception( "FunctionsMockerHack::add_function_mocks: The mock supplied for '$function_name' isn't callable." );
+			if ( ! \is_callable( $mock ) ) {
+				throw new Exception( "FunctionsMockerHack::add_function_mocks: The mock supplied for '$function_name' isn't callable." );
 			}
 
 			$this->function_mocks[ $function_name ] = $mock;
@@ -147,33 +161,17 @@ final class FunctionsMockerHack extends CodeHack {
 	 *
 	 * @param array $mocks Mocks as an associative array of function name => mock function with the same arguments as the original function.
 	 *
-	 * @throws \Exception Invalid input.
+	 * @throws Exception Invalid input.
 	 */
-	public static function add_function_mocks( $mocks ) {
+	public static function add_function_mocks( $mocks ): void {
 		self::$instance->register_function_mocks( $mocks );
 	}
 
 	/**
 	 * Unregister all the registered function mocks.
 	 */
-	public function reset() {
+	public function reset(): void {
 		$this->function_mocks = array();
-	}
-
-	/**
-	 * Handler for undefined static methods on this class, it invokes the mock for the function if registered or the original function if not.
-	 *
-	 * @param string $name Name of the function.
-	 * @param array  $arguments Arguments for the function.
-	 *
-	 * @return mixed The return value from the invoked callback or function.
-	 */
-	public static function __callStatic( $name, $arguments ) {
-		if ( array_key_exists( $name, self::$instance->function_mocks ) ) {
-			return call_user_func_array( self::$instance->function_mocks[ $name ], $arguments );
-		} else {
-			return call_user_func_array( $name, $arguments );
-		}
 	}
 
 	/**

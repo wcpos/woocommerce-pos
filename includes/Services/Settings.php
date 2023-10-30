@@ -92,16 +92,38 @@ class Settings {
 		),
 	);
 
+	public function __construct() {
+		// NOTE: do not put any code here, the settings service can be instantiated many times
+		// TODO: should I use the singleton pattern?
+	}
+
 	/**
-	 * @param string $id
+	 * @param string     $id
+	 * @param null|mixed $key
 	 *
 	 * @return null|array|mixed|WP_Error
 	 */
-	public function get_settings( string $id ) {
+	public function get_settings( string $id, $key = null ) {
 		$method_name = 'get_' . $id . '_settings';
 
 		if ( method_exists( $this, $method_name ) ) {
-			return $this->$method_name();
+			$settings = $this->$method_name();
+
+			// If key is not provided, return the entire settings.
+			if ( ! \is_string( $key ) ) {
+				return $settings;
+			}
+
+			if ( ! isset( $settings[$key] ) ) {
+				return new WP_Error(
+					'woocommerce_pos_settings_error',
+					// translators: 1. %s: Settings group id, 2. %s: Settings key
+					sprintf( __( 'Settings with id %s and key %s not found', 'woocommerce-pos' ), $id, $key ),
+					array( 'status' => 400 )
+				);
+			}
+
+			return $settings[$key];
 		}
 
 		return new WP_Error(
@@ -274,7 +296,7 @@ class Settings {
 		global $wpdb;
 
 		// maybe add custom barcode field
-		$custom_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$custom_field = $this->get_settings( 'general', 'barcode_field' );
 
 		// Prepare the basic query
 		$result = $wpdb->get_col(
@@ -356,31 +378,37 @@ class Settings {
 	 *
 	 * @param $id
 	 *
-	 * @return bool
+	 * @return bool|WP_Error
 	 */
-	public static function delete_settings( $id ): bool {
-		return delete_option( 'woocommerce_pos_' . $id );
+	public static function delete_settings( $id ) {
+		if ( ! is_super_admin() && ! current_user_can('manage_woocommerce_pos') ) {
+			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
+		}
+
+		return delete_option( self::$db_prefix . $id );
 	}
 
 	/**
 	 * Delete all settings in WP options table.
+	 *
+	 * @return bool|WP_Error
 	 */
-	public static function delete_all_settings(): void {
-		global $wpdb;
-		$wpdb->query(
-			$wpdb->prepare( "
-        DELETE FROM {$wpdb->options}
-        WHERE option_name
-        LIKE '%s'",
-				'woocommerce_pos_%'
-			)
-		);
+	public static function delete_all_settings() {
+		if ( ! is_super_admin() && ! current_user_can('manage_woocommerce_pos') ) {
+			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
+		}
+	
+		foreach ( self::$default_settings as $id => $settings ) {
+			delete_option( self::$db_prefix . $id );
+		}
+
+		return true;
 	}
 
 	/**
 	 * @return string
 	 */
-	public static function get_db_version(): string {
+	public static function get_db_version() {
 		return get_option( 'woocommerce_pos_db_version', '0' );
 	}
 
