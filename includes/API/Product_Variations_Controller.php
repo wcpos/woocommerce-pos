@@ -45,6 +45,38 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	}
 
 	/**
+	 * Add custom fields to the product schema.
+	 */
+	public function get_item_schema() {
+		$schema = parent::get_item_schema();
+		
+		$schema['properties']['barcode'] = array(
+			'description' => __('Barcode', 'woocommerce-pos'),
+			'type'        => 'string',
+			'context'     => array('view', 'edit'),
+			'readonly'    => false,
+		);
+
+		return $schema;
+	}
+
+	/**
+	 * Modify the collection params.
+	 */
+	public function get_collection_params() {
+		$params = parent::get_collection_params();
+		
+		// Modify the per_page argument to allow -1
+		$params['per_page']['minimum'] = -1;
+		$params['orderby']['enum']     = array_merge(
+			$params['orderby']['enum'],
+			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
+		);
+		
+		return $params;
+	}
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
@@ -132,5 +164,45 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 				array( 'status' => 500 )
 			);
 		}
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args          = parent::prepare_objects_query( $request );
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+
+		// Add custom 'orderby' options
+		if ( isset( $request['orderby'] ) ) {
+			switch ( $request['orderby'] ) {
+				case 'sku':
+					$args['meta_key'] = '_sku';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'barcode':
+					$args['meta_key'] = '_sku' !== $barcode_field ? $barcode_field : '_sku';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'stock_quantity':
+					$args['meta_key'] = '_stock';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'stock_status':
+					$args['meta_key'] = '_stock_status';
+					$args['orderby']  = 'meta_value';
+
+					break;
+			}
+		}
+
+		return $args;
 	}
 }

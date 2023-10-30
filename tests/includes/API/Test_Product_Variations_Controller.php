@@ -203,4 +203,130 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
 		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
 	}
+
+	/**
+	 * Barcode.
+	 */
+	public function test_get_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => 'foo',
+			);
+		});
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation     = wc_get_product( $variation_ids[0] );
+		$variation->update_meta_data( 'foo', 'bar' );
+		$this->assertEquals( 'bar', $this->endpoint->wcpos_get_barcode( $variation ) );
+	}
+
+	public function test_variation_response_contains_sku_barcode(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$response      = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 'DUMMY SKU VARIABLE SMALL', $data['barcode'] );
+	}
+
+	public function test_variation_response_contains_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => '_some_field',
+			);
+		});
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_some_field', 'some_string' );
+
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$response      = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 'some_string', $data['barcode'] );
+	}
+
+	/**
+	 * Orderby.
+	 */
+	public function test_orderby_sku(): void {
+		$product       = ProductHelper::create_variation_product();
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'sku' );
+
+		$this->assertEquals( $skus, array( 'DUMMY SKU VARIABLE LARGE', 'DUMMY SKU VARIABLE SMALL' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'sku' );
+
+		$this->assertEquals( $skus, array( 'DUMMY SKU VARIABLE SMALL', 'DUMMY SKU VARIABLE LARGE' ) );
+	}
+
+	public function test_orderby_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => '_barcode',
+			);
+		});
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_barcode', 'alpha' );
+		update_post_meta( $variation_ids[1], '_barcode', 'zeta' );
+
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
+		$response         = rest_get_server()->dispatch( $request );
+		$data             = $response->get_data();
+		$barcodes         = wp_list_pluck( $data, 'barcode' );
+
+		$this->assertEquals( $barcodes, array( 'alpha', 'zeta' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'desc' ) );
+		$response         = rest_get_server()->dispatch( $request );
+		$data             = $response->get_data();
+		$barcodes         = wp_list_pluck( $data, 'barcode' );
+
+		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
+	}
+
+	public function test_orderby_stock_status(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_stock_status', 'instock' );
+		update_post_meta( $variation_ids[1], '_stock_status', 'outofstock' );
+		
+		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_status' );
+
+		$this->assertEquals( $skus, array( 'instock', 'outofstock' ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_status' );
+
+		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
+	}
 }
