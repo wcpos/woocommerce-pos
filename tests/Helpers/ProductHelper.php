@@ -46,16 +46,16 @@ class ProductHelper {
 	public static function create_simple_product( $args = array(), $save = true ) {
 		// Default properties
 		$defaults = array(
-			'name'          => 'Dummy Product',
-			'regular_price' => 10,
-			'price'         => 10,
-			'sku'           => 'DUMMY SKU',
-			'manage_stock'  => false,
-			'tax_status'    => 'taxable',
-			'downloadable'  => false,
-			'virtual'       => false,
-			'stock_status'  => 'instock',
-			'weight'        => '1.1',
+			'name'           => 'Dummy Product',
+			'regular_price'  => 10,
+			'price'          => 10,
+			'sku'            => 'DUMMY SKU',
+			'manage_stock'   => false,
+			'tax_status'     => 'taxable',
+			'downloadable'   => false,
+			'virtual'        => false,
+			'stock_status'   => 'instock',
+			'weight'         => '1.1',
 		);
 	
 		// Merge default properties with user-provided args

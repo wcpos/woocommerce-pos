@@ -6,6 +6,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Products_Controller;
 use WP_REST_Request;
+use WP_Test_Spy_REST_Server;
 
 /**
  * @internal
@@ -194,7 +195,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Barcode.
 	 */
-	public function test_get_barcode(): void {
+	public function test_product_get_barcode(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'barcode_field' => 'foo',
@@ -251,7 +252,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Orderby.
 	 */
-	public function test_orderby_sku(): void {
+	public function test_product_orderby_sku(): void {
 		$product1  = ProductHelper::create_simple_product( array( 'sku' => '987654321' ) );
 		$product2  = ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
 		$product3  = ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
@@ -273,7 +274,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $skus, array( 'zeta', 'alpha', '987654321', '123456789' ) );
 	}
 
-	public function test_orderby_barcode(): void {
+	public function test_product_orderby_barcode(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'barcode_field' => '_barcode',
@@ -305,7 +306,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
 	}
 
-	public function test_orderby_stock_status(): void {
+	public function test_product_orderby_stock_status(): void {
 		$product1  = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
 		$product2  = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
@@ -325,10 +326,30 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
 	}
 
+	public function test_product_orderby_stock_quantity(): void {
+		$product1  = ProductHelper::create_simple_product( array( 'stock_quantity' => 1, 'manage_stock' => true ) );
+		$product2  = ProductHelper::create_simple_product( array( 'stock_quantity' => 2, 'manage_stock' => true ) );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 1, 2 ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 2, 1 ) );
+	}
+
 	/**
 	 * Decimal quantities.
 	 */
-	public function test_decimal_stock_quantity_schema(): void {
+	public function test_product_decimal_stock_quantity_schema(): void {
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
 
@@ -341,7 +362,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
 	}
 
-	public function test_get_decimal_quantities(): void {
+	public function test_product_response_with_decimal_quantities(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'decimal_qty' => true,
@@ -366,7 +387,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	// @TODO - this works in the POS, but not in the tests, I have no idea why
-	public function test_set_decimal_quantities(): void {
+	public function test_product_update_decimal_quantities(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'decimal_qty' => true,
@@ -383,13 +404,42 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_body_params( array(
 			'stock_quantity' => '3.85',
 		) );
-		$server   = rest_get_server(); // re-init the server, so that params are re-read??
-		$response = $server->dispatch($request);
+		// $server   = rest_get_server(); // re-init the server, so that params are re-read??
+		$wp_rest_server = new WP_Test_Spy_REST_Server();
+		$response       = $wp_rest_server->dispatch($request);
 	
 		$data = $response->get_data();
 	
 		$this->assertEquals(200, $response->get_status());
 			
 		$this->assertEquals( 3.85, $data['stock_quantity'] );
+	}
+
+	public function test_product_orderby_decimal_stock_quantity(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product1  = ProductHelper::create_simple_product( array( 'stock_quantity' => '11.2', 'manage_stock' => true ) );
+		$product2  = ProductHelper::create_simple_product( array( 'stock_quantity' => '3.5', 'manage_stock' => true ) );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 3.5, 11.2 ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 11.2, 3.5 ) );
 	}
 }

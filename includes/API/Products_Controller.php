@@ -287,7 +287,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 					break;
 				case 'stock_quantity':
 					$args['meta_key'] = '_stock';
-					$args['orderby']  = 'meta_value';
+					$args['orderby']  = 'meta_value_num';
 
 					break;
 				case 'stock_status':

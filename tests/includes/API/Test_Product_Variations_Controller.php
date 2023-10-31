@@ -4,71 +4,33 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use ReflectionClass;
-use WC_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Product_Variations_Controller;
-use WP_REST_Request;
-use WP_User;
 
 /**
  * @internal
  *
  * @coversNothing
  */
-class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
-	/**
-	 * @var Product_Variations_Controller
-	 */
-	protected $endpoint;
-
-	/**
-	 * @var WP_User
-	 */
-	protected $user;
-
-	
+class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
-
 		$this->endpoint = new Product_Variations_Controller();
-		$this->user     = $this->factory->user->create(
-			array(
-				'role' => 'administrator',
-			)
-		);
-
-		new Api();
-		wp_set_current_user( $this->user );
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
 	}
 
-	public function get_wp_rest_request( $method, $path ) {
-		$request = new WP_REST_Request();
-		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_method( $method );
-		$request->set_route( $path );
-
-		return $request;
-	}
-
 	public function test_namespace_property(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$namespace_property = $reflection->getProperty('namespace');
-		$namespace_property->setAccessible(true);
-		
-		$this->assertEquals('wcpos/v1', $namespace_property->getValue($this->endpoint));
+		$namespace = $this->get_reflected_property_value('namespace');
+
+		$this->assertEquals('wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$rest_base_property = $reflection->getProperty('rest_base');
-		$rest_base_property->setAccessible(true);
-		
-		$this->assertEquals('products/(?P<product_id>[\d]+)/variations', $rest_base_property->getValue($this->endpoint));
+		$rest_base = $this->get_reflected_property_value('rest_base');
+
+		$this->assertEquals('products/(?P<product_id>[\d]+)/variations', $rest_base);
 	}
 
 	/**
@@ -137,7 +99,8 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$product     = ProductHelper::create_variation_product();
-		$response    = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() . '/variations' ) );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$response    = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
 		$variations = $response->get_data();
@@ -145,7 +108,6 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$response_fields = array_keys( $variations[0] );
 
 		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
-
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
@@ -158,7 +120,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 2, \count( $variation_ids ) );
 		
 
-		$request     = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
 
@@ -181,7 +143,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 	public function test_variation_response_contains_uuid_meta_data(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
 		$response      = $this->server->dispatch($request);
 
 		$data = $response->get_data();
@@ -207,7 +169,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 	/**
 	 * Barcode.
 	 */
-	public function test_get_barcode(): void {
+	public function test_variation_get_barcode(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'barcode_field' => 'foo',
@@ -225,7 +187,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
 		$response      = $this->server->dispatch($request);
 	
 		$data = $response->get_data();
@@ -246,7 +208,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$variation_ids = $product->get_children();
 		update_post_meta( $variation_ids[0], '_some_field', 'some_string' );
 
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
 		$response      = $this->server->dispatch($request);
 	
 		$data = $response->get_data();
@@ -256,12 +218,36 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 'some_string', $data['barcode'] );
 	}
 
+	public function test_variation_update_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => 'barcode',
+			);
+		});
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_sku', 'sku-12345' );
+
+		$request       = $this->wp_rest_patch_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$request->set_body_params( array(
+			'barcode' => 'foo-12345',
+		) );
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 'foo-12345', $data['barcode'] );
+	}
+
 	/**
 	 * Orderby.
 	 */
-	public function test_orderby_sku(): void {
+	public function test_variation_orderby_sku(): void {
 		$product       = ProductHelper::create_variation_product();
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations');
 		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'asc' ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
@@ -278,7 +264,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( $skus, array( 'DUMMY SKU VARIABLE SMALL', 'DUMMY SKU VARIABLE LARGE' ) );
 	}
 
-	public function test_orderby_barcode(): void {
+	public function test_variation_orderby_barcode(): void {
 		add_filter( 'woocommerce_pos_general_settings', function() {
 			return array(
 				'barcode_field' => '_barcode',
@@ -290,7 +276,7 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		update_post_meta( $variation_ids[0], '_barcode', 'alpha' );
 		update_post_meta( $variation_ids[1], '_barcode', 'zeta' );
 
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations');
 		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
 		$response         = rest_get_server()->dispatch( $request );
 		$data             = $response->get_data();
@@ -307,13 +293,13 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( $barcodes, array( 'zeta', 'alpha' ) );
 	}
 
-	public function test_orderby_stock_status(): void {
+	public function test_variation_orderby_stock_status(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 		update_post_meta( $variation_ids[0], '_stock_status', 'instock' );
 		update_post_meta( $variation_ids[1], '_stock_status', 'outofstock' );
 		
-		$request       = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations');
 		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
@@ -328,5 +314,133 @@ class Test_Product_Variations_Controller extends WC_REST_Unit_Test_Case {
 		$skus         = wp_list_pluck( $data, 'stock_status' );
 
 		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
+	}
+
+	public function test_variation_orderby_stock_quantity(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_stock', 1 );
+		update_post_meta( $variation_ids[0], '_manage_stock', 'yes' );
+		update_post_meta( $variation_ids[1], '_stock', 2 );
+		update_post_meta( $variation_ids[1], '_manage_stock', 'yes' );
+
+		$request       = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 1, 2 ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 2, 1 ) );
+	}
+
+	/**
+	 * Decimal quantities.
+	 */
+	public function test_variation_decimal_stock_quantity_schema(): void {
+		$schema = $this->endpoint->get_item_schema();
+		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
+
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		$schema = $this->endpoint->get_item_schema();
+		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
+	}
+
+	public function test_variation_response_with_decimal_quantities(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation     = wc_get_product( $variation_ids[0] );
+		$variation->set_manage_stock( true );
+		$variation->set_stock_quantity( 1.5 );
+		$variation->save();
+
+		$request  = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 1.5, $data['stock_quantity'] );
+	}
+
+	// @TODO - this works in the POS, but not in the tests, I have no idea why
+	public function test_variation_update_decimal_quantities(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation     = wc_get_product( $variation_ids[0] );
+		$variation->set_manage_stock( true );
+		$variation->save();
+
+		$request  = $this->wp_rest_patch_request('/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0]);
+		$request->set_body_params( array(
+			'stock_quantity' => '3.85',
+		) );
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 3.85, $data['stock_quantity'] );
+	}
+
+	public function test_variation_orderby_decimal_stock_quantity(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_stock', '11.2' );
+		update_post_meta( $variation_ids[0], '_manage_stock', 'yes' );
+		update_post_meta( $variation_ids[1], '_stock', '3.5' );
+		update_post_meta( $variation_ids[1], '_manage_stock', 'yes' );
+		$request = $this->wp_rest_get_request('/wcpos/v1/products/' . $product->get_id() . '/variations');
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 3.5, 11.2 ) );
+
+		// reverse order
+		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+
+		$this->assertEquals( $skus, array( 11.2, 3.5 ) );
 	}
 }

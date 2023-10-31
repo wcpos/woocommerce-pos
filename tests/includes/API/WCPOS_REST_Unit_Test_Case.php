@@ -23,6 +23,8 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 	protected $user;
 
 	public function setUp(): void {
+		add_action('rest_api_init', array($this, 'rest_api_init')); // add hook before parent::setUp()
+
 		parent::setUp();
 		$this->user = $this->factory->user->create(
 			array(
@@ -30,11 +32,9 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 			)
 		);
 		wp_set_current_user($this->user);
+	}
 
-		/*
-		 * Using $this->server->dispatch doesn't call rest_api_init
-		 * We need to init the API manually to register the routes
-		 */
+	public function rest_api_init(): void {
 		new API();
 	}
 
