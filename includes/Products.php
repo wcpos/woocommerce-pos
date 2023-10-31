@@ -20,6 +20,11 @@ class Products {
 		add_action( 'pre_get_posts', array( $this, 'hide_pos_products' ) );
 //		add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );
 
+		/**
+		 * Allow decimal quantities for products and variations.
+		 *
+		 * @TODO - this will affect the online store aswell, should I make it POS only?
+		 */
 		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
 		if ( \is_bool( $allow_decimal_quantities ) && $allow_decimal_quantities ) {
 			remove_filter( 'woocommerce_stock_amount', 'intval' );

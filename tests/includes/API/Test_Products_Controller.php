@@ -4,59 +4,23 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use ReflectionClass;
-use WC_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Products_Controller;
 use WP_REST_Request;
-use WP_User;
-
-function woocommerce_pos_get_settings( $group, $field ) {
-	if ( 'general' === $group && 'barcode' === $field) {
-	}
-
-	return array('option' => 'mock_value');
-}
 
 /**
  * @internal
  *
  * @coversNothing
  */
-class Test_Products_Controller extends WC_REST_Unit_Test_Case {
-	/**
-	 * @var Products_Controller
-	 */
-	protected $endpoint;
-
-	/**
-	 * @var WP_User
-	 */
-	protected $user;
-
+class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
-
 		$this->endpoint = new Products_Controller();
-		$this->user     = $this->factory->user->create(
-			array(
-				'role' => 'administrator',
-			)
-		);
-
-		new Api();
-		wp_set_current_user( $this->user );
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
 	}
-
-	// public function test_something(): void {
-	// 	// Your test logic here
-	// 	$result = woocommerce_pos_get_settings('group', 'key');
-	// 	$this->assertEquals('mocked_value', $result);
-	// }
 
 	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products' ) {
 		$request = new WP_REST_Request();
@@ -68,19 +32,15 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	}
 
 	public function test_namespace_property(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$namespace_property = $reflection->getProperty('namespace');
-		$namespace_property->setAccessible(true);
-		
-		$this->assertEquals('wcpos/v1', $namespace_property->getValue($this->endpoint));
+		$namespace = $this->get_reflected_property_value('namespace');
+
+		$this->assertEquals('wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$rest_base_property = $reflection->getProperty('rest_base');
-		$rest_base_property->setAccessible(true);
-		
-		$this->assertEquals('products', $rest_base_property->getValue($this->endpoint));
+		$rest_base = $this->get_reflected_property_value('rest_base');
+
+		$this->assertEquals('products', $rest_base);
 	}
 
 	/**
@@ -175,14 +135,12 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$product  = ProductHelper::create_simple_product();
-		$response = $this->server->dispatch( $this->get_wp_rest_request( 'GET', '/wcpos/v1/products/' . $product->get_id() ) );
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
-
 		$response_fields = array_keys( $response->get_data() );
-
 		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
-
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
@@ -194,7 +152,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 
 	public function test_product_api_get_all_ids(): void {
 		$product  = ProductHelper::create_simple_product();
-		$request  = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
 
@@ -210,7 +168,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_product_response_contains_uuid_meta_data(): void {
 		$product  = ProductHelper::create_simple_product();
-		$request  = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id());
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
 		$response = $this->server->dispatch($request);
 
 		$data = $response->get_data();
@@ -259,7 +217,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$product  = ProductHelper::create_simple_product();
 		$product->update_meta_data( '_some_field', 'some_string' );
 		$product->save_meta_data();
-		$request  = new WP_REST_Request('GET', '/wcpos/v1/products/' . $product->get_id());
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
 		$response = $this->server->dispatch($request);
 	
 		$data = $response->get_data();
@@ -267,6 +225,27 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertEquals(200, $response->get_status());
 			
 		$this->assertEquals( 'some_string', $data['barcode'] );
+	}
+
+	public function test_product_update_barcode(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => 'barcode',
+			);
+		});
+
+		$product  = ProductHelper::create_simple_product( array( 'sku' => 'sku-12345' ) );
+		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() );
+		$request->set_body_params( array(
+			'barcode' => 'foo-12345',
+		) );
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 'foo-12345', $data['barcode'] );
 	}
 
 	/**
@@ -277,7 +256,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$product2  = ProductHelper::create_simple_product( array( 'sku' => 'zeta' ) );
 		$product3  = ProductHelper::create_simple_product( array( 'sku' => '123456789' ) );
 		$product4  = ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
-		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'asc' ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
@@ -309,7 +288,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$product2->update_meta_data( '_barcode', 'zeta' );
 		$product2->save_meta_data();
 
-		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
 		$response         = rest_get_server()->dispatch( $request );
 		$data             = $response->get_data();
@@ -329,7 +308,7 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 	public function test_orderby_stock_status(): void {
 		$product1  = ProductHelper::create_simple_product( array( 'stock_status' => 'instock' ) );
 		$product2  = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
-		$request   = $this->get_wp_rest_request( 'GET', '/wcpos/v1/products' );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
@@ -344,5 +323,73 @@ class Test_Products_Controller extends WC_REST_Unit_Test_Case {
 		$skus         = wp_list_pluck( $data, 'stock_status' );
 
 		$this->assertEquals( $skus, array( 'outofstock', 'instock' ) );
+	}
+
+	/**
+	 * Decimal quantities.
+	 */
+	public function test_decimal_stock_quantity_schema(): void {
+		$schema = $this->endpoint->get_item_schema();
+		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
+
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		$schema = $this->endpoint->get_item_schema();
+		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
+	}
+
+	public function test_get_decimal_quantities(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product  = ProductHelper::create_simple_product();
+		$product->set_manage_stock( true );
+		$product->set_stock_quantity( 1.5 );
+		$product->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 1.5, $data['stock_quantity'] );
+	}
+
+	// @TODO - this works in the POS, but not in the tests, I have no idea why
+	public function test_set_decimal_quantities(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'decimal_qty' => true,
+			);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter( 'woocommerce_stock_amount', 'floatval' );
+
+		$product  = ProductHelper::create_simple_product();
+		$product->set_manage_stock( true );
+		$product->save();
+
+		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() );
+		$request->set_body_params( array(
+			'stock_quantity' => '3.85',
+		) );
+		$server   = rest_get_server(); // re-init the server, so that params are re-read??
+		$response = $server->dispatch($request);
+	
+		$data = $response->get_data();
+	
+		$this->assertEquals(200, $response->get_status());
+			
+		$this->assertEquals( 3.85, $data['stock_quantity'] );
 	}
 }

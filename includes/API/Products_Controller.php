@@ -9,6 +9,7 @@ if ( ! class_exists('WC_REST_Products_Controller') ) {
 }
 
 use Exception;
+use WC_Data;
 use WC_Product;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
@@ -34,6 +35,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 	protected $namespace = 'wcpos/v1';
 
 	/**
+	 * Allow decimal quantities.
+	 *
+	 * @var bool
+	 */
+	protected $allow_decimal_quantities = false;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -57,6 +65,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 			'readonly'    => false,
 		);
 
+		$decimal_qty = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
+		if ( \is_bool( $decimal_qty ) && $decimal_qty ) {
+			$schema['properties']['stock_quantity']['type'] = 'string';
+		}
+
 		return $schema;
 	}
 
@@ -72,6 +85,21 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$params['orderby']['enum'],
 			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
 		);
+
+		$decimal_qty = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
+	
+		// New stock params
+		$new_stock_params = array(
+			'type'              => 'string',
+			'sanitize_callback' => 'sanitize_key',
+			'validate_callback' => 'rest_validate_request_arg',
+		);
+
+		if ( \is_bool( $decimal_qty ) && $decimal_qty ) {
+			$params['stock_quantity'] = isset($params['stock_quantity']) ?
+				array_merge($params['stock_quantity'], $new_stock_params) :
+				$new_stock_params;
+		}
 		
 		return $params;
 	}
@@ -101,7 +129,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
-		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
+		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
+		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
 	}
 
 	/**
@@ -165,6 +194,22 @@ class Products_Controller extends WC_REST_Products_Controller {
 		// $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
+	}
+
+	/**
+	 * Fires after a single object is created or updated via the REST API.
+	 *
+	 * @param WC_Data         $object   Inserted object.
+	 * @param WP_REST_Request $request  Request object.
+	 * @param bool            $creating True when creating object, false when updating.
+	 */
+	public function wcpos_insert_product_object( WC_Data $object, WP_REST_Request $request, bool $creating ): void {
+		$barcode_field = $this->wcpos_get_barcode_field();
+		$barcode       = $request->get_param( 'barcode' );
+		if ( $barcode ) {
+			$object->update_meta_data( $barcode_field, $barcode );
+			$object->save_meta_data();
+		}
 	}
 
 	/**

@@ -4,12 +4,9 @@ namespace WCPOS\WooCommercePOS\API\Traits;
 
 use WC_Product;
 use WC_Product_Variation;
+use WCPOS\WooCommercePOS\Logger;
 
 trait Product_Helpers {
-	public function add_product_image_src_filter(): void {
-		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
-	}
-
 	/**
 	 * Filters the attachment image source result.
 	 * The WC REST API returns 'full' images by default, but we want to return 'shop_thumbnail' images.
@@ -30,7 +27,7 @@ trait Product_Helpers {
 	 *                                    an array of width and height values in pixels (in that order).
 	 * @param bool         $icon          Whether the image should be treated as an icon.
 	 */
-	public function product_image_src( $image, int $attachment_id, $size, bool $icon ) {
+	public function wcpos_product_image_src( $image, int $attachment_id, $size, bool $icon ) {
 		// Get the metadata for the attachment.
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 
@@ -48,13 +45,42 @@ trait Product_Helpers {
 	}
 
 	/**
+	 * Get custom barcode postmeta.
+	 *
 	 * @param WC_Product|WC_Product_Variation $object
+	 *
+	 * @return string
 	 */
 	public function wcpos_get_barcode( $object ) {
-		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$barcode_field = $this->wcpos_get_barcode_field();
 
 		// _sku is_internal_meta_key, don't use get_meta() for this.
 		return '_sku' === $barcode_field ? $object->get_sku() : $object->get_meta( $barcode_field );
+	}
+
+	/**
+	 * Get barcode field from settings.
+	 *
+	 * @return string
+	 */
+	public function wcpos_get_barcode_field() {
+		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+
+		// Check for WP_Error
+		if ( is_wp_error( $barcode_field ) ) {
+			Logger::log( 'Error retrieving barcode_field: ' . $barcode_field->get_error_message() );
+
+			return '';
+		}
+	
+		// Check for non-string values
+		if ( ! \is_string( $barcode_field ) ) {
+			Logger::log( 'Unexpected data type for barcode_field. Expected string, got: ' . \gettype( $barcode_field ) );
+
+			return '';
+		}
+
+		return $barcode_field;
 	}
 
 	/**

@@ -101,7 +101,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
-		add_filter( 'wp_get_attachment_image_src', array( $this, 'product_image_src' ), 10, 4 );
+		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
 	}
 
 	/**
