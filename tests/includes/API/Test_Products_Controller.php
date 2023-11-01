@@ -442,4 +442,57 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( $skus, array( 11.2, 3.5 ) );
 	}
+
+	public function test_product_search(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array(
+				'barcode_field' => '_barcode',
+			);
+		});
+
+		$random_title       = wp_generate_password(12, false);
+		$random_sku         = wp_generate_password(8, false);
+		$random_barcode     = wp_generate_password(10, false);
+		$random_description = 'A string containing ' . $random_title . ' and ' . $random_sku . ' and ' . $random_barcode;
+
+		$product1  = ProductHelper::create_simple_product( array( 'description' => $random_description ) );
+		$product2  = ProductHelper::create_simple_product( array( 'description' => $random_description, 'name' => 'Foo ' . $random_title . ' bar' ) );
+		$product3  = ProductHelper::create_simple_product( array( 'description' => $random_description, 'sku' => 'foo-' . $random_sku . '-bar' ) );
+		$product4  = ProductHelper::create_simple_product( array( 'description' => $random_description ) );
+		$product4->update_meta_data( '_barcode', 'foo-' . $random_barcode . '-bar' );
+		$product4->save_meta_data();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+
+		// empty search
+		$request->set_query_params( array( 'search' => '' ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 4, \count( $data ) );
+
+		// search for title
+		$request->set_query_params( array( 'search' => $random_title ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $product2->get_id(), $data[0]['id'] );
+
+		// search for sku
+		$request->set_query_params( array( 'search' => $random_sku ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $product3->get_id(), $data[0]['id'] );
+
+		// search for barcode
+		$request->set_query_params( array( 'search' => $random_barcode ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $product4->get_id(), $data[0]['id'] );
+	}
 }

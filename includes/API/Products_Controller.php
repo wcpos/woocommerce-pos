@@ -131,6 +131,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
 		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
+		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
 	}
 
 	/**
@@ -211,6 +213,117 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$object->save_meta_data();
 		}
 	}
+
+	/**
+	 * Filter to adjust the WordPress search SQL query
+	 * - Search for the product title and SKU and barcode
+	 * - Do not search product description.
+	 *
+	 * @param string   $search
+	 * @param WP_Query $wp_query
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
+		global $wpdb;
+
+		if ( empty( $search ) ) {
+			return $search; // skip processing - no search term in query
+		}
+
+		$q = $wp_query->query_vars;
+		$n = ! empty( $q['exact'] ) ? '' : '%';
+
+		$search = $searchand = '';
+
+		// Adjust this to include the fields you want to search
+		$fields_to_search = array(
+			'post_title',
+			'_sku',
+		);
+
+		$barcode_field = $this->wcpos_get_barcode_field();
+		if ( '_sku' !== $barcode_field ) {
+			$fields_to_search[] = $barcode_field;
+		}
+
+		foreach ((array) $q['search_terms'] as $term) {
+			$term = $n . $wpdb->esc_like($term) . $n;
+
+			foreach ( $fields_to_search as $field ) {
+				if ( \in_array( $field, array('post_title'), true ) ) {
+					$search .= $wpdb->prepare( "{$searchand}($wpdb->posts.$field LIKE %s)", $term );
+				} else {
+					$search .= $wpdb->prepare( "{$searchand}(pm1.meta_value LIKE %s AND pm1.meta_key = '$field')", $term );
+				}
+				$searchand = ' OR ';
+			}
+		}
+
+		if ( ! empty( $search ) ) {
+			$search = " AND ({$search}) ";
+			if ( ! is_user_logged_in()) {
+				$search .= " AND ($wpdb->posts.post_password = '') ";
+			}
+		}
+
+		return $search;
+	}
+
+	/**
+	 * Filter the query arguments for a request.
+	 *
+	 * @param array           $args    Key value array of query var to query value.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array $args Key value array of query var to query value.
+	 */
+	public function wcpos_product_query( array $args, WP_REST_Request $request ): array {
+		if ( ! empty( $request['search'] ) ) {
+			// We need to set the query up for a postmeta join
+			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_products_search' ), 10, 2 );
+			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Filters the JOIN clause of the query.
+	 *
+	 * @param string   $join  The JOIN clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_join_to_products_search( string $join, WP_Query $wp_query ) {
+		global $wpdb;
+
+		if ( ! empty($wp_query->query_vars['s']) && false === strpos($join, 'pm1')) {
+			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
+		}
+
+		return $join;
+	}
+
+	/**
+	 * Filters the GROUP BY clause of the query.
+	 *
+	 * @param string   $groupby The GROUP BY clause of the query.
+	 * @param WP_Query $query   The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_groupby_product_search( string $groupby, WP_Query $query ) {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) ) {
+			$groupby = "{$wpdb->posts}.ID";
+		}
+
+		return $groupby;
+	}
+
 
 	/**
 	 * Returns array of all product ids, name.
