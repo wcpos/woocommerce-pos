@@ -131,8 +131,9 @@ class Products_Controller extends WC_REST_Products_Controller {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
 		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
-		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 	}
 
 	/**
@@ -271,6 +272,37 @@ class Products_Controller extends WC_REST_Products_Controller {
 	}
 
 	/**
+	 * Filters all query clauses at once, for convenience.
+	 *
+	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
+	 * fields (SELECT), and LIMIT clauses.
+	 *
+	 * @param string[] $clauses {
+	 *                          Associative array of the clauses for the query.
+	 *
+	 * @var string The WHERE clause of the query.
+	 * @var string The GROUP BY clause of the query.
+	 * @var string The JOIN clause of the query.
+	 * @var string The ORDER BY clause of the query.
+	 * @var string The DISTINCT clause of the query.
+	 * @var string The SELECT clause of the query.
+	 * @var string The LIMIT clause of the query.
+	 *             }
+	 *
+	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
+	 */
+	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
+		global $wpdb;
+
+		/*
+		 * @TODO - If we are ordering by stock_quantity ASC, the NULL values will be at the top of the list.
+		 * We need to find a way to order the NULL values at the bottom of the list.
+		 */
+
+		return $clauses;
+	}
+
+	/**
 	 * Filter the query arguments for a request.
 	 *
 	 * @param array           $args    Key value array of query var to query value.
@@ -333,8 +365,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return array|WP_Error
 	 */
 	public function wcpos_get_all_posts( array $fields = array() ): array {
-		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
-
 		$args = array(
 			'post_type'      => 'product',
 			'post_status'    => 'publish',
@@ -342,7 +372,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			'fields'         => 'ids',
 		);
 
-		if ( $pos_only_products ) {
+		if ( $this->wcpos_pos_only_products_enabled() ) {
 			$args['meta_query'] = array(
 				'relation' => 'OR',
 				array(
@@ -383,7 +413,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	protected function prepare_objects_query( $request ) {
 		$args          = parent::prepare_objects_query( $request );
-		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$barcode_field = $this->wcpos_get_barcode_field();
 
 		// Add custom 'orderby' options
 		if ( isset( $request['orderby'] ) ) {
@@ -410,6 +440,31 @@ class Products_Controller extends WC_REST_Products_Controller {
 					break;
 			}
 		}
+
+		// Add online_only check
+		if ( $this->wcpos_pos_only_products_enabled() ) {
+			$default_meta_query = array(
+				'relation' => 'OR',
+				array(
+					'key'     => '_pos_visibility',
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => '_pos_visibility',
+					'value'   => 'online_only',
+					'compare' => '!=',
+				),
+			);
+	
+			if (isset($args['meta_query'])) {
+				if ( ! isset($args['meta_query']['relation'])) {
+					$args['meta_query']['relation'] = 'AND';
+				}
+				$args['meta_query'] = array_merge_recursive($args['meta_query'], $default_meta_query);
+			} else {
+				$args['meta_query'] = $default_meta_query;
+			}
+		};
 
 		return $args;
 	}

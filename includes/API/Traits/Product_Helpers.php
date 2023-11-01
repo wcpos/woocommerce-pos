@@ -84,6 +84,25 @@ trait Product_Helpers {
 	}
 
 	/**
+	 * Get barcode field from settings.
+	 *
+	 * @return bool
+	 */
+	public function wcpos_pos_only_products_enabled() {
+		$pos_only_products_enabled = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+
+		// Check for WP_Error
+		if ( is_wp_error( $pos_only_products_enabled ) ) {
+			Logger::log( 'Error retrieving pos_only_products: ' . $pos_only_products_enabled->get_error_message() );
+
+			return '';
+		}
+
+		// make sure it's true, just in case there's a corrupt setting
+		return true === $pos_only_products_enabled;
+	}
+
+	/**
 	 * OLD CODE
 	 * Returns thumbnail if it exists, if not, returns the WC placeholder image.
 	 *
