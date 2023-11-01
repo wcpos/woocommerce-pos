@@ -65,8 +65,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			'readonly'    => false,
 		);
 
-		$decimal_qty = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
-		if ( \is_bool( $decimal_qty ) && $decimal_qty ) {
+		if ( $this->wcpos_allow_decimal_quantities() ) {
 			$schema['properties']['stock_quantity']['type'] = 'string';
 		}
 
@@ -85,21 +84,21 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$params['orderby']['enum'],
 			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
 		);
-
-		$decimal_qty = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
 	
 		// New stock params
-		$new_stock_params = array(
-			'type'              => 'string',
-			'sanitize_callback' => 'sanitize_key',
-			'validate_callback' => 'rest_validate_request_arg',
-		);
+		// @TODO - this is not working
+		
+		// $new_stock_params = array(
+		// 	'type'              => 'string',
+		// 	'sanitize_callback' => 'sanitize_key',
+		// 	'validate_callback' => 'rest_validate_request_arg',
+		// );
 
-		if ( \is_bool( $decimal_qty ) && $decimal_qty ) {
-			$params['stock_quantity'] = isset($params['stock_quantity']) ?
-				array_merge($params['stock_quantity'], $new_stock_params) :
-				$new_stock_params;
-		}
+		// if ( $this->wcpos_allow_decimal_quantities() ) {
+		// 	$params['stock_quantity'] = isset($params['stock_quantity']) ?
+		// 		array_merge($params['stock_quantity'], $new_stock_params) :
+		// 		$new_stock_params;
+		// }
 		
 		return $params;
 	}

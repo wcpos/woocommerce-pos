@@ -322,4 +322,60 @@ class ProductHelper {
 	public static function save_post_test_update_meta_data_direct( $id ): void {
 		update_post_meta( $id, '_test2', 'world' );
 	}
+	
+	/**
+	 * Create a product category.
+	 *
+	 * @param string   $name   The name of the category.
+	 * @param null|int $parent The ID of the parent term.
+	 *
+	 * @return array|WP_Error The created category info or WP_Error if an error occurs.
+	 */
+	public static function create_product_category( string $name, ?int $parent = null ) {
+		// Create a new product category
+		$args = $parent ? array('parent' => $parent) : array();
+
+		return wp_insert_term( $name, 'product_cat', $args );
+	}
+
+	/**
+	 * Delete a product category.
+	 *
+	 * @param int  $term_id The ID of the term to delete.
+	 * @param bool $force   True to force delete even if term is a default term.
+	 *
+	 * @return bool|WP_Error True on success or WP_Error if an error occurs.
+	 */
+	public static function delete_product_category( int $term_id, bool $force = false ) {
+		// Delete the product category
+		return wp_delete_term( $term_id, 'product_cat', array('force_default' => $force) );
+	}
+
+	/**
+	 * Create a product tag.
+	 *
+	 * @param string   $name   The name of the tag.
+	 * @param null|int $parent The ID of the parent term.
+	 *
+	 * @return array|WP_Error The created category info or WP_Error if an error occurs.
+	 */
+	public static function create_product_tag( string $name, ?int $parent = null ) {
+		// Create a new product tag
+		$args = $parent ? array('parent' => $parent) : array();
+
+		return wp_insert_term( $name, 'product_tag', $args );
+	}
+
+	/**
+	 * Delete a product tag.
+	 *
+	 * @param int  $term_id The ID of the term to delete.
+	 * @param bool $force   True to force delete even if term is a default term.
+	 *
+	 * @return bool|WP_Error True on success or WP_Error if an error occurs.
+	 */
+	public static function delete_product_tag( int $term_id, bool $force = false ) {
+		// Delete the product category
+		return wp_delete_term( $term_id, 'product_tag', array('force_default' => $force) );
+	}
 }

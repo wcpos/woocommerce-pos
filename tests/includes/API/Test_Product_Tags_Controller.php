@@ -2,71 +2,35 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use ReflectionClass;
-use WC_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Product_Tags_Controller;
-use WP_REST_Request;
-use WP_User;
 
 /**
  * @internal
  *
  * @coversNothing
  */
-class Test_Product_Tags_Controller extends WC_REST_Unit_Test_Case {
-	/**
-	 * @var Product_Tags_Controller
-	 */
-	protected $endpoint;
-
-	/**
-	 * @var WP_User
-	 */
-	protected $user;
-
-	
+class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
-
 		$this->endpoint = new Product_Tags_Controller();
-		$this->user     = $this->factory->user->create(
-			array(
-				'role' => 'administrator',
-			)
-		);
-
-		new Api();
-		wp_set_current_user( $this->user );
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
 	}
 
-	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products/tags' ) {
-		$request = new WP_REST_Request();
-		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_method( $method );
-		$request->set_route( $path );
-
-		return $request;
-	}
-
 	public function test_namespace_property(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$namespace_property = $reflection->getProperty('namespace');
-		$namespace_property->setAccessible(true);
-		
-		$this->assertEquals('wcpos/v1', $namespace_property->getValue($this->endpoint));
+		$namespace = $this->get_reflected_property_value('namespace');
+
+		$this->assertEquals('wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$rest_base_property = $reflection->getProperty('rest_base');
-		$rest_base_property->setAccessible(true);
-		
-		$this->assertEquals('products/tags', $rest_base_property->getValue($this->endpoint));
+		$rest_base = $this->get_reflected_property_value('rest_base');
+
+		$this->assertEquals('products/tags', $rest_base);
 	}
 
 	/**
@@ -77,5 +41,66 @@ class Test_Product_Tags_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/products/tags', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/tags/(?P<id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/tags/batch', $routes );
+	}
+
+	/**
+	 * Get all expected fields.
+	 */
+	public function get_expected_response_fields() {
+		return array(
+			'id',
+			'name',
+			'slug',
+			'description',
+			'count',
+			// woocommerce pos
+			'uuid',
+		);
+	}
+
+	public function test_product_tag_api_get_all_fields(): void {
+		$expected_response_fields = $this->get_expected_response_fields();
+
+		$tag             = ProductHelper::create_product_tag( 'Music' );
+		$request         = $this->wp_rest_get_request( '/wcpos/v1/products/tags/' . $tag['term_id'] );
+		$response        = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$response_fields = array_keys( $response->get_data() );
+
+		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
+
+		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
+	}
+
+	public function test_product_tag_api_get_all_ids(): void {
+		$tag1        = ProductHelper::create_product_tag( 'Music' );
+		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array('id') );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+		
+		$data = $response->get_data();
+		$this->assertEquals( 2, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $tag1['term_id'], $tag2['term_id'] ), $ids );
+	}
+
+	/**
+	 * Each category needs a UUID.
+	 */
+	public function test_product_tag_response_contains_uuid_meta_data(): void {
+		$tag             = ProductHelper::create_product_tag( 'Music' );
+		$request         = $this->wp_rest_get_request( '/wcpos/v1/products/tags/' . $tag['term_id'] );
+		$response        = $this->server->dispatch($request);
+
+		$data = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertTrue(Uuid::isValid($data['uuid']), 'The UUID value is not valid.');
 	}
 }

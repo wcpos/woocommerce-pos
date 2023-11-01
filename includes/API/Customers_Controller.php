@@ -91,6 +91,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'wcpos_customer_response' ), 10, 3 );
+		add_filter( 'woocommerce_rest_customer_query', array( $this, 'wcpos_customer_query' ), 10, 2 );
 	}
 
 	/**
@@ -181,19 +182,102 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	}
 
 	/**
-	 * Handle the orderby fields extra fields.
+	 * Filter arguments, before passing to WP_User_Query, when querying users via the REST API.
 	 *
-	 * @param mixed $request
+	 * @see https://developer.wordpress.org/reference/classes/wp_user_query/
+	 *
+	 * @param array           $prepared_args Array of arguments for WP_User_Query.
+	 * @param WP_REST_Request $request       The current request.
+	 *
+	 * @return array $prepared_args Array of arguments for WP_User_Query.
 	 */
-	protected function prepare_objects_query( $request ) {
-		$args = parent::prepare_objects_query( $request );
+	public function wcpos_customer_query( array $prepared_args, WP_REST_Request $request ): array {
+		$query_params = $request->get_query_params();
 
-		$orderby = $request['orderby'];
-		if ( \in_array( $orderby, array('first_name', 'last_name', 'email', 'role', 'username'), true ) ) {
-			$args['orderby']  = 'meta_value';
-			$args['meta_key'] = $orderby;
+		// Existing meta query
+		$existing_meta_query = $prepared_args['meta_query'] ?? array();
+
+		// add modified_after date_modified_gmt
+		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
+			$timestamp                   = strtotime( $query_params['modified_after'] );
+			$prepared_args['meta_query'] = array(
+				array(
+					'key'     => 'last_update',
+					'value'   => $timestamp ? (string) $timestamp : '',
+					'compare' => '>',
+				),
+			);
 		}
 
-		return $args;
+		// If the 'search' parameter exists
+		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
+			$search_keyword = $query_params['search'];
+	
+			$search_meta_query = array(
+				'relation' => 'OR',
+				array(
+					'key'     => 'first_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'last_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+			);
+	
+			// Merge with existing meta_query if any
+			if ( ! empty($existing_meta_query)) {
+				$existing_meta_query = array(
+					'relation' => 'AND',
+					$existing_meta_query,
+					$search_meta_query,
+				);
+			} else {
+				$existing_meta_query = $search_meta_query;
+			}
+		}
+
+		// Apply the modified or newly created meta_query
+		$prepared_args['meta_query'] = $existing_meta_query;
+
+		// Handle orderby cases
+		if ( isset( $query_params['orderby'] ) ) {
+			switch ( $query_params['orderby'] ) {
+				case 'first_name':
+					$prepared_args['meta_key'] = 'first_name';
+					$prepared_args['orderby']  = 'meta_value';
+
+					break;
+
+				case 'last_name':
+					$prepared_args['meta_key'] = 'last_name';
+					$prepared_args['orderby']  = 'meta_value';
+
+					break;
+
+				case 'email':
+					$prepared_args['orderby'] = 'user_email';
+
+					break;
+
+				case 'role':
+					$prepared_args['meta_key'] = 'wp_capabilities';
+					$prepared_args['orderby']  = 'meta_value';
+
+					break;
+
+				case 'username':
+					$prepared_args['orderby'] = 'user_login';
+
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		return $prepared_args;
 	}
 }

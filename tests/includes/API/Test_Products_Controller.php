@@ -5,7 +5,6 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Products_Controller;
-use WP_REST_Request;
 use WP_Test_Spy_REST_Server;
 
 /**
@@ -21,15 +20,6 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function tearDown(): void {
 		parent::tearDown();
-	}
-
-	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/products' ) {
-		$request = new WP_REST_Request();
-		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_method( $method );
-		$request->set_route( $path );
-
-		return $request;
 	}
 
 	public function test_namespace_property(): void {
@@ -152,16 +142,19 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_product_api_get_all_ids(): void {
-		$product  = ProductHelper::create_simple_product();
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
 
 		$response = $this->server->dispatch( $request );
-
 		$this->assertEquals( 200, $response->get_status() );
 
-		$this->assertEquals( array( (object) array( 'id' => $product->get_id() ) ), $response->get_data() );
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
 	}
 
 	/**
@@ -538,7 +531,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 3, \count( $data ) );
 		$ids         = wp_list_pluck( $data, 'id' );
 
-		$this->assertEquals( array( $product2->get_id(), $product3->get_id(), $product4->get_id() ), $ids );
+		$this->assertEqualsCanonicalizing( array( $product2->get_id(), $product3->get_id(), $product4->get_id() ), $ids );
 
 		// test products response
 		$request      = $this->wp_rest_get_request( '/wcpos/v1/products' );

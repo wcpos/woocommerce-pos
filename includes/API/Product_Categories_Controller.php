@@ -12,6 +12,7 @@ use Exception;
 use WC_REST_Product_Categories_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Product Tgas controller class.
@@ -64,6 +65,28 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 * Register hooks to modify WC REST API response.
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
+		add_filter( 'woocommerce_rest_prepare_product_cat', array( $this, 'wcpos_product_categories_response' ), 10, 3 );
+	}
+
+	/**
+	 * Filter the product response.
+	 *
+	 * @param WP_REST_Response $response The response object.
+	 * @param object           $item     The original term object.
+	 * @param WP_REST_Request  $request  Request object.
+	 *
+	 * @return WP_REST_Response $response The response object.
+	 */
+	public function wcpos_product_categories_response( WP_REST_Response $response, object $item, WP_REST_Request $request ): WP_REST_Response {
+		$data = $response->get_data();
+
+		// Make sure the term has a uuid
+		$data['uuid'] = $this->get_term_uuid( $item );
+
+		// Reset the new response data
+		$response->set_data( $data );
+
+		return $response;
 	}
 
 	/**
