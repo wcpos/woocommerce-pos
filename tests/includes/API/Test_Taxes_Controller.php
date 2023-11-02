@@ -2,71 +2,34 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use ReflectionClass;
-use WC_REST_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Taxes_Controller;
-use WP_REST_Request;
-use WP_User;
+use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**
  * @internal
  *
  * @coversNothing
  */
-class Test_Taxes_Controller extends WC_REST_Unit_Test_Case {
-	/**
-	 * @var Taxes_Controller
-	 */
-	protected $endpoint;
-
-	/**
-	 * @var WP_User
-	 */
-	protected $user;
-
-	
+class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setUp();
-
 		$this->endpoint = new Taxes_Controller();
-		$this->user     = $this->factory->user->create(
-			array(
-				'role' => 'administrator',
-			)
-		);
-
-		new Api();
-		wp_set_current_user( $this->user );
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
 	}
 
-	public function get_wp_rest_request( $method = 'GET', $path = '/wcpos/v1/taxes' ) {
-		$request = new WP_REST_Request();
-		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_method( $method );
-		$request->set_route( $path );
-
-		return $request;
-	}
-
 	public function test_namespace_property(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$namespace_property = $reflection->getProperty('namespace');
-		$namespace_property->setAccessible(true);
-		
-		$this->assertEquals('wcpos/v1', $namespace_property->getValue($this->endpoint));
+		$namespace = $this->get_reflected_property_value('namespace');
+
+		$this->assertEquals('wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$reflection         = new ReflectionClass($this->endpoint);
-		$rest_base_property = $reflection->getProperty('rest_base');
-		$rest_base_property->setAccessible(true);
-		
-		$this->assertEquals('taxes', $rest_base_property->getValue($this->endpoint));
+		$rest_base = $this->get_reflected_property_value('rest_base');
+
+		$this->assertEquals('taxes', $rest_base);
 	}
 
 	/**
@@ -77,5 +40,69 @@ class Test_Taxes_Controller extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/taxes', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/taxes/(?P<id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/taxes/batch', $routes );
+	}
+
+	/**
+	 * Get all expected fields.
+	 */
+	public function get_expected_response_fields() {
+		return array(
+			'id',
+			'country',
+			'state',
+			'postcode',
+			'city',
+			'postcodes',
+			'cities',
+			'rate',
+			'name',
+			'priority',
+			'compound',
+			'shipping',
+			'order',
+			'class',
+		);
+	}
+
+	public function test_product_category_api_get_all_fields(): void {
+		$expected_response_fields = $this->get_expected_response_fields();
+
+		$tax_id   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'NY',
+			'rate'    => '8.375',
+			'name'    => 'NY Tax',
+		));
+		$request    = $this->wp_rest_get_request( '/wcpos/v1/taxes/' . $tax_id );
+		$response   = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$response_fields = array_keys( $response->get_data() );
+
+		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
+
+		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
+	}
+
+	public function test_product_category_api_get_all_ids(): void {
+		$gb_tax_ids = TaxHelper::create_sample_tax_rates_GB();
+		print_r($gb_tax_ids);
+		$us_tax_ids = TaxHelper::create_sample_tax_rates_US();
+		print_r($us_tax_ids);
+
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array('id') );
+
+		$response = $this->server->dispatch( $request );
+		
+		$this->assertEquals( 200, $response->get_status() );
+		
+		$data = $response->get_data();
+		$this->assertEquals( 5, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array_merge($gb_tax_ids, $us_tax_ids), $ids );
 	}
 }

@@ -65,6 +65,25 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	}
 
 	/**
+	 * Check if the current user can view the taxes.
+	 * Note: WC REST API currently requires manage_woocommerce capability to access the endpoint (even for read only).
+	 * This would stop the Cashier role from being able to view the taxes, so we check for read_private_products instead.
+	 *
+	 * @param WP_REST_Request $request
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function get_item_permissions_check( $request ) { // no typing when overriding parent method
+		$permission = parent::get_item_permissions_check( $request );
+
+		if ( ! $permission && current_user_can( 'read_private_products' ) ) {
+			return true;
+		}
+
+		return $permission;
+	}
+
+	/**
 	 * Returns array of all tax_rate ids.
 	 *
 	 * @param array $fields
