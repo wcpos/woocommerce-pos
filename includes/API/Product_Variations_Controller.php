@@ -49,37 +49,55 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
-		
-		$schema['properties']['barcode'] = array(
-			'description' => __('Barcode', 'woocommerce-pos'),
-			'type'        => 'string',
-			'context'     => array('view', 'edit'),
-			'readonly'    => false,
-		);
+	
+		// Add the 'barcode' property if 'properties' exists and is an array
+		if (isset($schema['properties']) && \is_array($schema['properties'])) {
+			$schema['properties']['barcode'] = array(
+				'description' => __('Barcode', 'woocommerce-pos'),
+				'type'        => 'string',
+				'context'     => array('view', 'edit'),
+				'readonly'    => false,
+			);
+		}
 
-		$decimal_qty = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
-		if ( \is_bool( $decimal_qty ) && $decimal_qty ) {
+		// Check for 'stock_quantity' and allow decimal
+		if ($this->wcpos_allow_decimal_quantities()     &&
+			isset($schema['properties']['stock_quantity']) &&
+			\is_array($schema['properties']['stock_quantity'])) {
 			$schema['properties']['stock_quantity']['type'] = 'string';
 		}
 
 		return $schema;
 	}
 
+
 	/**
 	 * Modify the collection params.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
-		
-		// Modify the per_page argument to allow -1
-		$params['per_page']['minimum'] = -1;
-		$params['orderby']['enum']     = array_merge(
-			$params['orderby']['enum'],
-			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
-		);
-		
+	
+		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
+		if (isset($params['per_page']) && \is_array($params['per_page'])) {
+			$params['per_page']['minimum'] = -1;
+		}
+
+		// Ensure 'orderby' is set and is an array before attempting to modify it
+		if (isset($params['orderby']['enum']) && \is_array($params['orderby']['enum'])) {
+			// Define new sorting options
+			$new_sort_options = array(
+				'sku',
+				'barcode',
+				'stock_quantity',
+				'stock_status',
+			);
+			// Merge new options, avoiding duplicates
+			$params['orderby']['enum'] = array_unique(array_merge($params['orderby']['enum'], $new_sort_options));
+		}
+	
 		return $params;
 	}
+
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
@@ -197,7 +215,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	protected function prepare_objects_query( $request ) {
 		$args          = parent::prepare_objects_query( $request );
-		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$barcode_field = $this->wcpos_get_barcode_field();
 
 		// Add custom 'orderby' options
 		if ( isset( $request['orderby'] ) ) {

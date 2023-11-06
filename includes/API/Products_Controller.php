@@ -57,49 +57,52 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
-		
-		$schema['properties']['barcode'] = array(
-			'description' => __('Barcode', 'woocommerce-pos'),
-			'type'        => 'string',
-			'context'     => array('view', 'edit'),
-			'readonly'    => false,
-		);
+	
+		// Add the 'barcode' property if 'properties' exists and is an array
+		if (isset($schema['properties']) && \is_array($schema['properties'])) {
+			$schema['properties']['barcode'] = array(
+				'description' => __('Barcode', 'woocommerce-pos'),
+				'type'        => 'string',
+				'context'     => array('view', 'edit'),
+				'readonly'    => false,
+			);
+		}
 
-		if ( $this->wcpos_allow_decimal_quantities() ) {
+		// Check for 'stock_quantity' and allow decimal
+		if ($this->wcpos_allow_decimal_quantities()     &&
+			isset($schema['properties']['stock_quantity']) &&
+			\is_array($schema['properties']['stock_quantity'])) {
 			$schema['properties']['stock_quantity']['type'] = 'string';
 		}
 
 		return $schema;
 	}
 
+
 	/**
 	 * Modify the collection params.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
-		
-		// Modify the per_page argument to allow -1
-		$params['per_page']['minimum'] = -1;
-		$params['orderby']['enum']     = array_merge(
-			$params['orderby']['enum'],
-			array( 'sku', 'barcode', 'stock_quantity', 'stock_status' )
-		);
 	
-		// New stock params
-		// @TODO - this is not working
-		
-		// $new_stock_params = array(
-		// 	'type'              => 'string',
-		// 	'sanitize_callback' => 'sanitize_key',
-		// 	'validate_callback' => 'rest_validate_request_arg',
-		// );
+		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
+		if (isset($params['per_page']) && \is_array($params['per_page'])) {
+			$params['per_page']['minimum'] = -1;
+		}
 
-		// if ( $this->wcpos_allow_decimal_quantities() ) {
-		// 	$params['stock_quantity'] = isset($params['stock_quantity']) ?
-		// 		array_merge($params['stock_quantity'], $new_stock_params) :
-		// 		$new_stock_params;
-		// }
-		
+		// Ensure 'orderby' is set and is an array before attempting to modify it
+		if (isset($params['orderby']['enum']) && \is_array($params['orderby']['enum'])) {
+			// Define new sorting options
+			$new_sort_options = array(
+				'sku',
+				'barcode',
+				'stock_quantity',
+				'stock_status',
+			);
+			// Merge new options, avoiding duplicates
+			$params['orderby']['enum'] = array_unique(array_merge($params['orderby']['enum'], $new_sort_options));
+		}
+	
 		return $params;
 	}
 

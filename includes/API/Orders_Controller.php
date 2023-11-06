@@ -9,12 +9,16 @@ if ( ! class_exists('WC_REST_Orders_Controller') ) {
 }
 
 use Exception;
+use WC_Email_Customer_Invoice;
 use WC_Order;
 use WC_Order_Query;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WP_REST_Request;
 use WP_REST_Response;
+
+use WP_REST_Server;
 
 /**
  * Orders controller class.
@@ -33,6 +37,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	protected $namespace = 'wcpos/v1';
 
 	/**
+	 * Store the request object for use in lifecycle methods.
+	 *
+	 * @var WP_REST_Request
+	 */
+	protected $wcpos_request;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -44,20 +55,271 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Add custom fields to the product schema.
+	 */
+	public function get_item_schema() {
+		$schema = parent::get_item_schema();
+	
+		// Add barcode property to the schema
+		$schema['properties']['barcode'] = array(
+			'description' => __('Barcode', 'woocommerce-pos'),
+			'type'        => 'string',
+			'context'     => array('view', 'edit'),
+			'readonly'    => false,
+		);
+
+		// Check and remove email format validation from the billing property
+		if (isset($schema['properties']['billing']['properties']['email']['format'])) {
+			unset($schema['properties']['billing']['properties']['email']['format']);
+		}
+
+		// Modify line_items->parent_name to accept 'string' or 'null'
+		if (isset($schema['properties']['line_items']) &&
+		\is_array($schema['properties']['line_items']['items']['properties'])) {
+			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array('string', 'null');
+		}
+
+		return $schema;
+	}
+
+
+	/**
+	 * Create a single item.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// Proceed with the parent method to handle the creation
+		return parent::create_item( $request );
+	}
+
+	/**
+	 * Update a single order.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// Proceed with the parent method to handle the creation
+		return parent::update_item( $request );
+	}
+
+	/**
+	 * Create or update a line item.
+	 *
+	 * @param array  $posted Line item data.
+	 * @param string $action 'create' to add line item or 'update' to update it.
+	 * @param object $item   Passed when updating an item. Null during creation.
+	 *
+	 * @throws WC_REST_Exception Invalid data, server error.
+	 *
+	 * @return WC_Order_Item_Product
+	 */
+	public function prepare_line_items( $posted, $action = 'create', $item = null ) {
+		$item = parent::prepare_line_items( $posted, $action, $item );
+
+		/**
+		 * If you send a variation with meta_data, the meta_data will be duplicated
+		 * WooCommerce attempts to delete the duped meta_data in $item->set_product( $variation )
+		 * but later it gets added right back in $this->maybe_set_item_meta_data.
+		 *
+		 * To fix this we check for a variation_id and remove the meta_data before setting the product
+		 */
+		if ( $item->get_variation_id() ) {
+			// Get the product variation
+			$variation = wc_get_product( $item->get_variation_id() );
+			if ( $variation ) {
+				// Get the valid attribute keys and remove 'attribute_' prefix
+				$valid_keys = array_map(function($attribute_name) {
+					return str_replace( 'attribute_', '', $attribute_name );
+				}, array_keys( $variation->get_variation_attributes() ));
+
+				// Get existing meta data on the item
+				$meta_data   = $item->get_meta_data();
+				$unique_keys = array();
+
+				// Iterate over meta data to find and remove duplicates
+				foreach ( $meta_data as $index => $meta ) {
+					$meta_id = $meta->id;
+					$data    = $meta->get_data();
+					$key     = $data['key'];
+
+					if ( \in_array( $key, $valid_keys, true ) ) {
+						// If the meta data doesn't have an ID, it's considered 'new' and can be replaced by one with an ID.
+						if ( ! isset($unique_keys[$key]) || (isset($meta_id) && ! isset($unique_keys[$key]['id'])) ) {
+							$unique_keys[$key] = array('index' => $index, 'id' => $meta_id);
+						} else {
+							// Remove the duplicate meta data.
+							if ($meta->id) {
+								$item->delete_meta_data_by_mid( $meta->id );
+							} else {
+								$meta->value = null;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		return $item;
+	}
+
+	/**
+	 * Validate billing email.
+	 * NOTE: we have removed the format check to allow empty email addresses.
+	 *
+	 * @param WP_REST_Request $request
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
+		// Your custom validation logic for the request data
+		$billing = $request['billing'] ?? null;
+		$email   = \is_array($billing) ? ($billing['email'] ?? null) : null;
+	
+		if ( ! \is_null($email) && '' !== $email && ! is_email( $email ) ) {
+			return new \WP_Error(
+				'rest_invalid_param',
+				// translators: Use default WordPress translation
+				__( 'Invalid email address.' ),
+				array('status' => 400)
+			);
+		}
+
+		return true;
+	}
+
+
+
+	/**
 	 * Modify the collection params.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 		
-		// Modify the per_page argument to allow -1
-		$params['per_page']['minimum'] = -1;
-		$params['orderby']['enum']     = array_merge(
-			$params['orderby']['enum'],
-			array( 'status', 'customer_id', 'payment_method', 'total' )
-		);
+		if (isset($params['per_page'])) {
+			$params['per_page']['minimum'] = -1;
+		}
+	
+		if (isset($params['orderby']) && \is_array($params['orderby']['enum'])) {
+			$params['orderby']['enum'] = array_merge(
+				$params['orderby']['enum'],
+				array('status', 'customer_id', 'payment_method', 'total')
+			);
+		}
 
 		return $params;
 	}
+
+	/**
+	 * Add route for sending emails.
+	 */
+	public function register_routes(): void {
+		parent::register_routes();
+
+		register_rest_route(
+			$this->namespace,
+			'/orders/(?P<order_id>[\d]+)/email',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'wcpos_send_email' ),
+					'permission_callback' => array( $this, 'wcpos_send_email_permissions_check' ),
+					'args'                => array_merge($this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ), array(
+						'email'   => array(
+							'type'        => 'string',
+							'description' => __( 'Email address', 'woocommerce-pos' ),
+							'required'    => true,
+						),
+						'save_to' => array(
+							'type'        => 'string',
+							'description' => __( 'Save email to order', 'woocommerce-pos' ),
+							'required'    => false,
+						),
+					)),
+				),
+				'schema' => array(),
+			)
+		);
+	}
+
+	/**
+	 * Send order email, optionally add email address.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function wcpos_send_email( WP_REST_Request $request ) {
+		$this->wcpos_request = $request;
+		$order               = wc_get_order( (int) $request['order_id'] );
+		$email               = $request['email'];
+
+		if ( ! $order || $this->post_type !== $order->get_type() ) {
+			return new \WP_Error( 'woocommerce_rest_order_invalid_id', __( 'Invalid order ID.', 'woocommerce' ), array( 'status' => 404 ) );
+		}
+
+		if ( 'billing' == $request['save_to'] ) {
+			$order->set_billing_email( $email );
+			$order->save();
+			$order->add_order_note( sprintf( __( 'Email address %s added to billing details from WooCommerce POS.', 'woocommerce-pos' ), $email ), false, true );
+		}
+
+		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' );
+		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 10, 3 );
+
+		// Send the customer invoice email.
+		WC()->payment_gateways();
+		WC()->shipping();
+		WC()->mailer()->customer_invoice( $order );
+
+		// Note the event.
+		$order->add_order_note( sprintf( __( 'Order details manually sent to %s from WooCommerce POS.', 'woocommerce-pos' ), $email ), false, true );
+
+		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' );
+
+		$request->set_param( 'context', 'edit' );
+
+		return rest_ensure_response( array( 'success' => true ) );
+
+		//		$response->set_status( 201 );
+	}
+
+	/**
+	 * Send email permissions check.
+	 */
+	public function wcpos_send_email_permissions_check() {
+		if ( ! wc_rest_check_post_permissions( $this->post_type, 'create' ) ) {
+			return new WP_Error( 'woocommerce_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'woocommerce' ), array( 'status' => rest_authorization_required_code() ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param string                    $recipient
+	 * @param WC_Order                  $order
+	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice
+	 *
+	 * @return string
+	 */
+	public function wcpos_recipient_email_address( string $recipient, WC_Order $order, WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
+		return $this->wcpos_request['email'];
+	}
+
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
@@ -68,7 +330,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ): mixed {
-		$this->wcpos_register_wc_rest_api_hooks();
+		$this->wcpos_register_wc_rest_api_hooks( $request );
 		$params = $request->get_params();
 
 		// Optimised query for getting all product IDs
@@ -81,9 +343,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 	/**
 	 * Register hooks to modify WC REST API response.
+	 *
+	 * @param WP_REST_Request $request
 	 */
-	public function wcpos_register_wc_rest_api_hooks(): void {
+	public function wcpos_register_wc_rest_api_hooks( WP_REST_Request $request ): void {
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
+		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
+		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
 	}
 
 	/**
@@ -119,6 +385,48 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		// $this->log_large_rest_response( $response, $order->get_id() );
 
 		return $response;
+	}
+
+	/**
+	 * Add UUID to order items.
+	 *
+	 * @param $items     WC_Order_Item[]
+	 * @param $order     WC_Order
+	 * @param $item_type string[] ['line_item' | 'fee' | 'shipping' | 'tax' | 'coupon']
+	 *
+	 * @return WC_Order_Item[]
+	 */
+	public function wcpos_order_get_items( array $items, WC_Order $order, array $item_type ): array {
+		foreach ( $items as $item ) {
+			$this->maybe_add_order_item_uuid( $item );
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Add extra data for woocommerce pos orders.
+	 * - Add custom 'created_via' prop for POS orders, used in WC Admin display.
+	 *
+	 * @param WC_Order $order The object being saved.
+	 *
+	 * @throws WC_Data_Exception
+	 */
+	public function wcpos_before_order_object_save( WC_Order $order ): void {
+		if ( 0 === $order->get_id() ) {
+			$order->set_created_via( PLUGIN_NAME );
+		}
+
+		/**
+		 * Add cashier user id to order meta
+		 * Note: There should only be one cashier per order, currently this will overwrite previous cashier id.
+		 */
+		$user_id    = get_current_user_id();
+		$cashier_id = $order->get_meta( '_pos_user' );
+
+		if ( ! $cashier_id ) {
+			$order->update_meta_data( '_pos_user', $user_id );
+		}
 	}
 
 	/**

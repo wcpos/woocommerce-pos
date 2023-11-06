@@ -46,10 +46,12 @@ class API {
 
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
+			// woocommerce pos rest api controllers
 			'auth'                  => new API\Auth(),
 			'settings'              => new API\Settings(),
 			'stores'                => new API\Stores(),
-			'emails'                => new API\Order_Emails(),
+
+			// extend WC REST API controllers
 			'products'              => new API\Products_Controller(),
 			'product_variations'    => new API\Product_Variations_Controller(),
 			'orders'                => new API\Orders_Controller(),

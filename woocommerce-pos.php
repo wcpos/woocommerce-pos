@@ -57,3 +57,10 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 		<?php
 	} );
 }
+
+// Declare HPOS compatible
+add_action( 'before_woocommerce_init', function(): void {
+	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+	}
+} );

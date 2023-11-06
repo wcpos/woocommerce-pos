@@ -51,20 +51,26 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		// Add new fields to the 'orderby' enum list
-		$params['orderby']['enum'] = array_merge(
-			$params['orderby']['enum'],
-			array(
+		// Check if 'orderby' is set and is an array before modifying it
+		if (isset($params['orderby']) && \is_array($params['orderby']['enum'])) {
+			// Add new fields to the 'orderby' enum list
+			$new_orderby_options = array(
 				'first_name',
 				'last_name',
 				'email',
 				'role',
 				'username',
-			)
-		);
+			);
+			foreach ($new_orderby_options as $option) {
+				if ( ! \in_array($option, $params['orderby']['enum'], true)) {
+					$params['orderby']['enum'][] = $option;
+				}
+			}
+		}
 
 		return $params;
 	}
+
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.

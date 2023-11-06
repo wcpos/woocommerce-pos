@@ -30,6 +30,9 @@ class Orders {
 			'payment_complete_order_status',
 		), 10, 3);
 
+		 
+		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
+
 		// order emails
 		$admin_emails = array(
 			'new_order',
@@ -60,7 +63,7 @@ class Orders {
 	 * @return array
 	 */
 	public function wc_order_statuses( array $order_statuses ): array {
-		$order_statuses['wc-pos-open'] = _x( 'POS - Open', 'Order status', 'woocommerce-pos' );
+		$order_statuses['wc-pos-open']    = _x( 'POS - Open', 'Order status', 'woocommerce-pos' );
 		$order_statuses['wc-pos-partial'] = _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' );
 
 		return $order_statuses;
@@ -95,8 +98,8 @@ class Orders {
 	}
 
 	/**
-	 * @param string $status
-	 * @param int $id
+	 * @param string   $status
+	 * @param int      $id
 	 * @param WC_Order $order
 	 *
 	 * @return string
@@ -107,6 +110,33 @@ class Orders {
 		}
 
 		return $status;
+	}
+
+	/**
+	 * Hides uuid from appearing on Order Edit page.
+	 *
+	 * @param array $meta_keys
+	 *
+	 * @return array
+	 */
+	public function hidden_order_itemmeta( array $meta_keys ): array {
+		return array_merge( $meta_keys, array( '_woocommerce_pos_uuid', '_woocommerce_pos_tax_status' ) );
+	}
+
+	public function manage_admin_emails( $enabled, $order, $email_class ) {
+		if ( ! woocommerce_pos_request() ) {
+			return $enabled;
+		}
+
+		return woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+	}
+
+	public function manage_customer_emails( $enabled, $order, $email_class ) {
+		if ( ! woocommerce_pos_request() ) {
+			return $enabled;
+		}
+
+		return woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 	}
 
 
@@ -140,21 +170,5 @@ class Orders {
 				'woocommerce-pos'
 			),
 		));
-	}
-
-	public function manage_admin_emails( $enabled, $order, $email_class ) {
-		if ( ! woocommerce_pos_request() ) {
-			return $enabled;
-		}
-
-		return woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
-	}
-
-	public function manage_customer_emails( $enabled, $order, $email_class ) {
-		if ( ! woocommerce_pos_request() ) {
-			return $enabled;
-		}
-
-		return woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 	}
 }

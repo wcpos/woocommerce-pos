@@ -136,7 +136,7 @@ class Init {
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
 	}
-
+	
 	/**
 	 * Loads POS integrations with third party plugins.
 	 */

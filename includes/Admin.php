@@ -14,6 +14,10 @@ namespace WCPOS\WooCommercePOS;
 use Automattic\WooCommerce\Admin\PageController;
 use WCPOS\WooCommercePOS\Admin\Analytics;
 use WCPOS\WooCommercePOS\Admin\Notices;
+use WCPOS\WooCommercePOS\Admin\Orders\HPOS_List_Orders;
+use WCPOS\WooCommercePOS\Admin\Orders\HPOS_Single_Order;
+use WCPOS\WooCommercePOS\Admin\Orders\List_Orders;
+use WCPOS\WooCommercePOS\Admin\Orders\Single_Order;
 use WCPOS\WooCommercePOS\Admin\Permalink;
 use WCPOS\WooCommercePOS\Admin\Plugins;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
@@ -53,56 +57,85 @@ class Admin {
 	 * @param $current_screen
 	 */
 	public function current_screen( $current_screen ): void {
+		$action = $_GET['action'] ?? '';
+
+		// Main switch for screen IDs
 		switch ( $current_screen->id ) {
-			case 'options-permalink': // Add setting to permalink page
+			case 'options-permalink':
 				new Permalink();
 
-				break;
-
-			case 'product': // Single product page
+				return;
+			case 'product':
 				new Single_Product();
 
-				break;
-
-			case 'edit-product': // List products page
+				return;
+			case 'edit-product':
 				new List_Products();
 
-				break;
+				return;
+			case 'shop_order':
+				new List_Orders();
 
-			case 'shop_order': // Add POS settings to orders pages
-			case 'edit-shop_order': // Add POS settings to orders pages
-				new Orders();
+				return;
+			case 'edit-shop_order':
+				new Single_Order();
 
-				break;
+				return;
+			case 'woocommerce_page_wc-orders':
+				if ('edit' === $action) {
+					new HPOS_Single_Order();
+				} else {
+					new HPOS_List_Orders();
+				}
 
-			case 'plugins': // Customise plugins page
+				return;
+			case 'plugins':
 				new Plugins();
 
-				break;
+				return;
+			default:
+				// Check if the current screen matches a custom setting page ID
+				if ($this->is_woocommerce_pos_setting_page($current_screen)) {
+					new Settings();
 
-		}
-
-		// Load the Settings class
-		if ( \array_key_exists( 'settings', $this->menu_ids ) && $this->menu_ids['settings'] == $current_screen->id ) {
-			new Settings();
-		}
-
-		// Load the Analytics class
-		// Note screen->id = woocommerce_page_wc-admin is used in many places and is not unique to the analytics page.
-		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
-			$wc_admin_page_controller = PageController::get_instance();
-			$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
-			
-			if ( \is_array( $wc_admin_current_page ) ) {
-				$id     = $wc_admin_current_page['id']     ?? null;
-				$parent = $wc_admin_current_page['parent'] ?? null;
-					
-				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {
-					new Analytics();
+					return;
 				}
-			}
+				// Check if the current screen is for WooCommerce Analytics
+				if ($this->is_woocommerce_analytics($current_screen)) {
+					new Analytics();
+
+					return;
+				}
 		}
 	}
+
+	/**
+	 * Check if the current screen matches the POS setting page ID.
+	 *
+	 * @param mixed $current_screen
+	 */
+	private function is_woocommerce_pos_setting_page($current_screen) {
+		return \array_key_exists('settings', $this->menu_ids) && $this->menu_ids['settings'] === $current_screen->id;
+	}
+
+	/**
+	 * Check if the current screen is for WooCommerce Analytics.
+	 *
+	 * @param mixed $current_screen
+	 */
+	private function is_woocommerce_analytics($current_screen) {
+		if (class_exists('\Automattic\WooCommerce\Admin\PageController')) {
+			$wc_admin_page_controller = PageController::get_instance();
+			$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
+			$id                       = $wc_admin_current_page['id']         ?? null;
+			$parent                   = $wc_admin_current_page['parent']     ?? null;
+
+			return 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent;
+		}
+
+		return false;
+	}
+
 
 	/**
 	 * Load admin subclasses.

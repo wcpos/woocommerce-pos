@@ -215,7 +215,7 @@ if ( $pos_user ) {
 		?>
 			</td>
 			<td><?php echo esc_html( $item->get_quantity() ); ?></td>
-			<td><?php echo wp_kses_post( wc_price( $product->get_price() ) ); ?></td>
+			<td><?php echo \is_object($product) && method_exists($product, 'get_price') ? wp_kses_post( wc_price( $product->get_price() ) ) : ''; ?></td>
 			<td><?php echo wp_kses_post( wc_price( $item->get_total() ) ); ?></td>
 		</tr>
 	<?php } ?>
