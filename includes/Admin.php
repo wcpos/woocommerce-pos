@@ -74,11 +74,11 @@ class Admin {
 
 				return;
 			case 'shop_order':
-				new List_Orders();
-
+				new Single_Order();
+	
 				return;
 			case 'edit-shop_order':
-				new Single_Order();
+				new List_Orders();
 
 				return;
 			case 'woocommerce_page_wc-orders':
