@@ -258,10 +258,6 @@ class API {
 	/**
 	 * Filters the REST API dispatch request result.
 	 *
-	 * @TODO - Should I use this hook instead of rest_request_before_callbacks?
-	 * I could load the POS Handler and then return call_user_func( $handler['callback'], $request )
-	 * - Pro is that route may be cleaner and less flakey than the above method
-	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
 	 * @param WP_REST_Request $request         Request used to generate the response.
 	 * @param string          $route           Route matched for the request.
@@ -273,12 +269,21 @@ class API {
 		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
 			/*
 			 * If $handler['callback'][0] matches one of our controllers we add a filter for $dispatch_result.
-			 * This allows our POS endpoints to modify the response of the WooCommerce REST API.
+			 * This allows us to conditionally init woocommerce hooks in the controller.
 			 */
 			foreach ( $this->controllers as $key => $controller_class ) {
 				if ( $handler['callback'][0] === $controller_class ) {
 					/**
 					 * Filters the dispatch result for a request.
+					 *
+					 * The dynamic portion of the hook name, `$key`, refers to the identifier of the controller.
+					 *
+					 * @since 1.4.0
+					 *
+					 * @param mixed           $dispatch_result The dispatch result.
+					 * @param WP_REST_Request $request         The request instance.
+					 * @param string          $route           The route being dispatched.
+					 * @param array           $handler         The handler for the route.
 					 */
 					$dispatch_result = apply_filters( "woocommerce_pos_rest_dispatch_{$key}_request", $dispatch_result, $request, $route, $handler );
 

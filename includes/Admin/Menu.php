@@ -156,7 +156,22 @@ class Menu {
 		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
 		$pos_submenu[1][2] = woocommerce_pos_url();
 
-		// Allows Pro to hook into the POS admin menu.
+		/*
+		 * Fires after POS admin menus are registered.
+		 *
+		 * The array arguments, `$this->toplevel_screen_id` and
+		 * `$this->settings_screen_id`, refers to the top-level POS menu ID and
+		 * settings submenu ID respectively.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $menus {
+		 *     An array of admin menu IDs.
+		 *
+		 *     @type string $toplevel The top-level POS menu ID.
+		 *     @type string $settings The settings submenu ID.
+		 * }
+		 */
 		do_action( 'woocommerce_pos_register_pos_admin', array(
 			'toplevel' => $this->toplevel_screen_id,
 			'settings' => $this->settings_screen_id,

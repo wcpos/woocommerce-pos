@@ -15,15 +15,26 @@ use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\VERSION;
 
 class Settings {
-
-    /**
-     * @var
-     */
-    protected $settings_service;
+	/**
+	 * @var 
+	 */
+	protected $settings_service;
 
 	public function __construct() {
-        $this->settings_service = new \WCPOS\WooCommercePOS\Services\Settings();
+		$this->settings_service = new \WCPOS\WooCommercePOS\Services\Settings();
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+
+		/*
+		 * Initializes the settings for WooCommerce POS in the admin panel.
+		 *
+		 * This action hook can be used to run additional initialization routines
+		 * when the WooCommerce POS settings are being set up in the admin panel.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param Settings $this Settings class instance for the current admin context.
+		 */
+		do_action( 'woocommerce_pos_admin_settings_init', $this );
 	}
 
 	/**
@@ -36,8 +47,8 @@ class Settings {
 				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
 			</div>
 		</div>',
-            __( 'Error', 'woocommerce-pos' ),
-            __( 'Settings failed to load, please contact support', 'woocommerce-pos' )
+			__( 'Error', 'woocommerce-pos' ),
+			__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
 		);
 	}
 
@@ -48,9 +59,9 @@ class Settings {
 	 *
 	 * @return void
 	 */
-	public function enqueue_assets() {
+	public function enqueue_assets(): void {
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-		$dir = $is_development ? 'build' : 'assets';
+		$dir            = $is_development ? 'build' : 'assets';
 
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
@@ -85,10 +96,10 @@ class Settings {
 			true
 		);
 
-        // Add inline script
-        wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
+		// Add inline script
+		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
 
-        if ( $is_development ) {
+		if ( $is_development ) {
 			wp_enqueue_script(
 				'webpack-live-reload',
 				'http://localhost:35729/livereload.js',
@@ -97,19 +108,18 @@ class Settings {
 				true
 			);
 		}
-
-		do_action( 'woocommerce_pos_admin_settings_enqueue_assets' );
 	}
 
-    /**
-     * @return string
-     */
-    private function inline_script(): string {
-        $barcodes = array_values( $this->settings_service->get_barcodes() );
-        $order_statuses = $this->settings_service->get_order_statuses();
-        return sprintf( 'var wcpos = wcpos || {}; wcpos.settings = {
+	/**
+	 * @return string
+	 */
+	private function inline_script(): string {
+		$barcodes       = array_values( $this->settings_service->get_barcodes() );
+		$order_statuses = $this->settings_service->get_order_statuses();
+
+		return sprintf( 'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s
         }', json_encode( $barcodes ), json_encode( $order_statuses ) );
-    }
+	}
 }
