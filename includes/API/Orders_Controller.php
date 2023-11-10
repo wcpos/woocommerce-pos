@@ -329,7 +329,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param string          $route           Route matched for the request.
 	 * @param array           $handler         Route handler used for the request.
 	 */
-	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ): mixed {
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
 		$this->wcpos_register_wc_rest_api_hooks( $request );
 		$params = $request->get_params();
 
