@@ -16,8 +16,12 @@ trim_trailing_whitespace = true
 indent_style = tab
 indent_size = 4
 
-[{*.ts, *.tsx, .jshintrc, *.json, *.yml}]
+[{*.ts, *.tsx, .jshintrc, *.json}]
 indent_style = tab
+indent_size = 4
+
+[*.yml]
+indent_style = space
 indent_size = 4
 
 [{*.txt, wp-config-sample.php}]
