@@ -2,6 +2,8 @@
 node_modules
 packages
 tests
+build
+coverage
 languages
 report.html
 README.md

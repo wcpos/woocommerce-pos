@@ -56,14 +56,17 @@ jobs:
         if: steps.check_version.outputs.release == 'true'
         run: |
           mkdir temp_dir
-          rsync -av --exclude-from='.distignore' ./ temp_dir/
+          rsync -av --prune-empty-dirs --exclude-from='.distignore' ./ temp_dir/
       
       - name: Compress and Upload ZIP
         if: steps.check_version.outputs.release == 'true'
         run: |
-          zip -r woocommerce-pos.zip temp_dir
+          cd temp_dir
+          zip -r ../woocommerce-pos.zip .
+          cd ..
           gh release upload v${{ env.VERSION }} woocommerce-pos.zip --clobber
           rm -rf temp_dir
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
         
