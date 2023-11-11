@@ -19,8 +19,8 @@ class Received {
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
 
-        add_filter('show_admin_bar', '__return_false');
-    }
+		add_filter('show_admin_bar', '__return_false');
+	}
 
 
 	public function get_template(): void {
@@ -37,11 +37,16 @@ class Received {
 //				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
 //			}
 
-			$server     = new Server();
-			$order_json = $server->wp_rest_request( '/wc/v3/orders/' . $this->order_id );
+			/**
+			 * @TODO - this is a hack and needs to be fixed
+			 *
+			 * - hardcoding the rest endpoint is a receipe for disaster
+			 */
+			$server                   = new Server();
+			$order_json               = $server->wp_rest_request( '/wcpos/v1/orders/' . $this->order_id );
 			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
-			$completed_status = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
-			$order_complete = $order->has_status( array( $completed_status, 'pos-partial' ) );
+			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
+			$order_complete           = $order->has_status( array( $completed_status, 'pos-partial' ) );
 
 			// @TODO - display message for errors
 

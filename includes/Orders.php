@@ -17,19 +17,10 @@ class Orders {
 	public function __construct() {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
-		add_filter('woocommerce_valid_order_statuses_for_payment', array(
-			$this,
-			'valid_order_statuses_for_payment',
-		), 10, 2);
-		add_filter('woocommerce_valid_order_statuses_for_payment_complete', array(
-			$this,
-			'valid_order_statuses_for_payment_complete',
-		), 10, 2);
-		add_filter('woocommerce_payment_complete_order_status', array(
-			$this,
-			'payment_complete_order_status',
-		), 10, 3);
-
+		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 10, 3 );
+		add_filter( 'woocommerce_valid_order_statuses_for_payment', array($this,'valid_order_statuses_for_payment' ), 10, 2);
+		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2);
+		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3);
 		 
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 
@@ -67,6 +58,24 @@ class Orders {
 		$order_statuses['wc-pos-partial'] = _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' );
 
 		return $order_statuses;
+	}
+
+	/**
+	 * WooCommerce order-pay form won't allow processing of orders with total = 0.
+	 *
+	 * @param bool     $needs_payment
+	 * @param WC_Order $order
+	 * @param array    $valid_order_statuses
+	 *
+	 * @return bool
+	 */
+	public function order_needs_payment( bool $needs_payment, WC_Order $order, array $valid_order_statuses ): bool {
+		// If the order total is zero and status is a POS status, then allow payment to be taken, ie: Gift Card
+		if ( 0 == $order->get_total() && \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ) {
+			return true;
+		}
+
+		return $needs_payment;
 	}
 
 	/**

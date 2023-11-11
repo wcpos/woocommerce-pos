@@ -68,5 +68,3 @@ jobs:
           rm -rf temp_dir
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-        

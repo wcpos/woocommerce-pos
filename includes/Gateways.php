@@ -11,8 +11,6 @@
 namespace WCPOS\WooCommercePOS;
 
 class Gateways {
-
-
 	public function __construct() {
 		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ), 99 );
@@ -23,7 +21,7 @@ class Gateways {
 	 * BEWARE: some gateways/themes/plugins call this very early on every page!!
 	 * We cannot guarantee that $wp is set, so we cannot use woocommerce_pos_request.
 	 *
-	 * @param array | null $gateways
+	 * @param null|array $gateways
 	 *
 	 * @return array
 	 */
@@ -45,13 +43,13 @@ class Gateways {
 	/**
 	 * Get available payment POS gateways,
 	 * - Order and set default order
-	 * - Also going to remove icons from the gateways
+	 * - Also going to remove icons from the gateways.
 	 *
 	 * - NOTE: lots of plugins/themes call this filter and I can't guarantee that $gateways is an array
 	 *
-	 * @param array | null $gateways
+	 * @param null|array $gateways
 	 *
-	 * @return array | null
+	 * @return null|array
 	 */
 	public function available_payment_gateways( ?array $gateways ): ?array {
 		// early exit
@@ -60,8 +58,8 @@ class Gateways {
 		}
 
 		// use POS settings
-        $settings_service = new Services\Settings();
-		$settings = $settings_service->get_payment_gateways_settings();
+		$settings_service = new Services\Settings();
+		$settings         = $settings_service->get_payment_gateways_settings();
 
 		// Get all payment gateways
 		$all_gateways = WC()->payment_gateways->payment_gateways;
@@ -73,7 +71,7 @@ class Gateways {
 				if ( isset( $settings['gateways'][ $gateway->id ]['title'] ) ) {
 					$gateway->title = $settings['gateways'][ $gateway->id ]['title'];
 				}
-				/**
+				/*
 				 * There is an issue over-writing the description field because some gateways use this for info,
 				 * eg: Account Funds uses it to show the current balance.
 				 */
@@ -81,9 +79,9 @@ class Gateways {
 //					$gateway->description = $settings['gateways'][ $gateway->id ]['description'];
 //				}
 
-				$gateway->icon = '';
+				$gateway->icon    = '';
 				$gateway->enabled = 'yes';
-				$gateway->chosen = $gateway->id === $settings['default_gateway'];
+				$gateway->chosen  = $gateway->id === $settings['default_gateway'];
 
 				$_available_gateways[ $gateway->id ] = $gateway;
 			}
@@ -96,5 +94,4 @@ class Gateways {
 
 		return $_available_gateways;
 	}
-
 }

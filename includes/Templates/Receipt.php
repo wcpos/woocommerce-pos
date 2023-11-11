@@ -87,7 +87,7 @@ class Receipt {
 	 * @return null|mixed
 	 */
 	private function get_template_path( string $file_name ) {
-		/**
+		/*
 		 * Filters the path to the receipt template file.
 		 *
 		 * @param {string} $path Full server path to the template file.
