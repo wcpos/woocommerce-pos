@@ -54,15 +54,22 @@ jobs:
 
       - name: Read .distignore
         if: steps.check_version.outputs.release == 'true'
-        id: read_distignore
         run: |
           EXCLUDES=$(awk '{print "-x \42"$0"\42"}' .distignore | xargs)
           echo "EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-
+      
+      - name: Debug EXCLUDES
+        if: steps.check_version.outputs.release == 'true'
+        run: |
+          echo "Exclude string: $EXCLUDES"
+      
       - name: Compress and Upload ZIP
         if: steps.check_version.outputs.release == 'true'
         run: |
+          set -x
           zip -r woocommerce-pos.zip . $EXCLUDES
+          set +x
           gh release upload v${{ env.VERSION }} woocommerce-pos.zip --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
