@@ -21,6 +21,7 @@ jobs:
         run: |
           VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*" woocommerce-pos.php)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          git fetch --prune --unshallow
           LAST_TAG=$(git describe --tags --abbrev=0)
           if [[ "v$VERSION" == "$LAST_TAG" ]]; then
             echo "Version has not changed. Skipping release..."
