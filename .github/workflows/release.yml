@@ -52,24 +52,18 @@ jobs:
           composer install --no-dev
           yarn build:js
 
-      - name: Read .distignore
+      - name: Sync to Temporary Directory
         if: steps.check_version.outputs.release == 'true'
         run: |
-          EXCLUDES=$(awk '{print "-x \42"$0"\42"}' .distignore | xargs)
-          echo "EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-      
-      - name: Debug EXCLUDES
-        if: steps.check_version.outputs.release == 'true'
-        run: |
-          echo "Exclude string: $EXCLUDES"
+          mkdir temp_dir
+          rsync -av --exclude-from='.distignore' ./ temp_dir/
       
       - name: Compress and Upload ZIP
         if: steps.check_version.outputs.release == 'true'
         run: |
-          set -x
-          zip -r woocommerce-pos.zip . $EXCLUDES
-          set +x
+          zip -r woocommerce-pos.zip temp_dir
           gh release upload v${{ env.VERSION }} woocommerce-pos.zip --clobber
+          rm -rf temp_dir
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
