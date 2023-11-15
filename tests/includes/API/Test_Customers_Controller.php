@@ -360,4 +360,51 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer8->get_id(), $data[0]['id'] );
 	}
+
+	/**
+	 * Test customer creation.
+	 */
+	public function test_create_customer(): void {
+		$request = $this->wp_rest_post_request('/wcpos/v1/customers');
+		$request->set_body_params(
+			array(
+				'first_name' => 'John',
+				'last_name'  => 'Doe',
+				'email'      => 'email@example.com',
+				'password' 	 => '',
+			)
+		);
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		// print_r($data);
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'John', $data['first_name'] );
+		$this->assertEquals( 'Doe', $data['last_name'] );
+	}
+
+	public function test_update_customer(): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Sarah',
+				'last_name'  => 'Dobbs',
+				'email'      => 'dobbs@example.com',
+			),
+		);
+
+		$request  = $this->wp_rest_get_request('/wcpos/v1/customers/' . $customer->get_id() );
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'Sarah', $data['first_name'] );
+
+		$request            = $this->wp_rest_post_request('/wcpos/v1/customers/' . $customer->get_id() );
+		$data['first_name'] = 'Jane';
+		$request->set_body_params($data);
+		$response = rest_get_server()->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'Jane', $data['first_name'] );
+	}
 }

@@ -63,6 +63,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.4.0 - 2023/11/XX = 
+
+
 = 1.3.12 - 2023/09/29 =
 * Fix: WordPress database error Not unique table/alias: 'wp_postmeta' for query
 

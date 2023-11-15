@@ -87,9 +87,7 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_product_category_api_get_all_ids(): void {
 		$gb_tax_ids = TaxHelper::create_sample_tax_rates_GB();
-		print_r($gb_tax_ids);
 		$us_tax_ids = TaxHelper::create_sample_tax_rates_US();
-		print_r($us_tax_ids);
 
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
 		$request->set_param( 'posts_per_page', -1 );
@@ -104,5 +102,55 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array_merge($gb_tax_ids, $us_tax_ids), $ids );
+	}
+
+	/**
+	 * The WC REST API does not support the include param.
+	 * This test is to ensure that the include param is supported in the WCPOS API.
+	 *
+	 * @TODO - I will need to adjust the HEADER counts as well
+	 */
+	public function test_include_param(): void {
+		$tax_id1   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'NY',
+			'rate'    => '8.375',
+			'name'    => 'NY Tax',
+		));
+		$tax_id2   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'CA',
+			'rate'    => '7.25',
+			'name'    => 'CA Tax',
+		));
+		$tax_id3   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'FL',
+			'rate'    => '6.00',
+			'name'    => 'FL Tax',
+		));
+		$tax_id4   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'TX',
+			'rate'    => '6.25',
+			'name'    => 'TX Tax',
+		));
+		$tax_id5   = TaxHelper::create_tax_rate(array(
+			'country' => 'US',
+			'state'   => 'WA',
+			'rate'    => '6.50',
+			'name'    => 'WA Tax',
+		));
+
+		$request    = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param('include', array( $tax_id2, $tax_id4 ));
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array($tax_id2, $tax_id4), $ids );
 	}
 }

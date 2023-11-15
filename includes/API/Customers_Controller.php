@@ -45,6 +45,20 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	}
 
 	/**
+	 * Add custom fields to the product schema.
+	 */
+	public function get_item_schema() {
+		$schema = parent::get_item_schema();
+
+		// Check and remove email format validation from the billing property
+		if (isset($schema['properties']['billing']['properties']['email']['format'])) {
+			unset($schema['properties']['billing']['properties']['email']['format']);
+		}
+
+		return $schema;
+	}
+
+	/**
 	 * Add extra fields to WP_REST_Controller::get_collection_params().
 	 * - add new fields to the 'orderby' enum list.
 	 */
@@ -71,6 +85,64 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		return $params;
 	}
 
+	/**
+	 * Create a single item.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function create_item( $request ) {
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// Proceed with the parent method to handle the creation
+		return parent::create_item( $request );
+	}
+
+	/**
+	 * Update a single order.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_item( $request ) {
+		$valid_email = $this->wcpos_validate_billing_email( $request );
+		if ( is_wp_error( $valid_email ) ) {
+			return $valid_email;
+		}
+
+		// Proceed with the parent method to handle the creation
+		return parent::update_item( $request );
+	}
+
+	/**
+	 * Validate billing email.
+	 * NOTE: we have removed the format check to allow empty email addresses.
+	 *
+	 * @param WP_REST_Request $request
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
+		// Your custom validation logic for the request data
+		$billing = $request['billing'] ?? null;
+		$email   = \is_array($billing) ? ($billing['email'] ?? null) : null;
+	
+		if ( ! \is_null($email) && '' !== $email && ! is_email( $email ) ) {
+			return new \WP_Error(
+				'rest_invalid_param',
+				// translators: Use default WordPress translation
+				__( 'Invalid email address.' ),
+				array('status' => 400)
+			);
+		}
+
+		return true;
+	}
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
