@@ -34,6 +34,13 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	protected $namespace = 'wcpos/v1';
 
 	/**
+	 * Store user search results for merging with meta_query search results.
+	 *
+	 * @var array
+	 */
+	protected $wcpos_user_search_results = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -259,10 +266,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 	}
 
-	/**
+	/*
 	 * Filter arguments, before passing to WP_User_Query, when querying users via the REST API.
-	 *
-	 * @see https://developer.wordpress.org/reference/classes/wp_user_query/
 	 *
 	 * @param array           $prepared_args Array of arguments for WP_User_Query.
 	 * @param WP_REST_Request $request       The current request.
@@ -286,39 +291,6 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				),
 			);
 		}
-
-		// If the 'search' parameter exists
-		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
-			$search_keyword = $query_params['search'];
-	
-			$search_meta_query = array(
-				'relation' => 'OR',
-				array(
-					'key'     => 'first_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'last_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-			);
-	
-			// Merge with existing meta_query if any
-			if ( ! empty($existing_meta_query)) {
-				$existing_meta_query = array(
-					'relation' => 'AND',
-					$existing_meta_query,
-					$search_meta_query,
-				);
-			} else {
-				$existing_meta_query = $search_meta_query;
-			}
-		}
-
-		// Apply the modified or newly created meta_query
-		$prepared_args['meta_query'] = $existing_meta_query;
 
 		// Handle orderby cases
 		if ( isset( $query_params['orderby'] ) ) {
@@ -356,6 +328,111 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		}
 
+		// Handle search
+		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
+			$search_keyword = $query_params['search'];
+
+			/*
+			 * It seems that you can't search by user_email, user_login etc and meta_query at the same time.
+			 *
+			 * We will unset the search param and add a hook to modify the user query to search the user table
+			 */
+			unset( $prepared_args['search'] );
+			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use
+			add_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
+	
+			$search_meta_query = array(
+				'relation' => 'OR',
+				array(
+					'key'     => 'first_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'last_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				// WooCommerce billing fields
+				array(
+					'key'     => 'billing_first_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'billing_last_name',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'billing_email',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'billing_company',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'billing_phone',
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				),
+			);
+	
+			// Merge with existing meta_query if any
+			if ( ! empty($existing_meta_query)) {
+				$existing_meta_query = array(
+					'relation' => 'AND',
+					$existing_meta_query,
+					$search_meta_query,
+				);
+			} else {
+				$existing_meta_query = $search_meta_query;
+			}
+		}
+
+		// Apply the modified or newly created meta_query
+		$prepared_args['meta_query'] = $existing_meta_query;
+
 		return $prepared_args;
+	}
+
+	/**
+	 * Add user_email and user_login to the user query.
+	 *
+	 * @param WP_User_Query $query
+	 */
+	public function wcpos_search_user_table( $query ): void {
+		global $wpdb;
+		
+		// Remove the hook
+		remove_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
+
+		// Get the search keyword
+		$query_params   = $query->query_vars;
+		$search_keyword = $query_params['_wcpos_search'];
+
+		// Prepare the LIKE statement
+		$like_email = '%' . $wpdb->esc_like( $search_keyword ) . '%';
+		$like_login = '%' . $wpdb->esc_like( $search_keyword ) . '%';
+		
+		$insertion = $wpdb->prepare(
+			"({$wpdb->users}.user_email LIKE %s) OR ({$wpdb->users}.user_login LIKE %s) OR ",
+			$like_email,
+			$like_login
+		);
+
+		//$insertion = "({$wpdb->users}.user_email LIKE '%" . $search_keyword . "%') OR ({$wpdb->users}.user_login LIKE '%" . $search_keyword . "%') OR ";
+		$pattern   = "/\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\)(\s*OR\s*\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\))*\s*/";
+
+		// Add the search keyword to the query
+		$modified_where = preg_replace($pattern, "$insertion$0", $query->query_where);
+
+		// Check if the replacement was successful and assign it back to query_where
+		if ($modified_where !== $query->query_where) {
+			$query->query_where = $modified_where;
+		}
 	}
 }

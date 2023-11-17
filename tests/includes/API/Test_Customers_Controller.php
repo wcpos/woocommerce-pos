@@ -275,6 +275,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$random_username                = wp_generate_password(6, false);
 		$random_billing_first_name      = wp_generate_password(8, false);
 		$random_billing_last_name       = wp_generate_password(8, false);
+		$random_billing_email           = wp_generate_password(8, false) . '@test.com';
 		$random_billing_company         = wp_generate_password(8, false);
 		$random_billing_phone           = wp_generate_password(8, false);
 
@@ -284,17 +285,19 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$customer4 = CustomerHelper::create_customer( array( 'username' => $random_username ) );
 		$customer5 = CustomerHelper::create_customer( array( 'billing_first_name' => $random_billing_first_name ) );
 		$customer6 = CustomerHelper::create_customer( array( 'billing_last_name' => $random_billing_last_name ) );
-		$customer7 = CustomerHelper::create_customer( array( 'billing_company' => $random_billing_company ) );
-		$customer8 = CustomerHelper::create_customer( array( 'billing_phone' => $random_billing_phone ) );
+		$customer7 = CustomerHelper::create_customer( array( 'billing_email' => $random_billing_email ) );
+		$customer8 = CustomerHelper::create_customer( array( 'billing_company' => $random_billing_company ) );
+		$customer9 = CustomerHelper::create_customer( array( 'billing_phone' => $random_billing_phone ) );
 
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params( array( 'role' => 'all' ) );
 
 		// empty search
 		$request->set_query_params( array( 'search' => '' ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
-		$this->assertEquals( 8, \count( $data ) );
+		$this->assertEquals( 9, \count( $data ) );
 
 		// search for first_name
 		$request->set_query_params( array( 'search' => $random_first_name ) );
@@ -344,13 +347,21 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer6->get_id(), $data[0]['id'] );
 
+		// search for billing_last_name
+		$request->set_query_params( array( 'search' => $random_billing_email ) );
+		$response     = rest_get_server()->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer7->get_id(), $data[0]['id'] );
+
 		// search for billing_company
 		$request->set_query_params( array( 'search' => $random_billing_company ) );
 		$response     = rest_get_server()->dispatch( $request );
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 1, \count( $data ) );
-		$this->assertEquals( $customer7->get_id(), $data[0]['id'] );
+		$this->assertEquals( $customer8->get_id(), $data[0]['id'] );
 
 		// search for billing_last_name
 		$request->set_query_params( array( 'search' => $random_billing_phone ) );
@@ -358,7 +369,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 1, \count( $data ) );
-		$this->assertEquals( $customer8->get_id(), $data[0]['id'] );
+		$this->assertEquals( $customer9->get_id(), $data[0]['id'] );
 	}
 
 	/**
