@@ -17,7 +17,6 @@ use WCPOS\WooCommercePOS\Logger;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WP_REST_Request;
 use WP_REST_Response;
-
 use WP_REST_Server;
 
 /**
@@ -461,6 +460,35 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Filters all query clauses at once.
+	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
+	 *
+	 * @param string[] $clauses {
+	 *                          Associative array of the clauses for the query.
+	 *
+	 * @var string The SELECT clause of the query.
+	 * @var string The JOIN clause of the query.
+	 * @var string The WHERE clause of the query.
+	 * @var string The GROUP BY clause of the query.
+	 * @var string The ORDER BY clause of the query.
+	 * @var string The LIMIT clause of the query.
+	 *             }
+	 *
+	 * @param OrdersTableQuery $query The OrdersTableQuery instance (passed by reference).
+	 * @param array            $args  Query args.
+	 *
+	 * @return string[] $clauses
+	 */
+	public function wcpos_hpos_orderby_status_query( array $clauses, $query, $args ) {
+		if ( isset( $clauses['orderby'] ) && '' === $clauses['orderby'] ) {
+			$order              = $args['order'] ?? 'ASC';
+			$clauses['orderby'] = $query->get_table_name('orders') . '.status ' . $order;
+		}
+
+		return $clauses;
+	}
+
+	/**
 	 * Prepare objects query.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -474,6 +502,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( isset( $request['orderby'] ) ) {
 			switch ( $request['orderby'] ) {
 				case 'status':
+					// NOTE: 'post_status' is not a valid orderby option for WC_Order_Query
 					$args['orderby'] = 'post_status';
 
 					break;
@@ -492,6 +521,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					$args['orderby']  = 'meta_value';
 
 					break;
+			}
+
+			// If HPOS is enabled and $args['orderby'] = 'post_status', we need to add a custom query clause
+			if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )                                     &&
+			method_exists( '\Automattic\WooCommerce\Utilities\OrderUtil', 'custom_orders_table_usage_is_enabled' ) &&
+			\Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
+				if ('status' === $request['orderby']) {
+					add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_status_query' ), 10, 3 );
+				}
 			}
 		}
 

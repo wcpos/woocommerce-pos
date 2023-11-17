@@ -163,24 +163,29 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
 	}
 
+	/**
+	 * This works on the app, but not in the test??
+	 */
 	public function test_orderby_status(): void {
 		$order1    = OrderHelper::create_order( array( 'status' => 'pending' ) );
 		$order2    = OrderHelper::create_order( array( 'status' => 'completed' ) );
+		$order3    = OrderHelper::create_order( array( 'status' => 'on-hold' ) );
+		$order4    = OrderHelper::create_order( array( 'status' => 'processing' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'asc' ) );
-		$response = rest_get_server()->dispatch( $request );
+		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'completed', 'pending' ) );
+		$this->assertEquals( $statuses, array( 'completed', 'on-hold', 'pending', 'processing' ) );
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'desc' ) );
-		$response = rest_get_server()->dispatch( $request );
+		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'pending', 'completed' ) );
+		$this->assertEquals( $statuses, array( 'processing', 'pending', 'on-hold', 'completed' ) );
 	}
 
 	public function test_orderby_customer(): void {
@@ -189,7 +194,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order2    = OrderHelper::create_order();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'asc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
 
@@ -197,7 +202,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'desc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
 
@@ -209,7 +214,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order2    = OrderHelper::create_order( array( 'payment_method' => 'pos_card' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'asc' ) );
-		$response        = rest_get_server()->dispatch( $request );
+		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
 
@@ -217,7 +222,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'desc' ) );
-		$response        = rest_get_server()->dispatch( $request );
+		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
 
@@ -229,7 +234,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order2    = OrderHelper::create_order( array( 'total' => 200 ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'asc' ) );
-		$response = rest_get_server()->dispatch( $request );
+		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
 
@@ -237,7 +242,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'desc' ) );
-		$response = rest_get_server()->dispatch( $request );
+		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
 

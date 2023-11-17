@@ -5,7 +5,6 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Products_Controller;
-use WP_Test_Spy_REST_Server;
 
 /**
  * @internal
@@ -252,7 +251,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product4  = ProductHelper::create_simple_product( array( 'sku' => 'alpha' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'asc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'sku' );
 
@@ -260,7 +259,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'sku', 'order' => 'desc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'sku' );
 
@@ -284,7 +283,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'asc' ) );
-		$response         = rest_get_server()->dispatch( $request );
+		$response         = $this->server->dispatch( $request );
 		$data             = $response->get_data();
 		$barcodes         = wp_list_pluck( $data, 'barcode' );
 
@@ -292,7 +291,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'barcode', 'order' => 'desc' ) );
-		$response         = rest_get_server()->dispatch( $request );
+		$response         = $this->server->dispatch( $request );
 		$data             = $response->get_data();
 		$barcodes         = wp_list_pluck( $data, 'barcode' );
 
@@ -304,7 +303,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product2  = ProductHelper::create_simple_product( array( 'stock_status' => 'outofstock' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'asc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_status' );
 
@@ -312,7 +311,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'stock_status', 'order' => 'desc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_status' );
 
@@ -328,7 +327,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product6  = ProductHelper::create_simple_product();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_quantity' );
 
@@ -336,7 +335,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'stock_quantity' );
 
@@ -350,23 +349,16 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'integer', $schema['properties']['stock_quantity']['type'] );
 
-		add_filter( 'woocommerce_pos_general_settings', function() {
-			return array(
-				'decimal_qty' => true,
-			);
-		});
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
+
 		$schema = $this->endpoint->get_item_schema();
 		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
 	}
 
 	public function test_product_response_with_decimal_quantities(): void {
-		add_filter( 'woocommerce_pos_general_settings', function() {
-			return array(
-				'decimal_qty' => true,
-			);
-		});
-		remove_filter('woocommerce_stock_amount', 'intval');
-		add_filter( 'woocommerce_stock_amount', 'floatval' );
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product  = ProductHelper::create_simple_product();
 		$product->set_manage_stock( true );
@@ -385,13 +377,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	// @TODO - this works in the POS, but not in the tests, I have no idea why
 	public function test_product_update_decimal_quantities(): void {
-		add_filter( 'woocommerce_pos_general_settings', function() {
-			return array(
-				'decimal_qty' => true,
-			);
-		});
-		remove_filter('woocommerce_stock_amount', 'intval');
-		add_filter( 'woocommerce_stock_amount', 'floatval' );
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product  = ProductHelper::create_simple_product();
 		$product->set_manage_stock( true );
@@ -401,11 +388,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_body_params( array(
 			'stock_quantity' => '3.85',
 		) );
-		// $server   = rest_get_server(); // re-init the server, so that params are re-read??
-		$wp_rest_server = new WP_Test_Spy_REST_Server();
-		$response       = $wp_rest_server->dispatch($request);
-	
-		$data = $response->get_data();
+		$response       = $this->server->dispatch($request);
+		$data           = $response->get_data();
 	
 		$this->assertEquals(200, $response->get_status());
 			
@@ -413,31 +397,27 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_product_orderby_decimal_stock_quantity(): void {
-		add_filter( 'woocommerce_pos_general_settings', function() {
-			return array(
-				'decimal_qty' => true,
-			);
-		});
-		remove_filter('woocommerce_stock_amount', 'intval');
-		add_filter( 'woocommerce_stock_amount', 'floatval' );
+		$this->setup_decimal_quantity_tests();
+		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$product1  = ProductHelper::create_simple_product( array( 'stock_quantity' => '11.2', 'manage_stock' => true ) );
 		$product2  = ProductHelper::create_simple_product( array( 'stock_quantity' => '3.5', 'manage_stock' => true ) );
+		$product2  = ProductHelper::create_simple_product( array( 'stock_quantity' => '20.7', 'manage_stock' => true ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'asc' ) );
-		$response     = rest_get_server()->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+		$response  = $this->server->dispatch($request);
+		$data      = $response->get_data();
+		$skus      = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 3.5, 11.2 ) );
+		$this->assertEquals( $skus, array( 3.5, 11.2, 20.7 ) );
 
 		// reverse order
 		$request->set_query_params( array( 'orderby' => 'stock_quantity', 'order' => 'desc' ) );
-		$response     = rest_get_server()->dispatch( $request );
-		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+		$response  = $this->server->dispatch($request);
+		$data      = $response->get_data();
+		$skus      = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 11.2, 3.5 ) );
+		$this->assertEquals( $skus, array( 20.7, 11.2, 3.5 ) );
 	}
 
 	public function test_product_search(): void {
@@ -463,14 +443,14 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// empty search
 		$request->set_query_params( array( 'search' => '' ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 4, \count( $data ) );
 
 		// search for title
 		$request->set_query_params( array( 'search' => $random_title ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 1, \count( $data ) );
@@ -478,7 +458,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// search for sku
 		$request->set_query_params( array( 'search' => $random_sku ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 1, \count( $data ) );
@@ -486,7 +466,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// search for barcode
 		$request->set_query_params( array( 'search' => $random_barcode ) );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 1, \count( $data ) );
@@ -525,7 +505,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array('id') );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 3, \count( $data ) );
@@ -535,7 +515,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// test products response
 		$request      = $this->wp_rest_get_request( '/wcpos/v1/products' );
-		$response     = rest_get_server()->dispatch( $request );
+		$response     = $this->server->dispatch($request);
 		$data         = $response->get_data();
 		$this->assertEquals(200, $response->get_status());
 		$this->assertEquals( 3, \count( $data ) );

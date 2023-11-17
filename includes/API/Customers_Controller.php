@@ -424,7 +424,6 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$like_login
 		);
 
-		//$insertion = "({$wpdb->users}.user_email LIKE '%" . $search_keyword . "%') OR ({$wpdb->users}.user_login LIKE '%" . $search_keyword . "%') OR ";
 		$pattern   = "/\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\)(\s*OR\s*\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\))*\s*/";
 
 		// Add the search keyword to the query

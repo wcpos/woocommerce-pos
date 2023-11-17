@@ -79,4 +79,12 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 
 		return $property->getValue($this->endpoint);
 	}
+
+	protected function setup_decimal_quantity_tests(): void {
+		add_filter( 'woocommerce_pos_general_settings', function() {
+			return array('decimal_qty' => true);
+		});
+		remove_filter('woocommerce_stock_amount', 'intval');
+		add_filter('woocommerce_stock_amount', 'floatval');
+	}
 }
