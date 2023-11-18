@@ -6,7 +6,7 @@
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 ?>
 <!doctype html>
 <html <?php language_attributes(); ?>>
@@ -20,6 +20,8 @@ defined( 'ABSPATH' ) || exit;
 			font-size: 14px;
 			margin: 0 !important;
 			padding: 0 !important;
+			color: #000000 !important;
+			background-color: #ffffff !important;
 		}
 		h1, h2, h3, h4, h5, h6 {
 			margin: 0;
@@ -50,6 +52,11 @@ defined( 'ABSPATH' ) || exit;
 		h6 {
 			font-size: 12px;
 			margin-bottom: 4px;
+		}
+
+		.woocommerce {
+			color: #000000 !important;
+			background-color: #ffffff !important;
 		}
 
     .woocommerce-pos-troubleshooting {
@@ -258,23 +265,23 @@ defined( 'ABSPATH' ) || exit;
 
 <body <?php body_class(); ?>>
 <div class="woocommerce"><?php
-    global $wp_styles, $wp_scripts;
-    $styleHandles = $wp_styles->queue;
-    $scriptHandles = $wp_scripts->queue;
+	global $wp_styles, $wp_scripts;
+$styleHandles  = $wp_styles->queue;
+$scriptHandles = $wp_scripts->queue;
 
-    $style_exclude_list = apply_filters(
-        'woocommerce_pos_payment_template_dequeue_style_handles',
-        woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
-    );
+$style_exclude_list = apply_filters(
+	'woocommerce_pos_payment_template_dequeue_style_handles',
+	woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
+);
 
-    $script_exclude_list = apply_filters(
-        'woocommerce_pos_payment_template_dequeue_script_handles',
-        woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
-    );
+$script_exclude_list = apply_filters(
+	'woocommerce_pos_payment_template_dequeue_script_handles',
+	woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
+);
 
-    $mergedStyleHandles = array_unique(array_merge($styleHandles, $style_exclude_list));
-    $mergedScriptHandles = array_unique(array_merge($scriptHandles, $script_exclude_list));
-	?>
+$mergedStyleHandles  = array_unique(array_merge($styleHandles, $style_exclude_list));
+$mergedScriptHandles = array_unique(array_merge($scriptHandles, $script_exclude_list));
+?>
 
 	<div class="woocommerce-pos-troubleshooting notice notice-warning is-dismissible">
 		<p class="link">
@@ -285,23 +292,23 @@ defined( 'ABSPATH' ) || exit;
 			<div style="display: flex; justify-content: space-between;">
 				<div>
 					<h3><?php _e('Styles', 'woocommerce-pos'); ?></h3>
-            <?php foreach ($mergedStyleHandles as $handle) :
-                $checked = !in_array($handle, $style_exclude_list) ? 'checked' : '';
-                ?>
+            <?php foreach ($mergedStyleHandles as $handle) {
+            	$checked = ! \in_array($handle, $style_exclude_list, true) ? 'checked' : '';
+            	?>
 							<input type="checkbox" id="<?php echo $handle; ?>" name="styles[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
 							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
 							<input type="hidden" name="all_styles[]" value="<?php echo $handle; ?>"><br>
-            <?php endforeach; ?>
+            <?php } ?>
 				</div>
 				<div>
 					<h3><?php _e('Scripts', 'woocommerce-pos'); ?></h3>
-            <?php foreach ($mergedScriptHandles as $handle) :
-                $checked = !in_array($handle, $script_exclude_list) ? 'checked' : '';
-                ?>
+            <?php foreach ($mergedScriptHandles as $handle) {
+            	$checked = ! \in_array($handle, $script_exclude_list, true) ? 'checked' : '';
+            	?>
 							<input type="checkbox" id="<?php echo $handle; ?>" name="scripts[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
 							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
 							<input type="hidden" name="all_scripts[]" value="<?php echo $handle; ?>"><br>
-            <?php endforeach; ?>
+            <?php } ?>
 				</div>
 			</div>
 			<input type="hidden" name="troubleshooting_form_nonce" value="<?php echo $troubleshooting_form_nonce; ?>" />
@@ -335,13 +342,13 @@ defined( 'ABSPATH' ) || exit;
 					<address>
 						<?php echo wp_kses_post( $order->get_formatted_billing_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
 
-						<?php if ( $order->get_billing_phone() ) : ?>
+						<?php if ( $order->get_billing_phone() ) { ?>
 							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_billing_phone() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 
-						<?php if ( $order->get_billing_email() ) : ?>
+						<?php if ( $order->get_billing_email() ) { ?>
 							<p class="woocommerce-customer-details--email"><?php echo esc_html( $order->get_billing_email() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 					</address>
 
 				</div><!-- /.col-1 -->
@@ -351,9 +358,9 @@ defined( 'ABSPATH' ) || exit;
 					<address>
 						<?php echo wp_kses_post( $order->get_formatted_shipping_address( esc_html__( 'N/A', 'woocommerce' ) ) ); ?>
 
-						<?php if ( $order->get_shipping_phone() ) : ?>
+						<?php if ( $order->get_shipping_phone() ) { ?>
 							<p class="woocommerce-customer-details--phone"><?php echo esc_html( $order->get_shipping_phone() ); ?></p>
-						<?php endif; ?>
+						<?php } ?>
 					</address>
 				</div><!-- /.col-2 -->
 
@@ -376,15 +383,15 @@ defined( 'ABSPATH' ) || exit;
 
 			<?php
 			$coupons = $order->get_items( 'coupon' );
-			if ( $coupons ) {
-				echo '<h3>' . __('Applied coupons', 'woocommerce') . '</h3>';
-				echo '<ul>';
-				foreach ( $coupons as $coupon ) {
-					echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
-				}
-				echo '</ul>';
-			}
-			?>
+if ( $coupons ) {
+	echo '<h3>' . __('Applied coupons', 'woocommerce') . '</h3>';
+	echo '<ul>';
+	foreach ( $coupons as $coupon ) {
+		echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
+	}
+	echo '</ul>';
+}
+?>
 		</form>
 	</div>
 
