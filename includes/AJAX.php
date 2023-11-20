@@ -2,6 +2,8 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
+
 class AJAX {
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Product admin pages.
@@ -76,7 +78,8 @@ class AJAX {
 	 * We need to load it manually here.
 	 */
 	public function load_single_product_class(): void {
-		new Admin\Products\Single_Product();
+		$single_product_class = apply_filters( 'woocommerce_pos_single_product_admin_ajax_class', Single_Product::class );
+		new $single_product_class();
 	}
 
 	/**

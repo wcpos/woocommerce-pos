@@ -66,7 +66,8 @@ class Admin {
 
 				return;
 			case 'product':
-				new Single_Product();
+				$single_product_class = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
+				new $single_product_class();
 
 				return;
 			case 'edit-product':

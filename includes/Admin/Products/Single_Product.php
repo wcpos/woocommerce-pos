@@ -25,10 +25,14 @@ class Single_Product {
 	 */
 	private $options;
 
-
+	/**
+	 * @var string
+	 */
+	private $pro_link = '';
 	
 	public function __construct() {
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$this->pro_link      = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 
 		// visibility options
 		$this->options = array(
@@ -38,31 +42,28 @@ class Single_Product {
 		);
 
 		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
-			// product
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-			// variations
-			add_action('woocommerce_product_after_variable_attributes', array(
-				$this,
-				'after_variable_attributes_barcode_field',
-			), 10, 3);
+			add_action('woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3);
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
 		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
 			add_action( 'save_post', array( $this, 'save_post' ), 10, 2 );
 			add_action( 'post_submitbox_misc_actions', array( $this, 'post_submitbox_misc_actions' ), 99 );
-			add_action('woocommerce_product_after_variable_attributes', array(
-				$this,
-				'after_variable_attributes_pos_only_products',
-			), 10, 3);
-			add_action('woocommerce_save_product_variation', array(
-				$this,
-				'save_product_variation_pos_only_products',
-			));
+			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_pos_only_products' ), 10, 3 );
+			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_pos_only_products', ) );
 		}
+
+		add_action( 'woocommerce_product_options_pricing', array( $this, 'add_store_price_fields' ) );
+		add_action( 'woocommerce_product_options_tax', array( $this, 'add_store_tax_fields' ) );
+		add_action( 'woocommerce_variation_options_pricing', array( $this, 'add_variations_store_price_fields' ), 10, 3 );
+		add_action( 'woocommerce_variation_options_tax', array( $this, 'add_variations_store_tax_fields' ), 10, 3 );
 	}
 
+	/**
+	 * Show barcode input.
+	 */
 	public function woocommerce_product_options_sku(): void {
 		woocommerce_wp_text_input(
 			array(
@@ -70,6 +71,44 @@ class Single_Product {
 				'label'       => __( 'POS Barcode', 'woocommerce-pos' ),
 				'desc_tip'    => 'true',
 				'description' => __( 'Product barcode used at the point of sale', 'woocommerce-pos' ),
+			)
+		);
+	}
+
+	/**
+	 * Add store price fields to the product edit page.
+	 *
+	 * @param mixed $post_id
+	 */
+	public function add_store_price_fields(): void {
+		woocommerce_wp_checkbox(
+			array(
+				'id'                => '',
+				'label'             => '',
+				'value'             => true,
+				'cbvalue'           => false,
+				'description'       => __('Enable POS specific prices.', 'woocommerce-pos') . ' ' . $this->pro_link,
+				'custom_attributes' => array('disabled' => 'disabled'),
+			)
+		);
+	}
+
+	/**
+	 * Add store tax fields to the product edit page.
+	 *
+	 * @param mixed $post_id
+	 */
+	public function add_store_tax_fields(): void {
+		$link = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
+
+		woocommerce_wp_checkbox(
+			array(
+				'id'                => '',
+				'label'             => '',
+				'value'             => true,
+				'cbvalue'           => false,
+				'description'       => __('Enable POS specific taxes.', 'woocommerce-pos') . ' ' . $this->pro_link,
+				'custom_attributes' => array('disabled' => 'disabled'),
 			)
 		);
 	}
@@ -103,6 +142,34 @@ class Single_Product {
 		if ( isset( $_POST['variable_pos_barcode'][ $variation_id ] ) ) {
 			update_post_meta( $variation_id, $this->barcode_field, $_POST['variable_pos_barcode'][ $variation_id ] );
 		}
+	}
+
+	/**
+	 * Add store price fields to the variation edit page.
+	 *
+	 * @param int     $loop           Position in the loop.
+	 * @param array   $variation_data Variation data.
+	 * @param WP_Post $variation      Post data.
+	 */
+	public function add_variations_store_price_fields( $loop, $variation_data, $variation ): void {
+		echo '<p class="form-row form-row-full options" style="border:0;padding-bottom:0;margin-bottom:0;"><label>';
+		echo __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
+		echo '<input type="checkbox" class="checkbox" disabled />';
+		echo '</label></p>';
+	}
+
+	/**
+	 * Add store tax fields to the variation edit page.
+	 *
+	 * @param int     $loop           Position in the loop.
+	 * @param array   $variation_data Variation data.
+	 * @param WP_Post $variation      Post data.
+	 */
+	public function add_variations_store_tax_fields( $loop, $variation_data, $variation ): void {
+		echo '<p class="form-row form-row-full options" style="border:0;padding-bottom:0;margin-bottom:0;"><label>';
+		echo __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
+		echo '<input type="checkbox" class="checkbox" disabled />';
+		echo '</label></p>';
 	}
 
 	/**
