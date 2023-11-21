@@ -146,6 +146,18 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		// Add the barcode to the product response
 		$data['barcode'] = $this->wcpos_get_barcode( $variation );
 
+		/*
+		 * Backwards compatibility for WooCommerce < 8.3
+		 *
+		 * WooCommerce added 'parent_id' and 'name' to the variation response in 8.3
+		 */
+		if ( ! isset( $data['parent_id'] ) ) {
+			$data['parent_id'] = $variation->get_parent_id();
+		}
+		if ( ! isset( $data['name'] ) ) {
+			$data['name'] = \function_exists('wc_get_formatted_variation') ? wc_get_formatted_variation( $variation, true, false, false ) : '';
+		}
+
 		// Make sure we parse the meta data before returning the response
 		$variation->save_meta_data(); // make sure the meta data is saved
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $variation );
