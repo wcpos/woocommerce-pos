@@ -134,37 +134,49 @@ if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
 }
 
 /*
- * Return template path
+ * Return template path for a given template
  *
- * @param string $path
+ * @param string $template
  *
- * @return mixed|void
+ * @return string|null
  */
 if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
-	function woocommerce_pos_locate_template( $path = '' ) {
-		$template = locate_template(array(
-			'woocommerce-pos/' . $path,
-		));
+	function woocommerce_pos_locate_template( $template = '' ) {
+		// check theme directory first
+		$path = locate_template(
+			array(
+				'woocommerce-pos/' . $template,
+			)
+		);
 
-		if ( ! $template ) {
-			$template = PLUGIN_PATH . 'templates/' . $path;
+		// if not, use plugin template
+		if ( ! $path ) {
+			$path = PLUGIN_PATH . 'templates/' . $template;
 		}
 
-		if ( file_exists( $template ) ) {
-			/*
-			 * Filters the template path.
-			 *
-			 * @param {array} $template
-			 * @param {string} $path
-			 *
-			 * @returns {array} $template
-			 *
-			 * @since 1.0.0
-			 *
-			 * @hook woocommerce_pos_locate_template
-			 */
-			return apply_filters( 'woocommerce_pos_locate_template', $template, $path );
+		/*
+		 * Filters the template path.
+		 *
+		 * @param {string} $template
+		 * @param {string} $path
+		 *
+		 * @returns {string} $path
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_locate_template
+		 */
+		$filtered_path = apply_filters( 'woocommerce_pos_locate_template', $path, $template );
+
+		// Check if the filtered template file exists
+		if ( file_exists( $filtered_path ) ) {
+			return $filtered_path;
 		}
+
+		// Echo a message or handle the error as needed if the file path does not exist
+		echo "The template file '" . esc_html($filtered_path) . "' does not exist.";
+
+		return null;
 	}
 }
 
