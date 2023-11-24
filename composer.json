@@ -24,11 +24,9 @@
   "require": {
     "php": ">=7.4",
     "ext-json": "*",
-    "firebase/php-jwt": "v6.9.0",
-    "ramsey/uuid": "4.2.3",
+    "ramsey/uuid": "^4.2",
     "salesforce/handlebars-php": "3.0.1",
-    "vlucas/phpdotenv": "v5.5.0",
-    "yahnis-elsts/plugin-update-checker": "v5.2"
+    "vlucas/phpdotenv": "v5.5.0"
   },
   "config": {
     "platform": {
@@ -47,12 +45,21 @@
     "format": "phpcbf --standard=./.phpcs.xml.dist --report-summary --report-source",
     "lint": "phpcs --standard=./.phpcs.xml.dist",
     "lint-report": "phpcs --standard=./.phpcs.xml.dist --report=checkstyle",
-    "fix": "php-cs-fixer fix ."
+    "fix": "php-cs-fixer fix .",
+    "prefix-dependencies": [
+      "@composer --working-dir=php-scoper install",
+      "php-scoper/vendor/bin/php-scoper add-prefix --config=php-scoper/config.php --output-dir=./vendor_prefixed --force",
+      "@composer dump-autoload -o -a"
+    ]
   },
   "autoload": {
     "psr-4": {
-      "WCPOS\\WooCommercePOS\\": "includes/"
-    }
+      "WCPOS\\WooCommercePOS\\": "includes/"   
+    },
+    "classmap": [
+      "vendor_prefixed/firebase/php-jwt/src",
+      "vendor_prefixed/yahnis-elsts/plugin-update-checker"
+    ]
   },
   "autoload-dev": {
     "psr-4": {

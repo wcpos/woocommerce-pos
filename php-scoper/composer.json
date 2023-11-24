@@ -1,0 +1,23 @@
+{
+  "require-dev": {
+    "humbug/php-scoper": "0.13.10"
+  },
+	"require": {
+    "php": ">=7.4",
+    "ext-json": "*",
+    "firebase/php-jwt": "v6.9.0",
+    "ramsey/uuid": "4.2.3",
+    "salesforce/handlebars-php": "3.0.1",
+    "vlucas/phpdotenv": "v5.5.0",
+    "yahnis-elsts/plugin-update-checker": "v5.2"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "config": {
+		"platform": {
+      "php": "7.4"
+    },
+    "preferred-install": "dist",
+    "sort-packages": true
+  }
+}

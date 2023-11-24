@@ -174,7 +174,7 @@ if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 		}
 
 		// Echo a message or handle the error as needed if the file path does not exist
-		echo "The template file '" . esc_html($filtered_path) . "' does not exist.";
+		echo "The template file '" . esc_html( $filtered_path ) . "' does not exist.";
 
 		return null;
 	}

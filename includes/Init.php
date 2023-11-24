@@ -42,7 +42,7 @@ class Init {
 		new i18n();
 		new Gateways();
 		new Products();
-		//      new Customers();
+		// new Customers();
 		new Orders();
 
 		// frontend only
@@ -136,15 +136,15 @@ class Init {
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
 	}
-	
+
 	/**
 	 * Loads POS integrations with third party plugins.
 	 */
 	private function integrations(): void {
-		//      // WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		//      if ( class_exists( 'WC-Bookings' ) ) {
-		//          new Integrations\Bookings();
-		//      }
+		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+		// if ( class_exists( 'WC-Bookings' ) ) {
+		// new Integrations\Bookings();
+		// }
 
 		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
 		if ( class_exists( 'WPSEO_Options' ) ) {

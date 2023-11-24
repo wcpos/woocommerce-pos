@@ -19,14 +19,20 @@ trait Uuid_Handler {
 	private function maybe_add_post_uuid( WC_Data $object ): void {
 		$meta_data = $object->get_meta_data();
 
-		$uuids = array_filter( $meta_data, function( WC_Meta_Data $meta ) {
-			return '_woocommerce_pos_uuid' === $meta->key;
-		});
-		
-		$uuid_values = array_map( function( WC_Meta_Data $meta ) {
-			return $meta->value;
-		}, $uuids);
-		
+		$uuids = array_filter(
+			$meta_data,
+			function ( WC_Meta_Data $meta ) {
+				return '_woocommerce_pos_uuid' === $meta->key;
+			}
+		);
+
+		$uuid_values = array_map(
+			function ( WC_Meta_Data $meta ) {
+				return $meta->value;
+			},
+			$uuids
+		);
+
 		// If there is no uuid, add one, i.e., new product
 		if ( empty( $uuid_values ) ) {
 			$object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
@@ -40,7 +46,7 @@ trait Uuid_Handler {
 			$object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
 		}
 	}
-	
+
 
 	/**
 	 * @param WP_User $user

@@ -26,12 +26,12 @@ class API {
 	protected $controllers = array();
 
 	/**
-	 * @var 
+	 * @var
 	 */
 	protected $wc_rest_api_handler;
 
 	/**
-	 * @var 
+	 * @var
 	 */
 	protected $auth_service;
 
@@ -119,7 +119,7 @@ class API {
 			Logger::log( "Warning: 'rest_pre_serve_request' filter received a non-boolean value for 'served'. Defaulting to 'false'." );
 			$served = false; // Default value if not provided correctly
 		}
-		
+
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
 
 		return $served;
@@ -291,7 +291,7 @@ class API {
 				}
 			}
 		}
-			
+
 		return $dispatch_result;
 	}
 
