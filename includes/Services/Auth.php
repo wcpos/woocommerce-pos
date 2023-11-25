@@ -6,21 +6,11 @@ use Exception;
 use WCPOS\Vendor\Firebase\JWT\JWT;
 use WCPOS\Vendor\Firebase\JWT\Key;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Stores;
 use WP_Error;
 use WP_User;
 use const DAY_IN_SECONDS;
 
 class Auth {
-	/**
-	 *
-	 */
-	protected $stores_service;
-
-	public function __construct() {
-		$this->stores_service = new Stores();
-	}
-
 	/**
 	 * Generate a secret key if it doesn't exist, or return the existing one
 	 *
@@ -177,7 +167,6 @@ class Auth {
 			'nice_name'    => $user->user_nicename,
 			'display_name' => $user->display_name,
 			'avatar_url'   => get_avatar_url( $user->ID ),
-			'stores'       => $this->stores_service->get_stores(),
 		);
 
 		return $data;

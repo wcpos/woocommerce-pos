@@ -170,23 +170,28 @@ class API {
 	}
 
 	/**
-	 * @return false|string
+	 * Extract the Authorization Bearer token from the request.
+	 *
+	 * @return string|false
 	 */
 	public function get_auth_header() {
-		// Get HTTP Authorization Header.
-		$header = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] ) : false;
-
-		// Check for alternative header.
-		if ( ! $header && isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			$header = sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		// Check if HTTP_AUTHORIZATION is set in $_SERVER
+		if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] );
 		}
 
-		// Check for authorization param in URL
-		if ( ! $header && isset( $_GET['authorization'] ) ) {
-			$header = sanitize_text_field( $_GET['authorization'] );
+		// Check for alternative header in $_SERVER
+		if ( isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		}
 
-		return $header;
+		// Check for authorization param in URL ($_GET)
+		if ( isset( $_GET['authorization'] ) ) {
+			return sanitize_text_field( $_GET['authorization'] );
+		}
+
+		// Return false if none of the variables are set
+		return false;
 	}
 
 	/**
@@ -306,21 +311,31 @@ class API {
 	/**
 	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
-	 * @return int
+	 * @return int|WP_Error
 	 */
 	private function authenticate( $user_id ) {
-		// extract Bearer token from Authorization Header
-		list($token) = sscanf( $this->get_auth_header(), 'Bearer %s' );
+		// check if there is an auth header
+		$auth_header = $this->get_auth_header();
+		if ( ! is_string( $auth_header ) ) {
+			return $user_id;
+		}
+
+		// Extract Bearer token from Authorization Header
+		list($token) = sscanf( $auth_header, 'Bearer %s' );
 
 		if ( $token ) {
 			$decoded_token = $this->auth_service->validate_token( $token );
 
-			if ( empty( $decoded_token ) || is_wp_error( $decoded_token ) ) {
-				return $user_id;
+			// Check if validate_token returned WP_Error and user_id is null
+			if ( is_wp_error( $decoded_token ) && $user_id === null ) {
+					return $decoded_token;
 			}
-			$user = ! empty( $decoded_token->data->user->id ) ? $decoded_token->data->user->id : $user_id;
 
-			return absint( $user );
+			// If the token is valid, set the user_id
+			if ( ! is_wp_error( $decoded_token ) ) {
+				$user_id = $decoded_token->data->user->id;
+				return absint( $user_id );
+			}
 		}
 
 		return $user_id;

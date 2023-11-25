@@ -8,20 +8,12 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Stores;
-
+use WCPOS\WooCommercePOS\Services\Store;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
 class Frontend {
-	protected $auth_service;
-
-
-	public function __construct() {
-		$this->auth_service = new Auth();
-	}
-
 
 	/**
 	 * @return void
@@ -82,8 +74,8 @@ class Frontend {
 	public function footer(): void {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
-		$store_settings = new Stores();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
+		$store          = new Store();
 		$auth_service   = new Auth();
 
 		$site_uuid = get_option( 'woocommerce_pos_uuid' );
@@ -118,7 +110,7 @@ class Frontend {
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
-			'stores'         => $store_settings->get_stores(),
+			'stores'         => array( $store->get_data() ),
 		);
 
 		/**
