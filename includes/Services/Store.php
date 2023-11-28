@@ -14,7 +14,7 @@ class Store extends WC_Data {
 	 *
 	 * @var string
 	 */
-	protected $object_type = 'product';
+	protected $object_type = 'store';
 
 	/**
 	 * Stores product data.

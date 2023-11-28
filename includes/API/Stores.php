@@ -54,19 +54,17 @@ class Stores extends WP_REST_Controller {
 	 */
 	public function get_items( $request ) {
 		try {
-			$store = new Store();
+			$stores = wcpos_get_stores();
 
-			// Check if store data is available
-			if ( ! $store ) {
-					return new \WP_Error(
-						'woocommerce_pos_store_not_found',
-						esc_html__( 'Store not found', 'woocommerce-pos' ),
-						array( 'status' => 404 )
-					);
+			$response = array();
+			foreach ( $stores as $store ) {
+				$data = $this->prepare_item_for_response( $store, $request );
+				$response[] = $this->prepare_response_for_collection( $data );
 			}
 
-			$data = $store->get_data();
-			$response = rest_ensure_response( array( $data ) );
+			$response = rest_ensure_response( $response );
+			$response->header( 'X-WP-Total', count( $stores ) );
+			$response->header( 'X-WP-TotalPages', 1 );
 
 			return $response;
 
@@ -77,6 +75,31 @@ class Stores extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
+	}
+
+	/**
+	 * Prepare a single product output for response.
+	 *
+	 * @param Store           $store    Store object.
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function prepare_item_for_response( $store, $request ) {
+		$data = $store->get_data();
+		$response = rest_ensure_response( $data );
+		$response->add_links( $this->prepare_links( $store, $request ) );
+
+		/**
+		 * Filter the data for a response.
+		 *
+		 * The dynamic portion of the hook name, $this->post_type, refers to post_type of the post being
+		 * prepared for the response.
+		 *
+		 * @param WP_REST_Response   $response   The response object.
+		 * @param Store              $store      Store object.
+		 * @param WP_REST_Request    $request    Request object.
+		 */
+		return apply_filters( 'woocommerce_pos_rest_prepare_store', $response, $store, $request );
 	}
 
 	/**
@@ -94,5 +117,25 @@ class Stores extends WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+		/**
+		 * Prepare links for the request.
+		 *
+		 * @param WC_Product      $product Product object.
+		 * @param WP_REST_Request $request Request object.
+		 * @return array Links for the given product.
+		 */
+	protected function prepare_links( $store, $request ) {
+		$links = array(
+			'self' => array(
+				'href' => rest_url( sprintf( '/%s/%s/%d', $this->namespace, $this->rest_base, $store->get_id() ) ),
+			),
+			'collection' => array(
+				'href' => rest_url( sprintf( '/%s/%s', $this->namespace, $this->rest_base ) ),
+			),
+		);
+
+		return $links;
 	}
 }

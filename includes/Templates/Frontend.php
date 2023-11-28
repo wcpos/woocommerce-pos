@@ -75,8 +75,13 @@ class Frontend {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
-		$store          = new Store();
 		$auth_service   = new Auth();
+		$stores         = array_map(
+			function ( $store ) {
+				return $store->get_data();
+			},
+			wcpos_get_stores()
+		);
 
 		$site_uuid = get_option( 'woocommerce_pos_uuid' );
 		if ( ! $site_uuid ) {
@@ -110,7 +115,7 @@ class Frontend {
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
-			'stores'         => array( $store->get_data() ),
+			'stores'         => $stores,
 		);
 
 		/**
