@@ -72,10 +72,11 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'price_display_suffix',
 			'tax_total_display',
 			'meta_data',
+			'_links',
 		);
 	}
 
-	public function test_product_api_get_all_fields(): void {
+	public function test_stores_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/stores' );

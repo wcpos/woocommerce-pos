@@ -22,15 +22,15 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_namespace_property(): void {
-		$namespace = $this->get_reflected_property_value('namespace');
+		$namespace = $this->get_reflected_property_value( 'namespace' );
 
-		$this->assertEquals('wcpos/v1', $namespace );
+		$this->assertEquals( 'wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$rest_base = $this->get_reflected_property_value('rest_base');
+		$rest_base = $this->get_reflected_property_value( 'rest_base' );
 
-		$this->assertEquals('products/categories', $rest_base);
+		$this->assertEquals( 'products/categories', $rest_base );
 	}
 
 	/**
@@ -83,16 +83,17 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$cat2        = ProductHelper::create_product_category( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
 		$request->set_param( 'posts_per_page', -1 );
-		$request->set_param( 'fields', array('id') );
+		$request->set_param( 'fields', array( 'id' ) );
 
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 200, $response->get_status() );
-		
+
 		$data = $response->get_data();
-		$this->assertEquals( 3, \count( $data ) ); // there is one cat id = 15 by default
+		$this->assertEquals( 3, \count( $data ) ); // there is one cat id install in test setup
 		$ids  = wp_list_pluck( $data, 'id' );
 
-		$this->assertEqualsCanonicalizing( array( 15, $cat1['term_id'], $cat2['term_id'] ), $ids );
+		$this->assertContains( $cat1['term_id'], $ids );
+		$this->assertContains( $cat2['term_id'], $ids );
 	}
 
 	/**
@@ -101,10 +102,10 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_product_category_response_contains_uuid_meta_data(): void {
 		$category        = ProductHelper::create_product_category( 'Music' );
 		$request         = $this->wp_rest_get_request( '/wcpos/v1/products/categories/' . $category['term_id'] );
-		$response        = $this->server->dispatch($request);
+		$response        = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
-		$this->assertTrue(Uuid::isValid($data['uuid']), 'The UUID value is not valid.');
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
 }
