@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-\defined('ABSPATH') || die;
+\defined( 'ABSPATH' ) || die;
 
-if ( ! class_exists('WC_REST_Product_Variations_Controller') ) {
+if ( ! class_exists( 'WC_REST_Product_Variations_Controller' ) ) {
 	return;
 }
 
@@ -15,6 +15,8 @@ use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
+use WP_REST_Server;
+use WC_Product_Variation;
 
 /**
  * Product Tgas controller class.
@@ -41,6 +43,20 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
+
+			register_rest_route(
+				$this->namespace,
+				'/products/variations',
+				array(
+					array(
+						'methods'             => WP_REST_Server::READABLE,
+						'callback'            => array( $this, 'wcpos_get_all_items' ),
+						'permission_callback' => array( $this, 'get_items_permissions_check' ),
+						'args'                => $this->get_collection_params(),
+					),
+					'schema' => array( $this, 'get_public_item_schema' ),
+				)
+			);
 		}
 	}
 
@@ -49,21 +65,21 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
-	
+
 		// Add the 'barcode' property if 'properties' exists and is an array
-		if (isset($schema['properties']) && \is_array($schema['properties'])) {
+		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
 			$schema['properties']['barcode'] = array(
-				'description' => __('Barcode', 'woocommerce-pos'),
+				'description' => __( 'Barcode', 'woocommerce-pos' ),
 				'type'        => 'string',
-				'context'     => array('view', 'edit'),
+				'context'     => array( 'view', 'edit' ),
 				'readonly'    => false,
 			);
 		}
 
 		// Check for 'stock_quantity' and allow decimal
-		if ($this->wcpos_allow_decimal_quantities()     &&
-			isset($schema['properties']['stock_quantity']) &&
-			\is_array($schema['properties']['stock_quantity'])) {
+		if ( $this->wcpos_allow_decimal_quantities() &&
+			isset( $schema['properties']['stock_quantity'] ) &&
+			\is_array( $schema['properties']['stock_quantity'] ) ) {
 			$schema['properties']['stock_quantity']['type'] = 'string';
 		}
 
@@ -76,14 +92,14 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
-	
+
 		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
-		if (isset($params['per_page']) && \is_array($params['per_page'])) {
+		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it
-		if (isset($params['orderby']['enum']) && \is_array($params['orderby']['enum'])) {
+		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// Define new sorting options
 			$new_sort_options = array(
 				'sku',
@@ -92,9 +108,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 				'stock_status',
 			);
 			// Merge new options, avoiding duplicates
-			$params['orderby']['enum'] = array_unique(array_merge($params['orderby']['enum'], $new_sort_options));
+			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
-	
+
 		return $params;
 	}
 
@@ -155,7 +171,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$data['parent_id'] = $variation->get_parent_id();
 		}
 		if ( ! isset( $data['name'] ) ) {
-			$data['name'] = \function_exists('wc_get_formatted_variation') ? wc_get_formatted_variation( $variation, true, false, false ) : '';
+			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : '';
 		}
 
 		// Make sure we parse the meta data before returning the response
@@ -200,6 +216,21 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			'posts_per_page' => -1,
 			'fields'         => 'ids',
 		);
+
+		if ( $this->wcpos_pos_only_products_enabled() ) {
+			$args['meta_query'] = array(
+				'relation' => 'OR',
+				array(
+					'key'     => '_pos_visibility',
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => '_pos_visibility',
+					'value'   => 'online_only',
+					'compare' => '!=',
+				),
+			);
+		}
 
 		$variation_query = new WP_Query( $args );
 
@@ -255,6 +286,71 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			}
 		}
 
+		// Add online_only check
+		if ( $this->wcpos_pos_only_products_enabled() ) {
+			$default_meta_query = array(
+				'relation' => 'OR',
+				array(
+					'key'     => '_pos_visibility',
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => '_pos_visibility',
+					'value'   => 'online_only',
+					'compare' => '!=',
+				),
+			);
+
+			if ( isset( $args['meta_query'] ) ) {
+				if ( ! isset( $args['meta_query']['relation'] ) ) {
+					$args['meta_query']['relation'] = 'AND';
+				}
+				$args['meta_query'] = array_merge_recursive( $args['meta_query'], $default_meta_query );
+			} else {
+				$args['meta_query'] = $default_meta_query;
+			}
+		};
+
 		return $args;
+	}
+
+	/**
+	 * Endpoint for searching all product variations.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 */
+	public function wcpos_get_all_items( $request ) {
+		// Prepare arguments for the product query
+		$args = array(
+			'post_type' => 'product_variation',
+			'posts_per_page' => 10, // Limit to 10 items per page
+			'orderby' => 'ID', // Default ordering
+			'order' => 'ASC',
+			'paged' => ! empty( $request['page'] ) ? $request['page'] : 1, // Handle pagination
+		);
+
+		// Check if 'search' param is set for SKU search
+		if ( ! empty( $request['search'] ) ) {
+			$args['meta_query'] = array(
+				array(
+					'key' => '_sku',
+					'value' => $request['search'],
+					'compare' => 'LIKE',
+				),
+			);
+		}
+
+		// Get product variations
+		$query = new WP_Query( $args );
+		$variations = array();
+
+		foreach ( $query->posts as $variation ) {
+			$object = new WC_Product_Variation( $variation->ID );
+			$response = $this->prepare_object_for_response( $object, $request );
+			$variations[] = $this->prepare_response_for_collection( $response );
+		}
+
+		// Return the response
+		return new WP_REST_Response( $variations, 200 );
 	}
 }
