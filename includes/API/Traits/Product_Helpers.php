@@ -13,8 +13,8 @@ trait Product_Helpers {
 	 *
 	 * @TODO - should we return a wc_placeholder_img_src if no image is available?
 	 *
-	 * @param array|false $image {
-	 *                           Array of image data, or boolean false if no image is available.
+	 * @param array|false  $image {
+	 *                            Array of image data, or boolean false if no image is available.
 	 *
 	 * @var string $0 Image source URL.
 	 * @var int    $1 Image width in pixels.
@@ -72,7 +72,7 @@ trait Product_Helpers {
 
 			return '';
 		}
-	
+
 		// Check for non-string values
 		if ( ! \is_string( $barcode_field ) ) {
 			Logger::log( 'Unexpected data type for barcode_field. Expected string, got: ' . \gettype( $barcode_field ) );

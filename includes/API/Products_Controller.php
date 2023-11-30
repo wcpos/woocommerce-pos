@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-\defined('ABSPATH') || die;
+\defined( 'ABSPATH' ) || die;
 
-if ( ! class_exists('WC_REST_Products_Controller') ) {
+if ( ! class_exists( 'WC_REST_Products_Controller' ) ) {
 	return;
 }
 
@@ -26,6 +26,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	use Traits\Product_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
+	use Traits\Query_Helpers;
 
 	/**
 	 * Endpoint namespace.
@@ -57,21 +58,21 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
-	
+
 		// Add the 'barcode' property if 'properties' exists and is an array
-		if (isset($schema['properties']) && \is_array($schema['properties'])) {
+		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
 			$schema['properties']['barcode'] = array(
-				'description' => __('Barcode', 'woocommerce-pos'),
+				'description' => __( 'Barcode', 'woocommerce-pos' ),
 				'type'        => 'string',
-				'context'     => array('view', 'edit'),
+				'context'     => array( 'view', 'edit' ),
 				'readonly'    => false,
 			);
 		}
 
 		// Check for 'stock_quantity' and allow decimal
-		if ($this->wcpos_allow_decimal_quantities()     &&
-			isset($schema['properties']['stock_quantity']) &&
-			\is_array($schema['properties']['stock_quantity'])) {
+		if ( $this->wcpos_allow_decimal_quantities() &&
+			isset( $schema['properties']['stock_quantity'] ) &&
+			\is_array( $schema['properties']['stock_quantity'] ) ) {
 			$schema['properties']['stock_quantity']['type'] = 'string';
 		}
 
@@ -84,14 +85,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
-	
+
 		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
-		if (isset($params['per_page']) && \is_array($params['per_page'])) {
+		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it
-		if (isset($params['orderby']['enum']) && \is_array($params['orderby']['enum'])) {
+		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// Define new sorting options
 			$new_sort_options = array(
 				'sku',
@@ -100,9 +101,9 @@ class Products_Controller extends WC_REST_Products_Controller {
 				'stock_status',
 			);
 			// Merge new options, avoiding duplicates
-			$params['orderby']['enum'] = array_unique(array_merge($params['orderby']['enum'], $new_sort_options));
+			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
-	
+
 		return $params;
 	}
 
@@ -250,11 +251,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$fields_to_search[] = $barcode_field;
 		}
 
-		foreach ((array) $q['search_terms'] as $term) {
-			$term = $n . $wpdb->esc_like($term) . $n;
+		foreach ( (array) $q['search_terms'] as $term ) {
+			$term = $n . $wpdb->esc_like( $term ) . $n;
 
 			foreach ( $fields_to_search as $field ) {
-				if ( \in_array( $field, array('post_title'), true ) ) {
+				if ( \in_array( $field, array( 'post_title' ), true ) ) {
 					$search .= $wpdb->prepare( "{$searchand}($wpdb->posts.$field LIKE %s)", $term );
 				} else {
 					$search .= $wpdb->prepare( "{$searchand}(pm1.meta_value LIKE %s AND pm1.meta_key = '$field')", $term );
@@ -265,7 +266,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		if ( ! empty( $search ) ) {
 			$search = " AND ({$search}) ";
-			if ( ! is_user_logged_in()) {
+			if ( ! is_user_logged_in() ) {
 				$search .= " AND ($wpdb->posts.post_password = '') ";
 			}
 		}
@@ -333,7 +334,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	public function wcpos_posts_join_to_products_search( string $join, WP_Query $wp_query ) {
 		global $wpdb;
 
-		if ( ! empty($wp_query->query_vars['s']) && false === strpos($join, 'pm1')) {
+		if ( ! empty( $wp_query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
 			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
 		}
 
@@ -445,7 +446,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Add online_only check
 		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$default_meta_query = array(
+			$meta_query = array(
 				'relation' => 'OR',
 				array(
 					'key'     => '_pos_visibility',
@@ -457,15 +458,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 					'compare' => '!=',
 				),
 			);
-	
-			if (isset($args['meta_query'])) {
-				if ( ! isset($args['meta_query']['relation'])) {
-					$args['meta_query']['relation'] = 'AND';
-				}
-				$args['meta_query'] = array_merge_recursive($args['meta_query'], $default_meta_query);
-			} else {
-				$args['meta_query'] = $default_meta_query;
-			}
+
+			$args['meta_query'] = $this->wcpos_combine_meta_queries( $meta_query, $args['meta_query'] );
 		};
 
 		return $args;

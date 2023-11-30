@@ -27,6 +27,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	use Traits\Product_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
+	use Traits\Query_Helpers;
 
 	/**
 	 * Endpoint namespace.
@@ -288,7 +289,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 		// Add online_only check
 		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$default_meta_query = array(
+			$meta_query = array(
 				'relation' => 'OR',
 				array(
 					'key'     => '_pos_visibility',
@@ -301,56 +302,91 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 				),
 			);
 
-			if ( isset( $args['meta_query'] ) ) {
-				if ( ! isset( $args['meta_query']['relation'] ) ) {
-					$args['meta_query']['relation'] = 'AND';
-				}
-				$args['meta_query'] = array_merge_recursive( $args['meta_query'], $default_meta_query );
-			} else {
-				$args['meta_query'] = $default_meta_query;
-			}
+			// Combine meta queries
+			$args['meta_query'] = $this->wcpos_combine_meta_queries( $args['meta_query'], $meta_query );
+
 		};
 
 		return $args;
 	}
 
 	/**
-	 * Endpoint for searching all product variations.
+	 * Endpoint for getting all product variations, eg: search for sku or barcode.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 */
 	public function wcpos_get_all_items( $request ) {
-		// Prepare arguments for the product query
-		$args = array(
-			'post_type' => 'product_variation',
-			'posts_per_page' => 10, // Limit to 10 items per page
-			'orderby' => 'ID', // Default ordering
-			'order' => 'ASC',
-			'paged' => ! empty( $request['page'] ) ? $request['page'] : 1, // Handle pagination
-		);
+		$query_args = $this->prepare_objects_query( $request );
+		if ( is_wp_error( current( $query_args ) ) ) {
+			return current( $query_args );
+		}
 
 		// Check if 'search' param is set for SKU search
-		if ( ! empty( $request['search'] ) ) {
-			$args['meta_query'] = array(
-				array(
-					'key' => '_sku',
-					'value' => $request['search'],
-					'compare' => 'LIKE',
-				),
+		if ( ! empty( $query_args['s'] ) ) {
+			$barcode_field = $this->wcpos_get_barcode_field();
+			$meta_query = array(
+				'key' => '_sku',
+				'value' => $query_args['s'],
+				'compare' => 'LIKE',
 			);
+
+			if ( $barcode_field && '_sku' !== $barcode_field ) {
+				$meta_query = array(
+					'relation' => 'OR',
+					$meta_query,
+					array(
+						'key' => $barcode_field,
+						'value' => $query_args['s'],
+						'compare' => 'LIKE',
+					),
+				);
+			}
+
+			// Combine meta queries
+			$query_args['meta_query'] = $this->wcpos_combine_meta_queries( $query_args['meta_query'], $meta_query );
+
+			unset( $query_args['s'] );
 		}
 
-		// Get product variations
-		$query = new WP_Query( $args );
-		$variations = array();
+		$query_results = $this->get_objects( $query_args );
 
-		foreach ( $query->posts as $variation ) {
-			$object = new WC_Product_Variation( $variation->ID );
-			$response = $this->prepare_object_for_response( $object, $request );
-			$variations[] = $this->prepare_response_for_collection( $response );
+		$objects = array();
+		foreach ( $query_results['objects'] as $object ) {
+			if ( ! \wc_rest_check_post_permissions( $this->post_type, 'read', $object->get_id() ) ) {
+				continue;
+			}
+
+			$data      = $this->prepare_object_for_response( $object, $request );
+			$objects[] = $this->prepare_response_for_collection( $data );
 		}
 
-		// Return the response
-		return new WP_REST_Response( $variations, 200 );
+		$page      = (int) $query_args['paged'];
+		$max_pages = $query_results['pages'];
+
+		$response = rest_ensure_response( $objects );
+		$response->header( 'X-WP-Total', $query_results['total'] );
+		$response->header( 'X-WP-TotalPages', (int) $max_pages );
+
+		/**
+		 * Note: custom endpoint for getting all product variations
+		 */
+		$base          = 'products/variations';
+		$base = add_query_arg( $request->get_query_params(), rest_url( sprintf( '/%s/%s', $this->namespace, $base ) ) );
+
+		if ( $page > 1 ) {
+			$prev_page = $page - 1;
+			if ( $prev_page > $max_pages ) {
+				$prev_page = $max_pages;
+			}
+			$prev_link = add_query_arg( 'page', $prev_page, $base );
+			$response->link_header( 'prev', $prev_link );
+		}
+		if ( $max_pages > $page ) {
+			$next_page = $page + 1;
+			$next_link = add_query_arg( 'page', $next_page, $base );
+			$response->link_header( 'next', $next_link );
+		}
+
+		return $response;
 	}
 }

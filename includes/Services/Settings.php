@@ -115,16 +115,16 @@ class Settings {
 				return $settings;
 			}
 
-			if ( ! isset( $settings[$key] ) ) {
+			if ( ! isset( $settings[ $key ] ) ) {
 				return new WP_Error(
 					'woocommerce_pos_settings_error',
 					// translators: 1. %s: Settings group id, 2. %s: Settings key
-					sprintf( __( 'Settings with id %s and key %s not found', 'woocommerce-pos' ), $id, $key ),
+					sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
 					array( 'status' => 400 )
 				);
 			}
 
-			return $settings[$key];
+			return $settings[ $key ];
 		}
 
 		return new WP_Error(
@@ -213,7 +213,7 @@ class Settings {
 		return apply_filters( 'woocommerce_pos_checkout_settings', $settings );
 	}
 
-	
+
 	public function get_access_settings(): array {
 		global $wp_roles;
 		$role_caps = array();
@@ -277,7 +277,7 @@ class Settings {
 		return apply_filters( 'woocommerce_pos_tools_settings', $settings );
 	}
 
-	
+
 	public function get_license_settings() {
 		/*
 		 * Filters the license settings.
@@ -329,7 +329,7 @@ class Settings {
 		return array_map( 'wc_get_order_status_name', $order_statuses );
 	}
 
-	
+
 	public function get_payment_gateways_settings() {
 		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
 		WC_Payment_Gateways::instance()->init();
@@ -382,7 +382,7 @@ class Settings {
 	 * @return bool|WP_Error
 	 */
 	public static function delete_settings( $id ) {
-		if ( ! is_super_admin() && ! current_user_can('manage_woocommerce_pos') ) {
+		if ( ! is_super_admin() && ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
 
@@ -395,10 +395,10 @@ class Settings {
 	 * @return bool|WP_Error
 	 */
 	public static function delete_all_settings() {
-		if ( ! is_super_admin() && ! current_user_can('manage_woocommerce_pos') ) {
+		if ( ! is_super_admin() && ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
-	
+
 		foreach ( self::$default_settings as $id => $settings ) {
 			delete_option( self::$db_prefix . $id );
 		}

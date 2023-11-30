@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-\defined('ABSPATH') || die;
+\defined( 'ABSPATH' ) || die;
 
-if ( ! class_exists('WC_REST_Customers_Controller') ) {
+if ( ! class_exists( 'WC_REST_Customers_Controller' ) ) {
 	return;
 }
 
@@ -25,6 +25,7 @@ use WP_User_Query;
 class Customers_Controller extends WC_REST_Customers_Controller {
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
+	use Traits\Query_Helpers;
 
 	/**
 	 * Endpoint namespace.
@@ -58,8 +59,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$schema = parent::get_item_schema();
 
 		// Check and remove email format validation from the billing property
-		if (isset($schema['properties']['billing']['properties']['email']['format'])) {
-			unset($schema['properties']['billing']['properties']['email']['format']);
+		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
+			unset( $schema['properties']['billing']['properties']['email']['format'] );
 		}
 
 		return $schema;
@@ -73,7 +74,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$params = parent::get_collection_params();
 
 		// Check if 'orderby' is set and is an array before modifying it
-		if (isset($params['orderby']) && \is_array($params['orderby']['enum'])) {
+		if ( isset( $params['orderby'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// Add new fields to the 'orderby' enum list
 			$new_orderby_options = array(
 				'first_name',
@@ -82,8 +83,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				'role',
 				'username',
 			);
-			foreach ($new_orderby_options as $option) {
-				if ( ! \in_array($option, $params['orderby']['enum'], true)) {
+			foreach ( $new_orderby_options as $option ) {
+				if ( ! \in_array( $option, $params['orderby']['enum'], true ) ) {
 					$params['orderby']['enum'][] = $option;
 				}
 			}
@@ -137,14 +138,14 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
 		// Your custom validation logic for the request data
 		$billing = $request['billing'] ?? null;
-		$email   = \is_array($billing) ? ($billing['email'] ?? null) : null;
-	
-		if ( ! \is_null($email) && '' !== $email && ! is_email( $email ) ) {
+		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
+
+		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
 			return new \WP_Error(
 				'rest_invalid_param',
 				// translators: Use default WordPress translation
 				__( 'Invalid email address.' ),
-				array('status' => 400)
+				array( 'status' => 400 )
 			);
 		}
 
@@ -205,18 +206,24 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$customer           = new WC_Customer( $user_data->ID );
 			$raw_meta_data      = $customer->get_meta_data();
 
-			$filtered_meta_data = array_filter($raw_meta_data, function ($meta) {
-				return '_woocommerce_pos_uuid' === $meta->key;
-			});
+			$filtered_meta_data = array_filter(
+				$raw_meta_data,
+				function ( $meta ) {
+					return '_woocommerce_pos_uuid' === $meta->key;
+				}
+			);
 
 			// Convert to WC REST API expected format
-			$data['meta_data'] = array_map(function ($meta) {
-				return array(
-					'id'    => $meta->id,
-					'key'   => $meta->key,
-					'value' => $meta->value,
-				);
-			}, array_values($filtered_meta_data));
+			$data['meta_data'] = array_map(
+				function ( $meta ) {
+					return array(
+						'id'    => $meta->id,
+						'key'   => $meta->key,
+						'value' => $meta->value,
+					);
+				},
+				array_values( $filtered_meta_data )
+			);
 		} catch ( Exception $e ) {
 			Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
 		}
@@ -277,18 +284,18 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_customer_query( array $prepared_args, WP_REST_Request $request ): array {
 		$query_params = $request->get_query_params();
 
-		// Existing meta query
-		$existing_meta_query = $prepared_args['meta_query'] ?? array();
-
 		// add modified_after date_modified_gmt
 		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
 			$timestamp                   = strtotime( $query_params['modified_after'] );
-			$prepared_args['meta_query'] = array(
+			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries(
 				array(
-					'key'     => 'last_update',
-					'value'   => $timestamp ? (string) $timestamp : '',
-					'compare' => '>',
+					array(
+						'key'     => 'last_update',
+						'value'   => $timestamp ? (string) $timestamp : '',
+						'compare' => '>',
+					),
 				),
+				$prepared_args['meta_query']
 			);
 		}
 
@@ -340,7 +347,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			unset( $prepared_args['search'] );
 			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use
 			add_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
-	
+
 			$search_meta_query = array(
 				'relation' => 'OR',
 				array(
@@ -380,21 +387,10 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					'compare' => 'LIKE',
 				),
 			);
-	
-			// Merge with existing meta_query if any
-			if ( ! empty($existing_meta_query)) {
-				$existing_meta_query = array(
-					'relation' => 'AND',
-					$existing_meta_query,
-					$search_meta_query,
-				);
-			} else {
-				$existing_meta_query = $search_meta_query;
-			}
-		}
 
-		// Apply the modified or newly created meta_query
-		$prepared_args['meta_query'] = $existing_meta_query;
+			// Combine the search meta_query with the existing meta_query
+			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );
+		}
 
 		return $prepared_args;
 	}
@@ -406,7 +402,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 */
 	public function wcpos_search_user_table( $query ): void {
 		global $wpdb;
-		
+
 		// Remove the hook
 		remove_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
 
@@ -417,7 +413,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// Prepare the LIKE statement
 		$like_email = '%' . $wpdb->esc_like( $search_keyword ) . '%';
 		$like_login = '%' . $wpdb->esc_like( $search_keyword ) . '%';
-		
+
 		$insertion = $wpdb->prepare(
 			"({$wpdb->users}.user_email LIKE %s) OR ({$wpdb->users}.user_login LIKE %s) OR ",
 			$like_email,
@@ -427,10 +423,10 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$pattern   = "/\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\)(\s*OR\s*\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\))*\s*/";
 
 		// Add the search keyword to the query
-		$modified_where = preg_replace($pattern, "$insertion$0", $query->query_where);
+		$modified_where = preg_replace( $pattern, "$insertion$0", $query->query_where );
 
 		// Check if the replacement was successful and assign it back to query_where
-		if ($modified_where !== $query->query_where) {
+		if ( $modified_where !== $query->query_where ) {
 			$query->query_where = $modified_where;
 		}
 	}

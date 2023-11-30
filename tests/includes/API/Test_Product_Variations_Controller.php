@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Product_Variations_Controller;
+use WCPOS\WooCommercePOS\Products;
 
 /**
  * @internal
@@ -42,6 +43,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/(?P<id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/batch', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/products/(?P<product_id>[\d]+)/variations/generate', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/products/variations', $routes );
 	}
 
 	/**
@@ -563,4 +565,90 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	// */
 	// public function test_variation_orderby_menu_order(): void {
 	// }
+
+	/**
+	 * Test search using the products/variations endpoint.
+	 */
+	public function test_variation_search(): void {
+		// enable barcode and pos_only_products
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_barcode',
+					'pos_only_products' => true,
+				);
+			}
+		);
+
+		$random_sku1         = wp_generate_password( 8, false );
+		$random_sku2         = wp_generate_password( 8, false );
+		$random_barcode1     = wp_generate_password( 10, false );
+		$random_barcode2     = wp_generate_password( 10, false );
+
+		// create two variable products
+		$product1 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids1 = $product1->get_children();
+		update_post_meta( $variation_ids1[0], '_sku', $random_sku1 );
+		update_post_meta( $variation_ids1[0], '_barcode', $random_barcode1 );
+		update_post_meta( $variation_ids1[1], '_sku', $random_sku2 );
+		update_post_meta( $variation_ids1[1], '_barcode', $random_barcode2 );
+
+		$product2 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids2 = $product2->get_children();
+		update_post_meta( $variation_ids2[0], '_sku', $random_sku1 );
+		update_post_meta( $variation_ids2[0], '_barcode', $random_barcode1 );
+		update_post_meta( $variation_ids2[1], '_sku', $random_sku2 );
+		update_post_meta( $variation_ids2[1], '_barcode', $random_barcode2 );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+
+		// empty search
+		$request->set_query_params( array( 'search' => '' ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 4, \count( $data ) );
+
+		// search for sku1
+		$request->set_query_params( array( 'search' => $random_sku1 ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[0], $variation_ids2[0] ), wp_list_pluck( $data, 'id' ) );
+
+		// search for sku2
+		$request->set_query_params( array( 'search' => $random_sku2 ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+
+		// search for barcode1
+		$request->set_query_params( array( 'search' => $random_barcode1 ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[0], $variation_ids2[0] ), wp_list_pluck( $data, 'id' ) );
+
+		// search for barcode2
+		$request->set_query_params( array( 'search' => $random_barcode2 ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+
+		// make sure online_only variations are not returned
+		update_post_meta( $variation_ids1[1], '_pos_visibility', 'online_only' );
+		$request->set_query_params( array( 'search' => $random_barcode2 ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( array( $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+	}
 }
