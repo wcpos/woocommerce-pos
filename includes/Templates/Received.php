@@ -3,6 +3,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WooCommercePOS\Templates
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -19,26 +20,27 @@ class Received {
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
 
-		add_filter('show_admin_bar', '__return_false');
+		add_filter( 'show_admin_bar', '__return_false' );
 	}
 
 
 	public function get_template(): void {
 		try {
 			// get order
-			$order = wc_get_order( $this->order_id );
+			$order = \wc_get_order( $this->order_id );
 
 			// Order or receipt url is invalid.
 			if ( ! $order ) {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-//			if ( ! $order->is_paid() ) {
-//				wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-//			}
+			// if ( ! $order->is_paid() ) {
+			// wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
+			// }
 
 			/**
 			 * @TODO - this is a hack and needs to be fixed
+			 * @NOTE - the received template will be removed once we move to session based checkout
 			 *
 			 * - hardcoding the rest endpoint is a receipe for disaster
 			 */
@@ -53,7 +55,7 @@ class Received {
 			include woocommerce_pos_locate_template( 'received.php' );
 			exit;
 		} catch ( Exception $e ) {
-			wc_print_notice( $e->getMessage(), 'error' );
+			\wc_print_notice( $e->getMessage(), 'error' );
 		}
 	}
 }

@@ -25,8 +25,7 @@
     "php": ">=7.4",
     "ext-json": "*",
     "ramsey/uuid": "^4.2",
-    "salesforce/handlebars-php": "3.0.1",
-    "vlucas/phpdotenv": "v5.5.0"
+    "salesforce/handlebars-php": "3.0.1"
   },
   "config": {
     "platform": {
