@@ -48,7 +48,7 @@ class Received {
 			$order_json               = $server->wp_rest_request( '/wcpos/v1/orders/' . $this->order_id );
 			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
 			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
-			$order_complete           = $order->has_status( array( $completed_status, 'pos-partial' ) );
+			$order_complete           = $completed_status !== 'pos-open';
 
 			// @TODO - display message for errors
 
