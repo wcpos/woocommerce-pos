@@ -145,17 +145,17 @@ if ( ! \defined( 'ABSPATH' ) ) {
 		 * This hook adds the javascript to print the receipt.
 		 */
 		do_action( 'woocommerce_pos_receipt_head' );
-?>
+		?>
 	</head>
 <body <?php body_class(); ?>>
 <div class="sales-receipt">
 	<div class="header">
 		<?php
-$header_image = get_theme_mod( 'custom_logo' );
-if ( $header_image ) {
-	$image_attributes = wp_get_attachment_image_src( $header_image, 'full' );
-	$src              = $image_attributes[0];
-	?>
+		$header_image = get_theme_mod( 'custom_logo' );
+		if ( $header_image ) {
+			$image_attributes = wp_get_attachment_image_src( $header_image, 'full' );
+			$src              = $image_attributes[0];
+			?>
 			<img src="<?php echo esc_url( $src ); ?>" alt="<?php bloginfo( 'name' ); ?>">
 		<?php } else { ?>
 			<h1><?php bloginfo( 'name' ); ?></h1>
@@ -173,14 +173,14 @@ if ( $header_image ) {
 			<strong><?php echo esc_html( wc_format_datetime( $order->get_date_created(), 'F j, Y, g:i a' ) ); ?></strong>
 		</li>
 		<?php
-	// if order has meta value _pos_user, get the user id and display the user name
-	$pos_user = $order->get_meta( '_pos_user' );
-if ( $pos_user ) {
-	$user      = get_user_by( 'id', $pos_user );
-	$user_name = $user->display_name;
-	echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
-}
-?>
+		// if order has meta value _pos_user, get the user id and display the user name
+		$pos_user = $order->get_meta( '_pos_user' );
+		if ( $pos_user ) {
+			$user      = get_user_by( 'id', $pos_user );
+			$user_name = $user->display_name;
+			echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
+		}
+		?>
 		<?php if ( $order->get_payment_method_title() ) { ?>
 			<li class="method">
 				<?php esc_html_e( 'Payment method:', 'woocommerce' ); ?>
@@ -199,7 +199,8 @@ if ( $pos_user ) {
 			</tr>
 		</thead>
 		<tbody>
-	<?php foreach ( $order->get_items() as $item_id => $item ) {
+	<?php
+	foreach ( $order->get_items() as $item_id => $item ) {
 		$product = $item->get_product();
 		?>
 		<tr>
@@ -207,15 +208,15 @@ if ( $pos_user ) {
 				<?php
 					echo wp_kses_post( apply_filters( 'woocommerce_order_item_name', $item->get_name(), $item, false ) );
 
-		do_action( 'woocommerce_order_item_meta_start', $item_id, $item, $order, false );
+				do_action( 'woocommerce_order_item_meta_start', $item_id, $item, $order, false );
 
-		wc_display_item_meta( $item );
+				wc_display_item_meta( $item );
 
-		do_action( 'woocommerce_order_item_meta_end', $item_id, $item, $order, false );
-		?>
+				do_action( 'woocommerce_order_item_meta_end', $item_id, $item, $order, false );
+				?>
 			</td>
 			<td><?php echo esc_html( $item->get_quantity() ); ?></td>
-			<td><?php echo \is_object($product) && method_exists($product, 'get_price') ? wp_kses_post( wc_price( $product->get_price() ) ) : ''; ?></td>
+			<td><?php echo \is_object( $product ) && method_exists( $product, 'get_price' ) ? wp_kses_post( wc_price( $product->get_price() ) ) : ''; ?></td>
 			<td><?php echo wp_kses_post( wc_price( $item->get_total() ) ); ?></td>
 		</tr>
 	<?php } ?>
@@ -233,7 +234,7 @@ if ( $pos_user ) {
 			<?php } ?>
 			<?php foreach ( $order->get_fees() as $fee ) { ?>
 				<tr>
-					<th colspan="3"><?php esc_html_e( 'Fee', 'woocommerce' ); ?></th>
+					<th colspan="3"><?php echo esc_html( $fee->get_name() ); ?></th>
 					<td><?php echo wp_kses_post( wc_price( $fee->get_total() ) ); ?></td>
 				</tr>
 			<?php } ?>
@@ -316,12 +317,10 @@ if ( $pos_user ) {
 <?php } ?>
 
 	<div class="footer">
-	<p><?php esc_html_e( 'Thank you for your purchase!', 'woocommerce' ); ?></p>
-	<p><?php bloginfo( 'name' ); ?> - <?php
-		bloginfo( 'description' ); ?></p>
+		<p><?php esc_html_e( 'Thank you for your purchase!', 'woocommerce' ); ?></p>
+		<p><?php bloginfo( 'name' ); ?> - <?php bloginfo( 'description' ); ?></p>
 	</div>
 </div>
 
 </body>
 </html>
-
