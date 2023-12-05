@@ -4,14 +4,19 @@ namespace WCPOS\WooCommercePOS;
 
 use function is_string;
 
+/**
+ * Class Logger
+ *
+ * NOTE: do not put any SQL queries in this class, eg: options table lookup
+ */
 class Logger {
 	public const WC_LOG_FILENAME = 'woocommerce-pos';
 	public static $logger;
-    public static $log_level;
+	public static $log_level;
 
-    public static function set_log_level( $level ): void {
-        self::$log_level = $level;
-    }
+	public static function set_log_level( $level ): void {
+		self::$log_level = $level;
+	}
 
 	/**
 	 * Utilize WC logger class.
@@ -28,10 +33,9 @@ class Logger {
 				self::$logger = wc_get_logger();
 			}
 
-            if ( is_null( self::$log_level ) ) {
-                $settings = get_option( 'woocommerce_pos_settings' );
-                self::$log_level = $settings['debug_level'] ?? 'info';
-            }
+			if ( is_null( self::$log_level ) ) {
+				self::$log_level = 'info';
+			}
 
 			if ( ! is_string( $message ) ) {
 				$message = print_r( $message, true );

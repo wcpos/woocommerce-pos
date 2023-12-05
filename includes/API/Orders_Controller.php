@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-\defined('ABSPATH') || die;
+\defined( 'ABSPATH' ) || die;
 
-if ( ! class_exists('WC_REST_Orders_Controller') ) {
+if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 	return;
 }
 
@@ -18,6 +18,7 @@ use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 
 /**
  * Orders controller class.
@@ -58,24 +59,24 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
-	
+
 		// Add barcode property to the schema
 		$schema['properties']['barcode'] = array(
-			'description' => __('Barcode', 'woocommerce-pos'),
+			'description' => __( 'Barcode', 'woocommerce-pos' ),
 			'type'        => 'string',
-			'context'     => array('view', 'edit'),
+			'context'     => array( 'view', 'edit' ),
 			'readonly'    => false,
 		);
 
 		// Check and remove email format validation from the billing property
-		if (isset($schema['properties']['billing']['properties']['email']['format'])) {
-			unset($schema['properties']['billing']['properties']['email']['format']);
+		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
+			unset( $schema['properties']['billing']['properties']['email']['format'] );
 		}
 
 		// Modify line_items->parent_name to accept 'string' or 'null'
-		if (isset($schema['properties']['line_items']) &&
-		\is_array($schema['properties']['line_items']['items']['properties'])) {
-			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array('string', 'null');
+		if ( isset( $schema['properties']['line_items'] ) &&
+		\is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
+			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array( 'string', 'null' );
 		}
 
 		return $schema;
@@ -142,9 +143,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$variation = wc_get_product( $item->get_variation_id() );
 			if ( $variation ) {
 				// Get the valid attribute keys and remove 'attribute_' prefix
-				$valid_keys = array_map(function($attribute_name) {
-					return str_replace( 'attribute_', '', $attribute_name );
-				}, array_keys( $variation->get_variation_attributes() ));
+				$valid_keys = array_map(
+					function ( $attribute_name ) {
+						return str_replace( 'attribute_', '', $attribute_name );
+					},
+					array_keys( $variation->get_variation_attributes() )
+				);
 
 				// Get existing meta data on the item
 				$meta_data   = $item->get_meta_data();
@@ -158,11 +162,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 					if ( \in_array( $key, $valid_keys, true ) ) {
 						// If the meta data doesn't have an ID, it's considered 'new' and can be replaced by one with an ID.
-						if ( ! isset($unique_keys[$key]) || (isset($meta_id) && ! isset($unique_keys[$key]['id'])) ) {
-							$unique_keys[$key] = array('index' => $index, 'id' => $meta_id);
+						if ( ! isset( $unique_keys[ $key ] ) || ( isset( $meta_id ) && ! isset( $unique_keys[ $key ]['id'] ) ) ) {
+							$unique_keys[ $key ] = array(
+								'index' => $index,
+								'id' => $meta_id,
+							);
 						} else {
 							// Remove the duplicate meta data.
-							if ($meta->id) {
+							if ( $meta->id ) {
 								$item->delete_meta_data_by_mid( $meta->id );
 							} else {
 								$meta->value = null;
@@ -187,14 +194,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
 		// Your custom validation logic for the request data
 		$billing = $request['billing'] ?? null;
-		$email   = \is_array($billing) ? ($billing['email'] ?? null) : null;
-	
-		if ( ! \is_null($email) && '' !== $email && ! is_email( $email ) ) {
+		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
+
+		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
 			return new \WP_Error(
 				'rest_invalid_param',
 				// translators: Use default WordPress translation
 				__( 'Invalid email address.' ),
-				array('status' => 400)
+				array( 'status' => 400 )
 			);
 		}
 
@@ -208,15 +215,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
-		
-		if (isset($params['per_page'])) {
+
+		if ( isset( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
-	
-		if (isset($params['orderby']) && \is_array($params['orderby']['enum'])) {
+
+		if ( isset( $params['orderby'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_merge(
 				$params['orderby']['enum'],
-				array('status', 'customer_id', 'payment_method', 'total')
+				array( 'status', 'customer_id', 'payment_method', 'total' )
 			);
 		}
 
@@ -237,18 +244,21 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'wcpos_send_email' ),
 					'permission_callback' => array( $this, 'wcpos_send_email_permissions_check' ),
-					'args'                => array_merge($this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ), array(
-						'email'   => array(
-							'type'        => 'string',
-							'description' => __( 'Email address', 'woocommerce-pos' ),
-							'required'    => true,
-						),
-						'save_to' => array(
-							'type'        => 'string',
-							'description' => __( 'Save email to order', 'woocommerce-pos' ),
-							'required'    => false,
-						),
-					)),
+					'args'                => array_merge(
+						$this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
+						array(
+							'email'   => array(
+								'type'        => 'string',
+								'description' => __( 'Email address', 'woocommerce-pos' ),
+								'required'    => true,
+							),
+							'save_to' => array(
+								'type'        => 'string',
+								'description' => __( 'Save email to order', 'woocommerce-pos' ),
+								'required'    => false,
+							),
+						)
+					),
 				),
 				'schema' => array(),
 			)
@@ -294,7 +304,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		return rest_ensure_response( array( 'success' => true ) );
 
-		//		$response->set_status( 201 );
+		// $response->set_status( 201 );
 	}
 
 	/**
@@ -365,10 +375,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$this->maybe_add_post_uuid( $order );
 
 		// Add payment link to the order.
-		$pos_payment_url = add_query_arg(array(
-			'pay_for_order' => true,
-			'key'           => $order->get_order_key(),
-		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ));
+		$pos_payment_url = add_query_arg(
+			array(
+				'pay_for_order' => true,
+				'key'           => $order->get_order_key(),
+			),
+			get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() )
+		);
 
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
 
@@ -435,7 +448,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * @return array|WP_Error
 	 */
-	public function wcpos_get_all_posts(array $fields = array() ): array {
+	public function wcpos_get_all_posts( array $fields = array() ): array {
 		$args = array(
 			'limit'  => -1,
 			'return' => 'ids',
@@ -463,8 +476,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Filters all query clauses at once.
 	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
+	 * @param string[]         $clauses {
+	 *                                  Associative array of the clauses for the query.
 	 *
 	 * @var string The SELECT clause of the query.
 	 * @var string The JOIN clause of the query.
@@ -482,7 +495,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_hpos_orderby_status_query( array $clauses, $query, $args ) {
 		if ( isset( $clauses['orderby'] ) && '' === $clauses['orderby'] ) {
 			$order              = $args['order'] ?? 'ASC';
-			$clauses['orderby'] = $query->get_table_name('orders') . '.status ' . $order;
+			$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.status ' . $order;
 		}
 
 		return $clauses;
@@ -524,10 +537,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			}
 
 			// If HPOS is enabled and $args['orderby'] = 'post_status', we need to add a custom query clause
-			if ( class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )                                     &&
-			method_exists( '\Automattic\WooCommerce\Utilities\OrderUtil', 'custom_orders_table_usage_is_enabled' ) &&
-			\Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled() ) {
-				if ('status' === $request['orderby']) {
+			if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+				if ( 'status' === $request['orderby'] ) {
 					add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_status_query' ), 10, 3 );
 				}
 			}

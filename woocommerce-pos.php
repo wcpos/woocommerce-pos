@@ -6,6 +6,7 @@
  * Version:           1.4.0-beta.3
  * Author:            kilbot
  * Author URI:        http://wcpos.com
+ * Update URI:        https://updates.wcpos.com/pro/
  * Text Domain:       woocommerce-pos
  * License:           GPL-3.0+
  * License URI:       http://www.gnu.org/licenses/gpl-3.0.txt

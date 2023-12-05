@@ -6,6 +6,7 @@
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
+ * @package   WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
