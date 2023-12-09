@@ -3,16 +3,19 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WooCommerce POS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\Services\Store;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
+/**
+ * Frontend class.
+ */
 class Frontend {
 
 	/**

@@ -51,6 +51,7 @@ To prepare the repository for local development you should rename `.env.example`
 Next you will need to install the required PHP via `composer` and JavaScript packages via `yarn`.
 
 ```sh
+composer prefix-dependencies
 composer install
 yarn install
 ```

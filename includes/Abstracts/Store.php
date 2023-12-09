@@ -1,14 +1,22 @@
 <?php
+/**
+ * Abstract Store class.
+ *
+ * @package WooCommerce\POS\Abstracts
+ */
 
-namespace WCPOS\WooCommercePOS\Services;
+namespace WCPOS\WooCommercePOS\Abstracts;
 
-use WC_Data;
-
-if ( ! class_exists( 'WC_Data' ) ) {
-	return;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
-class Store extends WC_Data {
+/**
+ * Abstract Store class.
+ *
+ * Handles the store data, and provides CRUD methods.
+ */
+class Store extends \WC_Data {
 	/**
 	 * This is the name of this object type.
 	 *

@@ -13,10 +13,19 @@ return array(
 				->in( 'vendor/firebase/php-jwt' )
 				->name( '*.php' ), // Scope only PHP files.
 
-		// Add Finder for yahnis-elsts/plugin-update-checker
+		/**
+		 * If there is only one library the folder structure is not maintained :(
+		 * By creating a dummy folder we can maintain the folder structure.
+		 */
 		Finder::create()->files()
-				->in( 'vendor/yahnis-elsts/plugin-update-checker' )
-				->name( '*.php' ), // Scope only PHP files.
+			->in( 'dummy' )
+			->name( '*.php' ),
+
+		// Add Finder for yahnis-elsts/plugin-update-checker
+		// NOTE: I ended up rolling my own update checker, so this is no longer needed.
+		// Finder::create()->files()
+		// ->in( 'vendor/yahnis-elsts/plugin-update-checker' )
+		// ->name( '*.php' ), // Scope only PHP files.
 
 		// Add Finder for ramsey/uuid
 		// NOTE: UUID has too many dependencies to scope, so we'll just leave it alone.

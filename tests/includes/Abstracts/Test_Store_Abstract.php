@@ -1,8 +1,8 @@
 <?php
 
-namespace WCPOS\WooCommercePOS\Tests\Services;
+namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
-use WCPOS\WooCommercePOS\Services\Store;
+use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 
@@ -11,7 +11,7 @@ use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
  *
  * @coversNothing
  */
-class Test_Store_Service extends WP_UnitTestCase {
+class Test_Store_Abstract extends WP_UnitTestCase {
 	private $store;
 
 	public function setUp(): void {

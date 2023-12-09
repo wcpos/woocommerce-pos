@@ -9,7 +9,7 @@ if ( ! class_exists( 'WP_REST_Controller' ) ) {
 }
 
 use WP_REST_Controller;
-use WCPOS\WooCommercePOS\Services\Store;
+use WCPOS\WooCommercePOS\Abstracts\Store;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 class Stores extends WP_REST_Controller {

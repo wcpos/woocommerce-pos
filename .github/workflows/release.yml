@@ -14,12 +14,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Check if version has changed
         id: check_version
         run: |
-          VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*" woocommerce-pos.php)
+          VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*(-\w+)?(\.\d+)?" woocommerce-pos.php)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           git fetch --prune --unshallow
           LAST_TAG=$(git describe --tags --abbrev=0)
@@ -41,7 +41,7 @@ jobs:
           tag_name: v${{ env.VERSION }}
           release_name: Release v${{ env.VERSION }}
           draft: true
-          prerelease: false
+          prerelease: ${{ contains(env.VERSION, '-beta') }}
 
       - name: Build
         if: steps.check_version.outputs.release == 'true'
@@ -49,6 +49,7 @@ jobs:
           YARN_ENABLE_IMMUTABLE_INSTALLS: false
         run: |
           yarn install
+          composer prefix-dependencies
           composer install --no-dev
           yarn build:js
 

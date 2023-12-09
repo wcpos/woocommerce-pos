@@ -18,6 +18,7 @@ jobs:
           YARN_ENABLE_IMMUTABLE_INSTALLS: false
         run: |
           yarn install
+          composer prefix-dependencies
           composer install --no-dev
           yarn build:js
 

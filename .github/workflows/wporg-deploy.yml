@@ -2,7 +2,7 @@ name: Deploy to WordPress.org
 
 on:
   release:
-    types: [ published ]
+    types: [ released ]
 
 jobs:
   tag:
@@ -12,13 +12,14 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Build
         env:
           YARN_ENABLE_IMMUTABLE_INSTALLS: false
         run: |
           yarn install
+          composer prefix-dependencies
           composer install --no-dev
           yarn build:js
 

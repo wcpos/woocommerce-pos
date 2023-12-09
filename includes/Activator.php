@@ -47,7 +47,7 @@ class Activator {
 
 			// Init update script if required
 			$this->version_check();
-            $this->pro_version_check();
+			$this->pro_version_check();
 
 			// resolve plugin plugins
 			$this->plugin_check();
@@ -89,10 +89,12 @@ class Activator {
 		$this->create_pos_roles();
 
 		// add pos capabilities to non POS roles
-		$this->add_pos_capability(array(
-            'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
-            'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
-		));
+		$this->add_pos_capability(
+			array(
+				'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+				'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+			)
+		);
 
 		// set the auto redirection on next page load
 		// set_transient( 'woocommere_pos_welcome', 1, 30 );
@@ -123,9 +125,9 @@ class Activator {
 		}
 
 		$message = sprintf(
-            __( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
-            PHP_MIN_VERSION,
-            'http://www.wpupdatephp.com/update/'
+			__( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
+			PHP_MIN_VERSION,
+			'http://www.wpupdatephp.com/update/'
 		) . ' &raquo;';
 
 		Admin\Notices::add( $message );
@@ -140,10 +142,10 @@ class Activator {
 		}
 
 		$message = sprintf(
-            __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
-            'http://wordpress.org/plugins/woocommerce/',
-            WC_MIN_VERSION,
-            admin_url( 'plugins.php' )
+			__( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+			'http://wordpress.org/plugins/woocommerce/',
+			WC_MIN_VERSION,
+			admin_url( 'plugins.php' )
 		) . ' &raquo;';
 
 		Admin\Notices::add( $message );
@@ -184,9 +186,9 @@ class Activator {
 	 */
 	private function plugin_check(): void {
 		// disable NextGEN Gallery resource manager
-		//      if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
-		//          \define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
-		//      }
+		// if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
+		// \define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
+		// }
 	}
 
 	/**
@@ -222,14 +224,16 @@ class Activator {
 		);
 
 		add_role(
-            'cashier',
-            __( 'Cashier', 'woocommerce-pos' ),
-            $cashier_capabilities
+			'cashier',
+			__( 'Cashier', 'woocommerce-pos' ),
+			$cashier_capabilities
 		);
 
-		$this->add_pos_capability(array(
-            'cashier' => array( 'access_woocommerce_pos' ),
-		));
+		$this->add_pos_capability(
+			array(
+				'cashier' => array( 'access_woocommerce_pos' ),
+			)
+		);
 	}
 
 	/**
@@ -269,33 +273,32 @@ class Activator {
 		}
 	}
 
-    /**
-     * If \WCPOS\WooCommercePOSPro\ is installed, check the version is above MIN_PRO_VERSION
-     */
+	/**
+	 * If \WCPOS\WooCommercePOSPro\ is installed, check the version is above MIN_PRO_VERSION
+	 */
 	private function pro_version_check() {
-        if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
+		if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
 			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) {
-                /**
-                 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
-                 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
-                 */
-                if ( ! function_exists( 'deactivate_plugins' ) ) {
-                    require_once( ABSPATH . '/wp-admin/includes/plugin.php' );
-                }
+				/**
+				 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
+				 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
+				 */
+				if ( ! function_exists( 'deactivate_plugins' ) ) {
+					require_once ABSPATH . '/wp-admin/includes/plugin.php';
+				}
 
 				// WooCommerce POS Pro is activated, but the version is too low
 				deactivate_plugins( 'woocommerce-pos-pro/woocommerce-pos-pro.php' );
 
 				$message = sprintf(
-                    __( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce POS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce POS Pro</a>', 'woocommerce-pos' ),
-                    'https://wcpos.com/my-account',
-                    MIN_PRO_VERSION,
-                    admin_url( 'plugins.php' )
+					__( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce POS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce POS Pro</a>', 'woocommerce-pos' ),
+					'https://wcpos.com/my-account',
+					MIN_PRO_VERSION,
+					admin_url( 'plugins.php' )
 				) . ' &raquo;';
 
 				Admin\Notices::add( $message );
 			}
 		}
 	}
-
 }

@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-use WCPOS\WooCommercePOS\Services\Store;
+use WCPOS\WooCommercePOS\Abstracts\Store;
 
 /**
  * Standard way of retrieving stores based on certain parameters.

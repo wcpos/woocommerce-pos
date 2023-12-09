@@ -28,7 +28,7 @@ class Init {
 
 		// Init hooks
 		add_action( 'init', array( $this, 'init' ) );
-		add_action( 'rest_api_init', array( $this, 'rest_api_init' ), 20 );
+		add_action( 'rest_api_init', array( $this, 'init_rest_api' ), 20 );
 		add_filter( 'query_vars', array( $this, 'query_vars' ) );
 
 		// Headers for API discoverability
@@ -40,38 +40,65 @@ class Init {
 	 * Load the required resources.
 	 */
 	public function init(): void {
-		// common classes
+		$this->init_common();
+		$this->init_frontend();
+		$this->init_admin();
+		$this->init_integrations();
+	}
+
+	/**
+	 * Common initializations
+	 */
+	private function init_common() {
 		new i18n();
 		new Gateways();
 		new Products();
 		// new Customers();
 		new Orders();
+	}
 
-		// frontend only
+	/**
+	 * Frontend specific initializations
+	 */
+	private function init_frontend() {
 		if ( ! is_admin() ) {
-			new Templates();
-			new Form_Handler();
+				new Templates();
+				new Form_Handler();
 		}
+	}
 
-		// NOTE: admin_menu runs before admin_init, so we need to load the Admin class here
+	/**
+	 * Admin specific initializations
+	 */
+	private function init_admin() {
 		if ( is_admin() ) {
-			if ( \defined( '\DOING_AJAX' ) && DOING_AJAX ) {
-				// AJAX requests
-				new AJAX();
+			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+					new AJAX();
 			} else {
-				// Non-AJAX (Admin) requests
-				new Admin();
+					new Admin();
 			}
 		}
+	}
 
-		// load integrations
-		$this->integrations();
+	/**
+	 * Integrations
+	 */
+	private function init_integrations() {
+		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+		// if ( class_exists( 'WC-Bookings' ) ) {
+		// new Integrations\Bookings();
+		// }
+
+		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
+		if ( class_exists( 'WPSEO_Options' ) ) {
+			new Integrations\WPSEO();
+		}
 	}
 
 	/**
 	 * Loads the POS API and duck punches the WC REST API.
 	 */
-	public function rest_api_init(): void {
+	public function init_rest_api(): void {
 		if ( woocommerce_pos_request() ) {
 			new API();
 		}
@@ -136,21 +163,6 @@ class Init {
 		if ( isset( $_GET['_method'] ) && 'head' == strtolower( $_GET['_method'] ) ) {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
-		}
-	}
-
-	/**
-	 * Loads POS integrations with third party plugins.
-	 */
-	private function integrations(): void {
-		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		// if ( class_exists( 'WC-Bookings' ) ) {
-		// new Integrations\Bookings();
-		// }
-
-		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
-		if ( class_exists( 'WPSEO_Options' ) ) {
-			new Integrations\WPSEO();
 		}
 	}
 }
