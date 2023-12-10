@@ -12,3 +12,4 @@ composer.lock
 hookdoc-conf.json
 package.json
 yarn.lock
+php-scoper

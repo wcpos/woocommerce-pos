@@ -21,7 +21,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 
 	public function tearDown(): void {
 		parent::tearDown();
-		unset($this->settings);
+		unset( $this->settings );
 	}
 
 	/**
@@ -29,7 +29,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_get_general_default_settings(): void {
 		$settings = $this->settings->get_general_settings();
-		$this->assertIsArray($settings);
+		$this->assertIsArray( $settings );
 		$this->assertTrue( $settings['force_ssl'] );
 		$this->assertFalse( $settings['pos_only_products'] );
 		$this->assertTrue( $settings['generate_username'] );
@@ -43,11 +43,11 @@ class Test_Settings_Service extends WP_UnitTestCase {
 			'pos_only_products' => true,
 			'decimal_qty'       => true,
 		);
-		
-		$result = $this->settings->save_settings('general', $new_settings);
-		$this->assertIsArray($result);
-		$this->assertTrue($result['pos_only_products']);
-		$this->assertTrue($result['decimal_qty']);
+
+		$result = $this->settings->save_settings( 'general', $new_settings );
+		$this->assertIsArray( $result );
+		$this->assertTrue( $result['pos_only_products'] );
+		$this->assertTrue( $result['decimal_qty'] );
 	}
 
 	/**
@@ -55,7 +55,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_get_checkout_default_settings(): void {
 		$settings = $this->settings->get_checkout_settings();
-		$this->assertIsArray($settings);
+		$this->assertIsArray( $settings );
 		$this->assertEquals( 'wc-completed', $settings['order_status'] );
 		$this->assertTrue( $settings['admin_emails'] );
 		$this->assertTrue( $settings['customer_emails'] );
@@ -66,7 +66,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_get_payment_gateways_default_settings(): void {
 		$settings = $this->settings->get_payment_gateways_settings();
-		$this->assertIsArray($settings);
+		$this->assertIsArray( $settings );
 		$this->assertEquals( 'pos_cash', $settings['default_gateway'] );
 		$this->assertIsArray( $settings['gateways'] );
 
@@ -80,7 +80,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_get_access_default_settings(): void {
 		$settings = $this->settings->get_access_settings();
-		$this->assertIsArray($settings);
+		$this->assertIsArray( $settings );
 		$administrator = $settings['administrator'];
 
 		$this->assertTrue( $administrator['capabilities']['wcpos']['access_woocommerce_pos'] );
@@ -92,7 +92,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_get_license_default_settings(): void {
 		$settings = $this->settings->get_license_settings();
-		$this->assertIsArray($settings);
+		$this->assertIsArray( $settings );
 		$this->assertEmpty( $settings );
 	}
 
@@ -100,10 +100,10 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 * Get default settings by key.
 	 */
 	public function test_get_settings(): void {
-		$settings = $this->settings->get_settings('general');
-		$this->assertIsArray($settings);
+		$settings = $this->settings->get_settings( 'general' );
+		$this->assertIsArray( $settings );
 
-		$settings = $this->settings->get_settings('general', 'barcode_field');
+		$settings = $this->settings->get_settings( 'general', 'barcode_field' );
 		$this->assertEquals( '_sku', $settings );
 	}
 
@@ -111,15 +111,15 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 * Invalid.
 	 */
 	public function test_get_invalid_settings(): void {
-		$result = $this->settings->get_settings('invalid');
-		$this->assertInstanceOf(WP_Error::class, $result);
+		$result = $this->settings->get_settings( 'invalid' );
+		$this->assertInstanceOf( WP_Error::class, $result );
 
-		$result = $this->settings->get_settings('general', 'invalid');
-		$this->assertInstanceOf(WP_Error::class, $result);
+		$result = $this->settings->get_settings( 'general', 'invalid' );
+		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 
 	public function test_save_invalid_settings(): void {
-		$result = $this->settings->save_settings('invalid', array());
-		$this->assertInstanceOf(WP_Error::class, $result);
+		$result = $this->settings->save_settings( 'invalid', array() );
+		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 }

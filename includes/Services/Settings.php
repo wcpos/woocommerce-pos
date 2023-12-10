@@ -6,7 +6,17 @@ use WC_Payment_Gateways;
 use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
 
+/**
+ * Settings Service class.
+ */
 class Settings {
+	/**
+	 * The single instance of the class.
+	 *
+	 * @var Settings|null
+	 */
+	private static $instance = null;
+
 	/**
 	 * Prefix for the $wpdb->options table.
 	 *
@@ -93,9 +103,24 @@ class Settings {
 		),
 	);
 
-	public function __construct() {
-		// NOTE: do not put any code here, the settings service can be instantiated many times
-		// TODO: should I use the singleton pattern?
+	/**
+	 * Gets the singleton instance.
+	 *
+	 * @return Settings
+	 */
+	public static function instance(): Settings {
+		if ( null === self::$instance ) {
+				self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	/**
+	 * Constructor is private to prevent direct instantiation.
+	 * Use woocommerce_pos_get_settings() instead.
+	 * Or Settings::instance() if you must.
+	 */
+	private function __construct() {
 	}
 
 	/**

@@ -22,15 +22,15 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_namespace_property(): void {
-		$namespace = $this->get_reflected_property_value('namespace');
+		$namespace = $this->get_reflected_property_value( 'namespace' );
 
-		$this->assertEquals('wcpos/v1', $namespace );
+		$this->assertEquals( 'wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$rest_base = $this->get_reflected_property_value('rest_base');
+		$rest_base = $this->get_reflected_property_value( 'rest_base' );
 
-		$this->assertEquals('customers', $rest_base);
+		$this->assertEquals( 'customers', $rest_base );
 	}
 
 	/**
@@ -89,7 +89,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$customer    = CustomerHelper::create_customer();
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_param( 'posts_per_page', -1 );
-		$request->set_param( 'fields', array('id') );
+		$request->set_param( 'fields', array( 'id' ) );
 
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 200, $response->get_status() );
@@ -106,26 +106,26 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_customer_response_contains_uuid_meta_data(): void {
 		$customer = CustomerHelper::create_customer();
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/customers/' . $customer->get_id() );
-		$response = $this->server->dispatch($request);
+		$response = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 
 		$found      = false;
 		$uuid_value = '';
 		$count      = 0;
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
-		foreach ($data['meta_data'] as $meta) {
-			if ('_woocommerce_pos_uuid' === $meta['key']) {
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
 				$count++;
 				$uuid_value = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
-		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
+		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
 	}
 
 	/**
@@ -133,73 +133,103 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_first_name(): void {
 		// Create some customers
-		$customer1 = CustomerHelper::create_customer(array('first_name' => 'Alice'));
-		$customer2 = CustomerHelper::create_customer(array('first_name' => 'Zara'));
-		$customer3 = CustomerHelper::create_customer(array('first_name' => 'Bob'));
+		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'Alice' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'first_name' => 'Zara' ) );
+		$customer3 = CustomerHelper::create_customer( array( 'first_name' => 'Bob' ) );
 
 		// Order by 'first_name' ascending
-		$request = $this->wp_rest_get_request('/wcpos/v1/customers');
-		$request->set_query_params( array( 'orderby' => 'first_name', 'order' => 'asc' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'first_name',
+				'order' => 'asc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$first_names = wp_list_pluck( $data, 'first_name' );
-		
+
 		$this->assertEquals( $first_names, array( 'Alice', 'Bob', 'Zara' ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'first_name', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'first_name',
+				'order' => 'desc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$first_names = wp_list_pluck( $data, 'first_name' );
-		
+
 		$this->assertEquals( $first_names, array( 'Zara', 'Bob', 'Alice' ) );
 	}
 
 	public function test_orderby_last_name(): void {
 		// Create some customers
-		$customer1 = CustomerHelper::create_customer(array('last_name' => 'Anderson'));
-		$customer2 = CustomerHelper::create_customer(array('last_name' => 'Thompson'));
-		$customer3 = CustomerHelper::create_customer(array('last_name' => 'Martinez'));
+		$customer1 = CustomerHelper::create_customer( array( 'last_name' => 'Anderson' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'last_name' => 'Thompson' ) );
+		$customer3 = CustomerHelper::create_customer( array( 'last_name' => 'Martinez' ) );
 
 		// Order by 'last_name' ascending
-		$request = $this->wp_rest_get_request('/wcpos/v1/customers');
-		$request->set_query_params( array( 'orderby' => 'last_name', 'order' => 'asc' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'last_name',
+				'order' => 'asc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$last_names  = wp_list_pluck( $data, 'last_name' );
-		
+
 		$this->assertEquals( $last_names, array( 'Anderson', 'Martinez', 'Thompson' ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'last_name', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'last_name',
+				'order' => 'desc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$last_names  = wp_list_pluck( $data, 'last_name' );
-		
+
 		$this->assertEquals( $last_names, array( 'Thompson', 'Martinez', 'Anderson' ) );
 	}
 
 	public function test_orderby_email(): void {
 		// Create some customers
-		$customer1 = CustomerHelper::create_customer(array('email' => 'john.doe@example.com'));
-		$customer2 = CustomerHelper::create_customer(array('email' => 'sarah.smith@sample.com'));
-		$customer3 = CustomerHelper::create_customer(array('email' => 'alex.miller@demo.net'));
+		$customer1 = CustomerHelper::create_customer( array( 'email' => 'john.doe@example.com' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'email' => 'sarah.smith@sample.com' ) );
+		$customer3 = CustomerHelper::create_customer( array( 'email' => 'alex.miller@demo.net' ) );
 
 		// Order by 'email' ascending
-		$request = $this->wp_rest_get_request('/wcpos/v1/customers');
-		$request->set_query_params( array( 'orderby' => 'email', 'order' => 'asc' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'email',
+				'order' => 'asc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$emails      = wp_list_pluck( $data, 'email' );
-		
+
 		$this->assertEquals( $emails, array( 'alex.miller@demo.net', 'john.doe@example.com', 'sarah.smith@sample.com' ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'email', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'email',
+				'order' => 'desc',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$emails      = wp_list_pluck( $data, 'email' );
-		
+
 		$this->assertEquals( $emails, array( 'sarah.smith@sample.com', 'john.doe@example.com', 'alex.miller@demo.net' ) );
 	}
 
@@ -210,17 +240,23 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_role(): void {
 		// Create some customers
-		$customer1 = CustomerHelper::create_customer(array('role' => 'administrator'));
-		$customer2 = CustomerHelper::create_customer(array('role' => 'subscriber'));
-		$customer3 = CustomerHelper::create_customer(array('role' => 'customer'));
+		$customer1 = CustomerHelper::create_customer( array( 'role' => 'administrator' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'role' => 'subscriber' ) );
+		$customer3 = CustomerHelper::create_customer( array( 'role' => 'customer' ) );
 
 		// Order by 'role' ascending
-		$request = $this->wp_rest_get_request('/wcpos/v1/customers');
-		$request->set_query_params( array( 'orderby' => 'role', 'order' => 'asc', 'role' => 'all' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'role',
+				'order' => 'asc',
+				'role' => 'all',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$roles       = wp_list_pluck( $data, 'role' );
-		
+
 		$this->assertEquals(
 			$roles,
 			// NOTE: there are two admin users created by default, one above in the setup
@@ -228,11 +264,17 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'role', 'order' => 'desc', 'role' => 'all' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'role',
+				'order' => 'desc',
+				'role' => 'all',
+			)
+		);
 		$response    = $this->server->dispatch( $request );
 		$data        = $response->get_data();
 		$roles       = wp_list_pluck( $data, 'role' );
-		
+
 		$this->assertEquals(
 			$roles,
 			// NOTE: there are two admin users created by default, one above in the setup
@@ -242,28 +284,38 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_orderby_username(): void {
 		// Create some customers
-		$customer1 = CustomerHelper::create_customer(array('username' => 'alpha'));
-		$customer2 = CustomerHelper::create_customer(array('username' => 'zeta'));
-		$customer3 = CustomerHelper::create_customer(array('username' => 'beta'));
+		$customer1 = CustomerHelper::create_customer( array( 'username' => 'alpha' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'username' => 'zeta' ) );
+		$customer3 = CustomerHelper::create_customer( array( 'username' => 'beta' ) );
 
 		// Order by 'username' ascending
-		$request = $this->wp_rest_get_request('/wcpos/v1/customers');
-		$request->set_query_params( array( 'orderby' => 'username', 'order' => 'asc' ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'username',
+				'order' => 'asc',
+			)
+		);
 		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$usernames       = wp_list_pluck( $data, 'username' );
-		
+
 		$this->assertEquals(
 			$usernames,
 			array( 'alpha', 'beta', 'zeta' )
 		);
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'username', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'username',
+				'order' => 'desc',
+			)
+		);
 		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$usernames       = wp_list_pluck( $data, 'username' );
-		
+
 		$this->assertEquals(
 			$usernames,
 			array( 'zeta', 'beta', 'alpha' )
@@ -274,15 +326,15 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Search.
 	 */
 	public function test_customer_search(): void {
-		$random_first_name              = wp_generate_password(8, false);
-		$random_last_name               = wp_generate_password(8, false);
-		$random_email                   = wp_generate_password(6, false) . '@example.com';
-		$random_username                = wp_generate_password(6, false);
-		$random_billing_first_name      = wp_generate_password(8, false);
-		$random_billing_last_name       = wp_generate_password(8, false);
-		$random_billing_email           = wp_generate_password(8, false) . '@test.com';
-		$random_billing_company         = wp_generate_password(8, false);
-		$random_billing_phone           = wp_generate_password(8, false);
+		$random_first_name              = wp_generate_password( 8, false );
+		$random_last_name               = wp_generate_password( 8, false );
+		$random_email                   = wp_generate_password( 6, false ) . '@example.com';
+		$random_username                = wp_generate_password( 6, false );
+		$random_billing_first_name      = wp_generate_password( 8, false );
+		$random_billing_last_name       = wp_generate_password( 8, false );
+		$random_billing_email           = wp_generate_password( 8, false ) . '@test.com';
+		$random_billing_company         = wp_generate_password( 8, false );
+		$random_billing_phone           = wp_generate_password( 8, false );
 
 		$customer1 = CustomerHelper::create_customer( array( 'first_name' => $random_first_name ) );
 		$customer2 = CustomerHelper::create_customer( array( 'last_name' => $random_last_name ) );
@@ -301,14 +353,14 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => '' ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 9, \count( $data ) );
 
 		// search for first_name
 		$request->set_query_params( array( 'search' => $random_first_name ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer1->get_id(), $data[0]['id'] );
 
@@ -316,7 +368,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_last_name ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer2->get_id(), $data[0]['id'] );
 
@@ -324,7 +376,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_email ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer3->get_id(), $data[0]['id'] );
 
@@ -332,7 +384,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_username ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer4->get_id(), $data[0]['id'] );
 
@@ -340,15 +392,15 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_billing_first_name ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer5->get_id(), $data[0]['id'] );
-		
+
 		// search for billing_last_name
 		$request->set_query_params( array( 'search' => $random_billing_last_name ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer6->get_id(), $data[0]['id'] );
 
@@ -356,7 +408,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_billing_email ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer7->get_id(), $data[0]['id'] );
 
@@ -364,7 +416,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_billing_company ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer8->get_id(), $data[0]['id'] );
 
@@ -372,7 +424,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params( array( 'search' => $random_billing_phone ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer9->get_id(), $data[0]['id'] );
 	}
@@ -381,13 +433,13 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test customer creation.
 	 */
 	public function test_create_customer(): void {
-		$request = $this->wp_rest_post_request('/wcpos/v1/customers');
+		$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
 		$request->set_body_params(
 			array(
 				'first_name' => 'John',
 				'last_name'  => 'Doe',
 				'email'      => 'email@example.com',
-				'password' 	 => '',
+				'password'   => '',
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -408,15 +460,15 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 			),
 		);
 
-		$request  = $this->wp_rest_get_request('/wcpos/v1/customers/' . $customer->get_id() );
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/customers/' . $customer->get_id() );
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'Sarah', $data['first_name'] );
 
-		$request            = $this->wp_rest_post_request('/wcpos/v1/customers/' . $customer->get_id() );
+		$request            = $this->wp_rest_post_request( '/wcpos/v1/customers/' . $customer->get_id() );
 		$data['first_name'] = 'Jane';
-		$request->set_body_params($data);
+		$request->set_body_params( $data );
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 

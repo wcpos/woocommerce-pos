@@ -31,19 +31,12 @@ class API {
 	protected $wc_rest_api_handler;
 
 	/**
-	 * @var
-	 */
-	protected $auth_service;
-
-	/**
 	 * @var bool
 	 */
 	protected $is_auth_checked = false;
 
 
 	public function __construct() {
-		$this->auth_service = new Auth();
-
 		// Init and register routes for the WCPOS REST API
 		$this->controllers = array(
 			// woocommerce pos rest api controllers
@@ -324,7 +317,8 @@ class API {
 		list($token) = sscanf( $auth_header, 'Bearer %s' );
 
 		if ( $token ) {
-			$decoded_token = $this->auth_service->validate_token( $token );
+			$auth_service = Auth::instance();
+			$decoded_token = $auth_service->validate_token( $token );
 
 			// Check if validate_token returned WP_Error and user_id is null
 			if ( is_wp_error( $decoded_token ) && $user_id === null ) {

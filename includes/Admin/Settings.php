@@ -6,22 +6,25 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WooCommercePOS\Admin
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
+
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\VERSION;
 
+/**
+ * Class Settings
+ */
 class Settings {
 	/**
-	 * @var 
+	 * Settings constructor.
 	 */
-	protected $settings_service;
-
 	public function __construct() {
-		$this->settings_service = new \WCPOS\WooCommercePOS\Services\Settings();
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
 		/*
@@ -41,7 +44,8 @@ class Settings {
 	 * Output the settings pages.
 	 */
 	public static function display_settings_page(): void {
-		printf('<div id="woocommerce-pos-settings">
+		printf(
+			'<div id="woocommerce-pos-settings">
 			<div id="woocommerce-pos-js-error" class="wrap">
 				<h1>%s</h1>
 				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
@@ -114,12 +118,17 @@ class Settings {
 	 * @return string
 	 */
 	private function inline_script(): string {
-		$barcodes       = array_values( $this->settings_service->get_barcodes() );
-		$order_statuses = $this->settings_service->get_order_statuses();
+		$settings_service = SettingsService::instance();
+		$barcodes         = array_values( $settings_service->get_barcodes() );
+		$order_statuses   = $settings_service->get_order_statuses();
 
-		return sprintf( 'var wcpos = wcpos || {}; wcpos.settings = {
+		return sprintf(
+			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s
-        }', json_encode( $barcodes ), json_encode( $order_statuses ) );
+        }',
+			json_encode( $barcodes ),
+			json_encode( $order_statuses )
+		);
 	}
 }

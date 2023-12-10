@@ -13,6 +13,8 @@ namespace WCPOS\WooCommercePOS;
 
 use const DOING_AJAX;
 
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -55,6 +57,10 @@ class Init {
 		new Products();
 		// new Customers();
 		new Orders();
+
+		// init the Services
+		SettingsService::instance();
+		AuthService::instance();
 	}
 
 	/**

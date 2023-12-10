@@ -78,7 +78,7 @@ class Frontend {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
 		$github_url     = 'https://wcpos.github.io/managed-expo/';
-		$auth_service   = new Auth();
+		$auth_service   = Auth::instance();
 		$stores         = array_map(
 			function ( $store ) {
 				return $store->get_data();

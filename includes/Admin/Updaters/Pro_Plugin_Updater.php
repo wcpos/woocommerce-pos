@@ -13,7 +13,6 @@ namespace WCPOS\WooCommercePOS\Admin\Updaters;
 use Parsedown;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
-use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
  * Handles the update checking for the Pro plugin
@@ -110,8 +109,7 @@ class Pro_Plugin_Updater {
 			add_action( 'install_plugins_pre_plugin-information', array( $this, 'plugin_information' ), 5 );
 
 			// get license key from settings.
-			$settings_service = new Settings();
-			$license_settings = $settings_service->get_license_settings();
+			$license_settings = woocommerce_pos_get_settings( 'license' );
 			if ( isset( $license_settings['license_key'] ) && isset( $license_settings['instance'] ) ) {
 				$this->license_key = $license_settings['license_key'];
 				$this->instance = $license_settings['instance'];

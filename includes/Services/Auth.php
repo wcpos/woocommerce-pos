@@ -10,7 +10,36 @@ use WP_Error;
 use WP_User;
 use const DAY_IN_SECONDS;
 
+/**
+ * Auth Service class
+ */
 class Auth {
+	/**
+	 * The single instance of the class.
+	 *
+	 * @var Auth|null
+	 */
+	private static $instance = null;
+
+		/**
+		 * Gets the singleton instance.
+		 *
+		 * @return Auth
+		 */
+	public static function instance(): Auth {
+		if ( null === self::$instance ) {
+				self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	/**
+	 * Constructor is private to prevent direct instantiation.
+	 * Or Settings::instance() instead.
+	 */
+	public function __construct() {
+	}
+
 	/**
 	 * Generate a secret key if it doesn't exist, or return the existing one
 	 *

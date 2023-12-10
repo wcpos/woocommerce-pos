@@ -106,7 +106,7 @@ if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
  */
 if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	function woocommerce_pos_get_settings( $id, $key = null ) {
-		$settings_service = new Settings();
+		$settings_service = Settings::instance();
 
 		return $settings_service->get_settings( $id, $key );
 	}

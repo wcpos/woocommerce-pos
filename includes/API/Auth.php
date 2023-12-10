@@ -14,11 +14,21 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
-use function is_wp_error;
-use function rest_ensure_response;
-use function wp_authenticate;
+use WP_REST_Controller;
+use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
-class Auth extends Abstracts\Controller {
+/**
+ *
+ */
+class Auth extends WP_REST_Controller {
+		/**
+		 * Endpoint namespace.
+		 *
+		 * @var string
+		 */
+	protected $namespace = SHORT_NAME . '/v1';
+
 	/**
 	 * Route base.
 	 *
@@ -26,16 +36,10 @@ class Auth extends Abstracts\Controller {
 	 */
 	protected $rest_base = 'jwt';
 
-    /**
-     *
-     */
-    protected $auth_service;
-
 	/**
 	 * Stores constructor.
 	 */
 	public function __construct() {
-        $this->auth_service = new \WCPOS\WooCommercePOS\Services\Auth();
 	}
 
 	/**
@@ -50,10 +54,10 @@ class Auth extends Abstracts\Controller {
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'generate_token' ),
 				'permission_callback' => function ( WP_REST_Request $request ) {
-                    // special case for user=demo param
-                    if ( $request->get_param( 'user' ) === 'demo' ) {
-                        return true;
-                    }
+					// special case for user=demo param
+					if ( $request->get_param( 'user' ) === 'demo' ) {
+						return true;
+					}
 
 					$authorization = $request->get_header( 'authorization' );
 
@@ -117,7 +121,8 @@ class Auth extends Abstracts\Controller {
 
 	/**
 	 * Get the user and password in the request body and generate a JWT.
-     * @NOTE - not allowing REST Auth at the moment
+	 *
+	 * @NOTE - not allowing REST Auth at the moment
 	 *
 	 * @param WP_REST_Request $request
 	 * @return WP_Error|WP_REST_Response
@@ -142,8 +147,9 @@ class Auth extends Abstracts\Controller {
 				)
 			);
 		} else {
-            $data = $this->auth_service->generate_token( $user );
-        }
+			$auth_service = AuthService::instance();
+			$data = $auth_service->generate_token( $user );
+		}
 
 		/**
 		 * Let the user modify the data before sending it back
@@ -162,17 +168,18 @@ class Auth extends Abstracts\Controller {
 		return rest_ensure_response( $data );
 	}
 
-    /**
-     * Validate JWT Token.
-     *
-     * @param WP_REST_Request $request
-     * @return WP_REST_Response
-     */
-    public function validate_token( WP_REST_Request $request ): WP_REST_Response {
-        $token = $request->get_param( 'jwt' );
-        $result = $this->auth_service->validate_token( $token );
-        return rest_ensure_response( $result );
-    }
+	/**
+	 * Validate JWT Token.
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response
+	 */
+	public function validate_token( WP_REST_Request $request ): WP_REST_Response {
+		$token = $request->get_param( 'jwt' );
+		$auth_service = AuthService::instance();
+		$result = $auth_service->validate_token( $token );
+		return rest_ensure_response( $result );
+	}
 
 	/**
 	 * Refresh JWT Token.

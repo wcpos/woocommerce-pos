@@ -1,71 +1,71 @@
 <?php
+/**
+ * Login template
+ */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WCPOS\WooCommercePOS\Services\Auth;
 use WP_User;
 
+/**
+ * Login template
+ */
 class Login {
-    /**
-     *
-     */
-    protected $auth_service;
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		remove_action( 'login_init', 'send_frame_options_header', 10 );
+	}
 
+	/**
+	 * @return void
+	 */
+	public function get_template(): void {
+		$login_attempt = isset( $_POST['_wpnonce'] ) && wp_verify_nonce( $_POST['_wpnonce'], 'woocommerce_pos_login' );
 
-    public function __construct() {
-        $this->auth_service = new Auth();
+		// Login attempt detected
+		$error_string = '';
+		if ( $login_attempt ) {
+			$creds = array();
+			$creds['user_login'] = $_POST['log'];
+			$creds['user_password'] = $_POST['pwd'];
+			// $creds['remember'] = isset( $_POST['rememberme'] );
 
-        remove_action( 'login_init', 'send_frame_options_header', 10 );
-    }
+			$user = wp_signon( $creds, false );
 
-    /**
-     * @return void
-     */
-    public function get_template(): void {
-        $login_attempt = isset( $_POST['_wpnonce'] ) && wp_verify_nonce( $_POST['_wpnonce'], 'woocommerce_pos_login' );
+			if ( is_wp_error( $user ) ) {
+				foreach ( $user->errors as $error ) {
+					$error_string .= '<p class="error">' . $error[0] . '</p>';
+				}
+			} else {
+				$this->login_success( $user );
+				exit;
+			}
+		}
 
-        // Login attempt detected
-        $error_string = '';
-        if ( $login_attempt ) {
-            $creds = array();
-            $creds['user_login'] = $_POST['log'];
-            $creds['user_password'] = $_POST['pwd'];
-			//            $creds['remember'] = isset( $_POST['rememberme'] );
+		do_action( 'login_init' );
 
-            $user = wp_signon( $creds, false );
+		do_action( 'login_form_login' );
 
-            if ( is_wp_error( $user ) ) {
-                foreach ( $user->errors as $error ) {
-                    $error_string .= '<p class="error">' . $error[0] . '</p>';
-                }
-            } else {
-                $this->login_success( $user );
-                exit;
-            }
-        }
+		include woocommerce_pos_locate_template( 'login.php' );
+		exit;
+	}
 
-        //
-        do_action( 'login_init' );
+	/**
+	 * Login success
+	 *
+	 * @param WP_User $user
+	 *
+	 * @return void
+	 */
+	private function login_success( WP_User $user ) {
+		$auth_service = Auth::instance();
+		$user_data = $auth_service->get_user_data( $user );
+		$credentials = wp_json_encode( $user_data );
 
-        //
-        do_action( 'login_form_login' );
-
-        include woocommerce_pos_locate_template( 'login.php' );
-        exit;
-    }
-
-    /**
-     * Login success
-     *
-     * @param WP_User $user
-     *
-     * @return void
-     */
-    private function login_success( WP_User $user ) {
-        $user_data = $this->auth_service->get_user_data( $user );
-        $credentials = wp_json_encode( $user_data );
-
-        echo '<script>
+		echo '<script>
 	(function() {
         // Parse the order JSON from PHP
         var credentials = ' . $credentials . " 
@@ -87,6 +87,5 @@ class Login {
         }
     })();
 </script>" . "\n";
-    }
-
+	}
 }

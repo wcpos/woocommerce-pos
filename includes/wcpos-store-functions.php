@@ -45,3 +45,21 @@ if ( ! \function_exists( 'wcpos_get_store' ) ) {
 		return apply_filters( 'woocommerce_pos_get_store', $store, $the_store );
 	}
 }
+
+/**
+ * Helper to get the store name by ID.
+ *
+ * This function should only be called after 'init' action is finished, as there might be taxonomies that are getting
+ * registered during the init action.
+ *
+ * @since 1.4.0
+ *
+ * @param mixed $the_store Post object or post ID of the product.
+ * @return Store|null|false
+ */
+if ( ! \function_exists( 'wcpos_get_store_name' ) ) {
+	function wcpos_get_store_name( $the_store = false ) {
+		$store = wcpos_get_store( $the_store );
+		return $store->get_name();
+	}
+}

@@ -24,7 +24,7 @@ class Payment {
 	public function __construct( int $order_id ) {
 		$this->order_id   = $order_id;
 		$this->check_troubleshooting_form_submission();
-		//$this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
+		// $this->gateway_id = isset( $_GET['gateway'] ) ? sanitize_key( wp_unslash( $_GET['gateway'] ) ) : '';
 
 		// this is a checkout page
 		add_filter( 'woocommerce_is_checkout', '__return_true' );
@@ -117,9 +117,9 @@ class Payment {
 			\define( 'WOOCOMMERCE_CHECKOUT', true );
 		}
 
-		//      if ( ! $this->gateway_id ) {
-		//          wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
-		//      }
+		// if ( ! $this->gateway_id ) {
+		// wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
+		// }
 
 		do_action( 'woocommerce_pos_before_pay' );
 
@@ -155,7 +155,7 @@ class Payment {
 			wp_set_current_user( $order->get_customer_id() );
 
 			// create nonce for customer
-			//			$nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
+			// $nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
@@ -166,10 +166,10 @@ class Payment {
 			WC()->payment_gateways()->init();
 			$available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
-			//          if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
-			//              $gateway         = $available_gateways[ $this->gateway_id ];
-			//              $gateway->chosen = true;
-			//          }
+			// if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
+			// $gateway         = $available_gateways[ $this->gateway_id ];
+			// $gateway->chosen = true;
+			// }
 
 			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) );
 
@@ -235,8 +235,7 @@ class Payment {
 			$unchecked_scripts = isset( $sanitized_data['all_scripts'] ) ? array_diff( $sanitized_data['all_scripts'], $sanitized_data['scripts'] ) : array();
 
 			// @TODO - the save settings function should allow saving by key
-			$settings          = new Settings();
-			$checkout_settings = $settings->get_checkout_settings();
+			$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
 			$new_settings      = array_merge(
 				$checkout_settings,
 				array(
@@ -244,7 +243,9 @@ class Payment {
 					'dequeue_script_handles' => $unchecked_scripts,
 				)
 			);
-			$settings->save_settings( 'checkout', $new_settings );
+
+			$settings_service = Settings::instance();
+			$settings_service->save_settings( 'checkout', $new_settings );
 		}
 	}
 
@@ -254,10 +255,10 @@ class Payment {
 	private function create_customer_nonce() {
 		$user = wp_get_current_user();
 		$uid  = (int) $user->ID;
-		//		if ( ! $uid ) {
-		//			/** This filter is documented in wp-includes/pluggable.php */
-		//			$uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
-		//		}
+		// if ( ! $uid ) {
+		// ** This filter is documented in wp-includes/pluggable.php */
+		// $uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
+		// }
 
 		$token = '';
 		$i     = wp_nonce_tick();

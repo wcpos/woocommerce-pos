@@ -25,15 +25,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_namespace_property(): void {
-		$namespace = $this->get_reflected_property_value('namespace');
+		$namespace = $this->get_reflected_property_value( 'namespace' );
 
-		$this->assertEquals('wcpos/v1', $namespace );
+		$this->assertEquals( 'wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$rest_base = $this->get_reflected_property_value('rest_base');
+		$rest_base = $this->get_reflected_property_value( 'rest_base' );
 
-		$this->assertEquals('orders', $rest_base);
+		$this->assertEquals( 'orders', $rest_base );
 	}
 
 	/**
@@ -110,7 +110,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$order    = OrderHelper::create_order();
-		$request	 = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -126,7 +126,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order    = OrderHelper::create_order();
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
-		$request->set_param( 'fields', array('id') );
+		$request->set_param( 'fields', array( 'id' ) );
 
 		$response = $this->server->dispatch( $request );
 
@@ -141,26 +141,26 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_order_response_contains_uuid_meta_data(): void {
 		$order     = OrderHelper::create_order();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response  = $this->server->dispatch($request);
+		$response  = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 
 		$found      = false;
 		$uuid_value = '';
 		$count      = 0;
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
-		foreach ($data['meta_data'] as $meta) {
-			if ('_woocommerce_pos_uuid' === $meta['key']) {
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
 				$count++;
 				$uuid_value = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
-		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
+		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
 	}
 
 	/**
@@ -172,7 +172,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order3    = OrderHelper::create_order( array( 'status' => 'on-hold' ) );
 		$order4    = OrderHelper::create_order( array( 'status' => 'processing' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'asc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'status',
+				'order' => 'asc',
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
@@ -180,7 +185,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $statuses, array( 'completed', 'on-hold', 'pending', 'processing' ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'status', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'status',
+				'order' => 'desc',
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
@@ -193,7 +203,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order1    = OrderHelper::create_order( array( 'customer_id' => $customer->get_id() ) );
 		$order2    = OrderHelper::create_order();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'asc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'customer_id',
+				'order' => 'asc',
+			)
+		);
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
@@ -201,7 +216,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $customer_ids, array( 1, $customer->get_id() ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'customer_id', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'customer_id',
+				'order' => 'desc',
+			)
+		);
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
@@ -213,7 +233,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order1    = OrderHelper::create_order( array( 'payment_method' => 'pos_cash' ) );
 		$order2    = OrderHelper::create_order( array( 'payment_method' => 'pos_card' ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'asc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'payment_method',
+				'order' => 'asc',
+			)
+		);
 		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
@@ -221,7 +246,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $payment_methods, array( 'Card', 'Cash' ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'payment_method', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'payment_method',
+				'order' => 'desc',
+			)
+		);
 		$response        = $this->server->dispatch( $request );
 		$data            = $response->get_data();
 		$payment_methods = wp_list_pluck( $data, 'payment_method_title' );
@@ -233,7 +263,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order1    = OrderHelper::create_order( array( 'total' => 100 ) );
 		$order2    = OrderHelper::create_order( array( 'total' => 200 ) );
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'asc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'total',
+				'order' => 'asc',
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
@@ -241,7 +276,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $totals, array( 100, 200 ) );
 
 		// reverse order
-		$request->set_query_params( array( 'orderby' => 'total', 'order' => 'desc' ) );
+		$request->set_query_params(
+			array(
+				'orderby' => 'total',
+				'order' => 'desc',
+			)
+		);
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$totals   = wp_list_pluck( $data, 'total' );
@@ -255,11 +295,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_line_items_contains_uuid_meta_data(): void {
 		$order     = OrderHelper::create_order();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response  = $this->server->dispatch($request);
+		$response  = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
 
 		$found      = false;
@@ -267,15 +307,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$count      = 0;
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
-		foreach ($data['line_items'][0]['meta_data'] as $meta) {
-			if ('_woocommerce_pos_uuid' === $meta['key']) {
+		foreach ( $data['line_items'][0]['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
 				$count++;
 				$uuid_value = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
-		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
+		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
 	}
 
 	/**
@@ -284,11 +324,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_shipping_lines_contains_uuid_meta_data(): void {
 		$order     = OrderHelper::create_order();
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response  = $this->server->dispatch($request);
+		$response  = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data['shipping_lines'] ) );
 
 		$found      = false;
@@ -296,15 +336,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$count      = 0;
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
-		foreach ($data['shipping_lines'][0]['meta_data'] as $meta) {
-			if ('_woocommerce_pos_uuid' === $meta['key']) {
+		foreach ( $data['shipping_lines'][0]['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
 				$count++;
 				$uuid_value = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
-		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
+		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
 	}
 
 	/**
@@ -313,14 +353,14 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_fee_lines_contains_uuid_meta_data(): void {
 		$order         = OrderHelper::create_order();
 		$fee           = new WC_Order_Item_Fee();
-		$order->add_item($fee);
+		$order->add_item( $fee );
 		$order->save();
 		$request       = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response      = $this->server->dispatch($request);
+		$response      = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
+		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data['fee_lines'] ) );
 
 		$found      = false;
@@ -328,15 +368,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$count      = 0;
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
-		foreach ($data['fee_lines'][0]['meta_data'] as $meta) {
-			if ('_woocommerce_pos_uuid' === $meta['key']) {
+		foreach ( $data['fee_lines'][0]['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
 				$count++;
 				$uuid_value = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one _woocommerce_pos_uuid.');
-		$this->assertTrue(Uuid::isValid($uuid_value), 'The UUID value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
+		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
 	}
 
 	/**
@@ -401,8 +441,8 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$count      = 0;
 
 		// Look for the _pos_user key in meta_data
-		foreach ($data['meta_data'] as $meta) {
-			if ('_pos_user' === $meta['key']) {
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_pos_user' === $meta['key'] ) {
 				$count++;
 				$cashier = $meta['value'];
 			}
@@ -414,8 +454,8 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'pos_cash', $data['payment_method'] );
 		$this->assertEquals( 0, $data['customer_id'] );
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
-		$this->assertEquals(1, $count, 'There should only be one _pos_user.');
-		$this->assertEquals($this->user, $cashier, 'The cashier ID is not correct.');
+		$this->assertEquals( 1, $count, 'There should only be one _pos_user.' );
+		$this->assertEquals( $this->user, $cashier, 'The cashier ID is not correct.' );
 	}
 
 	/**
@@ -427,21 +467,21 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$note_added    = false;
 		$expected_note = sprintf( 'Order details manually sent to %s from WooCommerce POS.', $email );
 
-		$email_sent_callback = function() use (&$email_sent): void {
+		$email_sent_callback = function () use ( &$email_sent ): void {
 			$email_sent = true;
 		};
 
-		$order_note_filter_check = function($commentdata, $data) use (&$note_added, $expected_note) {
-			if ($commentdata['comment_content'] === $expected_note) {
+		$order_note_filter_check = function ( $commentdata, $data ) use ( &$note_added, $expected_note ) {
+			if ( $commentdata['comment_content'] === $expected_note ) {
 				$note_added = true;
 			}
 
 			return $commentdata;
 		};
 
-		add_action('woocommerce_before_resend_order_emails', $email_sent_callback);
-		add_filter('woocommerce_new_order_note_data', $order_note_filter_check, 10, 2);
-		
+		add_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+		add_filter( 'woocommerce_new_order_note_data', $order_note_filter_check, 10, 2 );
+
 		$order     = OrderHelper::create_order();
 		$request   = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
 		$request->set_body_params(
@@ -449,18 +489,18 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 				'email' => $email,
 			)
 		);
-		$response  = $this->server->dispatch($request);
+		$response  = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
-		$this->assertEquals(1, $data['success']);
-		$this->assertTrue($email_sent, "Order receipt email was not sent.");
-		$this->assertTrue($note_added, "Specific order note was not added.");
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, $data['success'] );
+		$this->assertTrue( $email_sent, 'Order receipt email was not sent.' );
+		$this->assertTrue( $note_added, 'Specific order note was not added.' );
 
 		// Remove the action hook after the test to clean up
-		remove_action('woocommerce_before_resend_order_emails', $email_sent_callback);
-		remove_filter('woocommerce_new_order_note_data', $order_note_filter_check);
+		remove_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+		remove_filter( 'woocommerce_new_order_note_data', $order_note_filter_check );
 	}
 
 	/**
@@ -479,43 +519,43 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// just retrieve order, no changes
 		$request       = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response      = $this->server->dispatch($request);
+		$response      = $this->server->dispatch( $request );
 		$data          = $response->get_data();
 
-		$this->assertEquals(200, $response->get_status());
-		$this->assertEquals(1, \count($data['line_items']), 'There should be one line item.');
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data['line_items'] ), 'There should be one line item.' );
 
 		$attr       = '';
 		$count      = 0;
 
 		// Look for the pa_size key in meta_data
-		foreach ($data['line_items'][0]['meta_data'] as $meta) {
-			if ('pa_size' === $meta['key']) {
+		foreach ( $data['line_items'][0]['meta_data'] as $meta ) {
+			if ( 'pa_size' === $meta['key'] ) {
 				$count++;
 				$attr = $meta['value'];
 			}
 		}
 
-		$this->assertEquals(1, $count, 'There should only be one pa_size.');
-		$this->assertEquals('small', $attr, 'The pa_size value is not valid.');
+		$this->assertEquals( 1, $count, 'There should only be one pa_size.' );
+		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid.' );
 
 		// now, save the order back to the API
 		$request       = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$request->set_body_params($data);
+		$request->set_body_params( $data );
 
-		$this->assertEquals(200, $response->get_status());
-		$this->assertEquals(1, \count($data['line_items']), 'There should be one line item.');
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data['line_items'] ), 'There should be one line item.' );
 
 		// Look for the pa_size key in meta_data
-		foreach ($data['line_items'][0]['meta_data'] as $meta) {
-			if ('pa_size' === $meta['key']) {
+		foreach ( $data['line_items'][0]['meta_data'] as $meta ) {
+			if ( 'pa_size' === $meta['key'] ) {
 				$count++;
 				$attr = $meta['value'];
 			}
 		}
-		
-		$this->assertEquals(1, $count, 'There should only be one pa_size.');
-		$this->assertEquals('small', $attr, 'The pa_size value is not valid.');
+
+		$this->assertEquals( 1, $count, 'There should only be one pa_size.' );
+		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid.' );
 	}
 
 	/**
@@ -541,7 +581,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 
-		$this->assertEquals(201, $response->get_status());
+		$this->assertEquals( 201, $response->get_status() );
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
 	}
 }

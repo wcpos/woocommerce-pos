@@ -7,8 +7,21 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WP_REST_Controller;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
-class Settings extends Abstracts\Controller {
+/**
+ * Class Settings REST API
+ */
+class Settings extends WP_REST_Controller {
+	/**
+	 * Endpoint namespace.
+	 *
+	 * @var string
+	 */
+	protected $namespace = SHORT_NAME . '/v1';
+
 	/**
 	 * Route base.
 	 *
@@ -16,24 +29,12 @@ class Settings extends Abstracts\Controller {
 	 */
 	protected $rest_base = 'settings';
 
-	
-	protected $settings_service;
-
 	/**
 	 * Settings constructor.
 	 */
 	public function __construct() {
-		$this->settings_service = new \WCPOS\WooCommercePOS\Services\Settings();
 		add_filter( 'option_woocommerce_pos_settings_payment_gateways', array( $this, 'payment_gateways_settings' ) );
 	}
-
-	/**
-	 * BACKWARD COMPATIBILITY: Remove this method in the future.
-	 */
-	//    public function get_settings( $id ) {
-	//      $settings = $this->settings_service->get_settings( $id );
-	//      return $settings;
-	//    }
 
 	/**
 	 * @return void
@@ -59,15 +60,15 @@ class Settings extends Abstracts\Controller {
 			)
 		);
 
-		//      register_rest_route(
-		//          $this->namespace,
-		//          '/' . $this->rest_base . '/general/barcodes',
-		//          array(
-		//              'methods' => WP_REST_Server::READABLE,
-		//              'callback' => array( $this, 'get_barcodes' ),
-		//              'permission_callback' => array( $this, 'read_permission_check' ),
-		//          )
-		//      );
+		// register_rest_route(
+		// $this->namespace,
+		// '/' . $this->rest_base . '/general/barcodes',
+		// array(
+		// 'methods' => WP_REST_Server::READABLE,
+		// 'callback' => array( $this, 'get_barcodes' ),
+		// 'permission_callback' => array( $this, 'read_permission_check' ),
+		// )
+		// );
 
 		register_rest_route(
 			$this->namespace,
@@ -270,7 +271,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_general_settings( WP_REST_Request $request ) {
-		$general_settings = $this->settings_service->get_general_settings();
+		$general_settings = woocommerce_pos_get_settings( 'general' );
 
 		if ( is_wp_error( $general_settings ) ) {
 			return $general_settings;
@@ -291,7 +292,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_checkout_settings( WP_REST_Request $request ) {
-		$checkout_settings = $this->settings_service->get_checkout_settings();
+		$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
 
 		if ( is_wp_error( $checkout_settings ) ) {
 			return $checkout_settings;
@@ -312,7 +313,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_payment_gateways_settings( WP_REST_Request $request ) {
-		$payment_gateways_settings = $this->settings_service->get_payment_gateways_settings();
+		$payment_gateways_settings = woocommerce_pos_get_settings( 'payment_gateways' );
 
 		if ( is_wp_error( $payment_gateways_settings ) ) {
 			return $payment_gateways_settings;
@@ -333,7 +334,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_access_settings( WP_REST_Request $request ) {
-		$access_settings = $this->settings_service->get_access_settings();
+		$access_settings = woocommerce_pos_get_settings( 'access' );
 
 		if ( is_wp_error( $access_settings ) ) {
 			return $access_settings;
@@ -354,7 +355,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_tools_settings( WP_REST_Request $request ) {
-		$tools_settings = $this->settings_service->get_tools_settings();
+		$tools_settings = woocommerce_pos_get_settings( 'tools' );
 
 		if ( is_wp_error( $tools_settings ) ) {
 			return $tools_settings;
@@ -375,7 +376,7 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_REST_Response
 	 */
 	public function get_license_settings( WP_REST_Request $request ) {
-		$license_settings = $this->settings_service->get_license_settings();
+		$license_settings = woocommerce_pos_get_settings( 'license' );
 
 		if ( is_wp_error( $license_settings ) ) {
 			return $license_settings;
@@ -397,10 +398,11 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_payment_gateways_settings( WP_REST_Request $request ) {
-		$old_settings     = $this->settings_service->get_payment_gateways_settings();
+		$old_settings     = woocommerce_pos_get_settings( 'payment_gateways' );
 		$updated_settings = array_replace_recursive( $old_settings, $request->get_json_params() );
 
-		return $this->settings_service->save_settings( 'payment_gateways', $updated_settings );
+		$settings_service = SettingsService::instance();
+		return $settings_service->save_settings( 'payment_gateways', $updated_settings );
 	}
 
 	/**
@@ -413,9 +415,11 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->settings_service->get_general_settings(), $request->get_json_params() );
+		$old_settings = woocommerce_pos_get_settings( 'general' );
+		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
 
-		return $this->settings_service->save_settings( 'general', $settings );
+		$settings_service = SettingsService::instance();
+		return $settings_service->save_settings( 'general', $settings );
 	}
 
 
@@ -428,9 +432,11 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->settings_service->get_checkout_settings(), $request->get_json_params() );
+		$old_settings = woocommerce_pos_get_settings( 'checkout' );
+		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
 
-		return $this->settings_service->save_settings( 'checkout', $settings );
+		$settings_service = SettingsService::instance();
+		return $settings_service->save_settings( 'checkout', $settings );
 	}
 
 
@@ -478,7 +484,7 @@ class Settings extends Abstracts\Controller {
 			}
 		}
 
-		return $this->settings_service->get_access_settings();
+		return woocommerce_pos_get_settings( 'access' );
 	}
 
 	/**
@@ -491,9 +497,11 @@ class Settings extends Abstracts\Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_tools_settings( WP_REST_Request $request ) {
-		$settings = array_replace_recursive( $this->settings_service->get_tools_settings(), $request->get_json_params() );
+		$old_settings = woocommerce_pos_get_settings( 'tools' );
+		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
 
-		return $this->settings_service->save_settings( 'tools', $settings );
+		$settings_service = SettingsService::instance();
+		return $settings_service->save_settings( 'tools', $settings );
 	}
 
 	/**
@@ -502,7 +510,7 @@ class Settings extends Abstracts\Controller {
 	 * @return bool
 	 */
 	public function read_permission_check(): bool {
-		//		return current_user_can( 'manage_woocommerce_pos' );
+		// return current_user_can( 'manage_woocommerce_pos' );
 		return true;
 	}
 

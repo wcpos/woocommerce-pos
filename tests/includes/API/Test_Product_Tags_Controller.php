@@ -22,15 +22,15 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_namespace_property(): void {
-		$namespace = $this->get_reflected_property_value('namespace');
+		$namespace = $this->get_reflected_property_value( 'namespace' );
 
-		$this->assertEquals('wcpos/v1', $namespace );
+		$this->assertEquals( 'wcpos/v1', $namespace );
 	}
 
 	public function test_rest_base(): void {
-		$rest_base = $this->get_reflected_property_value('rest_base');
+		$rest_base = $this->get_reflected_property_value( 'rest_base' );
 
-		$this->assertEquals('products/tags', $rest_base);
+		$this->assertEquals( 'products/tags', $rest_base );
 	}
 
 	/**
@@ -79,11 +79,11 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
 		$request->set_param( 'posts_per_page', -1 );
-		$request->set_param( 'fields', array('id') );
+		$request->set_param( 'fields', array( 'id' ) );
 
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 200, $response->get_status() );
-		
+
 		$data = $response->get_data();
 		$this->assertEquals( 2, \count( $data ) );
 		$ids  = wp_list_pluck( $data, 'id' );
@@ -97,10 +97,10 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_product_tag_response_contains_uuid_meta_data(): void {
 		$tag             = ProductHelper::create_product_tag( 'Music' );
 		$request         = $this->wp_rest_get_request( '/wcpos/v1/products/tags/' . $tag['term_id'] );
-		$response        = $this->server->dispatch($request);
+		$response        = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
-		$this->assertEquals(200, $response->get_status());
-		$this->assertTrue(Uuid::isValid($data['uuid']), 'The UUID value is not valid.');
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
 }
