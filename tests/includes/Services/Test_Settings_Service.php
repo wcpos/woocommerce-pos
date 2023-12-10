@@ -16,7 +16,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 
 	public function setUp(): void {
 		parent::setUp();
-		$this->settings = new Settings();
+		$this->settings = Settings::instance();
 	}
 
 	public function tearDown(): void {

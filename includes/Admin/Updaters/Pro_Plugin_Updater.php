@@ -103,15 +103,16 @@ class Pro_Plugin_Updater {
 		if ( $this->installed ) {
 			$this->check_pro_plugin_updates();
 			add_filter( 'site_transient_update_plugins', array( $this, 'modify_plugin_update_transient' ) );
-			add_action( 'upgrader_process_complete', 'after_plugin_update', 10, 2 );
+			add_action( 'upgrader_process_complete', array( $this, 'after_plugin_update' ), 10, 2 );
 			add_filter( 'plugin_row_meta', array( $this, 'plugin_row_meta' ), 10, 4 );
 			add_action( 'in_plugin_update_message-' . $this->pro_plugin_path, array( $this, 'plugin_update_message' ), 10, 2 );
 			add_action( 'install_plugins_pre_plugin-information', array( $this, 'plugin_information' ), 5 );
+			// add_filter( 'upgrader_package_options', array( $this, 'upgrade_package' ) );
 
 			// get license key from settings.
 			$license_settings = woocommerce_pos_get_settings( 'license' );
-			if ( isset( $license_settings['license_key'] ) && isset( $license_settings['instance'] ) ) {
-				$this->license_key = $license_settings['license_key'];
+			if ( isset( $license_settings['key'] ) && isset( $license_settings['instance'] ) ) {
+				$this->license_key = $license_settings['key'];
 				$this->instance = $license_settings['instance'];
 			}
 		}
@@ -156,7 +157,7 @@ class Pro_Plugin_Updater {
 	public function check_pro_plugin_updates( $force = false ) {
 		$update_data = get_transient( $this->update_data_transient_key );
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-		$expiration = $is_development ? 1 : 60 * 60 * 12; // 12 hours.
+		$expiration = 60 * 60 * 12; // 12 hours.
 		$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
 
 		if ( empty( $update_data ) || $force ) {
@@ -174,6 +175,14 @@ class Pro_Plugin_Updater {
 			);
 
 			$data = $this->validate_api_response( $response );
+
+			// Ensure $data has the expected structure.
+			$expected_properties = array( 'version', 'download_url', 'notes' );
+			foreach ( $expected_properties as $property ) {
+				if ( ! property_exists( $data, $property ) ) {
+					$data = new WP_Error( 'invalid_response_structure', "Missing expected property: $property" );
+				}
+			}
 
 			if ( is_wp_error( $data ) ) {
 				Logger::log( $data );
@@ -194,7 +203,7 @@ class Pro_Plugin_Updater {
 	private function check_license_status( $force = false ) {
 		$license_status = get_transient( $this->license_status_transient_key );
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-		$expiration = $is_development ? 1 : 60 * 60 * 12; // 12 hours.
+		$expiration = 60 * 60 * 12; // 12 hours.
 		$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
 
 		/**
@@ -281,15 +290,7 @@ class Pro_Plugin_Updater {
 			return new WP_Error( 'invalid_response_structure', 'Missing expected property: data' );
 		}
 
-		$data = $decoded_response->data;
-		$expected_properties = array( 'version', 'download_url', 'notes' );
-		foreach ( $expected_properties as $property ) {
-			if ( ! property_exists( $data, $property ) ) {
-				return new WP_Error( 'invalid_response_structure', "Missing expected property: $property" );
-			}
-		}
-
-		return $data;
+		return $decoded_response->data;
 	}
 
 	/**
@@ -301,8 +302,12 @@ class Pro_Plugin_Updater {
 	 */
 	public function modify_plugin_update_transient( $transient ) {
 		$update_data = get_transient( $this->update_data_transient_key );
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 
-		if ( empty( $update_data ) ) {
+		/**
+		 * NOTE: sometimes the $transient = false, ie: after updates.
+		 */
+		if ( empty( $update_data ) || false === $transient ) {
 			return $transient;
 		}
 
@@ -313,17 +318,26 @@ class Pro_Plugin_Updater {
 				return $transient;
 			}
 
-			$transient->response[ $this->pro_plugin_path ] = $this->create_update_response_object(
-				array(
-					'new_version'    => $latest_version,
-					'package'        => $update_data->download_url,
-					'release_notes'  => $update_data->notes,
-					/**
-					 * NOTE: Upgrade Notice only seems to appear on the Dashboard > Updates page
-					 */
-					'upgrade_notice' => $this->maybe_add_upgrade_notice(),
-				)
-			);
+			// check and make sure the update is not already in the transient.
+			if ( isset( $transient->response ) && ! isset( $transient->response[ $this->pro_plugin_path ] ) ) {
+				$transient->response[ $this->pro_plugin_path ] = $this->create_update_response_object(
+					array(
+						'new_version'    => $latest_version,
+						'package'        => add_query_arg(
+							array(
+								'key'      => $this->license_key,
+								'instance' => $this->instance,
+							),
+							$is_development ? 'http://localhost:8080/pro/download/1.4.0' : $update_data->download_url
+						),
+						'release_notes'  => $update_data->notes,
+						/**
+						 * NOTE: Upgrade Notice only seems to appear on the Dashboard > Updates page
+						 */
+						'upgrade_notice' => $this->maybe_add_upgrade_notice(),
+					)
+				);
+			}
 		}
 
 		return $transient;
@@ -573,5 +587,46 @@ class Pro_Plugin_Updater {
 		}
 
 		return 'Your license has expired. Please renew to update.';
+	}
+
+	/**
+	 * Filters the package options before running an update.
+	 *
+	 * @param array $options {
+	 *     Options used by the upgrader.
+	 *
+	 *     @type string $package                     Package for update.
+	 *     @type string $destination                 Update location.
+	 *     @type bool   $clear_destination           Clear the destination resource.
+	 *     @type bool   $clear_working               Clear the working resource.
+	 *     @type bool   $abort_if_destination_exists Abort if the Destination directory exists.
+	 *     @type bool   $is_multi                    Whether the upgrader is running multiple times.
+	 *     @type array  $hook_extra {
+	 *         Extra hook arguments.
+	 *
+	 *         @type string $action               Type of action. Default 'update'.
+	 *         @type string $type                 Type of update process. Accepts 'plugin', 'theme', or 'core'.
+	 *         @type bool   $bulk                 Whether the update process is a bulk update. Default true.
+	 *         @type string $plugin               Path to the plugin file relative to the plugins directory.
+	 *         @type string $theme                The stylesheet or template name of the theme.
+	 *         @type string $language_update_type The language pack update type. Accepts 'plugin', 'theme',
+	 *                                            or 'core'.
+	 *         @type object $language_update      The language pack update offer.
+	 *     }
+	 * }
+	 * @return array Modified options array.
+	 */
+	public function upgrade_package( $options ) {
+		if ( isset( $options['hook_extra'], $options['hook_extra']['plugin'] ) && $options['hook_extra']['plugin'] === $this->pro_plugin_path ) {
+			$options['package'] = add_query_arg(
+				array(
+					'key'      => $this->license_key,
+					'instance' => $this->instance,
+				),
+				$options['package']
+			);
+		}
+
+		return $options;
 	}
 }
