@@ -1,16 +1,20 @@
 <?php
 /**
- * Fired during plugin activation.
+ * Fired during plugin deactivation.
  *
- * This class defines all code necessary to run during the plugin's activation.
+ * This class defines all code necessary to run during the plugin's deactivation.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
+ * @package   WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
+/**
+ * Fired during plugin deactivation.
+ */
 class Deactivator {
 	public function __construct() {
 		register_deactivation_hook( PLUGIN_FILE, array( $this, 'deactivate' ) );

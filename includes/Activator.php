@@ -10,23 +10,11 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use function add_action;
-use function add_role;
-use function admin_url;
-use function class_exists;
-use function deactivate_plugins;
-use function defined;
-use function did_action;
-use function function_exists;
-use function is_admin;
-use function is_multisite;
-use function register_activation_hook;
-use function restore_current_blog;
-use function sprintf;
-use function switch_to_blog;
-use function version_compare;
 use const DOING_AJAX;
 
+/**
+ *
+ */
 class Activator {
 	public function __construct() {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
