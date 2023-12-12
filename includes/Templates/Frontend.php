@@ -43,8 +43,17 @@ class Frontend {
 		// disable cache plugins
 		$this->no_cache();
 
-		// last chance before template is rendered
-		do_action( 'woocommerce_pos_template_redirect' );
+		// last chance before frontend template is rendered
+		do_action( 'woocommerce_pos_frontend_template_redirect' );
+
+		/**
+		 * Deprecated action.
+		 *
+		 * @TODO remove in 1.5.0
+		 */
+		if ( has_action( 'woocommerce_pos_template_redirect' ) ) {
+			do_action_deprecated( 'woocommerce_pos_template_redirect', array(), 'Version_1.4.0', 'woocommerce_pos_frontend_template_redirect' );
+		}
 
 		// add head & footer actions
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
@@ -119,6 +128,7 @@ class Frontend {
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
 			'stores'         => $stores,
+			'store_id'       => isset( $_GET['store'] ) ? $_GET['store'] : null,
 		);
 
 		/**

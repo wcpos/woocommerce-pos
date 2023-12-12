@@ -47,6 +47,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// added by WooCommerce POS
 		$this->assertArrayHasKey( '/wcpos/v1/orders/(?P<order_id>[\d]+)/email', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/orders/statuses', $routes );
 	}
 
 	/**
@@ -583,5 +584,31 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 201, $response->get_status() );
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
+	}
+
+	/**
+	 * Retrieve all order statuses.
+	 */
+	public function test_get_order_statuses(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/statuses' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertNotEmpty( $data );
+
+		// Ensure that the response is an array
+		$this->assertIsArray( $data );
+
+		// Check if each element in the array has the required structure
+		foreach ( $data as $status ) {
+			$this->assertIsArray( $status );
+			$this->assertArrayHasKey( 'id', $status );
+			$this->assertArrayHasKey( 'name', $status );
+
+			// Check if the 'id' and 'name' fields are strings
+			$this->assertIsString( $status['id'] );
+			$this->assertIsString( $status['name'] );
+		}
 	}
 }

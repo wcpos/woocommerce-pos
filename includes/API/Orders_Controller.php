@@ -14,11 +14,12 @@ use WC_Order;
 use WC_Order_Query;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Logger;
-use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 use Automattic\WooCommerce\Utilities\OrderUtil;
+
+use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
 /**
  * Orders controller class.
@@ -55,7 +56,55 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Add custom fields to the product schema.
+	 * Register routes.
+	 */
+	public function register_routes() {
+		parent::register_routes();
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<order_id>[\d]+)/email',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'wcpos_send_email' ),
+					'permission_callback' => array( $this, 'wcpos_send_email_permissions_check' ),
+					'args'                => array_merge(
+						$this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
+						array(
+							'email'   => array(
+								'type'        => 'string',
+								'description' => __( 'Email address', 'woocommerce-pos' ),
+								'required'    => true,
+							),
+							'save_to' => array(
+								'type'        => 'string',
+								'description' => __( 'Save email to order', 'woocommerce-pos' ),
+								'required'    => false,
+							),
+						)
+					),
+				),
+				'schema' => array(),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/statuses',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'wcpos_get_order_statuses' ),
+					'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				),
+				'schema' => array( $this, 'wcpos_get_public_order_statuses_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Add custom fields to the order schema.
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
@@ -231,41 +280,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Add route for sending emails.
-	 */
-	public function register_routes(): void {
-		parent::register_routes();
-
-		register_rest_route(
-			$this->namespace,
-			'/orders/(?P<order_id>[\d]+)/email',
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'wcpos_send_email' ),
-					'permission_callback' => array( $this, 'wcpos_send_email_permissions_check' ),
-					'args'                => array_merge(
-						$this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
-						array(
-							'email'   => array(
-								'type'        => 'string',
-								'description' => __( 'Email address', 'woocommerce-pos' ),
-								'required'    => true,
-							),
-							'save_to' => array(
-								'type'        => 'string',
-								'description' => __( 'Save email to order', 'woocommerce-pos' ),
-								'required'    => false,
-							),
-						)
-					),
-				),
-				'schema' => array(),
-			)
-		);
-	}
-
-	/**
 	 * Send order email, optionally add email address.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -348,6 +362,53 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 *
+	 */
+	public function wcpos_get_order_statuses() {
+		$statuses = wc_get_order_statuses();
+		$formatted_statuses = array();
+
+		foreach ( $statuses as $status_key => $status_name ) {
+				// Remove the 'wc-' prefix from the status key
+				$status_id   = 'wc-' === substr( $status_key, 0, 3 ) ? substr( $status_key, 3 ) : $status_key;
+
+				$formatted_statuses[] = array(
+					'id'   => $status_id,
+					'name' => $status_name,
+				);
+		}
+
+		return rest_ensure_response( $formatted_statuses );
+	}
+
+	/**
+	 *
+	 */
+	public function wcpos_get_public_order_statuses_schema() {
+		$schema = array(
+			'$schema'    => 'http://json-schema.org/draft-04/schema#',
+			'title'      => 'order_status',
+			'type'       => 'object',
+			'properties' => array(
+				'id' => array(
+					'description' => __( 'Unique identifier for the order status.', 'woocommerce-pos-pro' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+				'name' => array(
+					'description' => __( 'Display name of the order status.', 'woocommerce-pos-pro' ),
+					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+					'readonly'    => true,
+				),
+			),
+		);
+
+		return $schema;
 	}
 
 	/**

@@ -1,6 +1,9 @@
 <?php
 /**
  * Login template
+ * NOTE: This is the modal login template, ie: JWT expired, not the web login
+ *
+ * @package WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
