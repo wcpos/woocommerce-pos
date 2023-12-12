@@ -75,20 +75,6 @@ class Pro_Plugin_Updater {
 	private $current_version;
 
 	/**
-	 * The license key
-	 *
-	 * @var string $license_key
-	 */
-	private $license_key;
-
-	/**
-	 * The instance
-	 *
-	 * @var string $instance
-	 */
-	private $instance;
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -101,20 +87,12 @@ class Pro_Plugin_Updater {
 		$this->current_version = $status['version'];
 
 		if ( $this->installed ) {
-			$this->check_pro_plugin_updates();
-			add_filter( 'site_transient_update_plugins', array( $this, 'modify_plugin_update_transient' ) );
+			add_filter( 'update_plugins_updates.wcpos.com', array( $this, 'update_plugins' ), 10, 4 );
+			// add_filter( 'site_transient_update_plugins', array( $this, 'modify_plugin_update_transient' ) );
 			add_action( 'upgrader_process_complete', array( $this, 'after_plugin_update' ), 10, 2 );
 			add_filter( 'plugin_row_meta', array( $this, 'plugin_row_meta' ), 10, 4 );
 			add_action( 'in_plugin_update_message-' . $this->pro_plugin_path, array( $this, 'plugin_update_message' ), 10, 2 );
 			add_action( 'install_plugins_pre_plugin-information', array( $this, 'plugin_information' ), 5 );
-			// add_filter( 'upgrader_package_options', array( $this, 'upgrade_package' ) );
-
-			// get license key from settings.
-			$license_settings = woocommerce_pos_get_settings( 'license' );
-			if ( isset( $license_settings['key'] ) && isset( $license_settings['instance'] ) ) {
-				$this->license_key = $license_settings['key'];
-				$this->instance = $license_settings['instance'];
-			}
 		}
 	}
 
@@ -150,6 +128,79 @@ class Pro_Plugin_Updater {
 	}
 
 	/**
+	 * Filters the update response for a given plugin hostname.
+	 *
+	 * @param array|false $update {
+	 *     The plugin update data with the latest details. Default false.
+	 *
+	 *     @type string $id           Optional. ID of the plugin for update purposes, should be a URI
+	 *                                specified in the `Update URI` header field.
+	 *     @type string $slug         Slug of the plugin.
+	 *     @type string $version      The version of the plugin.
+	 *     @type string $url          The URL for details of the plugin.
+	 *     @type string $package      Optional. The update ZIP for the plugin.
+	 *     @type string $tested       Optional. The version of WordPress the plugin is tested against.
+	 *     @type string $requires_php Optional. The version of PHP which the plugin requires.
+	 *     @type bool   $autoupdate   Optional. Whether the plugin should automatically update.
+	 *     @type array  $icons        Optional. Array of plugin icons.
+	 *     @type array  $banners      Optional. Array of plugin banners.
+	 *     @type array  $banners_rtl  Optional. Array of plugin RTL banners.
+	 *     @type array  $translations {
+	 *         Optional. List of translation updates for the plugin.
+	 *
+	 *         @type string $language   The language the translation update is for.
+	 *         @type string $version    The version of the plugin this translation is for.
+	 *                                  This is not the version of the language file.
+	 *         @type string $updated    The update timestamp of the translation file.
+	 *                                  Should be a date in the `YYYY-MM-DD HH:MM:SS` format.
+	 *         @type string $package    The ZIP location containing the translation update.
+	 *         @type string $autoupdate Whether the translation should be automatically installed.
+	 *     }
+	 * }
+	 * @param array       $plugin_data      Plugin headers.
+	 * @param string      $plugin_file      Plugin filename.
+	 * @param string[]    $locales          Installed locales to look up translations for.
+	 */
+	public function update_plugins( $update, $plugin_data, $plugin_file, $locales ) {
+		$update_data = $this->check_pro_plugin_updates();
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+
+		if ( ! is_wp_error( $update_data ) && is_object( $update_data ) && isset( $update_data->version ) ) {
+			$latest_version = $update_data->version;
+
+			if ( version_compare( $this->current_version, $latest_version, '>' ) ) {
+				return $update;
+			}
+
+			$license_settings = $this->get_license_settings();
+
+			$update = array(
+				'id'           => 'https://updates.wcpos.com',
+				'slug'         => 'woocommerce-pos-pro',
+				'plugin'       => $this->pro_plugin_path,
+				'version'      => $latest_version,
+				'url'          => 'https://wcpos.com/pro',
+				'package'      => add_query_arg(
+					array(
+						'key'      => isset( $license_settings['key'] ) ? $license_settings['key'] : '',
+						'instance' => isset( $license_settings['instance'] ) ? $license_settings['instance'] : '',
+					),
+					$is_development ? 'http://localhost:8080/pro/download/1.4.0' : $update_data->download_url
+				),
+				'requires'     => '5.6',
+				'tested'       => '6.5',
+				'requires_php' => '7.4',
+				'icons' => array(
+					'1x' => 'https://wcpos.com/wp-content/uploads/2014/06/woopos-pro.png',
+				),
+				'upgrade_notice' => $this->maybe_add_upgrade_notice(),
+			);
+		}
+
+		return $update;
+	}
+
+	/**
 	 * Check for updates to the Pro plugin
 	 *
 	 * @param  bool $force Force an update check.
@@ -157,10 +208,10 @@ class Pro_Plugin_Updater {
 	public function check_pro_plugin_updates( $force = false ) {
 		$update_data = get_transient( $this->update_data_transient_key );
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-		$expiration = 60 * 60 * 12; // 12 hours.
-		$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
 
 		if ( empty( $update_data ) || $force ) {
+			$expiration = 60 * 60 * 12; // 12 hours.
+			$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
 			$url = $endpoint . '/update/' . $this->current_version;
 
 			// make the api call.
@@ -176,17 +227,20 @@ class Pro_Plugin_Updater {
 
 			$data = $this->validate_api_response( $response );
 
-			// Ensure $data has the expected structure.
-			$expected_properties = array( 'version', 'download_url', 'notes' );
-			foreach ( $expected_properties as $property ) {
-				if ( ! property_exists( $data, $property ) ) {
-					$data = new WP_Error( 'invalid_response_structure', "Missing expected property: $property" );
+			// Ensure $data has version, download_url and notes.
+			if ( ! is_wp_error( $data ) ) {
+				$expected_properties = array( 'version', 'download_url', 'notes' );
+				foreach ( $expected_properties as $property ) {
+					if ( ! property_exists( $data, $property ) ) {
+						$data = new WP_Error( 'invalid_response_structure', "Missing expected property: $property" );
+						break;
+					}
 				}
 			}
 
 			if ( is_wp_error( $data ) ) {
 				Logger::log( $data );
-				$expiration = $is_development ? 1 : 60 * 60 * 1; // try again in an hour if error.
+				$expiration = 60 * 60 * 1; // try again in an hour if error.
 			}
 
 			set_transient( $this->update_data_transient_key, $data, $expiration );
@@ -218,7 +272,8 @@ class Pro_Plugin_Updater {
 		/**
 		 * If the Pro plugin is not activated, add a notice
 		 */
-		if ( ! $this->license_key || ! $this->instance ) {
+		$license_settings = $this->get_license_settings();
+		if ( empty( $license_settings['key'] ) || empty( $license_settings['instance'] ) ) {
 			// set the transient to an error.
 			$error = new WP_Error( 'missing_license_key', 'License key is not activated.' );
 			set_transient( $this->license_status_transient_key, $error, $expiration );
@@ -229,8 +284,8 @@ class Pro_Plugin_Updater {
 			// build the request.
 			$url = add_query_arg(
 				array(
-					'key'      => $this->license_key,
-					'instance' => $this->instance,
+					'key'      => $license_settings['key'],
+					'instance' => $license_settings['instance'],
 				),
 				$endpoint . '/license/status'
 			);
@@ -276,13 +331,9 @@ class Pro_Plugin_Updater {
 			return new WP_Error( 'invalid_json', 'Invalid JSON in response', $response['body'] );
 		}
 
-		if ( $response['response']['code'] === 400 ) {
+		if ( $response['response']['code'] !== 200 ) {
 			$error = isset( $decoded_response->error ) ? $decoded_response->error : 'No error message returned from server';
-			return new WP_Error( 'server_error', $error );
-		}
-
-		if ( $response['response']['code'] != 200 ) {
-			return new WP_Error( 'invalid_response_code', 'Unexpected response code: ' . $response['response']['code'] );
+			return new WP_Error( 'invalid_response_code', $error );
 		}
 
 		// Ensure $decoded_response has the expected structure.
@@ -293,55 +344,6 @@ class Pro_Plugin_Updater {
 		return $decoded_response->data;
 	}
 
-	/**
-	 * Modify the plugin update transient to include the Pro plugin
-	 *
-	 * @param  object $transient The plugin update transient.
-	 *
-	 * @return object $transient The modified plugin update transient.
-	 */
-	public function modify_plugin_update_transient( $transient ) {
-		$update_data = get_transient( $this->update_data_transient_key );
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-
-		/**
-		 * NOTE: sometimes the $transient = false, ie: after updates.
-		 */
-		if ( empty( $update_data ) || false === $transient ) {
-			return $transient;
-		}
-
-		if ( ! is_wp_error( $update_data ) && is_object( $update_data ) && isset( $update_data->version ) ) {
-			$latest_version = $update_data->version;
-
-			if ( version_compare( $this->current_version, $latest_version, '>' ) ) {
-				return $transient;
-			}
-
-			// check and make sure the update is not already in the transient.
-			if ( isset( $transient->response ) && ! isset( $transient->response[ $this->pro_plugin_path ] ) ) {
-				$transient->response[ $this->pro_plugin_path ] = $this->create_update_response_object(
-					array(
-						'new_version'    => $latest_version,
-						'package'        => add_query_arg(
-							array(
-								'key'      => $this->license_key,
-								'instance' => $this->instance,
-							),
-							$is_development ? 'http://localhost:8080/pro/download/1.4.0' : $update_data->download_url
-						),
-						'release_notes'  => $update_data->notes,
-						/**
-						 * NOTE: Upgrade Notice only seems to appear on the Dashboard > Updates page
-						 */
-						'upgrade_notice' => $this->maybe_add_upgrade_notice(),
-					)
-				);
-			}
-		}
-
-		return $transient;
-	}
 
 	/**
 	 * Create an update response object for the WordPress transient
@@ -590,43 +592,19 @@ class Pro_Plugin_Updater {
 	}
 
 	/**
-	 * Filters the package options before running an update.
+	 * Get the license settings
 	 *
-	 * @param array $options {
-	 *     Options used by the upgrader.
-	 *
-	 *     @type string $package                     Package for update.
-	 *     @type string $destination                 Update location.
-	 *     @type bool   $clear_destination           Clear the destination resource.
-	 *     @type bool   $clear_working               Clear the working resource.
-	 *     @type bool   $abort_if_destination_exists Abort if the Destination directory exists.
-	 *     @type bool   $is_multi                    Whether the upgrader is running multiple times.
-	 *     @type array  $hook_extra {
-	 *         Extra hook arguments.
-	 *
-	 *         @type string $action               Type of action. Default 'update'.
-	 *         @type string $type                 Type of update process. Accepts 'plugin', 'theme', or 'core'.
-	 *         @type bool   $bulk                 Whether the update process is a bulk update. Default true.
-	 *         @type string $plugin               Path to the plugin file relative to the plugins directory.
-	 *         @type string $theme                The stylesheet or template name of the theme.
-	 *         @type string $language_update_type The language pack update type. Accepts 'plugin', 'theme',
-	 *                                            or 'core'.
-	 *         @type object $language_update      The language pack update offer.
-	 *     }
-	 * }
-	 * @return array Modified options array.
+	 * NOTE: it's possible the Pro plugin is not activated, so we need to add a bit of a hack to get the settings.
 	 */
-	public function upgrade_package( $options ) {
-		if ( isset( $options['hook_extra'], $options['hook_extra']['plugin'] ) && $options['hook_extra']['plugin'] === $this->pro_plugin_path ) {
-			$options['package'] = add_query_arg(
-				array(
-					'key'      => $this->license_key,
-					'instance' => $this->instance,
-				),
-				$options['package']
-			);
+	private function get_license_settings() {
+		if ( ! $this->active ) {
+			if ( file_exists( WP_PLUGIN_DIR . '/woocommerce-pos-pro/includes/Services/Settings.php' ) ) {
+				include_once WP_PLUGIN_DIR . '/woocommerce-pos-pro/includes/Services/Settings.php';
+				if ( method_exists( '\WCPOS\WooCommercePOSPro\Services\Settings', '_get_inactive_license_settings' ) ) {
+					return \WCPOS\WooCommercePOSPro\Services\Settings::_get_inactive_license_settings();
+				}
+			}
 		}
-
-		return $options;
+		return woocommerce_pos_get_settings( 'license' );
 	}
 }

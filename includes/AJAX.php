@@ -3,6 +3,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
+use WCPOS\WooCommercePOS\Admin\Updaters\Pro_Plugin_Updater;
 
 class AJAX {
 	/**
@@ -44,7 +45,9 @@ class AJAX {
 		'woocommerce_get_order_details',
 	);
 
-	
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		if ( ! isset( $_REQUEST['action'] ) ) {
 			return;
@@ -65,7 +68,8 @@ class AJAX {
 		}
 
 		// we need to hook into these actions to save our custom fields via AJAX
-		add_action( 'woocommerce_product_quick_edit_save',
+		add_action(
+			'woocommerce_product_quick_edit_save',
 			array(
 				'\WCPOS\WooCommercePOS\Admin\Products\List_Products',
 				'quick_edit_save',
@@ -76,8 +80,10 @@ class AJAX {
 	/**
 	 * The Admin\Products\Single_Product class is not loaded for AJAX requests.
 	 * We need to load it manually here.
+	 *
+	 * @return void
 	 */
-	public function load_single_product_class(): void {
+	public function load_single_product_class() {
 		$single_product_class = apply_filters( 'woocommerce_pos_single_product_admin_ajax_class', Single_Product::class );
 		new $single_product_class();
 	}
@@ -85,14 +91,9 @@ class AJAX {
 	/**
 	 * The Admin\Products\List_Products class is not loaded for AJAX requests.
 	 * We need to load it manually here.
+	 *
+	 * @return void
 	 */
-	public function load_list_products_class(): void {
-	}
-
-	/**
-	 * The Admin\Orders class is not loaded for AJAX requests.
-	 * We need to load it manually here.
-	 */
-	public function load_orders_class(): void {
+	public function load_list_products_class() {
 	}
 }
