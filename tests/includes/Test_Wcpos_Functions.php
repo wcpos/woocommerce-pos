@@ -9,7 +9,7 @@ use WP_UnitTestCase;
  *
  * @coversNothing
  */
-class Test_WCPOS_Functions extends WP_UnitTestCase {
+class Test_Wcpos_Functions extends WP_UnitTestCase {
 	public function setup(): void {
 		parent::setup();
 	}

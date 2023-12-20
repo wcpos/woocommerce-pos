@@ -86,9 +86,13 @@ class Pro_Plugin_Updater {
 		$this->active = $status['active'];
 		$this->current_version = $status['version'];
 
+		// Allow the update server to be overridden for development.
+		if ( isset( $_ENV['WCPOS_PRO_UPDATE_SERVER'] ) ) {
+			$this->update_server = $_ENV['WCPOS_PRO_UPDATE_SERVER'];
+		}
+
 		if ( $this->installed ) {
 			add_filter( 'update_plugins_updates.wcpos.com', array( $this, 'update_plugins' ), 10, 4 );
-			// add_filter( 'site_transient_update_plugins', array( $this, 'modify_plugin_update_transient' ) );
 			add_action( 'upgrader_process_complete', array( $this, 'after_plugin_update' ), 10, 2 );
 			add_filter( 'plugin_row_meta', array( $this, 'plugin_row_meta' ), 10, 4 );
 			add_action( 'in_plugin_update_message-' . $this->pro_plugin_path, array( $this, 'plugin_update_message' ), 10, 2 );
@@ -207,12 +211,10 @@ class Pro_Plugin_Updater {
 	 */
 	public function check_pro_plugin_updates( $force = false ) {
 		$update_data = get_transient( $this->update_data_transient_key );
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 
 		if ( empty( $update_data ) || $force ) {
 			$expiration = 60 * 60 * 12; // 12 hours.
-			$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
-			$url = $endpoint . '/update/' . $this->current_version;
+			$url = $this->update_server . '/update/' . $this->current_version;
 
 			// make the api call.
 			$response = wp_remote_get(
@@ -256,9 +258,7 @@ class Pro_Plugin_Updater {
 	 */
 	private function check_license_status( $force = false ) {
 		$license_status = get_transient( $this->license_status_transient_key );
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$expiration = 60 * 60 * 12; // 12 hours.
-		$endpoint = $is_development ? 'http://localhost:8080/pro' : $this->update_server;
 
 		/**
 		 * TODO: How to allow for multisite?
@@ -287,7 +287,7 @@ class Pro_Plugin_Updater {
 					'key'      => $license_settings['key'],
 					'instance' => $license_settings['instance'],
 				),
-				$endpoint . '/license/status'
+				$this->update_server . '/license/status'
 			);
 
 			// make the api call.
@@ -305,7 +305,7 @@ class Pro_Plugin_Updater {
 
 			if ( is_wp_error( $data ) ) {
 				Logger::log( $data );
-				$expiration = $is_development ? 1 : 60 * 60 * 1; // try again in an hour if error.
+				$expiration = 60 * 60 * 1; // try again in an hour if error.
 			}
 
 			set_transient( $this->license_status_transient_key, $data, $expiration );
