@@ -34,10 +34,13 @@ class Gateways {
 		}
 
 		// All other cases, the default POS gateways are added
-		return array_merge($gateways, array(
-			'WCPOS\WooCommercePOS\Gateways\Cash',
-			'WCPOS\WooCommercePOS\Gateways\Card',
-		));
+		return array_merge(
+			$gateways,
+			array(
+				'WCPOS\WooCommercePOS\Gateways\Cash',
+				'WCPOS\WooCommercePOS\Gateways\Card',
+			)
+		);
 	}
 
 	/**
@@ -58,8 +61,7 @@ class Gateways {
 		}
 
 		// use POS settings
-		$settings_service = new Services\Settings();
-		$settings         = $settings_service->get_payment_gateways_settings();
+		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
 
 		// Get all payment gateways
 		$all_gateways = WC()->payment_gateways->payment_gateways;
@@ -75,9 +77,9 @@ class Gateways {
 				 * There is an issue over-writing the description field because some gateways use this for info,
 				 * eg: Account Funds uses it to show the current balance.
 				 */
-//				if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
-//					$gateway->description = $settings['gateways'][ $gateway->id ]['description'];
-//				}
+				// if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
+				// $gateway->description = $settings['gateways'][ $gateway->id ]['description'];
+				// }
 
 				$gateway->icon    = '';
 				$gateway->enabled = 'yes';
@@ -88,9 +90,12 @@ class Gateways {
 		}
 
 		// Order the available gateways according to the settings
-		uksort( $_available_gateways, function ( $a, $b ) use ( $settings ) {
-			return $settings['gateways'][ $a ]['order'] <=> $settings['gateways'][ $b ]['order'];
-		});
+		uksort(
+			$_available_gateways,
+			function ( $a, $b ) use ( $settings ) {
+				return $settings['gateways'][ $a ]['order'] <=> $settings['gateways'][ $b ]['order'];
+			}
+		);
 
 		return $_available_gateways;
 	}

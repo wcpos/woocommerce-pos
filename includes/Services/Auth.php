@@ -35,7 +35,7 @@ class Auth {
 
 	/**
 	 * Constructor is private to prevent direct instantiation.
-	 * Or Settings::instance() instead.
+	 * Or Auth::instance() instead.
 	 */
 	public function __construct() {
 	}
