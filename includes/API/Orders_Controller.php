@@ -45,6 +45,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	protected $wcpos_request;
 
 	/**
+	 * Whether we are creating a new order.
+	 *
+	 * @var bool
+	 */
+	private $is_creating = false;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -133,7 +140,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 
 	/**
-	 * Create a single item.
+	 * Create a single order.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
@@ -144,6 +151,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;
 		}
+
+		// Set the creating flag, used in woocommerce_before_order_object_save
+		$this->is_creating = true;
 
 		// Proceed with the parent method to handle the creation
 		return parent::create_item( $request );
@@ -486,7 +496,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws WC_Data_Exception
 	 */
 	public function wcpos_before_order_object_save( WC_Order $order ): void {
-		if ( 0 === $order->get_id() ) {
+		if ( $this->is_creating ) {
 			$order->set_created_via( PLUGIN_NAME );
 		}
 
