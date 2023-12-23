@@ -111,7 +111,7 @@ class Frontend {
 			'version'        => VERSION,
 			'manifest'       => $github_url . 'metadata.json',
 			'homepage'       => woocommerce_pos_url(),
-			'logout_url'     => wp_logout_url( woocommerce_pos_url() ),
+			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
 				'uuid'               => $site_uuid,
 				'url'                => get_option( 'siteurl' ),
@@ -187,6 +187,25 @@ class Frontend {
 </script>" . "\n";
 		}
 	}
+
+	/**
+	 *
+	 */
+	private function pos_logout_url() {
+		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout' );
+
+		$redirect_to = urlencode( woocommerce_pos_url() );
+		$reauth = 1;
+		$wcpos = 1;
+		$logout_nonce = wp_create_nonce( 'log-out' );
+
+		$logout_url = "{$login_url}?action=logout&_wpnonce={$logout_nonce}&redirect_to={$redirect_to}&reauth={$reauth}&wcpos={$wcpos}";
+
+		return $logout_url;
+	}
+
+
+
 
 	/**
 	 * Disable caching conflicts.
