@@ -30,11 +30,13 @@ class Plugins {
 	 *                              'recently_activated', 'upgrade', 'mustuse', 'dropins', and 'search'.
 	 */
 	public function plugin_action_links( array $actions ): array {
-		$actions['settings'] = '<a href="' . admin_url( 'admin.php?page=woocommerce-pos-settings' ) . '">' .
-							   // translators: wordpress
-							   __( 'Settings' ) . '</a>';
+		$settings = array(
+			'settings' => '<a href="' . admin_url( 'admin.php?page=woocommerce-pos-settings' ) . '">' .
+			// translators: wordpress
+			__( 'Settings' ) . '</a>',
+		);
 
-		return $actions;
+		return $settings + $actions;
 	}
 
 	/**
