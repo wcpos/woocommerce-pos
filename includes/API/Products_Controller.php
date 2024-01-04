@@ -43,6 +43,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 	protected $allow_decimal_quantities = false;
 
 	/**
+	 * Store the current request object.
+	 *
+	 * @var WP_REST_Request
+	 */
+	private $wcpos_request;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -116,6 +123,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 		$this->wcpos_register_wc_rest_api_hooks();
 		$params = $request->get_params();
 
@@ -313,11 +321,17 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 *
 	 * @return array $args Key value array of query var to query value.
 	 */
-	public function wcpos_product_query( array $args, WP_REST_Request $request ): array {
+	public function wcpos_product_query( array $args, WP_REST_Request $request ) {
 		if ( ! empty( $request['search'] ) ) {
-			// We need to set the query up for a postmeta join
+			// We need to set the query up for a postmeta join.
 			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_products_search' ), 10, 2 );
 			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
+		}
+
+		// Check for wcpos_include/wcpos_exclude parameter.
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			// Add a custom WHERE clause to the query.
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 10, 2 );
 		}
 
 		return $args;
@@ -331,10 +345,10 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 *
 	 * @return string
 	 */
-	public function wcpos_posts_join_to_products_search( string $join, WP_Query $wp_query ) {
+	public function wcpos_posts_join_to_products_search( string $join, WP_Query $query ) {
 		global $wpdb;
 
-		if ( ! empty( $wp_query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
+		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
 			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
 		}
 
@@ -357,6 +371,34 @@ class Products_Controller extends WC_REST_Products_Controller {
 		}
 
 		return $groupby;
+	}
+
+	/**
+	 * Filters the WHERE clause of the query.
+	 *
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_product_include_exclude( string $where, WP_Query $query ) {
+		global $wpdb;
+
+		// Handle 'wcpos_include'
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
+			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
+		}
+
+		// Handle 'wcpos_exclude'
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
+			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids );
+		}
+
+		return $where;
 	}
 
 

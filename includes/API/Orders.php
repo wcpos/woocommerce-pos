@@ -36,18 +36,28 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
 
 		add_filter( 'rest_request_before_callbacks', array( $this, 'rest_request_before_callbacks' ), 10, 3 );
 		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'order_query' ), 10, 2 );
-		add_filter('woocommerce_rest_pre_insert_shop_order_object', array(
-			$this,
-			'pre_insert_shop_order_object',
-		), 10, 3);
+		add_filter(
+			'woocommerce_rest_pre_insert_shop_order_object',
+			array(
+				$this,
+				'pre_insert_shop_order_object',
+			),
+			10,
+			3
+		);
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'order_get_items' ), 10, 3 );
 
 		add_action( 'woocommerce_rest_set_order_item', array( $this, 'rest_set_order_item' ), 10, 2 );
-		add_filter('woocommerce_product_variation_get_attributes', array(
-			$this,
-			'product_variation_get_attributes',
-		), 10, 2);
+		add_filter(
+			'woocommerce_product_variation_get_attributes',
+			array(
+				$this,
+				'product_variation_get_attributes',
+			),
+			10,
+			2
+		);
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'before_order_object_save' ), 10, 2 );
 		add_filter( 'posts_clauses', array( $this, 'orderby_additions' ), 10, 2 );
 		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'tax_based_on' ), 10, 2 );
@@ -150,13 +160,18 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
 		 * this hack allows guest orders to bypass this validation
 		 */
 		if ( isset( $raw_data['customer_id'] ) && 0 == $raw_data['customer_id'] ) {
-			add_filter('is_email', function ( $result, $email ) {
-				if ( ! $email ) {
-					return true;
-				}
+			add_filter(
+				'is_email',
+				function ( $result, $email ) {
+					if ( ! $email ) {
+						return true;
+					}
 
-				return $result;
-			}, 10, 2);
+					return $result;
+				},
+				10,
+				2
+			);
 		}
 	}
 
@@ -217,10 +232,13 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
 		$this->maybe_add_post_uuid( $order );
 
 		// Add payment link to the order.
-		$pos_payment_url = add_query_arg(array(
-			'pay_for_order' => true,
-			'key'           => $order->get_order_key(),
-		), get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() ));
+		$pos_payment_url = add_query_arg(
+			array(
+				'pay_for_order' => true,
+				'key'           => $order->get_order_key(),
+			),
+			get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() )
+		);
 
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
 
@@ -410,7 +428,7 @@ class Orders extends Abstracts\WC_Rest_API_Modifier {
 	 *
 	 * @return array|WP_Error
 	 */
-	public function get_all_posts(array $fields = array() ): array {
+	public function get_all_posts( array $fields = array() ): array {
 		$args = array(
 			'limit'  => -1,
 			'return' => 'ids',

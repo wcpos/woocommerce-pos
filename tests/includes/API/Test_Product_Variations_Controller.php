@@ -567,9 +567,126 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	// }
 
 	/**
+	 *
+	 */
+	public function test_variation_get_with_includes() {
+		$product = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids = $product->get_children();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request->set_param( 'include', array( $variation_ids[0] ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $variation_ids[0], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_variation_get_with_excludes() {
+		$product = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids = $product->get_children();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request->set_param( 'exclude', array( $variation_ids[0] ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $variation_ids[1], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_variation_on_sale_with_includes() {
+		$product = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids = $product->get_children();
+
+		// put variations on_sale
+		$variation1 = new \WC_Product_Variation( $variation_ids[0] );
+		$variation1->set_sale_price( 1 );
+		$variation1->save();
+
+		$variation2 = new \WC_Product_Variation( $variation_ids[1] );
+		$variation2->set_sale_price( 1 );
+		$variation2->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$variation_ids = $product->get_children();
+		$request->set_param( 'on_sale', true );
+		$request->set_param( 'include', array( $variation_ids[0] ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $variation_ids[0], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_variation_on_sale_with_excludes() {
+		$product = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids = $product->get_children();
+
+		// put variations on_sale
+		$variation1 = new \WC_Product_Variation( $variation_ids[0] );
+		$variation1->set_sale_price( 1 );
+		$variation1->save();
+
+		$variation2 = new \WC_Product_Variation( $variation_ids[1] );
+		$variation2->set_sale_price( 1 );
+		$variation2->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$variation_ids = $product->get_children();
+		$request->set_param( 'on_sale', true );
+		$request->set_param( 'exclude', array( $variation_ids[0] ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $variation_ids[1], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_all_variation_response_contains_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_some_field',
+				);
+			}
+		);
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		update_post_meta( $variation_ids[0], '_some_field', 'some_string' );
+
+		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$response      = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+
+		$this->assertEquals( 'some_string', $data[0]['barcode'] );
+	}
+
+	/**
 	 * Test search using the products/variations endpoint.
 	 */
-	public function test_variation_search(): void {
+	public function test_all_variation_search(): void {
 		// enable barcode and pos_only_products
 		add_filter(
 			'woocommerce_pos_general_settings',
@@ -650,5 +767,102 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( array( $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+	}
+
+	/**
+	 *
+	 */
+	public function test_all_variation_with_includes() {
+		$product1 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids1 = $product1->get_children();
+		$product2 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids2 = $product2->get_children();
+		$product3 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids3 = $product3->get_children();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'include', array( $variation_ids1[0], $variation_ids1[1] ) );
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$ids         = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[0], $variation_ids1[1] ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_all_variation_with_excludes() {
+		$product1 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids1 = $product1->get_children();
+		$product2 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids2 = $product2->get_children();
+		$product3 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids3 = $product3->get_children();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'exclude', array( $variation_ids1[0], $variation_ids1[1] ) );
+		$response    = $this->server->dispatch( $request );
+		$data        = $response->get_data();
+		$ids         = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 4, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[0], $variation_ids2[1], $variation_ids3[0] ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_all_variation_search_with_includes() {
+		$product1 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids1 = $product1->get_children();
+		$product2 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids2 = $product2->get_children();
+		$product3 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids3 = $product3->get_children();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_query_params(
+			array(
+				'include' => array( $variation_ids1[0], $variation_ids1[1] ),
+				'search' => 'DUMMY SKU VARIABLE SMALL',
+			)
+		);
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $variation_ids1[0], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_all_variation_search_with_excludes() {
+		$product1 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids1 = $product1->get_children();
+		$product2 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids2 = $product2->get_children();
+		$product3 = ProductHelper::create_variation_product(); // has two variations
+		$variation_ids3 = $product3->get_children();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_query_params(
+			array(
+				'exclude' => array( $variation_ids1[0], $variation_ids1[1] ),
+				'search' => 'DUMMY SKU VARIABLE SMALL',
+			)
+		);
+		$response    = $this->server->dispatch( $request );
+		$data        = $response->get_data();
+		$ids         = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$this->assertEqualsCanonicalizing( array( $variation_ids2[0], $variation_ids3[0] ), $ids );
 	}
 }

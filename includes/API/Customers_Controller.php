@@ -42,6 +42,13 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	protected $wcpos_user_search_results = array();
 
 	/**
+	 * Store the request object for use in lifecycle methods.
+	 *
+	 * @var WP_REST_Request
+	 */
+	protected $wcpos_request;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -161,6 +168,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 		$this->wcpos_register_wc_rest_api_hooks();
 		$params = $request->get_params();
 
@@ -392,6 +400,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );
 		}
 
+		// Handle include/exclude
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			add_action( 'pre_user_query', array( $this, 'wcpos_include_exclude_users_by_id' ) );
+		}
+
 		return $prepared_args;
 	}
 
@@ -428,6 +441,32 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// Check if the replacement was successful and assign it back to query_where
 		if ( $modified_where !== $query->query_where ) {
 			$query->query_where = $modified_where;
+		}
+	}
+
+	/**
+	 * Include or exclude users by ID.
+	 *
+	 * @param WP_User_Query $query
+	 */
+	public function wcpos_include_exclude_users_by_id( $query ) {
+		global $wpdb;
+
+		// Remove the hook
+		remove_action( 'pre_user_query', array( $this, 'wcpos_include_exclude_users_by_id' ) );
+
+		// Handle 'wcpos_include'
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
+			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID IN ($ids_format) ", $include_ids );
+		}
+
+		// Handle 'wcpos_exclude'
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
+			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID NOT IN ($ids_format) ", $exclude_ids );
 		}
 	}
 }

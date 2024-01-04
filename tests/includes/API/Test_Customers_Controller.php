@@ -451,6 +451,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'Doe', $data['last_name'] );
 	}
 
+	/**
+	 *
+	 */
 	public function test_update_customer(): void {
 		$customer = CustomerHelper::create_customer(
 			array(
@@ -474,5 +477,51 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'Jane', $data['first_name'] );
+	}
+
+	/**
+	 * Test customer search with includes
+	 */
+	public function test_customer_search_with_includes(): void {
+		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role' => 'all',
+				'search' => 'John',
+				'include' => $customer2->get_id(),
+			)
+		);
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer2->get_id(), $data[0]['id'] );
+	}
+
+		/**
+		 * Test customer search with includes
+		 */
+	public function test_customer_search_with_excludes(): void {
+		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
+		$customer2 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role' => 'all',
+				'search' => 'John',
+				'exclude' => $customer2->get_id(),
+			)
+		);
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer1->get_id(), $data[0]['id'] );
 	}
 }

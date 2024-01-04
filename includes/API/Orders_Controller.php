@@ -363,6 +363,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 		$this->wcpos_register_wc_rest_api_hooks( $request );
 		$params = $request->get_params();
 
@@ -430,6 +431,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
+		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
 	}
 
 	/**
@@ -510,6 +512,50 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! $cashier_id ) {
 			$order->update_meta_data( '_pos_user', $user_id );
 		}
+	}
+
+	/**
+	 * Filter the order query.
+	 *
+	 * @param array           $args    Query arguments.
+	 * @param WP_REST_Request $request Request object.
+	 */
+	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
+		// Check for wcpos_include/wcpos_exclude parameter.
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			// Add a custom WHERE clause to the query.
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Filter the WHERE clause of the query.
+	 *
+	 * @param string $where WHERE clause of the query.
+	 * @param object $query The WP_Query instance.
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
+		global $wpdb;
+
+		// Handle 'wcpos_include'
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
+			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
+		}
+
+		// Handle 'wcpos_exclude'
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
+			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids );
+		}
+
+		return $where;
 	}
 
 	/**

@@ -611,4 +611,168 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertIsString( $status['name'] );
 		}
 	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_id() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', (string) $order1->get_id() );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_billing_first_name() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+		$order2->set_billing_first_name( 'John' );
+		$order2->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', 'John' );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_billing_last_name() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+		$order1->set_billing_last_name( 'Doe' );
+		$order1->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', 'Doe' );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_billing_email() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+		$order1->set_billing_email( 'posuser@example.com' );
+		$order1->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', 'posuser' );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_id_with_includes() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', (string) $order1->get_id() );
+		$request->set_param( 'include', array( $order2->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 0, \count( $data ) );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_id_with_excludes() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', (string) $order1->get_id() );
+		$request->set_param( 'exclude', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 0, \count( $data ) );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_billing_first_name_with_includes() {
+		$order1 = OrderHelper::create_order();
+		$order1->set_billing_first_name( 'John' );
+		$order1->save();
+		$order2 = OrderHelper::create_order();
+		$order2->set_billing_first_name( 'John' );
+		$order2->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', 'John' );
+		$request->set_param( 'include', array( $order2->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_search_by_billing_first_name_with_excludes() {
+		$order1 = OrderHelper::create_order();
+		$order1->set_billing_first_name( 'John' );
+		$order1->save();
+		$order2 = OrderHelper::create_order();
+		$order2->set_billing_first_name( 'John' );
+		$order2->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'search', 'John' );
+		$request->set_param( 'exclude', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 0, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
 }

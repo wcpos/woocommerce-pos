@@ -219,38 +219,63 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
-		// Get 'include' parameter from request
+		$max_length = 10000;
+
+		// Process 'include' parameter
 		$include = $request->get_param( 'include' );
-
 		if ( $include ) {
-			// Convert to array if it's not
-			$include_array  = \is_array( $include ) ? $include : explode( ',', $include );
-			$include_string = implode( ',', $include_array );
+			$processed_include = $this->shorten_param_array( $include, $max_length );
+			$request->set_param( 'wcpos_include', $processed_include );
+			unset( $request['include'] );
+		}
 
-			// If the length of the 'include' string exceeds 10,000 characters, create a new array
-			if ( \strlen( $include_string ) > 10000 ) {
-				shuffle( $include_array ); // Shuffle the IDs to randomize
-
-				// Construct a random array of no more than 10,000 characters
-				$max_include_length   = 10000;
-				$new_include_string   = '';
-				$random_include_array = array();
-
-				foreach ( $include_array as $id ) {
-					if ( \strlen( $new_include_string . $id ) < $max_include_length ) {
-						$new_include_string .= $id . ',';
-						$random_include_array[] = $id;
-					} else {
-						break; // Stop when we reach the maximum length
-					}
-				}
-
-				// Set modified 'include' parameter back to request
-				$request->set_param( 'include', $random_include_array );
-			}
+		// Process 'exclude' parameter
+		$exclude = $request->get_param( 'exclude' );
+		if ( $exclude ) {
+			$processed_exclude = $this->shorten_param_array( $exclude, $max_length );
+			$request->set_param( 'wcpos_exclude', $processed_exclude );
+			unset( $request['exclude'] );
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Some servers have a limit on the number of include/exclude we can use in a request.
+	 * Worst thing is there is often no error message, the request returns an empty response.
+	 *
+	 * For example, WP Engine has a limit of 1024 characters?
+	 * https://wpengine.com/support/using-dev-tools/#Long_Queries_in_wp_db
+	 *
+	 * @TODO - For long queries, I should find a better solution than this.
+	 *
+	 * @param string|array $param_value
+	 * @param int          $max_length
+	 * @return array
+	 */
+	private function shorten_param_array( $param_value, $max_length ) {
+		$param_array  = is_array( $param_value ) ? $param_value : explode( ',', $param_value );
+		$param_string = implode( ',', $param_array );
+
+		if ( strlen( $param_string ) > $max_length ) {
+			shuffle( $param_array ); // Shuffle to randomize
+
+			$new_param_string   = '';
+			$random_param_array = array();
+
+			foreach ( $param_array as $id ) {
+				if ( strlen( $new_param_string . $id ) < $max_length ) {
+					$new_param_string .= $id . ',';
+					$random_param_array[] = $id;
+				} else {
+					break; // Stop when maximum length is reached
+				}
+			}
+
+			return $random_param_array;
+		}
+
+		return $param_array;
 	}
 
 	/**

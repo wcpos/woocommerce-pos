@@ -645,4 +645,146 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEqualsCanonicalizing( array( $product2->get_id(), $product3->get_id(), $product4->get_id() ), $ids );
 	}
+
+	/**
+	 *
+	 */
+	public function test_search_title_with_includes() {
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'search', 'dummy' );
+		$request->set_param( 'include', array( $product1->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_search_sku_with_includes() {
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'search', 'DUMMY SKU' );
+		$request->set_param( 'include', array( $product2->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product2->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_filter_on_sale_with_includes() {
+		$product1  = ProductHelper::create_simple_product(
+			array(
+				'sale_price' => 8,
+				'on_sale' => true,
+			)
+		);
+		$product2  = ProductHelper::create_simple_product();
+		$product3  = ProductHelper::create_simple_product(
+			array(
+				'sale_price' => 6,
+				'on_sale' => true,
+			)
+		);
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'on_sale', true );
+		$request->set_param( 'include', array( $product1->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_search_title_with_excludes() {
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'search', 'dummy' );
+		$request->set_param( 'exclude', array( $product1->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product2->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_search_sku_with_excludes() {
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'search', 'DUMMY SKU' );
+		$request->set_param( 'exclude', array( $product2->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product1->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_filter_on_sale_with_excludes() {
+		$product1  = ProductHelper::create_simple_product(
+			array(
+				'sale_price' => 8,
+				'on_sale' => true,
+			)
+		);
+		$product2  = ProductHelper::create_simple_product();
+		$product3  = ProductHelper::create_simple_product(
+			array(
+				'sale_price' => 6,
+				'on_sale' => true,
+			)
+		);
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'on_sale', true );
+		$request->set_param( 'exclude', array( $product1->get_id() ) );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids         = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $product3->get_id() ), $ids );
+	}
 }
