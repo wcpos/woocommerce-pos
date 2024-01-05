@@ -109,10 +109,8 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * The WC REST API does not support the include param.
 	 * This test is to ensure that the include param is supported in the WCPOS API.
-	 *
-	 * @TODO - I will need to adjust the HEADER counts as well
 	 */
-	public function test_include_param(): void {
+	public function test_include_and_exclude_param(): void {
 		$tax_id1   = TaxHelper::create_tax_rate(
 			array(
 				'country' => 'US',
@@ -164,5 +162,89 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $tax_id2, $tax_id4 ), $ids );
+
+		$request    = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'exclude', array( $tax_id2, $tax_id4 ) );
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 3, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $tax_id1, $tax_id3, $tax_id5 ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_include_and_exclude_param_with_class(): void {
+		$tax_id1   = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'NY',
+				'rate'    => '8.375',
+				'name'    => 'NY Tax',
+				'class'   => 'reduced-rate',
+			)
+		);
+		$tax_id2   = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'CA',
+				'rate'    => '7.25',
+				'name'    => 'CA Tax',
+			)
+		);
+		$tax_id3   = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'FL',
+				'rate'    => '6.00',
+				'name'    => 'FL Tax',
+				'class'   => 'reduced-rate',
+			)
+		);
+		$tax_id4   = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'TX',
+				'rate'    => '6.25',
+				'name'    => 'TX Tax',
+			)
+		);
+		$tax_id5   = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'WA',
+				'rate'    => '6.50',
+				'name'    => 'WA Tax',
+				'class'   => 'reduced-rate',
+			)
+		);
+
+		$request    = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'include', array( $tax_id1, $tax_id2 ) );
+		$request->set_param( 'class', 'reduced-rate' );
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $tax_id1 ), $ids );
+
+		$request    = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'exclude', array( $tax_id1, $tax_id2 ) );
+		$request->set_param( 'class', 'reduced-rate' );
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $tax_id3, $tax_id5 ), $ids );
 	}
 }

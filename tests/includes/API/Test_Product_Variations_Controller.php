@@ -680,7 +680,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 2, \count( $data ) );
 
-		$this->assertEquals( 'some_string', $data[0]['barcode'] );
+		$this->assertEquals( 'some_string', $data[1]['barcode'] );
 	}
 
 	/**
@@ -810,7 +810,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 4, \count( $data ) );
-		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[0], $variation_ids2[1], $variation_ids3[0] ), $ids );
+		$this->assertEqualsCanonicalizing( array( $variation_ids2[0], $variation_ids2[1], $variation_ids3[0], $variation_ids3[1] ), $ids );
 	}
 
 	/**
@@ -828,7 +828,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'include' => array( $variation_ids1[0], $variation_ids1[1] ),
-				'search' => 'DUMMY SKU VARIABLE SMALL',
+				'search' => 'SMALL',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -854,7 +854,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'exclude' => array( $variation_ids1[0], $variation_ids1[1] ),
-				'search' => 'DUMMY SKU VARIABLE SMALL',
+				'search' => 'SMALL',
 			)
 		);
 		$response    = $this->server->dispatch( $request );

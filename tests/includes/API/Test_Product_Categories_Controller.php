@@ -108,4 +108,80 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
+
+	/**
+	 *
+	 */
+	public function test_product_category_includes() {
+		$cat1        = ProductHelper::create_product_category( 'Music' );
+		$cat2        = ProductHelper::create_product_category( 'Clothes' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'include', $cat1['term_id'] );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $cat1['term_id'], $data[0]['id'] );
+	}
+
+	/**
+	 * NOTE: There is one category installed in the test setup.
+	 */
+	public function test_product_category_excludes() {
+		$cat1        = ProductHelper::create_product_category( 'Music' );
+		$cat2        = ProductHelper::create_product_category( 'Clothes' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'exclude', $cat1['term_id'] );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 2, \count( $data ) );
+		$ids = wp_list_pluck( $data, 'id' );
+
+		$this->assertNotContains( $cat1['term_id'], $ids );
+		$this->assertContains( $cat2['term_id'], $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_product_category_search_with_includes() {
+		$cat1        = ProductHelper::create_product_category( 'Music1' );
+		$cat2        = ProductHelper::create_product_category( 'Music2' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'include', $cat1['term_id'] );
+		$request->set_param( 'search', 'Music' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $cat1['term_id'], $data[0]['id'] );
+	}
+
+	/**
+	 * NOTE: There is one category installed in the test setup.
+	 */
+	public function test_product_category_search_with_excludes() {
+		$cat1        = ProductHelper::create_product_category( 'Music1' );
+		$cat2        = ProductHelper::create_product_category( 'Music2' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+		$request->set_param( 'exclude', $cat1['term_id'] );
+		$request->set_param( 'search', 'Music' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $cat2['term_id'], $data[0]['id'] );
+	}
 }

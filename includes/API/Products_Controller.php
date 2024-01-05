@@ -240,40 +240,48 @@ class Products_Controller extends WC_REST_Products_Controller {
 		global $wpdb;
 
 		if ( empty( $search ) ) {
-			return $search; // skip processing - no search term in query
+			return $search; // skip processing - no search term in query.
 		}
 
 		$q = $wp_query->query_vars;
 		$n = ! empty( $q['exact'] ) ? '' : '%';
+		$search_terms = (array) $q['search_terms'];
 
-		$search = $searchand = '';
+		// Fields in the main 'posts' table.
+		$post_fields = array( 'post_title' );
 
-		// Adjust this to include the fields you want to search
-		$fields_to_search = array(
-			'post_title',
-			'_sku',
-		);
+		// Meta fields to search.
+		$meta_fields = array( '_sku' );
+		$barcode_field = $this->wcpos_get_barcode_field();
+		if ( '_sku' !== $barcode_field ) {
+			$meta_fields[] = $barcode_field;
+		}
 
 		$barcode_field = $this->wcpos_get_barcode_field();
 		if ( '_sku' !== $barcode_field ) {
 			$fields_to_search[] = $barcode_field;
 		}
 
-		foreach ( (array) $q['search_terms'] as $term ) {
+		$search_conditions = array();
+
+		foreach ( $search_terms as $term ) {
 			$term = $n . $wpdb->esc_like( $term ) . $n;
 
-			foreach ( $fields_to_search as $field ) {
-				if ( \in_array( $field, array( 'post_title' ), true ) ) {
-					$search .= $wpdb->prepare( "{$searchand}($wpdb->posts.$field LIKE %s)", $term );
-				} else {
-					$search .= $wpdb->prepare( "{$searchand}(pm1.meta_value LIKE %s AND pm1.meta_key = '$field')", $term );
+			// Search in post fields
+			foreach ( $post_fields as $field ) {
+				if ( ! empty( $field ) ) {
+					$search_conditions[] = $wpdb->prepare( "($wpdb->posts.$field LIKE %s)", $term );
 				}
-				$searchand = ' OR ';
+			}
+
+			// Search in meta fields
+			foreach ( $meta_fields as $field ) {
+				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
 			}
 		}
 
-		if ( ! empty( $search ) ) {
-			$search = " AND ({$search}) ";
+		if ( ! empty( $search_conditions ) ) {
+			$search = ' AND (' . implode( ' OR ', $search_conditions ) . ') ';
 			if ( ! is_user_logged_in() ) {
 				$search .= " AND ($wpdb->posts.post_password = '') ";
 			}

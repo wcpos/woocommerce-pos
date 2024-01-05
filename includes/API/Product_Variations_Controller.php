@@ -152,6 +152,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
 		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
 	}
 
 	/**
@@ -210,6 +211,106 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	}
 
 	/**
+	 * Filter to adjust the WordPress search SQL query
+	 * - Search for the variation SKU and barcode
+	 * - Do not search variation description.
+	 *
+	 * @param string   $search Search string.
+	 * @param WP_Query $wp_query WP_Query object.
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_search( string $search, WP_Query $wp_query ) {
+		global $wpdb;
+
+		if ( empty( $search ) ) {
+			return $search; // skip processing - no search term in query.
+		}
+
+		$q = $wp_query->query_vars;
+		$n = ! empty( $q['exact'] ) ? '' : '%';
+		$search_terms = (array) $q['search_terms'];
+
+		// Fields in the main 'posts' table.
+		$post_fields = array(); // nothing at the moment for variations.
+
+		// Meta fields to search.
+		$meta_fields = array( '_sku' );
+		$barcode_field = $this->wcpos_get_barcode_field();
+		if ( '_sku' !== $barcode_field ) {
+			$meta_fields[] = $barcode_field;
+		}
+
+		$barcode_field = $this->wcpos_get_barcode_field();
+		if ( '_sku' !== $barcode_field ) {
+			$fields_to_search[] = $barcode_field;
+		}
+
+		$search_conditions = array();
+
+		foreach ( $search_terms as $term ) {
+			$term = $n . $wpdb->esc_like( $term ) . $n;
+
+			// Search in post fields
+			foreach ( $post_fields as $field ) {
+				if ( ! empty( $field ) ) {
+					$search_conditions[] = $wpdb->prepare( "($wpdb->posts.$field LIKE %s)", $term );
+				}
+			}
+
+			// Search in meta fields
+			foreach ( $meta_fields as $field ) {
+				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
+			}
+		}
+
+		if ( ! empty( $search_conditions ) ) {
+			$search = ' AND (' . implode( ' OR ', $search_conditions ) . ') ';
+			if ( ! is_user_logged_in() ) {
+				$search .= " AND ($wpdb->posts.post_password = '') ";
+			}
+		}
+
+		return $search;
+	}
+
+	/**
+	 * Filters the JOIN clause of the query.
+	 *
+	 * @param string   $join  The JOIN clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_join_to_posts_search( string $join, WP_Query $query ) {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) && false === strpos( $join, 'pm1' ) ) {
+			$join .= " LEFT JOIN {$wpdb->postmeta} pm1 ON {$wpdb->posts}.ID = pm1.post_id ";
+		}
+
+		return $join;
+	}
+
+	/**
+	 * Filters the GROUP BY clause of the query.
+	 *
+	 * @param string   $groupby The GROUP BY clause of the query.
+	 * @param WP_Query $query   The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_groupby_posts_search( string $groupby, WP_Query $query ) {
+		global $wpdb;
+
+		if ( ! empty( $query->query_vars['s'] ) ) {
+			$groupby = "{$wpdb->posts}.ID";
+		}
+
+		return $groupby;
+	}
+
+	/**
 	 * Filter the query arguments for a request.
 	 *
 	 * @param array           $args    Key value array of query var to query value.
@@ -218,6 +319,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @return array $args Key value array of query var to query value.
 	 */
 	public function wcpos_product_variation_query( array $args, WP_REST_Request $request ) {
+		if ( ! empty( $request['search'] ) ) {
+			// We need to set the query up for a postmeta join.
+			add_filter( 'posts_join', array( $this, 'wcpos_posts_join_to_posts_search' ), 10, 2 );
+			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_posts_search' ), 10, 2 );
+		}
+
 		// Check for wcpos_include/wcpos_exclude parameter.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
 			// Add a custom WHERE clause to the query.
@@ -371,77 +478,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @param WP_REST_Request $request Full details about the request.
 	 */
 	public function wcpos_get_all_items( $request ) {
-		$query_args = $this->prepare_objects_query( $request );
-		if ( is_wp_error( current( $query_args ) ) ) {
-			return current( $query_args );
-		}
-
-		// Check if 'search' param is set for SKU search
-		if ( ! empty( $query_args['s'] ) ) {
-			$barcode_field = $this->wcpos_get_barcode_field();
-			$meta_query = array(
-				'key' => '_sku',
-				'value' => $query_args['s'],
-				'compare' => 'LIKE',
-			);
-
-			if ( $barcode_field && '_sku' !== $barcode_field ) {
-				$meta_query = array(
-					'relation' => 'OR',
-					$meta_query,
-					array(
-						'key' => $barcode_field,
-						'value' => $query_args['s'],
-						'compare' => 'LIKE',
-					),
-				);
-			}
-
-			// Combine meta queries
-			$query_args['meta_query'] = $this->wcpos_combine_meta_queries( $query_args['meta_query'], $meta_query );
-
-			unset( $query_args['s'] );
-		}
-
-		$query_results = $this->get_objects( $query_args );
-
-		$objects = array();
-		foreach ( $query_results['objects'] as $object ) {
-			if ( ! \wc_rest_check_post_permissions( $this->post_type, 'read', $object->get_id() ) ) {
-				continue;
-			}
-
-			$data      = $this->prepare_object_for_response( $object, $request );
-			$objects[] = $this->prepare_response_for_collection( $data );
-		}
-
-		$page      = (int) $query_args['paged'];
-		$max_pages = $query_results['pages'];
-
-		$response = rest_ensure_response( $objects );
-		$response->header( 'X-WP-Total', $query_results['total'] );
-		$response->header( 'X-WP-TotalPages', (int) $max_pages );
-
-		/**
-		 * Note: custom endpoint for getting all product variations
-		 */
-		$base          = 'products/variations';
-		$base = add_query_arg( $request->get_query_params(), rest_url( sprintf( '/%s/%s', $this->namespace, $base ) ) );
-
-		if ( $page > 1 ) {
-			$prev_page = $page - 1;
-			if ( $prev_page > $max_pages ) {
-				$prev_page = $max_pages;
-			}
-			$prev_link = add_query_arg( 'page', $prev_page, $base );
-			$response->link_header( 'prev', $prev_link );
-		}
-		if ( $max_pages > $page ) {
-			$next_page = $page + 1;
-			$next_link = add_query_arg( 'page', $next_page, $base );
-			$response->link_header( 'next', $next_link );
-		}
-
-		return $response;
+		return parent::get_items( $request );
 	}
 }

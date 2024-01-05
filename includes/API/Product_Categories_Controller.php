@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-\defined('ABSPATH') || die;
+\defined( 'ABSPATH' ) || die;
 
-if ( ! class_exists('WC_REST_Product_Categories_Controller') ) {
+if ( ! class_exists( 'WC_REST_Product_Categories_Controller' ) ) {
 	return;
 }
 
@@ -30,6 +30,13 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 */
 	protected $namespace = 'wcpos/v1';
 
+		/**
+		 * Store the request object for use in lifecycle methods.
+		 *
+		 * @var WP_REST_Request
+		 */
+	protected $wcpos_request;
+
 	/**
 	 * Constructor.
 	 */
@@ -50,6 +57,7 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 		$this->wcpos_register_wc_rest_api_hooks();
 		$params = $request->get_params();
 
@@ -66,6 +74,7 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_product_cat', array( $this, 'wcpos_product_categories_response' ), 10, 3 );
+		add_filter( 'woocommerce_rest_product_cat_query', array( $this, 'wcpos_product_category_query' ), 10, 2 );
 	}
 
 	/**
@@ -87,6 +96,61 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 		$response->set_data( $data );
 
 		return $response;
+	}
+
+	/**
+	 * Filter the tag query.
+	 *
+	 * @param array           $args    Query arguments.
+	 * @param WP_REST_Request $request Request object.
+	 */
+	public function wcpos_product_category_query( array $args, WP_REST_Request $request ): array {
+		// Check for wcpos_include/wcpos_exclude parameter.
+		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
+			// Add a custom WHERE clause to the query.
+			add_filter( 'terms_clauses', array( $this, 'wcpos_terms_clauses_include_exclude' ), 10, 3 );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Filters the terms query SQL clauses.
+	 *
+	 * @param string[] $clauses {
+	 *     Associative array of the clauses for the query.
+	 *
+	 *     @type string $fields   The SELECT clause of the query.
+	 *     @type string $join     The JOIN clause of the query.
+	 *     @type string $where    The WHERE clause of the query.
+	 *     @type string $distinct The DISTINCT clause of the query.
+	 *     @type string $orderby  The ORDER BY clause of the query.
+	 *     @type string $order    The ORDER clause of the query.
+	 *     @type string $limits   The LIMIT clause of the query.
+	 * }
+	 * @param string[] $taxonomies An array of taxonomy names.
+	 * @param array    $args       An array of term query arguments.
+	 *
+	 * @return string[] $clauses
+	 */
+	public function wcpos_terms_clauses_include_exclude( array $clauses, array $taxonomies, array $args ) {
+		global $wpdb;
+
+		// Handle 'wcpos_include'
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', $this->wcpos_request['wcpos_include'] );
+			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id IN ($ids_format) ", $include_ids );
+		}
+
+		// Handle 'wcpos_exclude'
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', $this->wcpos_request['wcpos_exclude'] );
+			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id NOT IN ($ids_format) ", $exclude_ids );
+		}
+
+		return $clauses;
 	}
 
 	/**

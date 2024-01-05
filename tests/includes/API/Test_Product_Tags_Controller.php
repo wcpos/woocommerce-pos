@@ -103,4 +103,78 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
+
+	/**
+	 *
+	 */
+	public function test_product_tag_includes() {
+		$tag1        = ProductHelper::create_product_tag( 'Music' );
+		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
+		$request->set_param( 'include', $tag1['term_id'] );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $tag1['term_id'], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_product_tag_excludes() {
+		$tag1        = ProductHelper::create_product_tag( 'Music' );
+		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
+		$request->set_param( 'exclude', $tag1['term_id'] );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $tag2['term_id'], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_product_tag_search_with_includes() {
+		$tag1        = ProductHelper::create_product_tag( 'Music1' );
+		$tag2        = ProductHelper::create_product_tag( 'Music2' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
+		$request->set_param( 'include', $tag1['term_id'] );
+		$request->set_param( 'search', 'Music' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $tag1['term_id'], $data[0]['id'] );
+	}
+
+	/**
+	 *
+	 */
+	public function test_product_tag_search_with_excludes() {
+		$tag1        = ProductHelper::create_product_tag( 'Music1' );
+		$tag2        = ProductHelper::create_product_tag( 'Music2' );
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
+		$request->set_param( 'exclude', $tag1['term_id'] );
+		$request->set_param( 'search', 'Music' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 1, \count( $data ) );
+
+		$this->assertEquals( $tag2['term_id'], $data[0]['id'] );
+	}
 }
