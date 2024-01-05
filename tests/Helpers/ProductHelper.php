@@ -49,7 +49,7 @@ class ProductHelper {
 			'name'           => 'Dummy Product',
 			'regular_price'  => 10,
 			'price'          => 10,
-			'sku'            => 'DUMMY SKU',
+			'sku'            => uniqid( 'DUMMY SKU' ),
 			'manage_stock'   => false,
 			'tax_status'     => 'taxable',
 			'downloadable'   => false,
@@ -57,13 +57,13 @@ class ProductHelper {
 			'stock_status'   => 'instock',
 			'weight'         => '1.1',
 		);
-	
+
 		// Merge default properties with user-provided args
 		$props = wp_parse_args( $args, $defaults );
-	
+
 		$product = new WC_Product_Simple();
 		$product->set_props( $props );
-	
+
 		if ( $save ) {
 			$product->save();
 
@@ -72,7 +72,7 @@ class ProductHelper {
 
 		return $product;
 	}
-	
+
 
 	/**
 	 * Create external product.
@@ -87,7 +87,7 @@ class ProductHelper {
 			array(
 				'name'          => 'Dummy External Product',
 				'regular_price' => 10,
-				'sku'           => 'DUMMY EXTERNAL SKU',
+				'sku'           => uniqid( 'DUMMY EXTERNAL SKU' ),
 				'product_url'   => 'http://woocommerce.com',
 				'button_text'   => 'Buy external product',
 			)
@@ -111,7 +111,7 @@ class ProductHelper {
 		$product->set_props(
 			array(
 				'name' => 'Dummy Grouped Product',
-				'sku'  => 'DUMMY GROUPED SKU',
+				'sku'  => uniqid( 'DUMMY GROUPED SKU' ),
 			)
 		);
 		$product->set_children( array( $simple_product_1->get_id(), $simple_product_2->get_id() ) );
@@ -132,7 +132,7 @@ class ProductHelper {
 		$product->set_props(
 			array(
 				'name' => 'Dummy Variable Product',
-				'sku'  => 'DUMMY VARIABLE SKU',
+				'sku'  => uniqid( 'DUMMY VARIABLE SKU' ),
 			)
 		);
 
@@ -154,7 +154,7 @@ class ProductHelper {
 		$variation_1->set_props(
 			array(
 				'parent_id'     => $product->get_id(),
-				'sku'           => 'DUMMY SKU VARIABLE SMALL',
+				'sku'           => uniqid( 'DUMMY SKU VARIABLE SMALL' ),
 				'regular_price' => 10,
 			)
 		);
@@ -165,7 +165,7 @@ class ProductHelper {
 		$variation_2->set_props(
 			array(
 				'parent_id'     => $product->get_id(),
-				'sku'           => 'DUMMY SKU VARIABLE LARGE',
+				'sku'           => uniqid( 'DUMMY SKU VARIABLE LARGE' ),
 				'regular_price' => 15,
 			)
 		);
@@ -322,7 +322,7 @@ class ProductHelper {
 	public static function save_post_test_update_meta_data_direct( $id ): void {
 		update_post_meta( $id, '_test2', 'world' );
 	}
-	
+
 	/**
 	 * Create a product category.
 	 *
@@ -333,7 +333,7 @@ class ProductHelper {
 	 */
 	public static function create_product_category( string $name, ?int $parent = null ) {
 		// Create a new product category
-		$args = $parent ? array('parent' => $parent) : array();
+		$args = $parent ? array( 'parent' => $parent ) : array();
 
 		return wp_insert_term( $name, 'product_cat', $args );
 	}
@@ -348,7 +348,7 @@ class ProductHelper {
 	 */
 	public static function delete_product_category( int $term_id, bool $force = false ) {
 		// Delete the product category
-		return wp_delete_term( $term_id, 'product_cat', array('force_default' => $force) );
+		return wp_delete_term( $term_id, 'product_cat', array( 'force_default' => $force ) );
 	}
 
 	/**
@@ -361,7 +361,7 @@ class ProductHelper {
 	 */
 	public static function create_product_tag( string $name, ?int $parent = null ) {
 		// Create a new product tag
-		$args = $parent ? array('parent' => $parent) : array();
+		$args = $parent ? array( 'parent' => $parent ) : array();
 
 		return wp_insert_term( $name, 'product_tag', $args );
 	}
@@ -376,6 +376,6 @@ class ProductHelper {
 	 */
 	public static function delete_product_tag( int $term_id, bool $force = false ) {
 		// Delete the product category
-		return wp_delete_term( $term_id, 'product_tag', array('force_default' => $force) );
+		return wp_delete_term( $term_id, 'product_tag', array( 'force_default' => $force ) );
 	}
 }

@@ -770,7 +770,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( 0, \count( $data ) );
+		$this->assertEquals( 1, \count( $data ) );
 
 		$ids      = wp_list_pluck( $data, 'id' );
 		$this->assertEquals( array( $order2->get_id() ), $ids );

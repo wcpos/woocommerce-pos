@@ -200,8 +200,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 
 		$this->assertEquals( 200, $response->get_status() );
-
-		$this->assertEquals( 'DUMMY SKU VARIABLE SMALL', $data['barcode'] );
+		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $data['barcode'] );
 	}
 
 	public function test_variation_response_contains_barcode(): void {
@@ -273,7 +272,8 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'sku' );
 
-		$this->assertEquals( $skus, array( 'DUMMY SKU VARIABLE LARGE', 'DUMMY SKU VARIABLE SMALL' ) );
+		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE LARGE', $skus[0] );
+		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $skus[1] );
 
 		// reverse order
 		$request->set_query_params(
@@ -286,7 +286,8 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$skus         = wp_list_pluck( $data, 'sku' );
 
-		$this->assertEquals( $skus, array( 'DUMMY SKU VARIABLE SMALL', 'DUMMY SKU VARIABLE LARGE' ) );
+		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $skus[0] );
+		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE LARGE', $skus[1] );
 	}
 
 	public function test_variation_orderby_barcode(): void {
