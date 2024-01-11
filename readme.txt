@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.4
-Stable tag: 1.3.12
+Stable tag: 1.4.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -70,7 +70,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 * Pro: Fix Store login for Authorized Users
 * Pro: Fix Analytics for POS vs Online Orders
 * Pro: New updater
-* Plus: Add a lot of PHPUnit Tests, fixed numerous bugs for a more stable POS!
+* Plus: Added a lot of PHPUnit Tests, fixed numerous bugs for a more stable POS!
 
 = 1.3.12 - 2023/09/29 =
 * Fix: WordPress database error Not unique table/alias: 'wp_postmeta' for query
