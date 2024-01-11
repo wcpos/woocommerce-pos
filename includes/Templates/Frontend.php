@@ -86,7 +86,7 @@ class Frontend {
 	public function footer(): void {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
-		$github_url     = 'https://wcpos.github.io/managed-expo/';
+		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.4/';
 		$auth_service   = Auth::instance();
 		$stores         = array_map(
 			function ( $store ) {

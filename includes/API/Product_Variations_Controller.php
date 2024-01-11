@@ -203,8 +203,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 */
 	public function wcpos_insert_product_variation_object( WC_Data $object, WP_REST_Request $request, bool $creating ): void {
 		$barcode_field = $this->wcpos_get_barcode_field();
-		$barcode       = $request->get_param( 'barcode' );
-		if ( $barcode ) {
+		if ( $request->has_param( 'barcode' ) ) {
+			$barcode = $request->get_param( 'barcode' );
 			$object->update_meta_data( $barcode_field, $barcode );
 			$object->save_meta_data();
 		}

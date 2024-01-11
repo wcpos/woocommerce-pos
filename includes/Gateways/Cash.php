@@ -29,10 +29,13 @@ class Cash extends WC_Payment_Gateway {
 		$this->enabled     = 'no';
 
 		// Actions
-		add_action('woocommerce_pos_update_options_payment_gateways_' . $this->id, array(
-			$this,
-			'process_admin_options',
-		));
+		add_action(
+			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
+			array(
+				$this,
+				'process_admin_options',
+			)
+		);
 		add_action( 'woocommerce_thankyou_pos_cash', array( $this, 'calculate_change' ) );
 	}
 
@@ -86,7 +89,7 @@ class Cash extends WC_Payment_Gateway {
 	 */
 	public function process_payment( $order_id ): array {
 		// Check nonce
-		if ( !isset( $_POST['pos_cash_payment_nonce_field'] ) || !wp_verify_nonce( $_POST['pos_cash_payment_nonce_field'], 'pos_cash_payment_nonce' ) ) {
+		if ( ! isset( $_POST['pos_cash_payment_nonce_field'] ) || ! wp_verify_nonce( $_POST['pos_cash_payment_nonce_field'], 'pos_cash_payment_nonce' ) ) {
 			wp_die( __( 'Nonce verification failed', 'woocommerce-pos' ) );
 		}
 
@@ -117,11 +120,11 @@ class Cash extends WC_Payment_Gateway {
 					'total_tax' => 0,
 				)
 			);
-//			$fee->set_name( __( 'Partial Payment', 'woocommerce-pos' ) );
-//			$fee->set_amount( '-' . $tendered );
-//			$fee->set_total( '-' . $tendered );
-//			$fee->set_total_tax( '0' );
-//			$fee->set_tax_status( 'none' );
+			// $fee->set_name( __( 'Partial Payment', 'woocommerce-pos' ) );
+			// $fee->set_amount( '-' . $tendered );
+			// $fee->set_total( '-' . $tendered );
+			// $fee->set_total_tax( '0' );
+			// $fee->set_tax_status( 'none' );
 			$fee->add_meta_data( 'date_paid_gmt', gmdate( 'Y-m-d\TH:i:s' ), true );
 			$fee->set_order_id( $order_id );
 			$fee->save();
@@ -135,9 +138,9 @@ class Cash extends WC_Payment_Gateway {
 		}
 
 		// Return thankyou redirect
-//		$redirect = add_query_arg(array(
-//			'wcpos' => 1,
-//		), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));
+		// $redirect = add_query_arg(array(
+		// 'wcpos' => 1,
+		// ), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));
 
 		return array(
 			'result'   => 'success',
