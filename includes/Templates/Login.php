@@ -43,6 +43,7 @@ class Login {
 					$error_string .= '<p class="error">' . $error[0] . '</p>';
 				}
 			} else {
+				wp_set_current_user( $user->ID );
 				$this->login_success( $user );
 				exit;
 			}
@@ -66,6 +67,13 @@ class Login {
 	private function login_success( WP_User $user ) {
 		$auth_service = Auth::instance();
 		$user_data = $auth_service->get_user_data( $user );
+		$stores = array_map(
+			function ( $store ) {
+				return $store->get_data();
+			},
+			wcpos_get_stores()
+		);
+		$user_data['stores'] = $stores;
 		$credentials = wp_json_encode( $user_data );
 
 		echo '<script>
