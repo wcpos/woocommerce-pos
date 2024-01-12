@@ -128,6 +128,46 @@ class Pro_Plugin_Updater {
 			}
 		}
 
+		/**
+		 * This is a hack to manually trigger Pro update for version < 1.4.0
+		 * TODO: remove this after 1.4.0 is released for a while
+		 */
+		if ( $status['version'] && version_compare( $status['version'], '1.4.0', '<' ) ) {
+			// Manually the update_plugins transient
+			$update_plugins = get_site_transient( 'update_plugins' );
+			if ( ! is_object( $update_plugins ) ) {
+					$update_plugins = new stdClass();
+			}
+
+			$license_settings = $this->get_license_settings();
+
+			$update = array(
+				'id'             => 'https://updates.wcpos.com',
+				'slug'           => 'woocommerce-pos-pro',
+				'plugin'         => $this->pro_plugin_path,
+				'new_version'    => '1.4.1',
+				'url'            => 'https://wcpos.com/pro',
+				'package'        => add_query_arg(
+					array(
+						'key'      => isset( $license_settings['key'] ) ? $license_settings['key'] : '',
+						'instance' => isset( $license_settings['instance'] ) ? $license_settings['instance'] : '',
+					),
+					'https://updates.wcpos.com/pro/download/1.4.1'
+				),
+				'requires'       => '5.6',
+				'tested'         => '6.5',
+				'requires_php'   => '7.4',
+				'icons'          => array(
+					'1x' => 'https://wcpos.com/wp-content/uploads/2014/06/woopos-pro.png',
+				),
+				'upgrade_notice' => $this->maybe_add_upgrade_notice(),
+			);
+
+			$update_plugins->response[ $this->pro_plugin_path ] = (object) $update;
+
+			set_site_transient( 'update_plugins', $update_plugins );
+		}
+
 		return $status;
 	}
 
