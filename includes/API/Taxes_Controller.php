@@ -39,7 +39,6 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 */
 	public function __construct() {
 		add_filter( 'woocommerce_pos_rest_dispatch_taxes_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ) );
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
@@ -47,17 +46,32 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	}
 
 	/**
-	 * Check if the current user can view the taxes.
-	 * Note: WC REST API currently requires manage_woocommerce capability to access the endpoint (even for read only).
-	 * This would stop the Cashier role from being able to view the taxes, so we check for read_private_products instead.
+	 * Check whether a given request has permission to read taxes.
 	 *
-	 * @param mixed $permission
-	 *
-	 * @return bool
+	 * @param  WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|boolean
 	 */
-	public function check_permissions( $permission ) {
-		if ( ! $permission ) {
-			return current_user_can( 'read_private_products' );
+	public function get_items_permissions_check( $request ) {
+		$permission = parent::get_items_permissions_check( $request );
+
+		if ( is_wp_error( $permission ) && current_user_can( 'read_private_products' ) ) {
+			return true;
+		}
+
+		return $permission;
+	}
+
+	/**
+	 * Check if a given request has access to read a tax.
+	 *
+	 * @param  WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|boolean
+	 */
+	public function get_item_permissions_check( $request ) {
+		$permission = parent::get_items_permissions_check( $request );
+
+		if ( is_wp_error( $permission ) && current_user_can( 'read_private_products' ) ) {
+			return true;
 		}
 
 		return $permission;
@@ -178,26 +192,6 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		}
 
 		return $query;
-	}
-
-	/**
-	 * Check if the current user can view the taxes.
-	 * Note: WC REST API currently requires manage_woocommerce capability to access the endpoint (even for read only).
-	 * This would stop the Cashier role from being able to view the taxes, so we check for read_private_products instead.
-	 *
-	 * @param WP_REST_Request $request
-	 *
-	 * @return bool|WP_Error
-	 */
-	public function get_item_permissions_check( $request ) {
-		// no typing when overriding parent method
-		$permission = parent::get_item_permissions_check( $request );
-
-		if ( ! $permission && current_user_can( 'read_private_products' ) ) {
-			return true;
-		}
-
-		return $permission;
 	}
 
 	/**

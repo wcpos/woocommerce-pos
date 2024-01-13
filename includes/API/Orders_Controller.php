@@ -12,6 +12,7 @@ use Exception;
 use WC_Email_Customer_Invoice;
 use WC_Abstract_Order;
 use WC_Order_Query;
+use WC_Order_Item;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;

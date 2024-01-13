@@ -6,7 +6,7 @@
  */
 
 return array(
-	'current_user_can',
+	// 'current_user_can',
 	'get_bloginfo',
 	'get_woocommerce_currencies',
 	'get_woocommerce_currency_symbol',

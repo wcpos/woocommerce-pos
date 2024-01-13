@@ -64,7 +64,7 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
-	public function test_product_category_api_get_all_fields(): void {
+	public function test_taxes_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
 		$tax_id   = TaxHelper::create_tax_rate(
@@ -87,7 +87,7 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
-	public function test_product_category_api_get_all_ids(): void {
+	public function test_taxes_api_get_all_ids(): void {
 		$gb_tax_ids = TaxHelper::create_sample_tax_rates_GB();
 		$us_tax_ids = TaxHelper::create_sample_tax_rates_US();
 
@@ -104,6 +104,24 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids  = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array_merge( $gb_tax_ids, $us_tax_ids ), $ids );
+	}
+
+	/**
+	 * The Tax endpoint is not accessible by cashiers by default.
+	 */
+	public function test_taxes_api_get_for_cashier() {
+		$cashier_user_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier_user_id );
+
+		$gb_tax_ids = TaxHelper::create_sample_tax_rates_GB();
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 3, \count( $data ) );
+
+		wp_set_current_user( 0 );
 	}
 
 	/**
