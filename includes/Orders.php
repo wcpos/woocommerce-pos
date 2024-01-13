@@ -18,10 +18,10 @@ class Orders {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
 		add_filter( 'woocommerce_order_needs_payment', array( $this, 'order_needs_payment' ), 10, 3 );
-		add_filter( 'woocommerce_valid_order_statuses_for_payment', array($this,'valid_order_statuses_for_payment' ), 10, 2);
-		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2);
-		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3);
-		 
+		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( $this, 'valid_order_statuses_for_payment' ), 10, 2 );
+		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
+		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
+
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 
 		// order emails
@@ -151,33 +151,39 @@ class Orders {
 
 	private function register_order_status(): void {
 		// Order status for open orders
-		register_post_status('wc-pos-open', array(
-			'label'                     => _x( 'POS - Open', 'Order status', 'woocommerce-pos' ),
-			'public'                    => true,
-			'exclude_from_search'       => false,
-			'show_in_admin_all_list'    => true,
-			'show_in_admin_status_list' => true,
-			// translators: %s is the number of orders with POS - Open status
-			'label_count'               => _n_noop(
-				'POS - Open <span class="count">(%s)</span>',
-				'POS - Open <span class="count">(%s)</span>',
-				'woocommerce-pos'
-			),
-		));
+		register_post_status(
+			'wc-pos-open',
+			array(
+				'label'                     => _x( 'POS - Open', 'Order status', 'woocommerce-pos' ),
+				'public'                    => true,
+				'exclude_from_search'       => false,
+				'show_in_admin_all_list'    => true,
+				'show_in_admin_status_list' => true,
+				// translators: %s is the number of orders with POS - Open status
+				'label_count'               => _n_noop(
+					'POS - Open <span class="count">(%s)</span>',
+					'POS - Open <span class="count">(%s)</span>',
+					'woocommerce-pos'
+				),
+			)
+		);
 
 		// Order status for partial payment orders
-		register_post_status('wc-pos-partial', array(
-			'label'                     => _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' ),
-			'public'                    => true,
-			'exclude_from_search'       => false,
-			'show_in_admin_all_list'    => true,
-			'show_in_admin_status_list' => true,
-			// translators: %s is the number of orders with POS - Partial Payment status
-			'label_count'               => _n_noop(
-				'POS - Partial Payment <span class="count">(%s)</span>',
-				'POS - Partial Payment <span class="count">(%s)</span>',
-				'woocommerce-pos'
-			),
-		));
+		register_post_status(
+			'wc-pos-partial',
+			array(
+				'label'                     => _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' ),
+				'public'                    => true,
+				'exclude_from_search'       => false,
+				'show_in_admin_all_list'    => true,
+				'show_in_admin_status_list' => true,
+				// translators: %s is the number of orders with POS - Partial Payment status
+				'label_count'               => _n_noop(
+					'POS - Partial Payment <span class="count">(%s)</span>',
+					'POS - Partial Payment <span class="count">(%s)</span>',
+					'woocommerce-pos'
+				),
+			)
+		);
 	}
 }

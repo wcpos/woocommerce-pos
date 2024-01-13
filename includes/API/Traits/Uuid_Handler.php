@@ -3,14 +3,14 @@
 namespace WCPOS\WooCommercePOS\API\Traits;
 
 use Exception;
-use function get_user_meta;
 use Ramsey\Uuid\Uuid;
-use function update_user_meta;
 use WC_Data;
 use WC_Meta_Data;
 use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
 use WP_User;
+use function get_user_meta;
+use function update_user_meta;
 
 trait Uuid_Handler {
 	/**

@@ -10,7 +10,7 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 
 use Exception;
 use WC_Email_Customer_Invoice;
-use WC_Order;
+use WC_Abstract_Order;
 use WC_Order_Query;
 use WC_REST_Orders_Controller;
 use WCPOS\WooCommercePOS\Logger;
@@ -343,13 +343,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * @param string                    $recipient
-	 * @param WC_Order                  $order
-	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice
+	 * @param string                    $recipient.
+	 * @param WC_Abstract_Order         $order.
+	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice.
 	 *
 	 * @return string
 	 */
-	public function wcpos_recipient_email_address( string $recipient, WC_Order $order, WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
+	public function wcpos_recipient_email_address( string $recipient, WC_Abstract_Order $order, WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
 		return $this->wcpos_request['email'];
 	}
 
@@ -435,13 +435,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * @param WP_REST_Response $response The response object.
-	 * @param WC_Order         $order    Object data.
-	 * @param WP_REST_Request  $request  Request object.
+	 * @param WP_REST_Response  $response The response object.
+	 * @param WC_Abstract_Order $order    Object data.
+	 * @param WP_REST_Request   $request  Request object.
 	 *
 	 * @return WP_REST_Response
 	 */
-	public function wcpos_order_response( WP_REST_Response $response, WC_Order $order, WP_REST_Request $request ): WP_REST_Response {
+	public function wcpos_order_response( WP_REST_Response $response, WC_Abstract_Order $order, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
 		// Add UUID to order
@@ -475,13 +475,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	/**
 	 * Add UUID to order items.
 	 *
-	 * @param $items     WC_Order_Item[]
-	 * @param $order     WC_Order
-	 * @param $item_type string[] ['line_item' | 'fee' | 'shipping' | 'tax' | 'coupon']
+	 * NOTE: OrderRefund can also be passed
+	 *
+	 * @param WC_Order_Item[]   $items     The order items.
+	 * @param WC_Abstract_Order $order     The order object.
+	 * @param array             $item_type string[] ['line_item' | 'fee' | 'shipping' | 'tax' | 'coupon'].
 	 *
 	 * @return WC_Order_Item[]
 	 */
-	public function wcpos_order_get_items( array $items, WC_Order $order, array $item_type ): array {
+	public function wcpos_order_get_items( array $items, WC_Abstract_Order $order, array $item_type ): array {
 		foreach ( $items as $item ) {
 			$this->maybe_add_order_item_uuid( $item );
 		}
@@ -493,11 +495,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Add extra data for woocommerce pos orders.
 	 * - Add custom 'created_via' prop for POS orders, used in WC Admin display.
 	 *
-	 * @param WC_Order $order The object being saved.
+	 * @param WC_Abstract_Order $order The object being saved.
 	 *
 	 * @throws WC_Data_Exception
 	 */
-	public function wcpos_before_order_object_save( WC_Order $order ): void {
+	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		if ( $this->is_creating ) {
 			$order->set_created_via( PLUGIN_NAME );
 		}

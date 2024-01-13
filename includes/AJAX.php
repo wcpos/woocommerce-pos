@@ -63,9 +63,6 @@ class AJAX {
 		foreach ( $this->list_products_actions as $ajax_event ) {
 			add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_list_products_class' ), 9 );
 		}
-		foreach ( $this->order_actions as $ajax_event ) {
-			add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_orders_class' ), 9 );
-		}
 
 		// we need to hook into these actions to save our custom fields via AJAX
 		add_action(
