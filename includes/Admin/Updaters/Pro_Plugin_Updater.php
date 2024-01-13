@@ -140,6 +140,17 @@ class Pro_Plugin_Updater {
 			}
 
 			$license_settings = $this->get_license_settings();
+			$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
+			$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
+
+			// Construct the download URL, taking into account the environment
+			$package_url = add_query_arg(
+				array(
+					'key' => urlencode( $key ),
+					'instance' => urlencode( $instance ),
+				),
+				'https://updates.wcpos.com/pro/download/1.4.1'
+			);
 
 			$update = array(
 				'id'             => 'https://updates.wcpos.com',
@@ -147,13 +158,7 @@ class Pro_Plugin_Updater {
 				'plugin'         => $this->pro_plugin_path,
 				'new_version'    => '1.4.1',
 				'url'            => 'https://wcpos.com/pro',
-				'package'        => add_query_arg(
-					array(
-						'key'      => isset( $license_settings['key'] ) ? $license_settings['key'] : '',
-						'instance' => isset( $license_settings['instance'] ) ? $license_settings['instance'] : '',
-					),
-					'https://updates.wcpos.com/pro/download/1.4.1'
-				),
+				'package'        => $package_url,
 				'requires'       => '5.6',
 				'tested'         => '6.5',
 				'requires_php'   => '7.4',
@@ -209,14 +214,31 @@ class Pro_Plugin_Updater {
 		$update_data = $this->check_pro_plugin_updates();
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 
+		// Check if update data is valid and if a new version is available.
 		if ( ! is_wp_error( $update_data ) && is_object( $update_data ) && isset( $update_data->version ) ) {
 			$latest_version = $update_data->version;
 
+			// No update needed if the current version is greater than the latest version.
 			if ( version_compare( $this->current_version, $latest_version, '>' ) ) {
 				return $update;
 			}
 
 			$license_settings = $this->get_license_settings();
+			$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
+			$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
+
+			// Construct the download URL, taking into account the environment
+			$download_url = $is_development
+				? 'http://localhost:8080/pro/download/1.4.0'
+				: $update_data->download_url;
+
+			$package_url = add_query_arg(
+				array(
+					'key' => urlencode( $key ),
+					'instance' => urlencode( $instance ),
+				),
+				$download_url
+			);
 
 			$update = array(
 				'id'           => 'https://updates.wcpos.com',
@@ -224,13 +246,7 @@ class Pro_Plugin_Updater {
 				'plugin'       => $this->pro_plugin_path,
 				'version'      => $latest_version,
 				'url'          => 'https://wcpos.com/pro',
-				'package'      => add_query_arg(
-					array(
-						'key'      => isset( $license_settings['key'] ) ? $license_settings['key'] : '',
-						'instance' => isset( $license_settings['instance'] ) ? $license_settings['instance'] : '',
-					),
-					$is_development ? 'http://localhost:8080/pro/download/1.4.0' : $update_data->download_url
-				),
+				'package'      => $package_url,
 				'requires'     => '5.6',
 				'tested'       => '6.5',
 				'requires_php' => '7.4',
@@ -309,23 +325,26 @@ class Pro_Plugin_Updater {
 			return $error;
 		}
 
+		$license_settings = $this->get_license_settings();
+		$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
+		$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
+
 		/**
 		 * If the Pro plugin is not activated, add a notice
 		 */
-		$license_settings = $this->get_license_settings();
-		if ( empty( $license_settings['key'] ) || empty( $license_settings['instance'] ) ) {
+		if ( empty( $key ) || empty( $instance ) ) {
 			// set the transient to an error.
 			$error = new WP_Error( 'missing_license_key', 'License key is not activated.' );
 			set_transient( $this->license_status_transient_key, $error, $expiration );
 			return $error;
 		}
 
-		if ( empty( $update_data ) || $force ) {
+		if ( empty( $license_status ) || $force ) {
 			// build the request.
 			$url = add_query_arg(
 				array(
-					'key'      => $license_settings['key'],
-					'instance' => $license_settings['instance'],
+					'key' => urlencode( $key ),
+					'instance' => urlencode( $instance ),
 				),
 				$this->update_server . '/license/status'
 			);

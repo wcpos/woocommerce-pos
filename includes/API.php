@@ -96,7 +96,7 @@ class API {
 	/**
 	 * Add Access Control Allow Headers for POS app.
 	 *
-	 * NOTE: I have seen this filter called with NULL for $served, which is not expected
+	 * NOTE: I have seen this filter called with NULL for $served, it should be a boolean.
 	 *
 	 * @param mixed            $served  Whether the request has already been served.
 	 *                                  Default false.
@@ -106,13 +106,7 @@ class API {
 	 *
 	 * @return bool $served
 	 */
-	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
-		// Check if served is a boolean
-		if ( ! \is_bool( $served ) ) {
-			Logger::log( "Warning: 'rest_pre_serve_request' filter received a non-boolean value for 'served'. Defaulting to 'false'." );
-			$served = false; // Default value if not provided correctly
-		}
-
+	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
 
 		return $served;
