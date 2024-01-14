@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Provides a Cash Payment Gateway.
  *
@@ -16,6 +15,9 @@ use WC_Order;
 use WC_Order_Item_Fee;
 use WC_Payment_Gateway;
 
+/**
+ *
+ */
 class Cash extends WC_Payment_Gateway {
 	/**
 	 * Constructor for the gateway.
@@ -55,6 +57,11 @@ class Cash extends WC_Payment_Gateway {
 	 * Display the payment fields on the checkout modal.
 	 */
 	public function payment_fields(): void {
+		global $wp;
+
+		$order_id = isset( $wp->query_vars['order-pay'] ) ? $wp->query_vars['order-pay'] : null;
+		$order = $order_id ? wc_get_order( $order_id ) : null;
+
 		if ( $this->description ) {
 			echo '<p>' . wp_kses_post( $this->description ) . '</p>';
 		}
@@ -70,16 +77,45 @@ class Cash extends WC_Payment_Gateway {
 		}
 
 		echo '
-      <div class="form-row" id="pos-cash-tendered_field">
-        <label for="pos-cash-tendered" class="">' . __( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
-        <div class="input-group">
-        ' . $left_addon . '
-          <input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . __( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
-        ' . $right_addon . '
-        </div>
-        ' . wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' ) . '
-      </div>
+		<div class="form-row" id="pos-cash-tendered_field" style="display: flex; justify-content: space-between;">
+			<div style="flex: 1;">
+				<label for="pos-cash-tendered" style="padding-left:0">' . __( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
+				<div class="input-group">
+					' . $left_addon . '
+					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . __( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
+					' . $right_addon . '
+				</div>
+			</div>
+			<div style="flex: 1;">
+				<label style="padding-left:0">' . __( 'Change', 'woocommerce-pos' ) . '</label>
+				<div id="pos-cash-change-display"></div>
+			</div>
+			' . wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' ) . '
+		</div>
     ';
+
+		if ( $order && $order->get_total() > 0 ) {
+			echo '
+				<script>
+				document.addEventListener("DOMContentLoaded", function() {
+						var tenderedInput = document.getElementById("pos-cash-tendered");
+						var changeDisplay = document.getElementById("pos-cash-change-display");
+
+						tenderedInput.addEventListener("input", function() {
+								var tenderedAmount = parseFloat(tenderedInput.value);
+								var orderTotal = ' . json_encode( wc_format_decimal( $order->get_total() ) ) . '; // Get order total from PHP
+								var change = tenderedAmount - orderTotal;
+
+								if (change > 0) {
+										changeDisplay.innerHTML = change.toFixed(' . json_encode( wc_get_price_decimals() ) . ');
+								} else {
+										changeDisplay.innerHTML = "";
+								}
+						});
+				});
+				</script>
+			';
+		}
 	}
 
 	/**
@@ -102,8 +138,8 @@ class Cash extends WC_Payment_Gateway {
 			$tendered = wc_format_decimal( wp_unslash( $_POST['pos-cash-tendered'] ) );
 		}
 		$change = $tendered > $order->get_total() ? wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) ) : '0';
-		update_post_meta( $order_id, '_pos_cash_amount_tendered', $tendered );
-		update_post_meta( $order_id, '_pos_cash_change', $change );
+		$order->update_meta_data( '_pos_cash_amount_tendered', $tendered );
+		$order->update_meta_data( '_pos_cash_change', $change );
 
 		if ( $tendered >= $order->get_total() ) {
 			// payment complete

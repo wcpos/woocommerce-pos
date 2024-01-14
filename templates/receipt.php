@@ -263,6 +263,24 @@ if ( ! \defined( 'ABSPATH' ) ) {
 				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
 				<td><?php echo wp_kses_post( wc_price( $order->get_total() ) ); ?></td>
 			</tr>
+			<?php if ( $order->get_payment_method() === 'pos_cash' ) : ?>
+					<?php
+						$amount_tendered = $order->get_meta( '_pos_cash_amount_tendered' );
+						$change_given    = $order->get_meta( '_pos_cash_change' );
+					?>
+					<?php if ( ! empty( $amount_tendered ) ) : ?>
+						<tr>
+							<th colspan="3"><?php esc_html_e( 'Amount Tendered', 'woocommerce-pos' ); ?></th>
+							<td><?php echo wp_kses_post( wc_price( $amount_tendered ) ); ?></td>
+						</tr>
+					<?php endif; ?>
+					<?php if ( ! empty( $change_given ) ) : ?>
+						<tr>
+							<th colspan="3"><?php esc_html_e( 'Change', 'woocommerce-pos' ); ?></th>
+							<td><?php echo wp_kses_post( wc_price( $change_given ) ); ?></td>
+						</tr>
+					<?php endif; ?>
+			<?php endif; ?>
 		</tfoot>
 	</table>
 

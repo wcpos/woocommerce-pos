@@ -63,6 +63,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.4.5 - 2024/01/14 =
+* Add: show change in checkout modal and receipt for the Cash gateway
+* Add: use 'medium' sized product image instead of 'thumbnail'
+* Fix: compatibility with alternative login urls, eg: WPS Hide Login
+
 = 1.4.4 - 2024/01/12 =
 * Desktop App: fix login for Desktop Application v1.4.0
 
