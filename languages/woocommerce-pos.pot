@@ -1,17 +1,17 @@
-# Copyright (C) 2022 kilbot
+# Copyright (C) 2024 kilbot
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WooCommerce POS 1.0.0-beta\n"
+"Project-Id-Version: WooCommerce POS 1.4.5\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2022-12-30T04:47:05+00:00\n"
+"POT-Creation-Date: 2024-01-14T21:31:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"X-Generator: WP-CLI 2.7.1\n"
+"X-Generator: WP-CLI 2.9.0\n"
 "X-Domain: woocommerce-pos\n"
 
 #. Plugin Name of the plugin
@@ -49,6 +49,9 @@ msgstr ""
 msgid "Cashier"
 msgstr ""
 
+msgid "<strong>WooCommerce POS</strong> requires <a href=\"%1$s\">WooCommerce POS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce POS Pro</a>"
+msgstr ""
+
 msgid "POS"
 msgstr ""
 
@@ -56,6 +59,23 @@ msgid "View POS"
 msgstr ""
 
 msgid "Upgrade to Pro"
+msgstr ""
+
+msgid "Online"
+msgstr ""
+
+msgid "POS Cashier"
+msgstr ""
+
+msgid "Search for a cashier&hellip;"
+msgstr ""
+
+#. translators: 1: old POS cashier, 2: new POS cashier
+msgid "POS cashier changed from %1$s to %2$s."
+msgstr ""
+
+#. translators: 1: old POS cashier, 2: new POS cashier
+msgid "Unknown"
 msgstr ""
 
 msgid "POS & Online"
@@ -73,19 +93,22 @@ msgstr ""
 msgid "Product barcode used at the point of sale"
 msgstr ""
 
+msgid "Enable POS specific prices."
+msgstr ""
+
+msgid "Enable POS specific taxes."
+msgstr ""
+
+msgid "POS visibility"
+msgstr ""
+
 msgid "Error"
 msgstr ""
 
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
-msgid "POS visibility"
-msgstr ""
-
 msgid "JWT token."
-msgstr ""
-
-msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
 msgid "Email address"
@@ -94,13 +117,19 @@ msgstr ""
 msgid "Save email to order"
 msgstr ""
 
+msgid "Barcode"
+msgstr ""
+
 msgid "Email address %s added to billing details from WooCommerce POS."
 msgstr ""
 
 msgid "Order details manually sent to %s from WooCommerce POS."
 msgstr ""
 
-msgid "message"
+msgid "Failed to retrieve store data"
+msgstr ""
+
+msgid "You do not have permissions to view this data."
 msgstr ""
 
 msgid "Card"
@@ -115,14 +144,55 @@ msgstr ""
 msgid "Amount Tendered"
 msgstr ""
 
+msgid "Change"
+msgstr ""
+
+msgid "Nonce verification failed"
+msgstr ""
+
+msgid "Partial Payment"
+msgstr ""
+
 msgctxt "Money returned from cash sale"
 msgid "Change"
 msgstr ""
 
-msgid "Template not found."
+msgctxt "Order status"
+msgid "POS - Open"
 msgstr ""
 
-msgid "No gateway selected"
+msgctxt "Order status"
+msgid "POS - Partial Payment"
+msgstr ""
+
+#. translators: %s is the number of orders with POS - Open status
+msgid "POS - Open <span class=\"count\">(%s)</span>"
+msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the number of orders with POS - Partial Payment status
+msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
+msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "JWT is not configured properly, please contact the admin"
+msgstr ""
+
+#. translators: 1. %s: Settings group id, 2. %s: Settings key
+msgid "Settings with id %1$s and key %2$s not found"
+msgstr ""
+
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'
+msgid "Settings with id %s not found"
+msgstr ""
+
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'
+msgid "Can not save settings with id %s"
+msgstr ""
+
+msgid "Template not found."
 msgstr ""
 
 msgid "Sorry, this order is invalid and cannot be paid for."
@@ -140,42 +210,34 @@ msgstr ""
 msgid "Sorry, this order is invalid."
 msgstr ""
 
-msgid "Sorry, this order has not been paid."
+msgid "Having problems with the checkout?"
 msgstr ""
 
-msgid "Receipt"
+msgid "Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts."
 msgstr ""
 
-msgid "Billing Address"
+msgid "Styles"
 msgstr ""
 
-msgid "Shipping Address"
+msgid "Scripts"
 msgstr ""
 
-msgid "Order Number"
+msgid "Submit"
 msgstr ""
 
-msgid "Order Date"
+msgid "Close"
 msgstr ""
 
-msgid "Payment Method"
+msgid "Paying as customer"
 msgstr ""
 
-msgctxt "Abbreviation of Quantity"
-msgid "Qty"
-msgstr ""
-
-msgid "Subtotal"
-msgstr ""
-
-msgid "Discount"
-msgstr ""
-
-msgctxt "abbreviation for includes (tax)"
-msgid "incl."
+msgid "Guest"
 msgstr ""
 
 msgid "Point of Sale"
+msgstr ""
+
+msgid "Tax Receipt"
 msgstr ""
 
 msgid "The WooCommerce POS plugin failed to load correctly."
