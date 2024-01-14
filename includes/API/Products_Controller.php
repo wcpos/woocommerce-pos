@@ -140,7 +140,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
-		add_filter( 'wp_get_attachment_image_src', array( $this, 'wcpos_product_image_src' ), 10, 4 );
 		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
 		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
 		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
@@ -164,6 +163,21 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Add the barcode to the product response
 		$data['barcode'] = $this->wcpos_get_barcode( $product );
+
+		// Check if the response has an image
+		if ( isset( $data['images'] ) && ! empty( $data['images'] ) ) {
+			foreach ( $data['images'] as $key => $image ) {
+				// Replace the full size 'src' with the URL of the medium size image.
+				$image_id = $image['id'];
+				$medium_image_data = image_downsize( $image_id, 'medium' );
+
+				if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
+						$data['images'][ $key ]['src'] = $medium_image_data[0];
+				} else {
+						$data['images'][ $key ]['src'] = $image['src'];
+				}
+			}
+		}
 
 		/*
 		 * If product is variable, add the max and min prices and add them to the meta data
