@@ -14,4 +14,11 @@
 namespace WCPOS\WooCommercePOS;
 
 class i18n {
+
+	/**
+	 * Load the plugin text domain for translation.
+	 */
+	public function construct() {
+		load_plugin_textdomain( 'woocommerce-pos', false, PLUGIN_PATH . '/languages/' );
+	}
 }

@@ -178,7 +178,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 		if ( $pos_user ) {
 			$user      = get_user_by( 'id', $pos_user );
 			$user_name = $user->display_name;
-			echo '<li class="cashier">' . esc_html__( 'Cashier:', 'woocommerce-pos' ) . ' <strong>' . esc_html( $user_name ) . '</strong></li>';
+			echo '<li class="cashier">' . esc_html__( 'Cashier', 'woocommerce-pos' ) . ':<strong> ' . esc_html( $user_name ) . '</strong></li>';
 		}
 		?>
 		<?php if ( $order->get_payment_method_title() ) { ?>

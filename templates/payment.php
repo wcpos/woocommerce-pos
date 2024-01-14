@@ -59,48 +59,48 @@
 			background-color: #ffffff !important;
 		}
 
-    .woocommerce-pos-troubleshooting {
-        border-left: 4px solid #007cba; /* For the blue vertical line */
-        padding: 5px 10px; /* Padding around the text */
-        background: #fff; /* White background */
-        box-shadow: 0 1px 1px rgba(0,0,0,.04); /* Subtle shadow effect */
-    }
+	.woocommerce-pos-troubleshooting {
+		border-left: 4px solid #007cba; /* For the blue vertical line */
+		padding: 5px 10px; /* Padding around the text */
+		background: #fff; /* White background */
+		box-shadow: 0 1px 1px rgba(0,0,0,.04); /* Subtle shadow effect */
+	}
 
 		.woocommerce-pos-troubleshooting p.link {
 				margin: 0;
 		}
 
-    .woocommerce-pos-troubleshooting h3 {
-        margin: 0.5em 0;
-        padding: 0;
-        font-size: 1em;
-        font-weight: 600;
-    }
+	.woocommerce-pos-troubleshooting h3 {
+		margin: 0.5em 0;
+		padding: 0;
+		font-size: 1em;
+		font-weight: 600;
+	}
 
-    .woocommerce-pos-troubleshooting div {
-        flex: 1;
-        margin-right: 20px;
-    }
+	.woocommerce-pos-troubleshooting div {
+		flex: 1;
+		margin-right: 20px;
+	}
 
-    .woocommerce-pos-troubleshooting input[type="checkbox"] {
-        margin-right: 5px;
-    }
+	.woocommerce-pos-troubleshooting input[type="checkbox"] {
+		margin-right: 5px;
+	}
 
-    .woocommerce-pos-troubleshooting button {
-        margin-top: 20px;
-        background: #007cba;
-        border: none;
-        color: #fff;
-        padding: 10px 15px;
-        border-radius: 3px;
-        cursor: pointer;
-    }
+	.woocommerce-pos-troubleshooting button {
+		margin-top: 20px;
+		background: #007cba;
+		border: none;
+		color: #fff;
+		padding: 10px 15px;
+		border-radius: 3px;
+		cursor: pointer;
+	}
 
-    .woocommerce-pos-troubleshooting button:hover {
-        background: #005a87;
-    }
+	.woocommerce-pos-troubleshooting button:hover {
+		background: #005a87;
+	}
 
-    .woocommerce-error {
+	.woocommerce-error {
 			background-color: #f8d7da;
 			color: #721c24;
 			border-color: #f5c6cb;
@@ -264,7 +264,8 @@
 </head>
 
 <body <?php body_class(); ?>>
-<div class="woocommerce"><?php
+<div class="woocommerce">
+<?php
 	global $wp_styles, $wp_scripts;
 $styleHandles  = $wp_styles->queue;
 $scriptHandles = $wp_scripts->queue;
@@ -279,53 +280,55 @@ $script_exclude_list = apply_filters(
 	woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
 );
 
-$mergedStyleHandles  = array_unique(array_merge($styleHandles, $style_exclude_list));
-$mergedScriptHandles = array_unique(array_merge($scriptHandles, $script_exclude_list));
+$mergedStyleHandles  = array_unique( array_merge( $styleHandles, $style_exclude_list ) );
+$mergedScriptHandles = array_unique( array_merge( $scriptHandles, $script_exclude_list ) );
 ?>
 
 	<div class="woocommerce-pos-troubleshooting notice notice-warning is-dismissible">
 		<p class="link">
-			<a href="#" class="toggle-troubleshooting"><?php _e('Having problems with the checkout?', 'woocommerce-pos'); ?></a>
+			<a href="#" class="toggle-troubleshooting"><?php _e( 'Having problems with the checkout?', 'woocommerce-pos' ); ?></a>
 		</p>
 		<form id="troubleshooting-form" method="POST" style="display: none;">
-			<p><?php _e('Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts.', 'woocommerce-pos'); ?></p>
+			<p><?php _e( 'Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts.', 'woocommerce-pos' ); ?></p>
 			<div style="display: flex; justify-content: space-between;">
 				<div>
-					<h3><?php _e('Styles', 'woocommerce-pos'); ?></h3>
-            <?php foreach ($mergedStyleHandles as $handle) {
-            	$checked = ! \in_array($handle, $style_exclude_list, true) ? 'checked' : '';
-            	?>
+					<h3><?php _e( 'Styles', 'woocommerce-pos' ); ?></h3>
+			<?php
+			foreach ( $mergedStyleHandles as $handle ) {
+				$checked = ! \in_array( $handle, $style_exclude_list, true ) ? 'checked' : '';
+				?>
 							<input type="checkbox" id="<?php echo $handle; ?>" name="styles[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
 							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
 							<input type="hidden" name="all_styles[]" value="<?php echo $handle; ?>"><br>
-            <?php } ?>
+			<?php } ?>
 				</div>
 				<div>
-					<h3><?php _e('Scripts', 'woocommerce-pos'); ?></h3>
-            <?php foreach ($mergedScriptHandles as $handle) {
-            	$checked = ! \in_array($handle, $script_exclude_list, true) ? 'checked' : '';
-            	?>
+					<h3><?php _e( 'Scripts', 'woocommerce-pos' ); ?></h3>
+			<?php
+			foreach ( $mergedScriptHandles as $handle ) {
+				$checked = ! \in_array( $handle, $script_exclude_list, true ) ? 'checked' : '';
+				?>
 							<input type="checkbox" id="<?php echo $handle; ?>" name="scripts[]" value="<?php echo $handle; ?>" <?php echo $checked; ?>>
 							<label for="<?php echo $handle; ?>"><?php echo $handle; ?></label>
 							<input type="hidden" name="all_scripts[]" value="<?php echo $handle; ?>"><br>
-            <?php } ?>
+			<?php } ?>
 				</div>
 			</div>
 			<input type="hidden" name="troubleshooting_form_nonce" value="<?php echo $troubleshooting_form_nonce; ?>" />
-			<button type="submit"><?php _e('Submit', 'woocommerce-pos'); ?></button>
-			<a href="#" class="toggle-troubleshooting"><?php _e('Close', 'woocommerce-pos'); ?></a>
+			<button type="submit"><?php _e( 'Submit', 'woocommerce-pos' ); ?></button>
+			<a href="#" class="toggle-troubleshooting"><?php _e( 'Close', 'woocommerce-pos' ); ?></a>
 		</form>
 	</div>
 
 	<?php woocommerce_output_all_notices(); ?>
 
 	<div class="cashier">
-		<span><?php esc_html_e( 'Cashier: ', 'woocommerce-pos' ); ?></span>
+		<span><?php esc_html_e( 'Cashier', 'woocommerce-pos' ); ?>: </span>
 		<span class="cashier-name"><?php echo esc_html( $cashier->display_name ); ?></span>
 	</div>
 
 	<div class="current-user">
-		<span><?php esc_html_e( 'Paying as customer: ', 'woocommerce-pos' ); ?></span>
+		<span><?php esc_html_e( 'Paying as customer', 'woocommerce-pos' ); ?>: </span>
 		<?php $woocommerce_pos_customer = wp_get_current_user(); ?>
 		<span class="user-name"><?php echo 0 === $woocommerce_pos_customer->ID ? esc_html__( 'Guest', 'woocommerce-pos' ) : esc_html( $woocommerce_pos_customer->display_name ); ?></span>
 	</div>
@@ -383,19 +386,28 @@ $mergedScriptHandles = array_unique(array_merge($scriptHandles, $script_exclude_
 
 			<?php
 			$coupons = $order->get_items( 'coupon' );
-if ( $coupons ) {
-	echo '<h3>' . __('Applied coupons', 'woocommerce') . '</h3>';
-	echo '<ul>';
-	foreach ( $coupons as $coupon ) {
-		echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
-	}
-	echo '</ul>';
-}
-?>
+			if ( $coupons ) {
+				echo '<h3>' . __( 'Applied coupons', 'woocommerce' ) . '</h3>';
+				echo '<ul>';
+				foreach ( $coupons as $coupon ) {
+					echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
+				}
+				echo '</ul>';
+			}
+			?>
 		</form>
 	</div>
 
-	<?php wc_get_template( 'checkout/form-pay.php', array( 'order' => $order, 'available_gateways' => $available_gateways, 'order_button_text' => $order_button_text ) ); ?>
+	<?php
+	wc_get_template(
+		'checkout/form-pay.php',
+		array(
+			'order' => $order,
+			'available_gateways' => $available_gateways,
+			'order_button_text' => $order_button_text,
+		)
+	);
+	?>
 
 </div>
 
