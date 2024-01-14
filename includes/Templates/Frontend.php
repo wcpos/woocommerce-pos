@@ -192,7 +192,10 @@ class Frontend {
 	 *
 	 */
 	private function pos_logout_url() {
-		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout' );
+		/**
+		 * Get the login URL, allow other plugins to customise the URL. eg: WPS Hide Login
+		 */
+		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
 
 		$redirect_to = urlencode( woocommerce_pos_url() );
 		$reauth = 1;
