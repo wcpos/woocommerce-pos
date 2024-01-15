@@ -63,13 +63,15 @@ class Orders {
 	/**
 	 * WooCommerce order-pay form won't allow processing of orders with total = 0.
 	 *
+	 * NOTE: $needs_payment is meant to be a boolean, but I have seen it as null.
+	 *
 	 * @param bool     $needs_payment
 	 * @param WC_Order $order
 	 * @param array    $valid_order_statuses
 	 *
 	 * @return bool
 	 */
-	public function order_needs_payment( bool $needs_payment, WC_Order $order, array $valid_order_statuses ): bool {
+	public function order_needs_payment( $needs_payment, WC_Order $order, array $valid_order_statuses ) {
 		// If the order total is zero and status is a POS status, then allow payment to be taken, ie: Gift Card
 		if ( 0 == $order->get_total() && \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ) {
 			return true;
