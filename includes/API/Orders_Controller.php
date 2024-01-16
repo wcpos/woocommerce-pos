@@ -132,8 +132,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Modify line_items->parent_name to accept 'string' or 'null'
 		if ( isset( $schema['properties']['line_items'] ) &&
-		\is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
+			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
 			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array( 'string', 'null' );
+		}
+
+				// Check for 'stock_quantity' and allow decimal
+		if ( $this->wcpos_allow_decimal_quantities() &&
+			   isset( $schema['properties']['line_items'] ) &&
+			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
+			$schema['properties']['line_items']['items']['properties']['quantity']['type'] = array( 'number' );
 		}
 
 		return $schema;

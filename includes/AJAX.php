@@ -53,7 +53,8 @@ class AJAX {
 			return;
 		}
 
-		if ( 'heartbeat' == $_POST['action'] ) {
+		// ignore for WP Admin heartbeat requests
+		if ( isset( $_POST['action'] ) && 'heartbeat' == $_POST['action'] ) {
 			return;
 		}
 

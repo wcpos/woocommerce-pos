@@ -38,7 +38,7 @@ jobs:
         if: steps.git-diff.outputs.changes == 'true'
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: 'chore(l10n): update languages/woocommerce-pos.pot'
+          commit_message: 'chore(i18n): update languages/woocommerce-pos.pot'
           file_pattern: '*.pot'
 
 

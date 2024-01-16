@@ -64,23 +64,4 @@ trait Product_Helpers {
 		// make sure it's true, just in case there's a corrupt setting
 		return true === $pos_only_products_enabled;
 	}
-
-	/**
-	 * Get barcode field from settings.
-	 *
-	 * @return bool
-	 */
-	public function wcpos_allow_decimal_quantities() {
-		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
-
-		// Check for WP_Error
-		if ( is_wp_error( $allow_decimal_quantities ) ) {
-			Logger::log( 'Error retrieving decimal_qty: ' . $allow_decimal_quantities->get_error_message() );
-
-			return false;
-		}
-
-		// make sure it's true, just in case there's a corrupt setting
-		return true === $allow_decimal_quantities;
-	}
 }

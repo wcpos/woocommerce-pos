@@ -28,9 +28,12 @@ trait WCPOS_REST_API {
 	 * @return array
 	 */
 	public function wcpos_parse_meta_data( WC_Data $object ): array {
-		return array_map( function( $meta_data ) {
-			return $meta_data->get_data();
-		}, $object->get_meta_data());
+		return array_map(
+			function ( $meta_data ) {
+				return $meta_data->get_data();
+			},
+			$object->get_meta_data()
+		);
 	}
 
 	/**
@@ -49,5 +52,24 @@ trait WCPOS_REST_API {
 		if ( $response_size > $max_response_size ) {
 			Logger::log( "ID {$id} has a response size of {$response_size} bytes, exceeding the limit of {$max_response_size} bytes." );
 		}
+	}
+
+		/**
+		 * Get barcode field from settings.
+		 *
+		 * @return bool
+		 */
+	public function wcpos_allow_decimal_quantities() {
+		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
+
+		// Check for WP_Error
+		if ( is_wp_error( $allow_decimal_quantities ) ) {
+			Logger::log( 'Error retrieving decimal_qty: ' . $allow_decimal_quantities->get_error_message() );
+
+			return false;
+		}
+
+		// make sure it's true, just in case there's a corrupt setting
+		return true === $allow_decimal_quantities;
 	}
 }
