@@ -52,22 +52,22 @@ class HPOS_List_Orders extends List_Orders {
 		}
 	}
 
-	public function query_args($args) {
+	public function query_args( $args ) {
 		$pos_order_filter = $_GET['pos_order'] ?? '';
 
-		if ($pos_order_filter) {
-			if ( ! isset($args['field_query'])) {
+		if ( $pos_order_filter ) {
+			if ( ! isset( $args['field_query'] ) ) {
 				$args['field_query'] = array();
 			}
 
-			if ('yes' === $pos_order_filter) {
+			if ( 'yes' === $pos_order_filter ) {
 				$args['field_query'][] = array(
 					'field' => 'created_via',
 					'value' => 'woocommerce-pos',
 				);
 			}
 
-			if ('no' === $pos_order_filter) {
+			if ( 'no' === $pos_order_filter ) {
 				$args['field_query'][] = array(
 					'field'   => 'created_via',
 					'value'   => 'woocommerce-pos',

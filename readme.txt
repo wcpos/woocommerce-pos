@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.4
-Stable tag: 1.4.6
+Stable tag: 1.4.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -62,6 +62,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.4.7 - 2024/01/18 =
+* Bump: web application to version 1.4.1
+* Fix: scroll-to-top issue when scrolling data tables
+* Fix: variations not loading after first 10
 
 = 1.4.6 - 2024/01/16 =
 * Fix: decimal quantity for orders

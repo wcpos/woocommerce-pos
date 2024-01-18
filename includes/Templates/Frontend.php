@@ -86,7 +86,7 @@ class Frontend {
 	public function footer(): void {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
-		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.4/';
+		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@latest/';
 		$auth_service   = Auth::instance();
 		$stores         = array_map(
 			function ( $store ) {
@@ -181,7 +181,7 @@ class Frontend {
         .then((response) => response.json())
         .then((data) => {
             var bundle = data.fileMetadata.web.bundle;
-            var bundleUrl = '{$github_url}' + '/' + bundle;
+            var bundleUrl = '{$github_url}' + bundle;
             getScript(bundleUrl, () => { console.log('done') });
         });
 </script>" . "\n";
