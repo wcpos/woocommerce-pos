@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
-use WC_Order;
+use WC_Abstract_Order;
 
 class Single_Order {
 	public function __construct() {
@@ -14,12 +14,12 @@ class Single_Order {
 	/**
 	 * Makes POS orders editable by default.
 	 *
-	 * @param bool     $is_editable
-	 * @param WC_Order $order
+	 * @param bool              $is_editable
+	 * @param WC_Abstract_Order $order
 	 *
 	 * @return bool
 	 */
-	public function wc_order_is_editable( bool $is_editable, WC_Order $order ): bool {
+	public function wc_order_is_editable( bool $is_editable, WC_Abstract_Order $order ): bool {
 		if ( 'pos-open' == $order->get_status() ) {
 			$is_editable = true;
 		}
@@ -30,7 +30,7 @@ class Single_Order {
 	/**
 	 * Add cashier select to order page.
 	 */
-	public function add_cashier_select( WC_Order $order ): void {
+	public function add_cashier_select( WC_Abstract_Order $order ): void {
 		// only show if order created by POS
 		if ( 'woocommerce-pos' !== $order->get_created_via() ) {
 			return;
@@ -66,12 +66,12 @@ class Single_Order {
 		}
 
 		/**
-		 * NOTE: HPOS adds a second arg for WC_Order, but we will make it backwards compatible.
+		 * NOTE: HPOS adds a second arg for WC_Abstract_Order, but we will make it backwards compatible.
 		 */
 		$order = wc_get_order( $post_id );
 
-		// Check if $order is instance of WC_Order and $_POST['_pos_user'] is set
-		if ( $order instanceof WC_Order && isset( $_POST['_pos_user'] ) ) {
+		// Check if $order is instance of WC_Abstract_Order and $_POST['_pos_user'] is set
+		if ( $order instanceof WC_Abstract_Order && isset( $_POST['_pos_user'] ) ) {
 			$new_pos_cashier     = (int) sanitize_text_field( $_POST['_pos_user'] );
 			$current_pos_cashier = (int) $order->get_meta( '_pos_user' );
 

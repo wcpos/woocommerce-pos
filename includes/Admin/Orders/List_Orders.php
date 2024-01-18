@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
-use WC_Order;
+use WC_Abstract_Order;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WP_Query;
 
@@ -127,10 +127,10 @@ class List_Orders {
 	 */
 	public function pos_orders_list_column_content( string $column_name, int $post_id ): void {
 		if ( 'wcpos' === $column_name ) {
-			// Use the WC_Order object to interact with order data
+			// Use the WC_Abstract_Order object to interact with order data
 			$order = wc_get_order( $post_id );
 			// Check if the order exists and is not a boolean before accessing properties
-			if ( $order instanceof WC_Order ) {
+			if ( $order instanceof WC_Abstract_Order ) {
 				// Use the getter methods for order meta data
 				$legacy      = $order->get_meta( '_pos', true );
 				$created_via = $order->get_meta( '_created_via', true );

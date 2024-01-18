@@ -139,7 +139,7 @@ class Auth extends WP_REST_Controller {
 		if ( is_wp_error( $user ) ) {
 			$error_code = $user->get_error_code();
 
-			$data = new WP_Error(
+			$user_data = new WP_Error(
 				'woocommerce_pos_' . $error_code,
 				$user->get_error_message( $error_code ),
 				array(
@@ -148,7 +148,14 @@ class Auth extends WP_REST_Controller {
 			);
 		} else {
 			$auth_service = AuthService::instance();
-			$data = $auth_service->generate_token( $user );
+			$user_data = $auth_service->get_user_data( $user );
+			$stores = array_map(
+				function ( $store ) {
+					return $store->get_data();
+				},
+				wcpos_get_stores()
+			);
+			$user_data['stores'] = $stores;
 		}
 
 		/**
@@ -163,9 +170,9 @@ class Auth extends WP_REST_Controller {
 		 *
 		 * @hook woocommerce_pos_jwt_auth_token_before_dispatch
 		 */
-		$data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $data, $user );
+		$user_data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $user_data, $user );
 
-		return rest_ensure_response( $data );
+		return rest_ensure_response( $user_data );
 	}
 
 	/**

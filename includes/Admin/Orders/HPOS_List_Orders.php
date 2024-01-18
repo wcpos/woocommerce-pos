@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
-use WC_Order;
+use WC_Abstract_Order;
 
 class HPOS_List_Orders extends List_Orders {
 	/**
@@ -30,15 +30,15 @@ class HPOS_List_Orders extends List_Orders {
 	}
 
 	/**
-	 * @param string   $column_name The name of the column to display.
-	 * @param WC_Order $order       The order object whose data will be used to render the column.
+	 * @param string            $column_name The name of the column to display.
+	 * @param WC_Abstract_Order $order       The order object whose data will be used to render the column.
 	 *
 	 * @return void
 	 */
 	public function orders_custom_column_content( string $column_name, $order ): void {
 		if ( 'wcpos' === $column_name ) {
 			// Check if the order exists and is not a boolean before accessing properties
-			if ( $order instanceof WC_Order ) {
+			if ( $order instanceof WC_Abstract_Order ) {
 				// Use the getter methods for order meta data
 				$legacy      = $order->get_meta( '_pos', true );
 				$created_via = $order->get_meta( '_created_via', true );

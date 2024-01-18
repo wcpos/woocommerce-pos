@@ -52,15 +52,15 @@ class Init {
 	 * Common initializations
 	 */
 	private function init_common() {
-		new i18n();
-		new Gateways();
-		new Products();
-		// new Customers();
-		new Orders();
-
 		// init the Services
 		SettingsService::instance();
 		AuthService::instance();
+
+		// init other functionality needed by both frontend and admin
+		new i18n();
+		new Gateways();
+		new Products();
+		new Orders();
 	}
 
 	/**

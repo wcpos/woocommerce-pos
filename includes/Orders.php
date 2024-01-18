@@ -10,7 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WC_Order;
+use WC_Abstract_Order;
 
 class Orders {
 	public function __construct() {
@@ -63,13 +63,13 @@ class Orders {
 	 *
 	 * NOTE: $needs_payment is meant to be a boolean, but I have seen it as null.
 	 *
-	 * @param bool     $needs_payment
-	 * @param WC_Order $order
-	 * @param array    $valid_order_statuses
+	 * @param bool              $needs_payment
+	 * @param WC_Abstract_Order $order
+	 * @param array             $valid_order_statuses
 	 *
 	 * @return bool
 	 */
-	public function order_needs_payment( $needs_payment, WC_Order $order, array $valid_order_statuses ) {
+	public function order_needs_payment( $needs_payment, WC_Abstract_Order $order, array $valid_order_statuses ) {
 		// If the order total is zero and status is a POS status, then allow payment to be taken, ie: Gift Card
 		if ( 0 == $order->get_total() && \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ) {
 			return true;
@@ -81,12 +81,12 @@ class Orders {
 	/**
 	 * Note: the wc- prefix is not used here because it is added by WooCommerce.
 	 *
-	 * @param array    $order_statuses
-	 * @param WC_Order $order
+	 * @param array             $order_statuses
+	 * @param WC_Abstract_Order $order
 	 *
 	 * @return array
 	 */
-	public function valid_order_statuses_for_payment( array $order_statuses, WC_Order $order ): array {
+	public function valid_order_statuses_for_payment( array $order_statuses, WC_Abstract_Order $order ): array {
 		$order_statuses[] = 'pos-open';
 		$order_statuses[] = 'pos-partial';
 
@@ -94,12 +94,12 @@ class Orders {
 	}
 
 	/**
-	 * @param array    $order_statuses
-	 * @param WC_Order $order
+	 * @param array             $order_statuses
+	 * @param WC_Abstract_Order $order
 	 *
 	 * @return array
 	 */
-	public function valid_order_statuses_for_payment_complete( array $order_statuses, WC_Order $order ): array {
+	public function valid_order_statuses_for_payment_complete( array $order_statuses, WC_Abstract_Order $order ): array {
 		$order_statuses[] = 'pos-open';
 		$order_statuses[] = 'pos-partial';
 
@@ -107,13 +107,13 @@ class Orders {
 	}
 
 	/**
-	 * @param string   $status
-	 * @param int      $id
-	 * @param WC_Order $order
+	 * @param string            $status
+	 * @param int               $id
+	 * @param WC_Abstract_Order $order
 	 *
 	 * @return string
 	 */
-	public function payment_complete_order_status( string $status, int $id, WC_Order $order ): string {
+	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
 			return woocommerce_pos_get_settings( 'checkout', 'order_status' );
 		}

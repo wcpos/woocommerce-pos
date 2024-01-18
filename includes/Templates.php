@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WC_Order;
+use WC_Abstract_Order;
 
 /**
  *
@@ -143,12 +143,12 @@ class Templates {
 	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
 	 * version of the receipt.
 	 *
-	 * @param string   $order_received_url
-	 * @param WC_Order $order
+	 * @param string            $order_received_url
+	 * @param WC_Abstract_Order $order
 	 *
 	 * @return string
 	 */
-	public function order_received_url( string $order_received_url, WC_Order $order ): string {
+	public function order_received_url( string $order_received_url, WC_Abstract_Order $order ): string {
 		// check is pos
 		if ( ! woocommerce_pos_request() ) {
 			return $order_received_url;

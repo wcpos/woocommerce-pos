@@ -28,10 +28,13 @@ class Card extends WC_Payment_Gateway {
 		$this->enabled     = 'no';
 
 		// Actions
-		add_action('woocommerce_pos_update_options_payment_gateways_' . $this->id, array(
-			$this,
-			'process_admin_options',
-		));
+		add_action(
+			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
+			array(
+				$this,
+				'process_admin_options',
+			)
+		);
 		add_action( 'woocommerce_thankyou_pos_card', array( $this, 'calculate_cashback' ) );
 	}
 
@@ -75,7 +78,7 @@ class Card extends WC_Payment_Gateway {
 		$order = new WC_Order( $order_id );
 
 		// update pos_cash data
-		//      $data     = API::get_raw_data();
+		// $data     = API::get_raw_data();
 		$cashback = isset( $data['payment_details']['pos-cashback'] ) ? wc_format_decimal( $data['payment_details']['pos-cashback'] ) : 0;
 
 		if ( 0 !== $cashback ) {
@@ -84,10 +87,13 @@ class Card extends WC_Payment_Gateway {
 
 			// add cashback as fee line item
 			// TODO: this should be handled by $order->add_fee after WC 2.2
-			$item_id = wc_add_order_item($order_id, array(
-				'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
-				'order_item_type' => 'fee',
-			));
+			$item_id = wc_add_order_item(
+				$order_id,
+				array(
+					'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
+					'order_item_type' => 'fee',
+				)
+			);
 
 			if ( $item_id ) {
 				wc_add_order_item_meta( $item_id, '_line_total', $cashback );
