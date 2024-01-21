@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 	<title><?php esc_attr_e( 'Point of Sale', 'woocommerce-pos' ); ?> - <?php esc_html( bloginfo( 'name' ) ); ?></title>
 	<meta charset="utf-8"/>
 
-	<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1.00001, viewport-fit=cover">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
 	<meta name="theme-color" content="#000000">
 	<meta name="apple-mobile-web-app-capable" content="yes"/>
 
@@ -54,7 +54,7 @@ defined( 'ABSPATH' ) || exit;
 		 * Matches Expo build
 
 		 * Extend the react-native-web reset:
-		 * https://github.com/necolas/react-native-web/blob/master/packages/react-native-web/src/exports/StyleSheet/initialRules.js
+		 * https://necolas.github.io/react-native-web/docs/setup/#root-element
 		 */
 		html,
 		body,
@@ -115,4 +115,3 @@ defined( 'ABSPATH' ) || exit;
 <?php do_action( 'woocommerce_pos_footer' ); ?>
 
 </html>
-

@@ -9,6 +9,10 @@ use WC_Meta_Data;
 use WC_Order_Item;
 use WCPOS\WooCommercePOS\Logger;
 use WP_User;
+use WC_Product;
+use WC_Product_Variation;
+use WC_Abstract_Order;
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use function get_user_meta;
 use function update_user_meta;
 
@@ -33,20 +37,24 @@ trait Uuid_Handler {
 			$uuids
 		);
 
-		// If there is no uuid, add one, i.e., new product
-		if ( empty( $uuid_values ) ) {
-			$object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
+		// Check if there's more than one uuid, if so, keep the first and delete the rest.
+		if ( \count( $uuid_values ) > 1 ) {
+			// Keep the first UUID and remove the rest.
+			for ( $i = 1; $i < count( $uuid_values ); $i++ ) {
+					$object->delete_meta_data_by_mid( $uuids[ $i ]->id );
+			}
+			$uuid_values = array( reset( $uuid_values ) ); // Keep only the first UUID in the array.
 		}
 
-		// Check if there's more than one uuid, if so, delete and regenerate
-		if ( \count( $uuid_values ) > 1 ) {
-			foreach ( $uuids as $uuid_meta ) {
-				$object->delete_meta_data( $uuid_meta->key );
-			}
+		// Check conditions for updating the UUID.
+		$should_update_uuid = empty( $uuid_values )
+			|| ( isset( $uuid_values[0] ) && ! Uuid::isValid( $uuid_values[0] ) )
+			|| ( isset( $uuid_values[0] ) && $this->uuid_postmeta_exists( $uuid_values[0], $object ) );
+
+		if ( $should_update_uuid ) {
 			$object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
 		}
 	}
-
 
 	/**
 	 * @param WP_User $user
@@ -56,7 +64,21 @@ trait Uuid_Handler {
 	private function maybe_add_user_uuid( WP_User $user ): void {
 		$uuids = get_user_meta( $user->ID, '_woocommerce_pos_uuid', false );
 
-		if ( empty( $uuids ) || empty( $uuids[0] ) ) {
+		// Check if there's more than one uuid, if so, keep the first and delete the rest.
+		if ( count( $uuids ) > 1 ) {
+			// Keep the first UUID and remove the rest.
+			for ( $i = 1; $i < count( $uuids ); $i++ ) {
+				delete_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuids[ $i ] );
+			}
+			$uuids = array( $uuids[0] );
+		}
+
+		// Check conditions for updating the UUID.
+		$should_update_uuid = empty( $uuids )
+			|| ( isset( $uuids[0] ) && ! Uuid::isValid( $uuids[0] ) )
+			|| ( isset( $uuids[0] ) && $this->uuid_usermeta_exists( $uuids[0], $user->ID ) );
+
+		if ( $should_update_uuid ) {
 			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $this->create_uuid() );
 		}
 	}
@@ -84,14 +106,30 @@ trait Uuid_Handler {
 	 *
 	 * @return string
 	 */
-	private function get_term_uuid( object $item ): string {
-		$uuid = get_term_meta( $item->term_id, '_woocommerce_pos_uuid', true );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			add_term_meta( $item->term_id, '_woocommerce_pos_uuid', $uuid, true );
+	private function get_term_uuid( $term ): string {
+		$uuids = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', false );
+
+		// Check if there's more than one uuid, if so, keep the first and delete the rest.
+		if ( count( $uuids ) > 1 ) {
+			// Keep the first UUID and remove the rest.
+			for ( $i = 1; $i < count( $uuids ); $i++ ) {
+				delete_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuids[ $i ] );
+			}
+			$uuids = array( $uuids[0] );
 		}
 
-		return $uuid;
+		// Check conditions for updating the UUID.
+		$should_update_uuid = empty( $uuids )
+			|| ( isset( $uuids[0] ) && ! Uuid::isValid( $uuids[0] ) )
+			|| ( isset( $uuids[0] ) && $this->uuid_termmeta_exists( $uuids[0], $term->term_id ) );
+
+		if ( $should_update_uuid ) {
+			$uuid = $this->create_uuid();
+			add_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuid, true );
+			return $uuid;
+		}
+
+		return $uuids[0];
 	}
 
 	/**
@@ -107,5 +145,83 @@ trait Uuid_Handler {
 			// Return a fallback value
 			return 'fallback-uuid-' . time();
 		}
+	}
+
+	/**
+	 * Check if the given UUID is unique.
+	 *
+	 * @param string  $uuid The UUID to check.
+	 * @param WC_Data $object The WooCommerce data object.
+	 * @return bool True if unique, false otherwise.
+	 */
+	private function uuid_postmeta_exists( string $uuid, WC_Data $object ): bool {
+		global $wpdb;
+
+		if ( $object instanceof WC_Abstract_Order && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			// Check the orders meta table.
+			$result = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT 1 FROM {$wpdb->prefix}wc_ordermeta WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND order_id != %d LIMIT 1",
+					$uuid,
+					$object->get_id()
+				)
+			);
+		} else {
+			// Check the postmeta table.
+			$result = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT 1 FROM {$wpdb->postmeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND post_id != %d LIMIT 1",
+					$uuid,
+					$object->get_id()
+				)
+			);
+		}
+
+		// Convert the result to a boolean.
+		return (bool) $result;
+	}
+
+	/**
+	 * Check if the given UUID already exists for any user.
+	 *
+	 * @param string $uuid The UUID to check.
+	 * @param int    $exclude_id The user ID to exclude from the check.
+	 * @return bool True if unique, false otherwise.
+	 */
+	private function uuid_usermeta_exists( string $uuid, int $exclude_id ): bool {
+		global $wpdb;
+
+		$result = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$wpdb->usermeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND user_id != %d LIMIT 1",
+				$uuid,
+				$exclude_id
+			)
+		);
+
+		// Convert the result to a boolean.
+		return (bool) $result;
+	}
+
+	/**
+	 * Check if the given UUID already exists for any term.
+	 *
+	 * @param string $uuid The UUID to check.
+	 * @param int    $exclude_term_id The term ID to exclude from the check.
+	 * @return bool True if unique, false otherwise.
+	 */
+	private function uuid_termmeta_exists( string $uuid, int $exclude_term_id ): bool {
+		global $wpdb;
+
+		$result = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1 FROM {$wpdb->termmeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND term_id != %d LIMIT 1",
+				$uuid,
+				$exclude_term_id
+			)
+		);
+
+		// Convert the result to a boolean.
+		return (bool) $result;
 	}
 }

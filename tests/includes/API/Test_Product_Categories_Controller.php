@@ -184,4 +184,30 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( $cat2['term_id'], $data[0]['id'] );
 	}
+
+	/**
+	 *
+	 */
+	public function test_unique_product_category_uuid() {
+		$uuid = UUID::uuid4()->toString();
+		$cat1 = ProductHelper::create_product_category( 'Music1' );
+		add_term_meta( $cat1['term_id'], '_woocommerce_pos_uuid', $uuid );
+
+		$cat2 = ProductHelper::create_product_category( 'Music2' );
+		add_term_meta( $cat2['term_id'], '_woocommerce_pos_uuid', $uuid );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 3, \count( $data ) );
+
+		// pluck uuids
+		$uuids = wp_list_pluck( $data, 'uuid' );
+
+		$this->assertEquals( 3, \count( $uuids ) );
+		$this->assertContains( $uuid, $uuids );
+		$this->assertEquals( 3, \count( array_unique( $uuids ) ) );
+	}
 }

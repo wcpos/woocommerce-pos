@@ -27,7 +27,7 @@ class List_Products {
 	private $options;
 
 
-	
+
 	public function __construct() {
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 
@@ -43,10 +43,15 @@ class List_Products {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
 			// variations
-			add_action('woocommerce_product_after_variable_attributes', array(
-				$this,
-				'after_variable_attributes_barcode_field',
-			), 10, 3);
+			add_action(
+				'woocommerce_product_after_variable_attributes',
+				array(
+					$this,
+					'after_variable_attributes_barcode_field',
+				),
+				10,
+				3
+			);
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
@@ -57,17 +62,30 @@ class List_Products {
 			add_action( 'woocommerce_product_bulk_edit_save', array( $this, 'bulk_edit_save' ) );
 			add_action( 'quick_edit_custom_box', array( $this, 'quick_edit' ), 10, 2 );
 			add_action( 'manage_product_posts_custom_column', array( $this, 'custom_product_column' ), 10, 2 );
-			add_action('woocommerce_product_after_variable_attributes', array(
-				$this,
-				'after_variable_attributes_pos_only_products',
-			), 10, 3);
-			add_action('woocommerce_save_product_variation', array(
-				$this,
-				'save_product_variation_pos_only_products',
-			));
+			add_action(
+				'woocommerce_product_after_variable_attributes',
+				array(
+					$this,
+					'after_variable_attributes_pos_only_products',
+				),
+				10,
+				3
+			);
+			add_action(
+				'woocommerce_save_product_variation',
+				array(
+					$this,
+					'save_product_variation_pos_only_products',
+				)
+			);
 		}
+
+		add_filter( 'woocommerce_duplicate_product_exclude_meta', array( $this, 'exclude_uuid_meta_on_product_duplicate' ) );
 	}
 
+	/**
+	 *
+	 */
 	public function woocommerce_product_options_sku(): void {
 		woocommerce_wp_text_input(
 			array(
@@ -227,5 +245,18 @@ class List_Products {
 			$selected = get_post_meta( $post_id, '_pos_visibility', true );
 			echo '<div class="hidden" id="woocommerce_pos_inline_' . $post_id . '" data-visibility="' . $selected . '"></div>';
 		}
+	}
+
+	/**
+	 * Filter to allow us to exclude meta keys from product duplication..
+	 *
+	 * @param array $exclude_meta The keys to exclude from the duplicate.
+	 * @param array $existing_meta_keys The meta keys that the product already has.
+	 *
+	 * @return array
+	 */
+	public function exclude_uuid_meta_on_product_duplicate( array $meta_keys ) {
+		$meta_keys[] = '_woocommerce_pos_uuid';
+		return $meta_keys;
 	}
 }

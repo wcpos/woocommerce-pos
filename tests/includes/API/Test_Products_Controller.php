@@ -787,4 +787,39 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids         = wp_list_pluck( $data, 'id' );
 		$this->assertEquals( array( $product3->get_id() ), $ids );
 	}
+
+	/**
+	 *
+	 */
+	public function test_uuid_is_unique() {
+		$uuid = UUID::uuid4()->toString();
+		$product1  = ProductHelper::create_simple_product();
+		$product1->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$product1->save_meta_data();
+		$product2  = ProductHelper::create_simple_product();
+		$product2->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$product2->save_meta_data();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+
+		// pluck uuids from meta_data
+		$uuids = array();
+		foreach ( $data as $product ) {
+			foreach ( $product['meta_data'] as $meta ) {
+				if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+					$uuids[] = $meta['value'];
+				}
+			}
+		}
+
+		$this->assertEquals( 2, \count( $uuids ) );
+		$this->assertContains( $uuid, $uuids );
+		$this->assertEquals( 2, \count( array_unique( $uuids ) ) );
+	}
 }

@@ -320,8 +320,6 @@ if ( ! \defined( 'ABSPATH' ) ) {
 
 			</section><!-- /.col2-set -->
 
-
-
 			<?php do_action( 'woocommerce_order_details_after_customer_details', $order ); ?>
 
 		</section>
@@ -334,10 +332,6 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	</div>
 <?php } ?>
 
-	<div class="footer">
-		<p><?php esc_html_e( 'Thank you for your purchase!', 'woocommerce' ); ?></p>
-		<p><?php bloginfo( 'name' ); ?> - <?php bloginfo( 'description' ); ?></p>
-	</div>
 </div>
 
 </body>

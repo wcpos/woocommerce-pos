@@ -524,4 +524,39 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $customer1->get_id(), $data[0]['id'] );
 	}
+
+	/**
+	 *
+	 */
+	public function test_customer_uuid_is_unique(): void {
+		$uuid = UUID::uuid4()->toString();
+		$customer1  = CustomerHelper::create_customer();
+		$customer1->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$customer1->save_meta_data();
+		$customer2  = CustomerHelper::create_customer();
+		$customer2->update_meta_data( '_woocommerce_pos_uuid', $uuid );
+		$customer2->save_meta_data();
+
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+
+		$response     = $this->server->dispatch( $request );
+		$data         = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 2, \count( $data ) );
+
+		// pluck uuids from meta_data
+		$uuids = array();
+		foreach ( $data as $customer ) {
+			foreach ( $customer['meta_data'] as $meta ) {
+				if ( '_woocommerce_pos_uuid' === $meta['key'] ) {
+					$uuids[] = $meta['value'];
+				}
+			}
+		}
+
+		$this->assertEquals( 2, \count( $uuids ) );
+		$this->assertContains( $uuid, $uuids );
+		$this->assertEquals( 2, \count( array_unique( $uuids ) ) );
+	}
 }
