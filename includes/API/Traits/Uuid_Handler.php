@@ -37,13 +37,24 @@ trait Uuid_Handler {
 			$uuids
 		);
 
+		// Re-index the array to ensure sequential keys starting from 0.
+		$uuid_values = array_values( $uuid_values );
+
 		// Check if there's more than one uuid, if so, keep the first and delete the rest.
-		if ( \count( $uuid_values ) > 1 ) {
-			// Keep the first UUID and remove the rest.
-			for ( $i = 1; $i < count( $uuid_values ); $i++ ) {
-					$object->delete_meta_data_by_mid( $uuids[ $i ]->id );
+		if ( count( $uuid_values ) > 1 ) {
+			$first_uuid_key = key( $uuids ); // Get the key of the first UUID.
+
+			foreach ( $uuids as $key => $uuid_meta ) {
+				if ( $key === $first_uuid_key ) {
+					continue; // Skip the first UUID.
+				}
+
+				// Delete all UUIDs except the first one.
+				$object->delete_meta_data_by_mid( $uuid_meta->id );
 			}
-			$uuid_values = array( reset( $uuid_values ) ); // Keep only the first UUID in the array.
+
+			// Rebuild $uuid_values from updated $uuids.
+			$uuid_values = array( reset( $uuids )->value );
 		}
 
 		// Check conditions for updating the UUID.
