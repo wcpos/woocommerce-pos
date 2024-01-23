@@ -16,6 +16,9 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use function get_user_meta;
 use function update_user_meta;
 
+/**
+ *
+ */
 trait Uuid_Handler {
 	/**
 	 * Make sure the WC Data Object has a uuid.
@@ -168,7 +171,7 @@ trait Uuid_Handler {
 	private function uuid_postmeta_exists( string $uuid, WC_Data $object ): bool {
 		global $wpdb;
 
-		if ( $object instanceof WC_Abstract_Order && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+		if ( $object instanceof WC_Abstract_Order && class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			// Check the orders meta table.
 			$result = $wpdb->get_var(
 				$wpdb->prepare(
