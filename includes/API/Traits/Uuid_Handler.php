@@ -172,7 +172,7 @@ trait Uuid_Handler {
 			// Check the orders meta table.
 			$result = $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT 1 FROM {$wpdb->prefix}wc_ordermeta WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND order_id != %d LIMIT 1",
+					"SELECT 1 FROM {$wpdb->prefix}wc_orders_meta WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s AND order_id != %d LIMIT 1",
 					$uuid,
 					$object->get_id()
 				)
