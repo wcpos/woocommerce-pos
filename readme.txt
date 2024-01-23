@@ -65,7 +65,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 = 1.4.9 - 2024/01/21 =
 = 1.4.8 - 2024/01/21 =
-* Fix: duplicating Products in WC Admin also duplicated POS UUID, which casued problems
+* Fix: duplicating Products in WC Admin also duplicated POS UUID, which caused problems
 
 = 1.4.7 - 2024/01/18 =
 * Bump: web application to version 1.4.1

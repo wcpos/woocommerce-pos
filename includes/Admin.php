@@ -38,6 +38,13 @@ class Admin {
 	private $menu_ids = array();
 
 	/**
+	 * Registered screen handlers.
+	 *
+	 * @var array
+	 */
+	private $screen_handlers = array();
+
+	/**
 	 * Constructor.
 	 *
 	 * NOTE: WordPress fires the admin_menu hook before the admin_init.
@@ -51,6 +58,18 @@ class Admin {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
 		add_action( 'admin_init', array( $this, 'init' ) );
 		add_action( 'current_screen', array( $this, 'current_screen' ) );
+
+		// register the screen handlers.
+		$this->screen_handlers = array(
+			'options-permalink' => Permalink::class,
+			'product' => Single_Product::class,
+			'edit-product' => List_Products::class,
+			'shop_order' => Single_Order::class,
+			'edit-shop_order' => List_Orders::class,
+			'plugins' => Plugins::class,
+			'woocommerce_page_wc-orders' => array( $this, 'handle_wc_hpos_orders_screen' ),
+			'woocommerce_page_wc-admin' => array( $this, 'handle_wc_analytics_screen' ),
+		);
 	}
 
 	/**
@@ -70,91 +89,77 @@ class Admin {
 			'toplevel' => $menu->toplevel_screen_id,
 			'settings' => $menu->settings_screen_id,
 		);
+
+		/**
+		 * Add the settings screen using the WooCommerce POS menu ID.
+		 */
+		$this->screen_handlers[ $this->menu_ids['settings'] ] = Settings::class;
 	}
 
 	/**
 	 * Conditionally load subclasses based on admin screen.
 	 *
+	 * @TODO - I need to register the instances to allow remove_action/remove_filter.
+	 *
 	 * @param \WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {
-		$action = $_GET['action'] ?? '';
+				/**
+		 * Backwards compatibility for WooCommerce POS Pro 1.4.2 and below.
+		 *
+		 * @TODO: Remove in WooCommerce POS 2.0.0.
+		 */
+		$this->screen_handlers['product'] = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
 
-		// Main switch for screen IDs.
-		switch ( $current_screen->id ) {
-			case 'options-permalink':
-				new Permalink();
+		/**
+		 * Filters the screen handlers for WooCommerce POS admin screens.
+		 *
+		 * @since 1.4.10
+		 *
+		 * @param array       $handlers       Associative array of screen IDs and their corresponding handlers.
+		 *                                    Handler can be a class name or a callback array.
+		 * @param \WP_Screen  $current_screen The current WP_Screen object being loaded in the admin.
+		 */
+		$handlers = apply_filters( 'woocommerce_pos_admin_screen_handlers', $this->screen_handlers, $current_screen );
 
-				return;
-			case 'product':
-				$single_product_class = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
-				new $single_product_class();
+		// Check if the current screen has a handler.
+		if ( isset( $handlers[ $current_screen->id ] ) ) {
+			$handler = $handlers[ $current_screen->id ];
 
-				return;
-			case 'edit-product':
-				new List_Products();
-
-				return;
-			case 'shop_order':
-				new Single_Order();
-
-				return;
-			case 'edit-shop_order':
-				new List_Orders();
-
-				return;
-			case 'woocommerce_page_wc-orders':
-				if ( 'edit' === $action ) {
-					new HPOS_Single_Order();
-				} else {
-					new HPOS_List_Orders();
-				}
-
-				return;
-			case 'plugins':
-				new Plugins();
-
-				return;
-			default:
-				// Check if the current screen matches a custom setting page ID.
-				if ( $this->is_woocommerce_pos_setting_page( $current_screen ) ) {
-					new Settings();
-
-					return;
-				}
-				// Check if the current screen is for WooCommerce Analytics.
-				if ( $this->is_woocommerce_analytics( $current_screen ) ) {
-					new Analytics();
-
-					return;
-				}
+			if ( is_array( $handler ) && method_exists( $handler[0], $handler[1] ) ) {
+				call_user_func( $handler );
+			} elseif ( class_exists( $handler ) ) {
+				new $handler();
+			}
 		}
 	}
 
 	/**
-	 * Check if the current screen matches the POS setting page ID.
 	 *
-	 * @param \WP_Screen $current_screen Current screen object.
 	 */
-	private function is_woocommerce_pos_setting_page( $current_screen ) {
-		return \array_key_exists( 'settings', $this->menu_ids ) && $this->menu_ids['settings'] === $current_screen->id;
+	public function handle_wc_hpos_orders_screen() {
+		if ( 'edit' === $_GET['action'] ) {
+			new HPOS_Single_Order();
+		} else {
+			new HPOS_List_Orders();
+		}
 	}
 
 	/**
-	 * Check if the current screen is for WooCommerce Analytics.
 	 *
-	 * @param \WP_Screen $current_screen Current screen object.
 	 */
-	private function is_woocommerce_analytics( $current_screen ) {
+	public function handle_wc_analytics_screen() {
 		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
 			$wc_admin_page_controller = PageController::get_instance();
-			$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
-			$id                       = $wc_admin_current_page['id'] ?? null;
-			$parent                   = $wc_admin_current_page['parent'] ?? null;
+			if ( $wc_admin_page_controller ) {
+				$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
+				$id                       = $wc_admin_current_page['id'] ?? null;
+				$parent                   = $wc_admin_current_page['parent'] ?? null;
 
-			return 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent;
+				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {
+					new Analytics();
+				}
+			}
 		}
-
-		return false;
 	}
 }

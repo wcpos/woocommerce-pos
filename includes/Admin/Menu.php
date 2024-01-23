@@ -1,11 +1,11 @@
 <?php
-
 /**
  * WP Admin Menu Class.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
@@ -13,14 +13,21 @@ namespace WCPOS\WooCommercePOS\Admin;
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
+/**
+ *
+ */
 class Menu {
 	/**
-	 * @vars string Unique top level menu identifier
+	 * Unique top level menu identifier.
+	 *
+	 * @var string
 	 */
 	public $toplevel_screen_id;
 
 	/**
-	 * @vars string Unique top level menu identifier
+	 * Unique top level menu identifier.
+	 *
+	 * @var string
 	 */
 	public $settings_screen_id;
 
@@ -34,7 +41,7 @@ class Menu {
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
 		}
 
-//		add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
+		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
 	}
 
 	/**
@@ -56,7 +63,7 @@ class Menu {
 		if ( false !== $woo && false !== $pos ) {
 			// rearrange menu
 			unset( $menu_order[ $pos ] );
-			array_splice( $menu_order, ++ $woo, 0, PLUGIN_NAME );
+			array_splice( $menu_order, ++$woo, 0, PLUGIN_NAME );
 
 			// rearrange submenu
 			global $submenu;
@@ -98,22 +105,27 @@ class Menu {
 	 * Add POS submenu to WooCommerce Analytics menu.
 	 */
 	public function analytics_menu_items( array $report_pages ): array {
-		// Find the position of the 'Orders' item
+		// Find the position of the 'Orders' item.
 		$position = array_search( 'Orders', array_column( $report_pages, 'title' ), true );
 
-		// Use array_splice to add the new item
-		array_splice($report_pages, $position + 1, 0, array(
+		// Use array_splice to add the new item.
+		array_splice(
+			$report_pages,
+			$position + 1,
+			0,
 			array(
-				'id'       => 'woocommerce-analytics-pos',
-				'title'    => __( 'POS', 'woocommerce-pos' ),
-				'parent'   => 'woocommerce-analytics',
-				'path'     => '/analytics/pos',
-				'nav_args' => array(
-					'order'  => 45,
-					'parent' => 'woocommerce-analytics',
+				array(
+					'id'       => 'woocommerce-analytics-pos',
+					'title'    => __( 'POS', 'woocommerce-pos' ),
+					'parent'   => 'woocommerce-analytics',
+					'path'     => '/analytics/pos',
+					'nav_args' => array(
+						'order'  => 45,
+						'parent' => 'woocommerce-analytics',
+					),
 				),
-			),
-		));
+			)
+		);
 
 		return $report_pages;
 	}
@@ -172,9 +184,12 @@ class Menu {
 		 *     @type string $settings The settings submenu ID.
 		 * }
 		 */
-		do_action( 'woocommerce_pos_register_pos_admin', array(
-			'toplevel' => $this->toplevel_screen_id,
-			'settings' => $this->settings_screen_id,
-		) );
+		do_action(
+			'woocommerce_pos_register_pos_admin',
+			array(
+				'toplevel' => $this->toplevel_screen_id,
+				'settings' => $this->settings_screen_id,
+			)
+		);
 	}
 }

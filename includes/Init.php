@@ -19,6 +19,9 @@ use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
 
+/**
+ *
+ */
 class Init {
 	/**
 	 * Constructor.

@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
+use WCPOS\WooCommercePOS\Registry;
 use const DOING_AUTOSAVE;
 
 class Single_Product {
@@ -29,8 +30,10 @@ class Single_Product {
 	 * @var string
 	 */
 	private $pro_link = '';
-	
+
 	public function __construct() {
+		Registry::get_instance()->set( get_class( $this ), $this );
+
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 		$this->pro_link      = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 
@@ -44,7 +47,7 @@ class Single_Product {
 		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-			add_action('woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3);
+			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3 );
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
@@ -52,7 +55,7 @@ class Single_Product {
 			add_action( 'save_post', array( $this, 'save_post' ), 10, 2 );
 			add_action( 'post_submitbox_misc_actions', array( $this, 'post_submitbox_misc_actions' ), 99 );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_pos_only_products' ), 10, 3 );
-			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_pos_only_products', ) );
+			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_pos_only_products' ) );
 		}
 
 		add_action( 'woocommerce_product_options_pricing', array( $this, 'add_store_price_fields' ) );
@@ -87,8 +90,8 @@ class Single_Product {
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __('Enable POS specific prices.', 'woocommerce-pos') . ' ' . $this->pro_link,
-				'custom_attributes' => array('disabled' => 'disabled'),
+				'description'       => __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->pro_link,
+				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
 	}
@@ -107,8 +110,8 @@ class Single_Product {
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __('Enable POS specific taxes.', 'woocommerce-pos') . ' ' . $this->pro_link,
-				'custom_attributes' => array('disabled' => 'disabled'),
+				'description'       => __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->pro_link,
+				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
 	}
@@ -220,6 +223,7 @@ class Single_Product {
 	}
 
 	/**s
+	 *
 	 * @param $loop
 	 * @param $variation_data
 	 * @param $variation
