@@ -63,7 +63,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.4.10 =
+= 1.4.10 - 2024/01/23 =
 * Fix: compatibility issue with WooCommerce < 6.7.0
 
 = 1.4.9 - 2024/01/21 =
@@ -122,7 +122,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 = 1.3.8 - 2023/08/08 =
 * Fix: login modal for desktop application
 
-= 1.3.7 = 2023/07/31 =
+= 1.3.7 - 2023/07/31 =
 * Fix: rest_pre_serve_request critical error reported by some users
 * Fix: change 'woocommerce_available_payment_gateways' filter priority to 99
 * Add: setting for servers that don't allow Authorization header

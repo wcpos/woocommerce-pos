@@ -32,7 +32,16 @@ jobs:
       - name: Check for changes
         id: git-diff
         run: |
-          git diff --exit-code || echo "::set-output name=changes::true"
+          # Extract the current and previous versions of the .pot file
+          git show HEAD:languages/woocommerce-pos.pot > old.pot
+          tail -n +16 languages/woocommerce-pos.pot > new-trimmed.pot
+          tail -n +16 old.pot > old-trimmed.pot
+      
+          # Compare the trimmed files
+          diff --exit-code old-trimmed.pot new-trimmed.pot || echo "::set-output name=changes::true"
+      
+          # Clean up temporary files
+          rm old.pot new-trimmed.pot old-trimmed.pot
 
       - name: Commit updated POT file
         if: steps.git-diff.outputs.changes == 'true'
