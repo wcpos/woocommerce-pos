@@ -1,5 +1,4 @@
 <?php
-
 /**
  * POS Product Class.
  *
@@ -10,6 +9,12 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WC_Product;
+use Automattic\WooCommerce\StoreApi\Exceptions\NotPurchasableException;
+
+/**
+ *
+ */
 class Products {
 	/**
 	 * Constructor.
@@ -23,7 +28,11 @@ class Products {
 		if ( $pos_only_products ) {
 			add_action( 'woocommerce_product_query', array( $this, 'hide_pos_only_products' ) );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
-			add_filter( 'woocommerce_add_to_cart_validation', array( 'prevent_pos_only_add_to_cart', 10, 2 ) );
+			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
+
+			// NOTE: this hook is marked as deprecated.
+			add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'prevent_pos_only_add_to_cart' ), 10, 2 );
+
 			// add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );
 		}
 
@@ -40,12 +49,12 @@ class Products {
 	}
 
 	/**
-	 * Bump modified date on stock change
+	 * Bump modified date on stock change.
 	 * - variation->id = parent id.
 	 *
-	 * @param $product
+	 * @param WC_Product $product
 	 */
-	public function product_set_stock( $product ): void {
+	public function product_set_stock( WC_Product $product ): void {
 		$post_modified     = current_time( 'mysql' );
 		$post_modified_gmt = current_time( 'mysql', 1 );
 		wp_update_post(
@@ -61,7 +70,6 @@ class Products {
 	 * Hide POS Only products from the shop and category pages.
 	 *
 	 * @TODO - this should be improved so that admin users can see the product, but get a message
-	 * @TODO - should I use the 'woocommerce_product_query' action instead? I found it doesn't work correctly
 	 *
 	 * @param WP_Query $query Query instance.
 	 *
@@ -155,6 +163,8 @@ class Products {
 	/**
 	 * Prevent POS Only products from being added to the cart.
 	 *
+	 * NOTE: this hook is marked as deprecated.
+	 *
 	 * @param bool $passed
 	 * @param int  $product_id
 	 *
@@ -162,10 +172,31 @@ class Products {
 	 */
 	public function prevent_pos_only_add_to_cart( $passed, $product_id ) {
 		$pos_visibility = get_post_meta( $product_id, '_pos_visibility', true );
+
 		if ( $pos_visibility === 'pos_only' ) {
 			return false;
 		}
 
 		return $passed;
+	}
+
+	/**
+	 * Prevent POS Only products from being added to the cart via the Store API.
+	 *
+	 * @throws NotPurchasableException Exception if product is POS Only.
+
+	 * @param WC_Product $product Product.
+	 *
+	 * @return void
+	 */
+	public function store_api_prevent_pos_only_add_to_cart( WC_Product $product ) {
+		$pos_visibility = get_post_meta( $product->get_id(), '_pos_visibility', true );
+
+		if ( $pos_visibility === 'pos_only' ) {
+			throw new NotPurchasableException(
+				'woocommerce_pos_product_not_purchasable',
+				$product->get_name()
+			);
+		}
 	}
 }
