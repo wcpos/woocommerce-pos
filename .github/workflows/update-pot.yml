@@ -38,6 +38,8 @@ jobs:
           tail -n +16 old.pot > old-trimmed.pot
       
           # Compare the trimmed files
+          diff --version
+          diff --help
           diff --exit-code old-trimmed.pot new-trimmed.pot || echo "::set-output name=changes::true"
       
           # Clean up temporary files
