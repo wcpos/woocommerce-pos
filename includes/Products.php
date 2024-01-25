@@ -23,13 +23,14 @@ class Products {
 		if ( $pos_only_products ) {
 			add_action( 'woocommerce_product_query', array( $this, 'hide_pos_only_products' ) );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
+			add_filter( 'woocommerce_add_to_cart_validation', array( 'prevent_pos_only_add_to_cart', 10, 2 ) );
 			// add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );
 		}
 
 		/**
 		 * Allow decimal quantities for products and variations.
 		 *
-		 * @TODO - this will affect the online store aswell, should I make it POS only?
+		 * @TODO - this will affect the online store as well, should I make it POS only?
 		 */
 		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
 		if ( \is_bool( $allow_decimal_quantities ) && $allow_decimal_quantities ) {
@@ -149,5 +150,22 @@ class Products {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Prevent POS Only products from being added to the cart.
+	 *
+	 * @param bool $passed
+	 * @param int  $product_id
+	 *
+	 * @return bool
+	 */
+	public function prevent_pos_only_add_to_cart( $passed, $product_id ) {
+		$pos_visibility = get_post_meta( $product_id, '_pos_visibility', true );
+		if ( $pos_visibility === 'pos_only' ) {
+			return false;
+		}
+
+		return $passed;
 	}
 }
