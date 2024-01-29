@@ -205,9 +205,12 @@ class Settings {
 		/*
 		 * Filters the general settings.
 		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
 		 * @since 1.0.0
+		 *
+		 * @param array $settings
+		 *
+		 * @return array $settings
+		 *
 		 * @hook woocommerce_pos_general_settings
 		 */
 		return apply_filters( 'woocommerce_pos_general_settings', $settings );

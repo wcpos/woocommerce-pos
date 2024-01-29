@@ -104,8 +104,9 @@ class Admin {
 	 * @param \WP_Screen $current_screen Current screen object.
 	 */
 	public function current_screen( $current_screen ): void {
-				/**
+		/**
 		 * Backwards compatibility for WooCommerce POS Pro 1.4.2 and below.
+		 * DO NOT USE THIS!
 		 *
 		 * @TODO: Remove in WooCommerce POS 2.0.0.
 		 */
@@ -113,6 +114,8 @@ class Admin {
 
 		/**
 		 * Filters the screen handlers for WooCommerce POS admin screens.
+		 *
+		 * @hook woocommerce_pos_admin_screen_handlers
 		 *
 		 * @since 1.4.10
 		 *

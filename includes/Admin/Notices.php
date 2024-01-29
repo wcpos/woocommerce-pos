@@ -44,11 +44,11 @@ class Notices {
 		/**
 		 * Filters the POS admin notices.
 		 *
-		 * @param {array} $notices
-		 *
-		 * @returns {array} $notices
-		 *
 		 * @since 1.0.0
+		 *
+		 * @param array $notices
+		 *
+		 * @return array $notices
 		 *
 		 * @hook woocommerce_pos_admin_notices
 		 */

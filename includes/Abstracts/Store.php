@@ -62,6 +62,7 @@ class Store extends \WC_Data {
 	 * Construct the default POS store.
 	 */
 	public function __construct() {
+		parent::__construct();
 		$this->set_wordpress_settings();
 		$this->set_woocommerce_general_settings();
 		$this->set_woocommerce_tax_settings();

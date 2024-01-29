@@ -157,14 +157,14 @@ if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 		/*
 		 * Filters the template path.
 		 *
-		 * @param {string} $template
-		 * @param {string} $path
-		 *
-		 * @returns {string} $path
+		 * @hook woocommerce_pos_locate_template
 		 *
 		 * @since 1.0.0
 		 *
-		 * @hook woocommerce_pos_locate_template
+		 * @param string $path   The full path to the template.
+		 * @param string $template The template name, eg: 'receipt.php'.
+		 *
+		 * @return string $path The full path to the template.
 		 */
 		$filtered_path = apply_filters( 'woocommerce_pos_locate_template', $path, $template );
 
