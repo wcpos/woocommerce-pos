@@ -1,11 +1,11 @@
 <?php
-
 /**
- * REST API Class.
+ * WooCommerce POS REST API Class, ie: /wcpos/v1/ endpoints.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -17,6 +17,9 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 
+/**
+ *
+ */
 class API {
 	/**
 	 * WCPOS REST API namespaces and endpoints.

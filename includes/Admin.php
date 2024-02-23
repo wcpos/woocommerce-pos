@@ -141,7 +141,7 @@ class Admin {
 	 *
 	 */
 	public function handle_wc_hpos_orders_screen() {
-		if ( 'edit' === $_GET['action'] ) {
+		if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] ) {
 			new HPOS_Single_Order();
 		} else {
 			new HPOS_List_Orders();

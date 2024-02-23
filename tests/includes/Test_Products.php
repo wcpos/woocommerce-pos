@@ -3,7 +3,7 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WC_Unit_Test_Case;
+use WC_REST_Unit_Test_Case;
 use WP_Query;
 use WC_Query;
 use WCPOS\WooCommercePOS\Products;
@@ -14,7 +14,7 @@ use WC_Product_Variation;
  *
  * @coversNothing
  */
-class Test_Products extends WC_Unit_Test_Case {
+class Test_Products extends WC_REST_Unit_Test_Case {
 	public function setup(): void {
 		parent::setup();
 	}
@@ -117,5 +117,41 @@ class Test_Products extends WC_Unit_Test_Case {
 
 		// Assert that the variation without '_pos_visibility' set is in the query
 		$this->assertContains( $variation_ids[2], $queried_variation_ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_pos_only_products_via_store_api() {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'pos_only_products' => true,
+				);
+			}
+		);
+		new Products(); // reinstantiate the class to apply the filter
+
+		// Create a visible product
+		$visible_product = ProductHelper::create_simple_product();
+
+		// Create a product with _pos_visibility set to 'pos_only'
+		$hidden_product = ProductHelper::create_simple_product();
+		update_post_meta( $hidden_product->get_id(), '_pos_visibility', 'pos_only' );
+
+		// Verify that the meta value is set correctly
+		$pos_visibility = get_post_meta( $hidden_product->get_id(), '_pos_visibility', true );
+		$this->assertEquals( 'pos_only', $pos_visibility, 'Meta value for _pos_visibility not set correctly' );
+
+		// Make WC REST request
+		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
+		$request = new \WP_REST_Request( 'GET', '/wc/v3/products' );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $visible_product->get_id(), $data[0]['id'] );
 	}
 }

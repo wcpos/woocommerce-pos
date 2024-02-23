@@ -133,7 +133,7 @@ class List_Orders {
 			if ( $order instanceof WC_Abstract_Order ) {
 				// Use the getter methods for order meta data
 				$legacy      = $order->get_meta( '_pos', true );
-				$created_via = $order->get_meta( '_created_via', true );
+				$created_via = $order->get_created_via();
 
 				// Check if the order was created via WooCommerce POS
 				if ( 'woocommerce-pos' === $created_via || '1' === $legacy ) {

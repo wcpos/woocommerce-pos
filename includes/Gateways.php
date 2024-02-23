@@ -1,16 +1,22 @@
 <?php
-
 /**
  * Loads the POS Payment Gateways.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     https://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
+/**
+ * Gateways class.
+ */
 class Gateways {
+	/**
+	 *
+	 */
 	public function __construct() {
 		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ), 99 );

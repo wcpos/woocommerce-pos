@@ -173,17 +173,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$data['barcode'] = $this->wcpos_get_barcode( $variation );
 
 				// Check if the response has an image
-		if ( isset( $data['images'] ) && ! empty( $data['images'] ) ) {
-			foreach ( $data['images'] as $key => $image ) {
-				// Replace the full size 'src' with the URL of the medium size image.
-				$image_id = $image['id'];
-				$medium_image_data = image_downsize( $image_id, 'medium' );
+		if ( isset( $data['image'] ) && ! empty( $data['image'] ) && isset( $data['image']['id'] ) ) {
+			// Replace the full size 'src' with the URL of the medium size image.
+			$medium_image_data = image_downsize( $data['image']['id'], 'medium' );
 
-				if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
-					$data['images'][ $key ]['src'] = $medium_image_data[0];
-				} else {
-					$data['images'][ $key ]['src'] = $image['src'];
-				}
+			if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
+				$data['image']['src'] = $medium_image_data[0];
 			}
 		}
 

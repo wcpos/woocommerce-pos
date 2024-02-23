@@ -63,6 +63,12 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.4.11 - 2024/02/XX =
+* Fix: regression in product variation images, use 'medium' sized product image instead of full size
+* Fix: remove POS Only products from frontend WC REST API response
+* Fix: generic get meta method should not be used for '_create_via'
+* Fix: other minor PHP warnings
+
 = 1.4.10 - 2024/01/23 =
 * Fix: compatibility issue with WooCommerce < 6.7.0
 
