@@ -148,7 +148,7 @@ class Menu {
 			__( 'View POS', 'woocommerce-pos' ),
 			__( 'View POS', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
-			null
+			PLUGIN_NAME . '-view-pos',
 		);
 
 		$this->settings_screen_id = add_submenu_page(
