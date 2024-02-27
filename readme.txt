@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
 Requires at least: 5.6 & WooCommerce 5.3
 Tested up to: 6.4
-Stable tag: 1.4.10
+Stable tag: 1.4.11
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -63,7 +63,8 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.4.11 - 2024/02/XX =
+= 1.4.11 - 2024/02/27 =
+* Fix: regression in tax calculation when POS settings are different to Online settings
 * Fix: regression in product variation images, use 'medium' sized product image instead of full size
 * Fix: remove POS Only products from frontend WC REST API response
 * Fix: generic get meta method should not be used for '_create_via'
