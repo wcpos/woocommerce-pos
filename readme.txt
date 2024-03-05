@@ -63,11 +63,12 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.4.11 - 2024/02/27 =
+= 1.4.11 - 2024/03/XX =
 * Fix: regression in tax calculation when POS settings are different to Online settings
 * Fix: regression in product variation images, use 'medium' sized product image instead of full size
 * Fix: remove POS Only products from frontend WC REST API response
 * Fix: generic get meta method should not be used for '_create_via'
+* Fix: add enabled POS gateways to the Order Edit select input
 * Fix: other minor PHP warnings
 
 = 1.4.10 - 2024/01/23 =

@@ -1,14 +1,49 @@
 <?php
+/**
+ * Single Order
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
 
+/**
+ *
+ */
 class Single_Order {
+
+	/**
+	 *
+	 */
 	public function __construct() {
 		add_filter( 'wc_order_is_editable', array( $this, 'wc_order_is_editable' ), 10, 2 );
 		add_action( 'woocommerce_admin_order_data_after_order_details', array( $this, 'add_cashier_select' ) );
 		add_action( 'woocommerce_process_shop_order_meta', array( $this, 'save_cashier_select' ) );
+
+		$this->add_available_gateways();
+	}
+
+	/**
+	 * We need to add the POS gateways to the available gateways for the edit order dropdown.
+	 * It's possible another plugin could just re-init after us, but this will work for most cases.
+	 */
+	public function add_available_gateways() {
+		if ( WC()->payment_gateways() ) {
+			$payment_gateways = WC()->payment_gateways->payment_gateways;
+			$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+
+			// Add POS gateways to the available gateways for the edit order dropdown.
+			foreach ( $payment_gateways as $gateway ) {
+				if ( isset( $settings['gateways'][ $gateway->id ] ) && $settings['gateways'][ $gateway->id ]['enabled'] ) {
+					$gateway->enabled = 'yes';
+				}
+			}
+
+			// Directly set the modified gateways back to the WooCommerce Payment Gateways instance
+			WC()->payment_gateways->payment_gateways = $payment_gateways;
+		}
 	}
 
 	/**

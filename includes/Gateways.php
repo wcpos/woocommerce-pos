@@ -56,20 +56,20 @@ class Gateways {
 	 *
 	 * - NOTE: lots of plugins/themes call this filter and I can't guarantee that $gateways is an array
 	 *
-	 * @param null|array $gateways
+	 * @param null|array $gateways The available payment gateways.
 	 *
-	 * @return null|array
+	 * @return null|array The available payment gateways.
 	 */
 	public function available_payment_gateways( ?array $gateways ): ?array {
-		// early exit
+		// early exit.
 		if ( ! woocommerce_pos_request() ) {
 			return $gateways;
 		}
 
-		// use POS settings
+		// use POS settings.
 		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
 
-		// Get all payment gateways
+		// Get all payment gateways.
 		$all_gateways = WC()->payment_gateways->payment_gateways;
 
 		$_available_gateways = array();
