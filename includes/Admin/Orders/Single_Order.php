@@ -54,9 +54,9 @@ class Single_Order {
 	 *
 	 * @return bool
 	 */
-	public function wc_order_is_editable( bool $is_editable, WC_Abstract_Order $order ): bool {
+	public function wc_order_is_editable( $is_editable, WC_Abstract_Order $order ) {
 		if ( 'pos-open' == $order->get_status() ) {
-			$is_editable = true;
+			return true;
 		}
 
 		return $is_editable;

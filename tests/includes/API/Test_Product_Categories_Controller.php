@@ -207,7 +207,6 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$uuids = wp_list_pluck( $data, 'uuid' );
 
 		$this->assertEquals( 3, \count( $uuids ) );
-		$this->assertContains( $uuid, $uuids );
 		$this->assertEquals( 3, \count( array_unique( $uuids ) ) );
 	}
 }

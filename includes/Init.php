@@ -123,6 +123,8 @@ class Init {
 	 * to work, or any other custom query variables you want to be publicly available.
 	 *
 	 * @param string[] $query_vars The array of allowed query variable names.
+	 *
+	 * @return string[] The array of allowed query variable names.
 	 */
 	public function query_vars( array $query_vars ): array {
 		$query_vars[] = SHORT_NAME;
@@ -143,7 +145,7 @@ class Init {
 	 *
 	 * @return bool $served
 	 */
-	public function rest_pre_serve_request( bool $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ): bool {
+	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		if ( 'OPTIONS' == $request->get_method() ) {
 			$allow_headers = array(
 				'Authorization',            // For user-agent authentication with a server.
@@ -168,6 +170,8 @@ class Init {
 	 * Fires once the requested HTTP headers for caching, content type, etc. have been sent.
 	 *
 	 * FIXME: Why is Link header not exposed sometimes on my development machine?
+	 *
+	 * @return void
 	 */
 	public function send_headers(): void {
 		// some server convert HEAD to GET method, so use this query param instead
