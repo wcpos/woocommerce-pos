@@ -39,8 +39,6 @@ class Init {
 		// Headers for API discoverability
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
-
-		// add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
 	}
 
 	/**

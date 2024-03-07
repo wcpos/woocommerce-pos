@@ -22,70 +22,44 @@ class WC_API {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
 		if ( $pos_only_products ) {
-			add_action( 'woocommerce_product_query', array( $this, 'hide_pos_only_products' ) );
-			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
+			add_filter( 'woocommerce_rest_product_object_query', array( $this, 'hide_pos_only_products' ), 10, 2 );
+			add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'hide_pos_only_products' ), 10, 2 );
 		}
 	}
 
 	/**
-	 * Hide POS Only products from the shop and category pages.
+	 * Filter the query arguments for a request.
 	 *
-	 * @TODO - this should be improved so that admin users can see the product, but get a message
+	 * Enables adding extra arguments or setting defaults for a post
+	 * collection request.
 	 *
-	 * @param WP_Query $query Query instance.
-	 *
-	 * @return void
+	 * @param array           $args    Key value array of query var to query value.
+	 * @param WP_REST_Request $request The request used.
 	 */
-	public function hide_pos_only_products( $query ) {
-		$meta_query = $query->get( 'meta_query' );
-
-		// Define your default meta query.
-		$default_meta_query = array(
+	public function hide_pos_only_products( $args, $request ) {
+		$meta_query = array(
 			'relation' => 'OR',
 			array(
-				'key' => '_pos_visibility',
-				'value' => 'pos_only',
-				'compare' => '!=',
+				'key'     => '_pos_visibility',
+				'compare' => 'NOT EXISTS',
 			),
 			array(
-				'key' => '_pos_visibility',
-				'compare' => 'NOT EXISTS',
+				'key'     => '_pos_visibility',
+				'value'   => 'pos_only',
+				'compare' => '!=',
 			),
 		);
 
-		// Check if an existing meta query exists.
-		if ( is_array( $meta_query ) ) {
-			if ( ! isset( $meta_query ['relation'] ) ) {
-				$meta_query['relation'] = 'AND';
-			}
-			$meta_query[] = $default_meta_query;
+		if ( empty( $args['meta_query'] ) ) {
+			$args['meta_query'] = $meta_query;
 		} else {
-			$meta_query = $default_meta_query;
+			$args['meta_query'] = array(
+				'relation' => 'AND',
+				$args['meta_query'],
+				$meta_query,
+			);
 		}
 
-		// Set the updated meta query back to the query.
-		$query->set( 'meta_query', $meta_query );
-	}
-
-	/**
-	 * Remove POS Only variations from the storefront.
-	 *
-	 * @param bool                  $visible Whether the variation is visible.
-	 * @param int                   $variation_id The variation ID.
-	 * @param int                   $product_id The product ID.
-	 * @param \WC_Product_Variation $variation The variation object.
-	 */
-	public function hide_pos_only_variations( $visible, $variation_id, $product_id, $variation ) {
-		if ( \is_shop() || \is_product_category() || \is_product() ) {
-			// Get the _pos_visibility meta value for the variation.
-			$pos_visibility = get_post_meta( $variation_id, '_pos_visibility', true );
-
-			// Check if _pos_visibility is 'pos_only' for this variation.
-			if ( $pos_visibility === 'pos_only' ) {
-				return false;
-			}
-		}
-
-		return $visible;
+		return $args;
 	}
 }

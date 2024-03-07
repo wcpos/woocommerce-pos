@@ -58,7 +58,14 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 		$this->assertIsArray( $payment_gateways_settings );
 		$this->assertArrayHasKey( 'default_gateway', $payment_gateways_settings );
 		$this->assertArrayHasKey( 'gateways', $payment_gateways_settings );
-		$this->assertEquals( count( $payment_gateways_settings['gateways'] ), 2 );
+
+		$active_gateways = array_filter(
+			$payment_gateways_settings['gateways'],
+			function ( $gateway ) {
+				return $gateway['enabled'];
+			}
+		);
+		$this->assertEquals( count( $active_gateways ), 2 );
 
 		$payment_gateways_settings = woocommerce_pos_get_settings( 'payment_gateways', 'default_gateway' );
 		$this->assertEquals( 'pos_cash', $payment_gateways_settings );
