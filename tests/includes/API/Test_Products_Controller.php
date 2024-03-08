@@ -464,11 +464,15 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product->save();
 
 		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() );
-		$request->set_body_params(
-			array(
-				'stock_quantity' => '3.85',
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'stock_quantity' => '3.85',
+				)
 			)
 		);
+
 		$response       = $this->server->dispatch( $request );
 		$data           = $response->get_data();
 

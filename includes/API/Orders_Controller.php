@@ -536,6 +536,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// try to get POS tax settings from order meta
 		$raw_data = $this->wcpos_request->get_json_params();
+
 		if ( isset( $raw_data['meta_data'] ) ) {
 			foreach ( $raw_data['meta_data'] as $meta ) {
 				if ( '_woocommerce_pos_tax_based_on' == $meta['key'] ) {
