@@ -10,7 +10,7 @@
  * License:           GPL-3.0+
  * License URI:       http://www.gnu.org/licenses/gpl-3.0.txt
  * Domain Path:       /languages
- * WC tested up to:   8.4
+ * WC tested up to:   8.6
  * WC requires at least: 5.3.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
