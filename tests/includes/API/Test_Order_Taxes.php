@@ -2,10 +2,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
@@ -204,5 +200,78 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '2.00', $data['tax_lines'][0]['tax_total'] );
 		$this->assertEquals( 'VAT', $data['tax_lines'][0]['label'] );
 		$this->assertEquals( '20', $data['tax_lines'][0]['rate_percent'] );
+	}
+
+	/**
+	 * Create a new order with customer billing address as tax location.
+	 */
+	public function test_create_order_with_customer_shipping_address_as_tax_location(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		// Prepare your data as an array and then JSON-encode it
+		$data = array(
+			'payment_method' => 'pos_cash',
+			'line_items'     => array(
+				array(
+					'product_id' => 1,
+					'quantity'   => 1,
+					'price'      => 10,
+					'total'      => '10.00',
+				),
+			),
+			'shipping' => array(
+				'country'    => 'US',
+				'state'      => 'AL',
+				'postcode'   => '12345',
+			),
+			'meta_data' => array(
+				array(
+					'key'   => '_woocommerce_pos_tax_based_on',
+					'value' => 'shipping',
+				),
+			),
+		);
+
+		// Set the body to a JSON string
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( $data ) );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 201, $response->get_status() );
+
+		// check meta data
+		$count      = 0;
+		$tax_based_on = '';
+
+		// Look for the _woocommerce_pos_uuid key in meta_data
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_tax_based_on' === $meta['key'] ) {
+				$count++;
+				$tax_based_on = $meta['value'];
+			}
+		}
+
+		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_tax_based_on.' );
+		$this->assertEquals( 'shipping', $tax_based_on, 'The value of _woocommerce_pos_tax_based_on should be billing.' );
+
+		// line item taxes
+		$this->assertEquals( 1, \count( $data['line_items'] ) );
+		$this->assertEquals( 2, \count( $data['line_items'][0]['taxes'] ) );
+		$this->assertEquals( '1', $data['line_items'][0]['taxes'][0]['total'] );
+		$this->assertEquals( '0.22', $data['line_items'][0]['taxes'][1]['total'] );
+
+		// order taxes
+		$this->assertEquals( 2, \count( $data['tax_lines'] ) );
+		$this->assertEquals( '1.00', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
+		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
+		$this->assertEquals( '0.22', $data['tax_lines'][1]['tax_total'] );
+		$this->assertEquals( 'US AL', $data['tax_lines'][1]['label'] );
+		$this->assertEquals( '2', $data['tax_lines'][1]['rate_percent'] );
+
+		// order total
+		$this->assertEquals( '11.22', $data['total'] );
+		$this->assertEquals( '1.22', $data['cart_tax'] );
+		$this->assertEquals( '1.22', $data['total_tax'] );
 	}
 }

@@ -63,7 +63,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.4.11 - 2024/03/XX =
+= 1.4.11 - 2024/03/09 =
 * Fix: regression in tax calculation when POS settings are different to Online settings
 * Fix: regression in product variation images, use 'medium' sized product image instead of full size
 * Fix: remove POS Only products from frontend WC REST API response
