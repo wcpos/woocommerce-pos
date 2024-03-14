@@ -26,13 +26,6 @@ class Pro_Plugin_Updater {
 	private $pro_plugin_slug = 'woocommerce-pos-pro';
 
 	/**
-	 * The path to the Pro plugin
-	 *
-	 * @var string $pro_plugin_path
-	 */
-	private $pro_plugin_path = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
-
-	/**
 	 * The update server URL
 	 *
 	 * @var string $update_server
@@ -44,136 +37,68 @@ class Pro_Plugin_Updater {
 	 *
 	 * @var string $update_data_transient_key
 	 */
-	private $update_data_transient_key = 'woocommerce_pos_pro_update_data';
-
-		/**
-		 * Transient key for the update data
-		 *
-		 * @var string $update_data_transient_key
-		 */
-	private $license_status_transient_key = 'woocommerce_pos_pro_license_status';
+	public static $update_data_transient_key = 'woocommerce_pos_pro_update_data';
 
 	/**
-	 * Whether the Pro plugin is installed
+	 * Transient key for the update data
 	 *
-	 * @var bool $installed
+	 * @var string $license_status_transient_key
 	 */
-	private $installed;
+	public static $license_status_transient_key = 'woocommerce_pos_pro_license_status';
 
 	/**
-	 * Whether the Pro plugin is active
+	 * Installed Pro plugins
+	 * Note: Generally this would be an array of 1 installed Pro plugins but
+	 * it's possible an older version of the plugin is installed in a different directory.
 	 *
-	 * @var bool $active
+	 * @var array $installed_pro_plugins
 	 */
-	private $active;
-
-	/**
-	 * The current version of the Pro plugin
-	 *
-	 * @var string $current_version
-	 */
-	private $current_version;
+	private $installed_pro_plugins = array();
 
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		// Ensure the necessary functions are available
+		/**
+		 * First we need to check if the Pro plugin is installed (one or more versions)
+		 */
 		include_once ABSPATH . 'wp-admin/includes/plugin.php';
-
-		$status = $this->check_pro_plugin_status();
-		$this->installed = $status['installed'];
-		$this->active = $status['active'];
-		$this->current_version = $status['version'];
+		$all_plugins = get_plugins();
+		foreach ( $all_plugins as $plugin_path => $plugin_data ) {
+			$plugin_dir = dirname( $plugin_path );
+			if ( strpos( $plugin_dir, $this->pro_plugin_slug ) === 0 ) {
+				if ( isset( $plugin_data['UpdateURI'] ) && $plugin_data['UpdateURI'] == $this->update_server ) {
+					$this->installed_pro_plugins[ $plugin_path ] = $plugin_data;
+				}
+			}
+		}
 
 		// Allow the update server to be overridden for development.
 		if ( isset( $_ENV['WCPOS_PRO_UPDATE_SERVER'] ) ) {
 			$this->update_server = $_ENV['WCPOS_PRO_UPDATE_SERVER'];
 		}
 
-		if ( $this->installed ) {
+		if ( count( $this->installed_pro_plugins ) > 0 ) {
 			add_filter( 'update_plugins_updates.wcpos.com', array( $this, 'update_plugins' ), 10, 4 );
 			add_action( 'upgrader_process_complete', array( $this, 'after_plugin_update' ), 10, 2 );
 			add_filter( 'plugin_row_meta', array( $this, 'plugin_row_meta' ), 10, 4 );
-			add_action( 'in_plugin_update_message-' . $this->pro_plugin_path, array( $this, 'plugin_update_message' ), 10, 2 );
 			add_action( 'install_plugins_pre_plugin-information', array( $this, 'plugin_information' ), 5 );
-		}
-	}
+			add_action( 'admin_enqueue_scripts', array( $this, 'license_status_styles' ) );
 
-	/**
-	 * Check the status of the Pro plugin
-	 *
-	 * @return array(
-	 *  'installed' => bool,
-	 *  'active'    => bool,
-	 *  'version'   => string|null,
-	 * )
-	 */
-	public function check_pro_plugin_status() {
-		$status = array(
-			'installed' => false,
-			'active'    => false,
-			'version'   => null,
-		);
+			// loop through the installed Pro plugins.
+			foreach ( $this->installed_pro_plugins as $plugin_path => $plugin_data ) {
+				add_action( 'in_plugin_update_message-' . $plugin_path, array( $this, 'plugin_update_message' ), 10, 2 );
+				add_action( 'after_plugin_row_' . $plugin_path, array( $this, 'license_status_notice' ), 99 );
 
-		// Check if the Pro plugin file exists.
-		if ( file_exists( WP_PLUGIN_DIR . '/' . $this->pro_plugin_path ) ) {
-			$status['installed'] = true;
-			$plugin_data = get_plugin_data( WP_PLUGIN_DIR . '/' . $this->pro_plugin_path );
-			$status['version'] = $plugin_data['Version'];
-
-			// Check if the Pro plugin is active.
-			if ( is_plugin_active( $this->pro_plugin_path ) ) {
-				$status['active'] = true;
+				/**
+				 * This is a hack to manually trigger Pro update for version < 1.4.0
+				 * TODO: remove this after 1.4.0 is released for a while
+				 */
+				if ( isset( $plugin_data['Version'] ) && version_compare( $plugin_data['Version'], '1.4.0', '<' ) ) {
+						$this->remove_this_hack_for_older_versions( $plugin_path );
+				}
 			}
 		}
-
-		/**
-		 * This is a hack to manually trigger Pro update for version < 1.4.0
-		 * TODO: remove this after 1.4.0 is released for a while
-		 */
-		if ( $status['version'] && version_compare( $status['version'], '1.4.0', '<' ) ) {
-			// Manually the update_plugins transient
-			$update_plugins = get_site_transient( 'update_plugins' );
-			if ( ! is_object( $update_plugins ) ) {
-					$update_plugins = new stdClass();
-			}
-
-			$license_settings = $this->get_license_settings();
-			$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
-			$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
-
-			// Construct the download URL, taking into account the environment
-			$package_url = add_query_arg(
-				array(
-					'key' => urlencode( $key ),
-					'instance' => urlencode( $instance ),
-				),
-				'https://updates.wcpos.com/pro/download/1.4.1'
-			);
-
-			$update = array(
-				'id'             => 'https://updates.wcpos.com',
-				'slug'           => 'woocommerce-pos-pro',
-				'plugin'         => $this->pro_plugin_path,
-				'new_version'    => '1.4.1',
-				'url'            => 'https://wcpos.com/pro',
-				'package'        => $package_url,
-				'requires'       => '5.6',
-				'tested'         => '6.5',
-				'requires_php'   => '7.4',
-				'icons'          => array(
-					'1x' => 'https://wcpos.com/wp-content/uploads/2014/06/woopos-pro.png',
-				),
-				'upgrade_notice' => $this->maybe_add_upgrade_notice(),
-			);
-
-			$update_plugins->response[ $this->pro_plugin_path ] = (object) $update;
-
-			set_site_transient( 'update_plugins', $update_plugins );
-		}
-
-		return $status;
 	}
 
 	/**
@@ -211,18 +136,12 @@ class Pro_Plugin_Updater {
 	 * @param string[]    $locales          Installed locales to look up translations for.
 	 */
 	public function update_plugins( $update, $plugin_data, $plugin_file, $locales ) {
-		$update_data = $this->check_pro_plugin_updates();
+		$current_version = isset( $plugin_data['Version'] ) ? $plugin_data['Version'] : '1';
+		$update_data = $this->check_pro_plugin_updates( $current_version );
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 
 		// Check if update data is valid and if a new version is available.
-		if ( ! is_wp_error( $update_data ) && is_object( $update_data ) && isset( $update_data->version ) ) {
-			$latest_version = $update_data->version;
-
-			// No update needed if the current version is greater than the latest version.
-			if ( version_compare( $this->current_version, $latest_version, '>' ) ) {
-				return $update;
-			}
-
+		if ( isset( $update_data['version'] ) && version_compare( $current_version, $update_data['version'], '<' ) ) {
 			$license_settings = $this->get_license_settings();
 			$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
 			$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
@@ -243,8 +162,8 @@ class Pro_Plugin_Updater {
 			$update = array(
 				'id'           => 'https://updates.wcpos.com',
 				'slug'         => 'woocommerce-pos-pro',
-				'plugin'       => $this->pro_plugin_path,
-				'version'      => $latest_version,
+				'plugin'       => $plugin_file,
+				'version'      => $update_data['version'],
 				'url'          => 'https://wcpos.com/pro',
 				'package'      => $package_url,
 				'requires'     => '5.6',
@@ -263,20 +182,21 @@ class Pro_Plugin_Updater {
 	/**
 	 * Check for updates to the Pro plugin
 	 *
-	 * @param  bool $force Force an update check.
+	 * @param  string $version The current plugin version.
+	 * @param  bool   $force Force an update check.
 	 */
-	public function check_pro_plugin_updates( $force = false ) {
-		$update_data = get_transient( $this->update_data_transient_key );
+	public function check_pro_plugin_updates( $version = '1', $force = false ) {
+		$update_data = get_transient( self::$update_data_transient_key );
 
 		if ( empty( $update_data ) || $force ) {
 			$expiration = 60 * 60 * 12; // 12 hours.
-			$url = $this->update_server . '/update/' . $this->current_version;
+			$url = $this->update_server . '/update/' . $version;
 
 			// make the api call.
 			$response = wp_remote_get(
 				$url,
 				array(
-					'timeout' => wp_doing_cron() ? 10 : 3,
+					'timeout' => wp_doing_cron() ? 10 : 5,
 					'headers' => array(
 						'Accept' => 'application/json',
 					),
@@ -284,24 +204,28 @@ class Pro_Plugin_Updater {
 			);
 
 			$data = $this->validate_api_response( $response );
+			$error = isset( $data['is_error'] ) && $data['is_error'] ? $data : false;
 
-			// Ensure $data has version, download_url and notes.
-			if ( ! is_wp_error( $data ) ) {
+			// Ensure $data is an associative array and has version, download_url, and notes.
+			if ( ! $error && is_array( $data ) ) {
 				$expected_properties = array( 'version', 'download_url', 'notes' );
 				foreach ( $expected_properties as $property ) {
-					if ( ! property_exists( $data, $property ) ) {
+					if ( ! array_key_exists( $property, $data ) ) {
 						$data = new WP_Error( 'invalid_response_structure', "Missing expected property: $property" );
 						break;
 					}
 				}
-			}
-
-			if ( is_wp_error( $data ) ) {
+			} else {
 				Logger::log( $data );
 				$expiration = 60 * 60 * 1; // try again in an hour if error.
 			}
 
-			set_transient( $this->update_data_transient_key, $data, $expiration );
+			$success = set_transient( self::$update_data_transient_key, $data, $expiration );
+			if ( ! $success ) {
+				Logger::log( 'Failed to set update data transient' );
+			}
+
+			return $data;
 		}
 
 		return $update_data;
@@ -313,17 +237,20 @@ class Pro_Plugin_Updater {
 	 * @param  bool $force Force an update check.
 	 */
 	private function check_license_status( $force = false ) {
-		$license_status = get_transient( $this->license_status_transient_key );
+		$license_status = get_transient( self::$license_status_transient_key );
 		$expiration = 60 * 60 * 12; // 12 hours.
 
 		/**
 		 * TODO: How to allow for multisite?
 		 */
-		if ( is_multisite() ) {
-			$error = new WP_Error( 'multisite_update', 'Please go to http://wcpos.com/my-account to download update.' );
-			set_transient( $this->license_status_transient_key, $error, $expiration );
-			return $error;
-		}
+		// if ( is_multisite() ) {
+		// $error = array(
+		// 'code' => 'multisite_update',
+		// 'message' => 'Please go to http://wcpos.com/my-account to download update.',
+		// );
+		// set_transient( $this->license_status_transient_key, $error, $expiration );
+		// return $error;
+		// }
 
 		$license_settings = $this->get_license_settings();
 		$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
@@ -334,8 +261,12 @@ class Pro_Plugin_Updater {
 		 */
 		if ( empty( $key ) || empty( $instance ) ) {
 			// set the transient to an error.
-			$error = new WP_Error( 'missing_license_key', 'License key is not activated.' );
-			set_transient( $this->license_status_transient_key, $error, $expiration );
+			$error = array(
+				'is_error' => true,
+				'code' => 'missing_license_key',
+				'message' => 'License key is not activated.',
+			);
+			set_transient( self::$license_status_transient_key, $error, $expiration );
 			return $error;
 		}
 
@@ -353,7 +284,7 @@ class Pro_Plugin_Updater {
 			$response = wp_remote_get(
 				$url,
 				array(
-					'timeout' => wp_doing_cron() ? 10 : 3,
+					'timeout' => wp_doing_cron() ? 10 : 5,
 					'headers' => array(
 						'Accept' => 'application/json',
 					),
@@ -361,13 +292,18 @@ class Pro_Plugin_Updater {
 			);
 
 			$data = $this->validate_api_response( $response );
+			$error = isset( $data['is_error'] ) && $data['is_error'] ? $data : false;
 
-			if ( is_wp_error( $data ) ) {
-				Logger::log( $data );
-				$expiration = 60 * 60 * 1; // try again in an hour if error.
+			if ( $error ) {
+				Logger::log( $error );
 			}
 
-			set_transient( $this->license_status_transient_key, $data, $expiration );
+			$success = set_transient( self::$license_status_transient_key, $data, $expiration );
+			if ( ! $success ) {
+				Logger::log( 'Failed to set license status transient' );
+			}
+
+			return $data;
 		}
 
 		return $license_status;
@@ -382,77 +318,50 @@ class Pro_Plugin_Updater {
 	 */
 	public function validate_api_response( $response ) {
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return array(
+				'is_error' => true,
+				'code' => $response->get_error_code(),
+				'message' => $response->get_error_message(),
+			);
 		}
 
-		$decoded_response = json_decode( $response['body'] );
+		$decoded_response = json_decode( $response['body'], true ); // Decode as associative array.
 		if ( null === $decoded_response ) {
-			return new WP_Error( 'invalid_json', 'Invalid JSON in response', $response['body'] );
+			return array(
+				'is_error' => true,
+				'code' => 'invalid_json',
+				'message' => 'Invalid JSON in response',
+				'data' => $response['body'],
+			);
+		}
+
+		if ( $response['response']['code'] === 403 ) {
+			return array(
+				'is_error' => true,
+				'expired' => true,
+				'code' => 'license_expired',
+				'message' => isset( $decoded_response['error'] ) ? $decoded_response['error'] : 'License expired.',
+			);
 		}
 
 		if ( $response['response']['code'] !== 200 ) {
-			$error = isset( $decoded_response->error ) ? $decoded_response->error : 'No error message returned from server';
-			return new WP_Error( 'invalid_response_code', $error );
+			return array(
+				'is_error' => true,
+				'code' => 'invalid_response_code',
+				'message' => isset( $decoded_response['error'] ) ? $decoded_response['error'] : 'No error message returned from server.',
+			);
 		}
 
 		// Ensure $decoded_response has the expected structure.
-		if ( ! isset( $decoded_response->data ) ) {
-			return new WP_Error( 'invalid_response_structure', 'Missing expected property: data' );
+		if ( ! isset( $decoded_response['data'] ) ) {
+			return array(
+				'is_error' => true,
+				'code' => 'invalid_response_structure',
+				'message' => 'Missing expected property: data',
+			);
 		}
 
-		return $decoded_response->data;
-	}
-
-
-	/**
-	 * Create an update response object for the WordPress transient
-	 * NOTE: this transient is different to the one we use to store the update data
-	 *
-	 * @param  array $args {
-	 *  Arguments for creating the update data object.
-	 *
-	 *  @type string   $new_version  New plugin version.
-	 *  @type string   $package      Plugin update package URL.
-	 * }
-	 * @return object {
-	 *     An object of metadata about the available plugin update.
-	 *
-	 *     @type string   $id           Plugin ID, e.g. `w.org/plugins/[plugin-name]`.
-	 *     @type string   $slug         Plugin slug.
-	 *     @type string   $plugin       Plugin basename.
-	 *     @type string   $new_version  New plugin version.
-	 *     @type string   $url          Plugin URL.
-	 *     @type string   $package      Plugin update package URL.
-	 *     @type string[] $icons        An array of plugin icon URLs.
-	 *     @type string[] $banners      An array of plugin banner URLs.
-	 *     @type string[] $banners_rtl  An array of plugin RTL banner URLs.
-	 *     @type string   $requires     The version of WordPress which the plugin requires.
-	 *     @type string   $tested       The version of WordPress the plugin is tested against.
-	 *     @type string   $requires_php The version of PHP which the plugin requires.
-	 * }
-	 */
-	private function create_update_response_object( $args = array() ) {
-		$defaults = array(
-			'id'           => '0',
-			'slug'         => 'woocommerce-pos-pro',
-			'plugin'       => $this->pro_plugin_path,
-			'url'          => 'https://wcpos.com/pro',
-			'requires'     => '5.6',
-			'tested'       => '6.5',
-			'requires_php' => '7.4',
-			'icons' => array(
-				'1x' => 'https://wcpos.com/wp-content/uploads/2014/06/woopos-pro.png',
-			),
-		);
-
-		$parsed_args = wp_parse_args( $args, $defaults );
-
-		$update_obj = new \stdClass();
-		foreach ( $parsed_args as $key => $value ) {
-			$update_obj->$key = $value;
-		}
-
-		return $update_obj;
+		return $decoded_response['data'];
 	}
 
 	/**
@@ -464,8 +373,7 @@ class Pro_Plugin_Updater {
 	public function after_plugin_update( $upgrader, $options ) {
 		if ( $options['action'] == 'update' && $options['type'] == 'plugin' ) {
 			if ( isset( $options['plugins'] ) && in_array( 'woocommerce-pos/woocommerce-pos.php', $options['plugins'] ) ) {
-				delete_transient( $this->update_data_transient_key );
-				$this->check_pro_plugin_updates();
+				delete_transient( self::$update_data_transient_key );
 			}
 		}
 	}
@@ -519,10 +427,6 @@ class Pro_Plugin_Updater {
 	 * @return string[] An array of row meta.
 	 */
 	public function plugin_row_meta( $plugin_meta, $plugin_file, $plugin_data, $status ) {
-		if ( $plugin_file !== $this->pro_plugin_path ) {
-			return $plugin_meta;
-		}
-
 		// $license_status = 'Your license status here'; // Fetch or generate your license status message
 		// $plugin_meta[] = '<span style="color: #d63638;">' . esc_html( $license_status ) . '</span>';
 
@@ -559,22 +463,15 @@ class Pro_Plugin_Updater {
 	 * }
 	 */
 	public function plugin_update_message( $plugin_data, $response ) {
-		if ( $response->plugin !== $this->pro_plugin_path ) {
-			return;
-		}
+		// Nothing at the moment.
 
-		$license_status = $this->check_license_status();
-		if ( ! is_wp_error( $license_status ) ) {
-			return;
-		}
+		// $message = 'Your license has expired. <a href="http://wcpos.com/my-account/">Please renew</> to update.';
 
-		$message = 'Your license has expired. <a href="http://wcpos.com/my-account/">Please renew</> to update.';
+		// if ( $license_status->get_error_code() === 'missing_license_key' ) {
+		// $message = $license_status->get_error_message();
+		// }
 
-		if ( $license_status->get_error_code() === 'missing_license_key' ) {
-			$message = $license_status->get_error_message();
-		}
-
-		echo '<br /><span style="color: #d63638;">' . wp_kses_post( $message ) . '</span>';
+		// echo '<br /><span style="color: #d63638;">' . wp_kses_post( $message ) . '</span>';
 	}
 
 	/**
@@ -587,8 +484,8 @@ class Pro_Plugin_Updater {
 			return;
 		}
 
-		$update_data = get_transient( $this->update_data_transient_key );
-		$message = 'Something went wrong. Please try again later.';
+		$update_data = get_transient( self::$update_data_transient_key );
+		$message = esc_html__( 'Something went wrong. Please try again later.', 'woocommerce-pos' );
 
 		if ( is_wp_error( $update_data ) ) {
 			$message = $update_data->get_error_message();
@@ -599,6 +496,7 @@ class Pro_Plugin_Updater {
 			$message = $parsedown->text( $update_data->notes );
 		}
 
+		/* translators: WordPress */
 		iframe_header( __( 'Plugin Installation' ) );
 
 		/**
@@ -639,15 +537,151 @@ class Pro_Plugin_Updater {
 	 */
 	private function maybe_add_upgrade_notice() {
 		$license_status = $this->check_license_status();
-		if ( ! is_wp_error( $license_status ) ) {
+		$active = isset( $license_status['activated'] ) && $license_status['activated'];
+		$inactive = isset( $license_status['activated'] ) && ! $license_status['activated'];
+		$expired = isset( $license_status['expired'] ) && $license_status['expired'];
+
+		if ( isset( $license_status['is_error'] ) && $license_status['is_error'] ) {
+			$inactive = isset( $license_status['code'] ) &&
+				in_array(
+					$license_status['code'],
+					array(
+						'missing_license_key', // no license key is set.
+						'invalid_response_code', // usually the key or instance is wrong length.
+					)
+				);
+		}
+
+		if ( $inactive ) {
+			return esc_html__( 'Your WooCommerce Pro license is inactive', 'woocommerce-pos' );
+		}
+
+		if ( $expired ) {
+			return esc_html__( 'Your WooCommerce Pro license has expired', 'woocommerce-pos' );
+		}
+
+		if ( isset( $license_status['is_error'] ) && $license_status['is_error'] ) {
+			return $license_status['message'];
+		}
+	}
+
+	/**
+	 * Add a notice to the plugin update table on Dashboard > Updates
+	 */
+	public function license_status_notice() {
+		$license_status = $this->check_license_status();
+		$active = isset( $license_status['activated'] ) && $license_status['activated'];
+		$inactive = isset( $license_status['activated'] ) && ! $license_status['activated'];
+		$expired = isset( $license_status['expired'] ) && $license_status['expired'];
+
+		if ( isset( $license_status['is_error'] ) && $license_status['is_error'] ) {
+			$inactive = isset( $license_status['code'] ) &&
+				in_array(
+					$license_status['code'],
+					array(
+						'missing_license_key', // no license key is set.
+						'invalid_response_code', // usually the key or instance is wrong length.
+					)
+				);
+		}
+
+		if ( $active ) {
+			echo '<tr class="plugin-update-tr installer-plugin-update-tr woocommerce-pos-pro-license">
+				<td colspan="4" class="plugin-update colspanchange">
+					<div class="update-message notice inline wcpos-active" style="margin:0;border:0;border-bottom:1px solid #DCDCDE;border-left:4px solid #5D9B5C;background-color:#F8FFF1;">
+						<p class="installer-q-icon">' .
+						esc_html__( 'Your WooCommerce Pro license is valid and active.', 'woocommerce-pos' ) .
+						' ' .
+						esc_html__( 'You are receiving plugin updates.', 'woocommerce-pos' )
+						. '</p>
+					</div>
+				</td>
+			</tr>';
 			return;
 		}
 
-		if ( $license_status->get_error_code() === 'missing_license_key' ) {
-			return $license_status->get_error_message();
+		if ( $inactive ) {
+			echo '<tr class="plugin-update-tr installer-plugin-update-tr woocommerce-pos-pro-license">
+				<td colspan="4" class="plugin-update colspanchange">
+					<div class="update-message notice inline wcpos-inactive" style="margin:0;border:0;border-bottom:1px solid #DCDCDE;border-left:4px solid #BD5858;background-color:#FFF8E1;">
+						<p class="installer-q-icon">' .
+						esc_html__( 'Your WooCommerce Pro license is inactive.', 'woocommerce-pos' ) .
+						' ' .
+						sprintf(
+							wp_kses(
+								__( '<a href="%s">Click here</a> to activate your license key.', 'woocommerce-pos' ),
+								array( 'a' => array( 'href' => array() ) )
+							),
+							esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings#license' ) )
+						)
+						. '</p>
+					</div>
+				</td>
+			</tr>';
+			return;
 		}
 
-		return 'Your license has expired. Please renew to update.';
+		if ( $expired ) {
+			echo '<tr class="plugin-update-tr installer-plugin-update-tr woocommerce-pos-pro-license">
+				<td colspan="4" class="plugin-update colspanchange">
+					<div class="update-message notice inline wcpos-expired" style="margin:0;border:0;border-bottom:1px solid #DCDCDE;border-left:4px solid #D63638;background-color:#FFF7F7;">
+						<p class="installer-q-icon">' .
+						esc_html__( 'Your WooCommerce Pro license has expired.', 'woocommerce-pos' ) .
+						' ' .
+						sprintf(
+							wp_kses(
+								__( '<a href="%s">Please renew</a> to receive updates.', 'woocommerce-pos' ),
+								array( 'a' => array( 'href' => array() ) )
+							),
+							'https://wcpos.com/my-account/'
+						)
+						. '</p>
+					</div>
+				</td>
+			</tr>';
+			return;
+		}
+
+		$message = esc_html__( 'Something went wrong. Please try again later.', 'woocommerce-pos' );
+		if ( isset( $license_status['is_error'] ) && $license_status['is_error'] ) {
+			$message = $license_status['message'];
+		}
+		echo '<tr class="plugin-update-tr installer-plugin-update-tr woocommerce-pos-pro-license">
+			<td colspan="4" class="plugin-update colspanchange">
+				<div class="update-message notice inline wcpos-expired" style="margin:0;border:0;border-bottom:1px solid #DCDCDE;border-left:4px solid #D63638;background-color:#FFF7F7;">
+					<p class="installer-q-icon">' . $message . '</p>
+				</div>
+			</td>
+		</tr>';
+	}
+
+	/**
+	 * Add some styles for the license status notice
+	 *
+	 * @param string $hook The current admin page.
+	 */
+	public function license_status_styles( $hook ) {
+		if ( 'plugins.php' === $hook ) {
+			wp_register_style( 'woocommerce-pos-styles', false );
+			wp_enqueue_style( 'woocommerce-pos-styles' );
+
+			$css = '
+				.woocommerce-pos-pro-license .wcpos-active p::before {
+					content: "\f12a";
+    			color: #4d7d4c;
+    			width: 25px;
+				}
+				.woocommerce-pos-pro-license .wcpos-inactive p::before {
+					content: "\f112";
+					color: #bd5858;
+					width: 25px;
+				}
+				.woocommerce-pos-pro-license .wcpos-expired p::before {
+					width: 25px;
+				}
+			';
+			wp_add_inline_style( 'woocommerce-pos-styles', $css );
+		}
 	}
 
 	/**
@@ -656,14 +690,67 @@ class Pro_Plugin_Updater {
 	 * NOTE: it's possible the Pro plugin is not activated, so we need to add a bit of a hack to get the settings.
 	 */
 	private function get_license_settings() {
-		if ( ! $this->active ) {
-			if ( file_exists( WP_PLUGIN_DIR . '/woocommerce-pos-pro/includes/Services/Settings.php' ) ) {
-				include_once WP_PLUGIN_DIR . '/woocommerce-pos-pro/includes/Services/Settings.php';
-				if ( method_exists( '\WCPOS\WooCommercePOSPro\Services\Settings', '_get_inactive_license_settings' ) ) {
-					return \WCPOS\WooCommercePOSPro\Services\Settings::_get_inactive_license_settings();
-				}
+		// first check if any Pro plugins are active.
+		foreach ( $this->installed_pro_plugins as $plugin_path => $plugin_data ) {
+			if ( is_plugin_active( $plugin_path ) ) {
+				return woocommerce_pos_get_settings( 'license' );
 			}
 		}
-		return woocommerce_pos_get_settings( 'license' );
+
+		// else, try and get the settings from the first Pro plugin.
+		$first_folder = dirname( array_key_first( $this->installed_pro_plugins ) );
+		if ( file_exists( WP_PLUGIN_DIR . '/' . $first_folder . '/includes/Services/Settings.php' ) ) {
+			include_once WP_PLUGIN_DIR . '/' . $first_folder . '/includes/Services/Settings.php';
+			if ( method_exists( '\WCPOS\WooCommercePOSPro\Services\Settings', '_get_inactive_license_settings' ) ) {
+				return \WCPOS\WooCommercePOSPro\Services\Settings::_get_inactive_license_settings();
+			}
+		}
+	}
+
+	/**
+	 * Temporary fix for older versions of the Pro plugin
+	 *
+	 * @param string $plugin_path The plugin path.
+	 */
+	private function remove_this_hack_for_older_versions( $plugin_path ) {
+		// Manually the update_plugins transient
+		$update_plugins = get_site_transient( 'update_plugins' );
+		if ( ! is_object( $update_plugins ) ) {
+				$update_plugins = new stdClass();
+				$update_plugins->response = array();
+		}
+
+		$license_settings = $this->get_license_settings();
+		$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
+		$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
+
+		// Construct the download URL, taking into account the environment.
+		$package_url = add_query_arg(
+			array(
+				'key' => urlencode( $key ),
+				'instance' => urlencode( $instance ),
+			),
+			'https://updates.wcpos.com/pro/download/1.4.5'
+		);
+
+		$update = array(
+			'id'             => 'https://updates.wcpos.com',
+			'slug'           => 'woocommerce-pos-pro',
+			'plugin'         => $plugin_path,
+			'new_version'    => '1.4.5',
+			'url'            => 'https://wcpos.com/pro',
+			'package'        => $package_url,
+			'requires'       => '5.6',
+			'tested'         => '6.5',
+			'requires_php'   => '7.4',
+			'icons'          => array(
+				'1x' => 'https://wcpos.com/wp-content/uploads/2014/06/woopos-pro.png',
+			),
+			'upgrade_notice' => $this->maybe_add_upgrade_notice(),
+		);
+
+		$update_plugins->response[ $plugin_path ] = (object) $update;
+
+		set_site_transient( 'update_plugins', $update_plugins );
 	}
 }

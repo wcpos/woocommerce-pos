@@ -1,7 +1,7 @@
 === WooCommerce POS ===
 Contributors: kilbot
 Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
-Requires at least: 5.6 & WooCommerce 5.3
+Requires at least: 5.6
 Tested up to: 6.4
 Stable tag: 1.4.11
 License: GPL-3.0
@@ -62,6 +62,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.4.12 - 2024/03/XX =
+* Fix: Pro plugin not showing updates for some users
 
 = 1.4.11 - 2024/03/09 =
 * Fix: regression in tax calculation when POS settings are different to Online settings

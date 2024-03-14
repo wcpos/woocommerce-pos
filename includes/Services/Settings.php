@@ -3,8 +3,8 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Payment_Gateways;
-use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * Settings Service class.
@@ -161,23 +161,49 @@ class Settings {
 	}
 
 	/**
-	 * @param string $id
-	 * @param array  $settings
+	 * Saves settings for a specific section.
 	 *
-	 * @return null|array|mixed|WP_Error
+	 * @param string $id The ID of the settings section being saved.
+	 * @param array  $settings The settings array to be saved.
+	 *
+	 * @return array|WP_Error Returns the updated settings array on success or WP_Error on failure.
 	 */
 	public function save_settings( string $id, array $settings ) {
-		$success = update_option(
-			static::$db_prefix . $id,
-			array_merge(
-				$settings,
-				array( 'date_modified_gmt' => current_time( 'mysql', true ) )
-			),
-			false
+		$settings = array_merge(
+			$settings,
+			array( 'date_modified_gmt' => current_time( 'mysql', true ) )
 		);
 
+		/**
+		 * Filters the settings before they are saved.
+		 *
+		 * Allows modification of the settings array for a specific section before it is saved to the database.
+		 *
+		 * @since 1.4.12
+		 *
+		 * @param array  $settings The settings array about to be saved.
+		 * @param string $id       The ID of the settings section being saved.
+		 */
+		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
+
+		$success = update_option( static::$db_prefix . $id, $settings, false );
+
 		if ( $success ) {
-			return $this->get_settings( $id );
+			$saved_settings = $this->get_settings( $id );
+
+			/**
+			 * Fires after settings for a specific section are successfully saved.
+			 *
+			 * Provides a way to execute additional logic after a specific settings section is updated.
+			 *
+			 * @since 1.4.12
+			 *
+			 * @param array  $saved_settings The settings array that was just saved.
+			 * @param string $id             The ID of the settings section that was saved.
+			 */
+			do_action( "woocommerce_pos_saved_{$id}_settings", $saved_settings, $id );
+
+			return $saved_settings;
 		}
 
 		return new WP_Error(
