@@ -64,6 +64,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 == Changelog ==
 
 = 1.4.12 - 2024/03/XX =
+* Security: Fix Insufficient Verification of Data Authenticity to Authenticated (Customer+) Information Disclosure (reported by Lucio Sá)
 * Fix: Pro plugin not showing updates for some users
 
 = 1.4.11 - 2024/03/09 =

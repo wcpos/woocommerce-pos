@@ -1,7 +1,15 @@
 <?php
+/**
+ *
+ */
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+
+/**
+ *
+ */
 class Form_Handler {
 
 	public function __construct() {
@@ -27,14 +35,44 @@ class Form_Handler {
 	public function pay_action() {
 		global $wp;
 
-		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'] ) ) {
+		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'], $_GET['token'] ) ) {
 			$order_id  = absint( $wp->query_vars['order-pay'] );
 			$order     = wc_get_order( $order_id );
 
-			// set customer
+			// Ensure the order exists.
+			if ( ! $order ) {
+				wp_die(
+					esc_html__( 'Order does not exist.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
+			// Verify the order key matches the key provided in the URL.
+			$provided_key = sanitize_text_field( wp_unslash( $_GET['key'] ) );
+			if ( $provided_key !== $order->get_order_key() ) {
+				wp_die(
+					esc_html__( 'Order key mismatch.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
+			// Verify the cashier is authorized to access the order.
+			$provided_token = sanitize_text_field( wp_unslash( $_GET['token'] ) );
+			$auth = AuthService::instance();
+			$user = $auth->validate_token( $provided_token );
+			if ( is_wp_error( $user ) ) {
+				wp_die(
+					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
+			// set customer.
 			wp_set_current_user( $order->get_customer_id() );
 		}
-
 	}
 
 	/**
@@ -70,5 +108,4 @@ class Form_Handler {
 			}
 		}
 	}
-
 }
