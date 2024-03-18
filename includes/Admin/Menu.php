@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
  *
@@ -39,6 +40,7 @@ class Menu {
 			$this->register_pos_admin();
 			add_filter( 'custom_menu_order', '__return_true' );
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
+			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
 		}
 
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
@@ -79,25 +81,6 @@ class Menu {
 	 * Render the upgrade page.
 	 */
 	public function display_upgrade_page(): void {
-		$upgrade = get_transient( 'remote_pro_page' );
-
-		// Check for transient, if none, grab remote HTML file
-		if ( false === $upgrade ) {
-			// Get remote HTML file
-			$response = wp_remote_get( 'http://wcpos.com/pro/?wp-admin=woocommerce-pos' );
-			// Check for error
-			if ( is_wp_error( $response ) ) {
-				return;
-			}
-			// Parse remote HTML file
-			$upgrade = wp_remote_retrieve_body( $response );
-			// Check for error
-			if ( is_wp_error( $upgrade ) ) {
-				return;
-			}
-			// Store remote HTML file in transient, expire after 24 hours
-			set_transient( 'remote_pro_page', $upgrade, 24 * HOUR_IN_SECONDS );
-		}
 		include_once 'templates/upgrade.php';
 	}
 
@@ -191,5 +174,41 @@ class Menu {
 				'settings' => $this->settings_screen_id,
 			)
 		);
+	}
+
+	/**
+	 * Enqueue landing page scripts and styles.
+	 */
+	public function enqueue_landing_scripts_and_styles( $hook_suffix ): void {
+		if ( $hook_suffix === $this->toplevel_screen_id ) {
+			$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing/assets/';
+
+			// Enqueue the landing page CSS from CDN
+			wp_enqueue_style(
+				'wcpos-landing',
+				$url . 'css/landing.css',
+				array(),
+				PLUGIN_VERSION
+			);
+
+			// Ensure WordPress bundled React and lodash are loaded as dependencies
+			wp_enqueue_script( 'react' );
+			wp_enqueue_script( 'lodash' );
+
+			// Enqueue the landing page JS from CDN, with React and lodash as dependencies
+			wp_enqueue_script(
+				'wcpos-landing',
+				$url . 'js/landing.js',
+				array(
+					'react',
+					'react-dom',
+					'wp-element',
+					'lodash',
+				),
+				PLUGIN_VERSION,
+				true
+			);
+		}
 	}
 }
