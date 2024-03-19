@@ -1,6 +1,6 @@
 === WooCommerce POS ===
 Contributors: kilbot
-Tags: cart, e-commerce, ecommerce, inventory, point-of-sale, pos, sales, sell, shop, shopify, store, vend, woocommerce, wordpress-ecommerce
+Tags: ecommerce, point-of-sale, pos, inventory, store
 Requires at least: 5.6
 Tested up to: 6.5
 Stable tag: 1.4.12

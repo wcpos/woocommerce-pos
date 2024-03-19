@@ -140,8 +140,13 @@ class Pro_Plugin_Updater {
 		$update_data = $this->check_pro_plugin_updates( $current_version );
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 
+		// Check if $update_data is an object and convert to an array if so.
+		if ( is_object( $update_data ) ) {
+			$update_data = get_object_vars( $update_data );
+		}
+
 		// Check if update data is valid and if a new version is available.
-		if ( isset( $update_data['version'] ) && version_compare( $current_version, $update_data['version'], '<' ) ) {
+		if ( is_array( $update_data ) && isset( $update_data['version'] ) && version_compare( $current_version, $update_data['version'], '<' ) ) {
 			$license_settings = $this->get_license_settings();
 			$key = isset( $license_settings['key'] ) ? $license_settings['key'] : '';
 			$instance = isset( $license_settings['instance'] ) ? $license_settings['instance'] : '';
