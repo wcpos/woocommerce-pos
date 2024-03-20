@@ -1,10 +1,7 @@
 name: Sync assets with wordpress.org
 
 on:
-  push:
-    paths:
-      - 'readme.txt'
-      - '.wordpress-org/**'
+  workflow_dispatch:
 
 jobs:
   run:

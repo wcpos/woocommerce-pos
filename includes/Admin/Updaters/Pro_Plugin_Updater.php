@@ -542,6 +542,12 @@ class Pro_Plugin_Updater {
 	 */
 	private function maybe_add_upgrade_notice() {
 		$license_status = $this->check_license_status();
+
+		// Check if $update_data is an object and convert to an array if so.
+		if ( is_object( $license_status ) ) {
+			$license_status = get_object_vars( $license_status );
+		}
+
 		$active = isset( $license_status['activated'] ) && $license_status['activated'];
 		$inactive = isset( $license_status['activated'] ) && ! $license_status['activated'];
 		$expired = isset( $license_status['expired'] ) && $license_status['expired'];
@@ -575,6 +581,12 @@ class Pro_Plugin_Updater {
 	 */
 	public function license_status_notice() {
 		$license_status = $this->check_license_status();
+
+		// Check if $update_data is an object and convert to an array if so.
+		if ( is_object( $license_status ) ) {
+			$license_status = get_object_vars( $license_status );
+		}
+
 		$active = isset( $license_status['activated'] ) && $license_status['activated'];
 		$inactive = isset( $license_status['activated'] ) && ! $license_status['activated'];
 		$expired = isset( $license_status['expired'] ) && $license_status['expired'];
