@@ -12,11 +12,6 @@
 	},
 	"steps": [
 		{
-			"step": "login",
-			"username": "admin",
-			"password": "password"
-		},
-		{
 			"step": "installPlugin",
 			"pluginZipFile": {
 				"resource": "wordpress.org/plugins",
@@ -29,8 +24,8 @@
 		{
 			"step": "installPlugin",
 			"pluginZipFile": {
-				"resource": "wordpress.org/plugins",
-				"slug": "woocommerce-pos"
+				"resource": "url",
+				"url": "https:\/\/downloads.wordpress.org\/plugin\/woocommerce-pos.1.4.13.zip"
 			},
 			"options": {
 				"activate": true
@@ -50,6 +45,11 @@
 		{
 			"step": "runPHP",
 			"code": "<?php\nrequire_once 'wp-load.php';\nglobal $wpdb;\n$wpdb->insert(\n    $wpdb->prefix . 'woocommerce_tax_rates',\n    array(\n        'tax_rate_country' => 'US',\n        'tax_rate_state' => '',\n        'tax_rate' => '5.0000',\n        'tax_rate_name' => 'Sales Tax',\n        'tax_rate_priority' => '1',\n        'tax_rate_compound' => '0',\n        'tax_rate_shipping' => '1',\n        'tax_rate_order' => '0',\n        'tax_rate_class' => ''\n    )\n);\n"
+		},
+		{
+			"step": "login",
+			"username": "admin",
+			"password": "password"
 		}
 	]
 }
