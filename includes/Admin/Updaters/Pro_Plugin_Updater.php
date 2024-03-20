@@ -154,7 +154,7 @@ class Pro_Plugin_Updater {
 			// Construct the download URL, taking into account the environment
 			$download_url = $is_development
 				? 'http://localhost:8080/pro/download/1.4.0'
-				: $update_data->download_url;
+				: $update_data['download_url'];
 
 			$package_url = add_query_arg(
 				array(
