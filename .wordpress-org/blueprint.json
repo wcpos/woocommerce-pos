@@ -1,0 +1,55 @@
+{
+	"landingPage": "/pos",
+	"preferredVersions": {
+		"php": "8.0",
+		"wp": "latest"
+	},
+	"phpExtensionBundles": [
+		"kitchen-sink"
+	],
+	"features": {
+		"networking": true
+	},
+	"steps": [
+		{
+			"step": "login",
+			"username": "admin",
+			"password": "password"
+		},
+		{
+				"step": "installPlugin",
+				"pluginZipFile": {
+						"resource": "wordpress.org/plugins",
+						"slug": "woocommerce"
+				},
+				"options": {
+						"activate": true
+				}
+		},
+		{
+				"step": "installPlugin",
+				"pluginZipFile": {
+					"resource": "wordpress.org/plugins",
+					"slug": "woocommerce-pos"
+				},
+				"options": {
+						"activate": true
+				}
+		},
+		{
+			"step": "setSiteOptions",
+			"options": {
+					"permalink_structure": "/%year%/%monthnum%/%day%/%postname%/",
+					"woocommerce_calc_taxes": "yes"
+			}
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp wc product import wp-content/plugins/woocommerce/sample-data/sample_products.csv --user=admin"
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php\nrequire_once 'wp-load.php';\nglobal $wpdb;\n$wpdb->insert(\n    $wpdb->prefix . 'woocommerce_tax_rates',\n    array(\n        'tax_rate_country' => 'US',\n        'tax_rate_state' => '',\n        'tax_rate' => '5.0000',\n        'tax_rate_name' => 'Sales Tax',\n        'tax_rate_priority' => '1',\n        'tax_rate_compound' => '0',\n        'tax_rate_shipping' => '1',\n        'tax_rate_order' => '0',\n        'tax_rate_class' => ''\n    )\n);\n"
+		}
+	]
+}
