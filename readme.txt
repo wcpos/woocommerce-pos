@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, store
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.4.12
+Stable tag: 1.4.13
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -62,6 +62,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.4.13 - 2024/03/19 = 
+* Fix: potential error introduced to Pro updater in previous version
 
 = 1.4.12 - 2024/03/18 =
 * Security: Fix Insufficient Verification of Data Authenticity to Authenticated (Customer+) Information Disclosure (reported by Lucio Sá)
