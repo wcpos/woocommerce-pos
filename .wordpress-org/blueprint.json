@@ -45,7 +45,7 @@
 		},
 		{
 			"step": "runPHP",
-			"code": "<?php\nrequire_once(ABSPATH . 'wp-load.php');\n\nif (class_exists('WC_Product_CSV_Importer')) {\n    $import_file = ABSPATH . 'wp-content/plugins/woocommerce/sample-data/sample_products.csv';\n    $args = [\n        'delimiter' => ',', // CSV delimiter\n        'start_pos' => 0, // Starting position\n        'mapping' => [], // Column mapping, leave empty for automatic mapping\n        'parse' => true, // Parse file\n    ];\n\n    $importer = new WC_Product_CSV_Importer($import_file, $args);\n    $results = $importer->import();\n}\n"
+			"code": "<?php\nrequire_once 'wp-load.php';\n\nif (class_exists('WC_Product_CSV_Importer')) {\n    $import_file = ABSPATH . 'wp-content/plugins/woocommerce/sample-data/sample_products.csv';\n    $args = [\n        'delimiter' => ',', // CSV delimiter\n        'start_pos' => 0, // Starting position\n        'mapping' => [], // Column mapping, leave empty for automatic mapping\n        'parse' => true, // Parse file\n    ];\n\n    $importer = new WC_Product_CSV_Importer($import_file, $args);\n    $results = $importer->import();\n}\n"
 		},
 		{
 			"step": "runPHP",
