@@ -17,34 +17,34 @@
 			"password": "password"
 		},
 		{
-				"step": "installPlugin",
-				"pluginZipFile": {
-						"resource": "wordpress.org/plugins",
-						"slug": "woocommerce"
-				},
-				"options": {
-						"activate": true
-				}
+			"step": "installPlugin",
+			"pluginZipFile": {
+				"resource": "wordpress.org/plugins",
+				"slug": "woocommerce"
+			},
+			"options": {
+				"activate": true
+			}
 		},
 		{
-				"step": "installPlugin",
-				"pluginZipFile": {
-					"resource": "wordpress.org/plugins",
-					"slug": "woocommerce-pos"
-				},
-				"options": {
-						"activate": true
-				}
+			"step": "installPlugin",
+			"pluginZipFile": {
+				"resource": "wordpress.org/plugins",
+				"slug": "woocommerce-pos"
+			},
+			"options": {
+				"activate": true
+			}
 		},
 		{
 			"step": "setSiteOptions",
 			"options": {
-					"permalink_structure": "/%year%/%monthnum%/%day%/%postname%/",
-					"woocommerce_calc_taxes": "yes"
+				"permalink_structure": "/%year%/%monthnum%/%day%/%postname%/",
+				"woocommerce_calc_taxes": "yes"
 			}
 		},
 		{
-			"step": "wp-cli",
+			"step": "wpCLI",
 			"command": "wp wc product import wp-content/plugins/woocommerce/sample-data/sample_products.csv --user=admin"
 		},
 		{
