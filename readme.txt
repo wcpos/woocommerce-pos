@@ -1,4 +1,4 @@
-=== WooCommerce POS ===
+=== WooCommerce POS - Point of Sale plugin ===
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
@@ -13,7 +13,7 @@ WooCommerce POS is a simple application for taking orders at the Point of Sale u
 
 WooCommerce POS is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
 
-= 🕒 Install and start taking orders in less than 2 minutes. =
+> 🕒 Install and start taking orders in less than 2 minutes.
 
 = 🎥 DEMO =
 You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
