@@ -1,23 +1,38 @@
 === WooCommerce POS ===
 Contributors: kilbot
-Tags: ecommerce, point-of-sale, pos, inventory, store
+Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
 Stable tag: 1.4.15
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-Finally, a Point of Sale plugin for WooCommerce! Sell online and in your physical retail store - no monthly fees, no need to sync inventory.
+WooCommerce POS is a simple application for taking orders at the Point of Sale using your WooCommerce store.
 
 == Description ==
 
-WooCommerce POS is a simple interface for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store.
-WooCommerce POS provides an alternative to Vend or Shopify POS - no need to sync inventory and no monthly subscription fees.
+WooCommerce POS is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
 
-= DEMO =
-You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with `login/pass` : `demo/demo`
+= 🕒 Install and start taking orders in less than 2 minutes. =
 
-= REQUIREMENTS =
+= 🎥 DEMO =
+You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
+or download the desktop application:
+⬇️ [Download WooCommerce POS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
+⬇️ [Download WooCommerce POS for Mac](https://updates.wcpos.com/electron/download/darwin-x64)
+
+= ✨ FEATURES = 
+* Available cross-platform via browser or desktop application _(iOS and Android coming soon)_
+* Offline storage for fast product search and order processing
+* Manage product stock levels and pricing quickly
+* Add new customers or checkout via Guest account
+* Add miscellaneous products to cart, ie: products not in WooCommerce
+* **Pro:** Use any WooCommerce gateway
+* **Pro:** Create multiple POS Stores
+* **Pro:** Analytics for POS and Online sales
+* **Pro:** Priority [Discord support](https://wcpos.com/discord) (usually < 1 hour)
+
+= 📋 REQUIREMENTS =
 * WordPress >= 5.6
 * WooCommerce >= 5.3
 * PHP >= 7.4
@@ -62,6 +77,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.4.16 - 2024/03/22 =
+* Fix: namespace checkout token, this may help some situations where checkout is not completing
 
 = 1.4.15 - 2024/03/20 = 
 * Fix: another potential error introduced to Pro updater in previous version 🤦‍♂️
