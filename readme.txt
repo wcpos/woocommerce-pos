@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.4.15
+Stable tag: 1.4.16
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -79,7 +79,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 == Changelog ==
 
 = 1.4.16 - 2024/03/22 =
-* Fix: namespace checkout token, this may help some situations where checkout is not completing
+* Fix: nonce check failing for Guest orders when checking out with the desktop application
 
 = 1.4.15 - 2024/03/20 = 
 * Fix: another potential error introduced to Pro updater in previous version 🤦‍♂️

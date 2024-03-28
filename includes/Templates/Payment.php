@@ -153,6 +153,7 @@ class Payment {
 			 * @TODO - is this the best way to do this?
 			 */
 			wp_set_current_user( $order->get_customer_id() );
+			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 10, 2 );
 
 			// create nonce for customer
 			// $nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
@@ -247,6 +248,17 @@ class Payment {
 			$settings_service = Settings::instance();
 			$settings_service->save_settings( 'checkout', $new_settings );
 		}
+	}
+
+	/**
+	 * Fix: when checking out as Guest on the desktop application, WordPress gets a $uid from the
+	 * session, eg: 't_8b04f8283e7edc5aeee2867c89dd06'. This causes the nonce check to fail.
+	 */
+	public function nonce_user_logged_out( $uid, $action ) {
+		if ( $action === 'woocommerce-pay' ) {
+			return 0;
+		}
+		return $uid;
 	}
 
 	/**

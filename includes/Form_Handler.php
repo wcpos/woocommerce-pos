@@ -35,7 +35,7 @@ class Form_Handler {
 	public function pay_action() {
 		global $wp;
 
-		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'], $_GET['token'] ) ) {
+		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'] ) ) {
 			$order_id  = absint( $wp->query_vars['order-pay'] );
 			$order     = wc_get_order( $order_id );
 
@@ -58,8 +58,20 @@ class Form_Handler {
 				);
 			}
 
+			// Check for 'wcpos_jwt' and fall back to 'token' if not present.
+			// remove 'token' when wcpos_jwt is fully implemented.
+			$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
+
+			if ( $token_key === null || ! isset( $_GET[ $token_key ] ) ) {
+				wp_die(
+					esc_html__( 'Token not provided.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
 			// Verify the cashier is authorized to access the order.
-			$provided_token = sanitize_text_field( wp_unslash( $_GET['token'] ) );
+			$provided_token = sanitize_text_field( wp_unslash( $_GET[ $token_key ] ) );
 			$auth = AuthService::instance();
 			$user = $auth->validate_token( $provided_token );
 			if ( is_wp_error( $user ) ) {
