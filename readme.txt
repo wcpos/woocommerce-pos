@@ -48,7 +48,7 @@ or download the desktop application:
 = Pro installation =
 If you have purchased a license for [WooCommerce POS Pro](http://wcpos.com/pro) please follow the steps below to install and activate the plugin:
 
-1. Go to: http://woopos.com.au/my-account/
+1. Go to: http://wcpos.com/my-account/
 2. Under My Downloads, click the download link and save the plugin to your desktop.
 3. Then go to your site, login and go to the Add New Plugin page, eg: http://<yourstore.com>/wp-admin/plugin-install.php?tab=upload
 4. Upload the plugin zip file from your desktop and activate.
