@@ -103,6 +103,30 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 */
 	public function wcpos_register_wc_rest_api_hooks(): void {
 		add_filter( 'woocommerce_rest_tax_query', array( $this, 'wcpos_tax_query' ), 10, 2 );
+		add_filter( 'woocommerce_rest_prepare_tax', array( $this, 'wcpos_prepare_tax_response' ), 10, 3 );
+	}
+
+	/**
+	 * Filter tax object returned from the REST API.
+	 *
+	 * @param WP_REST_Response $response The response object.
+	 * @param stdClass         $tax      Tax object used to create response.
+	 * @param WP_REST_Request  $request  Request object.
+	 */
+	public function wcpos_prepare_tax_response( $response, $tax, $request ) {
+		$data = $response->get_data();
+
+		/**
+		 * Make sure the tax has a uuid
+		 * NOTE: we're just using the tax_rate_id as the uuid as we are unlikely to create tax rates via the POS,
+		 * and there is no meta_data we're we can eaily store a uuid.
+		 */
+		$data['uuid'] = (string) $tax->tax_rate_id;
+
+		// Reset the new response data
+		$response->set_data( $data );
+
+		return $response;
 	}
 
 	/**
