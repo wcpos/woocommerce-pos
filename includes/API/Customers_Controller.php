@@ -16,6 +16,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_User;
 use WP_User_Query;
+use WP_Error;
 
 /**
  * Product Tgas controller class.
@@ -172,7 +173,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$this->wcpos_register_wc_rest_api_hooks();
 		$params = $request->get_params();
 
-		// Optimised query for getting all product IDs
+		// Optimised query for getting all user IDs.
 		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
 			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
 		}
@@ -198,7 +199,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_customer_response( WP_REST_Response $response, WP_User $user_data, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Add the uuid to the response
+		// Add the uuid to the response.
 		$this->maybe_add_user_uuid( $user_data );
 
 		/*
@@ -221,7 +222,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				}
 			);
 
-			// Convert to WC REST API expected format
+			// Convert to WC REST API expected format.
 			$data['meta_data'] = array_map(
 				function ( $meta ) {
 					return array(
@@ -236,7 +237,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
 		}
 
-		// Set any changes to the response data
+		// Set any changes to the response data.
 		$response->set_data( $data );
 		// $this->log_large_rest_response( $response, $user_data->ID );
 
@@ -250,30 +251,66 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * multisite would return all users from all sites, not just the current site.
 	 * Also, querying by role is not as simple as querying by post type.
 	 *
-	 * @param array $fields
+	 * @param array $fields Fields to return. Default is ID.
 	 *
 	 * @return array|WP_Error
 	 */
 	public function wcpos_get_all_posts( array $fields = array() ): array {
+		global $wpdb;
+
+		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
+
 		$args = array(
-			'fields' => 'ID', // Only return user IDs
+			'fields' => array( 'ID', 'registered' ), // Return only the ID and registered date.
+			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier']
 		);
-		$roles = 'all'; // @TODO: could be an array of roles, like ['customer', 'cashier']
 
-		if ( 'all' !== $roles ) {
-			$args['role__in'] = $roles;
-		}
-
-		$user_query = new WP_User_Query( $args );
-
+		/**
+		 * The user query is too complex to do a direct sql query, eg: multisite would return all users from all sites,
+		 * not just the current site. Also, querying by role is not as simple as querying by post type.
+		 *
+		 * For now we get all user ids and all 'last_update' meta values, then combine them into an array of objects.
+		 */
 		try {
-			$user_ids = $user_query->get_results();
+			$user_query = new WP_User_Query( $args );
+			$users = $user_query->get_results();
+			$last_updates = array();
 
-			return array_map( array( $this, 'wcpos_format_id' ), $user_ids );
+			if ( $id_with_modified_date ) {
+				$last_update_results = $wpdb->get_results(
+					"
+            SELECT user_id, meta_value 
+            FROM $wpdb->usermeta 
+            WHERE meta_key = 'last_update'",
+					OBJECT_K
+				);
+
+				foreach ( $last_update_results as $user_id => $meta ) {
+					$last_updates[ $user_id ] = $meta->meta_value;
+				}
+			}
+
+			// Merge user IDs with their corresponding 'last_updated' values or fallback to user_registered.
+			$user_data = array_map(
+				function ( $user ) use ( $last_updates, $id_with_modified_date ) {
+					$user_info = array( 'id' => (int) $user->ID );
+					if ( $id_with_modified_date ) {
+						if ( isset( $last_updates[ $user->ID ] ) ) {
+							$user_info['date_modified_gmt'] = wc_rest_prepare_date_response( $last_updates[ $user->ID ] );
+						} else {
+							$user_info['date_modified_gmt'] = wc_rest_prepare_date_response( $user->user_registered );
+						}
+					}
+					return $user_info;
+				},
+				$users
+			);
+
+			return $user_data;
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
 
-			return new \WP_Error(
+			return new WP_Error(
 				'woocommerce_pos_rest_cannot_fetch',
 				'Error fetching customer IDs.',
 				array( 'status' => 500 )
@@ -281,7 +318,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 	}
 
-	/*
+	/**
 	 * Filter arguments, before passing to WP_User_Query, when querying users via the REST API.
 	 *
 	 * @param array           $prepared_args Array of arguments for WP_User_Query.
@@ -292,7 +329,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_customer_query( array $prepared_args, WP_REST_Request $request ): array {
 		$query_params = $request->get_query_params();
 
-		// add modified_after date_modified_gmt
+		// add modified_after date_modified_gmt.
 		if ( isset( $query_params['modified_after'] ) && '' !== $query_params['modified_after'] ) {
 			$timestamp                   = strtotime( $query_params['modified_after'] );
 			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries(
@@ -307,7 +344,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			);
 		}
 
-		// Handle orderby cases
+		// Handle orderby cases.
 		if ( isset( $query_params['orderby'] ) ) {
 			switch ( $query_params['orderby'] ) {
 				case 'first_name':
@@ -343,7 +380,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		}
 
-		// Handle search
+		// Handle search.
 		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
 			$search_keyword = $query_params['search'];
 
@@ -368,7 +405,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					'value'   => $search_keyword,
 					'compare' => 'LIKE',
 				),
-				// WooCommerce billing fields
+				// WooCommerce billing fields.
 				array(
 					'key'     => 'billing_first_name',
 					'value'   => $search_keyword,
@@ -396,11 +433,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				),
 			);
 
-			// Combine the search meta_query with the existing meta_query
+			// Combine the search meta_query with the existing meta_query.
 			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );
 		}
 
-		// Handle include/exclude
+		// Handle include/exclude.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
 			add_action( 'pre_user_query', array( $this, 'wcpos_include_exclude_users_by_id' ) );
 		}
@@ -411,19 +448,19 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Add user_email and user_login to the user query.
 	 *
-	 * @param WP_User_Query $query
+	 * @param WP_User_Query $query The WP_User_Query instance (passed by reference).
 	 */
 	public function wcpos_search_user_table( $query ): void {
 		global $wpdb;
 
-		// Remove the hook
+		// Remove the hook.
 		remove_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
 
-		// Get the search keyword
+		// Get the search keyword.
 		$query_params   = $query->query_vars;
 		$search_keyword = $query_params['_wcpos_search'];
 
-		// Prepare the LIKE statement
+		// Prepare the LIKE statement.
 		$like_email = '%' . $wpdb->esc_like( $search_keyword ) . '%';
 		$like_login = '%' . $wpdb->esc_like( $search_keyword ) . '%';
 
@@ -435,10 +472,10 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 
 		$pattern   = "/\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\)(\s*OR\s*\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\))*\s*/";
 
-		// Add the search keyword to the query
+		// Add the search keyword to the query.
 		$modified_where = preg_replace( $pattern, "$insertion$0", $query->query_where );
 
-		// Check if the replacement was successful and assign it back to query_where
+		// Check if the replacement was successful and assign it back to query_where.
 		if ( $modified_where !== $query->query_where ) {
 			$query->query_where = $modified_where;
 		}
@@ -447,22 +484,22 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Include or exclude users by ID.
 	 *
-	 * @param WP_User_Query $query
+	 * @param WP_User_Query $query The WP_User_Query instance (passed by reference).
 	 */
 	public function wcpos_include_exclude_users_by_id( $query ) {
 		global $wpdb;
 
-		// Remove the hook
+		// Remove the hook.
 		remove_action( 'pre_user_query', array( $this, 'wcpos_include_exclude_users_by_id' ) );
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID IN ($ids_format) ", $include_ids );
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );

@@ -168,9 +168,15 @@ class Product_Tags_Controller extends WC_REST_Product_Tags_Controller {
 		);
 
 		try {
-			$product_tag_ids = get_terms( $args );
+			$results = get_terms( $args );
 
-			return array_map( array( $this, 'wcpos_format_id' ), $product_tag_ids );
+			// Format the response.
+			return array_map(
+				function ( $item ) {
+					return array( 'id' => (int) $item );
+				},
+				$results
+			);
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product tags IDs: ' . $e->getMessage() );
 

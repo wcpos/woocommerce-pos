@@ -235,14 +235,12 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 			ARRAY_A
 		);
 
-		// Convert array of arrays into array of strings (ids)
-		$all_ids = array_map(
+		// Format the response.
+		return array_map(
 			function ( $item ) {
-				return \strval( $item['id'] );
+				return array( 'id' => (int) $item['id'] );
 			},
 			$results
 		);
-
-		return array_map( array( $this, 'wcpos_format_id' ), $all_ids );
 	}
 }

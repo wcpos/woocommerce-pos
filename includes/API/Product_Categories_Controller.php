@@ -168,9 +168,15 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 		);
 
 		try {
-			$product_category_ids = get_terms( $args );
+			$results = get_terms( $args );
 
-			return array_map( array( $this, 'wcpos_format_id' ), $product_category_ids );
+			// Format the response.
+			return array_map(
+				function ( $item ) {
+					return array( 'id' => (int) $item );
+				},
+				$results
+			);
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product category IDs: ' . $e->getMessage() );
 

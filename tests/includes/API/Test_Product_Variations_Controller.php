@@ -117,10 +117,69 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test getting all customer IDs.
+	 * Test getting all variation IDs.
 	 */
 	public function test_variation_api_get_all_ids(): void {
+		$product1       = ProductHelper::create_variation_product();
+		$product2       = ProductHelper::create_variation_product();
+		$variation1_ids = $product1->get_children();
+		$variation2_ids = $product2->get_children();
+		$this->assertEquals( 2, \count( $variation1_ids ) );
+		$this->assertEquals( 2, \count( $variation2_ids ) );
+
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( 4, \count( $ids ) );
+
+		$this->assertEqualsCanonicalizing( array( $variation1_ids[0], $variation1_ids[1], $variation2_ids[0], $variation2_ids[1] ), $ids );
+	}
+
+	/**
+	 * Test getting all variation IDs with modified date.
+	 */
+	public function test_variation_api_get_all_ids_with_date_modified_gmt(): void {
+		$product1       = ProductHelper::create_variation_product();
+		$product2       = ProductHelper::create_variation_product();
+		$variation1_ids = $product1->get_children();
+		$variation2_ids = $product2->get_children();
+		$this->assertEquals( 2, \count( $variation1_ids ) );
+		$this->assertEquals( 2, \count( $variation2_ids ) );
+
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id', 'date_modified_gmt' ) );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( 4, \count( $ids ) );
+
+		$this->assertEqualsCanonicalizing( array( $variation1_ids[0], $variation1_ids[1], $variation2_ids[0], $variation2_ids[1] ), $ids );
+
+		// Verify that date_modified_gmt is present for all variations and correctly formatted.
+		foreach ( $data as $d ) {
+			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for variation ID {$d['id']}." );
+			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for variation ID {$d['id']} is not correctly formatted." );
+		}
+	}
+
+	/**
+	 * Test getting all variation IDs.
+	 */
+	public function test_variation_api_get_variable_ids(): void {
 		$product       = ProductHelper::create_variation_product();
+		$product2       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 		$this->assertEquals( 2, \count( $variation_ids ) );
 
@@ -132,13 +191,41 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 
-		$this->assertEquals(
-			array(
-				(object) array( 'id' => $variation_ids[1] ),
-				(object) array( 'id' => $variation_ids[0] ),
-			),
-			$response->get_data()
-		);
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( 2, \count( $ids ) );
+
+		$this->assertEqualsCanonicalizing( array( $variation_ids[1], $variation_ids[0] ), $ids );
+	}
+
+	/**
+	 * Test getting all variation IDs with modified date.
+	 */
+	public function test_variation_api_get_variable_ids_with_date_modified_gmt(): void {
+		$product       = ProductHelper::create_variation_product();
+		$product2       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$this->assertEquals( 2, \count( $variation_ids ) );
+
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id', 'date_modified_gmt' ) );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( 2, \count( $ids ) );
+
+		$this->assertEqualsCanonicalizing( array( $variation_ids[1], $variation_ids[0] ), $ids );
+
+		// Verify that date_modified_gmt is present for all variations and correctly formatted.
+		foreach ( $data as $d ) {
+			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for variation ID {$d['id']}." );
+			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for variation ID {$d['id']} is not correctly formatted." );
+		}
 	}
 
 	/**

@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
+use WP_Error;
 
 /**
  * Products controller class.
@@ -427,47 +428,36 @@ class Products_Controller extends WC_REST_Products_Controller {
 	/**
 	 * Returns array of all product ids, name.
 	 *
-	 * @param array $fields
+	 * @param array $fields Fields to return.
 	 *
 	 * @return array|WP_Error
 	 */
 	public function wcpos_get_all_posts( array $fields = array() ): array {
-		$args = array(
-			'post_type'      => 'product',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'fields'         => 'ids',
-		);
+		global $wpdb;
 
+		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
+		$select_fields = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
+
+		// Use SELECT DISTINCT in the initial SQL statement for both cases.
+		$sql = "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts}";
+
+		// If the '_pos_visibility' condition needs to be applied.
 		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$args['meta_query'] = array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_pos_visibility',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_pos_visibility',
-					'value'   => 'online_only',
-					'compare' => '!=',
-				),
-			);
+			$sql .= " LEFT JOIN {$wpdb->postmeta} ON ({$wpdb->posts}.ID = {$wpdb->postmeta}.post_id AND {$wpdb->postmeta}.meta_key = '_pos_visibility')";
+			$sql .= " WHERE post_type = 'product' AND post_status = 'publish' AND ({$wpdb->postmeta}.post_id IS NULL OR {$wpdb->postmeta}.meta_value != 'online_only')";
+		} else {
+			$sql .= " WHERE post_type = 'product' AND post_status = 'publish'";
 		}
 
-		$product_query = new WP_Query( $args );
+		// Order by post_date DESC to maintain order consistency.
+		$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 
 		try {
-			$product_ids = $product_query->posts;
-
-			return array_map( array( $this, 'wcpos_format_id' ), $product_ids );
+			$results = $wpdb->get_results( $sql );
+			return $this->wcpos_format_all_posts_response( $results );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching product IDs: ' . $e->getMessage() );
-
-			return new \WP_Error(
-				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching product IDs.',
-				array( 'status' => 500 )
-			);
+			Logger::log( 'Error fetching product data: ' . $e->getMessage() );
+			return new WP_Error( 'woocommerce_pos_rest_cannot_fetch', 'Error fetching product data.', array( 'status' => 500 ) );
 		}
 	}
 

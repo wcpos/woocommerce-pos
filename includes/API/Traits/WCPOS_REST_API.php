@@ -8,12 +8,30 @@ use WP_REST_Response;
 
 trait WCPOS_REST_API {
 	/**
-	 * @param string $id
+	 * Formats the response for all fetched posts into associative arrays.
 	 *
-	 * @return object
+	 * @param array $results The raw results from the database query.
+	 * @return array An array of associative arrays with post information.
 	 */
-	public function wcpos_format_id( string $id ): object {
-		return (object) array( 'id' => (int) $id );
+	public function wcpos_format_all_posts_response( $results ) {
+		$formatted_results = array_map(
+			function ( $result ) {
+				// Initialize the formatted result as an associative array.
+				$formatted_result = array(
+					'id' => (int) $result->id, // Cast ID to integer for consistency.
+				);
+
+				// Check if post_modified_gmt exists and is not null, then set date_modified_gmt.
+				if ( isset( $result->date_modified_gmt ) && ! empty( $result->date_modified_gmt ) ) {
+					$formatted_result['date_modified_gmt'] = wc_rest_prepare_date_response( $result->date_modified_gmt );
+				}
+
+				return $formatted_result;
+			},
+			$results
+		);
+
+		return $formatted_results;
 	}
 
 	/**

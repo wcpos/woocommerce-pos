@@ -156,6 +156,28 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
 	}
 
+	public function test_product_api_get_all_id_with_date_modified_gmt(): void {
+		$product1  = ProductHelper::create_simple_product();
+		$product2  = ProductHelper::create_simple_product();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id', 'date_modified_gmt' ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
+
+		// Verify that date_modified_gmt is present for all products and correctly formatted.
+		foreach ( $data as $d ) {
+			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for product ID {$d['id']}." );
+			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for product ID {$d['id']} is not correctly formatted." );
+		}
+	}
+
 	/**
 	 * Each product needs a UUID.
 	 */

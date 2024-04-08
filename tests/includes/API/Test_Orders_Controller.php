@@ -123,17 +123,48 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
+	/**
+	 *
+	 */
 	public function test_order_api_get_all_ids(): void {
-		$order    = OrderHelper::create_order();
+		$order1    = OrderHelper::create_order();
+		$order2    = OrderHelper::create_order();
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array( 'id' ) );
 
 		$response = $this->server->dispatch( $request );
-
 		$this->assertEquals( 200, $response->get_status() );
 
-		$this->assertEquals( array( (object) array( 'id' => $order->get_id() ) ), $response->get_data() );
+		$data    = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( array( $order1->get_id(), $order2->get_id() ), $ids );
+	}
+
+	/**
+	 *
+	 */
+	public function test_order_api_get_all_ids_with_date_modified_gmt(): void {
+		$order1    = OrderHelper::create_order();
+		$order2    = OrderHelper::create_order();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id', 'date_modified_gmt' ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data    = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( array( $order1->get_id(), $order2->get_id() ), $ids );
+
+				// Verify that date_modified_gmt is present for all products and correctly formatted.
+		foreach ( $data as $d ) {
+			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for product ID {$d['id']}." );
+			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for product ID {$d['id']} is not correctly formatted." );
+		}
 	}
 
 	/**

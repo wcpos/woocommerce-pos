@@ -19,6 +19,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 use Automattic\WooCommerce\Utilities\OrderUtil;
+use WP_Error;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
@@ -595,33 +596,51 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	/**
 	 * Returns array of all order ids.
 	 *
-	 * @param array $fields
+	 * @param array $fields Fields to return.
 	 *
 	 * @return array|WP_Error
 	 */
 	public function wcpos_get_all_posts( array $fields = array() ): array {
-		$args = array(
-			'limit'  => -1,
-			'return' => 'ids',
-			'status' => array_keys( wc_get_order_statuses() ), // Get valid order statuses
+		global $wpdb;
+
+		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
+
+		// Check if HPOS is enabled and custom orders table is used.
+		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
+		$sql = '';
+
+		$statuses = array_map(
+			function ( $status ) {
+				return "'$status'";
+			},
+			array_keys( wc_get_order_statuses() )
 		);
 
-		$order_query = new WC_Order_Query( $args );
+		if ( $hpos_enabled ) {
+			$select_fields = $id_with_modified_date ? 'id, date_updated_gmt as date_modified_gmt' : 'id';
+			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->prefix}wc_orders WHERE type = 'shop_order'";
+			$sql .= ' AND status IN (' . implode( ',', $statuses ) . ')';
+
+			// Order by date_created_gmt DESC to maintain order consistency.
+			$sql .= " ORDER BY {$wpdb->prefix}wc_orders.date_created_gmt DESC";
+		} else {
+			$select_fields = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
+			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts} WHERE post_type = 'shop_order'";
+			$sql .= ' AND post_status IN (' . implode( ',', $statuses ) . ')';
+
+			// Order by post_date DESC to maintain order consistency.
+			$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
+		}
 
 		try {
-			$order_ids = $order_query->get_orders();
-
-			return array_map( array( $this, 'wcpos_format_id' ), $order_ids );
+			$results = $wpdb->get_results( $sql );
+			return $this->wcpos_format_all_posts_response( $results );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
-
-			return new \WP_Error(
-				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching order IDs.',
-				array( 'status' => 500 )
-			);
+			Logger::log( 'Error fetching order data: ' . $e->getMessage() );
+			return new WP_Error( 'woocommerce_pos_rest_cannot_fetch', 'Error fetching order data.', array( 'status' => 500 ) );
 		}
 	}
+
 
 	/**
 	 * Filters all query clauses at once.

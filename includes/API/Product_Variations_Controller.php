@@ -17,6 +17,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 use WC_Product_Variation;
+use WP_Error;
 
 /**
  * Product Tgas controller class.
@@ -379,47 +380,46 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	 * @return array|WP_Error
 	 */
 	public function wcpos_get_all_posts( array $fields = array() ): array {
-		$parent_id = $this->request['product_id'];
+		global $wpdb;
 
-		$args = array(
-			'post_type'      => 'product_variation',
-			'post_status'    => 'publish',
-			'post_parent'    => $parent_id,
-			'posts_per_page' => -1,
-			'fields'         => 'ids',
-		);
+		$parent_id = (int) $this->wcpos_request->get_param( 'product_id' );
+		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
 
+		// Build the SELECT clause based on requested fields.
+		$select_fields = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
+
+		// Initialize the SQL query.
+		$sql = "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts}";
+
+		 // Apply '_pos_visibility' condition if necessary.
 		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$args['meta_query'] = array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_pos_visibility',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_pos_visibility',
-					'value'   => 'online_only',
-					'compare' => '!=',
-				),
-			);
+			$sql .= " LEFT JOIN {$wpdb->postmeta} ON ({$wpdb->posts}.ID = {$wpdb->postmeta}.post_id AND {$wpdb->postmeta}.meta_key = '_pos_visibility')";
+			$sql .= " WHERE {$wpdb->posts}.post_type = 'product_variation' AND {$wpdb->posts}.post_status = 'publish' AND ({$wpdb->postmeta}.post_id IS NULL OR {$wpdb->postmeta}.meta_value != 'online_only')";
+		} else {
+			$sql .= " WHERE {$wpdb->posts}.post_type = 'product_variation' AND {$wpdb->posts}.post_status = 'publish'";
 		}
 
-		$variation_query = new WP_Query( $args );
+		// Dynamically add the post_parent clause if a parent ID is provided.
+		if ( $parent_id ) {
+			$sql = $wpdb->prepare( $sql . " AND {$wpdb->posts}.post_parent = %d", $parent_id );
+		}
 
 		try {
-			$variation_ids = $variation_query->posts;
-
-			return array_map( array( $this, 'wcpos_format_id' ), $variation_ids );
+			// Execute the query.
+			$results = $wpdb->get_results( $sql );
+			// Format and return the results.
+			return $this->wcpos_format_all_posts_response( $results );
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product variation IDs: ' . $e->getMessage() );
 
-			return new \WP_Error(
+			return new WP_Error(
 				'woocommerce_pos_rest_cannot_fetch',
 				'Error fetching product variation IDs.',
 				array( 'status' => 500 )
 			);
 		}
 	}
+
 
 	/**
 	 * Prepare objects query.
