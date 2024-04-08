@@ -32,6 +32,12 @@ jobs:
           composer prefix-dependencies
           composer install
 
+      - name: Start WordPress Environment
+        run: npm run wp-env start --xdebug=coverage
+  
+      - name: Check WooCommerce Activation
+        run: npm run wp-env run cli -- wp plugin list
+
       - name: Linting the code
         run: |
           vendor/bin/phpcs -i

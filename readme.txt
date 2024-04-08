@@ -78,6 +78,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.5.0 - 2024/04/XX =
+
+
 = 1.4.16 - 2024/03/28 =
 * Fix: nonce check failing for Guest orders when checking out with the desktop application
 
