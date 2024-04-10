@@ -155,9 +155,9 @@ class Single_Product {
 	 * @param WP_Post $variation      Post data.
 	 */
 	public function add_variations_store_price_fields( $loop, $variation_data, $variation ): void {
-		echo '<p class="form-row form-row-full options" style="border:0;padding-bottom:0;margin-bottom:0;"><label>';
+		echo '<p class="form-row form-row-full"><label>';
 		echo __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
-		echo '<input type="checkbox" class="checkbox" disabled />';
+		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
 
@@ -169,9 +169,9 @@ class Single_Product {
 	 * @param WP_Post $variation      Post data.
 	 */
 	public function add_variations_store_tax_fields( $loop, $variation_data, $variation ): void {
-		echo '<p class="form-row form-row-full options" style="border:0;padding-bottom:0;margin-bottom:0;"><label>';
+		echo '<p class="form-row form-row-full"><label>';
 		echo __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
-		echo '<input type="checkbox" class="checkbox" disabled />';
+		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
 
