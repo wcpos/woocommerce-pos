@@ -2,8 +2,8 @@
   "core": null,
   "phpVersion": null,
   "plugins": [
-    ".",
-    "https://downloads.wordpress.org/plugin/woocommerce.zip"
+    "https://downloads.wordpress.org/plugin/woocommerce.zip",
+    "."
   ],
   "config": {
     "WP_DEBUG": true,
