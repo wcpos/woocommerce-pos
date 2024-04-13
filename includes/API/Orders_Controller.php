@@ -26,7 +26,7 @@ use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 /**
  * Orders controller class.
  *
- * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Products_Controller methods
+ * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Orders_Controller methods
  */
 class Orders_Controller extends WC_REST_Orders_Controller {
 	use Traits\Uuid_Handler;
@@ -54,10 +54,18 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	private $is_creating = false;
 
 	/**
+	 * Whether High Performance Orders is enabled.
+	 *
+	 * @var bool
+	 */
+	private $hpos_enabled = false;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		add_filter( 'woocommerce_pos_rest_dispatch_orders_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
+		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
@@ -558,8 +566,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_shop_order_query( array $args, WP_REST_Request $request ) {
 		// Check for wcpos_include/wcpos_exclude parameter.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
-			// Add a custom WHERE clause to the query.
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+			if ( $this->hpos_enabled ) {
+				add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orders_table_query_clauses' ), 10, 3 );
+			} else {
+				add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
+			}
 		}
 
 		return $args;
@@ -576,14 +587,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_posts_where_order_include_exclude( string $where, $query ) {
 		global $wpdb;
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
 			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
@@ -591,6 +602,39 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $where;
+	}
+
+	/**
+	 * Filters all query clauses at once.
+	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
+	 *
+	 * @param string[]         $clauses {
+	 *     Associative array of the clauses for the query.
+	 *
+	 *     @type string $fields  The SELECT clause of the query.
+	 *     @type string $join    The JOIN clause of the query.
+	 *     @type string $where   The WHERE clause of the query.
+	 *     @type string $groupby The GROUP BY clause of the query.
+	 *     @type string $orderby The ORDER BY clause of the query.
+	 *     @type string $limits  The LIMIT clause of the query.
+	 * }
+	 * @param OrdersTableQuery $query   The OrdersTableQuery instance (passed by reference).
+	 * @param array            $args    Query args.
+	 */
+	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
+		// Handle 'wcpos_include'.
+		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
+			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
+			$clauses['where'] .= ' AND ' . $query->get_table_name( 'orders' ) . '.id IN (' . implode( ',', $include_ids ) . ')';
+		}
+
+		// Handle 'wcpos_exclude'.
+		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
+			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
+			$clauses['where'] .= ' AND ' . $query->get_table_name( 'orders' ) . '.id NOT IN (' . implode( ',', $exclude_ids ) . ')';
+		}
+
+		return $clauses;
 	}
 
 	/**
@@ -641,6 +685,55 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 	}
 
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args = parent::prepare_objects_query( $request );
+
+		/**
+		 * Extend the orderby parameter to include custom options.
+		 * Legacy order options.
+		 */
+		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
+			switch ( $request['orderby'] ) {
+				case 'status':
+					// NOTE: 'post_status' is not a valid orderby option for WC_Order_Query.
+					$args['orderby'] = 'post_status';
+
+					break;
+				case 'customer_id':
+					$args['meta_key'] = '_customer_user';
+					$args['orderby']  = 'meta_value_num';
+
+					break;
+				case 'payment_method':
+					$args['meta_key'] = '_payment_method_title';
+					$args['orderby']  = 'meta_value';
+
+					break;
+				case 'total':
+					$args['meta_key'] = '_order_total';
+					$args['orderby']  = 'meta_value';
+
+					break;
+			}
+		}
+
+		/**
+		 * Extend the orderby parameter to include custom options.
+		 * HOPS orders options.
+		 */
+		if ( isset( $request['orderby'] ) && $this->hpos_enabled ) {
+			add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_query' ), 10, 3 );
+		}
+
+		return $args;
+	}
 
 	/**
 	 * Filters all query clauses at once.
@@ -662,58 +755,31 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * @return string[] $clauses
 	 */
-	public function wcpos_hpos_orderby_status_query( array $clauses, $query, $args ) {
+	public function wcpos_hpos_orderby_query( array $clauses, $query, $args ) {
 		if ( isset( $clauses['orderby'] ) && '' === $clauses['orderby'] ) {
-			$order              = $args['order'] ?? 'ASC';
-			$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.status ' . $order;
-		}
+			$order   = $args['order'] ?? 'ASC';
+			$orderby = $this->wcpos_request->get_param( 'orderby' );
 
-		return $clauses;
-	}
-
-	/**
-	 * Prepare objects query.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return array|WP_Error
-	 */
-	protected function prepare_objects_query( $request ) {
-		$args = parent::prepare_objects_query( $request );
-
-		// Add custom 'orderby' options
-		if ( isset( $request['orderby'] ) ) {
-			switch ( $request['orderby'] ) {
+			switch ( $orderby ) {
 				case 'status':
-					// NOTE: 'post_status' is not a valid orderby option for WC_Order_Query
-					$args['orderby'] = 'post_status';
+					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.status ' . $order;
 
 					break;
 				case 'customer_id':
-					$args['meta_key'] = '_customer_user';
-					$args['orderby']  = 'meta_value_num';
+					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.customer_id ' . $order;
 
 					break;
 				case 'payment_method':
-					$args['meta_key'] = '_payment_method_title';
-					$args['orderby']  = 'meta_value';
+					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.payment_method ' . $order;
 
 					break;
 				case 'total':
-					$args['meta_key'] = '_order_total';
-					$args['orderby']  = 'meta_value';
+					$clauses['orderby'] = $query->get_table_name( 'orders' ) . '.total_amount ' . $order;
 
 					break;
 			}
-
-			// If HPOS is enabled and $args['orderby'] = 'post_status', we need to add a custom query clause
-			if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-				if ( 'status' === $request['orderby'] ) {
-					add_filter( 'woocommerce_orders_table_query_clauses', array( $this, 'wcpos_hpos_orderby_status_query' ), 10, 3 );
-				}
-			}
 		}
 
-		return $args;
+		return $clauses;
 	}
 }

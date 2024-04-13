@@ -20,7 +20,7 @@ class Bootstrap {
 		ini_set( 'display_errors', 'on' );
 		error_reporting( E_ALL );
 		$this->tests_dir  = $this->get_test_dir();
-		$this->plugin_dir = \dirname(__FILE__, 2);
+		$this->plugin_dir = \dirname( __DIR__, 1 );
 
 		// Require composer dependencies.
 		require_once $this->plugin_dir . '/vendor/autoload.php';
@@ -35,11 +35,10 @@ class Bootstrap {
 
 		// Do not try to load JavaScript files from an external URL - this takes a
 		// while.
-		\define('GUTENBERG_LOAD_VENDOR_SCRIPTS', false);
+		\define( 'GUTENBERG_LOAD_VENDOR_SCRIPTS', false );
 
-		tests_add_filter('muplugins_loaded', array( $this, 'manually_load_plugin' ) );
-		tests_add_filter('muplugins_loaded', array( $this, 'install_woocommerce' ) );
-		
+		tests_add_filter( 'muplugins_loaded', array( $this, 'manually_load_plugin' ) );
+		tests_add_filter( 'muplugins_loaded', array( $this, 'install_woocommerce' ) );
 
 		// Start up the WP testing environment.
 		tests_add_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) ); // handle bootstrap errors
@@ -58,22 +57,22 @@ class Bootstrap {
 	 */
 	public function get_test_dir(): string {
 		// Try the WP_TESTS_DIR environment variable first.
-		$_tests_dir = getenv('WP_TESTS_DIR');
+		$_tests_dir = getenv( 'WP_TESTS_DIR' );
 
 		// Next, try the WP_PHPUNIT composer package.
-		if ( ! $_tests_dir) {
-			$_tests_dir = getenv('WP_PHPUNIT__DIR');
+		if ( ! $_tests_dir ) {
+			$_tests_dir = getenv( 'WP_PHPUNIT__DIR' );
 		}
 
 		// See if we're installed inside an existing WP dev instance.
-		if ( ! $_tests_dir) {
-			$_try_tests_dir = \dirname(__FILE__) . '/../../../../../tests/phpunit';
-			if (file_exists($_try_tests_dir . '/includes/functions.php')) {
+		if ( ! $_tests_dir ) {
+			$_try_tests_dir = __DIR__ . '/../../../../../tests/phpunit';
+			if ( file_exists( $_try_tests_dir . '/includes/functions.php' ) ) {
 				$_tests_dir = $_try_tests_dir;
 			}
 		}
 		// Fallback.
-		if ( ! $_tests_dir) {
+		if ( ! $_tests_dir ) {
 			$_tests_dir = '/tmp/wordpress-tests-lib';
 		}
 
@@ -94,11 +93,11 @@ class Bootstrap {
 	public function install_woocommerce(): void {
 		require $this->plugin_dir . '/../woocommerce/woocommerce.php';
 		// Clean existing install first.
-		//  define( 'WP_UNINSTALL_PLUGIN', true );
-		//  define( 'WC_REMOVE_ALL_DATA', true );
-		//  require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
-		//  WC_Install::install();
-		//  echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
+		// define( 'WP_UNINSTALL_PLUGIN', true );
+		// define( 'WC_REMOVE_ALL_DATA', true );
+		// require dirname( dirname( __FILE__ ) ) . '/../woocommerce/uninstall.php';
+		// WC_Install::install();
+		// echo esc_html( 'Installing WooCommerce...' . PHP_EOL );
 	}
 
 	/**
@@ -117,6 +116,7 @@ class Bootstrap {
 		require_once $this->plugin_dir . '/tests/Helpers/CustomerHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/CouponHelper.php';
 		require_once $this->plugin_dir . '/tests/Helpers/ShippingHelper.php';
+		require_once $this->plugin_dir . '/tests/Helpers/HPOSToggleTrait.php';
 	}
 
 	/**
@@ -131,12 +131,12 @@ class Bootstrap {
 	 *
 	 * @throws Exception When a `wp_die()` occurs.
 	 */
-	public function fail_if_died($message): void {
-		if (is_wp_error($message)) {
+	public function fail_if_died( $message ): void {
+		if ( is_wp_error( $message ) ) {
 			$message = $message->get_error_message();
 		}
 
-		throw new \Exception('WordPress died: ' . $message);
+		throw new \Exception( 'WordPress died: ' . $message );
 	}
 
 	public static function instance() {

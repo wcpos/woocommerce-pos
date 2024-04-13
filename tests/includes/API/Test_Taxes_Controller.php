@@ -47,6 +47,7 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function get_expected_response_fields() {
 		return array(
+			'uuid',
 			'id',
 			'country',
 			'state',
