@@ -11,6 +11,8 @@
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
+use WC_Product;
+use WC_Product_Simple;
 
 class Orders {
 	public function __construct() {
@@ -21,6 +23,7 @@ class Orders {
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
+		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
 
 		// order emails
 		$admin_emails = array(
@@ -185,5 +188,23 @@ class Orders {
 				),
 			)
 		);
+	}
+
+	/**
+	 *
+	 *
+	 * @param WC_Product|bool       $product The product object or false if not found
+	 * @param WC_Order_Item_Product $item    The order item object
+	 *
+	 * @return WC_Product|bool
+	 */
+	public function order_item_product( $product, $item ) {
+		if ( ! $product ) {
+			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
+			$product = new WC_Product_Simple();
+			$product->set_name( $item->get_name() );
+		}
+
+		return $product;
 	}
 }

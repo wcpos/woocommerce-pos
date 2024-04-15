@@ -44,7 +44,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	}
 
 	public function tearDown(): void {
-		$this->toggle_cot_feature_and_usage( $this->cot_state );
+		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
 
 		remove_all_filters( 'wc_allow_changing_orders_storage_while_sync_is_pending' );
