@@ -214,37 +214,33 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 *
 		 * To fix this we check for a variation_id and remove the meta_data before setting the product
 		 */
-		if ( $item->get_variation_id() ) {
-			// Get the product variation
-			$variation = wc_get_product( $item->get_variation_id() );
-			if ( $variation ) {
-				// Get the valid attribute keys and remove 'attribute_' prefix
-				$valid_keys = array_map(
-					function ( $attribute_name ) {
-						return str_replace( 'attribute_', '', $attribute_name );
-					},
-					array_keys( $variation->get_variation_attributes() )
-				);
+		if ( $action !== 'create' && $item->get_variation_id() ) {
+			$attributes = wc_get_product_variation_attributes( $item->get_variation_id() );
 
-				// Get existing meta data on the item
-				$meta_data   = $item->get_meta_data();
-				$unique_keys = array();
+			// Loop through attributes and remove any duplicates
+			foreach ( $attributes as $key => $value ) {
+				$attribute = str_replace( 'attribute_', '', $key );
+				$meta_data = $item->get_meta( $attribute, false );
 
-				// Iterate over meta data to find and remove duplicates
-				foreach ( $meta_data as $index => $meta ) {
-					$meta_id = $meta->id;
-					$data    = $meta->get_data();
-					$key     = $data['key'];
+				if ( is_array( $meta_data ) && count( $meta_data ) > 1 ) {
+					$meta_to_keep = null;
 
-					if ( \in_array( $key, $valid_keys, true ) ) {
-						// If the meta data doesn't have an ID, it's considered 'new' and can be replaced by one with an ID.
-						if ( ! isset( $unique_keys[ $key ] ) || ( isset( $meta_id ) && ! isset( $unique_keys[ $key ]['id'] ) ) ) {
-							$unique_keys[ $key ] = array(
-								'index' => $index,
-								'id' => $meta_id,
-							);
-						} else {
-							// Remove the duplicate meta data.
+					// Check each meta to find one with an ID to keep.
+					foreach ( $meta_data as $meta ) {
+						if ( isset( $meta->id ) ) {
+								$meta_to_keep = $meta;
+								break;
+						}
+					}
+
+					// If no meta with an ID is found, keep the first one.
+					if ( ! $meta_to_keep ) {
+							$meta_to_keep = $meta_data[0];
+					}
+
+					// Remove all other meta data for this attribute.
+					foreach ( $meta_data as $meta ) {
+						if ( $meta !== $meta_to_keep ) {
 							if ( $meta->id ) {
 								$item->delete_meta_data_by_mid( $meta->id );
 							} else {
@@ -257,6 +253,21 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $item;
+	}
+
+	/**
+	 * Gets the product ID from posted ID.
+	 * NOTE: This overrides the parent method to remove the sku check, some users have products duplicated SKUs.
+	 *
+	 * @throws WC_REST_Exception When SKU or ID is not valid.
+	 * @param array  $posted Request data.
+	 * @param string $action 'create' to add line item or 'update' to update it.
+	 * @return int
+	 */
+	public function get_product_id( $posted, $action = 'create' ) {
+		$data = $posted;
+		unset( $data['sku'] );
+		return parent::get_product_id( $data, $action );
 	}
 
 	/**
