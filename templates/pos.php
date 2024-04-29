@@ -98,6 +98,21 @@ defined( 'ABSPATH' ) || exit;
 			background-color: black;
 		  }
 		}*/
+
+		#splash {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			height: 100%;
+			width: 100%;
+			background-color: #fafbfc;
+		}
+
+		#splash img {
+			width: 150px;
+			height: 150px;
+		}
 	</style>
 
 	<?php do_action( 'woocommerce_pos_head' ); ?>

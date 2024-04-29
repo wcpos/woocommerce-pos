@@ -340,7 +340,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' );
-		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 10, 3 );
+		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 99 );
 
 		// Send the customer invoice email.
 		WC()->payment_gateways();
@@ -371,13 +371,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Get the recipient email address, for manual sending of order emails.
+	 *
 	 * @param string                    $recipient.
 	 * @param WC_Abstract_Order         $order.
 	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice.
 	 *
 	 * @return string
 	 */
-	public function wcpos_recipient_email_address( string $recipient, WC_Abstract_Order $order, WC_Email_Customer_Invoice $WC_Email_Customer_Invoice ) {
+	public function wcpos_recipient_email_address() {
 		return $this->wcpos_request['email'];
 	}
 

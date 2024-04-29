@@ -1,9 +1,15 @@
 <?php
+/**
+ *
+ */
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
 
+/**
+ * Class HPOS_List_Orders
+ */
 class HPOS_List_Orders extends List_Orders {
 	/**
 	 * NOTE: When HPOS is anabled we go to a different Order List page
@@ -30,28 +36,27 @@ class HPOS_List_Orders extends List_Orders {
 	}
 
 	/**
+	 * Display the content for the custom column.
+	 *
 	 * @param string            $column_name The name of the column to display.
 	 * @param WC_Abstract_Order $order       The order object whose data will be used to render the column.
 	 *
 	 * @return void
 	 */
 	public function orders_custom_column_content( string $column_name, $order ): void {
-		if ( 'wcpos' === $column_name ) {
-			// Check if the order exists and is not a boolean before accessing properties
-			if ( $order instanceof WC_Abstract_Order ) {
-				// Use the getter methods for order meta data
-				$legacy      = $order->get_meta( '_pos', true );
-				$created_via = $order->get_created_via();
-
-				// Check if the order was created via WooCommerce POS
-				if ( 'woocommerce-pos' === $created_via || '1' === $legacy ) {
-					// Output a custom icon or text to indicate POS order
-					echo '<span class="wcpos-icon" title="POS Order"></span>';
-				}
-			}
+		if ( 'wcpos' === $column_name && woocommerce_pos_is_pos_order( $order ) ) {
+			echo '<span class="wcpos-icon" title="POS Order"></span>';
 		}
 	}
 
+	/**
+	 * Parse the query to filter orders by POS or online.
+	 *
+	 * @TODO - add legacy support for _pos = 1
+	 *
+	 * @param array $args Query args.
+	 * @return array
+	 */
 	public function query_args( $args ) {
 		$pos_order_filter = $_GET['pos_order'] ?? '';
 

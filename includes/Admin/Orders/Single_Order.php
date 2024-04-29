@@ -64,16 +64,18 @@ class Single_Order {
 
 	/**
 	 * Add cashier select to order page.
+	 *
+	 * @param WC_Abstract_Order $order Order object.
 	 */
-	public function add_cashier_select( WC_Abstract_Order $order ): void {
-		// only show if order created by POS
-		if ( 'woocommerce-pos' !== $order->get_created_via() ) {
+	public function add_cashier_select( $order ): void {
+		// only show if order created by POS.
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
 			return;
 		}
 
 		$cashier_id = $order->get_meta( '_pos_user' );
 
-		// Create nonce for security
+		// Create nonce for security.
 		wp_nonce_field( 'pos_cashier_select_action', 'pos_cashier_select_nonce' );
 
 		echo '<p class="form-field form-field-wide">';

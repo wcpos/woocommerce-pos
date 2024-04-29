@@ -3,10 +3,14 @@
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
 use WC_Abstract_Order;
-use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WP_Query;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
 
 class List_Orders {
+
+	/**
+	 * List_Orders constructor.
+	 */
 	public function __construct() {
 		// add filter dropdown to orders list page
 		add_action( 'restrict_manage_posts', array( $this, 'order_filter_dropdown' ) );
@@ -18,6 +22,11 @@ class List_Orders {
 		add_action( 'admin_enqueue_scripts', array( $this, 'pos_order_column_width' ) );
 	}
 
+	/**
+	 * Add a filter dropdown to the orders list page.
+	 *
+	 * @return void
+	 */
 	public function order_filter_dropdown(): void {
 		$selected = $_GET['pos_order'] ?? '';
 
@@ -37,7 +46,9 @@ class List_Orders {
 	}
 
 	/**
-	 * @param WP_Query $query
+	 * Parse the query to filter orders by POS or online.
+	 *
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
 	 * @return WP_Query
 	 */
@@ -101,6 +112,8 @@ class List_Orders {
 
 
 	/**
+	 * Add a custom column to the orders list table.
+	 *
 	 * @param string[] $columns The column header labels keyed by column ID.
 	 *
 	 * @return string[]
@@ -120,27 +133,16 @@ class List_Orders {
 	}
 
 	/**
+	 * Display the content for the custom column.
+	 *
 	 * @param string $column_name The name of the column to display.
 	 * @param int    $post_id     The current post ID.
 	 *
 	 * @return void
 	 */
 	public function pos_orders_list_column_content( string $column_name, int $post_id ): void {
-		if ( 'wcpos' === $column_name ) {
-			// Use the WC_Abstract_Order object to interact with order data
-			$order = wc_get_order( $post_id );
-			// Check if the order exists and is not a boolean before accessing properties
-			if ( $order instanceof WC_Abstract_Order ) {
-				// Use the getter methods for order meta data
-				$legacy      = $order->get_meta( '_pos', true );
-				$created_via = $order->get_created_via();
-
-				// Check if the order was created via WooCommerce POS
-				if ( 'woocommerce-pos' === $created_via || '1' === $legacy ) {
-					// Output a custom icon or text to indicate POS order
-					echo '<span class="wcpos-icon" title="POS Order"></span>';
-				}
-			}
+		if ( 'wcpos' === $column_name && woocommerce_pos_is_pos_order( $post_id ) ) {
+			echo '<span class="wcpos-icon" title="POS Order"></span>';
 		}
 	}
 

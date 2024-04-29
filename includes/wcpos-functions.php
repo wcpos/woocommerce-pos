@@ -17,8 +17,8 @@
  */
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
-use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use WCPOS\WooCommercePOS\Services\Settings;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -204,5 +204,26 @@ if ( ! \function_exists( 'woocommerce_pos_doc_url' ) ) {
 if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
 	function woocommerce_pos_faq_url( $page ): string {
 		return 'http://faq.wcpos.com/v/' . VERSION . '/en/' . $page;
+	}
+}
+
+/**
+ * Helper function checks whether order is a POS order
+ *
+ * @param $order WC_Order|int
+ * @return bool
+ */
+if ( ! \function_exists( 'woocommerce_pos_is_pos_order' ) ) {
+	function woocommerce_pos_is_pos_order( $order ): bool {
+		$order = is_int( $order ) ? wc_get_order( $order ) : $order;
+
+		if ( $order instanceof WC_Order ) {
+			$legacy      = $order->get_meta( '_pos', true );
+			$created_via = $order->get_created_via();
+
+			return 'woocommerce-pos' === $created_via || '1' === $legacy;
+		}
+
+		return false;
 	}
 }
