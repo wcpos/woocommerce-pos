@@ -35,14 +35,28 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	protected $wcpos_request;
 
 	/**
-	 * Constructor.
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
 	 */
-	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_taxes_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 
-		if ( method_exists( parent::class, '__construct' ) ) {
-			parent::__construct();
+		add_filter( 'woocommerce_rest_tax_query', array( $this, 'wcpos_tax_query' ), 10, 2 );
+		add_filter( 'woocommerce_rest_prepare_tax', array( $this, 'wcpos_prepare_tax_response' ), 10, 3 );
+
+		/**
+		 * Check if the request is for all tax rates and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all rate IDs.
+		 */
+		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
 		}
+
+		return $dispatch_result;
 	}
 
 	/**
@@ -75,35 +89,6 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		}
 
 		return $permission;
-	}
-
-	/**
-	 * Dispatch request to parent controller, or override if needed.
-	 *
-	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
-	 * @param WP_REST_Request $request         Request used to generate the response.
-	 * @param string          $route           Route matched for the request.
-	 * @param array           $handler         Route handler used for the request.
-	 */
-	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-		$this->wcpos_register_wc_rest_api_hooks();
-		$params = $request->get_params();
-
-		// Optimised query for getting all product IDs
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
-		}
-
-		return $dispatch_result;
-	}
-
-	/**
-	 * Register hooks to modify WC REST API response.
-	 */
-	public function wcpos_register_wc_rest_api_hooks(): void {
-		add_filter( 'woocommerce_rest_tax_query', array( $this, 'wcpos_tax_query' ), 10, 2 );
-		add_filter( 'woocommerce_rest_prepare_tax', array( $this, 'wcpos_prepare_tax_response' ), 10, 3 );
 	}
 
 	/**

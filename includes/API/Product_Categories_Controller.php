@@ -38,17 +38,6 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	protected $wcpos_request;
 
 	/**
-	 * Constructor.
-	 */
-	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_product_categories_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
-
-		if ( method_exists( parent::class, '__construct' ) ) {
-			parent::__construct();
-		}
-	}
-
-	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
@@ -58,23 +47,19 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
 		$this->wcpos_request = $request;
-		$this->wcpos_register_wc_rest_api_hooks();
-		$params = $request->get_params();
 
-		// Optimised query for getting all product IDs
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
+		add_filter( 'woocommerce_rest_prepare_product_cat', array( $this, 'wcpos_product_categories_response' ), 10, 3 );
+		add_filter( 'woocommerce_rest_product_cat_query', array( $this, 'wcpos_product_category_query' ), 10, 2 );
+
+		/**
+		 * Check if the request is for all categories and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all category IDs.
+		 */
+		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
 		}
 
 		return $dispatch_result;
-	}
-
-	/**
-	 * Register hooks to modify WC REST API response.
-	 */
-	public function wcpos_register_wc_rest_api_hooks(): void {
-		add_filter( 'woocommerce_rest_prepare_product_cat', array( $this, 'wcpos_product_categories_response' ), 10, 3 );
-		add_filter( 'woocommerce_rest_product_cat_query', array( $this, 'wcpos_product_category_query' ), 10, 2 );
 	}
 
 	/**

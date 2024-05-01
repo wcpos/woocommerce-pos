@@ -64,12 +64,39 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_orders_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
 		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
 		}
+	}
+
+	/**
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
+	 */
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
+
+		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
+		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
+		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
+		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
+		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'wcpos_tax_based_on' ), 10, 2 );
+
+		/**
+		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all order IDs.
+		 */
+		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
+		}
+
+		return $dispatch_result;
 	}
 
 	/**
@@ -126,7 +153,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
 
-		// Add barcode property to the schema
+		// Add barcode property to the schema.
 		$schema['properties']['barcode'] = array(
 			'description' => __( 'Barcode', 'woocommerce-pos' ),
 			'type'        => 'string',
@@ -134,18 +161,18 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			'readonly'    => false,
 		);
 
-		// Check and remove email format validation from the billing property
+		// Check and remove email format validation from the billing property.
 		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
 			unset( $schema['properties']['billing']['properties']['email']['format'] );
 		}
 
-		// Modify line_items->parent_name to accept 'string' or 'null'
+		// Modify line_items->parent_name to accept 'string' or 'null'.
 		if ( isset( $schema['properties']['line_items'] ) &&
 			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
 			$schema['properties']['line_items']['items']['properties']['parent_name']['type'] = array( 'string', 'null' );
 		}
 
-				// Check for 'stock_quantity' and allow decimal
+				// Check for 'stock_quantity' and allow decimal.
 		if ( $this->wcpos_allow_decimal_quantities() &&
 			   isset( $schema['properties']['line_items'] ) &&
 			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
@@ -169,10 +196,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
-		// Set the creating flag, used in woocommerce_before_order_object_save
+		// Set the creating flag, used in woocommerce_before_order_object_save.
 		$this->is_creating = true;
 
-		// Proceed with the parent method to handle the creation
+		// Proceed with the parent method to handle the creation.
 		return parent::create_item( $request );
 	}
 
@@ -189,7 +216,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
-		// Proceed with the parent method to handle the creation
+		// Proceed with the parent method to handle the creation.
 		return parent::update_item( $request );
 	}
 
@@ -383,28 +410,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		return $this->wcpos_request['email'];
 	}
 
-
-	/**
-	 * Dispatch request to parent controller, or override if needed.
-	 *
-	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
-	 * @param WP_REST_Request $request         Request used to generate the response.
-	 * @param string          $route           Route matched for the request.
-	 * @param array           $handler         Route handler used for the request.
-	 */
-	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-		$this->wcpos_register_wc_rest_api_hooks( $request );
-		$params = $request->get_params();
-
-		// Optimised query for getting all product IDs
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
-		}
-
-		return $dispatch_result;
-	}
-
 	/**
 	 *
 	 */
@@ -450,19 +455,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		);
 
 		return $schema;
-	}
-
-	/**
-	 * Register hooks to modify WC REST API response.
-	 *
-	 * @param WP_REST_Request $request
-	 */
-	public function wcpos_register_wc_rest_api_hooks( WP_REST_Request $request ): void {
-		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
-		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
-		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
-		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
-		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'wcpos_tax_based_on' ), 10, 2 );
 	}
 
 	/**

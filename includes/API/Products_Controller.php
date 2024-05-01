@@ -11,6 +11,7 @@ if ( ! class_exists( 'WC_REST_Products_Controller' ) ) {
 use Exception;
 use WC_Data;
 use WC_Product;
+use WC_Product_Variable;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Query;
@@ -48,26 +49,51 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 *
 	 * @var WP_REST_Request
 	 */
-	private $wcpos_request;
+	protected $wcpos_request;
 
 	/**
-	 * Constructor.
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
+	 *
+	 * @return mixed $dispatch_result Dispatch result, will be used if not empty.
 	 */
-	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_products_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 
-		if ( method_exists( parent::class, '__construct' ) ) {
-			parent::__construct();
+		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
+		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
+		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
+		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
+
+		/**
+		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all product IDs.
+		 */
+		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
 		}
+
+		return $dispatch_result;
 	}
 
 	/**
 	 * Add custom fields to the product schema.
+	 * - Add 'barcode' property to the product schema.
+	 * - Allow decimal quantities if enabled.
+	 *
+	 * Overrides the parent method.
+	 *
+	 * @return array $schema The product schema.
 	 */
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
 
-		// Add the 'barcode' property if 'properties' exists and is an array
+		// Add the 'barcode' property if 'properties' exists and is an array.
 		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
 			$schema['properties']['barcode'] = array(
 				'description' => __( 'Barcode', 'woocommerce-pos' ),
@@ -77,7 +103,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			);
 		}
 
-		// Check for 'stock_quantity' and allow decimal
+		// Check for 'stock_quantity' and allow decimal.
 		if ( $this->wcpos_allow_decimal_quantities() &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
@@ -90,16 +116,22 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 	/**
 	 * Modify the collection params.
+	 * - Allow 'per_page' to be set to -1.
+	 * - Add custom sorting options.
+	 *
+	 * Overrides the parent method.
+	 *
+	 * @return array $params The collection parameters.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
+		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying.
 		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
-		// Ensure 'orderby' is set and is an array before attempting to modify it
+		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// Define new sorting options
 			$new_sort_options = array(
@@ -108,43 +140,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 				'stock_quantity',
 				'stock_status',
 			);
-			// Merge new options, avoiding duplicates
+			// Merge new options, avoiding duplicates.
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
 
 		return $params;
-	}
-
-	/**
-	 * Dispatch request to parent controller, or override if needed.
-	 *
-	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
-	 * @param WP_REST_Request $request         Request used to generate the response.
-	 * @param string          $route           Route matched for the request.
-	 * @param array           $handler         Route handler used for the request.
-	 */
-	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-		$this->wcpos_register_wc_rest_api_hooks();
-		$params = $request->get_params();
-
-		// Optimised query for getting all product IDs
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
-		}
-
-		return $dispatch_result;
-	}
-
-	/**
-	 * Register hooks to modify WC REST API response.
-	 */
-	public function wcpos_register_wc_rest_api_hooks(): void {
-		add_filter( 'woocommerce_rest_prepare_product_object', array( $this, 'wcpos_product_response' ), 10, 3 );
-		add_action( 'woocommerce_rest_insert_product_object', array( $this, 'wcpos_insert_product_object' ), 10, 3 );
-		add_filter( 'woocommerce_rest_product_object_query', array( $this, 'wcpos_product_query' ), 10, 2 );
-		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
-		add_filter( 'posts_clauses', array( $this, 'wcpos_posts_clauses' ), 10, 2 );
 	}
 
 	/**
@@ -159,13 +159,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 	public function wcpos_product_response( WP_REST_Response $response, WC_Product $product, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Add the UUID to the product response
+		// Add the UUID to the product response.
 		$this->maybe_add_post_uuid( $product );
 
-		// Add the barcode to the product response
+		// Add the barcode to the product response.
 		$data['barcode'] = $this->wcpos_get_barcode( $product );
 
-		// Check if the response has an image
+		// Check if the response has an image.
 		if ( isset( $data['images'] ) && ! empty( $data['images'] ) ) {
 			foreach ( $data['images'] as $key => $image ) {
 				// Replace the full size 'src' with the URL of the medium size image.
@@ -184,8 +184,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * If product is variable, add the max and min prices and add them to the meta data
 		 * @TODO - only need to update if there is a change
 		 */
-		if ( $product->is_type( 'variable' ) ) {
-			// Initialize price variables
+		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
+			// Initialize price variables.
 			$price_array = array(
 				'price' => array(
 					'min' => $product->get_variation_price(),
@@ -201,24 +201,24 @@ class Products_Controller extends WC_REST_Products_Controller {
 				),
 			);
 
-			// Try encoding the array into JSON
+			// Try encoding the array into JSON.
 			$encoded_price = wp_json_encode( $price_array );
 
-			// Check if the encoding was successful
+			// Check if the encoding was successful.
 			if ( false === $encoded_price ) {
-				// JSON encode failed, log the original array for debugging
+				// JSON encode failed, log the original array for debugging.
 				Logger::log( 'JSON encoding of price array failed: ' . json_last_error_msg(), $price_array );
 			} else {
-				// Update the meta data with the successfully encoded price data
+				// Update the meta data with the successfully encoded price data.
 				$product->update_meta_data( '_woocommerce_pos_variable_prices', $encoded_price );
 			}
 		}
 
-		// Make sure we parse the meta data before returning the response
-		$product->save_meta_data(); // make sure the meta data is saved
+		// Make sure we parse the meta data before returning the response.
+		$product->save_meta_data(); // make sure the meta data is saved.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $product );
 
-		// Set any changes to the response data
+		// Set any changes to the response data.
 		$response->set_data( $data );
 		// $this->log_large_rest_response( $response, $product->get_id() );
 
@@ -246,8 +246,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * - Search for the product title and SKU and barcode
 	 * - Do not search product description.
 	 *
-	 * @param string   $search
-	 * @param WP_Query $wp_query
+	 * @param string   $search The search SQL query.
+	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 *
 	 * @return string
 	 */

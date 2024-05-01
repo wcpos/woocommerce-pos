@@ -45,28 +45,51 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	protected $wcpos_request;
 
 	/**
-	 * Constructor.
+	 * Dispatch request to parent controller, or override if needed.
+	 *
+	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
+	 * @param WP_REST_Request $request         Request used to generate the response.
+	 * @param string          $route           Route matched for the request.
+	 * @param array           $handler         Route handler used for the request.
 	 */
-	public function __construct() {
-		add_filter( 'woocommerce_pos_rest_dispatch_product_variations_request', array( $this, 'wcpos_dispatch_request' ), 10, 4 );
+	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		$this->wcpos_request = $request;
 
-		if ( method_exists( parent::class, '__construct' ) ) {
-			parent::__construct();
+		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
+		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
+		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
+		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
 
-			register_rest_route(
-				$this->namespace,
-				'/products/variations',
-				array(
-					array(
-						'methods'             => WP_REST_Server::READABLE,
-						'callback'            => array( $this, 'wcpos_get_all_items' ),
-						'permission_callback' => array( $this, 'get_items_permissions_check' ),
-						'args'                => $this->get_collection_params(),
-					),
-					'schema' => array( $this, 'get_public_item_schema' ),
-				)
-			);
+		/**
+		 * Check if the request is for all products and if the 'posts_per_page' is set to -1.
+		 * Optimised query for getting all product IDs.
+		 */
+		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
 		}
+
+		return $dispatch_result;
+	}
+
+	/**
+	 *
+	 */
+	public function register_routes() {
+		parent::register_routes();
+
+		register_rest_route(
+			$this->namespace,
+			'/products/variations',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'wcpos_get_all_items' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+					'args'                => $this->get_collection_params(),
+				),
+				'schema' => array( $this, 'get_public_item_schema' ),
+			)
+		);
 	}
 
 	/**
@@ -121,38 +144,6 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		}
 
 		return $params;
-	}
-
-
-	/**
-	 * Dispatch request to parent controller, or override if needed.
-	 *
-	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
-	 * @param WP_REST_Request $request         Request used to generate the response.
-	 * @param string          $route           Route matched for the request.
-	 * @param array           $handler         Route handler used for the request.
-	 */
-	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
-		$this->wcpos_request = $request;
-		$this->wcpos_register_wc_rest_api_hooks();
-		$params = $request->get_params();
-
-		// Optimised query for getting all product IDs
-		if ( isset( $params['posts_per_page'] ) && -1 == $params['posts_per_page'] && isset( $params['fields'] ) ) {
-			$dispatch_result = $this->wcpos_get_all_posts( $params['fields'] );
-		}
-
-		return $dispatch_result;
-	}
-
-	/**
-	 * Register hooks to modify WC REST API response.
-	 */
-	public function wcpos_register_wc_rest_api_hooks(): void {
-		add_filter( 'woocommerce_rest_prepare_product_variation_object', array( $this, 'wcpos_variation_response' ), 10, 3 );
-		add_action( 'woocommerce_rest_insert_product_variation_object', array( $this, 'wcpos_insert_product_variation_object' ), 10, 3 );
-		add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'wcpos_product_variation_query' ), 10, 2 );
-		add_filter( 'posts_search', array( $this, 'wcpos_posts_search' ), 10, 2 );
 	}
 
 	/**

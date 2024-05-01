@@ -29,37 +29,15 @@ class API {
 	protected $controllers = array();
 
 	/**
-	 * @var
-	 */
-	protected $wc_rest_api_handler;
-
-	/**
+	 * Flag to check if authentication has been checked.
+	 *
 	 * @var bool
 	 */
 	protected $is_auth_checked = false;
 
 
 	public function __construct() {
-		// Init and register routes for the WCPOS REST API
-		$this->controllers = array(
-			// woocommerce pos rest api controllers
-			'auth'                  => new API\Auth(),
-			'settings'              => new API\Settings(),
-			'stores'                => new API\Stores(),
-
-			// extend WC REST API controllers
-			'products'              => new API\Products_Controller(),
-			'product_variations'    => new API\Product_Variations_Controller(),
-			'orders'                => new API\Orders_Controller(),
-			'customers'             => new API\Customers_Controller(),
-			'product_tags'          => new API\Product_Tags_Controller(),
-			'product_categories'    => new API\Product_Categories_Controller(),
-			'taxes'                 => new API\Taxes_Controller(),
-		);
-
-		foreach ( $this->controllers as $key => $controller_class ) {
-			$controller_class->register_routes();
-		}
+		$this->register_routes();
 
 		// Allows requests from WCPOS Desktop and Mobile Apps
 		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
@@ -80,6 +58,58 @@ class API {
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 
 		$this->prevent_messages();
+	}
+
+	/**
+	 * Register routes for all controllers.
+	 */
+	public function register_routes() {
+		/**
+		 * Filter the list of controller classes used in the WooCommerce POS REST API.
+		 *
+		 * This filter allows customizing or extending the set of controller classes that handle
+		 * REST API routes for the WooCommerce POS. By filtering these controllers, plugins can
+		 * modify existing endpoints or add new controllers for additional functionality.
+		 *
+		 * @since 1.5.0
+		 *
+		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
+		 *                            - 'auth'                  => Fully qualified name of the class handling authentication.
+		 *                            - 'settings'              => Fully qualified name of the class handling settings.
+		 *                            - 'stores'                => Fully qualified name of the class handling stores management.
+		 *                            - 'products'              => Fully qualified name of the class handling products.
+		 *                            - 'product_variations'    => Fully qualified name of the class handling product variations.
+		 *                            - 'orders'                => Fully qualified name of the class handling orders.
+		 *                            - 'customers'             => Fully qualified name of the class handling customers.
+		 *                            - 'product_tags'          => Fully qualified name of the class handling product tags.
+		 *                            - 'product_categories'    => Fully qualified name of the class handling product categories.
+		 *                            - 'taxes'                 => Fully qualified name of the class handling taxes.
+		 */
+		$classes = apply_filters(
+			'woocommerce_pos_rest_api_controllers',
+			array(
+				// woocommerce pos rest api controllers.
+				'auth'                  => API\Auth::class,
+				'settings'              => API\Settings::class,
+				'stores'                => API\Stores::class,
+
+				// extend WC REST API controllers.
+				'products'              => API\Products_Controller::class,
+				'product_variations'    => API\Product_Variations_Controller::class,
+				'orders'                => API\Orders_Controller::class,
+				'customers'             => API\Customers_Controller::class,
+				'product_tags'          => API\Product_Tags_Controller::class,
+				'product_categories'    => API\Product_Categories_Controller::class,
+				'taxes'                 => API\Taxes_Controller::class,
+			)
+		);
+
+		foreach ( $classes as $key => $class ) {
+			if ( class_exists( $class ) ) {
+				$this->controllers[ $key ] = new $class();
+				$this->controllers[ $key ]->register_routes();
+			}
+		}
 	}
 
 	/**
@@ -286,27 +316,16 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
-			/*
-			 * If $handler['callback'][0] matches one of our controllers we add a filter for $dispatch_result.
-			 * This allows us to conditionally init woocommerce hooks in the controller.
-			 */
-			foreach ( $this->controllers as $key => $controller_class ) {
-				if ( $handler['callback'][0] === $controller_class ) {
-					/**
-					 * Filters the dispatch result for a request.
-					 *
-					 * The dynamic portion of the hook name, `$key`, refers to the identifier of the controller.
-					 *
-					 * @since 1.4.0
-					 *
-					 * @param mixed           $dispatch_result The dispatch result.
-					 * @param WP_REST_Request $request         The request instance.
-					 * @param string          $route           The route being dispatched.
-					 * @param array           $handler         The handler for the route.
-					 */
-					$dispatch_result = apply_filters( "woocommerce_pos_rest_dispatch_{$key}_request", $dispatch_result, $request, $route, $handler );
+		if ( isset( $handler['callback'] ) && is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
+			$controller = $handler['callback'][0];
 
+			// Check if the controller object is one of our registered controllers.
+			foreach ( $this->controllers as $key => $wcpos_controller ) {
+				if ( $controller === $wcpos_controller ) {
+					// Check if the controller has a 'wcpos_dispatch_request' method.
+					if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
+						return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
+					}
 					break;
 				}
 			}
@@ -324,6 +343,8 @@ class API {
 	}
 
 	/**
+	 * Check the Authorization header for a Bearer token.
+	 *
 	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
 	 * @return int|WP_Error
