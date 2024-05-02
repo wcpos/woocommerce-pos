@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2024-03-28T23:40:10+00:00\n"
+"POT-Creation-Date: 2024-05-02T22:21:45+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.10.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -154,6 +154,9 @@ msgid "Order details manually sent to %s from WooCommerce POS."
 msgstr ""
 
 msgid "Failed to retrieve store data"
+msgstr ""
+
+msgid "Store not found"
 msgstr ""
 
 msgid "You do not have permissions to view this data."
