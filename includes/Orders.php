@@ -13,8 +13,17 @@ namespace WCPOS\WooCommercePOS;
 use WC_Abstract_Order;
 use WC_Product;
 use WC_Product_Simple;
+use WC_Order;
 
+/**
+ * Orders Class
+ * - runs for all life cycles
+ */
 class Orders {
+
+	/**
+	 * Constructor
+	 */
 	public function __construct() {
 		$this->register_order_status();
 		add_filter( 'wc_order_statuses', array( $this, 'wc_order_statuses' ), 10, 1 );
@@ -24,6 +33,7 @@ class Orders {
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
+		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
 
 		// order emails
 		$admin_emails = array(
@@ -110,6 +120,8 @@ class Orders {
 	}
 
 	/**
+	 *
+	 *
 	 * @param string            $status
 	 * @param int               $id
 	 * @param WC_Abstract_Order $order
@@ -135,6 +147,9 @@ class Orders {
 		return array_merge( $meta_keys, array( '_woocommerce_pos_uuid', '_woocommerce_pos_tax_status' ) );
 	}
 
+	/**
+	 *
+	 */
 	public function manage_admin_emails( $enabled, $order, $email_class ) {
 		if ( ! woocommerce_pos_request() ) {
 			return $enabled;
@@ -143,6 +158,9 @@ class Orders {
 		return woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
 	}
 
+	/**
+	 *
+	 */
 	public function manage_customer_emails( $enabled, $order, $email_class ) {
 		if ( ! woocommerce_pos_request() ) {
 			return $enabled;
@@ -151,7 +169,9 @@ class Orders {
 		return woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 	}
 
-
+	/**
+	 * Register the POS order statuses.
+	 */
 	private function register_order_status(): void {
 		// Order status for open orders
 		register_post_status(
@@ -191,7 +211,7 @@ class Orders {
 	}
 
 	/**
-	 *
+	 * Filter the product object for an order item.
 	 *
 	 * @param WC_Product|bool       $product The product object or false if not found
 	 * @param WC_Order_Item_Product $item    The order item object
@@ -206,5 +226,42 @@ class Orders {
 		}
 
 		return $product;
+	}
+
+	/**
+	 * Get tax location for this order.
+	 *
+	 * @param array             $args array Override the location.
+	 * @param WC_Abstract_Order $order The order object.
+	 *
+	 * @return array
+	 */
+	public function get_tax_location( $args, WC_Abstract_Order $order ) {
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $args;
+		}
+
+		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
+
+		if ( $order instanceof WC_Order ) {
+			if ( 'billing' == $tax_based_on ) {
+				$args['country']  = $order->get_billing_country();
+				$args['state']    = $order->get_billing_state();
+				$args['postcode'] = $order->get_billing_postcode();
+				$args['city']     = $order->get_billing_city();
+			} elseif ( 'shipping' == $tax_based_on ) {
+				$args['country']  = $order->get_shipping_country();
+				$args['state']    = $order->get_shipping_state();
+				$args['postcode'] = $order->get_shipping_postcode();
+				$args['city']     = $order->get_shipping_city();
+			} else {
+				$args['country']  = WC()->countries->get_base_country();
+				$args['state']    = WC()->countries->get_base_state();
+				$args['postcode'] = WC()->countries->get_base_postcode();
+				$args['city']     = WC()->countries->get_base_city();
+			}
+		}
+
+		return $args;
 	}
 }

@@ -86,7 +86,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
 		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
-		add_filter( 'option_woocommerce_tax_based_on', array( $this, 'wcpos_tax_based_on' ), 10, 2 );
 
 		/**
 		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
@@ -537,29 +536,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! $cashier_id ) {
 			$order->update_meta_data( '_pos_user', $user_id );
 		}
-	}
-
-		/**
-		 * Filters the value of the woocommerce_tax_based_on option.
-		 *
-		 * @param mixed  $value  Value of the option.
-		 * @param string $option Option name.
-		 */
-	public function wcpos_tax_based_on( $value, $option ) {
-		$tax_based_on = 'base'; // default value is base
-
-		// try to get POS tax settings from order meta
-		$raw_data = $this->wcpos_request->get_json_params();
-
-		if ( isset( $raw_data['meta_data'] ) ) {
-			foreach ( $raw_data['meta_data'] as $meta ) {
-				if ( '_woocommerce_pos_tax_based_on' == $meta['key'] ) {
-					$tax_based_on = $meta['value'];
-				}
-			}
-		}
-
-		return $tax_based_on;
 	}
 
 	/**

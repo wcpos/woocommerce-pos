@@ -1,4 +1,9 @@
 <?php
+/**
+ * Stores API.
+ *
+ * @package WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -12,6 +17,9 @@ use WP_REST_Controller;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 
+/**
+ * Stores API.
+ */
 class Stores extends WP_REST_Controller {
 		/**
 		 * Endpoint namespace.
@@ -27,13 +35,10 @@ class Stores extends WP_REST_Controller {
 	 */
 	protected $rest_base = 'stores';
 
+
 	/**
-	 * Stores constructor.
+	 * Register the routes for the objects of the controller.
 	 */
-	public function __construct() {
-	}
-
-
 	public function register_routes(): void {
 		register_rest_route(
 			$this->namespace,
@@ -41,6 +46,16 @@ class Stores extends WP_REST_Controller {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_items' ),
+				'permission_callback' => array( $this, 'check_permissions' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_item' ),
 				'permission_callback' => array( $this, 'check_permissions' ),
 			)
 		);
@@ -75,6 +90,28 @@ class Stores extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
+	}
+
+	/**
+	 * Retrieve a single store.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
+	 */
+	public function get_item( $request ) {
+		$store = wcpos_get_store( $request['id'] );
+
+		if ( ! $store ) {
+			return new \WP_Error(
+				'woocommerce_pos_store_not_found',
+				esc_html__( 'Store not found', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$data = $this->prepare_item_for_response( $store, $request );
+
+		return rest_ensure_response( $data );
 	}
 
 	/**

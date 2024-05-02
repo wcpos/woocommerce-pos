@@ -4,6 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
+use WC_Admin_Settings;
 
 /**
  * @internal
@@ -15,6 +16,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		parent::setUp();
 		$this->endpoint = new Orders_Controller();
 		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_tax_based_on', 'base' );
 
 		// Set default address
 		// update_option( 'woocommerce_default_country', 'GB' );
@@ -88,6 +90,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	 * Create a new order.
 	 */
 	public function test_create_order_with_tax(): void {
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		$request->set_body_params(
 			array(
@@ -135,6 +140,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	 * Create a new order with customer billing address as tax location.
 	 */
 	public function test_create_order_with_customer_billing_address_as_tax_location(): void {
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		// Prepare your data as an array and then JSON-encode it
 		$data = array(
@@ -206,6 +214,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	 * Create a new order with customer billing address as tax location.
 	 */
 	public function test_create_order_with_customer_shipping_address_as_tax_location(): void {
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		// Prepare your data as an array and then JSON-encode it
 		$data = array(

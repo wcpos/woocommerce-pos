@@ -7,6 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Abstracts;
 
+// use WC_Admin_Settings; // this messes up tests.
+use function wc_format_country_state_string;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -35,8 +38,10 @@ class Store extends \WC_Data {
 		'store_address' => '',
 		'store_address_2' => '',
 		'store_city' => '',
-		'default_country' => '',
 		'store_postcode' => '',
+		'store_state' => '',
+		'store_country' => '',
+		'default_country' => '',
 		'default_customer_address' => '',
 		'calc_taxes' => '',
 		'enable_coupons' => '',
@@ -48,6 +53,12 @@ class Store extends \WC_Data {
 		'price_num_decimals' => '',
 		'prices_include_tax' => '',
 		'tax_based_on' => '',
+		'tax_address' => array(
+			'country' => '',
+			'state' => '',
+			'postcode' => '',
+			'city' => '',
+		),
 		'shipping_tax_class' => '',
 		'tax_round_at_subtotal' => '',
 		'tax_display_shop' => '',
@@ -81,10 +92,15 @@ class Store extends \WC_Data {
 	 *
 	 */
 	public function set_woocommerce_general_settings() {
+		$default_country = \WC_Admin_Settings::get_option( 'woocommerce_default_country' );
+		$country_state_array = wc_format_country_state_string( $default_country );
+
 		$this->set_prop( 'store_address', \WC_Admin_Settings::get_option( 'woocommerce_store_address' ) );
 		$this->set_prop( 'store_address_2', \WC_Admin_Settings::get_option( 'woocommerce_store_address_2' ) );
 		$this->set_prop( 'store_city', \WC_Admin_Settings::get_option( 'woocommerce_store_city' ) );
-		$this->set_prop( 'default_country', \WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+		$this->set_prop( 'store_state', $country_state_array['state'] );
+		$this->set_prop( 'store_country', $country_state_array['country'] );
+		$this->set_prop( 'default_country', $default_country );
 		$this->set_prop( 'store_postcode', \WC_Admin_Settings::get_option( 'woocommerce_store_postcode' ) );
 		$this->set_prop( 'default_customer_address', \WC_Admin_Settings::get_option( 'woocommerce_default_customer_address' ) );
 		$this->set_prop( 'calc_taxes', \WC_Admin_Settings::get_option( 'woocommerce_calc_taxes' ) );
@@ -109,6 +125,19 @@ class Store extends \WC_Data {
 		$this->set_prop( 'tax_display_cart', \WC_Admin_Settings::get_option( 'woocommerce_tax_display_cart' ) );
 		$this->set_prop( 'price_display_suffix', \WC_Admin_Settings::get_option( 'woocommerce_price_display_suffix' ) );
 		$this->set_prop( 'tax_total_display', \WC_Admin_Settings::get_option( 'woocommerce_tax_total_display' ) );
+
+		// tax address is same as WooCommerce address by default.
+		$country_state_array = wc_format_country_state_string( \WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$this->set_prop(
+			'tax_address',
+			array(
+				'country' => $country_state_array['country'],
+				'state' => $country_state_array['state'],
+				'postcode' => \WC_Admin_Settings::get_option( 'woocommerce_store_postcode' ),
+				'city' => \WC_Admin_Settings::get_option( 'woocommerce_store_city' ),
+			)
+		);
 	}
 
 	/**
@@ -180,13 +209,34 @@ class Store extends \WC_Data {
 	}
 
 	/**
-	 * Get Store country.
+	 * Get Store country, eg: US:AL.
+	 * This is of the form COUNTRYCODE:STATECODE to be consistent with the WooCommerce settings.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
 	 * @return string
 	 */
 	public function get_default_country( $context = 'view' ) {
 		return $this->get_prop( 'default_country', $context );
+	}
+
+	/**
+	 * Get Store state code.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_store_state( $context = 'view' ) {
+		return $this->get_prop( 'store_state', $context );
+	}
+
+	/**
+	 * Get Store country code.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_store_country( $context = 'view' ) {
+		return $this->get_prop( 'store_country', $context );
 	}
 
 	/**
@@ -297,6 +347,16 @@ class Store extends \WC_Data {
 	 */
 	public function get_tax_based_on( $context = 'view' ) {
 		return $this->get_prop( 'tax_based_on', $context );
+	}
+
+	/**
+	 * Get Store tax address.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return array
+	 */
+	public function get_tax_address( $context = 'view' ) {
+		return $this->get_prop( 'tax_address', $context );
 	}
 
 	/**
