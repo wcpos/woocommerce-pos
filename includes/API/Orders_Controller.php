@@ -294,7 +294,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function get_product_id( $posted, $action = 'create' ) {
 		// If id = 0, ie: miscellaneaous product, just return 0.
-		if ( isset( $posted['id'] ) && 0 == $posted['id'] ) {
+		if ( isset( $posted['product_id'] ) && 0 == $posted['product_id'] ) {
 			return 0;
 		}
 
