@@ -107,7 +107,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		if ( $this->wcpos_allow_decimal_quantities() &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
-			$schema['properties']['stock_quantity']['type'] = 'string';
+			$schema['properties']['stock_quantity']['type'] = 'float';
 		}
 
 		return $schema;
@@ -233,6 +233,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param bool            $creating True when creating object, false when updating.
 	 */
 	public function wcpos_insert_product_object( WC_Data $object, WP_REST_Request $request, $creating ): void {
+		// Update the barcode if it is set in the request.
 		$barcode_field = $this->wcpos_get_barcode_field();
 		if ( $request->has_param( 'barcode' ) ) {
 			$barcode = $request->get_param( 'barcode' );

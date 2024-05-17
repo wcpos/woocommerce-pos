@@ -81,6 +81,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
 		$this->wcpos_request = $request;
+		// set hpos_enabled again for tests to work @TODO - fix this
+		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
@@ -283,14 +285,20 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 	/**
 	 * Gets the product ID from posted ID.
-	 * NOTE: This overrides the parent method to remove the sku check, some users have products duplicated SKUs.
 	 *
 	 * @throws WC_REST_Exception When SKU or ID is not valid.
 	 * @param array  $posted Request data.
 	 * @param string $action 'create' to add line item or 'update' to update it.
+	 *
 	 * @return int
 	 */
 	public function get_product_id( $posted, $action = 'create' ) {
+		// If id = 0, ie: miscellaneaous product, just return 0.
+		if ( isset( $posted['id'] ) && 0 == $posted['id'] ) {
+			return 0;
+		}
+
+		// Bypass the sku check. Some users have products with duplicated SKUs, esp. variable/variations.
 		$data = $posted;
 		unset( $data['sku'] );
 		return parent::get_product_id( $data, $action );
@@ -300,7 +308,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Validate billing email.
 	 * NOTE: we have removed the format check to allow empty email addresses.
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return bool|WP_Error
 	 */

@@ -128,7 +128,6 @@ class Frontend {
 			),
 			'wp_credentials' => $auth_service->get_user_data( $user ),
 			'stores'         => $stores,
-			'store_id'       => isset( $_GET['store'] ) ? $_GET['store'] : null,
 		);
 
 		/**

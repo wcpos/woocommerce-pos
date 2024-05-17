@@ -56,8 +56,6 @@ class API {
 		// These filters allow changes to the WC REST API response
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
-
-		$this->prevent_messages();
 	}
 
 	/**
@@ -322,6 +320,23 @@ class API {
 			// Check if the controller object is one of our registered controllers.
 			foreach ( $this->controllers as $key => $wcpos_controller ) {
 				if ( $controller === $wcpos_controller ) {
+					/**
+					 * I'm adding some additional PHP settings before the response. Placing them here so they only apply to the POS API.
+					 *
+					 * - error_reporting(0) - Turn off error reporting
+					 * - ini_set('display_errors', 0) - Turn off error display
+					 * - ini_set('precision', 10) - Set the precision of floating point numbers
+					 * - ini_set('serialize_precision', 10) - Set the precision of floating point numbers for serialization
+					 *
+					 * This is to prevent any PHP errors from being displayed in the response.
+					 *
+					 * The precision settings are to prevent floating point weirdness, eg: stock_quantity 3.6 becomes 3.6000000000000001
+					 */
+					error_reporting( 0 );
+					@ini_set( 'display_errors', 0 );
+					@ini_set( 'precision', 10 );
+					@ini_set( 'serialize_precision', 10 );
+
 					// Check if the controller has a 'wcpos_dispatch_request' method.
 					if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
 						return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
@@ -332,14 +347,6 @@ class API {
 		}
 
 		return $dispatch_result;
-	}
-
-	/**
-	 * Error messages and notices can cause the JSON response to fail.
-	 */
-	private function prevent_messages(): void {
-		error_reporting( 0 );
-		@ini_set( 'display_errors', 0 );
 	}
 
 	/**
