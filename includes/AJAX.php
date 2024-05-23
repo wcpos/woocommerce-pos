@@ -3,8 +3,12 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
+use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 use WCPOS\WooCommercePOS\Admin\Updaters\Pro_Plugin_Updater;
 
+	/**
+	 *
+	 */
 class AJAX {
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Product admin pages.
@@ -22,7 +26,7 @@ class AJAX {
 	 * @var string[]
 	 */
 	private $list_products_actions = array(
-		// 'inline-save', // this is a core WordPress action and it won't call our hook
+		'inline_save', // this is a core WordPress action and it won't call our hooks?? I don't know why.
 	);
 
 	/**
@@ -73,6 +77,17 @@ class AJAX {
 				'quick_edit_save',
 			)
 		);
+
+		/**
+		 * @TODO - I need to fix this AJAX mess.
+		 * When a quick edit is saved, WooCommerce returns a re-rendered row to replace the existing row.
+		 * Because it's via AJAX, our 'manage_product_posts_custom_column' hook won't run, so it won't include our updated value.
+		 *
+		 * I have loaded the List_Products class here for the wp_ajax_inline_save hook .
+		 */
+		if ( 'inline-save' === $_REQUEST['action'] ) {
+			new List_Products();
+		}
 	}
 
 	/**

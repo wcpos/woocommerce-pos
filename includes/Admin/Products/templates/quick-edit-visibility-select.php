@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		</div>
 	</div>
 	<script>
-		(function () {
+		document.addEventListener('DOMContentLoaded', function() {
 			// we create a copy of the WP inline edit post function
 			const wp_inline_edit = window.inlineEditPost.edit;
 
@@ -46,14 +46,19 @@ if ( ! defined( 'ABSPATH' ) ) {
 					const edit_row = document.getElementById('edit-' + post_id);
 
 					// get the data
-					const val = document.getElementById('woocommerce_pos_inline_' + post_id).dataset.visibility;
+					let val = '';
+					let elem = document.getElementById('woocommerce_pos_inline_' + post_id);
+					if (elem) {
+						val = elem.dataset.visibility;
+					}
 
 					// populate the data
 					const select = edit_row.querySelector('select[name="_pos_visibility"]');
-					select.value = val;
+					if (select) {
+						select.value = val;
+					}
 				}
-			}
-		})();
+			};
+		});
 	</script>
 </fieldset>
-

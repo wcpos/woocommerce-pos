@@ -144,7 +144,7 @@ class Orders {
 	 * @return array
 	 */
 	public function hidden_order_itemmeta( array $meta_keys ): array {
-		return array_merge( $meta_keys, array( '_woocommerce_pos_uuid', '_woocommerce_pos_tax_status' ) );
+		return array_merge( $meta_keys, array( '_woocommerce_pos_uuid', '_woocommerce_pos_tax_status', '_woocommerce_pos_data' ) );
 	}
 
 	/**
