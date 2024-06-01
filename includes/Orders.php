@@ -34,6 +34,8 @@ class Orders {
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
+		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
+		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 
 		// order emails
 		$admin_emails = array(
@@ -263,5 +265,30 @@ class Orders {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Calculate taxes for an order item.
+	 *
+	 * @param WC_Order_Item|WC_Order_Item_Shipping $item Order item object.
+	 */
+	public function order_item_after_calculate_taxes( $item ) {
+		$meta_data = $item->get_meta_data();
+
+		foreach ( $meta_data as $meta ) {
+			foreach ( $meta_data as $meta ) {
+				if ( '_woocommerce_pos_data' === $meta->key ) {
+					$pos_data = json_decode( $meta->value, true );
+
+					if ( json_last_error() === JSON_ERROR_NONE ) {
+						if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
+							$item->set_taxes( false );
+						}
+					} else {
+						Logger::log( 'JSON parse error: ' . json_last_error_msg() );
+					}
+				}
+			}
+		}
 	}
 }

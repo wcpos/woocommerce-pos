@@ -80,6 +80,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param array           $handler         Route handler used for the request.
 	 */
 	public function wcpos_dispatch_request( $dispatch_result, WP_REST_Request $request, $route, $handler ) {
+		/**
+		 * Force decimal rounding to 6 places for all order data. This matches the POS.
+		 *
+		 * @TODO - should this be flexible via a query param from the POS?
+		 */
+		$request->set_param( 'dp', '6' );
+
 		$this->wcpos_request = $request;
 		// set hpos_enabled again for tests to work @TODO - fix this
 		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();

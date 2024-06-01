@@ -72,16 +72,19 @@ class API {
 		 * @since 1.5.0
 		 *
 		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
-		 *                            - 'auth'                  => Fully qualified name of the class handling authentication.
-		 *                            - 'settings'              => Fully qualified name of the class handling settings.
-		 *                            - 'stores'                => Fully qualified name of the class handling stores management.
-		 *                            - 'products'              => Fully qualified name of the class handling products.
-		 *                            - 'product_variations'    => Fully qualified name of the class handling product variations.
-		 *                            - 'orders'                => Fully qualified name of the class handling orders.
-		 *                            - 'customers'             => Fully qualified name of the class handling customers.
-		 *                            - 'product_tags'          => Fully qualified name of the class handling product tags.
-		 *                            - 'product_categories'    => Fully qualified name of the class handling product categories.
-		 *                            - 'taxes'                 => Fully qualified name of the class handling taxes.
+		 *        - 'auth'                  => Fully qualified name of the class handling authentication.
+		 *        - 'settings'              => Fully qualified name of the class handling settings.
+		 *        - 'stores'                => Fully qualified name of the class handling stores management.
+		 *        - 'products'              => Fully qualified name of the class handling products.
+		 *        - 'product_variations'    => Fully qualified name of the class handling product variations.
+		 *        - 'orders'                => Fully qualified name of the class handling orders.
+		 *        - 'customers'             => Fully qualified name of the class handling customers.
+		 *        - 'product_tags'          => Fully qualified name of the class handling product tags.
+		 *        - 'product_categories'    => Fully qualified name of the class handling product categories.
+		 *        - 'taxes'                 => Fully qualified name of the class handling taxes.
+		 *        - 'shipping_methods'      => Fully qualified name of the class handling shipping methods.
+		 *        - 'tax_classes'           => Fully qualified name of the class handling tax classes.
+		 *        - 'order_statuses'        => Fully qualified name of the class handling order statuses.
 		 */
 		$classes = apply_filters(
 			'woocommerce_pos_rest_api_controllers',
@@ -99,6 +102,9 @@ class API {
 				'product_tags'          => API\Product_Tags_Controller::class,
 				'product_categories'    => API\Product_Categories_Controller::class,
 				'taxes'                 => API\Taxes_Controller::class,
+				'shipping_methods'      => API\Shipping_Methods_Controller::class,
+				'tax_classes'           => API\Tax_Classes_Controller::class,
+				'order_statuses'        => API\Data_Order_Statuses_Controller::class,
 			)
 		);
 
