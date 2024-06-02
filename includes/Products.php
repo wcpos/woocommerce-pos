@@ -45,6 +45,7 @@ class Products {
 		if ( \is_bool( $allow_decimal_quantities ) && $allow_decimal_quantities ) {
 			remove_filter( 'woocommerce_stock_amount', 'intval' );
 			add_filter( 'woocommerce_stock_amount', 'floatval' );
+			add_action( 'woocommerce_before_product_object_save', array( $this, 'save_decimal_quantities' ) );
 		}
 	}
 
@@ -198,5 +199,34 @@ class Products {
 				$product->get_name()
 			);
 		}
+	}
+
+	/**
+	 * Save decimal quantities for products and variations.
+	 *
+	 * @param WC_Product $product Product.
+	 */
+	public function save_decimal_quantities( WC_Product $product ) {
+		if ( ! $product->get_manage_stock() ) {
+			$product->set_stock_status( 'instock' );
+			return;
+		}
+
+		$stock_quantity = $product->get_stock_quantity();
+		$stock_notification_threshold = absint( get_option( 'woocommerce_notify_no_stock_amount', 0 ) );
+
+		// Adjust the condition to consider stock quantities between 0 and 1 as instock if greater than 0.
+		$stock_is_above_notification_threshold = ( $stock_quantity > 0 && $stock_quantity > $stock_notification_threshold );
+		$backorders_are_allowed = ( 'no' !== $product->get_backorders() );
+
+		if ( $stock_is_above_notification_threshold ) {
+			$new_stock_status = 'instock';
+		} elseif ( $backorders_are_allowed ) {
+			$new_stock_status = 'onbackorder';
+		} else {
+			$new_stock_status = 'outofstock';
+		}
+
+		$product->set_stock_status( $new_stock_status );
 	}
 }
