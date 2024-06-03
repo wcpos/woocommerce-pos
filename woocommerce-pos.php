@@ -36,7 +36,7 @@ const SHORT_NAME  = 'wcpos';
 // minimum requirements.
 const WC_MIN_VERSION  = '5.3';
 const PHP_MIN_VERSION = '7.4';
-const MIN_PRO_VERSION = '1.4.0';
+const MIN_PRO_VERSION = '1.5.0';
 
 // load .env flags (for development).
 function load_env( $file ) {

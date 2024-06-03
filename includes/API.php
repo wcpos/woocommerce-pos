@@ -17,6 +17,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 
+
 /**
  *
  */
@@ -50,7 +51,7 @@ class API {
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ), 20 );
 		add_filter( 'rest_authentication_errors', array( $this, 'rest_authentication_errors' ), 50, 1 );
 
-		// Adds uuid for the WordPress install
+		// Adds info about the WordPress install
 		add_filter( 'rest_index', array( $this, 'rest_index' ), 10, 1 );
 
 		// These filters allow changes to the WC REST API response
@@ -219,9 +220,11 @@ class API {
 	}
 
 	/**
-	 * Add uuid to the WP REST API index.
+	 * Adds info to the WP REST API index response.
+	 * - UUID
+	 * - Version Info
 	 *
-	 * @param WP_REST_Response $response Response data
+	 * @param WP_REST_Response $response Response data.
 	 *
 	 * @return WP_REST_Response
 	 */
@@ -232,6 +235,9 @@ class API {
 			update_option( 'woocommerce_pos_uuid', $uuid );
 		}
 		$response->data['uuid'] = $uuid;
+		$response->data['wp_version'] = get_bloginfo( 'version' );
+		$response->data['wc_version'] = WC()->version;
+		$response->data['wcpos_version'] = VERSION;
 
 		return $response;
 	}
