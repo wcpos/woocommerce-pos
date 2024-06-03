@@ -19,7 +19,8 @@ WooCommerce POS is a simple application for taking orders at the Point of Sale u
 You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
 or download the desktop application:
 ⬇️ [Download WooCommerce POS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
-⬇️ [Download WooCommerce POS for Mac](https://updates.wcpos.com/electron/download/darwin-x64)
+⬇️ [Download WooCommerce POS for Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
+⬇️ [Download WooCommerce POS for Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
 
 = ✨ FEATURES = 
 * Available cross-platform via browser or desktop application _(iOS and Android coming soon)_
