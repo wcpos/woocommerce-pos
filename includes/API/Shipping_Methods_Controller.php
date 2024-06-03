@@ -24,4 +24,17 @@ class Shipping_Methods_Controller extends WC_REST_Shipping_Methods_Controller {
 	 * @var string
 	 */
 	protected $namespace = 'wcpos/v1';
+
+	/**
+	 * Check whether a given request has permission to view shipping methods.
+	 *
+	 * @param  WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|boolean
+	 */
+	public function get_items_permissions_check( $request ) {
+		if ( is_user_logged_in() ) {
+			return true;
+		}
+		return parent::get_items_permissions_check( $request );
+	}
 }

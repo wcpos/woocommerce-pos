@@ -135,4 +135,17 @@ class Data_Order_Statuses_Controller extends WC_REST_Data_Controller {
 
 		return $this->add_additional_fields_schema( $schema );
 	}
+
+	/**
+	 * Check whether a given request has permission to view order statuses.
+	 *
+	 * @param  WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|boolean
+	 */
+	public function get_items_permissions_check( $request ) {
+		if ( is_user_logged_in() ) {
+			return true;
+		}
+		return parent::get_items_permissions_check( $request );
+	}
 }

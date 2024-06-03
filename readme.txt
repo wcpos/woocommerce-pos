@@ -79,6 +79,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.5.1 - 2024/06/03 =
+* Fix: "Sorry, you cannot list resources." error for cashier role
+
+
 = 1.5.0 - 2024/06/03 =
 * Fix: the POS will now correctly sync stock quantity after each sale
 * Fix: cart tax logic has been improved to fix rounding issues
