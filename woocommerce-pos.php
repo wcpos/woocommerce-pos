@@ -14,7 +14,7 @@
  * Tested up to:      6.5
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
- * WC tested up to:   8.7
+ * WC tested up to:   8.9
  * WC requires at least: 5.3
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
