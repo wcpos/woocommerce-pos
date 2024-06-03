@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.4.16
+Stable tag: 1.5.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -78,8 +78,22 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.5.0 - 2024/06/02 =
-* Coming...
+= 1.5.0 - 2024/06/03 =
+* Fix: the POS will now correctly sync stock quantity after each sale
+* Fix: cart tax logic has been improved to fix rounding issues
+* Fix: shipping tax will now use the correct class
+* Fix: re-opening orders now functions correctly
+* Fix: quick discount calculation
+* Fix: orders created with different currencies will show the correct currency symbol
+* Added: split option to allow multiple cart lines for the same product
+* Added: stock filter for products
+* Added: Fees can now be a fix percentage of the cart total
+* Added: order status can now be changed from the Orders page
+* Added: extra display information for Orders, such as 'created_via' and 'cashier'
+* Added: cart will only show open orders associated with the logged in cashier
+* Pro: cart will only show open orders from the current POS Store
+* Pro: current store will stay selected after refresh or application re-open
+* ... numerous other bug fixes and performance improvements
 
 = 1.4.16 - 2024/03/28 =
 * Fix: nonce check failing for Guest orders when checking out with the desktop application
@@ -231,3 +245,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 * We recommend updating only when you have time to deal with potential issues.
 * You can always revert to the old version if necessary, https://wordpress.org/plugins/woocommerce-pos/advanced/
 * If you need assistance, join our Discord chat at https://wcpos.com/discord for support.
+
+== Upgrade Notice ==
+
+= 1.5.0 =
+**Important Update Notice:**
+We have made some significant changes to the local POS database in this update. To ensure a smooth transition, please consider updating your system when you have a quiet moment, such as outside of your busy sales hours. This will allow you to thoroughly test the new features and changes.
+
+For the latest updates and real-time information, please visit our community chat at [wcpos.com/discord](https://wcpos.com/discord).
