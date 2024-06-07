@@ -196,6 +196,33 @@ trait Uuid_Handler {
 	}
 
 	/**
+	 *
+	 */
+	private function get_order_ids_by_uuid( string $uuid ) {
+		global $wpdb;
+
+		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			// Check the orders meta table.
+			$result = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT order_id FROM {$wpdb->prefix}wc_orders_meta WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s",
+					$uuid
+				)
+			);
+		} else {
+			// Check the postmeta table.
+			$result = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_woocommerce_pos_uuid' AND meta_value = %s",
+					$uuid
+				)
+			);
+		}
+
+		return $result;
+	}
+
+	/**
 	 * Check if the given UUID already exists for any user.
 	 *
 	 * @param string $uuid The UUID to check.

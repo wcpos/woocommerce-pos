@@ -193,12 +193,46 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 	/**
 	 * Create a single order.
+	 * - Validate billing email.
+	 * - Do a sanity check on the UUID, if the internet connection is bad, several requests can be made with the same UUID.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function create_item( $request ) {
+		// check if the UUID is already in use.
+		if ( isset( $request['meta_data'] ) && is_array( $request['meta_data'] ) ) {
+			foreach ( $request['meta_data'] as $meta ) {
+				if ( $meta['key'] === '_woocommerce_pos_uuid' ) {
+					$uuid = $meta['value'];
+					$ids = $this->get_order_ids_by_uuid( $uuid );
+
+					/**
+					 * If the UUID is already in use, and there is only one order with that UUID, return the existing order.
+					 * This can happen if the internet connection is bad and the request is made several times.
+					 *
+					 * @NOTE: This means that $request data is lost, but we can't update existing order because it has resource ids now.
+					 * The alternative would be to update the existing order, but that would require a lot of extra work.
+					 * Or return an error, which would be a bad user experience.
+					 */
+					if ( count( $ids ) === 1 ) {
+						Logger::log( 'UUID already in use, return existing order.', $ids[0] );
+
+						// Create a new WP_REST_Request object for the GET request.
+						$get_request = new WP_REST_Request( 'GET', '/wc/v3/orders/' . $ids[0] );
+						$get_request->set_param( 'id', $ids[0] );
+
+						return $this->get_item( $get_request );
+					}
+					if ( count( $ids ) > 1 ) {
+						Logger::log( 'UUID already in use for multiple orders. This should not happen.', $ids );
+						return new WP_Error( 'woocommerce_rest_order_invalid_id', __( 'UUID already in use.', 'woocommerce' ), array( 'status' => 400 ) );
+					}
+				}
+			}
+		}
+
 		$valid_email = $this->wcpos_validate_billing_email( $request );
 		if ( is_wp_error( $valid_email ) ) {
 			return $valid_email;
@@ -320,7 +354,6 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @return bool|WP_Error
 	 */
 	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
-		// Your custom validation logic for the request data
 		$billing = $request['billing'] ?? null;
 		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
 
