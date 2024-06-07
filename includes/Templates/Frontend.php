@@ -12,6 +12,7 @@ use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
 
 /**
  * Frontend class.
@@ -148,7 +149,15 @@ class Frontend {
 		$initial_props = wp_json_encode( $vars );
 		$dev_bundle    = 'http://localhost:8081/index.bundle?platform=web&dev=true&hot=false';
 
-		// getScript helper and initialProps
+		/**
+		 * Add path to worker scripts
+		 */
+		$idbWorker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
+		$mmIdbWorker = PLUGIN_URL . 'assets/js/memory-mapped-indexeddb.worker.js';
+
+		/**
+		 * getScript helper and initialProps
+		 */
 		echo "<script>
 	function getScript(source, callback) {
 	    var script = document.createElement('script');
@@ -168,9 +177,14 @@ class Frontend {
 	    prior.parentNode.insertBefore(script, prior);
 	}
 
-	var initialProps={$initial_props};
+	var idbWorker = '{$idbWorker}';
+	var mmIdbWorker = '{$mmIdbWorker}';
+	var initialProps = {$initial_props};
 </script>" . "\n";
 
+		/**
+		 * The actual app bundle
+		 */
 		if ( $development ) {
 			// Development
 			echo "<script>getScript('{$dev_bundle}' , () => { console.log('done') });</script>" . "\n";
