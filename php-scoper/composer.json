@@ -5,7 +5,8 @@
 	"require": {
     "php": ">=7.4",
     "ext-json": "*",
-    "firebase/php-jwt": "v6.9.0"
+    "firebase/php-jwt": "v6.9.0",
+    "phpfastcache/phpfastcache": "^8.1"
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
@@ -17,4 +18,3 @@
     "sort-packages": true
   }
 }
-

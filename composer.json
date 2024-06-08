@@ -25,8 +25,7 @@
     "php": ">=7.4",
     "ext-json": "*",
     "erusev/parsedown": "^1.7",
-    "ramsey/uuid": "^4.2",
-    "salesforce/handlebars-php": "3.0.1"
+    "ramsey/uuid": "^4.2"
   },
   "config": {
     "platform": {
@@ -47,18 +46,16 @@
     "lint-report": "phpcs --standard=./.phpcs.xml.dist --report=checkstyle",
     "fix": "php-cs-fixer fix .",
     "prefix-dependencies": [
-      "@composer --working-dir=php-scoper install",
-      "cd php-scoper && vendor/bin/php-scoper --output-dir=../vendor_prefixed add-prefix --force && cd ..",
-      "@composer dump-autoload -o -a"
+      "composer --working-dir=php-scoper install",
+      "cd php-scoper && vendor/bin/php-scoper add-prefix --output-dir=../vendor_prefixed --force && cd ..",
+      "composer dump-autoload -o",
+      "php generate_autoload.php"
     ]
   },
   "autoload": {
     "psr-4": {
       "WCPOS\\WooCommercePOS\\": "includes/"   
-    },
-    "classmap": [
-      "vendor_prefixed/vendor/firebase/php-jwt/src"
-    ]
+    }
   },
   "autoload-dev": {
     "psr-4": {

@@ -3,50 +3,18 @@
 use Isolated\Symfony\Component\Finder\Finder;
 
 return array(
-	// Define the namespace prefix to use.
-	'prefix' => 'WCPOS\Vendor',
+	'prefix' => 'WCPOS\\Vendor',
 
-	// Finders: Locate files that need to be scoped.
 	'finders' => array(
-		// Finder for the firebase/php-jwt library.
-		Finder::create()->files()
-				->in( 'vendor/firebase/php-jwt' )
-				->name( '*.php' ), // Scope only PHP files.
-
-		/**
-		 * If there is only one library the folder structure is not maintained :(
-		 * By creating a dummy folder we can maintain the folder structure.
-		 */
-		Finder::create()->files()
-			->in( 'dummy' )
-			->name( '*.php' ),
-
-		// Add Finder for yahnis-elsts/plugin-update-checker
-		// NOTE: I ended up rolling my own update checker, so this is no longer needed.
-		// Finder::create()->files()
-		// ->in( 'vendor/yahnis-elsts/plugin-update-checker' )
-		// ->name( '*.php' ), // Scope only PHP files.
-
-		// Add Finder for ramsey/uuid
-		// NOTE: UUID has too many dependencies to scope, so we'll just leave it alone.
-		// Finder::create()->files()
-		// ->in( 'vendor/ramsey/uuid' )
-		// ->name( '*.php' ), // Scope only PHP files.
+		Finder::create()->files()->in( 'vendor/firebase/php-jwt' )->name( '*.php' ),
+		Finder::create()->files()->in( 'vendor/phpfastcache/phpfastcache' )->name( '*.php' ),
 	),
 
-	// 'patchers' are used to transform the code after it has been scoped.
-	// Define any necessary patchers below. For a minimal setup, this might not be needed.
-		'patchers' => array(
-			// Example patcher (you can modify or remove this)
-			function ( string $filePath, string $prefix, string $content ) {
-				// Modify $content as needed or return it unchanged.
-				return $content;
-			},
-		),
-
-	// 'whitelist' can be used to specify classes, functions, and constants
-	// that should not be prefixed (i.e., left in the global scope).
-	'whitelist' => array(
-		// Example: 'YourNamespacePrefix\Firebase\JWT\*',
+	'patchers' => array(
+		function ( string $filePath, string $prefix, string $content ) {
+			return $content;
+		},
 	),
+
+	'whitelist' => array(),
 );

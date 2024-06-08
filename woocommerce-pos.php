@@ -17,10 +17,8 @@
  * WC tested up to:   8.9
  * WC requires at least: 5.3
  *
- * @author    Paul Kilmurray <paul@kilbot.com>
- *
  * @see      http://wcpos.com
- * @package   WCPOS\WooCommercePOS
+ * @package  WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -33,21 +31,21 @@ const SHORT_NAME  = 'wcpos';
 \define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
 \define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 
-// minimum requirements.
+// Minimum requirements.
 const WC_MIN_VERSION  = '5.3';
 const PHP_MIN_VERSION = '7.4';
 const MIN_PRO_VERSION = '1.5.0';
 
-// load .env flags (for development).
+// Load .env flags (for development).
 function load_env( $file ) {
 	if ( ! file_exists( $file ) ) {
-			return;
+		return;
 	}
 
 	$lines = file( $file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
 	foreach ( $lines as $line ) {
 		if ( strpos( trim( $line ), '#' ) === 0 ) {
-				continue;
+			continue;
 		}
 
 		list($name, $value) = explode( '=', $line, 2 );
@@ -55,36 +53,50 @@ function load_env( $file ) {
 		$value = trim( $value );
 
 		if ( ! array_key_exists( $name, $_SERVER ) && ! array_key_exists( $name, $_ENV ) ) {
-				putenv( sprintf( '%s=%s', $name, $value ) );
-				$_ENV[ $name ] = $value;
+			putenv( sprintf( '%s=%s', $name, $value ) );
+			$_ENV[ $name ] = $value;
 		}
 	}
 }
 
-// Autoloader.
-if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
-	require_once __DIR__ . '/vendor/autoload.php';
+// Autoload vendor and prefixed libraries.
+function wcpos_load_autoloaders() {
+	$vendor_autoload = __DIR__ . '/vendor/autoload.php';
+	$vendor_prefixed_autoload = __DIR__ . '/vendor_prefixed/autoload.php';
 
-	// Environment variables.
-	load_env( __DIR__ . '/.env' );
+	if ( file_exists( $vendor_autoload ) ) {
+		require_once $vendor_autoload;
+	}
+	if ( file_exists( $vendor_prefixed_autoload ) ) {
+		require_once $vendor_prefixed_autoload;
+	}
+}
 
-	// Activate plugin.
-	new Activator();
+wcpos_load_autoloaders();
 
-	// Deactivate plugin.
-	new Deactivator();
-} else {
+// Environment variables.
+load_env( __DIR__ . '/.env' );
+
+// Error handling for autoload failure.
+if ( ! class_exists( \WCPOS\WooCommercePOS\Activator::class ) || ! class_exists( \WCPOS\WooCommercePOS\Deactivator::class ) ) {
 	add_action(
 		'admin_notices',
 		function (): void {
 			?>
-		<div class="notice notice-error">
-			<p><?php esc_html_e( 'The WooCommerce POS plugin failed to load correctly.', 'woocommerce-pos' ); ?></p>
-		</div>
+			<div class="notice notice-error">
+				<p><?php esc_html_e( 'The WooCommerce POS plugin failed to load correctly.', 'woocommerce-pos' ); ?></p>
+			</div>
 			<?php
 		}
 	);
+	return; // Exit early if classes are not found.
 }
+
+// Activate plugin.
+new Activator();
+
+// Deactivate plugin.
+new Deactivator();
 
 // Declare HPOS compatible.
 add_action(
