@@ -28,6 +28,7 @@ or download the desktop application:
 * Manage product stock levels and pricing quickly
 * Add new customers or checkout via Guest account
 * Add miscellaneous products to cart, ie: products not in WooCommerce
+* Live chat support within the application
 * **Pro:** Use any WooCommerce gateway
 * **Pro:** Create multiple POS Stores
 * **Pro:** Analytics for POS and Online sales
@@ -81,7 +82,6 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 = 1.5.1 - 2024/06/03 =
 * Fix: "Sorry, you cannot list resources." error for cashier role
-
 
 = 1.5.0 - 2024/06/03 =
 * Fix: the POS will now correctly sync stock quantity after each sale

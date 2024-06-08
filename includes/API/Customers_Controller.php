@@ -68,7 +68,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		 * Optimised query for getting all customer IDs.
 		 */
 		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
-			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
+			return $this->wcpos_get_all_posts( $request );
 		}
 
 		return $dispatch_result;
@@ -236,17 +236,23 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * multisite would return all users from all sites, not just the current site.
 	 * Also, querying by role is not as simple as querying by post type.
 	 *
-	 * @param array $fields Fields to return. Default is ID.
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_Error
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( array $fields = array() ): array {
+	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
+		// Start timing execution
+		$start_time = microtime( true );
+
+		$modified_after = $request->get_param( 'modified_after' );
+		$dates_are_gmt = true;
+		$fields = $request->get_param( 'fields' );
 		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
 
 		$args = array(
-			'fields' => array( 'ID', 'registered' ), // Return only the ID and registered date.
+			'fields' => array( 'ID', 'user_registered' ), // Return only the ID and registered date.
 			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier']
 		);
 
@@ -262,36 +268,81 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$last_updates = array();
 
 			if ( $id_with_modified_date ) {
-				$last_update_results = $wpdb->get_results(
-					"
-            SELECT user_id, meta_value 
-            FROM $wpdb->usermeta 
-            WHERE meta_key = 'last_update'",
-					OBJECT_K
-				);
+				$query = "
+					SELECT user_id, meta_value 
+					FROM $wpdb->usermeta 
+					WHERE meta_key = 'last_update'
+				";
 
-				foreach ( $last_update_results as $user_id => $meta ) {
-					$last_updates[ $user_id ] = $meta->meta_value;
+				// If modified_after param is set, add the condition to the query
+				if ( $modified_after ) {
+					$modified_after_timestamp = strtotime( $modified_after );
+					$query .= $wpdb->prepare( ' AND meta_value > %d', $modified_after_timestamp );
+				}
+
+				$last_update_results = $wpdb->get_results( $query );
+
+				// Manually create the associative array of user_id => last_update
+				foreach ( $last_update_results as $result ) {
+					$last_updates[ $result->user_id ] = is_numeric( $result->meta_value ) ? gmdate( 'Y-m-d\TH:i:s', (int) $result->meta_value ) : null;
 				}
 			}
 
-			// Merge user IDs with their corresponding 'last_updated' values or fallback to user_registered.
-			$user_data = array_map(
-				function ( $user ) use ( $last_updates, $id_with_modified_date ) {
-					$user_info = array( 'id' => (int) $user->ID );
-					if ( $id_with_modified_date ) {
-						if ( isset( $last_updates[ $user->ID ] ) ) {
-							$user_info['date_modified_gmt'] = wc_rest_prepare_date_response( $last_updates[ $user->ID ] );
-						} else {
-							$user_info['date_modified_gmt'] = wc_rest_prepare_date_response( $user->user_registered );
-						}
-					}
-					return $user_info;
-				},
-				$users
-			);
+			/**
+			 * Performance notes:
+			 * - Using a generator is faster than array_map when dealing with large datasets.
+			 * - If date is in the format 'Y-m-d H:i:s' we just do preg_replace to 'Y-m-d\TH:i:s',
+			 * rather than using wc_rest_prepare_date_response
+			 *
+			 * This resulted in execution time of 10% of the original time.
+			 *
+			 * If the modified_after param is set, we don't need to loop through the entire user list.
+			 * The last_update_results array will only contain the users that have been modified after the given date.
+			 * We just need to check they are valid user ids, this sucks, but there could be orphaned last_update meta values.
+			 */
+			$formatted_results = array();
 
-			return $user_data;
+			if ( $modified_after ) {
+				foreach ( $users as $user ) {
+					if ( isset( $last_updates[ $user->ID ] ) ) {
+						$user_info = array( 'id' => (int) $user->ID );
+						if ( $id_with_modified_date ) {
+							$user_info['date_modified_gmt'] = $last_updates[ $user->ID ];
+						}
+						$formatted_results[] = $user_info;
+					}
+				}
+			} else {
+				function format_results( $users, $last_updates, $id_with_modified_date ) {
+					foreach ( $users as $user ) {
+						$user_info = array( 'id' => (int) $user->ID );
+						if ( $id_with_modified_date ) {
+							if ( isset( $last_updates[ $user->ID ] ) && ! empty( $last_updates[ $user->ID ] ) ) {
+								$user_info['date_modified_gmt'] = $last_updates[ $user->ID ];
+							} else {
+								$user_info['date_modified_gmt'] = null; // users can have null date_modified_gmt
+							}
+						}
+						yield $user_info;
+					}
+				}
+
+				$formatted_results = iterator_to_array( format_results( $users, $last_updates, $id_with_modified_date ) );
+			}
+
+			// Get the total number of orders for the given criteria.
+			$total = count( $formatted_results );
+
+			// Collect execution time and server load.
+			$execution_time = microtime( true ) - $start_time;
+			$server_load = sys_getloadavg();
+
+			$response = rest_ensure_response( $formatted_results );
+			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-Execution-Time', $execution_time );
+			$response->header( 'X-Server-Load', json_encode( $server_load ) );
+
+			return $response;
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
 

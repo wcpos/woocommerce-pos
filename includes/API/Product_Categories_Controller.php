@@ -56,7 +56,7 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 		 * Optimised query for getting all category IDs.
 		 */
 		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
-			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
+			return $this->wcpos_get_all_posts( $request );
 		}
 
 		return $dispatch_result;
@@ -141,11 +141,14 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	/**
 	 * Returns array of all product category ids.
 	 *
-	 * @param array $fields
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_Error
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( array $fields = array() ): array {
+	public function wcpos_get_all_posts( $request ) {
+		// Start timing execution.
+		$start_time = microtime( true );
+
 		$args = array(
 			'taxonomy'   => 'product_cat',
 			'hide_empty' => false,
@@ -156,12 +159,26 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 			$results = get_terms( $args );
 
 			// Format the response.
-			return array_map(
-				function ( $item ) {
-					return array( 'id' => (int) $item );
+			$formatted_results = array_map(
+				function ( $id ) {
+					return array( 'id' => (int) $id );
 				},
 				$results
 			);
+
+			// Get the total number of orders for the given criteria.
+			$total = count( $formatted_results );
+
+			// Collect execution time and server load.
+			$execution_time = microtime( true ) - $start_time;
+			$server_load = sys_getloadavg();
+
+			$response = rest_ensure_response( $formatted_results );
+			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-Execution-Time', $execution_time );
+			$response->header( 'X-Server-Load', json_encode( $server_load ) );
+
+			return $response;
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product category IDs: ' . $e->getMessage() );
 

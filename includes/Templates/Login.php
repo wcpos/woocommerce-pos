@@ -78,7 +78,6 @@ class Login {
 
 		echo '<script>
 	(function() {
-        // Parse the order JSON from PHP
         var credentials = ' . $credentials . " 
 
         // Check if postMessage function exists for window.top

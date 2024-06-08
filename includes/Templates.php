@@ -149,8 +149,10 @@ class Templates {
 	 * @return string
 	 */
 	public function order_received_url( string $order_received_url, WC_Abstract_Order $order ): string {
+		global $wp;
+
 		// check is pos
-		if ( ! woocommerce_pos_request() ) {
+		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
 			return $order_received_url;
 		}
 

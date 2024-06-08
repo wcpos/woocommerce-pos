@@ -75,7 +75,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * Optimised query for getting all product IDs.
 		 */
 		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
-			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
+			return $this->wcpos_get_all_posts( $request );
 		}
 
 		return $dispatch_result;
@@ -429,13 +429,19 @@ class Products_Controller extends WC_REST_Products_Controller {
 	/**
 	 * Returns array of all product ids, name.
 	 *
-	 * @param array $fields Fields to return.
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_Error
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( array $fields = array() ): array {
+	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
+		// Start timing execution.
+		$start_time = microtime( true );
+
+		$modified_after = $request->get_param( 'modified_after' );
+		$dates_are_gmt = true; // Dates are always in GMT.
+		$fields = $request->get_param( 'fields' );
 		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
 		$select_fields = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
 
@@ -450,12 +456,32 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$sql .= " WHERE post_type = 'product' AND post_status = 'publish'";
 		}
 
+		// Add modified_after condition if provided.
+		if ( $modified_after ) {
+			$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
+		}
+
 		// Order by post_date DESC to maintain order consistency.
 		$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 
 		try {
-			$results = $wpdb->get_results( $sql );
-			return $this->wcpos_format_all_posts_response( $results );
+			$results = $wpdb->get_results( $sql, ARRAY_A );
+			$formatted_results = $this->wcpos_format_all_posts_response( $results );
+
+			// Get the total number of orders for the given criteria.
+			$total = count( $formatted_results );
+
+			// Collect execution time and server load.
+			$execution_time = microtime( true ) - $start_time;
+			$server_load = sys_getloadavg();
+
+			$response = rest_ensure_response( $formatted_results );
+			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-Execution-Time', $execution_time );
+			$response->header( 'X-Server-Load', json_encode( $server_load ) );
+
+			return $response;
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product data: ' . $e->getMessage() );
 			return new WP_Error( 'woocommerce_pos_rest_cannot_fetch', 'Error fetching product data.', array( 'status' => 500 ) );
