@@ -86,6 +86,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 * Added: Cart setting to enable/disable show receipt after checkout
 * Added: Cart setting to enable/disable auto-print receipt after checkout
 * Fix: Prevent order create duplication from the POS
+* Fix: Cart subtotal showing tax when tax display is not enabled
 
 = 1.5.1 - 2024/06/03 =
 * Fix: "Sorry, you cannot list resources." error for cashier role
