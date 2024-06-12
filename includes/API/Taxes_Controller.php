@@ -8,8 +8,11 @@ if ( ! class_exists( 'WC_REST_Taxes_Controller' ) ) {
 	return;
 }
 
+use Exception;
 use WC_REST_Taxes_Controller;
+use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Product Tgas controller class.
@@ -53,7 +56,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		 * Optimised query for getting all rate IDs.
 		 */
 		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
-			return $this->wcpos_get_all_posts( $request->get_param( 'fields' ) );
+			return $this->wcpos_get_all_posts( $request );
 		}
 
 		return $dispatch_result;
@@ -206,26 +209,60 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	/**
 	 * Returns array of all tax_rate ids.
 	 *
-	 * @param array $fields
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_Error
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( array $fields = array() ): array {
+	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
-		$results = $wpdb->get_results(
-			'
-			SELECT tax_rate_id as id FROM ' . $wpdb->prefix . 'woocommerce_tax_rates
-		',
-			ARRAY_A
-		);
+		// Start timing execution.
+		$start_time = microtime( true );
+		$modified_after = $request->get_param( 'modified_after' );
 
-		// Format the response.
-		return array_map(
-			function ( $item ) {
-				return array( 'id' => (int) $item['id'] );
-			},
-			$results
-		);
+		try {
+			/**
+			 * @TODO - taxes doen't have a modified date, so we can't filter by modified_after
+			 * - ideally WooCommerce would provide a modified_after filter for terms
+			 * - for now we'll just return empty for modified terms
+			 */
+			$results = $modified_after ? array() : $wpdb->get_results(
+				'
+				SELECT tax_rate_id as id FROM ' . $wpdb->prefix . 'woocommerce_tax_rates
+			',
+				ARRAY_A
+			);
+
+			// Format the response.
+			$formatted_results = array_map(
+				function ( $item ) {
+					return array( 'id' => (int) $item['id'] );
+				},
+				$results
+			);
+
+			// Get the total number of orders for the given criteria.
+			$total = count( $formatted_results );
+
+			// Collect execution time and server load.
+			$execution_time = microtime( true ) - $start_time;
+			$execution_time_ms = number_format( $execution_time * 1000, 2 );
+			$server_load = sys_getloadavg();
+
+			$response = rest_ensure_response( $formatted_results );
+			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
+			$response->header( 'X-Server-Load', json_encode( $server_load ) );
+
+			return $response;
+		} catch ( Exception $e ) {
+			Logger::log( 'Error fetching product tax rate IDs: ' . $e->getMessage() );
+
+			return new \WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching product tax rate IDs.',
+				array( 'status' => 500 )
+			);
+		}
 	}
 }

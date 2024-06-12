@@ -153,7 +153,6 @@ class Frontend {
 		 * Add path to worker scripts
 		 */
 		$idbWorker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
-		$mmIdbWorker = PLUGIN_URL . 'assets/js/memory-mapped-indexeddb.worker.js';
 
 		/**
 		 * getScript helper and initialProps
@@ -178,7 +177,6 @@ class Frontend {
 	}
 
 	var idbWorker = '{$idbWorker}';
-	var mmIdbWorker = '{$mmIdbWorker}';
 	var initialProps = {$initial_props};
 </script>" . "\n";
 

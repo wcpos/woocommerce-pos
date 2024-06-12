@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.5.1
+Stable tag: 1.6.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -79,6 +79,13 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.6.0 - 2024/06/12 = 
+* Improved: Performance for large stores
+* Added: Log screen for insights into the POS performance and events
+* Added: Cart setting to enable/disable show receipt after checkout
+* Added: Cart setting to enable/disable auto-print receipt after checkout
+* Fix: Prevent order create duplication from the POS
 
 = 1.5.1 - 2024/06/03 =
 * Fix: "Sorry, you cannot list resources." error for cashier role

@@ -376,6 +376,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		// Start timing execution.
 		$start_time = microtime( true );
 
+		$modified_after = $request->get_param( 'modified_after' );
 		$fields = $request->get_param( 'fields' );
 		$parent_id = (int) $this->wcpos_request->get_param( 'product_id' );
 		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
@@ -394,6 +395,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$sql .= " WHERE {$wpdb->posts}.post_type = 'product_variation' AND {$wpdb->posts}.post_status = 'publish'";
 		}
 
+		// Add modified_after condition if provided.
+		if ( $modified_after ) {
+			$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
+		}
+
 		// Dynamically add the post_parent clause if a parent ID is provided.
 		if ( $parent_id ) {
 			$sql = $wpdb->prepare( $sql . " AND {$wpdb->posts}.post_parent = %d", $parent_id );
@@ -409,11 +416,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 
 			// Collect execution time and server load.
 			$execution_time = microtime( true ) - $start_time;
+			$execution_time_ms = number_format( $execution_time * 1000, 2 );
 			$server_load = sys_getloadavg();
 
 			$response = rest_ensure_response( $formatted_results );
 			$response->header( 'X-WP-Total', (int) $total );
-			$response->header( 'X-Execution-Time', $execution_time );
+			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 
 			return $response;
