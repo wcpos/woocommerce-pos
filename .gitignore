@@ -18,6 +18,7 @@ composer.lock
 .wp-env.override.json
 assets/js/*
 !assets/js/README.md
+!assets/js/indexeddb.worker.js
 assets/css/*
 !assets/css/README.md
 assets/asset-manifest.json
