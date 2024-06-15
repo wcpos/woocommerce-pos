@@ -485,7 +485,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 			return $response;
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product data: ' . $e->getMessage() );
-			return new WP_Error( 'woocommerce_pos_rest_cannot_fetch', 'Error fetching product data.', array( 'status' => 500 ) );
+			return new WP_Error(
+				'woocommerce_pos_rest_cannot_fetch',
+				'Error fetching product data.',
+				array( 'status' => 500 )
+			);
 		}
 	}
 

@@ -15,7 +15,7 @@
       <img src="https://github.com/wcpos/woocommerce-pos/actions/workflows/wporg-deploy.yml/badge.svg" alt="Deploy to WordPress.org" />
     </a>
     <a href="https://wcpos.com/discord">
-      <img src="https://img.shields.io/discord/711884517081612298?color=%237289DA&label=WCPOS&logo=discord&logoColor=white" alt="Discord chat" />
+      <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FGCEeEVpEvX%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&logo=discord&logoColor=white&label=users%20online&color=green" alt="Discord chat" />
     </a>
   </p>
   <p>

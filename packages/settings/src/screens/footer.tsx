@@ -44,7 +44,7 @@ const Footer = () => {
 					<a href="https://wcpos.com/discord" target="_blank" rel="noreferrer">
 						<img
 							id="discord-badge"
-							src="https://img.shields.io/discord/711884517081612298?color=%232271B1&amp;logoColor=white"
+							src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FGCEeEVpEvX%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&logo=discord&logoColor=white&label=users%20online&color=green"
 							alt="Discord Chat"
 						/>
 					</a>

@@ -145,7 +145,7 @@ class Product_Tags_Controller extends WC_REST_Product_Tags_Controller {
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( $request ): array {
+	public function wcpos_get_all_posts( $request ) {
 		// Start timing execution.
 		$start_time = microtime( true );
 		$modified_after = $request->get_param( 'modified_after' );

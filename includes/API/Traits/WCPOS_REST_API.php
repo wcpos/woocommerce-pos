@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\API\Traits;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
 use WP_REST_Response;
+use Exception;
 
 trait WCPOS_REST_API {
 	/**
@@ -21,23 +22,23 @@ trait WCPOS_REST_API {
 		 *
 		 * This resulted in execution time of 10% of the original time.
 		 */
-		function format_results( $results ) {
-			foreach ( $results as $result ) {
-				$result['id'] = (int) $result['id'];
+		return iterator_to_array(
+			( function () use ( $results ) {
+				foreach ( $results as $result ) {
+					$result['id'] = (int) $result['id'];
 
-				if ( isset( $result['date_modified_gmt'] ) ) {
-					if ( preg_match( '/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/', $result['date_modified_gmt'] ) ) {
+					if ( isset( $result['date_modified_gmt'] ) ) {
+						if ( preg_match( '/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/', $result['date_modified_gmt'] ) ) {
 							$result['date_modified_gmt'] = preg_replace( '/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/', '$1T$2', $result['date_modified_gmt'] );
-					} else {
-							$result['date_modified_gmt'] = wc_rest_prepare_date_response( $result['date_modified_gmt'] );
+						} else {
+								$result['date_modified_gmt'] = wc_rest_prepare_date_response( $result['date_modified_gmt'] );
+						}
 					}
+
+					yield $result;
 				}
-
-				yield $result;
-			}
-		}
-
-		return iterator_to_array( format_results( $results ) );
+			} )()
+		);
 	}
 
 	/**

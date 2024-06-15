@@ -313,21 +313,21 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					}
 				}
 			} else {
-				function format_results( $users, $last_updates, $id_with_modified_date ) {
-					foreach ( $users as $user ) {
-						$user_info = array( 'id' => (int) $user->ID );
-						if ( $id_with_modified_date ) {
-							if ( isset( $last_updates[ $user->ID ] ) && ! empty( $last_updates[ $user->ID ] ) ) {
-								$user_info['date_modified_gmt'] = $last_updates[ $user->ID ];
-							} else {
-								$user_info['date_modified_gmt'] = null; // users can have null date_modified_gmt
+				$formatted_results = iterator_to_array(
+					( function () use ( $users, $last_updates, $id_with_modified_date ) {
+						foreach ( $users as $user ) {
+							$user_info = array( 'id' => (int) $user->ID );
+							if ( $id_with_modified_date ) {
+								if ( isset( $last_updates[ $user->ID ] ) && ! empty( $last_updates[ $user->ID ] ) ) {
+									$user_info['date_modified_gmt'] = $last_updates[ $user->ID ];
+								} else {
+									$user_info['date_modified_gmt'] = null; // users can have null date_modified_gmt
+								}
 							}
+							yield $user_info;
 						}
-						yield $user_info;
-					}
-				}
-
-				$formatted_results = iterator_to_array( format_results( $users, $last_updates, $id_with_modified_date ) );
+					} )()
+				);
 			}
 
 			// Get the total number of orders for the given criteria.

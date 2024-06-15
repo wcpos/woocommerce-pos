@@ -11,6 +11,9 @@ use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProx
 use ReflectionException;
 use ReflectionProperty;
 
+error_reporting( E_ALL );
+ini_set( 'display_errors', 1 );
+
 class Bootstrap {
 	public $tests_dir;
 	public $plugin_dir;

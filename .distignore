@@ -13,3 +13,4 @@ hookdoc-conf.json
 package.json
 yarn.lock
 php-scoper
+generate_autoload.php
