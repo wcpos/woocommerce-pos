@@ -1,5 +1,4 @@
 <?php
-
 /**
  * POS Product Admin Class
  * - pos only products.
@@ -13,8 +12,12 @@
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
 use WC_Product;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Query;
 
+/**
+ *
+ */
 class List_Products {
 	/**
 	 * @var string
@@ -56,7 +59,7 @@ class List_Products {
 		}
 
 		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
-			add_action( 'pre_get_posts', array( $this, 'pre_get_posts' ) );
+			add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 			add_filter( 'views_edit-product', array( $this, 'pos_visibility_filters' ), 10, 1 );
 			add_action( 'bulk_edit_custom_box', array( $this, 'bulk_edit' ), 10, 2 );
 			add_action( 'woocommerce_product_bulk_edit_save', array( $this, 'bulk_edit_save' ) );
@@ -125,21 +128,34 @@ class List_Products {
 			$views['all'] = str_replace( 'class="current"', '', $views['all'] );
 		}
 
+		$settings_instance = Settings::instance();
+
+		// Get the product IDs for the POS and Online only products
+		$pos_only = $settings_instance->get_pos_only_product_visibility_settings();
+		$pos_only_ids = isset( $pos_only['ids'] ) && is_array( $pos_only['ids'] ) ? array_map( 'intval', (array) $pos_only['ids'] ) : array();
+		$online_only = $settings_instance->get_online_only_product_visibility_settings();
+		$online_only_ids = isset( $online_only['ids'] ) && is_array( $online_only['ids'] ) ? array_map( 'intval', (array) $online_only['ids'] ) : array();
+
 		$new_views = array();
 
 		foreach ( $visibility_filters as $key => $label ) {
-			$sql = $wpdb->prepare(
-				"SELECT count(DISTINCT pm.post_id)
-                FROM {$wpdb->postmeta} pm
-                JOIN {$wpdb->posts} p ON (p.ID = pm.post_id)
-                WHERE pm.meta_key = '_pos_visibility'
-                AND pm.meta_value = %s
-                AND p.post_type = 'product'
-                AND p.post_status = 'publish'
-              ",
-				$key
-			);
-			$count = $wpdb->get_var( $sql );
+			$count = 0;
+			$ids = array();
+			$format = '';
+
+			if ( 'pos_only' === $key ) {
+				$ids = $pos_only_ids;
+				$format = implode( ',', array_fill( 0, count( $pos_only_ids ), '%d' ) );
+			} elseif ( 'online_only' === $key ) {
+				$ids = $online_only_ids;
+				$format = implode( ',', array_fill( 0, count( $online_only_ids ), '%d' ) );
+			}
+
+			if ( ! empty( $ids ) ) {
+				$sql = "SELECT count(DISTINCT ID) FROM {$wpdb->posts} WHERE post_type = 'product'";
+				$sql .= $wpdb->prepare( " AND ID IN ($format) ", $ids );
+				$count = $wpdb->get_var( $sql );
+			}
 
 			$class             = ( isset( $_GET['pos_visibility'] ) && $_GET['pos_visibility'] == $key ) ? 'current' : '';
 			$query_string      = remove_query_arg( array( 'pos_visibility', 'post_status' ) );
@@ -160,27 +176,51 @@ class List_Products {
 
 
 	/**
-	 * Show/hide POS products.
+	 * Modify the SQL clauses for the query to filter by POS visibility.
 	 *
+	 * @param array    $clauses
 	 * @param WP_Query $query
+	 *
+	 * @return array
 	 */
-	public function pre_get_posts( WP_Query $query ): void {
-		// Ensure we're in the admin and it's the main query
-		if ( ! is_admin() && ! $query->is_main_query() ) {
-			return;
+	public function posts_clauses( array $clauses, WP_Query $query ): array {
+			// Ensure we're in the admin and it's the main query.
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+				return $clauses;
 		}
 
-		// If 'pos_visibility' filter is set
-		if ( ! empty( $_GET['pos_visibility'] ) ) {
-			$meta_query = array(
-				array(
-					'key'   => '_pos_visibility',
-					'value' => sanitize_text_field( wp_unslash( $_GET['pos_visibility'] ) ),
-				),
-			);
-
-			$query->set( 'meta_query', $meta_query );
+		// If 'pos_visibility' filter is set.
+		if ( empty( $_GET['pos_visibility'] ) ) {
+			return $clauses;
 		}
+
+		global $wpdb;
+		$visibility = sanitize_text_field( wp_unslash( $_GET['pos_visibility'] ) );
+		$settings_instance = Settings::instance();
+
+		if ( 'pos_only' === $visibility ) {
+			$pos_only = $settings_instance->get_pos_only_product_visibility_settings();
+			$pos_only_ids = isset( $pos_only['ids'] ) && is_array( $pos_only['ids'] ) ? array_map( 'intval', (array) $pos_only['ids'] ) : array();
+			$format = implode( ',', array_fill( 0, count( $pos_only_ids ), '%d' ) );
+			if ( empty( $pos_only_ids ) ) {
+				// No IDs, show no records.
+				$clauses['where'] .= ' AND 1=0 ';
+			} else {
+				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $pos_only_ids );
+			}
+		} elseif ( 'online_only' === $visibility ) {
+			$online_only = $settings_instance->get_online_only_product_visibility_settings();
+			$online_only_ids = isset( $online_only['ids'] ) && is_array( $online_only['ids'] ) ? array_map( 'intval', (array) $online_only['ids'] ) : array();
+			$format = implode( ',', array_fill( 0, count( $online_only_ids ), '%d' ) );
+			if ( empty( $online_only_ids ) ) {
+				// No IDs, show no records.
+				$clauses['where'] .= ' AND 1=0 ';
+			} else {
+				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $online_only_ids );
+			}
+		}
+
+		return $clauses;
 	}
 
 	/**
@@ -219,8 +259,13 @@ class List_Products {
 	 */
 	public static function quick_edit_save( WC_Product $product ): void {
 		if ( ! empty( $_POST['_pos_visibility'] ) ) {
-			$product->update_meta_data( '_pos_visibility', sanitize_text_field( $_POST['_pos_visibility'] ) );
-			$product->save();
+			$settings_instance = Settings::instance();
+			$args = array(
+				'post_type' => 'products',
+				'visibility' => sanitize_text_field( $_POST['_pos_visibility'] ),
+				'ids' => array( $product->get_id() ),
+			);
+			$settings_instance->update_visibility_settings( $args );
 		}
 	}
 
@@ -231,8 +276,13 @@ class List_Products {
 	 */
 	public function bulk_edit_save( WC_Product $product ): void {
 		if ( ! empty( $_GET['_pos_visibility'] ) ) {
-			$product->update_meta_data( '_pos_visibility', sanitize_text_field( $_GET['_pos_visibility'] ) );
-			$product->save();
+			$settings_instance = Settings::instance();
+			$args = array(
+				'post_type' => 'products',
+				'visibility' => sanitize_text_field( $_GET['_pos_visibility'] ),
+				'ids' => array( $product->get_id() ),
+			);
+			$settings_instance->update_visibility_settings( $args );
 		}
 	}
 
@@ -242,7 +292,18 @@ class List_Products {
 	 */
 	public function custom_product_column( $column, $post_id ): void {
 		if ( 'name' == $column ) {
-			$selected = get_post_meta( $post_id, '_pos_visibility', true );
+			$selected = '';
+			$settings_instance = Settings::instance();
+			$pos_only = $settings_instance->is_product_pos_only( $post_id );
+			$online_only = $settings_instance->is_product_online_only( $post_id );
+
+			 // Set $selected based on the visibility status.
+			if ( $pos_only ) {
+				$selected = 'pos_only';
+			} elseif ( $online_only ) {
+				$selected = 'online_only';
+			}
+
 			echo '<div class="hidden" id="woocommerce_pos_inline_' . $post_id . '" data-visibility="' . $selected . '"></div>';
 		}
 	}

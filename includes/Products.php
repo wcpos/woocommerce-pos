@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WC_Product;
 use Automattic\WooCommerce\StoreApi\Exceptions\NotPurchasableException;
+use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
  *
@@ -26,7 +27,7 @@ class Products {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
 		if ( $pos_only_products ) {
-			add_action( 'woocommerce_product_query', array( $this, 'hide_pos_only_products' ) );
+			add_filter( 'posts_where', array( $this, 'hide_pos_only_products' ), 10, 2 );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
 
@@ -68,43 +69,29 @@ class Products {
 	}
 
 	/**
-	 * Hide POS Only products from the shop and category pages.
+	 * Filters the WHERE clause of the query.
 	 *
-	 * @TODO - this should be improved so that admin users can see the product, but get a message
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 *
-	 * @param WP_Query $query Query instance.
-	 *
-	 * @return void
+	 * @return string
 	 */
-	public function hide_pos_only_products( $query ) {
-		$meta_query = $query->get( 'meta_query' );
+	public function hide_pos_only_products( $where, $query ) {
+			// Ensure this only runs for the main WooCommerce shop queries
+		if ( ! is_admin() && $query->is_main_query() && ( is_shop() || is_product_category() || is_product_tag() ) ) {
+			global $wpdb;
 
-		// Define your default meta query.
-		$default_meta_query = array(
-			'relation' => 'OR',
-			array(
-				'key' => '_pos_visibility',
-				'value' => 'pos_only',
-				'compare' => '!=',
-			),
-			array(
-				'key' => '_pos_visibility',
-				'compare' => 'NOT EXISTS',
-			),
-		);
+			$settings_instance = Settings::instance();
+			$settings = $settings_instance->get_pos_only_product_visibility_settings();
 
-		// Check if an existing meta query exists.
-		if ( is_array( $meta_query ) ) {
-			if ( ! isset( $meta_query ['relation'] ) ) {
-				$meta_query['relation'] = 'AND';
+			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+				$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
 			}
-			$meta_query[] = $default_meta_query;
-		} else {
-			$meta_query = $default_meta_query;
 		}
 
-		// Set the updated meta query back to the query.
-		$query->set( 'meta_query', $meta_query );
+		return $where;
 	}
 
 	/**
@@ -117,11 +104,10 @@ class Products {
 	 */
 	public function hide_pos_only_variations( $visible, $variation_id, $product_id, $variation ) {
 		if ( \is_shop() || \is_product_category() || \is_product() ) {
-			// Get the _pos_visibility meta value for the variation.
-			$pos_visibility = get_post_meta( $variation_id, '_pos_visibility', true );
+			$settings_instance = Settings::instance();
+			$pos_only = $settings_instance->is_variation_pos_only( $variation_id );
 
-			// Check if _pos_visibility is 'pos_only' for this variation.
-			if ( $pos_visibility === 'pos_only' ) {
+			if ( $pos_only ) {
 				return false;
 			}
 		}
@@ -137,26 +123,7 @@ class Products {
 	 * @return array The modified arguments.
 	 */
 	public function filter_category_count_exclude_pos_only( $args ) {
-		if ( ! is_admin() && \function_exists( 'woocommerce_pos_get_settings' ) ) {
-			$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
-
-			if ( $pos_only_products ) {
-				$meta_query = $args['meta_query'] ?? array();
-
-				$meta_query['relation'] = 'OR';
-				$meta_query[]           = array(
-					'key'     => '_pos_visibility',
-					'value'   => 'pos_only',
-					'compare' => '!=',
-				);
-				$meta_query[] = array(
-					'key'     => '_pos_visibility',
-					'compare' => 'NOT EXISTS',
-				);
-
-				$args['meta_query'] = $meta_query;
-			}
-		}
+		// @TODO: Do we need this?
 
 		return $args;
 	}
@@ -172,9 +139,11 @@ class Products {
 	 * @return bool
 	 */
 	public function prevent_pos_only_add_to_cart( $passed, $product_id ) {
-		$pos_visibility = get_post_meta( $product_id, '_pos_visibility', true );
+		$settings_instance = Settings::instance();
+		$product_pos_only = $settings_instance->is_product_pos_only( $product_id );
+		$variation_pos_only = $settings_instance->is_variation_pos_only( $product_id );
 
-		if ( $pos_visibility === 'pos_only' ) {
+		if ( $product_pos_only || $variation_pos_only ) {
 			return false;
 		}
 
@@ -191,9 +160,14 @@ class Products {
 	 * @return void
 	 */
 	public function store_api_prevent_pos_only_add_to_cart( WC_Product $product ) {
-		$pos_visibility = get_post_meta( $product->get_id(), '_pos_visibility', true );
+		$settings_instance = Settings::instance();
+		if ( $product->is_type( 'variation' ) ) {
+			$pos_only = $settings_instance->is_variation_pos_only( $product->get_id() );
+		} else {
+			$pos_only = $settings_instance->is_product_pos_only( $product->get_id() );
+		}
 
-		if ( $pos_visibility === 'pos_only' ) {
+		if ( $pos_only ) {
 			throw new NotPurchasableException(
 				'woocommerce_pos_product_not_purchasable',
 				$product->get_name()

@@ -13,6 +13,8 @@
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
 use WCPOS\WooCommercePOS\Registry;
+use WCPOS\WooCommercePOS\Services\Settings;
+
 use const DOING_AUTOSAVE;
 
 class Single_Product {
@@ -185,19 +187,25 @@ class Single_Product {
 			return;
 		}
 
-		// Don't save revisions and autosaves
+		// Don't save revisions and autosaves.
 		if ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
 			return;
 		}
 
-		// Make sure the current user has permission to edit the post
+		// Make sure the current user has permission to edit the post.
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
 
-		// Get the product and save
+		// Get the product and save.
 		if ( isset( $_POST['_pos_visibility'] ) ) {
-			update_post_meta( $post_id, '_pos_visibility', $_POST['_pos_visibility'] );
+			$settings_instance = Settings::instance();
+			$args = array(
+				'post_type' => 'products',
+				'visibility' => $_POST['_pos_visibility'],
+				'ids' => array( $post_id ),
+			);
+			$settings_instance->update_visibility_settings( $args );
 		}
 	}
 
@@ -211,7 +219,18 @@ class Single_Product {
 			return;
 		}
 
-		$selected = get_post_meta( $post->ID, '_pos_visibility', true );
+		$selected = '';
+		$settings_instance = Settings::instance();
+		$pos_only = $settings_instance->is_product_pos_only( $post->ID );
+		$online_only = $settings_instance->is_product_online_only( $post->ID );
+
+		 // Set $selected based on the visibility status.
+		if ( $pos_only ) {
+			$selected = 'pos_only';
+		} elseif ( $online_only ) {
+			$selected = 'online_only';
+		}
+
 		if ( ! $selected ) {
 			$selected = '';
 			if ( 'add' == get_current_screen()->action ) {
@@ -222,17 +241,25 @@ class Single_Product {
 		include 'templates/post-metabox-visibility-select.php';
 	}
 
-	/**s
+	/**
 	 *
 	 * @param $loop
 	 * @param $variation_data
 	 * @param $variation
 	 */
 	public function after_variable_attributes_pos_only_products( $loop, $variation_data, $variation ): void {
-		$selected = get_post_meta( $variation->ID, '_pos_visibility', true );
-		if ( ! $selected ) {
-			$selected = '';
+		$selected = '';
+		$settings_instance = Settings::instance();
+		$pos_only = $settings_instance->is_product_pos_only( $variation->ID );
+		$online_only = $settings_instance->is_product_online_only( $variation->ID );
+
+		 // Set $selected based on the visibility status.
+		if ( $pos_only ) {
+			$selected = 'pos_only';
+		} elseif ( $online_only ) {
+			$selected = 'online_only';
 		}
+
 		include 'templates/variation-metabox-visibility-select.php';
 	}
 
@@ -241,7 +268,13 @@ class Single_Product {
 	 */
 	public function save_product_variation_pos_only_products( $variation_id ): void {
 		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) ) {
-			update_post_meta( $variation_id, '_pos_visibility', $_POST['variable_pos_visibility'][ $variation_id ] );
+			$settings_instance = Settings::instance();
+			$args = array(
+				'post_type' => 'variations',
+				'visibility' => $_POST['variable_pos_visibility'][ $variation_id ],
+				'ids' => array( $variation_id ),
+			);
+			$settings_instance->update_visibility_settings( $args );
 		}
 	}
 }

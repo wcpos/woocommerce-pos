@@ -18,6 +18,7 @@ use WP_Query;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
+use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
  * Products controller class.
@@ -352,10 +353,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
 		}
 
+		// if POS only products are enabled, exclude online-only products
+		if ( $this->wcpos_pos_only_products_enabled() ) {
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_exclude_online_only' ), 10, 2 );
+		}
+
 		// Check for wcpos_include/wcpos_exclude parameter.
 		if ( isset( $request['wcpos_include'] ) || isset( $request['wcpos_exclude'] ) ) {
-			// Add a custom WHERE clause to the query.
-			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 10, 2 );
+			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
 		}
 
 		return $args;
@@ -395,6 +400,31 @@ class Products_Controller extends WC_REST_Products_Controller {
 		}
 
 		return $groupby;
+	}
+
+	/**
+	 * Filters the WHERE clause of the query.
+	 *
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function wcpos_posts_where_product_exclude_online_only( string $where, WP_Query $query ) {
+		global $wpdb;
+
+		$settings_instance = Settings::instance();
+		$online_only = $settings_instance->get_online_only_product_visibility_settings();
+		$online_only_ids = isset( $online_only['ids'] ) && is_array( $online_only['ids'] ) ? $online_only['ids'] : array();
+
+		// Exclude online-only product IDs if POS only products are enabled
+		if ( ! empty( $online_only_ids ) ) {
+			$online_only_ids = array_map( 'intval', (array) $online_only_ids );
+			$ids_format = implode( ',', array_fill( 0, count( $online_only_ids ), '%d' ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids );
+		}
+
+		return $where;
 	}
 
 	/**
@@ -447,13 +477,17 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Use SELECT DISTINCT in the initial SQL statement for both cases.
 		$sql = "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts}";
+		$sql .= " WHERE post_type = 'product' AND post_status = 'publish'";
 
 		// If the '_pos_visibility' condition needs to be applied.
 		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$sql .= " LEFT JOIN {$wpdb->postmeta} ON ({$wpdb->posts}.ID = {$wpdb->postmeta}.post_id AND {$wpdb->postmeta}.meta_key = '_pos_visibility')";
-			$sql .= " WHERE post_type = 'product' AND post_status = 'publish' AND ({$wpdb->postmeta}.post_id IS NULL OR {$wpdb->postmeta}.meta_value != 'online_only')";
-		} else {
-			$sql .= " WHERE post_type = 'product' AND post_status = 'publish'";
+			$settings_instance = Settings::instance();
+			$online_only = $settings_instance->get_online_only_product_visibility_settings();
+			if ( isset( $online_only['ids'] ) && is_array( $online_only['ids'] ) && ! empty( $online_only['ids'] ) ) {
+				$online_only_ids = array_map( 'intval', (array) $online_only['ids'] );
+				$ids_format = implode( ',', array_fill( 0, count( $online_only_ids ), '%d' ) );
+				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids );
+			}
 		}
 
 		// Add modified_after condition if provided.
@@ -529,24 +563,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 					break;
 			}
 		}
-
-		// Add online_only check
-		if ( $this->wcpos_pos_only_products_enabled() ) {
-			$meta_query = array(
-				'relation' => 'OR',
-				array(
-					'key'     => '_pos_visibility',
-					'compare' => 'NOT EXISTS',
-				),
-				array(
-					'key'     => '_pos_visibility',
-					'value'   => 'online_only',
-					'compare' => '!=',
-				),
-			);
-
-			$args['meta_query'] = $this->wcpos_combine_meta_queries( $meta_query, $args['meta_query'] );
-		};
 
 		return $args;
 	}

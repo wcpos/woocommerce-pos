@@ -73,6 +73,28 @@ class Settings {
 		'tools' => array(
 			'use_jwt_as_param' => false,
 		),
+		'visibility' => array(
+			'products' => array(
+				'default' => array(
+					'pos_only' => array(
+						'ids' => array(),
+					),
+					'online_only' => array(
+						'ids' => array(),
+					),
+				),
+			),
+			'variations' => array(
+				'default' => array(
+					'pos_only' => array(
+						'ids' => array(),
+					),
+					'online_only' => array(
+						'ids' => array(),
+					),
+				),
+			),
+		),
 	);
 
 	/**
@@ -429,6 +451,305 @@ class Settings {
 	}
 
 	/**
+	 * POS Visibility settings.
+	 */
+	public function get_visibility_settings() {
+		$default_settings = self::$default_settings['visibility'];
+		$settings         = get_option( self::$db_prefix . 'visibility', array() );
+
+		// if the key does not exist in db settings, use the default settings
+		foreach ( $default_settings as $key => $value ) {
+			if ( ! \array_key_exists( $key, $settings ) ) {
+				$settings[ $key ] = $value;
+			}
+		}
+
+		/*
+		 * Filters the visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_visibility_settings', $settings );
+	}
+
+	/**
+	 * Update visibility settings.
+	 *
+	 * @param array $args The visibility settings to update.
+	 * @return bool|WP_Error True on success, WP_Error on failure.
+	 */
+	public function update_visibility_settings( array $args ) {
+			// Validate and normalize arguments.
+		if ( empty( $args['post_type'] ) || ! isset( $args['ids'] ) ) {
+			return new WP_Error(
+				'woocommerce_pos_settings_error',
+				__( 'Invalid arguments provided', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$post_type = $args['post_type'];
+		$scope = $args['scope'] ?? 'default';
+		$visibility = $args['visibility'] ?? '';
+		$ids = is_array( $args['ids'] ) ? $args['ids'] : array( $args['ids'] );
+		$ids = array_filter( array_map( 'intval', $ids ) ); // Force to array of integers.
+
+		// Get the current visibility settings.
+		$current_settings = $this->get_visibility_settings();
+
+		// Define the opposite visibility type.
+		$opposite_visibility = ( $visibility === 'pos_only' ) ? 'online_only' : 'pos_only';
+
+		// Add or remove IDs based on the visibility type.
+		foreach ( $ids as $id ) {
+			if ( $visibility === '' ) {
+				// Remove from both pos_only and online_only.
+				$current_settings[ $post_type ][ $scope ]['pos_only']['ids'] = $this->remove_id_from_visibility(
+					$current_settings[ $post_type ][ $scope ]['pos_only']['ids'],
+					$id
+				);
+				$current_settings[ $post_type ][ $scope ]['online_only']['ids'] = $this->remove_id_from_visibility(
+					$current_settings[ $post_type ][ $scope ]['online_only']['ids'],
+					$id
+				);
+			} else {
+				// Add to the specified visibility type.
+				$current_settings[ $post_type ][ $scope ][ $visibility ]['ids'] = $this->add_id_to_visibility(
+					$current_settings[ $post_type ][ $scope ][ $visibility ]['ids'],
+					$id
+				);
+				// Remove from the opposite visibility type.
+				$current_settings[ $post_type ][ $scope ][ $opposite_visibility ]['ids'] = $this->remove_id_from_visibility(
+					$current_settings[ $post_type ][ $scope ][ $opposite_visibility ]['ids'],
+					$id
+				);
+			}
+		}
+
+		return $this->save_settings( 'visibility', $current_settings );
+	}
+
+	/**
+	 * Add an ID to a visibility type if it doesn't already exist.
+	 *
+	 * @param array $ids The current array of IDs.
+	 * @param int   $id The ID to add.
+	 * @return array The updated array of IDs.
+	 */
+	private function add_id_to_visibility( array $ids, int $id ): array {
+		if ( ! in_array( $id, $ids, true ) ) {
+			$ids[] = $id;
+		}
+		return $ids;
+	}
+
+	/**
+	 * Remove an ID from a visibility type if it exists.
+	 *
+	 * @param array $ids The current array of IDs.
+	 * @param int   $id The ID to remove.
+	 * @return array The updated array of IDs.
+	 */
+	private function remove_id_from_visibility( array $ids, int $id ): array {
+		return array_filter(
+			$ids,
+			function ( $existing_id ) use ( $id ) {
+				return $existing_id !== $id;
+			}
+		);
+	}
+
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
+	 */
+	public function get_product_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_visibility_settings();
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_product_visibility_settings', $settings['products'][ $scope ], $scope );
+	}
+
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+	 */
+	public function get_pos_only_product_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_product_visibility_settings( $scope );
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_pos_only_product_visibility_settings', $settings['pos_only'], $scope );
+	}
+
+		/**
+		 * Get product visibility settings.
+		 *
+		 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+		 *
+		 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+		 */
+	public function get_online_only_product_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_product_visibility_settings( $scope );
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_online_only_product_visibility_settings', $settings['online_only'], $scope );
+	}
+
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
+	 */
+	public function get_variations_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_visibility_settings();
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_variations_visibility_settings', $settings['variations'][ $scope ], $scope );
+	}
+
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+	 */
+	public function get_pos_only_variations_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_variations_visibility_settings( $scope );
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_pos_only_variations_visibility_settings', $settings['pos_only'], $scope );
+	}
+
+		/**
+		 * Get product visibility settings.
+		 *
+		 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+		 *
+		 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+		 */
+	public function get_online_only_variations_visibility_settings( $scope = 'default' ) {
+		$settings = $this->get_variations_visibility_settings( $scope );
+
+		/*
+		 * Filters the product visibility settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @since 1.0.0
+		 * @hook woocommerce_pos_product_visibility_settings
+		 */
+		return apply_filters( 'woocommerce_pos_online_only_variations_visibility_settings', $settings['online_only'], $scope );
+	}
+
+	/**
+	 * Check if a product is POS only.
+	 *
+	 * @param string|int $product_id
+	 *
+	 * @return bool
+	 */
+	public function is_product_pos_only( $product_id ) {
+		$product_id = (int) $product_id;
+		$settings = $this->get_pos_only_product_visibility_settings();
+		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
+
+		return in_array( $product_id, $pos_only_ids, true );
+	}
+
+	/**
+	 * Check if a product is Online only.
+	 *
+	 * @param string|int $product_id
+	 *
+	 * @return bool
+	 */
+	public function is_product_online_only( $product_id ) {
+		$product_id = (int) $product_id;
+		$settings = $this->get_online_only_product_visibility_settings();
+		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
+
+		return in_array( $product_id, $online_only_ids, true );
+	}
+
+	/**
+	 * Check if a variation is POS only.
+	 *
+	 * @param string|int $variation_id
+	 *
+	 * @return bool
+	 */
+	public function is_variation_pos_only( $variation_id ) {
+		$variation_id = (int) $variation_id;
+		$settings = $this->get_pos_only_variations_visibility_settings();
+		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
+
+		return in_array( $variation_id, $pos_only_ids, true );
+	}
+
+		/**
+		 * Check if a variation is Online only.
+		 *
+		 * @param string|int $variation_id
+		 *
+		 * @return bool
+		 */
+	public function is_variation_online_only( $variation_id ) {
+		$variation_id = (int) $variation_id;
+		$settings = $this->get_online_only_variations_visibility_settings();
+		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
+
+		return in_array( $variation_id, $online_only_ids, true );
+	}
+
+
+	/**
 	 * Delete settings in WP options table.
 	 *
 	 * @param $id
@@ -472,6 +793,6 @@ class Settings {
 	 * bumps the idb version number.
 	 */
 	public static function bump_versions(): void {
-		add_option( 'woocommerce_pos_db_version', VERSION, '', 'no' );
+		update_option( 'woocommerce_pos_db_version', VERSION );
 	}
 }

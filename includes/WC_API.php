@@ -10,10 +10,26 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WP_Query;
+use WCPOS\WooCommercePOS\Services\Settings;
+
 /**
  *
  */
 class WC_API {
+	/**
+	 * Indicates if the current request is for WooCommerce products.
+	 *
+	 * @var bool
+	 */
+	private $is_woocommerce_rest_api_products_request = false;
+
+	/**
+	 * Indicates if the current request is for WooCommerce variations.
+	 *
+	 * @var bool
+	 */
+	private $is_woocommerce_rest_api_variations_request = false;
 
 	/**
 	 *
@@ -22,44 +38,61 @@ class WC_API {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
 		if ( $pos_only_products ) {
-			add_filter( 'woocommerce_rest_product_object_query', array( $this, 'hide_pos_only_products' ), 10, 2 );
-			add_filter( 'woocommerce_rest_product_variation_object_query', array( $this, 'hide_pos_only_products' ), 10, 2 );
+			add_filter( 'rest_pre_dispatch', array( $this, 'set_woocommerce_rest_api_request_flags' ), 10, 3 );
+			add_filter( 'posts_where', array( $this, 'exclude_pos_only_products_from_api_response' ), 10, 2 );
 		}
 	}
 
 	/**
-	 * Filter the query arguments for a request.
 	 *
-	 * Enables adding extra arguments or setting defaults for a post
-	 * collection request.
-	 *
-	 * @param array           $args    Key value array of query var to query value.
-	 * @param WP_REST_Request $request The request used.
 	 */
-	public function hide_pos_only_products( $args, $request ) {
-		$meta_query = array(
-			'relation' => 'OR',
-			array(
-				'key'     => '_pos_visibility',
-				'compare' => 'NOT EXISTS',
-			),
-			array(
-				'key'     => '_pos_visibility',
-				'value'   => 'pos_only',
-				'compare' => '!=',
-			),
-		);
+	public function set_woocommerce_rest_api_request_flags( $result, $server, $request ) {
+		$route = $request->get_route();
 
-		if ( empty( $args['meta_query'] ) ) {
-			$args['meta_query'] = $meta_query;
-		} else {
-			$args['meta_query'] = array(
-				'relation' => 'AND',
-				$args['meta_query'],
-				$meta_query,
-			);
+		if ( strpos( $route, '/wc/v3/products' ) === 0 || strpos( $route, '/wc/v2/products' ) === 0 || strpos( $route, '/wc/v1/products' ) === 0 ) {
+			$this->is_woocommerce_rest_api_products_request = true;
+
+			if ( strpos( $route, '/variations' ) !== false ) {
+				$this->is_woocommerce_rest_api_variations_request = true;
+			}
 		}
 
-		return $args;
+		return $result;
+	}
+
+	/**
+	 * Hide POS only products from the API response.
+	 *
+	 * @param string   $where The WHERE clause of the query.
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return string
+	 */
+	public function exclude_pos_only_products_from_api_response( $where, $query ) {
+		global $wpdb;
+		$settings_instance = Settings::instance();
+
+		// Hide POS only variations from the API response.
+		if ( ! $this->is_woocommerce_rest_api_variations_request ) {
+			$settings = $settings_instance->get_pos_only_variations_visibility_settings();
+
+			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+				$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
+			}
+
+			// Hide POS only products from the API response.
+		} elseif ( $this->is_woocommerce_rest_api_products_request ) {
+			$settings = $settings_instance->get_pos_only_product_visibility_settings();
+
+			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+				$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
+			}
+		}
+
+		return $where;
 	}
 }

@@ -80,6 +80,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.6.1 - 2024/06/17 = 
+- **Enhancement:** Changed the way POS Only and Online Only products are managed.
+  - Moved from using postmeta (`_pos_visibility`) to using centralized settings in the options table (`woocommerce_pos_settings_visibility`).
+
 = 1.6.0 - 2024/06/12 = 
 * Improved: Performance for large stores
 * Added: Log screen for insights into the POS performance and events
