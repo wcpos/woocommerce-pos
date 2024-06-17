@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WooCommerce POS 1.4.16\n"
+"Project-Id-Version: WooCommerce POS 1.6.1\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2024-06-01T20:52:20+00:00\n"
+"POT-Creation-Date: 2024-06-17T22:53:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.10.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -238,6 +238,9 @@ msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'
 msgid "Can not save settings with id %s"
+msgstr ""
+
+msgid "Invalid arguments provided"
 msgstr ""
 
 msgid "Template not found."
