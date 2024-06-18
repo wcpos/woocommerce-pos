@@ -258,7 +258,7 @@ class List_Products {
 	 * @return void
 	 */
 	public static function quick_edit_save( WC_Product $product ): void {
-		if ( ! empty( $_POST['_pos_visibility'] ) ) {
+		if ( isset( $_POST['_pos_visibility'] ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
@@ -275,7 +275,7 @@ class List_Products {
 	 * @return void
 	 */
 	public function bulk_edit_save( WC_Product $product ): void {
-		if ( ! empty( $_GET['_pos_visibility'] ) ) {
+		if ( isset( $_GET['_pos_visibility'] ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',

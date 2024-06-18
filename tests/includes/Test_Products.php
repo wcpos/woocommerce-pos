@@ -7,6 +7,7 @@ use WP_UnitTestCase;
 use WP_Query;
 use WCPOS\WooCommercePOS\Products;
 use WC_Product_Variation;
+use WC_Install;
 
 /**
  * @internal
@@ -16,6 +17,13 @@ use WC_Product_Variation;
 class Test_Products extends WP_UnitTestCase {
 	public function setup(): void {
 		parent::setup();
+
+		WC_Install::create_pages();
+		$shop_page_id = wc_get_page_id( 'shop' );
+		$this->assertTrue(
+			$shop_page_id && get_post_status( $shop_page_id ) == 'publish',
+			'The WooCommerce "shop" page is not set up.'
+		);
 	}
 
 	public function tearDown(): void {
@@ -41,11 +49,32 @@ class Test_Products extends WP_UnitTestCase {
 
 		// Create a product with _pos_visibility set to 'pos_only'
 		$hidden_product = ProductHelper::create_simple_product();
-		update_post_meta( $hidden_product->get_id(), '_pos_visibility', 'pos_only' );
 
-		// Verify that the meta value is set correctly
-		$pos_visibility = get_post_meta( $hidden_product->get_id(), '_pos_visibility', true );
-		$this->assertEquals( 'pos_only', $pos_visibility, 'Meta value for _pos_visibility not set correctly' );
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $hidden_product->get_id() ),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+			)
+		);
 
 		// Mimic the main WooCommerce query
 		$query_args = array(
@@ -53,6 +82,8 @@ class Test_Products extends WP_UnitTestCase {
 			'post_status' => 'publish',
 			'posts_per_page' => -1, // Get all products for testing
 		);
+
+		$this->go_to( wc_get_page_id( 'shop' ) );
 
 		$query = new WP_Query( $query_args );
 		WC()->query->product_query( $query );
@@ -93,8 +124,32 @@ class Test_Products extends WP_UnitTestCase {
 		$variation_3->save();
 
 		$variation_ids = $product->get_children();
-		update_post_meta( $variation_ids[0], '_pos_visibility', 'pos_only' );
-		update_post_meta( $variation_ids[1], '_pos_visibility', 'online_only' );
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $variation_ids[0] ),
+						),
+						'online_only' => array(
+							'ids' => array( $variation_ids[1] ),
+						),
+					),
+				),
+			)
+		);
 
 		// Mimic the main WooCommerce query for product variations
 		$query_args = array(
@@ -103,6 +158,8 @@ class Test_Products extends WP_UnitTestCase {
 			'posts_per_page' => -1, // Get all variations for testing
 			'post_parent'   => $product->get_id(), // Ensure variations of the specific product are fetched
 		);
+
+		$this->go_to( wc_get_page_id( 'shop' ) );
 
 		$query = new WP_Query( $query_args );
 		WC()->query->product_query( $query );

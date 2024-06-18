@@ -21,4 +21,3 @@ if ( ! \defined( 'ABSPATH' ) ) {
 		</select>
 	</p>
 </div>
-

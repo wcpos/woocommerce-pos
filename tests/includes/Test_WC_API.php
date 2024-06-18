@@ -37,13 +37,34 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		// Create a visible product
 		$visible_product = ProductHelper::create_simple_product();
 
-		// Create a product with _pos_visibility set to 'pos_only'
+		// Create a product with visibility set to 'pos_only'
 		$hidden_product = ProductHelper::create_simple_product();
-		update_post_meta( $hidden_product->get_id(), '_pos_visibility', 'pos_only' );
 
-		// Verify that the meta value is set correctly
-		$pos_visibility = get_post_meta( $hidden_product->get_id(), '_pos_visibility', true );
-		$this->assertEquals( 'pos_only', $pos_visibility, 'Meta value for _pos_visibility not set correctly' );
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $hidden_product->get_id() ),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+			)
+		);
 
 		// Make WC REST request
 		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
@@ -54,6 +75,8 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $visible_product->get_id(), $data[0]['id'] );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
 		/**
@@ -73,11 +96,31 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		// Create a variable product
 		$variable = ProductHelper::create_variation_product();
 		$variation_ids = $variable->get_children();
-		update_post_meta( $variation_ids[0], '_pos_visibility', 'pos_only' );
-
-		// Verify that the meta value is set correctly
-		$pos_visibility = get_post_meta( $variation_ids[0], '_pos_visibility', true );
-		$this->assertEquals( 'pos_only', $pos_visibility, 'Meta value for _pos_visibility not set correctly' );
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $variation_ids[0] ),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+			)
+		);
 
 		// Make WC REST request
 		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
@@ -103,5 +146,7 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		// $this->assertEquals( $variable->get_id(), $data['id'] );
 		// $this->assertEquals( 1, \count( $data['variations'] ) );
 		// $this->assertEquals( $variation_ids[1], $data['variations'][0] );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 }

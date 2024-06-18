@@ -77,7 +77,7 @@ class Products {
 	 * @return string
 	 */
 	public function hide_pos_only_products( $where, $query ) {
-			// Ensure this only runs for the main WooCommerce shop queries
+		// Ensure this only runs for the main WooCommerce shop queries
 		if ( ! is_admin() && $query->is_main_query() && ( is_shop() || is_product_category() || is_product_tag() ) ) {
 			global $wpdb;
 

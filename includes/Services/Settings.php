@@ -56,6 +56,8 @@ class Settings {
 				'woocommerce-blocktheme',
 				'wp-block-library',
 			),
+			'disable_wp_head' => false,
+			'disable_wp_footer' => false,
 		),
 		'payment_gateways' => array(
 			'default_gateway' => 'pos_cash',

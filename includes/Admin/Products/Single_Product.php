@@ -250,8 +250,8 @@ class Single_Product {
 	public function after_variable_attributes_pos_only_products( $loop, $variation_data, $variation ): void {
 		$selected = '';
 		$settings_instance = Settings::instance();
-		$pos_only = $settings_instance->is_product_pos_only( $variation->ID );
-		$online_only = $settings_instance->is_product_online_only( $variation->ID );
+		$pos_only = $settings_instance->is_variation_pos_only( $variation->ID );
+		$online_only = $settings_instance->is_variation_online_only( $variation->ID );
 
 		 // Set $selected based on the visibility status.
 		if ( $pos_only ) {

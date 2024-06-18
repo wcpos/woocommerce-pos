@@ -621,7 +621,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Online Only products.
 	 */
-	public function test_pos_only_products(): void {
+	public function test_online_only_products(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
 			function () {
@@ -631,23 +631,36 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		);
 
-		// online only
 		$product1  = ProductHelper::create_simple_product();
-		$product1->update_meta_data( '_pos_visibility', 'online_only' );
-		$product1->save_meta_data();
-
-		// both
 		$product2  = ProductHelper::create_simple_product();
-		$product2->update_meta_data( '_pos_visibility', '' );
-		$product2->save_meta_data();
-
-		// pos only
 		$product3  = ProductHelper::create_simple_product();
-		$product3->update_meta_data( '_pos_visibility', 'pos_only' );
-		$product3->save_meta_data();
-
-		// new product
 		$product4    = ProductHelper::create_simple_product();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $product3->get_id() ),
+						),
+						'online_only' => array(
+							'ids' => array( $product1->get_id() ),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+			)
+		);
 
 		// test get all ids
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
@@ -670,6 +683,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$ids         = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $product2->get_id(), $product3->get_id(), $product4->get_id() ), $ids );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
 	/**

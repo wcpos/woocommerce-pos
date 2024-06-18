@@ -585,7 +585,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Online Only products.
 	 */
-	public function test_pos_only_product_variations(): void {
+	public function test_online_only_product_variations(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
 			function () {
@@ -606,7 +606,6 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$variation_3->set_attributes( array( 'pa_size' => 'medium' ) );
-		$variation_3->update_meta_data( '_pos_visibility', 'online_only' );
 		$variation_3->save_meta_data();
 		$variation_3->save();
 
@@ -619,9 +618,34 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 		$variation_4->set_attributes( array( 'pa_size' => 'x-large' ) );
-		$variation_4->update_meta_data( '_pos_visibility', 'pos_only' );
 		$variation_4->save_meta_data();
 		$variation_4->save();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array(),
+						),
+						'online_only' => array(
+							'ids' => array(),
+						),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only' => array(
+							'ids' => array( $variation_4->get_id() ),
+						),
+						'online_only' => array(
+							'ids' => array( $variation_3->get_id() ),
+						),
+					),
+				),
+			)
+		);
 
 		// test get all ids
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations' );
@@ -646,6 +670,8 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertNotContains( $variation_3->get_id(), $ids );
 		$this->assertContains( $variation_4->get_id(), $ids );
+
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
 	// /**
