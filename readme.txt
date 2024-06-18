@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -80,7 +80,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.6.1 - 2024/06/17 = 
+= 1.6.1 - 2024/06/18 = 
 - Enhancement: Changed the way POS Only and Online Only products are managed
   - Moved from using postmeta (`_pos_visibility`) to using centralized settings in the options table (`woocommerce_pos_settings_visibility`)
 - Improved: Payment template settings, you can now disable all `wp_head` or `wp_footer` scripts
