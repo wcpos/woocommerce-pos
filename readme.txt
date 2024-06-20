@@ -80,6 +80,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.6.2 - 2024/06/20 = 
+- Fix: Error preventing resources (products, orders, customers, etc) from loading on Windows servers
+
 = 1.6.1 - 2024/06/18 = 
 - Enhancement: Changed the way POS Only and Online Only products are managed
   - Moved from using postmeta (`_pos_visibility`) to using centralized settings in the options table (`woocommerce_pos_settings_visibility`)

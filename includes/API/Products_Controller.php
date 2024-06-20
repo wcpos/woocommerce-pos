@@ -509,7 +509,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			// Collect execution time and server load.
 			$execution_time = microtime( true ) - $start_time;
 			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load = sys_getloadavg();
+			$server_load = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
 			$response->header( 'X-WP-Total', (int) $total );

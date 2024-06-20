@@ -3,7 +3,7 @@
  * Plugin Name:       WooCommerce POS
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           1.6.1
+ * Version:           1.6.2
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -14,7 +14,7 @@
  * Tested up to:      6.5
  * Requires PHP:      7.4
  * Requires Plugins:  woocommerce
- * WC tested up to:   8.9
+ * WC tested up to:   9.0
  * WC requires at least: 5.3
  *
  * @see      http://wcpos.com
@@ -24,7 +24,7 @@
 namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants.
-const VERSION     = '1.6.1';
+const VERSION     = '1.6.2';
 const PLUGIN_NAME = 'woocommerce-pos';
 const SHORT_NAME  = 'wcpos';
 \define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
@@ -37,7 +37,7 @@ const PHP_MIN_VERSION = '7.4';
 const MIN_PRO_VERSION = '1.5.0';
 
 // Load .env flags (for development).
-function load_env( $file ) {
+function wcpos_load_env( $file ) {
 	if ( ! file_exists( $file ) ) {
 		return;
 	}
@@ -75,7 +75,7 @@ function wcpos_load_autoloaders() {
 wcpos_load_autoloaders();
 
 // Environment variables.
-load_env( __DIR__ . '/.env' );
+wcpos_load_env( __DIR__ . '/.env' );
 
 // Error handling for autoload failure.
 if ( ! class_exists( \WCPOS\WooCommercePOS\Activator::class ) || ! class_exists( \WCPOS\WooCommercePOS\Deactivator::class ) ) {

@@ -97,4 +97,33 @@ trait WCPOS_REST_API {
 		// make sure it's true, just in case there's a corrupt setting
 		return true === $allow_decimal_quantities;
 	}
+
+	/**
+	 * Get server load average.
+	 *
+	 * @return array The load average.
+	 */
+	public function get_server_load() {
+		try {
+			if ( stristr( PHP_OS, 'win' ) ) {
+					// Use WMIC to get load percentage from Windows.
+					$load = @shell_exec( 'wmic cpu get loadpercentage /all' );
+				if ( $load ) {
+						$load = explode( "\n", $load );
+					if ( isset( $load[1] ) ) {
+						$load = intval( $load[1] );
+						return array( $load, $load, $load ); // Mimic the array structure of sys_getloadavg().
+					}
+				}
+			} elseif ( function_exists( 'sys_getloadavg' ) ) {
+				return sys_getloadavg();
+			}
+		} catch ( Exception $e ) {
+			// Log the error for debugging purposes.
+			Logger::log( 'Error getting server load: ' . $e->getMessage() );
+		}
+
+		// Fallback if no method is available or an error occurs.
+		return array( 0, 0, 0 );
+	}
 }
