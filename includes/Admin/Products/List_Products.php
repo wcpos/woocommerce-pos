@@ -258,7 +258,9 @@ class List_Products {
 	 * @return void
 	 */
 	public static function quick_edit_save( WC_Product $product ): void {
-		if ( isset( $_POST['_pos_visibility'] ) ) {
+		$valid_options = array( 'pos_only', 'online_only', '' );
+
+		if ( isset( $_POST['_pos_visibility'] ) && in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
@@ -275,11 +277,13 @@ class List_Products {
 	 * @return void
 	 */
 	public function bulk_edit_save( WC_Product $product ): void {
-		if ( isset( $_GET['_pos_visibility'] ) ) {
+		$valid_options = array( 'pos_only', 'online_only', '' );
+
+		if ( isset( $_GET['_pos_visibility'] ) && in_array( $_GET['_pos_visibility'], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
-				'visibility' => sanitize_text_field( $_GET['_pos_visibility'] ),
+				'visibility' => $_GET['_pos_visibility'],
 				'ids' => array( $product->get_id() ),
 			);
 			$settings_instance->update_visibility_settings( $args );

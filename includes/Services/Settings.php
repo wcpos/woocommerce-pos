@@ -493,6 +493,18 @@ class Settings {
 			);
 		}
 
+		// Define valid visibility options.
+		$valid_options = array( 'pos_only', 'online_only', '' );
+
+		// Check if visibility is set and valid.
+		if ( ! isset( $args['visibility'] ) || ! in_array( $args['visibility'], $valid_options, true ) ) {
+			return new WP_Error(
+				'woocommerce_pos_settings_error',
+				__( 'Invalid visibility option provided', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$post_type = $args['post_type'];
 		$scope = $args['scope'] ?? 'default';
 		$visibility = $args['visibility'] ?? '';

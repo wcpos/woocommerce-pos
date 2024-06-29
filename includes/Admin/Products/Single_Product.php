@@ -198,7 +198,9 @@ class Single_Product {
 		}
 
 		// Get the product and save.
-		if ( isset( $_POST['_pos_visibility'] ) ) {
+		$valid_options = array( 'pos_only', 'online_only', '' );
+
+		if ( isset( $_POST['_pos_visibility'] ) && in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
@@ -267,7 +269,9 @@ class Single_Product {
 	 * @param $variation_id
 	 */
 	public function save_product_variation_pos_only_products( $variation_id ): void {
-		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) ) {
+		$valid_options = array( 'pos_only', 'online_only', '' );
+
+		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) && in_array( $_POST['variable_pos_visibility'][ $variation_id ], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'variations',
