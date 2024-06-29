@@ -1,4 +1,4 @@
-=== WooCommerce POS - Point of Sale (POS) ===
+=== WooCommerce POS - Point of Sale ===
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
