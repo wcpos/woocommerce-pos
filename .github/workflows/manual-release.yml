@@ -30,7 +30,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           release_name: Release v${{ env.VERSION }}
-          draft: false
+          draft: true
           prerelease: ${{ contains(env.VERSION, '-beta') }}
 
       - name: Build
