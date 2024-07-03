@@ -344,7 +344,11 @@
 		?>
 </div>
 
-<?php wp_footer(); ?>
+<?php
+if ( ! $this->disable_wp_footer ) {
+	wp_footer();
+}
+?>
 
 </body>
 </html>
