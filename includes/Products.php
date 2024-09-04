@@ -27,7 +27,7 @@ class Products {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
 		if ( $pos_only_products ) {
-			add_filter( 'posts_where', array( $this, 'hide_pos_only_products' ), 10, 2 );
+			add_action( 'pre_get_posts', array( $this, 'hide_pos_only_products' ) );
 			add_filter( 'woocommerce_variation_is_visible', array( $this, 'hide_pos_only_variations' ), 10, 4 );
 			add_action( 'woocommerce_store_api_validate_add_to_cart', array( $this, 'store_api_prevent_pos_only_add_to_cart' ) );
 
@@ -76,22 +76,26 @@ class Products {
 	 *
 	 * @return string
 	 */
-	public function hide_pos_only_products( $where, $query ) {
-		// Ensure this only runs for the main WooCommerce shop queries
-		if ( ! is_admin() && $query->is_main_query() && ( is_shop() || is_product_category() || is_product_tag() ) ) {
-			global $wpdb;
+	public function hide_pos_only_products( $query ) {
+		// Ensure this only runs for the main WooCommerce queries on product-related pages
+		if ( ! is_admin() && $query->is_main_query() && ( is_shop() || is_product() || is_post_type_archive( 'product' ) || is_product_taxonomy() ) ) {
 
 			$settings_instance = Settings::instance();
 			$settings = $settings_instance->get_pos_only_product_visibility_settings();
 
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
-				$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
-				$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] ); // Sanitize IDs as integers
+
+				// Merge any existing excluded IDs with the new ones
+				$existing_excludes = $query->get( 'post__not_in' );
+				if ( ! is_array( $existing_excludes ) ) {
+					$existing_excludes = array();
+				}
+
+				// Set the post__not_in query parameter to exclude specified IDs
+				$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
 			}
 		}
-
-		return $where;
 	}
 
 	/**

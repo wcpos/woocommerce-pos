@@ -238,6 +238,7 @@ class API {
 		$response->data['wp_version'] = get_bloginfo( 'version' );
 		$response->data['wc_version'] = WC()->version;
 		$response->data['wcpos_version'] = VERSION;
+		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
 
 		return $response;
 	}
