@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.5
-Stable tag: 1.6.5
+Stable tag: 1.6.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -79,6 +79,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.6.6 - 2024/09/05 =
+* Fix: POS Only Products appearing in the POS 😓
 
 = 1.6.5 - 2024/09/04 =
 * Fix: POS Only Products appearing in the web store

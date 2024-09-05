@@ -78,7 +78,7 @@ class Products {
 	 */
 	public function hide_pos_only_products( $query ) {
 		// Ensure this only runs for the main WooCommerce queries on product-related queries
-		if ( ! is_admin() && 'product' === $query->get( 'post_type' ) ) {
+		if ( ! is_admin() && ! woocommerce_pos_request() && 'product' === $query->get( 'post_type' ) ) {
 
 			$settings_instance = Settings::instance();
 			$settings = $settings_instance->get_pos_only_product_visibility_settings();
