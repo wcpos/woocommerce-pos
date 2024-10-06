@@ -128,6 +128,17 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return $valid_email;
 		}
 
+		/**
+		 * Generate a password for the new user.
+		 * Add filter for get_option key 'woocommerce_registration_generate_password' to ensure it is set to 'yes'.
+		 */
+		add_filter(
+			'pre_option_woocommerce_registration_generate_password',
+			function () {
+				return 'yes';
+			}
+		);
+
 		// Proceed with the parent method to handle the creation
 		return parent::create_item( $request );
 	}
