@@ -87,7 +87,7 @@ class Frontend {
 	public function footer(): void {
 		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user           = wp_get_current_user();
-		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.6/';
+		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.7/';
 		$auth_service   = Auth::instance();
 		$stores         = array_map(
 			function ( $store ) {
@@ -158,47 +158,83 @@ class Frontend {
 		 * getScript helper and initialProps
 		 */
 		echo "<script>
-	function getScript(source, callback) {
-	    var script = document.createElement('script');
-	    var prior = document.getElementsByTagName('script')[0];
-	    script.async = 1;
+    function getScript(source, callback) {
+        var script = document.createElement('script');
+        script.async = true;
+        script.onload = script.onreadystatechange = function(_, isAbort) {
+            if (isAbort || !script.readyState || /loaded|complete/.test(script.readyState)) {
+                script.onload = script.onreadystatechange = null;
+                script = undefined;
+                if (!isAbort && callback) setTimeout(callback, 0);
+            }
+        };
+        script.src = source;
+        document.head.appendChild(script);
+    }
 
-	    script.onload = script.onreadystatechange = function( _, isAbort ) {
-	        if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
-	            script.onload = script.onreadystatechange = null;
-	            script = undefined;
+    function loadCSS(source, callback) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = source;
+        link.onload = function() {
+            if (callback) callback();
+        };
+        link.onerror = function() {
+            console.error('Failed to load CSS file:', source);
+        };
+        document.head.appendChild(link);
+    }
 
-	            if(!isAbort && callback) setTimeout(callback, 0);
-	        }
-	    };
-
-	    script.src = source;
-	    prior.parentNode.insertBefore(script, prior);
-	}
-
-	var idbWorker = '{$idbWorker}';
-	var initialProps = {$initial_props};
-</script>" . "\n";
+    var idbWorker = '{$idbWorker}';
+    var initialProps = {$initial_props};
+    </script>" . "\n";
 
 		/**
 		 * The actual app bundle
 		 */
 		if ( $development ) {
-			// Development
-			echo "<script>getScript('{$dev_bundle}' , () => { console.log('done') });</script>" . "\n";
-		} else {
-			// Production
+			// Development Mode
 			echo "<script>
-    var request = new Request(initialProps.manifest);
+			getScript('{$dev_bundle}', function() {
+					console.log('Development JavaScript bundle loaded');
+			});
+			</script>" . "\n";
+		} else {
+			// Production Mode
+			echo "<script>
+			var request = new Request(initialProps.manifest);
 
-    window.fetch(request)
-        .then((response) => response.json())
-        .then((data) => {
-            var bundle = data.fileMetadata.web.bundle;
-            var bundleUrl = '{$github_url}' + bundle;
-            getScript(bundleUrl, () => { console.log('done') });
-        });
-</script>" . "\n";
+			window.fetch(request)
+					.then(function(response) { return response.json(); })
+					.then(function(data) {
+							var baseUrl = '{$github_url}';
+							var bundle = data.fileMetadata.web.bundle;
+							var bundleUrl = baseUrl + bundle;
+
+							// Check if CSS file is specified in the manifest
+							if (data.fileMetadata.web.css) {
+									var cssFile = data.fileMetadata.web.css;
+									var cssUrl = baseUrl + cssFile;
+
+									// Load CSS first
+									loadCSS(cssUrl, function() {
+											console.log('CSS loaded');
+											// Load JavaScript after CSS is loaded
+											getScript(bundleUrl, function() {
+													console.log('JavaScript bundle loaded');
+											});
+									});
+							} else {
+									// If no CSS file, load JavaScript immediately
+									getScript(bundleUrl, function() {
+											console.log('JavaScript bundle loaded');
+									});
+							}
+					})
+					.catch(function(error) {
+							console.error('Error fetching manifest:', error);
+					});
+			</script>" . "\n";
 		}
 	}
 
