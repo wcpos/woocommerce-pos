@@ -2,8 +2,8 @@
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
-Tested up to: 6.5
-Stable tag: 1.6.6
+Tested up to: 6.7
+Stable tag: 1.7.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -79,6 +79,15 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.0 - 2024/11/13 =
+* Enhancement: Updated all React components to use modern standards (Tailwind, Radix UI), improving reliability and usability
+* Enhancement: Improved the local database query engine for a more responsive POS experience
+* Enhancement: Improved barcode scanning detection
+* Fix: Popover positioning issues
+* Fix: Customer search on Android devices
+* Fix: Quick discounts calculation bug affecting some users
+* Pro: New Reports page for End of Day Reporting (Z-Report)
 
 = 1.6.6 - 2024/09/05 =
 * Fix: POS Only Products appearing in the POS 😓
@@ -283,8 +292,8 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Upgrade Notice ==
 
-= 1.5.0 =
+= 1.7.0 =
 **Important Update Notice:**
-We have made some significant changes to the local POS database in this update. To ensure a smooth transition, please consider updating your system when you have a quiet moment, such as outside of your busy sales hours. This will allow you to thoroughly test the new features and changes.
+We have made some significant changes to the User Interface. To ensure a smooth transition, please consider updating your system when you have a quiet moment, such as outside of your busy sales hours. This will allow you to thoroughly test the new features and changes.
 
 For the latest updates and real-time information, please visit our community chat at [wcpos.com/discord](https://wcpos.com/discord).

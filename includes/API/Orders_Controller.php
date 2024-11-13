@@ -370,24 +370,39 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		return true;
 	}
 
-
-
 	/**
 	 * Modify the collection params.
 	 */
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		if ( isset( $params['per_page'] ) ) {
+		// Ensure 'per_page' is an array and has a 'minimum' key
+		if ( isset( $params['per_page'] ) && is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
-		if ( isset( $params['orderby'] ) && \is_array( $params['orderby']['enum'] ) ) {
+		// Ensure 'orderby' is an array and has an 'enum' key that is also an array
+		if ( isset( $params['orderby'] ) && is_array( $params['orderby'] ) && isset( $params['orderby']['enum'] ) && is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_merge(
 				$params['orderby']['enum'],
 				array( 'status', 'customer_id', 'payment_method', 'total' )
 			);
 		}
+
+		// Add 'pos_cashier' parameter
+		$params['pos_cashier'] = array(
+			'description' => __('Filter orders by POS cashier.', 'woocommerce-pos'),
+			'type'        => 'integer',
+			'required'    => false,
+		);
+
+		// Add 'pos_store' parameter
+		// @NOTE - this is different to 'store_id' which is the store the request was made from.
+		$params['pos_store'] = array(
+			'description' => __('Filter orders by POS store.', 'woocommerce-pos'),
+			'type'        => 'integer',
+			'required'    => false,
+		);
 
 		return $params;
 	}
@@ -601,6 +616,22 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			} else {
 				add_filter( 'posts_where', array( $this, 'wcpos_posts_where_order_include_exclude' ), 10, 2 );
 			}
+		}
+
+		// Add 'pos_cashier' filter.
+		if ( isset( $request['pos_cashier'] ) ) {
+			$args['meta_query'][] = array(
+				'key' => '_pos_user',
+				'value' => $request['pos_cashier'],
+			);
+		}
+
+		// Add 'pos_store' filter.
+		if ( isset( $request['pos_store'] ) ) {
+			$args['meta_query'][] = array(
+				'key' => '_pos_store',
+				'value' => $request['pos_store'],
+			);
 		}
 
 		return $args;

@@ -832,4 +832,46 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
 	}
+
+	/**
+	 * 
+	 */
+	public function test_filter_order_by_cashier() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+		$order2->add_meta_data( '_pos_user', 4, true );
+		$order2->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'pos_cashier', 4 );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
+
+		/**
+	 * 
+	 */
+	public function test_filter_order_by_store() {
+		$order1 = OrderHelper::create_order();
+		$order2 = OrderHelper::create_order();
+		$order2->add_meta_data( '_pos_store', 64, true );
+		$order2->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'pos_store', 64 );
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+
+		$ids      = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
 }
