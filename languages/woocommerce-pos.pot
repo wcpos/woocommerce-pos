@@ -2,16 +2,16 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WooCommerce POS 1.6.3\n"
+"Project-Id-Version: WooCommerce POS 1.7.0\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2024-06-29T13:37:36+00:00\n"
+"POT-Creation-Date: 2024-11-13T11:31:57+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"X-Generator: WP-CLI 2.10.0\n"
+"X-Generator: WP-CLI 2.11.0\n"
 "X-Domain: woocommerce-pos\n"
 
 #. Plugin Name of the plugin
@@ -138,6 +138,9 @@ msgstr ""
 msgid "JWT token."
 msgstr ""
 
+msgid "Filter customers by roles."
+msgstr ""
+
 msgid "Order Status."
 msgstr ""
 
@@ -151,6 +154,12 @@ msgid "Save email to order"
 msgstr ""
 
 msgid "Barcode"
+msgstr ""
+
+msgid "Filter orders by POS cashier."
+msgstr ""
+
+msgid "Filter orders by POS store."
 msgstr ""
 
 msgid "Email address %s added to billing details from WooCommerce POS."
