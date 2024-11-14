@@ -11,13 +11,13 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use const DOING_AJAX;
-
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
+
+use const DOING_AJAX;
 
 /**
  *
@@ -102,6 +102,10 @@ class Init {
 		if ( class_exists( 'WPSEO_Options' ) ) {
 			new Integrations\WPSEO();
 		}
+
+		// wePOS alters the WooCommerce REST API, breaking the expected schema
+		// It's very bad form on their part, but we need to work around it
+		new Integrations\WePOS();
 	}
 
 	/**
