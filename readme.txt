@@ -30,7 +30,7 @@ or download the desktop application:
 * Add miscellaneous products to cart, ie: products not in WooCommerce
 * Live chat support within the application
 
-= 🔓 [PRO FEATURES](https://wcpos.com/pro) = 
+= 🔓 PRO FEATURES = 
 * **Stock Management:** quickly adjust stock levels, pricing and more
 * **Order Management:** re-open and print receipts for older orders
 * **Customer Management:** create new customers and edit customer details
@@ -38,6 +38,8 @@ or download the desktop application:
 * **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
 * **Priority [Discord support](https://wcpos.com/discord):** (usually < 1 hour)
+
+*Discover all PRO features at [wcpos.com/pro](https://wcpos.com/pro)*
 
 = 📋 REQUIREMENTS =
 * WordPress >= 5.6
