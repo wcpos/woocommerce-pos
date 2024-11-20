@@ -29,11 +29,15 @@ or download the desktop application:
 * Add new customers or checkout via Guest account
 * Add miscellaneous products to cart, ie: products not in WooCommerce
 * Live chat support within the application
-* **Pro:** Use any WooCommerce gateway
-* **Pro:** Create multiple POS Stores
-* **Pro:** Analytics for POS and Online sales
-* **Pro:** End of Day Reports
-* **Pro:** Priority [Discord support](https://wcpos.com/discord) (usually < 1 hour)
+
+= 🔓 [PRO FEATURES](https://wcpos.com/pro) = 
+* **Stock Management:** quickly adjust stock levels, pricing and more
+* **Order Management:** re-open and print receipts for older orders
+* **Customer Management:** create new customers and edit customer details
+* **Payment Gateways:** use any gateway for checkout
+* **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
+* **Stores:** Manage locations with unique tax settings, pricing and receipts
+* **Priority [Discord support](https://wcpos.com/discord):** (usually < 1 hour)
 
 = 📋 REQUIREMENTS =
 * WordPress >= 5.6
@@ -82,6 +86,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 == Changelog ==
 
 = 1.7.1 - 2024/11/14 = 
+* Fix: Error updating quantity for Product Variations when decimal quantities enabled
 * Plugin Conflict: The wePOS plugin alters the standard WC REST API response, which in turn breaks WooCommerce POS
 This small update adds code to prevent WooCommerce POS from being activated if wePOS is detected
 

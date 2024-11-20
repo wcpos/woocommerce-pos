@@ -113,7 +113,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		if ( $this->wcpos_allow_decimal_quantities() &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
-			$schema['properties']['stock_quantity']['type'] = 'string';
+			$schema['properties']['stock_quantity']['type'] = 'float';
 		}
 
 		return $schema;
