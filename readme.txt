@@ -16,19 +16,20 @@ WooCommerce POS is a simple application for taking orders at the Point of Sale u
 > 🕒 Install and start taking orders in less than 2 minutes.
 
 = 🎥 DEMO =
-You can see a demo of the WooCommerce POS plugin in action by going to [https://demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
+You can see a demo of the WooCommerce POS plugin in action by going to [demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
 or download the desktop application:
 ⬇️ [Download WooCommerce POS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
 ⬇️ [Download WooCommerce POS for Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
 ⬇️ [Download WooCommerce POS for Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
 
 = ✨ FEATURES = 
-* Available cross-platform via browser or desktop application _(iOS and Android coming soon)_
-* Offline storage for fast product search and order processing
-* Manage product stock levels and pricing quickly
-* Add new customers or checkout via Guest account
-* Add miscellaneous products to cart, ie: products not in WooCommerce
-* Live chat support within the application
+* **Cross-platform:** Accessible via browser or desktop application _(iOS & Android coming soon)_
+* **Offline Storage:** Fast product search and order processing
+* **Flexible Cart:** Add products not listed in WooCommerce
+* **Barcode Support:** Scan products directly into the cart
+* **Custom Receipts:** Tailor receipt templates with PHP
+* **Multilingual:** Available in most major languages
+* **Built-in Support:** Access live chat for instant help
 
 = 🔓 PRO FEATURES = 
 * **Stock Management:** quickly adjust stock levels, pricing and more
@@ -37,7 +38,7 @@ or download the desktop application:
 * **Payment Gateways:** use any gateway for checkout
 * **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
-* **Priority [Discord support](https://wcpos.com/discord):** (usually < 1 hour)
+* **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
 
 *Discover all PRO features at [wcpos.com/pro](https://wcpos.com/pro)*
 
