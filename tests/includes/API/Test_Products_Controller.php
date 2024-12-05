@@ -118,6 +118,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			'post_password',
 			// Added by WCPOS.
 			'barcode',
+			// Added in WooCommerce 9.4.0
+			'global_unique_id',
 		);
 	}
 
@@ -454,7 +456,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
-		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
+		$this->assertEquals( 'float', $schema['properties']['stock_quantity']['type'] );
 	}
 
 	public function test_product_response_with_decimal_quantities(): void {

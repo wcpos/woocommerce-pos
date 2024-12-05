@@ -34,6 +34,10 @@ abstract class WCPOS_REST_Unit_Test_Case extends WC_REST_Unit_Test_Case {
 		wp_set_current_user( $this->user );
 	}
 
+	public function tearDown(): void {
+		parent::tearDown();
+	}
+
 	public function rest_api_init(): void {
 		new API();
 	}

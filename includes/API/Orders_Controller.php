@@ -574,7 +574,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$pos_payment_url = add_query_arg(
 			array(
 				'pay_for_order' => true,
-				'key'           => $order->get_order_key(),
+				'key'           => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
 			),
 			get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() )
 		);
@@ -623,7 +623,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @throws WC_Data_Exception
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
-		if ( $this->is_creating ) {
+		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
 		}
 

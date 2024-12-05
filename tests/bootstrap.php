@@ -27,7 +27,7 @@ class Bootstrap {
 
 		// Require composer dependencies.
 		require_once $this->plugin_dir . '/vendor/autoload.php';
-		// $this->initialize_code_hacker();
+		$this->initialize_code_hacker();
 
 		// Bootstrap WP_Mock to initialize built-in features
 		// NOTE: CodeHacker and WP_Mock are not compatible :(

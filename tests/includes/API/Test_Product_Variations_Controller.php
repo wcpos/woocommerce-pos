@@ -91,12 +91,15 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			'attributes',
 			'menu_order',
 			'meta_data',
+			'type',
 			'_links',
 			// Added by WCPOS.
 			'barcode',
-			// Added in WooCommerce 8.3.0 :/
+			// Added in WooCommerce 8.3.0
 			'name',
 			'parent_id',
+			// Added in WooCommerce 9.4.0
+			'global_unique_id',
 		);
 	}
 
@@ -498,7 +501,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
-		$this->assertEquals( 'string', $schema['properties']['stock_quantity']['type'] );
+		$this->assertEquals( 'float', $schema['properties']['stock_quantity']['type'] );
 	}
 
 	public function test_variation_response_with_decimal_quantities(): void {

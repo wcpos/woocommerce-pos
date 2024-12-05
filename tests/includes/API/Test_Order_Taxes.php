@@ -131,7 +131,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		// order taxes
 		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
-		$this->assertEquals( '1.00', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( '1.000000', $data['tax_lines'][0]['tax_total'] );
 		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
 		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
 	}
@@ -205,7 +205,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		// order taxes
 		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
-		$this->assertEquals( '2.00', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( '2.000000', $data['tax_lines'][0]['tax_total'] );
 		$this->assertEquals( 'VAT', $data['tax_lines'][0]['label'] );
 		$this->assertEquals( '20', $data['tax_lines'][0]['rate_percent'] );
 	}
@@ -273,22 +273,22 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		// order taxes
 		$this->assertEquals( 2, \count( $data['tax_lines'] ) );
-		$this->assertEquals( '1.00', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( '1.000000', $data['tax_lines'][0]['tax_total'] );
 		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
 		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
-		$this->assertEquals( '0.22', $data['tax_lines'][1]['tax_total'] );
+		$this->assertEquals( '0.220000', $data['tax_lines'][1]['tax_total'] );
 		$this->assertEquals( 'US AL', $data['tax_lines'][1]['label'] );
 		$this->assertEquals( '2', $data['tax_lines'][1]['rate_percent'] );
 
 		// order total
-		$this->assertEquals( '11.22', $data['total'] );
-		$this->assertEquals( '1.22', $data['cart_tax'] );
-		$this->assertEquals( '1.22', $data['total_tax'] );
+		$this->assertEquals( '11.220000', $data['total'] );
+		$this->assertEquals( '1.220000', $data['cart_tax'] );
+		$this->assertEquals( '1.220000', $data['total_tax'] );
 	}
 
-		/**
-		 *
-		 */
+	/**
+	 *
+	 */
 	public function test_fee_lines_should_respect_tax_status_when_negative() {
 		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
 		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
