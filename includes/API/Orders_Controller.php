@@ -21,6 +21,7 @@ use WP_REST_Server;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WCPOS\WooCommercePOS\Services\Cache;
 use WP_Error;
+use WC_Tax;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
@@ -96,6 +97,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
 		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
 		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
+		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( $this, 'wcpos_order_item_fee_after_calculate_taxes' ), 10, 2 );
 
 		/**
 		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
@@ -326,6 +328,41 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * The way WooCommerce handles negative fees is ... weird.
+	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
+	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
+	 * the wrong result.
+	 *
+	 * @param WC_Order_Item_Fee $fee_item The fee item.
+	 * @param array             $calculate_tax_for The tax calculation data.
+	 */
+	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ) {
+		if ( $fee_item->get_total() < 0 ) {
+			// Respect the fee line's tax_class and tax_status.
+			$tax_class = $fee_item->get_tax_class();
+			$tax_status = $fee_item->get_tax_status();
+
+			if ( $tax_status === 'taxable' ) {
+					// Use the tax_class if set, otherwise default.
+					$calculate_tax_for['tax_class'] = $tax_class ? : '';
+
+					// Find rates and calculate taxes for the fee.
+					$tax_rates = WC_Tax::find_rates( $calculate_tax_for );
+					$discount_taxes = WC_Tax::calc_tax( $fee_item->get_total(), $tax_rates );
+
+					// Apply calculated taxes to the fee item.
+					$fee_item->set_taxes( array( 'total' => $discount_taxes ) );
+			} else {
+				// Set taxes to none if tax_status is 'none'.
+				$fee_item->set_taxes( false );
+			}
+
+			// Save the updated fee item.
+			$fee_item->save();
+		}
+	}
+
+	/**
 	 * Gets the product ID from posted ID.
 	 *
 	 * @throws WC_REST_Exception When SKU or ID is not valid.
@@ -391,7 +428,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Add 'pos_cashier' parameter
 		$params['pos_cashier'] = array(
-			'description' => __('Filter orders by POS cashier.', 'woocommerce-pos'),
+			'description' => __( 'Filter orders by POS cashier.', 'woocommerce-pos' ),
 			'type'        => 'integer',
 			'required'    => false,
 		);
@@ -399,7 +436,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		// Add 'pos_store' parameter
 		// @NOTE - this is different to 'store_id' which is the store the request was made from.
 		$params['pos_store'] = array(
-			'description' => __('Filter orders by POS store.', 'woocommerce-pos'),
+			'description' => __( 'Filter orders by POS store.', 'woocommerce-pos' ),
 			'type'        => 'integer',
 			'required'    => false,
 		);

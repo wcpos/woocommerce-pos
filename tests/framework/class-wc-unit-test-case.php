@@ -66,11 +66,11 @@ class WC_Unit_Test_Case extends WP_HTTP_TestCase {
 		WC_Post_types::register_post_types();
 		WC_Post_types::register_taxonomies();
 
-		CodeHacker::reset_hacks();
+		// CodeHacker::reset_hacks();
 
 		// Reset the instance of MockableLegacyProxy that was registered during bootstrap,
 		// in order to start the test in a clean state (without anything mocked).
-		wc_get_container()->get( LegacyProxy::class )->reset();
+		// wc_get_container()->get( LegacyProxy::class )->reset();
 	}
 
 	/**

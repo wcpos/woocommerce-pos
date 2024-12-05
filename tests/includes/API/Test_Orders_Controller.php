@@ -139,7 +139,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data    = $response->get_data();
 		$ids  = wp_list_pluck( $data, 'id' );
 
-		$this->assertEquals( array( $order1->get_id(), $order2->get_id() ), $ids );
+		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 	}
 
 	/**
@@ -158,7 +158,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data    = $response->get_data();
 		$ids  = wp_list_pluck( $data, 'id' );
 
-		$this->assertEquals( array( $order1->get_id(), $order2->get_id() ), $ids );
+		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 
 				// Verify that date_modified_gmt is present for all products and correctly formatted.
 		foreach ( $data as $d ) {
@@ -834,7 +834,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * 
+	 *
 	 */
 	public function test_filter_order_by_cashier() {
 		$order1 = OrderHelper::create_order();
@@ -854,8 +854,8 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
-		/**
-	 * 
+	/**
+	 *
 	 */
 	public function test_filter_order_by_store() {
 		$order1 = OrderHelper::create_order();

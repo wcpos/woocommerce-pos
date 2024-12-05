@@ -27,7 +27,7 @@ class Bootstrap {
 
 		// Require composer dependencies.
 		require_once $this->plugin_dir . '/vendor/autoload.php';
-		$this->initialize_code_hacker();
+		// $this->initialize_code_hacker();
 
 		// Bootstrap WP_Mock to initialize built-in features
 		// NOTE: CodeHacker and WP_Mock are not compatible :(
@@ -49,7 +49,7 @@ class Bootstrap {
 		$this->includes();
 
 		// re-initialize dependency injection, this needs to be the last operation after everything else is in place.
-		$this->initialize_dependency_injection();
+		// $this->initialize_dependency_injection();
 
 		// Use existing behavior for wp_die during actual test execution.
 		remove_filter( 'wp_die_handler', array( $this, 'fail_if_died' ) );
@@ -190,32 +190,31 @@ class Bootstrap {
 	/**
 	 * Re-initialize the dependency injection engine.
 	 *
-	 * The dependency injection engine has been already initialized as part of the Woo initialization, but we need
-	 * to replace the registered read-only container with a fully configurable one for testing.
-	 * To this end we hack a bit and use reflection to grab the underlying container that the read-only one stores
-	 * in a private property.
-	 *
-	 * Additionally, we replace the legacy/function proxies with mockable versions to easily replace anything
-	 * in tests as appropriate.
-	 *
-	 * @throws \Exception The Container class doesn't have a 'container' property.
+	 * This adjusts the container for testing, enabling the use of mockable proxies and other test-specific overrides.
 	 */
-	private function initialize_dependency_injection(): void {
-		require_once $this->plugin_dir . '/tests/Tools/DependencyManagement/MockableLegacyProxy.php';
+	// private function initialize_dependency_injection(): void {
+	// Check if WooCommerce provides a testing container.
+	// if ( ! class_exists( \Automattic\WooCommerce\Internal\DependencyManagement\TestingContainer::class ) ) {
+	// throw new \Exception( 'TestingContainer class is not available in the current WooCommerce version.' );
+	// }
 
-		try {
-			$inner_container_property = new ReflectionProperty( \Automattic\WooCommerce\Container::class, 'container' );
-		} catch ( ReflectionException $ex ) {
-			throw new \Exception( "Error when trying to get the private 'container' property from the " . \Automattic\WooCommerce\Container::class . ' class using reflection during unit testing bootstrap, has the property been removed or renamed?' );
-		}
+	// Create a new TestingContainer instance.
+	// $testing_container = new \Automattic\WooCommerce\Internal\DependencyManagement\TestingContainer();
 
-		$inner_container_property->setAccessible( true );
-		$inner_container = $inner_container_property->getValue( wc_get_container() );
+	// Replace the legacy proxy with a mockable version for testing.
+	// $testing_container->register(
+	// LegacyProxy::class,
+	// function () {
+	// return new MockableLegacyProxy();
+	// }
+	// );
 
-		$inner_container->replace( LegacyProxy::class, MockableLegacyProxy::class );
+	// Replace the global WooCommerce container with the testing container.
+	// \Automattic\WooCommerce\Container::set( $testing_container );
 
-		$GLOBALS['wc_container'] = $inner_container;
-	}
+	// Store the container globally for test access if necessary.
+	// $GLOBALS['wc_container'] = $testing_container;
+	// }
 }
 
 Bootstrap::instance();

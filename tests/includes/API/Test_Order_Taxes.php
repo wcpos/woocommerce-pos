@@ -285,4 +285,48 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '1.22', $data['cart_tax'] );
 		$this->assertEquals( '1.22', $data['total_tax'] );
 	}
+
+		/**
+		 *
+		 */
+	public function test_fee_lines_should_respect_tax_status_when_negative() {
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items'     => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+						'price'      => 20,
+						'total'      => '20.00',
+					),
+				),
+				'fee_lines'     => array(
+					array(
+						'name' => 'Fee',
+						'total' => '-10',
+						'tax_status' => 'none',
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 201, $response->get_status() );
+
+		// fee line taxes
+		$this->assertEquals( 1, \count( $data['fee_lines'] ) );
+		$this->assertEquals( '-10.000000', $data['fee_lines'][0]['total'] );
+		$this->assertEquals( '0.000000', $data['fee_lines'][0]['total_tax'] );
+		$this->assertEquals( 0, \count( $data['fee_lines'][0]['taxes'] ) );
+
+		// order taxes
+		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
+		$this->assertEquals( '2.000000', $data['total_tax'] );
+		$this->assertEquals( '12.000000', $data['total'] );
+	}
 }

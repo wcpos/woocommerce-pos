@@ -88,6 +88,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.7.2 - 2024/12/XX =
+* Fix: Negative fees with tax_status='none' and/or tax_class are now applied correctly to the order
+
 = 1.7.1 - 2024/11/14 = 
 * Fix: Error updating quantity for Product Variations when decimal quantities enabled
 * Plugin Conflict: The wePOS plugin alters the standard WC REST API response, which in turn breaks WooCommerce POS
