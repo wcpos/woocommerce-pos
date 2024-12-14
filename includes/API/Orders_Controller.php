@@ -671,6 +671,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
+		// @TODO - Add 'created_via' filter.
+		// 'created_via' is stored in the operational data table for HPOS and postmeta for legacy.
+
 		return $args;
 	}
 

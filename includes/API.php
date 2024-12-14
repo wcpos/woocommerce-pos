@@ -240,6 +240,17 @@ class API {
 		$response->data['wcpos_version'] = VERSION;
 		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
 
+		/**
+		 * Remove the routes from the response.
+		 *
+		 * Some wordpress sites have a huge number of routes, like 2MB of data. It shouldn;t matter, but it seems
+		 * to cause issues with the desktop application sometimes. We don't use the routes at the moment, so we
+		 * can remove them from the response.
+		 */
+		$data = $response->get_data();
+		unset( $data['routes'] );
+		$response->set_data( $data );
+
 		return $response;
 	}
 
