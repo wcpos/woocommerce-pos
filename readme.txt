@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.7
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -88,8 +88,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.7.2 - 2024/12/XX =
+= 1.7.2 - 2024/12/27 =
 * Fix: Negative fees with tax_status='none' and/or tax_class are now applied correctly to the order
+* Fix: Remove routes from WP API index for POS to reduce request size
+* Fix: Annoying issue where pagination resets while searching
+* Fix: Minor cart display issues
+* Fix: Add html decode for special characters
+* Fix: Remove 'low stock' as an option in the products filter - this status does not exist
+* Fix: Variation attributes doubling when barcode scanning
 
 = 1.7.1 - 2024/11/14 = 
 * Fix: Error updating quantity for Product Variations when decimal quantities enabled
