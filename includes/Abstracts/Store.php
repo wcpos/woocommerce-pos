@@ -41,7 +41,7 @@ class Store extends \WC_Data {
 		'store_postcode' => '',
 		'store_state' => '',
 		'store_country' => '',
-		'default_country' => '',
+		// 'default_country' => '',
 		'default_customer_address' => '',
 		'calc_taxes' => '',
 		'enable_coupons' => '',
@@ -100,7 +100,7 @@ class Store extends \WC_Data {
 		$this->set_prop( 'store_city', \WC_Admin_Settings::get_option( 'woocommerce_store_city' ) );
 		$this->set_prop( 'store_state', $country_state_array['state'] );
 		$this->set_prop( 'store_country', $country_state_array['country'] );
-		$this->set_prop( 'default_country', $default_country );
+		// $this->set_prop( 'default_country', $default_country );
 		$this->set_prop( 'store_postcode', \WC_Admin_Settings::get_option( 'woocommerce_store_postcode' ) );
 		$this->set_prop( 'default_customer_address', \WC_Admin_Settings::get_option( 'woocommerce_default_customer_address' ) );
 		$this->set_prop( 'calc_taxes', \WC_Admin_Settings::get_option( 'woocommerce_calc_taxes' ) );
@@ -110,7 +110,7 @@ class Store extends \WC_Data {
 		$this->set_prop( 'currency_pos', \WC_Admin_Settings::get_option( 'woocommerce_currency_pos' ) );
 		$this->set_prop( 'price_thousand_sep', \WC_Admin_Settings::get_option( 'woocommerce_price_thousand_sep' ) );
 		$this->set_prop( 'price_decimal_sep', \WC_Admin_Settings::get_option( 'woocommerce_price_decimal_sep' ) );
-		$this->set_prop( 'price_num_decimals', \WC_Admin_Settings::get_option( 'woocommerce_price_num_decimals' ) );
+		$this->set_prop( 'price_num_decimals', (int) \WC_Admin_Settings::get_option( 'woocommerce_price_num_decimals', 2 ) );
 	}
 
 	/**
@@ -215,9 +215,9 @@ class Store extends \WC_Data {
 	 * @param  string $context What the value is for. Valid values are view and edit.
 	 * @return string
 	 */
-	public function get_default_country( $context = 'view' ) {
-		return $this->get_prop( 'default_country', $context );
-	}
+	// public function get_default_country( $context = 'view' ) {
+	// 	return $this->get_prop( 'default_country', $context );
+	// }
 
 	/**
 	 * Get Store state code.
