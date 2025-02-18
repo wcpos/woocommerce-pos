@@ -25,12 +25,12 @@ jobs:
       - name: Deploy to WP Engine
         uses: wpengine/github-action-wpe-site-deploy@v3
         with:
-          # Deploy vars
+          # WP Engine deployment variables
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: wcposdev
-          # Deploy Options
-          # SRC_PATH: "."
           REMOTE_PATH: "wp-content/plugins/woocommerce-pos"
-          FLAGS: -azvr --inplace --delete --delete-excluded --exclude-from=.distignore
-          #          SCRIPT: "path/yourscript.sh"
+          # Override rsync's SSH options to disable multiplexing
+          FLAGS: >-
+            -azvr --inplace --delete --delete-excluded --exclude-from=.distignore
+            -e "ssh -o StrictHostKeyChecking=no -o ControlMaster=no -p 22 -i \$HOME/.ssh/wpe_id_rsa"
           CACHE_CLEAR: TRUE
