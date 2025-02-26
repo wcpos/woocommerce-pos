@@ -117,13 +117,6 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertEquals( '', $store_city ); // Assuming default is empty string
 	}
 
-	public function test_get_default_country(): void {
-		// Assuming you have a way to set these values or mock them
-		$store_country = $this->store->get_default_country();
-		$this->assertIsString( $store_country );
-		$this->assertEquals( 'US:CA', $store_country );
-	}
-
 	public function test_get_store_postcode(): void {
 		$store_postcode = $this->store->get_store_postcode();
 		$this->assertIsString( $store_postcode );
@@ -181,7 +174,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	public function test_get_price_number_of_decimals(): void {
 		$decimals = $this->store->get_price_number_of_decimals();
 		$this->assertIsString( $decimals );
-		$this->assertEquals( '2', $decimals ); // Default value
+		$this->assertEquals( 2, $decimals ); // Default value
 	}
 
 	public function test_get_prices_include_tax(): void {

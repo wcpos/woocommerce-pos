@@ -63,6 +63,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			'description',
 			'short_description',
 			'sku',
+			'brands',
 			'price',
 			'regular_price',
 			'sale_price',

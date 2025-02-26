@@ -55,7 +55,6 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'store_state',
 			'store_country',
 			'tax_address',
-			'default_country',
 			'store_postcode',
 			'default_customer_address',
 			'calc_taxes',
