@@ -25,29 +25,26 @@ jobs:
           php-version: "7.4"
           tools: composer, cs2pr, phpcs
 
-      - name: Build
-        env:
-          YARN_ENABLE_IMMUTABLE_INSTALLS: false
-        run: |
-          yarn install
-          composer prefix-dependencies
-          composer install
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.4.1'
 
       - name: Start WordPress Environment
-        run: npm run wp-env start --xdebug=coverage
+        run: pnpm run wp-env start --xdebug=coverage
   
       - name: Check WooCommerce Activation
-        run: npm run wp-env run cli -- wp plugin list
+        run: pnpm run wp-env run cli -- wp plugin list
 
       - name: Linting the code
         run: |
           vendor/bin/phpcs -i
           vendor/bin/phpcs --config-show
           # vendor/bin/phpcs --report=checkstyle | cs2pr
-          npm run lint
+          pnpm run lint
         continue-on-error: true
 
       - name: Running the tests
         run: | 
-          npm run test
+          pnpm run test
           # cat phpunit.xml | cs2pr
