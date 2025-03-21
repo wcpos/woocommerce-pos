@@ -216,49 +216,91 @@ if ( ! \defined( 'ABSPATH' ) ) {
 				?>
 			</td>
 			<td><?php echo esc_html( $item->get_quantity() ); ?></td>
-			<td><?php echo \is_object( $product ) && method_exists( $product, 'get_price' ) ? wp_kses_post( wc_price( $product->get_price() ) ) : ''; ?></td>
-			<td><?php echo wp_kses_post( wc_price( $item->get_total() ) ); ?></td>
+			<td><?php 
+				$tax_display = get_option( 'woocommerce_tax_display_cart' );
+				if ( 'excl' === $tax_display ) {
+					echo wp_kses_post( wc_price( $item->get_subtotal() / $item->get_quantity() ) );
+				} else {
+					echo wp_kses_post( wc_price( $item->get_subtotal_tax() / $item->get_quantity() + $item->get_subtotal() / $item->get_quantity() ) );
+				}
+			?></td>
+			<td><?php 
+				$tax_display = get_option( 'woocommerce_tax_display_cart' );
+				if ( 'excl' === $tax_display ) {
+					echo wp_kses_post( wc_price( $item->get_total() ) );
+				} else {
+					echo wp_kses_post( wc_price( $item->get_total() + $item->get_total_tax() ) );
+				}
+			?></td>
 		</tr>
 	<?php } ?>
 		</tbody>
 		<tfoot>
 			<tr>
 				<th colspan="3"><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></th>
-				<td><?php echo wp_kses_post( wc_price( $order->get_subtotal() ) ); ?></td>
+				<td><?php 
+					$tax_display = get_option( 'woocommerce_tax_display_cart' );
+					if ( 'excl' === $tax_display ) {
+						echo wp_kses_post( wc_price( $order->get_subtotal() ) );
+					} else {
+						echo wp_kses_post( wc_price( $order->get_subtotal() + $order->get_subtotal_tax() ) );
+					}
+				?></td>
 			</tr>
 			<?php if ( $order->get_shipping_total() > 0 ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Shipping', 'woocommerce' ); ?></th>
-					<td><?php echo wp_kses_post( wc_price( $order->get_shipping_total() ) ); ?></td>
+					<td><?php 
+						if ( 'excl' === $tax_display ) {
+							echo wp_kses_post( wc_price( $order->get_shipping_total() ) );
+						} else {
+							echo wp_kses_post( wc_price( $order->get_shipping_total() + $order->get_shipping_tax() ) );
+						}
+					?></td>
 				</tr>
 			<?php } ?>
 			<?php foreach ( $order->get_fees() as $fee ) { ?>
 				<tr>
 					<th colspan="3"><?php echo esc_html( $fee->get_name() ); ?></th>
-					<td><?php echo wp_kses_post( wc_price( $fee->get_total() ) ); ?></td>
+					<td><?php 
+						if ( 'excl' === $tax_display ) {
+							echo wp_kses_post( wc_price( $fee->get_total() ) );
+						} else {
+							echo wp_kses_post( wc_price( $fee->get_total() + $fee->get_total_tax() ) );
+						}
+					?></td>
 				</tr>
 			<?php } ?>
 			<?php if ( $order->get_total_discount() > 0 ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Discount', 'woocommerce' ); ?></th>
-					<td><?php echo wp_kses_post( wc_price( $order->get_total_discount() ) ); ?></td>
+					<td><?php 
+						// Discounts are always displayed as positive numbers
+						if ( 'excl' === $tax_display ) {
+							echo wp_kses_post( wc_price( $order->get_total_discount( false ) ) );
+						} else {
+							echo wp_kses_post( wc_price( $order->get_total_discount( true ) ) );
+						}
+					?></td>
 				</tr>
 			<?php } ?>
-			<?php if ( wc_tax_enabled() ) { ?>
-				<?php if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) { ?>
-					<?php foreach ( $order->get_tax_totals() as $code => $tax ) { ?>
+			<?php 
+			// Only show tax rows if we're showing prices excluding tax
+			if ( 'excl' === $tax_display && wc_tax_enabled() ) { 
+				if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) {
+					foreach ( $order->get_tax_totals() as $code => $tax ) { ?>
 						<tr>
 							<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
 							<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
 						</tr>
-					<?php } ?>
-				<?php } else { ?>
+					<?php }
+				} else { ?>
 					<tr>
 						<th colspan="3"><?php echo esc_html( WC()->countries->tax_or_vat() ); ?></th>
 						<td><?php echo wp_kses_post( wc_price( $order->get_total_tax() ) ); ?></td>
 					</tr>
-				<?php } ?>
-			<?php } ?>
+				<?php }
+			} ?>
 			<tr>
 				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
 				<td><?php echo wp_kses_post( wc_price( $order->get_total() ) ); ?></td>
