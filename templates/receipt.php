@@ -284,23 +284,27 @@ if ( ! \defined( 'ABSPATH' ) ) {
 					?></td>
 				</tr>
 			<?php } ?>
-			<?php 
-			// Only show tax rows if we're showing prices excluding tax
-			if ( 'excl' === $tax_display && wc_tax_enabled() ) { 
-				if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) {
-					foreach ( $order->get_tax_totals() as $code => $tax ) { ?>
+			<?php if ( wc_tax_enabled() ) : ?>
+				<?php 
+				$tax_display = get_option( 'woocommerce_tax_display_cart' );
+				$tax_suffix = ( 'incl' === $tax_display ) 
+					? ' ' . esc_html__('(incl. tax)', 'woocommerce') 
+					: ' ' . esc_html__('(excl. tax)', 'woocommerce');
+				?>
+				<?php if ( 'itemized' === get_option( 'woocommerce_tax_total_display' ) ) { ?>
+					<?php foreach ( $order->get_tax_totals() as $code => $tax ) { ?>
 						<tr>
-							<th colspan="3"><?php echo esc_html( $tax->label ); ?></th>
+							<th colspan="3"><?php echo esc_html( $tax->label ) . $tax_suffix; ?></th>
 							<td><?php echo wp_kses_post( wc_price( $tax->amount ) ); ?></td>
 						</tr>
-					<?php }
-				} else { ?>
+					<?php } ?>
+				<?php } else { ?>
 					<tr>
-						<th colspan="3"><?php echo esc_html( WC()->countries->tax_or_vat() ); ?></th>
+						<th colspan="3"><?php echo esc_html( WC()->countries->tax_or_vat() ) . $tax_suffix; ?></th>
 						<td><?php echo wp_kses_post( wc_price( $order->get_total_tax() ) ); ?></td>
 					</tr>
-				<?php }
-			} ?>
+				<?php } ?>
+			<?php endif; ?>
 			<tr>
 				<th colspan="3"><?php esc_html_e( 'Total', 'woocommerce' ); ?></th>
 				<td><?php echo wp_kses_post( wc_price( $order->get_total() ) ); ?></td>

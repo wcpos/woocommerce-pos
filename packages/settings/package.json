@@ -1,8 +1,8 @@
 {
   "name": "@wcpos/settings",
   "scripts": {
-    "build": "NODE_ENV=production ../../node_modules/.bin/webpack",
-    "start": "../../node_modules/.bin/webpack --watch"
+    "build": "NODE_ENV=production node_modules/.bin/webpack",
+    "start": "node_modules/.bin/webpack --watch"
   },
   "dependencies": {
     "@headlessui/react": "^2.0.4",

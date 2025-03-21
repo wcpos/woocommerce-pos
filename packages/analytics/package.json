@@ -1,8 +1,8 @@
 {
   "name": "@wcpos/analytics",
   "scripts": {
-    "build": "NODE_ENV=production ../../node_modules/.bin/webpack",
-    "start": "../../node_modules/.bin/webpack --watch"
+    "build": "NODE_ENV=production node_modules/.bin/webpack",
+    "start": "node_modules/.bin/webpack --watch"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.45.0",
