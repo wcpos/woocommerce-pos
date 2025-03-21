@@ -10,19 +10,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: 🏗 Checkout code
+        uses: actions/checkout@v4
 
-      - name: Build
-        env:
-          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.6.5'
+
+      - name: 👷 Build
         run: |
-          yarn install
+          pnpm install
           composer prefix-dependencies
           composer install --no-dev
-          yarn build:js
+          pnpm settings build
+          pnpm analytics build
 
-      - name: Deploy to WP Engine
+      - name: 🚀 Deploy to WP Engine
         uses: wpengine/github-action-wpe-site-deploy@v3
         with:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}

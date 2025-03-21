@@ -12,19 +12,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 🏗 Checkout code
         uses: actions/checkout@v4
 
-      - name: Build
-        env:
-          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.6.5'
+
+      - name: 👷 Build
         run: |
-          yarn install
+          pnpm install
           composer prefix-dependencies
           composer install --no-dev
-          yarn build:js
+          pnpm settings build
+          pnpm analytics build
 
-      - name: WordPress Plugin Deploy
+      - name: 📦 WordPress Plugin Deploy
         id: deploy
         uses: 10up/action-wordpress-plugin-deploy@stable
         env:

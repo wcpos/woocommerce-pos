@@ -16,13 +16,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: 🏗 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Release Version
+      - name: 🔖 Setup Release Version
         run: echo "VERSION=${{ github.event.inputs.releaseVersion }}" >> $GITHUB_ENV
 
-      - name: Create Release
+      - name: 📦 Create Release
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -33,21 +33,25 @@ jobs:
           draft: true
           prerelease: ${{ contains(env.VERSION, '-beta') }}
 
-      - name: Build
-        env:
-          YARN_ENABLE_IMMUTABLE_INSTALLS: false
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.6.5'
+
+      - name: 👷 Build
         run: |
-          yarn install
+          pnpm install
           composer prefix-dependencies
           composer install --no-dev
-          yarn build:js
+          pnpm settings build
+          pnpm analytics build
 
-      - name: Sync to Temporary Directory
+      - name: 📂 Sync to Temporary Directory
         run: |
           mkdir temp_dir
           rsync -av --prune-empty-dirs --exclude-from='.distignore' ./ temp_dir/
       
-      - name: Compress and Upload ZIP
+      - name: 📦 Compress and Upload ZIP
         run: |
           cd temp_dir
           zip -r ../woocommerce-pos.zip .
