@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.7
-Stable tag: 1.7.3
+Stable tag: 1.7.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -87,6 +87,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.4 - 2025/03/22 = 
+* Revert: changes to the default receipt template
 
 = 1.7.3 - 2025/03/21 = 
 * Fix: default receipt template to display Miscellaneous Product Price and better match WooCommerce templates
