@@ -236,17 +236,6 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	<?php } ?>
 		</tbody>
 		<tfoot>
-			<tr>
-				<th colspan="3"><?php esc_html_e( 'Subtotal', 'woocommerce' ); ?></th>
-				<td><?php 
-					$tax_display = get_option( 'woocommerce_tax_display_cart' );
-					if ( 'excl' === $tax_display ) {
-						echo wp_kses_post( wc_price( $order->get_subtotal() ) );
-					} else {
-						echo wp_kses_post( wc_price( $order->get_subtotal() + $order->get_subtotal_tax() ) );
-					}
-				?></td>
-			</tr>
 			<?php if ( $order->get_shipping_total() > 0 ) { ?>
 				<tr>
 					<th colspan="3"><?php esc_html_e( 'Shipping', 'woocommerce' ); ?></th>
