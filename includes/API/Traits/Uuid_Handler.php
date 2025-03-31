@@ -69,9 +69,9 @@ trait Uuid_Handler {
 	 */
 	private function maybe_add_post_uuid( WC_Data $object ): void {
 		// Use object_type to ensure uniqueness across different record types.
-		$lock_key = 'wc_pos_uuid_' . $object->object_type . '_' . $object->get_id();
+		$lock_key = 'wc_pos_uuid_' . $object->get_type() . '_' . $object->get_id();
 		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
-			Logger::log( "Unable to acquire lock for post UUID update for {$object->object_type} id " . $object->get_id() );
+			Logger::log( "Unable to acquire lock for post UUID update for {$object->get_type()} id " . $object->get_id() );
 			return;
 		}
 		try {
