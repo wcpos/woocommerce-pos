@@ -30,6 +30,12 @@ jobs:
         with:
           version: '10.8.0'
 
+      - name: 👷 Build
+        run: |
+          pnpm install
+          composer prefix-dependencies
+          composer install
+
       - name: Start WordPress Environment
         run: pnpm run wp-env start --xdebug=coverage
   
