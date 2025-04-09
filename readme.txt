@@ -2,8 +2,8 @@
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
-Tested up to: 6.7
-Stable tag: 1.7.4
+Tested up to: 6.8
+Stable tag: 1.7.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -87,6 +87,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.5 - 2025/04/09 =
+* Fix: $object->object_type error, use $object->get_type() instead
+* Fix: increase woocommerce_get_checkout_order_received_url to ensure POS Thank You page is used for POS orders
 
 = 1.7.4 - 2025/03/22 = 
 * Revert: changes to the default receipt template
@@ -320,9 +324,3 @@ This small update adds code to prevent WooCommerce POS from being activated if w
 * If you need assistance, join our Discord chat at https://wcpos.com/discord for support.
 
 == Upgrade Notice ==
-
-= 1.7.0 =
-**Important Update Notice:**
-We have made some significant changes to the User Interface. To ensure a smooth transition, please consider updating your system when you have a quiet moment, such as outside of your busy sales hours. This will allow you to thoroughly test the new features and changes.
-
-For the latest updates and real-time information, please visit our community chat at [wcpos.com/discord](https://wcpos.com/discord).

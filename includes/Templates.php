@@ -40,7 +40,11 @@ class Templates {
 
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
-		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 10, 2 );
+
+		/**
+		 * Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
+		 */
+		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
 	}
 
 	/**
