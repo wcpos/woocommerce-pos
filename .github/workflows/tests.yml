@@ -28,7 +28,7 @@ jobs:
       - name: 🏗 Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: '10.4.1'
+          version: '10.8.0'
 
       - name: Start WordPress Environment
         run: pnpm run wp-env start --xdebug=coverage
