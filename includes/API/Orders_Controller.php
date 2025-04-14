@@ -341,6 +341,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 */
 		parent::maybe_set_item_meta_data( $item, $posted );
 
+		// Ensure this is a product line item, not a fee or shipping
+		if ( ! $item instanceof WC_Order_Item_Product ) {
+			return;
+		}
+
+		// Only proceed if there's a variation ID and we have posted meta
 		if ( ! $item->get_variation_id() || empty( $posted['meta_data'] ) || ! is_array( $posted['meta_data'] ) ) {
 			return;
 		}
