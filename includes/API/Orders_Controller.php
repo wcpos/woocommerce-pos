@@ -328,6 +328,62 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Maybe set item meta if posted.
+	 *
+	 * @param WC_Order_Item $item   Order item data.
+	 * @param array         $posted Request data.
+	 */
+	public function maybe_set_item_meta_data( $item, $posted ) {
+		/**
+		 * Call the parent method first to handle standard meta data
+		 * This will populate the attribute key, eg: 'pa_color' or 'logo'
+		 * BUT: if the attribute can be 'any' then we need to handle that
+		 */
+		parent::maybe_set_item_meta_data( $item, $posted );
+
+		if ( ! $item->get_variation_id() || empty( $posted['meta_data'] ) || ! is_array( $posted['meta_data'] ) ) {
+			return;
+		}
+
+		$attributes = wc_get_product_variation_attributes( $item->get_variation_id() );
+		$product_id = $item->get_product_id();
+		$product    = wc_get_product( $product_id );
+		$parent_attributes = $product->get_attributes();
+
+		foreach ( $attributes as $key => $value ) {
+			if( '' === $value ) {
+				$slug = str_replace( 'attribute_', '', $key );
+
+				if ( ! isset( $parent_attributes[ $slug ] ) ) {
+					continue;
+				}
+
+				$name = $parent_attributes[ $slug ]['name'] ?? $slug;
+				if( $name === $slug ) {
+					$name = wc_attribute_label( $slug );
+				}
+
+				// find the value from $posted['meta_data']
+				foreach ( $posted['meta_data'] as $meta ) {
+					// Match posted attribute label to the $name we just determined
+					if ( isset( $meta['display_key'], $meta['display_value'] ) && $meta['display_key'] === $name ) {
+						$posted_value = $meta['display_value'];
+						// Only update if the posted value is non-empty
+						if ( $posted_value ) {
+							$item->update_meta_data(
+								$slug,
+								$posted_value,
+								isset( $meta['id'] ) ? $meta['id'] : ''
+							);
+							break; // Stop searching once found
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
 	 * The way WooCommerce handles negative fees is ... weird.
 	 * They by-pass the normal tax calculation, disregard the tax_status and tax_class, and apply the taxes to the fee line.
 	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
