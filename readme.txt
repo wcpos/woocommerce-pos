@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.6
+Stable tag: 1.7.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -88,7 +88,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.7.6 - 2025/04/14 = 
+= 1.7.7 - 2025/04/14 = 
 * Fix: issue where variant was not saving properly in the Order Item meta data
 
 = 1.7.5 - 2025/04/09 =

@@ -342,7 +342,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		parent::maybe_set_item_meta_data( $item, $posted );
 
 		// Ensure this is a product line item, not a fee or shipping
-		if ( ! $item instanceof WC_Order_Item_Product ) {
+		if ( ! is_object( $item ) || get_class( $item ) !== 'WC_Order_Item_Product' ) {
 			return;
 		}
 
