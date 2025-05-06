@@ -3,7 +3,7 @@
  * Plugin Name:       WooCommerce POS
  * Plugin URI:        https://wordpress.org/plugins/woocommerce-pos/
  * Description:       A simple front-end for taking WooCommerce orders at the Point of Sale. Requires <a href="http://wordpress.org/plugins/woocommerce/">WooCommerce</a>.
- * Version:           1.7.7
+ * Version:           1.7.8
  * Author:            kilbot
  * Author URI:        http://wcpos.com
  * Text Domain:       woocommerce-pos
@@ -24,7 +24,7 @@
 namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants.
-const VERSION     = '1.7.7';
+const VERSION     = '1.7.8';
 const PLUGIN_NAME = 'woocommerce-pos';
 const SHORT_NAME  = 'wcpos';
 \define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
@@ -107,3 +107,36 @@ add_action(
 		}
 	}
 );
+
+/**
+ * Caching can cause all sorts of issues with the POS, so we attempt to disable caching for POS templates.
+ */
+add_action( 'plugins_loaded', function () {
+	// Check request URI as early as possible.
+	if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+		return;
+	}
+
+	if ( preg_match( '#^/(wcpos-login|wcpos-checkout)(/|$)#i', $_SERVER['REQUEST_URI'] ) ) {
+
+		// 1) Hard kill all LSCache features (cache + optimisation).
+		if ( ! defined( 'LITESPEED_DISABLE_ALL' ) ) {
+			define( 'LITESPEED_DISABLE_ALL', true );
+		}
+
+		// 2) Belt-and-braces: mark the response non-cacheable for older LSCache versions.
+		if ( ! defined( 'LSCACHE_NO_CACHE' ) ) {
+			define( 'LSCACHE_NO_CACHE', true );
+		}
+
+		// 3) Disable W3 Total Cache minify
+		if ( ! \defined( 'DONOTMINIFY' ) ) {
+			\define( 'DONOTMINIFY', 'true' );
+		}
+
+		// 4) Disable WP Super Cache
+		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
+			\define( 'DONOTCACHEPAGE', 'true' );
+		}
+	}
+}, 0 );
