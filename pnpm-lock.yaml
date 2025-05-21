@@ -9,11 +9,11 @@ importers:
   .:
     devDependencies:
       '@wordpress/babel-plugin-makepot':
-        specifier: 6.0.0
-        version: 6.0.0(@babel/core@7.24.7)
+        specifier: 6.23.0
+        version: 6.23.0(@babel/core@7.24.7)
       '@wordpress/env':
-        specifier: 10.0.0
-        version: 10.0.0
+        specifier: 10.23.0
+        version: 10.23.0(@types/node@22.13.11)
       jsdoc:
         specifier: ^4.0.3
         version: 4.0.3
@@ -121,8 +121,8 @@ importers:
         specifier: 7.13.0
         version: 7.13.0(eslint@9.5.0)(typescript@5.4.5)
       '@wordpress/env':
-        specifier: 10.0.0
-        version: 10.0.0
+        specifier: 10.23.0
+        version: 10.23.0(@types/node@22.13.11)
       autoprefixer:
         specifier: 10.4.19
         version: 10.4.19(postcss@8.4.38)
@@ -359,8 +359,8 @@ importers:
         specifier: 7.13.0
         version: 7.13.0(eslint@9.5.0)(typescript@5.4.5)
       '@wordpress/env':
-        specifier: 10.0.0
-        version: 10.0.0
+        specifier: 10.23.0
+        version: 10.23.0(@types/node@22.13.11)
       autoprefixer:
         specifier: 10.4.19
         version: 10.4.19(postcss@8.4.38)
@@ -1348,6 +1348,127 @@ packages:
     resolution: {integrity: sha512-JBxkERygn7Bv/GbN5Rv8Ul6LVknS+5Bp6RgDC/O8gEBU/yeH5Ui5C/OlWrTb6qct7LjjfT6Re2NxB0ln0yYybA==}
     engines: {node: '>=18.18'}
 
+  '@inquirer/checkbox@4.1.6':
+    resolution: {integrity: sha512-62u896rWCtKKE43soodq5e/QcRsA22I+7/4Ov7LESWnKRO6BVo2A1DFLDmXL9e28TB0CfHc3YtkbPm7iwajqkg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/confirm@5.1.10':
+    resolution: {integrity: sha512-FxbQ9giWxUWKUk2O5XZ6PduVnH2CZ/fmMKMBkH71MHJvWr7WL5AHKevhzF1L5uYWB2P548o1RzVxrNd3dpmk6g==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/core@10.1.11':
+    resolution: {integrity: sha512-BXwI/MCqdtAhzNQlBEFE7CEflhPkl/BqvAuV/aK6lW3DClIfYVDWPP/kXuXHtBWC7/EEbNqd/1BGq2BGBBnuxw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/editor@4.2.11':
+    resolution: {integrity: sha512-YoZr0lBnnLFPpfPSNsQ8IZyKxU47zPyVi9NLjCWtna52//M/xuL0PGPAxHxxYhdOhnvY2oBafoM+BI5w/JK7jw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/expand@4.0.13':
+    resolution: {integrity: sha512-HgYNWuZLHX6q5y4hqKhwyytqAghmx35xikOGY3TcgNiElqXGPas24+UzNPOwGUZa5Dn32y25xJqVeUcGlTv+QQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/figures@1.0.11':
+    resolution: {integrity: sha512-eOg92lvrn/aRUqbxRyvpEWnrvRuTYRifixHkYVpJiygTgVSBIHDqLh0SrMQXkafvULg3ck11V7xvR+zcgvpHFw==}
+    engines: {node: '>=18'}
+
+  '@inquirer/input@4.1.10':
+    resolution: {integrity: sha512-kV3BVne3wJ+j6reYQUZi/UN9NZGZLxgc/tfyjeK3mrx1QI7RXPxGp21IUTv+iVHcbP4ytZALF8vCHoxyNSC6qg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/number@3.0.13':
+    resolution: {integrity: sha512-IrLezcg/GWKS8zpKDvnJ/YTflNJdG0qSFlUM/zNFsdi4UKW/CO+gaJpbMgQ20Q58vNKDJbEzC6IebdkprwL6ew==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/password@4.0.13':
+    resolution: {integrity: sha512-NN0S/SmdhakqOTJhDwOpeBEEr8VdcYsjmZHDb0rblSh2FcbXQOr+2IApP7JG4WE3sxIdKytDn4ed3XYwtHxmJQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/prompts@7.5.1':
+    resolution: {integrity: sha512-5AOrZPf2/GxZ+SDRZ5WFplCA2TAQgK3OYrXCYmJL5NaTu4ECcoWFlfUZuw7Es++6Njv7iu/8vpYJhuzxUH76Vg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/rawlist@4.1.1':
+    resolution: {integrity: sha512-VBUC0jPN2oaOq8+krwpo/mf3n/UryDUkKog3zi+oIi8/e5hykvdntgHUB9nhDM78RubiyR1ldIOfm5ue+2DeaQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/search@3.0.13':
+    resolution: {integrity: sha512-9g89d2c5Izok/Gw/U7KPC3f9kfe5rA1AJ24xxNZG0st+vWekSk7tB9oE+dJv5JXd0ZSijomvW0KPMoBd8qbN4g==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/select@4.2.1':
+    resolution: {integrity: sha512-gt1Kd5XZm+/ddemcT3m23IP8aD8rC9drRckWoP/1f7OL46Yy2FGi8DSmNjEjQKtPl6SV96Kmjbl6p713KXJ/Jg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
+  '@inquirer/type@3.0.6':
+    resolution: {integrity: sha512-/mKVCtVpyBu3IDarv0G+59KC4stsD5mDsGpYh+GKs1NZT88Jh52+cuoA1AtLk2Q0r/quNl+1cSUyLRHBFeD0XA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
     engines: {node: '>=12'}
@@ -2192,11 +2313,11 @@ packages:
     resolution: {integrity: sha512-RsdUV57A+DTJGU3slq/S9vTOtVkatnT1YyGIK3UDKaEhXkvBPtLTWwd3WR13GCfjFZ5XupH9FAGUQFkOve0eKQ==}
     engines: {node: '>=12'}
 
-  '@wordpress/babel-plugin-makepot@6.0.0':
-    resolution: {integrity: sha512-mscDzDMm/aken6+Cb2W3EIUJr0E3DUh7SPW9RBnSvd/8D6mhPWl8Aa/gZRonlRPq5q/lPRI6fV4c4tlia8BgcQ==}
+  '@wordpress/babel-plugin-makepot@6.23.0':
+    resolution: {integrity: sha512-S5/ObKwPWESQm4+i6i5vmY78Tsemg+Kp1pIVXCBxmJhronnUjkK3zzoP85eLIeOlbPbxR+HYK48/ycwbzyPAcg==}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
     peerDependencies:
-      '@babel/core': ^7.12.9
+      '@babel/core': ^7.25.7
 
   '@wordpress/base-styles@4.3.1':
     resolution: {integrity: sha512-A/PpsWP5FSni2++v+cBaSoeBRw0Yv1oK5iBXKMATxdQmPfGVPauBl365U3IUPz0lxr5ckFIq/Ey+Ejww+Pe5sQ==}
@@ -2409,8 +2530,8 @@ packages:
     resolution: {integrity: sha512-JsM1Cy283BusHOb1uyD3tG9GAb5hp/ycgPnBS/ScKT/8VD8yGzsX6Pz910GWo5udXP03d2+UI/BQ68KPqPQKqQ==}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
 
-  '@wordpress/env@10.0.0':
-    resolution: {integrity: sha512-GpbYT7P61U6PWOqpyPmTBGLswBoyOCUtGF2/0qCsbN7vC8oekm+iNpYT2JS0ETSC1/8esxxKlYVvLxXwTF9MPg==}
+  '@wordpress/env@10.23.0':
+    resolution: {integrity: sha512-4OIydQJWIjkjR6o0YIC4zI853NrhaiaNkU47BpIh+OGEwMbDG4OZgith4l3ZlHP1ZGSg5qBt3gZSmXK/e0aKmQ==}
     engines: {node: '>=18.12.0', npm: '>=8.19.2'}
     hasBin: true
 
@@ -3163,9 +3284,9 @@ packages:
     resolution: {integrity: sha512-ywqV+5MmyL4E7ybXgKys4DugZbX0FC6LnwrhjuykIjnK9k8OQacQ7axGKnjDXWNhns0xot3bZI5h55H8yo9cJg==}
     engines: {node: '>=6'}
 
-  cli-width@3.0.0:
-    resolution: {integrity: sha512-FxqpkPPwu1HjuN93Omfm4h8uIanXofW0RxVEW3k5RKx+mJJYSthzNhp32Kzxxy3YAEZ/Dc/EWN1vZRY0+kOhbw==}
-    engines: {node: '>= 10'}
+  cli-width@4.1.0:
+    resolution: {integrity: sha512-ouuZd4/dm2Sw5Gmqy6bGyNNNe1qt9RpmxveLSO7KcgsTnU7RXfsw+/bukWGo1abgBiMAic068rclZsO4IWmmxQ==}
+    engines: {node: '>= 12'}
 
   clipboard@2.0.11:
     resolution: {integrity: sha512-C+0bbOqkezLIsmWSvlsXS0Q0bmkugu7jcfMIACB+RDEntIzQIkdr148we28AfSloQLRdZlYL/QYyrq05j/3Faw==}
@@ -4078,10 +4199,6 @@ packages:
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
 
-  figures@3.2.0:
-    resolution: {integrity: sha512-yaduQFRKLXYOGgEn6AZau90j3ggSOyiqXU0F9JZfeXYhNa+Jk4X+s45A2zg5jns87GAFa34BBm2kXw4XpNcbdg==}
-    engines: {node: '>=8'}
-
   file-entry-cache@8.0.0:
     resolution: {integrity: sha512-XXTUwCvisa5oacNGRP9SfNtYBNAMi+RPwBFmblZEF7N7swHYQS6/Zfk7SRwx4D5j3CH211YNRco1DEMNVfZCnQ==}
     engines: {node: '>=16.0.0'}
@@ -4546,10 +4663,6 @@ packages:
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
-
-  inquirer@7.3.3:
-    resolution: {integrity: sha512-JG3eIAj5V9CwcGvuOmoo6LB9kbAYT8HXffUl6memuszlwDC/qvFAJw49XJ5NROSFNPxp3iQg1GqkFhaY/CR0IA==}
-    engines: {node: '>=8.0.0'}
 
   internal-slot@1.1.0:
     resolution: {integrity: sha512-4gd7VpWNQNB4UKKCFFVcp1AVv+FMOgs9NKzjHKusc8jTMhd5eL1NqQqOpE0KzMds804/yHlglp3uxgluOqAPLw==}
@@ -5392,6 +5505,10 @@ packages:
 
   mute-stream@0.0.8:
     resolution: {integrity: sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==}
+
+  mute-stream@2.0.0:
+    resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
+    engines: {node: ^18.17.0 || >=20.5.0}
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
@@ -6535,19 +6652,15 @@ packages:
     deprecated: Rimraf versions prior to v4 are no longer supported
     hasBin: true
 
-  run-async@2.4.1:
-    resolution: {integrity: sha512-tvVnVv01b8c1RrA6Ep7JkStj85Guv/YrMcwqYQnwjsAS2cTmmPGBBjAjpCW7RrSodNSoE2/qg9O4bceNvUuDgQ==}
-    engines: {node: '>=0.12.0'}
+  rimraf@5.0.10:
+    resolution: {integrity: sha512-l0OE8wL34P4nJH/H2ffoaniAokM2qSmrtXHmlpvYr5AVVX8msAyW0l8NVJFDxlSK4u3Uh/f41cQheDVdnYijwQ==}
+    hasBin: true
 
   run-parallel@1.2.0:
     resolution: {integrity: sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA==}
 
   rungen@0.3.2:
     resolution: {integrity: sha512-zWl10xu2D7zoR8zSC2U6bg5bYF6T/Wk7rxwp8IPaJH7f0Ge21G03kNHVgHR7tyVkSSfAOG0Rqf/Cl38JftSmtw==}
-
-  rxjs@6.6.7:
-    resolution: {integrity: sha512-hTdwr+7yYNIT5n4AMYp85KA6yw2Va0FLa3Rguvbpa4W3I5xynaBZo41cM3XM+4Q6fRMj3sBYIR1VAmZMXYJvRQ==}
-    engines: {npm: '>=2.0.0'}
 
   safe-array-concat@1.1.3:
     resolution: {integrity: sha512-AURm5f0jYEOydBj7VQlVvDrjeFgthDdEF5H1dP+6mNpoXOMo1quQqJ4wvJDyRZ9+pO3kGWoOdmV08cSv2aJV6Q==}
@@ -7003,9 +7116,6 @@ packages:
   thenify@3.3.1:
     resolution: {integrity: sha512-RVZSIV5IG10Hk3enotrhvz0T9em6cyHBLkH/YAZuKqd8hRkKhSfCGIcP2KUY0EPxndzANBmNllzWPwak+bheSw==}
 
-  through@2.3.8:
-    resolution: {integrity: sha512-w89qg7PI8wAdvX60bMDP+bFoD5Dvhm9oLheFp5O4a2QF0cSBGsBX4qZmadPMvVqlLJBBci+WqGGOAPvcDeNSVg==}
-
   tiny-emitter@2.1.0:
     resolution: {integrity: sha512-NB6Dk1A9xgQPMoGqC5CVXn123gWyte215ONT5Pp5a0yt4nlEoO1ZWeCwpncaekPHXO60i47ihFnZPiRPjRMq4Q==}
 
@@ -7423,6 +7533,10 @@ packages:
     resolution: {integrity: sha512-QC1/iN/2/RPVJ5jYK8BGttj5z83LmSKmvbvrXPNCLZSEb32KKVDJDl/MOt2N01qU2H/FkzEa9PKto1BqDjtd7Q==}
     engines: {node: '>=6'}
 
+  wrap-ansi@6.2.0:
+    resolution: {integrity: sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==}
+    engines: {node: '>=8'}
+
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
@@ -7503,6 +7617,10 @@ packages:
   yocto-queue@1.2.0:
     resolution: {integrity: sha512-KHBC7z61OJeaMGnF3wqNZj+GGNXOyypZviiKpQeiHirG5Ib1ImwcLBH70rbMSkKfSmUNBsdf2PwaEJtKvgmkNw==}
     engines: {node: '>=12.20'}
+
+  yoctocolors-cjs@2.1.2:
+    resolution: {integrity: sha512-cYVsTjKl8b+FrnidjibDWskAv7UKOfcwaVZdp/it9n1s9fU3IkgDbhdIRKCW4JDsAlECJY0ytoVPT3sK6kideA==}
+    engines: {node: '>=18'}
 
 snapshots:
 
@@ -8711,6 +8829,122 @@ snapshots:
 
   '@humanwhocodes/retry@0.3.1': {}
 
+  '@inquirer/checkbox@4.1.6(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/figures': 1.0.11
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      ansi-escapes: 4.3.2
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/confirm@5.1.10(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/core@10.1.11(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/figures': 1.0.11
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      ansi-escapes: 4.3.2
+      cli-width: 4.1.0
+      mute-stream: 2.0.0
+      signal-exit: 4.1.0
+      wrap-ansi: 6.2.0
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/editor@4.2.11(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      external-editor: 3.1.0
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/expand@4.0.13(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/figures@1.0.11': {}
+
+  '@inquirer/input@4.1.10(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/number@3.0.13(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/password@4.0.13(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      ansi-escapes: 4.3.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/prompts@7.5.1(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/checkbox': 4.1.6(@types/node@22.13.11)
+      '@inquirer/confirm': 5.1.10(@types/node@22.13.11)
+      '@inquirer/editor': 4.2.11(@types/node@22.13.11)
+      '@inquirer/expand': 4.0.13(@types/node@22.13.11)
+      '@inquirer/input': 4.1.10(@types/node@22.13.11)
+      '@inquirer/number': 3.0.13(@types/node@22.13.11)
+      '@inquirer/password': 4.0.13(@types/node@22.13.11)
+      '@inquirer/rawlist': 4.1.1(@types/node@22.13.11)
+      '@inquirer/search': 3.0.13(@types/node@22.13.11)
+      '@inquirer/select': 4.2.1(@types/node@22.13.11)
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/rawlist@4.1.1(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/search@3.0.13(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/figures': 1.0.11
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/select@4.2.1(@types/node@22.13.11)':
+    dependencies:
+      '@inquirer/core': 10.1.11(@types/node@22.13.11)
+      '@inquirer/figures': 1.0.11
+      '@inquirer/type': 3.0.6(@types/node@22.13.11)
+      ansi-escapes: 4.3.2
+      yoctocolors-cjs: 2.1.2
+    optionalDependencies:
+      '@types/node': 22.13.11
+
+  '@inquirer/type@3.0.6(@types/node@22.13.11)':
+    optionalDependencies:
+      '@types/node': 22.13.11
+
   '@isaacs/cliui@8.0.2':
     dependencies:
       string-width: 5.1.2
@@ -9472,7 +9706,7 @@ snapshots:
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.3.1)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/wordpress__data': 7.0.0(react@18.3.1)
       '@types/wordpress__keycodes': 2.18.0
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       react-autosize-textarea: 7.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
@@ -9486,7 +9720,7 @@ snapshots:
     dependencies:
       '@types/react': 18.3.3
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.3.1)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
       - react
@@ -9500,7 +9734,7 @@ snapshots:
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.3.1)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/wordpress__notices': 4.0.0(react@18.3.1)
       '@types/wordpress__rich-text': 3.4.6(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       downshift: 6.1.12(react@18.3.1)
       re-resizable: 6.11.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
@@ -9527,7 +9761,7 @@ snapshots:
 
   '@types/wordpress__keycodes@2.18.0':
     dependencies:
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 4.20.0
 
   '@types/wordpress__notices@4.0.0(react@18.3.1)':
     dependencies:
@@ -9879,24 +10113,24 @@ snapshots:
     dependencies:
       '@woocommerce/number': 2.4.0
       '@wordpress/deprecated': 2.12.3
-      '@wordpress/element': 4.4.1
-      '@wordpress/html-entities': 3.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/html-entities': 3.58.0
       '@wordpress/i18n': 3.20.0
 
   '@woocommerce/data@4.1.0(@types/react@18.3.3)(@wordpress/core-data@4.4.6(react@18.3.1))(lodash@4.17.21)(moment@2.30.1)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@woocommerce/date': 4.2.0(lodash@4.17.21)
       '@woocommerce/navigation': 8.1.0(@types/react@18.3.3)(lodash@4.17.21)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
-      '@wordpress/api-fetch': 6.3.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
+      '@wordpress/api-fetch': 6.55.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
       '@wordpress/core-data': 4.4.6(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
       '@wordpress/data-controls': 2.30.0(react@18.3.1)
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/element': 4.4.1
-      '@wordpress/hooks': 3.6.1
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/url': 3.7.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/element': 4.20.0
+      '@wordpress/hooks': 3.58.0
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/url': 3.59.0
       dompurify: 2.5.8
       md5: 2.3.0
       moment: 2.30.1
@@ -9913,8 +10147,8 @@ snapshots:
   '@woocommerce/date@4.2.0(lodash@4.17.21)':
     dependencies:
       '@types/d3-time-format': 2.3.4
-      '@wordpress/date': 4.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/date': 4.58.0
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
       moment: 2.30.1
       moment-timezone: 0.5.47
@@ -9922,13 +10156,13 @@ snapshots:
 
   '@woocommerce/navigation@8.1.0(@types/react@18.3.3)(lodash@4.17.21)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/components': 19.8.6(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
-      '@wordpress/compose': 5.4.2(react@18.3.1)
-      '@wordpress/element': 4.4.1
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/compose': 5.20.0(react@18.3.1)
+      '@wordpress/element': 4.20.0
+      '@wordpress/hooks': 3.58.0
       '@wordpress/notices': 3.31.0(react@18.3.1)
-      '@wordpress/url': 3.7.1
+      '@wordpress/url': 3.59.0
       history: 5.3.0
       lodash: 4.17.21
       qs: 6.14.0
@@ -9953,7 +10187,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.7
       '@wordpress/dom-ready': 3.58.0
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/i18n': 4.58.0
 
   '@wordpress/a11y@4.20.0':
     dependencies:
@@ -9964,8 +10198,8 @@ snapshots:
   '@wordpress/api-fetch@6.3.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/url': 3.7.1
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/url': 3.59.0
 
   '@wordpress/api-fetch@6.55.0':
     dependencies:
@@ -9983,7 +10217,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.7
 
-  '@wordpress/babel-plugin-makepot@6.0.0(@babel/core@7.24.7)':
+  '@wordpress/babel-plugin-makepot@6.23.0(@babel/core@7.24.7)':
     dependencies:
       '@babel/core': 7.24.7
       deepmerge: 4.3.1
@@ -10183,20 +10417,20 @@ snapshots:
       '@emotion/styled': 11.14.0(@emotion/react@11.14.0(@types/react@18.3.3)(react@18.3.1))(@types/react@18.3.3)(react@18.3.1)
       '@emotion/utils': 1.0.0
       '@use-gesture/react': 10.3.1(react@18.3.1)
-      '@wordpress/a11y': 3.6.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
-      '@wordpress/date': 4.6.1
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/dom': 3.6.1
-      '@wordpress/element': 4.4.1
+      '@wordpress/a11y': 3.58.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
+      '@wordpress/date': 4.58.0
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/dom': 3.58.0
+      '@wordpress/element': 4.20.0
       '@wordpress/escape-html': 2.58.0
-      '@wordpress/hooks': 3.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/hooks': 3.58.0
+      '@wordpress/i18n': 4.58.0
       '@wordpress/icons': 8.2.3
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 3.58.0
       '@wordpress/primitives': 3.56.0
-      '@wordpress/rich-text': 5.4.3(react@18.3.1)
+      '@wordpress/rich-text': 5.20.0(react@18.3.1)
       '@wordpress/warning': 2.58.0
       classnames: 2.5.1
       colord: 2.9.3
@@ -10451,11 +10685,11 @@ snapshots:
       '@babel/runtime': 7.24.7
       '@types/lodash': 4.17.5
       '@types/mousetrap': 1.6.15
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/dom': 3.6.1
-      '@wordpress/element': 4.4.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/dom': 3.58.0
+      '@wordpress/element': 4.20.0
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 3.58.0
       '@wordpress/priority-queue': 2.58.0
       clipboard: 2.0.11
       lodash: 4.17.21
@@ -10501,15 +10735,15 @@ snapshots:
   '@wordpress/core-data@4.4.6(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/blocks': 11.21.0(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/element': 4.4.1
-      '@wordpress/html-entities': 3.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/element': 4.20.0
+      '@wordpress/html-entities': 3.58.0
+      '@wordpress/i18n': 4.58.0
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/url': 3.7.1
+      '@wordpress/url': 3.59.0
       equivalent-key-map: 0.2.2
       lodash: 4.17.21
       memize: 1.1.0
@@ -10654,7 +10888,7 @@ snapshots:
   '@wordpress/deprecated@3.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/hooks': 3.58.0
 
   '@wordpress/deprecated@4.20.0':
     dependencies:
@@ -10738,21 +10972,22 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@wordpress/env@10.0.0':
+  '@wordpress/env@10.23.0(@types/node@22.13.11)':
     dependencies:
+      '@inquirer/prompts': 7.5.1(@types/node@22.13.11)
       chalk: 4.1.2
       copy-dir: 1.3.0
       docker-compose: 0.24.8
       extract-zip: 1.7.0
       got: 11.8.6
-      inquirer: 7.3.3
       js-yaml: 3.14.1
       ora: 4.1.1
-      rimraf: 3.0.2
+      rimraf: 5.0.10
       simple-git: 3.27.0
       terminal-link: 2.1.1
       yargs: 17.7.2
     transitivePeerDependencies:
+      - '@types/node'
       - supports-color
 
   '@wordpress/escape-html@2.58.0':
@@ -10813,7 +11048,7 @@ snapshots:
   '@wordpress/i18n@4.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/hooks': 3.58.0
       gettext-parser: 1.4.0
       lodash: 4.17.21
       memize: 1.1.0
@@ -10840,7 +11075,7 @@ snapshots:
   '@wordpress/icons@8.2.3':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       '@wordpress/primitives': 3.56.0
 
   '@wordpress/icons@9.49.0':
@@ -10870,8 +11105,8 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.7
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/element': 4.4.1
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/keycodes': 3.58.0
       lodash: 4.17.21
       react: 18.3.1
       rememo: 3.0.0
@@ -10884,7 +11119,7 @@ snapshots:
   '@wordpress/keycodes@3.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
 
   '@wordpress/keycodes@4.20.0':
@@ -10895,10 +11130,10 @@ snapshots:
   '@wordpress/media-utils@3.4.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/blob': 3.58.0
-      '@wordpress/element': 4.4.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
 
   '@wordpress/notices@3.31.0(react@18.3.1)':
@@ -11013,13 +11248,13 @@ snapshots:
   '@wordpress/rich-text@5.4.3(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/a11y': 3.6.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
+      '@wordpress/a11y': 3.58.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       '@wordpress/escape-html': 2.58.0
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/keycodes': 3.58.0
       lodash: 4.17.21
       memize: 1.1.0
       react: 18.3.1
@@ -11742,7 +11977,7 @@ snapshots:
 
   cli-spinners@2.9.2: {}
 
-  cli-width@3.0.0: {}
+  cli-width@4.1.0: {}
 
   clipboard@2.0.11:
     dependencies:
@@ -12791,10 +13026,6 @@ snapshots:
     dependencies:
       pend: 1.2.0
 
-  figures@3.2.0:
-    dependencies:
-      escape-string-regexp: 1.0.5
-
   file-entry-cache@8.0.0:
     dependencies:
       flat-cache: 4.0.1
@@ -13319,22 +13550,6 @@ snapshots:
       wrappy: 1.0.2
 
   inherits@2.0.4: {}
-
-  inquirer@7.3.3:
-    dependencies:
-      ansi-escapes: 4.3.2
-      chalk: 4.1.2
-      cli-cursor: 3.1.0
-      cli-width: 3.0.0
-      external-editor: 3.1.0
-      figures: 3.2.0
-      lodash: 4.17.21
-      mute-stream: 0.0.8
-      run-async: 2.4.1
-      rxjs: 6.6.7
-      string-width: 4.2.3
-      strip-ansi: 6.0.1
-      through: 2.3.8
 
   internal-slot@1.1.0:
     dependencies:
@@ -14389,6 +14604,8 @@ snapshots:
   ms@2.1.3: {}
 
   mute-stream@0.0.8: {}
+
+  mute-stream@2.0.0: {}
 
   mz@2.7.0:
     dependencies:
@@ -15654,17 +15871,15 @@ snapshots:
     dependencies:
       glob: 7.2.3
 
-  run-async@2.4.1: {}
+  rimraf@5.0.10:
+    dependencies:
+      glob: 10.4.5
 
   run-parallel@1.2.0:
     dependencies:
       queue-microtask: 1.2.3
 
   rungen@0.3.2: {}
-
-  rxjs@6.6.7:
-    dependencies:
-      tslib: 1.14.1
 
   safe-array-concat@1.1.3:
     dependencies:
@@ -16189,8 +16404,6 @@ snapshots:
     dependencies:
       any-promise: 1.3.0
 
-  through@2.3.8: {}
-
   tiny-emitter@2.1.0: {}
 
   tiny-invariant@1.3.3: {}
@@ -16666,6 +16879,12 @@ snapshots:
       string-width: 3.1.0
       strip-ansi: 5.2.0
 
+  wrap-ansi@6.2.0:
+    dependencies:
+      ansi-styles: 4.3.0
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+
   wrap-ansi@7.0.0:
     dependencies:
       ansi-styles: 4.3.0
@@ -16742,3 +16961,5 @@ snapshots:
   yocto-queue@0.1.0: {}
 
   yocto-queue@1.2.0: {}
+
+  yoctocolors-cjs@2.1.2: {}

@@ -110,9 +110,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_order_api_get_all_fields(): void {
 		$expected_response_fields = $this->get_expected_response_fields();
 
-		$order    = OrderHelper::create_order();
+		$order       = OrderHelper::create_order();
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response = $this->server->dispatch( $request );
+		$response    = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
 
@@ -123,13 +123,10 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 	}
 
-	/**
-	 *
-	 */
 	public function test_order_api_get_all_ids(): void {
 		$order1    = OrderHelper::create_order();
 		$order2    = OrderHelper::create_order();
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array( 'id' ) );
 
@@ -137,18 +134,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data    = $response->get_data();
-		$ids  = wp_list_pluck( $data, 'id' );
+		$ids     = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
 	public function test_order_api_get_all_ids_with_date_modified_gmt(): void {
 		$order1    = OrderHelper::create_order();
 		$order2    = OrderHelper::create_order();
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'posts_per_page', -1 );
 		$request->set_param( 'fields', array( 'id', 'date_modified_gmt' ) );
 
@@ -156,11 +150,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data    = $response->get_data();
-		$ids  = wp_list_pluck( $data, 'id' );
+		$ids     = wp_list_pluck( $data, 'id' );
 
 		$this->assertEqualsCanonicalizing( array( $order1->get_id(), $order2->get_id() ), $ids );
 
-				// Verify that date_modified_gmt is present for all products and correctly formatted.
+		// Verify that date_modified_gmt is present for all products and correctly formatted.
 		foreach ( $data as $d ) {
 			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for product ID {$d['id']}." );
 			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for product ID {$d['id']} is not correctly formatted." );
@@ -207,7 +201,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'status',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -220,7 +214,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'status',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -238,7 +232,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'customer_id',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -251,7 +245,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'customer_id',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -268,7 +262,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'payment_method',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response        = $this->server->dispatch( $request );
@@ -281,7 +275,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'payment_method',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response        = $this->server->dispatch( $request );
@@ -298,7 +292,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'total',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -311,7 +305,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'total',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response = $this->server->dispatch( $request );
@@ -497,7 +491,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$email         = 'sendtest@example.com';
 		$email_sent    = false;
 		$note_added    = false;
-		$expected_note = sprintf( 'Order details manually sent to %s from WooCommerce POS.', $email );
+		$expected_note = \sprintf( 'Order details manually sent to %s from WooCommerce POS.', $email );
 
 		$email_sent_callback = function () use ( &$email_sent ): void {
 			$email_sent = true;
@@ -643,10 +637,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_id() {
+	public function test_order_search_by_id(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 
@@ -662,10 +653,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_billing_first_name() {
+	public function test_order_search_by_billing_first_name(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 		$order2->set_billing_first_name( 'John' );
@@ -683,10 +671,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_billing_last_name() {
+	public function test_order_search_by_billing_last_name(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 		$order1->set_billing_last_name( 'Doe' );
@@ -704,10 +689,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_billing_email() {
+	public function test_order_search_by_billing_email(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 		$order1->set_billing_email( 'posuser@example.com' );
@@ -725,10 +707,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_id_with_includes() {
+	public function test_order_search_by_id_with_includes(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 
@@ -742,10 +721,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 0, \count( $data ) );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_id_with_excludes() {
+	public function test_order_search_by_id_with_excludes(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 
@@ -759,10 +735,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 0, \count( $data ) );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_billing_first_name_with_includes() {
+	public function test_order_search_by_billing_first_name_with_includes(): void {
 		$order1 = OrderHelper::create_order();
 		$order1->set_billing_first_name( 'John' );
 		$order1->save();
@@ -783,10 +756,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_order_search_by_billing_first_name_with_excludes() {
+	public function test_order_search_by_billing_first_name_with_excludes(): void {
 		$order1 = OrderHelper::create_order();
 		$order1->set_billing_first_name( 'John' );
 		$order1->save();
@@ -807,10 +777,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_create_order_with_decimal_quantity() {
+	public function test_create_order_with_decimal_quantity(): void {
 		$this->setup_decimal_quantity_tests();
 
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
@@ -833,10 +800,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_filter_order_by_cashier() {
+	public function test_filter_order_by_cashier(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 		$order2->add_meta_data( '_pos_user', 4, true );
@@ -854,10 +818,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_filter_order_by_store() {
+	public function test_filter_order_by_store(): void {
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
 		$order2->add_meta_data( '_pos_store', 64, true );
@@ -873,5 +834,34 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$ids      = wp_list_pluck( $data, 'id' );
 		$this->assertEquals( array( $order2->get_id() ), $ids );
+	}
+
+	/**
+	 * BUG: miscellanous products are not saving the SKU
+	 * https://github.com/wcpos/woocommerce-pos/issues/398.
+	 */
+	public function test_order_with_miscellaneous_product_with_sku(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'payment_method' => 'pos_cash',
+				'line_items'     => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Miscellaneous',
+						'quantity'   => 1,
+						'sku'        => 'SKU-123',
+						'price'      => 100,
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertEquals( 201, $response->get_status() );
+
+		// Check if the SKU is saved
+		$this->assertEquals( 'SKU-123', $data['line_items'][0]['sku'] );
 	}
 }

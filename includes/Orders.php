@@ -11,18 +11,17 @@
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
+use WC_Order;
 use WC_Product;
 use WC_Product_Simple;
-use WC_Order;
 
 /**
  * Orders Class
- * - runs for all life cycles
+ * - runs for all life cycles.
  */
 class Orders {
-
 	/**
-	 * Constructor
+	 * Constructor.
 	 */
 	public function __construct() {
 		$this->register_order_status();
@@ -122,8 +121,6 @@ class Orders {
 	}
 
 	/**
-	 *
-	 *
 	 * @param string            $status
 	 * @param int               $id
 	 * @param WC_Abstract_Order $order
@@ -150,7 +147,9 @@ class Orders {
 	}
 
 	/**
-	 *
+	 * @param mixed $enabled
+	 * @param mixed $order
+	 * @param mixed $email_class
 	 */
 	public function manage_admin_emails( $enabled, $order, $email_class ) {
 		if ( ! woocommerce_pos_request() ) {
@@ -161,7 +160,9 @@ class Orders {
 	}
 
 	/**
-	 *
+	 * @param mixed $enabled
+	 * @param mixed $order
+	 * @param mixed $email_class
 	 */
 	public function manage_customer_emails( $enabled, $order, $email_class ) {
 		if ( ! woocommerce_pos_request() ) {
@@ -169,6 +170,106 @@ class Orders {
 		}
 
 		return woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+	}
+
+	/**
+	 * Filter the product object for an order item.
+	 *
+	 * @param bool|WC_Product       $product The product object or false if not found
+	 * @param WC_Order_Item_Product $item    The order item object
+	 *
+	 * @return bool|WC_Product
+	 */
+	public function order_item_product( $product, $item ) {
+		if ( ! $product && 0 === $item->get_product_id() ) {
+			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
+			$product = new WC_Product_Simple();
+
+			// set name & sku
+			$product->set_name( $item->get_name() );
+			$product->set_sku( $item->get_meta( '_sku', true ) ?: '' );
+
+			// set price and regular_price
+			$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
+			$pos_data      = json_decode( $pos_data_json, true );
+
+			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+				if ( isset( $pos_data['price'] ) ) {
+					$product->set_price( $pos_data['price'] );
+					$product->set_sale_price( $pos_data['price'] );
+				}
+				if ( isset( $pos_data['regular_price'] ) ) {
+					$product->set_regular_price( $pos_data['regular_price'] );
+				}
+				if ( isset( $pos_data['tax_status'] ) ) {
+					$product->set_tax_status( $pos_data['tax_status'] );
+				}
+			}
+		}
+
+		return $product;
+	}
+
+	/**
+	 * Get tax location for this order.
+	 *
+	 * @param array             $args  array Override the location.
+	 * @param WC_Abstract_Order $order The order object.
+	 *
+	 * @return array
+	 */
+	public function get_tax_location( $args, WC_Abstract_Order $order ) {
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $args;
+		}
+
+		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
+
+		if ( $order instanceof WC_Order ) {
+			if ( 'billing' == $tax_based_on ) {
+				$args['country']  = $order->get_billing_country();
+				$args['state']    = $order->get_billing_state();
+				$args['postcode'] = $order->get_billing_postcode();
+				$args['city']     = $order->get_billing_city();
+			} elseif ( 'shipping' == $tax_based_on ) {
+				$args['country']  = $order->get_shipping_country();
+				$args['state']    = $order->get_shipping_state();
+				$args['postcode'] = $order->get_shipping_postcode();
+				$args['city']     = $order->get_shipping_city();
+			} else {
+				$args['country']  = WC()->countries->get_base_country();
+				$args['state']    = WC()->countries->get_base_state();
+				$args['postcode'] = WC()->countries->get_base_postcode();
+				$args['city']     = WC()->countries->get_base_city();
+			}
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Calculate taxes for an order item.
+	 *
+	 * @param WC_Order_Item|WC_Order_Item_Shipping $item Order item object.
+	 */
+	public function order_item_after_calculate_taxes( $item ): void {
+		$meta_data = $item->get_meta_data();
+
+		foreach ( $meta_data as $meta ) {
+			foreach ( $meta_data as $meta ) {
+				if ( '_woocommerce_pos_data' === $meta->key ) {
+					$pos_data = json_decode( $meta->value, true );
+
+					if ( JSON_ERROR_NONE === json_last_error() ) {
+						if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
+							$item->set_taxes( false );
+						}
+					} else {
+						Logger::log( 'JSON parse error: ' . json_last_error_msg() );
+					}
+				}
+			}
+		}
 	}
 
 	/**
@@ -210,85 +311,5 @@ class Orders {
 				),
 			)
 		);
-	}
-
-	/**
-	 * Filter the product object for an order item.
-	 *
-	 * @param WC_Product|bool       $product The product object or false if not found
-	 * @param WC_Order_Item_Product $item    The order item object
-	 *
-	 * @return WC_Product|bool
-	 */
-	public function order_item_product( $product, $item ) {
-		if ( ! $product ) {
-			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
-			$product = new WC_Product_Simple();
-			$product->set_name( $item->get_name() );
-		}
-
-		return $product;
-	}
-
-	/**
-	 * Get tax location for this order.
-	 *
-	 * @param array             $args array Override the location.
-	 * @param WC_Abstract_Order $order The order object.
-	 *
-	 * @return array
-	 */
-	public function get_tax_location( $args, WC_Abstract_Order $order ) {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
-			return $args;
-		}
-
-		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
-
-		if ( $order instanceof WC_Order ) {
-			if ( 'billing' == $tax_based_on ) {
-				$args['country']  = $order->get_billing_country();
-				$args['state']    = $order->get_billing_state();
-				$args['postcode'] = $order->get_billing_postcode();
-				$args['city']     = $order->get_billing_city();
-			} elseif ( 'shipping' == $tax_based_on ) {
-				$args['country']  = $order->get_shipping_country();
-				$args['state']    = $order->get_shipping_state();
-				$args['postcode'] = $order->get_shipping_postcode();
-				$args['city']     = $order->get_shipping_city();
-			} else {
-				$args['country']  = WC()->countries->get_base_country();
-				$args['state']    = WC()->countries->get_base_state();
-				$args['postcode'] = WC()->countries->get_base_postcode();
-				$args['city']     = WC()->countries->get_base_city();
-			}
-		}
-
-		return $args;
-	}
-
-	/**
-	 * Calculate taxes for an order item.
-	 *
-	 * @param WC_Order_Item|WC_Order_Item_Shipping $item Order item object.
-	 */
-	public function order_item_after_calculate_taxes( $item ) {
-		$meta_data = $item->get_meta_data();
-
-		foreach ( $meta_data as $meta ) {
-			foreach ( $meta_data as $meta ) {
-				if ( '_woocommerce_pos_data' === $meta->key ) {
-					$pos_data = json_decode( $meta->value, true );
-
-					if ( json_last_error() === JSON_ERROR_NONE ) {
-						if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
-							$item->set_taxes( false );
-						}
-					} else {
-						Logger::log( 'JSON parse error: ' . json_last_error_msg() );
-					}
-				}
-			}
-		}
 	}
 }
