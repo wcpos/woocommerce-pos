@@ -1,17 +1,17 @@
-# Copyright (C) 2024 kilbot
+# Copyright (C) 2025 kilbot
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WooCommerce POS 1.7.1\n"
+"Project-Id-Version: WooCommerce POS 1.7.8\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2024-11-14T18:54:59+00:00\n"
+"POT-Creation-Date: 2025-05-21T10:48:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"X-Generator: WP-CLI 2.11.0\n"
+"X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
 
 #. Plugin Name of the plugin
@@ -34,9 +34,11 @@ msgstr ""
 msgid "http://wcpos.com"
 msgstr ""
 
+#, php-format
 msgid "<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
+#, php-format
 msgid "<strong>WooCommerce POS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
 
@@ -49,6 +51,7 @@ msgstr ""
 msgid "Cashier"
 msgstr ""
 
+#, php-format
 msgid "<strong>WooCommerce POS</strong> requires <a href=\"%1$s\">WooCommerce POS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce POS Pro</a>"
 msgstr ""
 
@@ -71,6 +74,7 @@ msgid "Search for a cashier&hellip;"
 msgstr ""
 
 #. translators: 1: old POS cashier, 2: new POS cashier
+#, php-format
 msgid "POS cashier changed from %1$s to %2$s."
 msgstr ""
 
@@ -126,12 +130,14 @@ msgstr ""
 msgid "Your WooCommerce Pro license is inactive."
 msgstr ""
 
+#, php-format
 msgid "<a href=\"%s\">Click here</a> to activate your license key."
 msgstr ""
 
 msgid "Your WooCommerce Pro license has expired."
 msgstr ""
 
+#, php-format
 msgid "<a href=\"%s\">Please renew</a> to receive updates."
 msgstr ""
 
@@ -162,9 +168,11 @@ msgstr ""
 msgid "Filter orders by POS store."
 msgstr ""
 
+#, php-format
 msgid "Email address %s added to billing details from WooCommerce POS."
 msgstr ""
 
+#, php-format
 msgid "Order details manually sent to %s from WooCommerce POS."
 msgstr ""
 
@@ -195,6 +203,9 @@ msgstr ""
 msgid "Cashback"
 msgstr ""
 
+msgid "Nonce verification failed"
+msgstr ""
+
 msgid "Cash"
 msgstr ""
 
@@ -202,9 +213,6 @@ msgid "Amount Tendered"
 msgstr ""
 
 msgid "Change"
-msgstr ""
-
-msgid "Nonce verification failed"
 msgstr ""
 
 msgid "Partial Payment"
@@ -226,12 +234,14 @@ msgid "POS - Partial Payment"
 msgstr ""
 
 #. translators: %s is the number of orders with POS - Open status
+#, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
 msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %s is the number of orders with POS - Partial Payment status
+#, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgstr[0] ""
@@ -241,14 +251,17 @@ msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
 #. translators: 1. %s: Settings group id, 2. %s: Settings key
+#, php-format
 msgid "Settings with id %1$s and key %2$s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'
+#, php-format
 msgid "Settings with id %s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'
+#, php-format
 msgid "Can not save settings with id %s"
 msgstr ""
 
