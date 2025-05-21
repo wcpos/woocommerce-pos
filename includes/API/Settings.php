@@ -3,16 +3,16 @@
 namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 use WP_Error;
+use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use WP_REST_Controller;
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 /**
- * Class Settings REST API
+ * Class Settings REST API.
  */
 class Settings extends WP_REST_Controller {
 	/**
@@ -152,7 +152,7 @@ class Settings extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_access_settings' ),
-				'permission_callback' => array( $this, 'access_permission_check' ),
+				'permission_callback' => array( $this, 'update_access_permission_check' ),
 			)
 		);
 
@@ -172,7 +172,7 @@ class Settings extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_tools_settings' ),
-				'permission_callback' => array( $this, 'access_permission_check' ),
+				'permission_callback' => array( $this, 'update_permission_check' ),
 			)
 		);
 
@@ -405,6 +405,7 @@ class Settings extends WP_REST_Controller {
 		$updated_settings = array_replace_recursive( $old_settings, $request->get_json_params() );
 
 		$settings_service = SettingsService::instance();
+
 		return $settings_service->save_settings( 'payment_gateways', $updated_settings );
 	}
 
@@ -419,9 +420,10 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
 		$old_settings = woocommerce_pos_get_settings( 'general' );
-		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
+		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
 
 		$settings_service = SettingsService::instance();
+
 		return $settings_service->save_settings( 'general', $settings );
 	}
 
@@ -436,9 +438,10 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
 		$old_settings = woocommerce_pos_get_settings( 'checkout' );
-		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
+		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
 
 		$settings_service = SettingsService::instance();
+
 		return $settings_service->save_settings( 'checkout', $settings );
 	}
 
@@ -501,9 +504,10 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_tools_settings( WP_REST_Request $request ) {
 		$old_settings = woocommerce_pos_get_settings( 'tools' );
-		$settings = array_replace_recursive( $old_settings, $request->get_json_params() );
+		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
 
 		$settings_service = SettingsService::instance();
+
 		return $settings_service->save_settings( 'tools', $settings );
 	}
 
@@ -513,8 +517,7 @@ class Settings extends WP_REST_Controller {
 	 * @return bool
 	 */
 	public function read_permission_check(): bool {
-		// return current_user_can( 'manage_woocommerce_pos' );
-		return true;
+		return current_user_can( 'manage_woocommerce_pos' );
 	}
 
 	/**
@@ -527,8 +530,8 @@ class Settings extends WP_REST_Controller {
 	/**
 	 * @return bool
 	 */
-	public function access_permission_check(): bool {
-		return current_user_can( 'promote_users' );
+	public function update_access_permission_check(): bool {
+		return current_user_can( 'edit_users' ) && current_user_can( 'promote_users' );
 	}
 
 	/**
@@ -549,9 +552,12 @@ class Settings extends WP_REST_Controller {
 
 	/**
 	 * Temporary fix for stale license status transient. Remove when possible.
+	 *
+	 * @param mixed $value
 	 */
 	public function remove_license_transient( $value ) {
 		delete_transient( 'woocommerce_pos_pro_license_status' );
+
 		return $value;
 	}
 }

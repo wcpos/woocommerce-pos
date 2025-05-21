@@ -3,20 +3,13 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Payment_Gateways;
-use WP_Error;
 use const WCPOS\WooCommercePOS\VERSION;
+use WP_Error;
 
 /**
  * Settings Service class.
  */
 class Settings {
-	/**
-	 * The single instance of the class.
-	 *
-	 * @var Settings|null
-	 */
-	private static $instance = null;
-
 	/**
 	 * Prefix for the $wpdb->options table.
 	 *
@@ -56,7 +49,7 @@ class Settings {
 				'woocommerce-blocktheme',
 				'wp-block-library',
 			),
-			'disable_wp_head' => false,
+			'disable_wp_head'   => false,
 			'disable_wp_footer' => false,
 		),
 		'payment_gateways' => array(
@@ -98,6 +91,12 @@ class Settings {
 			),
 		),
 	);
+	/**
+	 * The single instance of the class.
+	 *
+	 * @var null|Settings
+	 */
+	private static $instance = null;
 
 	/**
 	 * @var array
@@ -108,19 +107,21 @@ class Settings {
 			'manage_woocommerce_pos', // pos admin
 		),
 		'wc' => array(
-			'create_users',
-			'edit_others_products',
-			'edit_others_shop_orders',
+			// 'create_customers', // coming in WooCommerce 9.0?
+			'read_private_products',
 			'edit_product',
+			'edit_others_products',
 			'edit_published_products',
+			'read_private_shop_orders',
+			'publish_shop_orders',
+			// 'promote_users', // for some reason Shop Manager needs this to create customers?
 			'edit_shop_orders',
+			'edit_others_shop_orders',
+			'create_users',
 			'edit_users',
 			'list_users',
 			'manage_product_terms',
-			'publish_shop_orders',
-			'read_private_products',
 			'read_private_shop_coupons',
-			'read_private_shop_orders',
 		),
 		'wp' => array(
 			'read', // wp-admin access
@@ -128,23 +129,24 @@ class Settings {
 	);
 
 	/**
-	 * Gets the singleton instance.
-	 *
-	 * @return Settings
-	 */
-	public static function instance(): Settings {
-		if ( null === self::$instance ) {
-				self::$instance = new self();
-		}
-		return self::$instance;
-	}
-
-	/**
 	 * Constructor is private to prevent direct instantiation.
 	 * Use woocommerce_pos_get_settings() instead.
 	 * Or Settings::instance() if you must.
 	 */
 	private function __construct() {
+	}
+
+	/**
+	 * Gets the singleton instance.
+	 *
+	 * @return Settings
+	 */
+	public static function instance(): self {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+
+		return self::$instance;
 	}
 
 	/**
@@ -168,7 +170,7 @@ class Settings {
 				return new WP_Error(
 					'woocommerce_pos_settings_error',
 					// translators: 1. %s: Settings group id, 2. %s: Settings key
-					sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
+					\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
 					array( 'status' => 400 )
 				);
 			}
@@ -179,7 +181,7 @@ class Settings {
 		return new WP_Error(
 			'woocommerce_pos_settings_error',
 			// translators: %s: Settings group id, ie: 'general' or 'checkout'
-			sprintf( __( 'Settings with id %s not found', 'woocommerce-pos' ), $id ),
+			\sprintf( __( 'Settings with id %s not found', 'woocommerce-pos' ), $id ),
 			array( 'status' => 400 )
 		);
 	}
@@ -187,7 +189,7 @@ class Settings {
 	/**
 	 * Saves settings for a specific section.
 	 *
-	 * @param string $id The ID of the settings section being saved.
+	 * @param string $id       The ID of the settings section being saved.
 	 * @param array  $settings The settings array to be saved.
 	 *
 	 * @return array|WP_Error Returns the updated settings array on success or WP_Error on failure.
@@ -215,7 +217,7 @@ class Settings {
 		if ( $success ) {
 			$saved_settings = $this->get_settings( $id );
 
-			/**
+			/*
 			 * Fires after settings for a specific section are successfully saved.
 			 *
 			 * Provides a way to execute additional logic after a specific settings section is updated.
@@ -233,7 +235,7 @@ class Settings {
 		return new WP_Error(
 			'woocommerce_pos_settings_error',
 			// translators: %s: Settings group id, ie: 'general' or 'checkout'
-			sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
+			\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
 			array( 'status' => 400 )
 		);
 	}
@@ -481,10 +483,11 @@ class Settings {
 	 * Update visibility settings.
 	 *
 	 * @param array $args The visibility settings to update.
+	 *
 	 * @return bool|WP_Error True on success, WP_Error on failure.
 	 */
 	public function update_visibility_settings( array $args ) {
-			// Validate and normalize arguments.
+		// Validate and normalize arguments.
 		if ( empty( $args['post_type'] ) || ! isset( $args['ids'] ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
@@ -497,7 +500,7 @@ class Settings {
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
 		// Check if visibility is set and valid.
-		if ( ! isset( $args['visibility'] ) || ! in_array( $args['visibility'], $valid_options, true ) ) {
+		if ( ! isset( $args['visibility'] ) || ! \in_array( $args['visibility'], $valid_options, true ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
 				__( 'Invalid visibility option provided', 'woocommerce-pos' ),
@@ -505,21 +508,21 @@ class Settings {
 			);
 		}
 
-		$post_type = $args['post_type'];
-		$scope = $args['scope'] ?? 'default';
+		$post_type  = $args['post_type'];
+		$scope      = $args['scope']      ?? 'default';
 		$visibility = $args['visibility'] ?? '';
-		$ids = is_array( $args['ids'] ) ? $args['ids'] : array( $args['ids'] );
-		$ids = array_filter( array_map( 'intval', $ids ) ); // Force to array of integers.
+		$ids        = \is_array( $args['ids'] ) ? $args['ids'] : array( $args['ids'] );
+		$ids        = array_filter( array_map( 'intval', $ids ) ); // Force to array of integers.
 
 		// Get the current visibility settings.
 		$current_settings = $this->get_visibility_settings();
 
 		// Define the opposite visibility type.
-		$opposite_visibility = ( $visibility === 'pos_only' ) ? 'online_only' : 'pos_only';
+		$opposite_visibility = ( 'pos_only' === $visibility ) ? 'online_only' : 'pos_only';
 
 		// Add or remove IDs based on the visibility type.
 		foreach ( $ids as $id ) {
-			if ( $visibility === '' ) {
+			if ( '' === $visibility ) {
 				// Remove from both pos_only and online_only.
 				$current_settings[ $post_type ][ $scope ]['pos_only']['ids'] = $this->remove_id_from_visibility(
 					$current_settings[ $post_type ][ $scope ]['pos_only']['ids'],
@@ -547,39 +550,9 @@ class Settings {
 	}
 
 	/**
-	 * Add an ID to a visibility type if it doesn't already exist.
-	 *
-	 * @param array $ids The current array of IDs.
-	 * @param int   $id The ID to add.
-	 * @return array The updated array of IDs.
-	 */
-	private function add_id_to_visibility( array $ids, int $id ): array {
-		if ( ! in_array( $id, $ids, true ) ) {
-			$ids[] = $id;
-		}
-		return $ids;
-	}
-
-	/**
-	 * Remove an ID from a visibility type if it exists.
-	 *
-	 * @param array $ids The current array of IDs.
-	 * @param int   $id The ID to remove.
-	 * @return array The updated array of IDs.
-	 */
-	private function remove_id_from_visibility( array $ids, int $id ): array {
-		return array_filter(
-			$ids,
-			function ( $existing_id ) use ( $id ) {
-				return $existing_id !== $id;
-			}
-		);
-	}
-
-	/**
 	 * Get product visibility settings.
 	 *
-	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
 	 *
 	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
 	 */
@@ -600,7 +573,7 @@ class Settings {
 	/**
 	 * Get product visibility settings.
 	 *
-	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
 	 *
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
@@ -618,13 +591,13 @@ class Settings {
 		return apply_filters( 'woocommerce_pos_pos_only_product_visibility_settings', $settings['pos_only'], $scope );
 	}
 
-		/**
-		 * Get product visibility settings.
-		 *
-		 * @param string $scope  The scope of the settings to get. 'default' or store ID.
-		 *
-		 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
-		 */
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+	 */
 	public function get_online_only_product_visibility_settings( $scope = 'default' ) {
 		$settings = $this->get_product_visibility_settings( $scope );
 
@@ -642,7 +615,7 @@ class Settings {
 	/**
 	 * Get product visibility settings.
 	 *
-	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
 	 *
 	 * @return array $settings The product visibility settings, eg: { pos_only: { ids: [1, 2, 3] }, online_only: { ids: [4, 5, 6] }
 	 */
@@ -663,7 +636,7 @@ class Settings {
 	/**
 	 * Get product visibility settings.
 	 *
-	 * @param string $scope  The scope of the settings to get. 'default' or store ID.
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
 	 *
 	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
 	 */
@@ -681,13 +654,13 @@ class Settings {
 		return apply_filters( 'woocommerce_pos_pos_only_variations_visibility_settings', $settings['pos_only'], $scope );
 	}
 
-		/**
-		 * Get product visibility settings.
-		 *
-		 * @param string $scope  The scope of the settings to get. 'default' or store ID.
-		 *
-		 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
-		 */
+	/**
+	 * Get product visibility settings.
+	 *
+	 * @param string $scope The scope of the settings to get. 'default' or store ID.
+	 *
+	 * @return array $settings The product visibility settings, eg: { ids: [1, 2, 3] }
+	 */
 	public function get_online_only_variations_visibility_settings( $scope = 'default' ) {
 		$settings = $this->get_variations_visibility_settings( $scope );
 
@@ -705,61 +678,61 @@ class Settings {
 	/**
 	 * Check if a product is POS only.
 	 *
-	 * @param string|int $product_id
+	 * @param int|string $product_id
 	 *
 	 * @return bool
 	 */
 	public function is_product_pos_only( $product_id ) {
-		$product_id = (int) $product_id;
-		$settings = $this->get_pos_only_product_visibility_settings();
+		$product_id   = (int) $product_id;
+		$settings     = $this->get_pos_only_product_visibility_settings();
 		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
 
-		return in_array( $product_id, $pos_only_ids, true );
+		return \in_array( $product_id, $pos_only_ids, true );
 	}
 
 	/**
 	 * Check if a product is Online only.
 	 *
-	 * @param string|int $product_id
+	 * @param int|string $product_id
 	 *
 	 * @return bool
 	 */
 	public function is_product_online_only( $product_id ) {
-		$product_id = (int) $product_id;
-		$settings = $this->get_online_only_product_visibility_settings();
+		$product_id      = (int) $product_id;
+		$settings        = $this->get_online_only_product_visibility_settings();
 		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
 
-		return in_array( $product_id, $online_only_ids, true );
+		return \in_array( $product_id, $online_only_ids, true );
 	}
 
 	/**
 	 * Check if a variation is POS only.
 	 *
-	 * @param string|int $variation_id
+	 * @param int|string $variation_id
 	 *
 	 * @return bool
 	 */
 	public function is_variation_pos_only( $variation_id ) {
 		$variation_id = (int) $variation_id;
-		$settings = $this->get_pos_only_variations_visibility_settings();
+		$settings     = $this->get_pos_only_variations_visibility_settings();
 		$pos_only_ids = array_map( 'intval', (array) $settings['ids'] );
 
-		return in_array( $variation_id, $pos_only_ids, true );
+		return \in_array( $variation_id, $pos_only_ids, true );
 	}
 
-		/**
-		 * Check if a variation is Online only.
-		 *
-		 * @param string|int $variation_id
-		 *
-		 * @return bool
-		 */
+	/**
+	 * Check if a variation is Online only.
+	 *
+	 * @param int|string $variation_id
+	 *
+	 * @return bool
+	 */
 	public function is_variation_online_only( $variation_id ) {
-		$variation_id = (int) $variation_id;
-		$settings = $this->get_online_only_variations_visibility_settings();
+		$variation_id    = (int) $variation_id;
+		$settings        = $this->get_online_only_variations_visibility_settings();
 		$online_only_ids = array_map( 'intval', (array) $settings['ids'] );
 
-		return in_array( $variation_id, $online_only_ids, true );
+		return \in_array( $variation_id, $online_only_ids, true );
 	}
 
 
@@ -808,5 +781,38 @@ class Settings {
 	 */
 	public static function bump_versions(): void {
 		update_option( 'woocommerce_pos_db_version', VERSION );
+	}
+
+	/**
+	 * Add an ID to a visibility type if it doesn't already exist.
+	 *
+	 * @param array $ids The current array of IDs.
+	 * @param int   $id  The ID to add.
+	 *
+	 * @return array The updated array of IDs.
+	 */
+	private function add_id_to_visibility( array $ids, int $id ): array {
+		if ( ! \in_array( $id, $ids, true ) ) {
+			$ids[] = $id;
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Remove an ID from a visibility type if it exists.
+	 *
+	 * @param array $ids The current array of IDs.
+	 * @param int   $id  The ID to remove.
+	 *
+	 * @return array The updated array of IDs.
+	 */
+	private function remove_id_from_visibility( array $ids, int $id ): array {
+		return array_filter(
+			$ids,
+			function ( $existing_id ) use ( $id ) {
+				return $existing_id !== $id;
+			}
+		);
 	}
 }

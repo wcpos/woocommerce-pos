@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.8
+Stable tag: 1.7.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -87,6 +87,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.9 - 2025/05/21 =
+* Security Fix: fix missing authorisation on reading POS settings API (low severity), reported by Marek Mikita (patchstack)
+* Fix: Add SKU and prices to Miscellaneous Products
+* Fix: Update Card Gateway for HPOS compatibility
 
 = 1.7.8 - 2025/05/06 = 
 * Fix: disable Lite Speed caching for POS templates, causing issues with checkout
