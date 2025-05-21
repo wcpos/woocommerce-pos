@@ -12,7 +12,6 @@
 
 namespace WCPOS\WooCommercePOS\Gateways;
 
-use WC_Order;
 use WC_Payment_Gateway;
 
 class Card extends WC_Payment_Gateway {
@@ -64,6 +63,7 @@ class Card extends WC_Payment_Gateway {
           <input type="text" class="form-control" name="pos-cashback" id="pos-cashback" placeholder="" maxlength="20" data-value="0" data-numpad="cash" data-label="' . __( 'Cashback', 'woocommerce-pos' ) . '">
         ' . $right_addon . '
         </div>
+		' . wp_nonce_field( 'pos_card_payment_nonce', 'pos_card_payment_nonce_field' ) . '
       </div>
     ';
 	}
@@ -74,16 +74,21 @@ class Card extends WC_Payment_Gateway {
 	 * @return array
 	 */
 	public function process_payment( $order_id ) {
-		// get order object
-		$order = new WC_Order( $order_id );
+		// Check nonce
+		if ( ! isset( $_POST['pos_card_payment_nonce_field'] ) || ! wp_verify_nonce( $_POST['pos_card_payment_nonce_field'], 'pos_card_payment_nonce' ) ) {
+			wp_die( __( 'Nonce verification failed', 'woocommerce-pos' ) );
+		}
 
-		// update pos_cash data
-		// $data     = API::get_raw_data();
-		$cashback = isset( $data['payment_details']['pos-cashback'] ) ? wc_format_decimal( $data['payment_details']['pos-cashback'] ) : 0;
+		// get order object
+		$order = wc_get_order( $order_id );
+
+		if ( isset( $_POST['pos-cashback'] ) && ! empty( $_POST['pos-cashback'] ) ) {
+			$cashback = wc_format_decimal( wp_unslash( $_POST['pos-cashback'] ) );
+		}
 
 		if ( 0 !== $cashback ) {
 			// add order meta
-			update_post_meta( $order_id, '_pos_card_cashback', $cashback );
+			$order->update_meta_data( '_pos_card_cashback', $cashback );
 
 			// add cashback as fee line item
 			// TODO: this should be handled by $order->add_fee after WC 2.2
@@ -104,9 +109,8 @@ class Card extends WC_Payment_Gateway {
 			}
 
 			// update the order total to include fee
-			$order_total = get_post_meta( $order_id, '_order_total', true );
-			$order_total += $cashback;
-			update_post_meta( $order_id, '_order_total', $order_total );
+			$order->set_total( wc_format_decimal( \floatval( $order->get_total() ) + \floatval( $cashback ) ) );
+			$order->save();
 		}
 
 		// payment complete
@@ -124,7 +128,8 @@ class Card extends WC_Payment_Gateway {
 	 */
 	public function calculate_cashback( $order_id ): void {
 		$message  = '';
-		$cashback = get_post_meta( $order_id, '_pos_card_cashback', true );
+		$order    = wc_get_order( $order_id );
+		$cashback = $order->get_meta( '_pos_card_cashback' );
 
 		// construct message
 		if ( $cashback ) {
