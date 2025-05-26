@@ -82,6 +82,7 @@ class Card extends WC_Payment_Gateway {
 		// get order object
 		$order = wc_get_order( $order_id );
 
+		$cashback = 0; // Initialize with default value
 		if ( isset( $_POST['pos-cashback'] ) && ! empty( $_POST['pos-cashback'] ) ) {
 			$cashback = wc_format_decimal( wp_unslash( $_POST['pos-cashback'] ) );
 		}
