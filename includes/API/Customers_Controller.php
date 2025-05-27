@@ -12,11 +12,11 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_User;
 use WP_User_Query;
-use WP_Error;
 
 /**
  * Product Tgas controller class.
@@ -24,9 +24,9 @@ use WP_Error;
  * @NOTE: methods not prefixed with wcpos_ will override WC_REST_Customers_Controller methods
  */
 class Customers_Controller extends WC_REST_Customers_Controller {
+	use Traits\Query_Helpers;
 	use Traits\Uuid_Handler;
 	use Traits\WCPOS_REST_API;
-	use Traits\Query_Helpers;
 
 	/**
 	 * Endpoint namespace.
@@ -63,11 +63,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'wcpos_customer_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'wcpos_customer_query' ), 10, 2 );
 
-		/**
+		/*
 		 * Check if the request is for all customers and if the 'posts_per_page' is set to -1.
 		 * Optimised query for getting all customer IDs.
 		 */
-		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+		if ( -1 == $request->get_param( 'posts_per_page' ) && null !== $request->get_param( 'fields' ) ) {
 			return $this->wcpos_get_all_posts( $request );
 		}
 
@@ -138,7 +138,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return $valid_email;
 		}
 
-		/**
+		/*
 		 * Generate a password for the new user.
 		 * Add filter for get_option key 'woocommerce_registration_generate_password' to ensure it is set to 'yes'.
 		 */
@@ -184,7 +184,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
 
 		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
-			return new \WP_Error(
+			return new WP_Error(
 				'rest_invalid_param',
 				// translators: Use default WordPress translation
 				__( 'Invalid email address.' ),
@@ -212,10 +212,15 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		 * Add the customer meta data to the response
 		 *
 		 * In the WC REST Customers Controller -> get_formatted_item_data_core function, the customer's
-		 * meta_data is only added for administrators. I assume this is for privacy/security reasons.
+		 * meta_data is only added for administrators. I assume this is for privacy/security reasons?
 		 *
-		 * NOTE: for now we are only adding the uuid meta_data
-		 * @TODO - are there any other meta_data we need to add?
+		 * Even for administrators, meta data starting with '_' will be filtered out.
+		 * We need to add the uuid meta_data to the response for all cashiers and also non-protected meta.
+		 *
+		 * This means we let of junk meta_data into the response, but at least we don't block data and allow
+		 * saving of meta_data.
+		 *
+		 * @TODO - add filter settings to block/allow meta_data keys
 		 */
 		try {
 			$customer           = new WC_Customer( $user_data->ID );
@@ -224,7 +229,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$filtered_meta_data = array_filter(
 				$raw_meta_data,
 				function ( $meta ) {
-					return '_woocommerce_pos_uuid' === $meta->key;
+					return '_woocommerce_pos_uuid' === $meta->key || ! is_protected_meta( $meta->key, 'user' );
 				}
 			);
 
@@ -259,7 +264,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return WP_REST_Response|WP_Error
+	 * @return WP_Error|WP_REST_Response
 	 */
 	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
@@ -267,9 +272,9 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// Start timing execution
 		$start_time = microtime( true );
 
-		$modified_after = $request->get_param( 'modified_after' );
-		$dates_are_gmt = true;
-		$fields = $request->get_param( 'fields' );
+		$modified_after        = $request->get_param( 'modified_after' );
+		$dates_are_gmt         = true;
+		$fields                = $request->get_param( 'fields' );
 		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
 
 		$args = array(
@@ -277,15 +282,15 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier']
 		);
 
-		/**
+		/*
 		 * The user query is too complex to do a direct sql query, eg: multisite would return all users from all sites,
 		 * not just the current site. Also, querying by role is not as simple as querying by post type.
 		 *
 		 * For now we get all user ids and all 'last_update' meta values, then combine them into an array of objects.
 		 */
 		try {
-			$user_query = new WP_User_Query( $args );
-			$users = $user_query->get_results();
+			$user_query   = new WP_User_Query( $args );
+			$users        = $user_query->get_results();
 			$last_updates = array();
 
 			if ( $id_with_modified_date ) {
@@ -352,12 +357,12 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 
 			// Get the total number of orders for the given criteria.
-			$total = count( $formatted_results );
+			$total = \count( $formatted_results );
 
 			// Collect execution time and server load.
-			$execution_time = microtime( true ) - $start_time;
+			$execution_time    = microtime( true ) - $start_time;
 			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load = $this->get_server_load();
+			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
 			$response->header( 'X-WP-Total', (int) $total );
@@ -501,8 +506,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 
 		// Filter by roles (this is a comma separated list of roles).
-		if ( ! empty( $request['roles'] ) && is_array( $request['roles'] ) ) {
-			$roles = array_map( 'sanitize_text_field', $request['roles'] );
+		if ( ! empty( $request['roles'] ) && \is_array( $request['roles'] ) ) {
+			$roles                     = array_map( 'sanitize_text_field', $request['roles'] );
 			$prepared_args['role__in'] = $roles;
 			// remove $prepared_args['role'] to prevent it from overriding $prepared_args['role__in']
 			unset( $prepared_args['role'] );
@@ -552,7 +557,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 *
 	 * @param WP_User_Query $query The WP_User_Query instance (passed by reference).
 	 */
-	public function wcpos_include_exclude_users_by_id( $query ) {
+	public function wcpos_include_exclude_users_by_id( $query ): void {
 		global $wpdb;
 
 		// Remove the hook.
@@ -561,14 +566,14 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
-			$ids_format = implode( ',', array_fill( 0, count( $include_ids ), '%d' ) );
+			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID IN ($ids_format) ", $include_ids );
 		}
 
 		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
-			$ids_format = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID NOT IN ($ids_format) ", $exclude_ids );
 		}
 	}
