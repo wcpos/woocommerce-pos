@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.9
+Stable tag: 1.7.10
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -87,6 +87,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.10 - 2025/05/27 = 
+* Fix: Undefined variable $cashback in Card gateway
+* Fix: Allow non-protected meta_data in Customer response data
 
 = 1.7.9 - 2025/05/21 =
 * Security Fix: fix missing authorisation on reading POS settings API (low severity), reported by Marek Mikita (patchstack)
