@@ -12,10 +12,10 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
-use WCPOS\WooCommercePOS\Registry;
-use WCPOS\WooCommercePOS\Services\Settings;
-
 use const DOING_AUTOSAVE;
+use WCPOS\WooCommercePOS\Registry;
+
+use WCPOS\WooCommercePOS\Services\Settings;
 
 class Single_Product {
 	/**
@@ -34,7 +34,7 @@ class Single_Product {
 	private $pro_link = '';
 
 	public function __construct() {
-		Registry::get_instance()->set( get_class( $this ), $this );
+		Registry::get_instance()->set( static::class  , $this );
 
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 		$this->pro_link      = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
@@ -46,7 +46,7 @@ class Single_Product {
 			'online_only' => __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, array( '_sku', '_global_unique_id' ), true ) ) {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3 );
@@ -200,12 +200,12 @@ class Single_Product {
 		// Get the product and save.
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_POST['_pos_visibility'] ) && in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
+		if ( isset( $_POST['_pos_visibility'] ) && \in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
-			$args = array(
-				'post_type' => 'products',
+			$args              = array(
+				'post_type'  => 'products',
 				'visibility' => $_POST['_pos_visibility'],
-				'ids' => array( $post_id ),
+				'ids'        => array( $post_id ),
 			);
 			$settings_instance->update_visibility_settings( $args );
 		}
@@ -221,12 +221,12 @@ class Single_Product {
 			return;
 		}
 
-		$selected = '';
+		$selected          = '';
 		$settings_instance = Settings::instance();
-		$pos_only = $settings_instance->is_product_pos_only( $post->ID );
-		$online_only = $settings_instance->is_product_online_only( $post->ID );
+		$pos_only          = $settings_instance->is_product_pos_only( $post->ID );
+		$online_only       = $settings_instance->is_product_online_only( $post->ID );
 
-		 // Set $selected based on the visibility status.
+		// Set $selected based on the visibility status.
 		if ( $pos_only ) {
 			$selected = 'pos_only';
 		} elseif ( $online_only ) {
@@ -244,18 +244,17 @@ class Single_Product {
 	}
 
 	/**
-	 *
 	 * @param $loop
 	 * @param $variation_data
 	 * @param $variation
 	 */
 	public function after_variable_attributes_pos_only_products( $loop, $variation_data, $variation ): void {
-		$selected = '';
+		$selected          = '';
 		$settings_instance = Settings::instance();
-		$pos_only = $settings_instance->is_variation_pos_only( $variation->ID );
-		$online_only = $settings_instance->is_variation_online_only( $variation->ID );
+		$pos_only          = $settings_instance->is_variation_pos_only( $variation->ID );
+		$online_only       = $settings_instance->is_variation_online_only( $variation->ID );
 
-		 // Set $selected based on the visibility status.
+		// Set $selected based on the visibility status.
 		if ( $pos_only ) {
 			$selected = 'pos_only';
 		} elseif ( $online_only ) {
@@ -271,12 +270,12 @@ class Single_Product {
 	public function save_product_variation_pos_only_products( $variation_id ): void {
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) && in_array( $_POST['variable_pos_visibility'][ $variation_id ], $valid_options, true ) ) {
+		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) && \in_array( $_POST['variable_pos_visibility'][ $variation_id ], $valid_options, true ) ) {
 			$settings_instance = Settings::instance();
-			$args = array(
-				'post_type' => 'variations',
+			$args              = array(
+				'post_type'  => 'variations',
 				'visibility' => $_POST['variable_pos_visibility'][ $variation_id ],
-				'ids' => array( $variation_id ),
+				'ids'        => array( $variation_id ),
 			);
 			$settings_instance->update_visibility_settings( $args );
 		}
