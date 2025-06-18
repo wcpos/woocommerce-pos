@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.10
+Stable tag: 1.7.11
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -87,6 +87,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WooCommerce POS main screen
 
 == Changelog ==
+
+= 1.7.11 - 2025/06/18 = 
+* Fix: is_internal_meta_key errors for barcodes as '_global_unique_id'
 
 = 1.7.10 - 2025/05/27 = 
 * Fix: Undefined variable $cashback in Card gateway

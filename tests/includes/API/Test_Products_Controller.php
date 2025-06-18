@@ -227,7 +227,6 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'bar', $this->endpoint->wcpos_get_barcode( $product ) );
 	}
 
-
 	public function test_product_response_contains_barcode(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
@@ -277,6 +276,70 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'foo-12345', $data['barcode'] );
 	}
 
+	public function test_product_get_global_unique_id_as_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_global_unique_id',
+				);
+			}
+		);
+
+		$product  = ProductHelper::create_simple_product();
+		$product->set_global_unique_id( '1234567890123' );
+		$this->assertEquals( '1234567890123', $this->endpoint->wcpos_get_barcode( $product ) );
+	}
+
+	public function test_product_response_contains_global_unique_id_as_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_global_unique_id',
+				);
+			}
+		);
+
+		$product  = ProductHelper::create_simple_product();
+		$product->set_global_unique_id( '1234567890' );
+		$product->save();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals( '1234567890', $data['barcode'] );
+	}
+
+	public function test_product_update_global_unique_id_as_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_global_unique_id',
+				);
+			}
+		);
+
+		$product  = ProductHelper::create_simple_product( array( 'sku' => 'sku-12345' ) );
+		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() );
+		$request->set_body_params(
+			array(
+				'barcode' => '12345',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals( '12345', $data['barcode'] );
+	}
+
 	/**
 	 * Orderby.
 	 */
@@ -289,7 +352,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'sku',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -302,7 +365,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'sku',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -334,7 +397,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'barcode',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response         = $this->server->dispatch( $request );
@@ -347,7 +410,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'barcode',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response         = $this->server->dispatch( $request );
@@ -364,7 +427,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_status',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -377,7 +440,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_status',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -391,31 +454,31 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product1  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => 1,
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product2  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => 2,
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product3  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => null,
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product4  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => 0,
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product5  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => -1,
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product6  = ProductHelper::create_simple_product();
@@ -423,7 +486,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_quantity',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -436,7 +499,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_quantity',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response     = $this->server->dispatch( $request );
@@ -513,26 +576,26 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product1  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => '11.2',
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product2  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => '3.5',
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$product2  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => '20.7',
-				'manage_stock' => true,
+				'manage_stock'   => true,
 			)
 		);
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_quantity',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response  = $this->server->dispatch( $request );
@@ -545,7 +608,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'stock_quantity',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response  = $this->server->dispatch( $request );
@@ -574,13 +637,13 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$product2  = ProductHelper::create_simple_product(
 			array(
 				'description' => $random_description,
-				'name' => 'Foo ' . $random_title . ' bar',
+				'name'        => 'Foo ' . $random_title . ' bar',
 			)
 		);
 		$product3  = ProductHelper::create_simple_product(
 			array(
 				'description' => $random_description,
-				'sku' => 'foo-' . $random_sku . '-bar',
+				'sku'         => 'foo-' . $random_sku . '-bar',
 			)
 		);
 		$product4  = ProductHelper::create_simple_product( array( 'description' => $random_description ) );
@@ -634,9 +697,9 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		);
 
-		$product1  = ProductHelper::create_simple_product();
-		$product2  = ProductHelper::create_simple_product();
-		$product3  = ProductHelper::create_simple_product();
+		$product1    = ProductHelper::create_simple_product();
+		$product2    = ProductHelper::create_simple_product();
+		$product3    = ProductHelper::create_simple_product();
 		$product4    = ProductHelper::create_simple_product();
 
 		update_option(
@@ -690,10 +753,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
-	/**
-	 *
-	 */
-	public function test_search_title_with_includes() {
+	public function test_search_title_with_includes(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
 
@@ -710,10 +770,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_search_sku_with_includes() {
+	public function test_search_sku_with_includes(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
 
@@ -730,21 +787,18 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_filter_on_sale_with_includes() {
+	public function test_filter_on_sale_with_includes(): void {
 		$product1  = ProductHelper::create_simple_product(
 			array(
 				'sale_price' => 8,
-				'on_sale' => true,
+				'on_sale'    => true,
 			)
 		);
 		$product2  = ProductHelper::create_simple_product();
 		$product3  = ProductHelper::create_simple_product(
 			array(
 				'sale_price' => 6,
-				'on_sale' => true,
+				'on_sale'    => true,
 			)
 		);
 
@@ -761,10 +815,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_search_title_with_excludes() {
+	public function test_search_title_with_excludes(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
 
@@ -781,10 +832,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product2->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_search_sku_with_excludes() {
+	public function test_search_sku_with_excludes(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
 
@@ -801,21 +849,18 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product1->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_filter_on_sale_with_excludes() {
+	public function test_filter_on_sale_with_excludes(): void {
 		$product1  = ProductHelper::create_simple_product(
 			array(
 				'sale_price' => 8,
-				'on_sale' => true,
+				'on_sale'    => true,
 			)
 		);
 		$product2  = ProductHelper::create_simple_product();
 		$product3  = ProductHelper::create_simple_product(
 			array(
 				'sale_price' => 6,
-				'on_sale' => true,
+				'on_sale'    => true,
 			)
 		);
 
@@ -832,11 +877,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product3->get_id() ), $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_uuid_is_unique() {
-		$uuid = UUID::uuid4()->toString();
+	public function test_uuid_is_unique(): void {
+		$uuid      = Uuid::uuid4()->toString();
 		$product1  = ProductHelper::create_simple_product();
 		$product1->update_meta_data( '_woocommerce_pos_uuid', $uuid );
 		$product1->save_meta_data();

@@ -17,8 +17,14 @@ trait Product_Helpers {
 	public function wcpos_get_barcode( $object ) {
 		$barcode_field = $this->wcpos_get_barcode_field();
 
-		// _sku is_internal_meta_key, don't use get_meta() for this.
-		return '_sku' === $barcode_field ? $object->get_sku() : $object->get_meta( $barcode_field );
+		if ( '_sku' === $barcode_field ) {
+			return $object->get_sku();
+		}
+		if ( '_global_unique_id' === $barcode_field ) {
+			return $object->get_global_unique_id();
+		}
+
+		return $object->get_meta( $barcode_field );
 	}
 
 	/**

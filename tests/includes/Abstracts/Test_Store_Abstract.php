@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
+use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
-use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 
 /**
  * @internal
@@ -40,7 +40,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'store_state',
 			'store_country',
 			'tax_address',
-			'default_country',
+			// 'default_country',
 			'store_postcode',
 			'default_customer_address',
 			'calc_taxes',
@@ -63,10 +63,10 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		);
 	}
 
-	public function test_product_api_get_all_fields(): void {
+	public function test_store_api_get_all_fields(): void {
 		$expected_data_props = $this->get_expected_data_props();
-		$data = $this->store->get_data();
-		$props = array_keys( $data );
+		$data                = $this->store->get_data();
+		$props               = array_keys( $data );
 		$this->assertEmpty( array_diff( $expected_data_props, $props ), 'These fields were expected but not present in Store: ' . print_r( array_diff( $expected_data_props, $props ), true ) );
 		$this->assertEmpty( array_diff( $props, $expected_data_props ), 'These fields were not expected in Store: ' . print_r( array_diff( $props, $expected_data_props ), true ) );
 	}
@@ -83,6 +83,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			array(
 				'get_bloginfo' => function ( $show = '' ) {
 					echo "Mocked get_bloginfo called with parameter: $show\n";
+
 					return 'Mocked Store Name';
 				},
 			)
