@@ -3,22 +3,20 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
- * @package WooCommerce POS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
-use const WCPOS\WooCommercePOS\PLUGIN_URL;
 
 /**
  * Frontend class.
  */
 class Frontend {
-
 	/**
 	 * @return void
 	 */
@@ -47,7 +45,7 @@ class Frontend {
 		// last chance before frontend template is rendered
 		do_action( 'woocommerce_pos_frontend_template_redirect' );
 
-		/**
+		/*
 		 * Deprecated action.
 		 *
 		 * @TODO remove in 1.5.0
@@ -150,13 +148,11 @@ class Frontend {
 		$dev_bundle    = site_url( '/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app' );
 
 		/**
-		 * Add path to worker scripts
+		 * Add path to worker scripts.
 		 */
 		$idbWorker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
 
-		/**
-		 * getScript helper and initialProps
-		 */
+		// getScript helper and initialProps
 		echo "<script>
     function getScript(source, callback) {
         var script = document.createElement('script');
@@ -189,9 +185,7 @@ class Frontend {
     var initialProps = {$initial_props};
     </script>" . "\n";
 
-		/**
-		 * The actual app bundle
-		 */
+		// The actual app bundle
 		if ( $development ) {
 			// Development Mode
 			echo "<script>
@@ -238,23 +232,18 @@ class Frontend {
 		}
 	}
 
-	/**
-	 *
-	 */
 	private function pos_logout_url() {
 		/**
-		 * Get the login URL, allow other plugins to customise the URL. eg: WPS Hide Login
+		 * Get the login URL, allow other plugins to customise the URL. eg: WPS Hide Login.
 		 */
 		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
 
-		$redirect_to = urlencode( woocommerce_pos_url() );
-		$reauth = 1;
-		$wcpos = 1;
+		$redirect_to  = urlencode( woocommerce_pos_url() );
+		$reauth       = 1;
+		$wcpos        = 1;
 		$logout_nonce = wp_create_nonce( 'log-out' );
 
-		$logout_url = "{$login_url}?action=logout&_wpnonce={$logout_nonce}&redirect_to={$redirect_to}&reauth={$reauth}&wcpos={$wcpos}";
-
-		return $logout_url;
+		return "{$login_url}?action=logout&_wpnonce={$logout_nonce}&redirect_to={$redirect_to}&reauth={$reauth}&wcpos={$wcpos}";
 	}
 
 

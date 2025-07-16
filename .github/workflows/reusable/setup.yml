@@ -1,0 +1,24 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+		node-version:
+			description: Version of Node to use
+			default: "20.x"
+		pnpm-version:
+			description: Version of pnpm to use
+			default: "10.8.0"
+
+jobs:
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
