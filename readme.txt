@@ -88,6 +88,8 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.8.0 - 2025/11/XX =
+
 = 1.7.14 - 2025/11/19 =
 * Change: Plugin name changed from "WooCommerce POS" to "WCPOS" to comply with WooCommerce trademark requirements
 * Note: This is a branding change only - all functionality remains the same
