@@ -20,6 +20,13 @@ class Auth {
 	private $redirect_uri;
 
 	/**
+	 * The state parameter.
+	 *
+	 * @var string
+	 */
+	private $state;
+
+	/**
 	 * Error message.
 	 *
 	 * @var string
@@ -35,7 +42,21 @@ class Auth {
 
 		// Initialize properties
 		$this->redirect_uri = esc_url( $_REQUEST['redirect_uri'] ?? '', array( 'https', 'http', 'wcpos' ) );
+		$this->state        = sanitize_text_field( $_REQUEST['state'] ?? '' );
 		$this->error        = '';
+
+		// Validate required parameters
+		if ( empty( $this->redirect_uri ) ) {
+			$this->error = 'Missing or invalid redirect_uri parameter.';
+
+			return;
+		}
+
+		if ( empty( $this->state ) ) {
+			$this->error = 'Missing state parameter.';
+
+			return;
+		}
 
 		// Handle form submission
 		$this->handle_form_submission();
@@ -48,6 +69,15 @@ class Auth {
 	 */
 	public function get_redirect_uri(): string {
 		return $this->redirect_uri;
+	}
+
+	/**
+	 * Get the state parameter.
+	 *
+	 * @return string
+	 */
+	public function get_state(): string {
+		return $this->state;
 	}
 
 	/**
@@ -121,14 +151,21 @@ class Auth {
 		}
 
 		// On success, redirect back to app (or fallback to dashboard)
+		$redirect_params = array(
+			'access_token'  => rawurlencode( $redirect_data['access_token'] ),
+			'refresh_token' => rawurlencode( $redirect_data['refresh_token'] ),
+			'token_type'    => rawurlencode( $redirect_data['token_type'] ),
+			'expires_in'    => \intval( $redirect_data['expires_in'] ),
+			'user_id'       => \intval( $redirect_data['user_id'] ),
+		);
+
+		// Include state parameter if it was provided
+		if ( ! empty( $this->state ) ) {
+			$redirect_params['state'] = rawurlencode( $this->state );
+		}
+
 		$target = $this->redirect_uri
-				? add_query_arg( array(
-					'access_token'  => rawurlencode( $redirect_data['access_token'] ),
-					'refresh_token' => rawurlencode( $redirect_data['refresh_token'] ),
-					'token_type'    => rawurlencode( $redirect_data['token_type'] ),
-					'expires_in'    => \intval( $redirect_data['expires_in'] ),
-					'user_id'       => \intval( $redirect_data['user_id'] ),
-				), $this->redirect_uri )
+				? add_query_arg( $redirect_params, $this->redirect_uri )
 				: admin_url();
 
 		wp_redirect( $target );
