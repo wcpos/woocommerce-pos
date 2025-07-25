@@ -35,6 +35,7 @@ class Init {
 		// Headers for API discoverability
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
+		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 	}
 
 	/**
@@ -121,6 +122,24 @@ class Init {
 		if ( isset( $_GET['_method'] ) && 'head' == strtolower( $_GET['_method'] ) ) {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
+		}
+	}
+
+	/**
+	 * Some security plugins will set X-Frame-Options: SAMEORIGIN/DENY, which will prevent the POS desktop
+	 * application from opening pages like the login in an iframe.
+	 *
+	 * For pages we need, we will remove the X-Frame-Options header.
+	 *
+	 * @param mixed $wp
+	 *
+	 * @return void
+	 */
+	public function remove_x_frame_options( $wp ): void {
+		if ( woocommerce_pos_request() || isset( $wp->query_vars['wcpos-login'] ) ) {
+			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
+				header_remove( 'X-Frame-Options' );
+			}
 		}
 	}
 
