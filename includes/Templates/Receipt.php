@@ -56,6 +56,12 @@ class Receipt {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
+			// Validate order key for security.
+			$order_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+			if ( empty( $order_key ) || $order_key !== $order->get_order_key() ) {
+				wp_die( esc_html__( 'You do not have permission to view this receipt.', 'woocommerce-pos' ) );
+			}
+
 			/**
 			 * Put WC_Order into the global scope so that the template can access it.
 			 */

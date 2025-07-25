@@ -645,7 +645,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
 
 		// Add receipt link to the order.
-		$pos_receipt_url = get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() );
+		$pos_receipt_url = add_query_arg(
+			array(
+				'key' => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
+			),
+			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
+		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
 		// Make sure we parse the meta data before returning the response
