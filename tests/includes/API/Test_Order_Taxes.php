@@ -2,9 +2,9 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use WC_Admin_Settings;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
-use WC_Admin_Settings;
 
 /**
  * @internal
@@ -21,16 +21,16 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		// Set default address
 		// update_option( 'woocommerce_default_country', 'GB' );
 
-		/**
+		/*
 		 * Init Taxes
 		 *
 		 * use WooCommerce Tax Dummy Data
 		 */
 		TaxHelper::create_tax_rate(
 			array(
-				'country' => 'GB',
-				'rate'    => '20.000',
-				'name'    => 'VAT',
+				'country'  => 'GB',
+				'rate'     => '20.000',
+				'name'     => 'VAT',
 				'priority' => 1,
 				'compound' => true,
 				'shipping' => true,
@@ -38,9 +38,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		);
 		TaxHelper::create_tax_rate(
 			array(
-				'country' => 'GB',
-				'rate'    => '5.000',
-				'name'    => 'VAT',
+				'country'  => 'GB',
+				'rate'     => '5.000',
+				'name'     => 'VAT',
 				'priority' => 1,
 				'compound' => true,
 				'shipping' => true,
@@ -49,9 +49,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		);
 		TaxHelper::create_tax_rate(
 			array(
-				'country' => 'GB',
-				'rate'    => '0.000',
-				'name'    => 'VAT',
+				'country'  => 'GB',
+				'rate'     => '0.000',
+				'name'     => 'VAT',
 				'priority' => 1,
 				'compound' => true,
 				'shipping' => true,
@@ -60,9 +60,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		);
 		TaxHelper::create_tax_rate(
 			array(
-				'country' => 'US',
-				'rate'    => '10.000',
-				'name'    => 'US',
+				'country'  => 'US',
+				'rate'     => '10.000',
+				'name'     => 'US',
 				'priority' => 1,
 				'compound' => true,
 				'shipping' => true,
@@ -70,11 +70,11 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		);
 		TaxHelper::create_tax_rate(
 			array(
-				'country' => 'US',
-				'state'   => 'AL',
+				'country'  => 'US',
+				'state'    => 'AL',
 				'postcode' => '12345; 123456',
-				'rate'    => '2.000',
-				'name'    => 'US AL',
+				'rate'     => '2.000',
+				'name'     => 'US AL',
 				'priority' => 2,
 				'compound' => true,
 				'shipping' => true,
@@ -127,7 +127,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
 		$this->assertEquals( 1, \count( $data['line_items'][0]['taxes'] ) );
-		$this->assertEquals( '1', $data['line_items'][0]['taxes'][0]['total'] );
+		$this->assertEquals( '1.000000', $data['line_items'][0]['taxes'][0]['total'] );
 
 		// order taxes
 		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
@@ -184,7 +184,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 201, $response->get_status() );
 
 		// check meta data
-		$count      = 0;
+		$count        = 0;
 		$tax_based_on = '';
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
@@ -201,7 +201,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
 		$this->assertEquals( 1, \count( $data['line_items'][0]['taxes'] ) );
-		$this->assertEquals( '2', $data['line_items'][0]['taxes'][0]['total'] );
+		$this->assertEquals( '2.000000', $data['line_items'][0]['taxes'][0]['total'] );
 
 		// order taxes
 		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
@@ -251,7 +251,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 201, $response->get_status() );
 
 		// check meta data
-		$count      = 0;
+		$count        = 0;
 		$tax_based_on = '';
 
 		// Look for the _woocommerce_pos_uuid key in meta_data
@@ -268,8 +268,8 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
 		$this->assertEquals( 2, \count( $data['line_items'][0]['taxes'] ) );
-		$this->assertEquals( '1', $data['line_items'][0]['taxes'][0]['total'] );
-		$this->assertEquals( '0.22', $data['line_items'][0]['taxes'][1]['total'] );
+		$this->assertEquals( '1.000000', $data['line_items'][0]['taxes'][0]['total'] );
+		$this->assertEquals( '0.220000', $data['line_items'][0]['taxes'][1]['total'] );
 
 		// order taxes
 		$this->assertEquals( 2, \count( $data['tax_lines'] ) );
@@ -286,10 +286,7 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '1.220000', $data['total_tax'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_fee_lines_should_respect_tax_status_when_negative() {
+	public function test_fee_lines_should_respect_tax_status_when_negative(): void {
 		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
 		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
 
@@ -306,8 +303,8 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 				),
 				'fee_lines'     => array(
 					array(
-						'name' => 'Fee',
-						'total' => '-10',
+						'name'       => 'Fee',
+						'total'      => '-10',
 						'tax_status' => 'none',
 					),
 				),
