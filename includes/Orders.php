@@ -137,13 +137,48 @@ class Orders {
 	 * @return bool Whether the email should be sent.
 	 */
 	public function manage_admin_emails( $enabled, $order, $email_class ) {
+		// Better email ID detection
+		$email_id = 'unknown';
+		if ( $email_class instanceof WC_Email && isset( $email_class->id ) ) {
+			$email_id = $email_class->id;
+		} elseif ( \is_object( $email_class ) && isset( $email_class->id ) ) {
+			$email_id = $email_class->id;
+		} elseif ( \is_string( $email_class ) ) {
+			$email_id = $email_class;
+		}
+
+		// Get current filter name for additional context
+		$current_filter = current_filter();
+		
 		// Only control emails for POS orders
 		if ( ! $this->is_pos_order( $order ) ) {
+			Logger::log( \sprintf(
+				'WCPOS Admin Email: Order #%s not POS order (created_via: %s), Email ID: %s, Filter: %s - SKIPPING',
+				$order instanceof WC_Order ? $order->get_id() : 'unknown',
+				$order instanceof WC_Order ? $order->get_created_via() : 'unknown',
+				$email_id,
+				$current_filter
+			) );
+
 			return $enabled;
 		}
 
+		$admin_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$order_id             = $order instanceof WC_Order ? $order->get_id() : 'unknown';
+
+		// Debug logging
+		Logger::log( \sprintf(
+			'WCPOS Admin Email Control: Order #%s, Email ID: %s, Filter: %s, Originally Enabled: %s, POS Setting: %s, Final Result: %s',
+			$order_id,
+			$email_id,
+			$current_filter,
+			$enabled ? 'YES' : 'NO',
+			$admin_emails_enabled ? 'ENABLED' : 'DISABLED',
+			$admin_emails_enabled ? 'ENABLED' : 'DISABLED'
+		) );
+
 		// Return the setting value, this will override any other plugin settings
-		return (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		return $admin_emails_enabled;
 	}
 
 	/**
@@ -162,8 +197,22 @@ class Orders {
 			return $enabled;
 		}
 
+		$customer_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		$email_id                = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
+		$order_id                = $order instanceof WC_Order ? $order->get_id() : 'unknown';
+
+		// Debug logging
+		Logger::log( \sprintf(
+			'WCPOS Customer Email Control: Order #%s, Email ID: %s, Originally Enabled: %s, POS Setting: %s, Final Result: %s',
+			$order_id,
+			$email_id,
+			$enabled ? 'YES' : 'NO',
+			$customer_emails_enabled ? 'ENABLED' : 'DISABLED',
+			$customer_emails_enabled ? 'ENABLED' : 'DISABLED'
+		) );
+
 		// Return the setting value, this will override any other plugin settings
-		return (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		return $customer_emails_enabled;
 	}
 
 	/**
@@ -183,8 +232,21 @@ class Orders {
 			return $recipient;
 		}
 
-		// If admin emails are disabled, return empty string to prevent sending
 		$admin_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$email_id             = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
+		$order_id             = $order instanceof WC_Order ? $order->get_id() : 'unknown';
+
+		// Debug logging
+		Logger::log( \sprintf(
+			'WCPOS Admin Recipient Filter: Order #%s, Email ID: %s, Original Recipient: %s, POS Setting: %s, Final Recipient: %s',
+			$order_id,
+			$email_id,
+			$recipient,
+			$admin_emails_enabled ? 'ENABLED' : 'DISABLED',
+			$admin_emails_enabled ? $recipient : 'BLOCKED'
+		) );
+
+		// If admin emails are disabled, return empty string to prevent sending
 		if ( ! $admin_emails_enabled ) {
 			return '';
 		}
@@ -209,8 +271,21 @@ class Orders {
 			return $recipient;
 		}
 
-		// If customer emails are disabled, return empty string to prevent sending
 		$customer_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		$email_id                = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
+		$order_id                = $order instanceof WC_Order ? $order->get_id() : 'unknown';
+
+		// Debug logging
+		Logger::log( \sprintf(
+			'WCPOS Customer Recipient Filter: Order #%s, Email ID: %s, Original Recipient: %s, POS Setting: %s, Final Recipient: %s',
+			$order_id,
+			$email_id,
+			$recipient,
+			$customer_emails_enabled ? 'ENABLED' : 'DISABLED',
+			$customer_emails_enabled ? $recipient : 'BLOCKED'
+		) );
+
+		// If customer emails are disabled, return empty string to prevent sending
 		if ( ! $customer_emails_enabled ) {
 			return '';
 		}
@@ -337,21 +412,27 @@ class Orders {
 		$is_wc_email = false;
 		$order_id    = null;
 
-		// Common WooCommerce email subject patterns
+		// Common WooCommerce email subject patterns - more comprehensive
 		$patterns = array(
-			'/Your (.+) order \(#(\d+)\)/',                    // Customer emails
-			'/\[(.+)\] New customer order \(#(\d+)\)/',        // New order admin email
-			'/\[(.+)\] Cancelled order \(#(\d+)\)/',           // Cancelled order
-			'/\[(.+)\] Failed order \(#(\d+)\)/',              // Failed order
-			'/Order #(\d+) details/',                          // Invoice emails
-			'/Note added to your order #(\d+)/',               // Customer note
+			'/Your (.+) order \(#(\d+)\)/',                      // Customer emails
+			'/\[(.+)\] New customer order \(#(\d+)\)/',          // New order admin email
+			'/\[(.+)\] Cancelled order \(#(\d+)\)/',             // Cancelled order admin email
+			'/\[(.+)\] Failed order \(#(\d+)\)/',                // Failed order admin email
+			'/Order #(\d+) details/',                            // Invoice emails
+			'/Note added to your order #(\d+)/',                 // Customer note
+			'/\[(.+)\] Order #(\d+)/',                           // Generic admin pattern
+			'/Order (\d+) \-/',                                  // Alternative order pattern
 		);
 
 		foreach ( $patterns as $pattern ) {
 			if ( preg_match( $pattern, $subject, $matches ) ) {
 				$is_wc_email = true;
-				// Extract order ID from the match
-				$order_id = isset( $matches[2] ) ? (int) $matches[2] : ( isset( $matches[1] ) ? (int) $matches[1] : null );
+				// Extract order ID from the match - try different capture groups
+				if ( isset( $matches[2] ) && is_numeric( $matches[2] ) ) {
+					$order_id = (int) $matches[2];
+				} elseif ( isset( $matches[1] ) && is_numeric( $matches[1] ) ) {
+					$order_id = (int) $matches[1];
+				}
 
 				break;
 			}
@@ -368,16 +449,22 @@ class Orders {
 			return $atts;
 		}
 
-		// Determine if this is likely an admin or customer email based on recipient and content
-		$to             = $atts['to'];
-		$admin_email    = get_option( 'admin_email' );
-		$is_admin_email = ( $to === $admin_email || 0 === strpos( $subject, '[' ) );
+		// More robust admin email detection
+		$is_admin_email = $this->is_likely_admin_email( $atts, $subject );
+		
+		// Debug logging - helps troubleshoot issues
+		Logger::log( \sprintf(
+			'WCPOS Email Debug: Order #%d, Subject: "%s", To: "%s", Admin Email: %s',
+			$order_id,
+			$subject,
+			$atts['to'],
+			$is_admin_email ? 'YES' : 'NO'
+		) );
 
 		// Check settings and prevent sending if disabled
 		if ( $is_admin_email ) {
 			$admin_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
 			if ( ! $admin_emails_enabled ) {
-				// Log for debugging purposes
 				Logger::log( 'WCPOS: Prevented admin email for POS order #' . $order_id );
 
 				return false; // Prevent the email from being sent
@@ -385,7 +472,6 @@ class Orders {
 		} else {
 			$customer_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 			if ( ! $customer_emails_enabled ) {
-				// Log for debugging purposes
 				Logger::log( 'WCPOS: Prevented customer email for POS order #' . $order_id );
 
 				return false; // Prevent the email from being sent
@@ -393,6 +479,348 @@ class Orders {
 		}
 
 		return $atts;
+	}
+
+	/**
+	 * Debug function to log all email sends for troubleshooting.
+	 * This helps us see exactly what emails are being triggered.
+	 *
+	 * @param string   $to           Email recipient.
+	 * @param string   $subject      Email subject.
+	 * @param string   $message      Email message.
+	 * @param string   $headers      Email headers.
+	 * @param WC_Email $email_object Email object.
+	 */
+	public function debug_email_sending( $to, $subject, $message, $headers, $email_object = null ): void {
+		if ( ! $email_object instanceof WC_Email ) {
+			return;
+		}
+
+		// Check if this email is related to a POS order
+		$order = null;
+		if ( isset( $email_object->object ) && $email_object->object instanceof WC_Order ) {
+			$order = $email_object->object;
+		}
+
+		if ( $this->is_pos_order( $order ) ) {
+			Logger::log( \sprintf(
+				'WCPOS Email Send Debug: Email ID: %s, Order: #%s, To: %s, Subject: "%s"',
+				$email_object->id,
+				$order ? $order->get_id() : 'unknown',
+				$to,
+				$subject
+			) );
+		}
+	}
+
+	/**
+	 * Debug function to catch all email-related filter calls.
+	 * This helps us see what email hooks are being triggered.
+	 */
+	public function debug_all_email_filters(): void {
+		$hook = current_filter();
+		
+		// Only log WooCommerce email filters
+		if ( 0 === strpos( $hook, 'woocommerce_email_enabled_' ) ||
+			 0    === strpos( $hook, 'woocommerce_email_recipient_' ) ) {
+			$args  = \func_get_args();
+			$order = null;
+			
+			// Try to extract order from arguments
+			foreach ( $args as $arg ) {
+				if ( $arg instanceof WC_Order ) {
+					$order = $arg;
+
+					break;
+				}
+			}
+			
+			// Only log if this is a POS order or if we can't determine the order
+			if ( null === $order || $this->is_pos_order( $order ) ) {
+				$email_type        = str_replace( array( 'woocommerce_email_enabled_', 'woocommerce_email_recipient_' ), '', $hook );
+				$order_id          = $order ? $order->get_id() : 'unknown';
+				$order_created_via = $order ? $order->get_created_via() : 'unknown';
+				
+				Logger::log( \sprintf(
+					'WCPOS Email Filter Debug: Hook: %s, Email Type: %s, Order: #%s, Created Via: %s',
+					$hook,
+					$email_type,
+					$order_id,
+					$order_created_via
+				) );
+			}
+		}
+	}
+
+	/**
+	 * Handle order status changes for POS orders.
+	 * This bypasses WooCommerce email settings and manually triggers emails based on POS settings.
+	 *
+	 * @param int      $order_id Order ID.
+	 * @param WC_Order $order    Order object.
+	 */
+	public function handle_order_status_change( $order_id, $order = null ): void {
+		// Get order if not provided
+		if ( ! $order instanceof WC_Order ) {
+			$order = wc_get_order( $order_id );
+		}
+
+		// Only handle POS orders
+		if ( ! $this->is_pos_order( $order ) ) {
+			return;
+		}
+
+		$current_hook = current_filter();
+		Logger::log( \sprintf(
+			'WCPOS Order Status Change: Order #%s, Hook: %s, Status: %s',
+			$order->get_id(),
+			$current_hook,
+			$order->get_status()
+		) );
+
+		// Get POS email settings
+		$admin_emails_enabled    = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$customer_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+
+		// Map order status change hooks to email types
+		$admin_email_triggers = array(
+			'woocommerce_order_status_pending_to_processing'   => 'new_order',
+			'woocommerce_order_status_pending_to_completed'    => 'new_order',
+			'woocommerce_order_status_pending_to_on-hold'      => 'new_order',
+			'woocommerce_order_status_failed_to_processing'    => 'new_order',
+			'woocommerce_order_status_failed_to_completed'     => 'new_order',
+			'woocommerce_order_status_cancelled_to_processing' => 'new_order',
+			'woocommerce_order_status_on-hold_to_processing'   => 'new_order',
+			'woocommerce_order_status_processing_to_cancelled' => 'cancelled_order',
+			'woocommerce_order_status_pending_to_failed'       => 'failed_order',
+			'woocommerce_order_status_on-hold_to_cancelled'    => 'cancelled_order',
+			'woocommerce_order_status_on-hold_to_failed'       => 'failed_order',
+		);
+
+		$customer_email_triggers = array(
+			'woocommerce_order_status_pending_to_on-hold'    => 'customer_on_hold_order',
+			'woocommerce_order_status_pending_to_processing' => 'customer_processing_order',
+			'woocommerce_order_status_pending_to_completed'  => 'customer_completed_order',
+			'woocommerce_order_status_failed_to_processing'  => 'customer_processing_order',
+			'woocommerce_order_status_failed_to_completed'   => 'customer_completed_order',
+			'woocommerce_order_status_on-hold_to_processing' => 'customer_processing_order',
+		);
+
+		// Handle admin emails
+		if ( $admin_emails_enabled && isset( $admin_email_triggers[ $current_hook ] ) ) {
+			$this->force_send_admin_email( $admin_email_triggers[ $current_hook ], $order );
+		} elseif ( ! $admin_emails_enabled && isset( $admin_email_triggers[ $current_hook ] ) ) {
+			// Block default admin emails if POS setting is disabled
+			$this->block_default_admin_email( $admin_email_triggers[ $current_hook ], $order );
+		}
+
+		// Handle customer emails
+		if ( $customer_emails_enabled && isset( $customer_email_triggers[ $current_hook ] ) ) {
+			$this->force_send_customer_email( $customer_email_triggers[ $current_hook ], $order );
+		} elseif ( ! $customer_emails_enabled && isset( $customer_email_triggers[ $current_hook ] ) ) {
+			// Block default customer emails if POS setting is disabled
+			$this->block_default_customer_email( $customer_email_triggers[ $current_hook ], $order );
+		}
+	}
+
+	/**
+	 * Force send an admin email for POS orders, bypassing WooCommerce settings.
+	 *
+	 * @param string   $email_type Email type (new_order, cancelled_order, etc.).
+	 * @param WC_Order $order      Order object.
+	 */
+	private function force_send_admin_email( $email_type, $order ): void {
+		$emails     = WC()->mailer()->get_emails();
+		$class_name = 'WC_Email_' . str_replace( ' ', '_', ucwords( str_replace( '_', ' ', $email_type ) ) );
+
+		if ( ! isset( $emails[ $class_name ] ) ) {
+			Logger::log( \sprintf( 'WCPOS: Admin email class not found: %s', $class_name ) );
+
+			return;
+		}
+
+		$email            = $emails[ $class_name ];
+		$original_enabled = $email->is_enabled();
+
+		Logger::log( \sprintf(
+			'WCPOS Force Admin Email: Order #%s, Email Type: %s, WC Enabled: %s, Forcing Send',
+			$order->get_id(),
+			$email_type,
+			$original_enabled ? 'YES' : 'NO'
+		) );
+
+		// Temporarily enable the email if it's disabled
+		if ( ! $original_enabled ) {
+			$email->enabled = 'yes';
+		}
+
+		// Send the email
+		try {
+			$email->trigger( $order->get_id(), $order );
+			Logger::log( \sprintf( 'WCPOS: Successfully sent admin email %s for order #%s', $email_type, $order->get_id() ) );
+		} catch ( Exception $e ) {
+			Logger::log( \sprintf( 'WCPOS: Failed to send admin email %s for order #%s: %s', $email_type, $order->get_id(), $e->getMessage() ) );
+		}
+
+		// Restore original enabled state
+		$email->enabled = $original_enabled ? 'yes' : 'no';
+	}
+
+	/**
+	 * Force send a customer email for POS orders, bypassing WooCommerce settings.
+	 *
+	 * @param string   $email_type Email type (customer_processing_order, etc.).
+	 * @param WC_Order $order      Order object.
+	 */
+	private function force_send_customer_email( $email_type, $order ): void {
+		$emails     = WC()->mailer()->get_emails();
+		$class_name = 'WC_Email_' . str_replace( ' ', '_', ucwords( str_replace( '_', ' ', $email_type ) ) );
+
+		if ( ! isset( $emails[ $class_name ] ) ) {
+			Logger::log( \sprintf( 'WCPOS: Customer email class not found: %s', $class_name ) );
+
+			return;
+		}
+
+		$email            = $emails[ $class_name ];
+		$original_enabled = $email->is_enabled();
+
+		Logger::log( \sprintf(
+			'WCPOS Force Customer Email: Order #%s, Email Type: %s, WC Enabled: %s, Forcing Send',
+			$order->get_id(),
+			$email_type,
+			$original_enabled ? 'YES' : 'NO'
+		) );
+
+		// Temporarily enable the email if it's disabled
+		if ( ! $original_enabled ) {
+			$email->enabled = 'yes';
+		}
+
+		// Send the email
+		try {
+			$email->trigger( $order->get_id(), $order );
+			Logger::log( \sprintf( 'WCPOS: Successfully sent customer email %s for order #%s', $email_type, $order->get_id() ) );
+		} catch ( Exception $e ) {
+			Logger::log( \sprintf( 'WCPOS: Failed to send customer email %s for order #%s: %s', $email_type, $order->get_id(), $e->getMessage() ) );
+		}
+
+		// Restore original enabled state
+		$email->enabled = $original_enabled ? 'yes' : 'no';
+	}
+
+	/**
+	 * Block default admin email for POS orders when POS setting is disabled.
+	 *
+	 * @param string   $email_type Email type (new_order, cancelled_order, etc.).
+	 * @param WC_Order $order      Order object.
+	 */
+	private function block_default_admin_email( $email_type, $order ): void {
+		$emails     = WC()->mailer()->get_emails();
+		$class_name = 'WC_Email_' . str_replace( ' ', '_', ucwords( str_replace( '_', ' ', $email_type ) ) );
+
+		if ( ! isset( $emails[ $class_name ] ) ) {
+			return;
+		}
+
+		$email            = $emails[ $class_name ];
+		$original_enabled = $email->is_enabled();
+
+		Logger::log( \sprintf(
+			'WCPOS Block Admin Email: Order #%s, Email Type: %s, WC Enabled: %s, POS Setting: DISABLED - Blocking',
+			$order->get_id(),
+			$email_type,
+			$original_enabled ? 'YES' : 'NO'
+		) );
+
+		// Temporarily disable the email to prevent default sending
+		$email->enabled = 'no';
+
+		// Re-enable after a short delay to restore original state
+		add_action( 'shutdown', function() use ( $email, $original_enabled ): void {
+			$email->enabled = $original_enabled ? 'yes' : 'no';
+		} );
+	}
+
+	/**
+	 * Block default customer email for POS orders when POS setting is disabled.
+	 *
+	 * @param string   $email_type Email type (customer_processing_order, etc.).
+	 * @param WC_Order $order      Order object.
+	 */
+	private function block_default_customer_email( $email_type, $order ): void {
+		$emails     = WC()->mailer()->get_emails();
+		$class_name = 'WC_Email_' . str_replace( ' ', '_', ucwords( str_replace( '_', ' ', $email_type ) ) );
+
+		if ( ! isset( $emails[ $class_name ] ) ) {
+			return;
+		}
+
+		$email            = $emails[ $class_name ];
+		$original_enabled = $email->is_enabled();
+
+		Logger::log( \sprintf(
+			'WCPOS Block Customer Email: Order #%s, Email Type: %s, WC Enabled: %s, POS Setting: DISABLED - Blocking',
+			$order->get_id(),
+			$email_type,
+			$original_enabled ? 'YES' : 'NO'
+		) );
+
+		// Temporarily disable the email to prevent default sending
+		$email->enabled = 'no';
+
+		// Re-enable after a short delay to restore original state
+		add_action( 'shutdown', function() use ( $email, $original_enabled ): void {
+			$email->enabled = $original_enabled ? 'yes' : 'no';
+		} );
+	}
+
+	/**
+	 * Determine if an email is likely an admin email based on various factors.
+	 *
+	 * @param array  $email_args Email arguments from wp_mail.
+	 * @param string $subject    Email subject line.
+	 *
+	 * @return bool True if this looks like an admin email.
+	 */
+	private function is_likely_admin_email( $email_args, $subject ) {
+		$to = $email_args['to'];
+		
+		// Check if it's going to the main admin email
+		$admin_email = get_option( 'admin_email' );
+		if ( $to === $admin_email ) {
+			return true;
+		}
+		
+		// Check if it's going to any WooCommerce admin email addresses
+		$wc_admin_emails = array(
+			get_option( 'woocommerce_stock_email_recipient' ),
+			get_option( 'admin_email' ),
+		);
+		
+		if ( \in_array( $to, $wc_admin_emails, true ) ) {
+			return true;
+		}
+		
+		// Check subject patterns that indicate admin emails
+		$admin_subject_patterns = array(
+			'/^\[.*\]\s+(New|Cancelled|Failed)\s+.*(order|customer)/i',
+			'/^\[.*\]\s+Order\s+#\d+/i',
+		);
+		
+		foreach ( $admin_subject_patterns as $pattern ) {
+			if ( preg_match( $pattern, $subject ) ) {
+				return true;
+			}
+		}
+		
+		// Check if subject starts with [site_name] pattern (common for admin emails)
+		$site_name = get_bloginfo( 'name' );
+		if ( $site_name && 0 === strpos( $subject, '[' . $site_name . ']' ) ) {
+			return true;
+		}
+		
+		return false;
 	}
 
 	/**
@@ -430,8 +858,6 @@ class Orders {
 			'new_order',
 			'cancelled_order',
 			'failed_order',
-			'reset_password',
-			'new_account',
 		);
 
 		// Customer emails - these go to customers
@@ -442,6 +868,8 @@ class Orders {
 			'customer_refunded_order',
 			'customer_invoice',
 			'customer_note',
+			'reset_password',     // This is a customer email, not admin
+			'new_account',        // This is a customer email, not admin
 		);
 
 		// Hook into email enabled filters with high priority
@@ -460,8 +888,28 @@ class Orders {
 			add_filter( "woocommerce_email_recipient_{$email_id}", array( $this, 'filter_customer_email_recipients' ), 999, 4 );
 		}
 
+		// CRITICAL: Hook directly into order status changes to bypass WooCommerce email settings
+		// These hooks fire regardless of whether WooCommerce emails are enabled/disabled
+		add_action( 'woocommerce_order_status_pending_to_processing', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_pending_to_completed', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_pending_to_on-hold', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_failed_to_processing', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_failed_to_completed', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_cancelled_to_processing', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_on-hold_to_processing', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_processing_to_cancelled', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_pending_to_failed', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_on-hold_to_cancelled', array( $this, 'handle_order_status_change' ), 5, 2 );
+		add_action( 'woocommerce_order_status_on-hold_to_failed', array( $this, 'handle_order_status_change' ), 5, 2 );
+
 		// Ultimate failsafe - use wp_mail filter to prevent sending at the last moment
 		add_filter( 'wp_mail', array( $this, 'prevent_disabled_pos_emails' ), 999, 1 );
+
+		// Add action to log all email sends for debugging (can be removed after troubleshooting)
+		add_action( 'woocommerce_email_send_before', array( $this, 'debug_email_sending' ), 1, 4 );
+
+		// Add global debugging to catch all email filter calls
+		add_action( 'all', array( $this, 'debug_all_email_filters' ), 1 );
 	}
 
 	/**
