@@ -88,6 +88,11 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.7.12 - 2025/07/25 = 
+* Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt
+* Fix: Remove the X-Frame-Options Header for which prevents desktop application users from logging in
+* Fix: Checkout email settings have been tested and should now work
+
 = 1.7.11 - 2025/06/18 = 
 * Fix: is_internal_meta_key errors for barcodes as '_global_unique_id'
 
