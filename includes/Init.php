@@ -6,22 +6,18 @@
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
- * @package   WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use const DOING_AJAX;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
+
 use WP_REST_Server;
 
-use const DOING_AJAX;
-
-/**
- *
- */
 class Init {
 	/**
 	 * Constructor.
@@ -39,6 +35,7 @@ class Init {
 		// Headers for API discoverability
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
+		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 	}
 
 	/**
@@ -49,63 +46,6 @@ class Init {
 		$this->init_frontend();
 		$this->init_admin();
 		$this->init_integrations();
-	}
-
-	/**
-	 * Common initializations
-	 */
-	private function init_common() {
-		// init the Services
-		SettingsService::instance();
-		AuthService::instance();
-
-		// init other functionality needed by both frontend and admin
-		new i18n();
-		new Gateways();
-		new Products();
-		new Orders();
-	}
-
-	/**
-	 * Frontend specific initializations
-	 */
-	private function init_frontend() {
-		if ( ! is_admin() ) {
-				new Templates();
-				new Form_Handler();
-		}
-	}
-
-	/**
-	 * Admin specific initializations
-	 */
-	private function init_admin() {
-		if ( is_admin() ) {
-			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
-					new AJAX();
-			} else {
-					new Admin();
-			}
-		}
-	}
-
-	/**
-	 * Integrations
-	 */
-	private function init_integrations() {
-		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		// if ( class_exists( 'WC-Bookings' ) ) {
-		// new Integrations\Bookings();
-		// }
-
-		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
-		if ( class_exists( 'WPSEO_Options' ) ) {
-			new Integrations\WPSEO();
-		}
-
-		// wePOS alters the WooCommerce REST API, breaking the expected schema
-		// It's very bad form on their part, but we need to work around it
-		new Integrations\WePOS();
 	}
 
 	/**
@@ -183,5 +123,80 @@ class Init {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
+	}
+
+	/**
+	 * Some security plugins will set X-Frame-Options: SAMEORIGIN/DENY, which will prevent the POS desktop
+	 * application from opening pages like the login in an iframe.
+	 *
+	 * For pages we need, we will remove the X-Frame-Options header.
+	 *
+	 * @param mixed $wp
+	 *
+	 * @return void
+	 */
+	public function remove_x_frame_options( $wp ): void {
+		if ( woocommerce_pos_request() || isset( $wp->query_vars['wcpos-login'] ) ) {
+			if ( ! headers_sent() && \function_exists( 'header_remove' ) ) {
+				header_remove( 'X-Frame-Options' );
+			}
+		}
+	}
+
+	/**
+	 * Common initializations.
+	 */
+	private function init_common(): void {
+		// init the Services
+		SettingsService::instance();
+		AuthService::instance();
+
+		// init other functionality needed by both frontend and admin
+		new i18n();
+		new Gateways();
+		new Products();
+		new Orders();
+	}
+
+	/**
+	 * Frontend specific initializations.
+	 */
+	private function init_frontend(): void {
+		if ( ! is_admin() ) {
+			new Templates();
+			new Form_Handler();
+		}
+	}
+
+	/**
+	 * Admin specific initializations.
+	 */
+	private function init_admin(): void {
+		if ( is_admin() ) {
+			if ( \defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+				new AJAX();
+			} else {
+				new Admin();
+			}
+		}
+	}
+
+	/**
+	 * Integrations.
+	 */
+	private function init_integrations(): void {
+		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+		// if ( class_exists( 'WC-Bookings' ) ) {
+		// new Integrations\Bookings();
+		// }
+
+		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
+		if ( class_exists( 'WPSEO_Options' ) ) {
+			new Integrations\WPSEO();
+		}
+
+		// wePOS alters the WooCommerce REST API, breaking the expected schema
+		// It's very bad form on their part, but we need to work around it
+		new Integrations\WePOS();
 	}
 }
