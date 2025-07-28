@@ -6,22 +6,18 @@
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
- * @package   WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use const DOING_AJAX;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
+
 use WP_REST_Server;
 
-use const DOING_AJAX;
-
-/**
- *
- */
 class Init {
 	/**
 	 * Constructor.
@@ -49,63 +45,6 @@ class Init {
 		$this->init_frontend();
 		$this->init_admin();
 		$this->init_integrations();
-	}
-
-	/**
-	 * Common initializations
-	 */
-	private function init_common() {
-		// init the Services
-		SettingsService::instance();
-		AuthService::instance();
-
-		// init other functionality needed by both frontend and admin
-		new i18n();
-		new Gateways();
-		new Products();
-		new Orders();
-	}
-
-	/**
-	 * Frontend specific initializations
-	 */
-	private function init_frontend() {
-		if ( ! is_admin() ) {
-				new Templates();
-				new Form_Handler();
-		}
-	}
-
-	/**
-	 * Admin specific initializations
-	 */
-	private function init_admin() {
-		if ( is_admin() ) {
-			if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
-					new AJAX();
-			} else {
-					new Admin();
-			}
-		}
-	}
-
-	/**
-	 * Integrations
-	 */
-	private function init_integrations() {
-		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
-		// if ( class_exists( 'WC-Bookings' ) ) {
-		// new Integrations\Bookings();
-		// }
-
-		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
-		if ( class_exists( 'WPSEO_Options' ) ) {
-			new Integrations\WPSEO();
-		}
-
-		// wePOS alters the WooCommerce REST API, breaking the expected schema
-		// It's very bad form on their part, but we need to work around it
-		new Integrations\WePOS();
 	}
 
 	/**
@@ -183,5 +122,62 @@ class Init {
 			header( 'Access-Control-Allow-Origin: *' );
 			header( 'Access-Control-Expose-Headers: Link' );
 		}
+	}
+
+	/**
+	 * Common initializations.
+	 */
+	private function init_common(): void {
+		// init the Services
+		SettingsService::instance();
+		AuthService::instance();
+
+		// init other functionality needed by both frontend and admin
+		new i18n();
+		new Gateways();
+		new Products();
+		new Orders();
+	}
+
+	/**
+	 * Frontend specific initializations.
+	 */
+	private function init_frontend(): void {
+		if ( ! is_admin() ) {
+			new Templates();
+			new Form_Handler();
+		}
+	}
+
+	/**
+	 * Admin specific initializations.
+	 */
+	private function init_admin(): void {
+		if ( is_admin() ) {
+			if ( \defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+				new AJAX();
+			} else {
+				new Admin();
+			}
+		}
+	}
+
+	/**
+	 * Integrations.
+	 */
+	private function init_integrations(): void {
+		// WooCommerce Bookings - http://www.woothemes.com/products/woocommerce-bookings/
+		// if ( class_exists( 'WC-Bookings' ) ) {
+		// new Integrations\Bookings();
+		// }
+
+		// Yoast SEO - https://wordpress.org/plugins/wordpress-seo/
+		if ( class_exists( 'WPSEO_Options' ) ) {
+			new Integrations\WPSEO();
+		}
+
+		// wePOS alters the WooCommerce REST API, breaking the expected schema
+		// It's very bad form on their part, but we need to work around it
+		new Integrations\WePOS();
 	}
 }

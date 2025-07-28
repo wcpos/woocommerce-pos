@@ -24,11 +24,11 @@ $error        = $wcpos_auth_instance->get_error();
 	<title><?php _e('WooCommerce POS Login'); ?></title>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link rel='stylesheet' id='dashicons-css' href='https://wcpos.local/wp-includes/css/dashicons.min.css?ver=6.8.2' media='all' />
-	<link rel='stylesheet' id='buttons-css' href='https://wcpos.local/wp-includes/css/buttons.min.css?ver=6.8.2' media='all' />
-	<link rel='stylesheet' id='forms-css' href='https://wcpos.local/wp-admin/css/forms.min.css?ver=6.8.2' media='all' />
-	<link rel='stylesheet' id='l10n-css' href='https://wcpos.local/wp-admin/css/l10n.min.css?ver=6.8.2' media='all' />
-	<link rel='stylesheet' id='login-css' href='https://wcpos.local/wp-admin/css/login.min.css?ver=6.8.2' media='all' />
+	<link rel='stylesheet' id='dashicons-css' href='<?php echo includes_url( 'css/dashicons.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
+	<link rel='stylesheet' id='buttons-css' href='<?php echo includes_url( 'css/buttons.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
+	<link rel='stylesheet' id='forms-css' href='<?php echo admin_url( 'css/forms.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
+	<link rel='stylesheet' id='l10n-css' href='<?php echo admin_url( 'css/l10n.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
+	<link rel='stylesheet' id='login-css' href='<?php echo admin_url( 'css/login.min.css' ); ?>?ver=<?php echo get_bloginfo( 'version' ); ?>' media='all' />
 </head>
 <body class="login no-js login-action-login wp-core-ui locale-<?php echo str_replace('_', '-', get_locale()); ?>">
 <script type="text/javascript">
