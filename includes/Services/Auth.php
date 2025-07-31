@@ -5,7 +5,6 @@ namespace WCPOS\WooCommercePOS\Services;
 use const DAY_IN_SECONDS;
 use Exception;
 use const HOUR_IN_SECONDS;
-use Ramsey\Uuid\Uuid;
 use WCPOS\Vendor\Firebase\JWT\JWT;
 use WCPOS\Vendor\Firebase\JWT\Key;
 use WP_Error;
@@ -179,7 +178,7 @@ class Auth {
 			),
 		);
 
-		/**
+		/*
 		 * Let the user modify the access token data before the sign.
 		 *
 		 * @param {array} $token
@@ -285,11 +284,14 @@ class Auth {
 			return $refresh_token;
 		}
 
+		$issued_at = time();
+		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		
 		return array(
 			'access_token'  => $access_token,
 			'refresh_token' => $refresh_token,
 			'token_type'    => 'Bearer',
-			'expires_in'    => apply_filters( 'woocommerce_pos_jwt_access_token_expire', HOUR_IN_SECONDS / 2, time() ) - time(),
+			'expires_at'    => (int) $expire,
 		);
 	}
 
@@ -320,7 +322,7 @@ class Auth {
 		}
 
 		return array(
-			'uuid'         => $this->get_user_uuid( $user ),
+			'uuid'         => Cashier::instance()->get_cashier_uuid( $user ),
 			'id'           => $user->ID,
 			'username'     => $user->user_login,
 			'email'        => $user->user_email,
@@ -333,7 +335,7 @@ class Auth {
 			'access_token'  => $tokens['access_token'],
 			'refresh_token' => $tokens['refresh_token'],
 			'token_type'    => $tokens['token_type'],
-			'expires_in'    => $tokens['expires_in'],
+			'expires_at'    => $tokens['expires_at'],
 		);
 	}
 
@@ -355,8 +357,11 @@ class Auth {
 			'access_token'  => $tokens['access_token'],
 			'refresh_token' => $tokens['refresh_token'],
 			'token_type'    => $tokens['token_type'],
-			'expires_in'    => $tokens['expires_in'],
-			'user_id'       => $user->ID, // Minimal user identification
+			'expires_at'    => $tokens['expires_at'],
+			// Get basic user data for display, other data will be fetched from the server.
+			'uuid'          => Cashier::instance()->get_cashier_uuid( $user ),
+			'id'            => $user->ID,
+			'display_name'  => $user->display_name,
 		);
 	}
 
@@ -397,10 +402,13 @@ class Auth {
 			return $new_access_token;
 		}
 
+		$issued_at = time();
+		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		
 		return array(
 			'access_token' => $new_access_token,
 			'token_type'   => 'Bearer',
-			'expires_in'   => apply_filters( 'woocommerce_pos_jwt_access_token_expire', HOUR_IN_SECONDS / 2, time() ) - time(),
+			'expires_at'   => (int) $expire,
 		);
 	}
 
@@ -481,29 +489,5 @@ class Auth {
 		}
 
 		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
-	}
-
-	/**
-	 * Note: usermeta is shared across all sites in a network, this can cause issues in the POS.
-	 * We need to make sure that the user uuid is unique per site.
-	 *
-	 * @param WP_User $user
-	 *
-	 * @return string
-	 */
-	private function get_user_uuid( WP_User $user ): string {
-		$meta_key = '_woocommerce_pos_uuid';
-
-		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
-			$meta_key = $meta_key . '_' . get_current_blog_id();
-		}
-
-		$uuid = get_user_meta( $user->ID, $meta_key, true );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			update_user_meta( $user->ID, $meta_key, $uuid );
-		}
-
-		return $uuid;
 	}
 }

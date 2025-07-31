@@ -155,8 +155,10 @@ class Auth {
 			'access_token'  => rawurlencode( $redirect_data['access_token'] ),
 			'refresh_token' => rawurlencode( $redirect_data['refresh_token'] ),
 			'token_type'    => rawurlencode( $redirect_data['token_type'] ),
-			'expires_in'    => \intval( $redirect_data['expires_in'] ),
-			'user_id'       => \intval( $redirect_data['user_id'] ),
+			'expires_at'    => \intval( $redirect_data['expires_at'] ),
+			'id'            => \intval( $redirect_data['id'] ),
+			'uuid'          => rawurlencode( $redirect_data['uuid'] ),
+			'display_name'  => rawurlencode( $redirect_data['display_name'] ),
 		);
 
 		// Include state parameter if it was provided
