@@ -70,7 +70,7 @@ class API {
 		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
 		 *                           - 'auth'                  => Fully qualified name of the class handling authentication.
 		 *                           - 'settings'              => Fully qualified name of the class handling settings.
-		 *                           - 'stores'                => Fully qualified name of the class handling stores management.
+		 *                           - 'cashier'               => Fully qualified name of the class handling cashier management.
 		 *                           - 'products'              => Fully qualified name of the class handling products.
 		 *                           - 'product_variations'    => Fully qualified name of the class handling product variations.
 		 *                           - 'orders'                => Fully qualified name of the class handling orders.
@@ -88,7 +88,7 @@ class API {
 				// WCPOS rest api controllers.
 				'auth'                  => API\Auth::class,
 				'settings'              => API\Settings::class,
-				'stores'                => API\Stores::class,
+				'cashier'               => API\Cashier::class,
 
 				// extend WC REST API controllers.
 				'products'              => API\Products_Controller::class,
