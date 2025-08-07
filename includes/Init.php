@@ -156,6 +156,7 @@ class Init {
 		new Gateways();
 		new Products();
 		new Orders();
+		new Emails();
 	}
 
 	/**

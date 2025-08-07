@@ -17,8 +17,8 @@
  */
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
-use WCPOS\WooCommercePOS\Services\Settings;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use WCPOS\WooCommercePOS\Services\Settings;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -207,7 +207,7 @@ if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
 	}
 }
 
-/**
+/*
  * Helper function checks whether order is a POS order
  *
  * @param $order WC_Order|int
@@ -215,15 +215,22 @@ if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
  */
 if ( ! \function_exists( 'woocommerce_pos_is_pos_order' ) ) {
 	function woocommerce_pos_is_pos_order( $order ): bool {
-		$order = is_int( $order ) ? wc_get_order( $order ) : $order;
-
-		if ( $order instanceof WC_Order ) {
-			$legacy      = $order->get_meta( '_pos', true );
-			$created_via = $order->get_created_via();
-
-			return 'woocommerce-pos' === $created_via || '1' === $legacy;
+		// Handle various input types and edge cases
+		if ( ! $order instanceof WC_Order ) {
+			// Sometimes the order is passed as an ID
+			if ( is_numeric( $order ) ) {
+				$order = wc_get_order( $order );
+			}
+	
+			// If we still don't have a valid order, return false
+			if ( ! $order instanceof WC_Order ) {
+				return false;
+			}
 		}
 
-		return false;
+		$legacy      = $order->get_meta( '_pos', true );
+		$created_via = $order->get_created_via();
+
+		return 'woocommerce-pos' === $created_via || '1' === $legacy;
 	}
 }

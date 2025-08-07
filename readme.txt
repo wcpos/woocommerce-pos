@@ -88,7 +88,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.8.0 - 2025/07/XX =
+= 1.8.0 - 2025/08/XX =
+
+= 1.7.13 - 2025/08/06 = 
+* Fix: New Order emails to send after order calculations
 
 = 1.7.12 - 2025/07/25 = 
 * Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt
