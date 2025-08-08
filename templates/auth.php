@@ -71,5 +71,26 @@ $error        = $wcpos_auth_instance->get_error();
 </div>
 
 <div class="clear"></div>
+
+<script type="text/javascript">
+(function() {
+	// Check if we're on demo domains and auto-populate credentials
+	var hostname = window.location.hostname;
+	var isDemoDomain = hostname === 'demo.wcpos.com' || hostname === 'wcposdev.wpengine.com';
+	
+	if (isDemoDomain) {
+		// Wait for DOM to be ready
+		document.addEventListener('DOMContentLoaded', function() {
+			var usernameField = document.getElementById('wcpos-user-login');
+			var passwordField = document.getElementById('wcpos-user-pass');
+			
+			if (usernameField && passwordField) {
+				usernameField.value = 'demo';
+				passwordField.value = 'demo';
+			}
+		});
+	}
+})();
+</script>
 </body>
 </html>
