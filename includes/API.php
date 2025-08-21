@@ -97,6 +97,7 @@ class API {
 				'customers'             => API\Customers_Controller::class,
 				'product_tags'          => API\Product_Tags_Controller::class,
 				'product_categories'    => API\Product_Categories_Controller::class,
+				'product_brands'        => API\Product_Brands_Controller::class,
 				'taxes'                 => API\Taxes_Controller::class,
 				'shipping_methods'      => API\Shipping_Methods_Controller::class,
 				'tax_classes'           => API\Tax_Classes_Controller::class,
