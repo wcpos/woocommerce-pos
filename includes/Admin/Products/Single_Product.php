@@ -46,7 +46,7 @@ class Single_Product {
 			'online_only' => __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && ! \in_array( $this->barcode_field, array( '_sku', '_global_unique_id' ), true ) ) {
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, $this->get_excluded_barcode_fields(), true ) ) {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3 );
@@ -279,5 +279,27 @@ class Single_Product {
 			);
 			$settings_instance->update_visibility_settings( $args );
 		}
+	}
+
+	/**
+	 * Get the list of barcode fields that should be excluded from custom barcode field functionality.
+	 *
+	 * These fields are built-in WooCommerce or plugin fields that don't need custom barcode input.
+	 *
+	 * @return array Array of excluded barcode field keys.
+	 */
+	private function get_excluded_barcode_fields(): array {
+		$excluded_fields = array(
+			'_sku',					// default WooCommerce SKU field
+			'_global_unique_id',	// default WooCommerce GTIN, UPC, EAN, or ISBN
+			'_alg_ean', 			// https://wpfactory.com/item/ean-barcodes-woocommerce/
+		);
+
+		/*
+		 * Filter the list of barcode fields that should be excluded from custom barcode field functionality.
+		 *
+		 * @param array $excluded_fields Array of field keys to exclude from custom barcode input.
+		 */
+		return apply_filters( 'woocommerce_pos_excluded_custom_barcode_fields', $excluded_fields );
 	}
 }

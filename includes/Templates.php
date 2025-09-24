@@ -9,9 +9,6 @@ namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
 
-/**
- *
- */
 class Templates {
 	/**
 	 * @var string POS frontend slug
@@ -24,7 +21,13 @@ class Templates {
 	private $pos_login_regex;
 
 	/**
+	 * @var string POS auth slug
+	 */
+	private $pos_auth_regex;
+
+	/**
 	 * @var string POS checkout slug
+	 *
 	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
 	 * eg: x-frame-options: SAMEORIGIN
 	 */
@@ -34,6 +37,7 @@ class Templates {
 	public function __construct() {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
 		$this->pos_login_regex    = '^wcpos-login/?';
+		$this->pos_auth_regex     = '^wcpos-auth/?';
 		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
 
 		$this->add_rewrite_rules();
@@ -41,24 +45,8 @@ class Templates {
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
 
-		/**
-		 * Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
-		 */
+		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
 		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
-	}
-
-	/**
-	 * @NOTE: 'order-pay' and 'order-received' rewrite tags are added by WC
-	 *
-	 * @return void
-	 */
-	private function add_rewrite_rules() {
-		add_rewrite_tag( '%wcpos%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-login%', '([^&]+)' );
-		add_rewrite_rule( $this->pos_regex, 'index.php?wcpos=1', 'top' );
-		add_rewrite_rule( $this->pos_login_regex, 'index.php?wcpos-login=1', 'top' );
-		add_rewrite_rule( $this->pos_checkout_regex, 'index.php?$matches[1]=$matches[2]&wcpos=1', 'top' );
 	}
 
 	/**
@@ -69,7 +57,7 @@ class Templates {
 	 * @return array|bool
 	 */
 	public function rewrite_rules( $rules ) {
-		return isset( $rules[ $this->pos_regex ], $rules[ $this->pos_login_regex ], $rules[ $this->pos_checkout_regex ] ) ? $rules : false;
+		return isset( $rules[ $this->pos_regex ], $rules[ $this->pos_login_regex ], $rules[ $this->pos_auth_regex ], $rules[ $this->pos_checkout_regex ] ) ? $rules : false;
 	}
 
 	/**
@@ -79,18 +67,19 @@ class Templates {
 		global $wp;
 
 		$rewrite_rules_to_templates = array(
-			$this->pos_regex => __NAMESPACE__ . '\\Templates\\Frontend',
-			$this->pos_login_regex => __NAMESPACE__ . '\\Templates\\Login',
+			$this->pos_regex          => __NAMESPACE__ . '\\Templates\\Frontend',
+			$this->pos_login_regex    => __NAMESPACE__ . '\\Templates\\Login',
+			$this->pos_auth_regex     => __NAMESPACE__ . '\\Templates\\Auth',
 			$this->pos_checkout_regex => array(
-				'order-pay' => __NAMESPACE__ . '\\Templates\\Payment',
+				'order-pay'      => __NAMESPACE__ . '\\Templates\\Payment',
 				'order-received' => __NAMESPACE__ . '\\Templates\\Received',
-				'wcpos-receipt' => __NAMESPACE__ . '\\Templates\\Receipt',
+				'wcpos-receipt'  => __NAMESPACE__ . '\\Templates\\Receipt',
 			),
 		);
 
 		foreach ( $rewrite_rules_to_templates as $rule => $classname ) {
 			if ( $wp->matched_rule === $rule ) {
-				if ( is_array( $classname ) ) {
+				if ( \is_array( $classname ) ) {
 					$this->load_checkout_template( $classname );
 				} else {
 					$this->load_template( $classname );
@@ -98,48 +87,6 @@ class Templates {
 				exit;
 			}
 		}
-	}
-
-	/**
-	 * Loads order templates, additionally checks query var is a valid order id
-	 *
-	 * @param array $classnames
-	 *
-	 * @return void
-	 */
-	private function load_checkout_template( array $classnames ): void {
-		global $wp;
-
-		foreach ( $classnames as $query_var => $classname ) {
-			if ( isset( $wp->query_vars[ $query_var ] ) ) {
-				$order_id = absint( $wp->query_vars[ $query_var ] );
-
-				if ( class_exists( $classname ) && $order_id ) {
-					$template = new $classname( $order_id );
-					$template->get_template();
-					return;
-				}
-			}
-		}
-
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
-	}
-
-	/**
-	 * Loads all other templates
-	 *
-	 * @param string $classname
-	 *
-	 * @return void
-	 */
-	private function load_template( string $classname ): void {
-		if ( class_exists( $classname ) ) {
-			$template = new $classname();
-			$template->get_template();
-			return;
-		}
-
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 	}
 
 
@@ -168,5 +115,65 @@ class Templates {
 		);
 
 		return $redirect;
+	}
+
+	/**
+	 * @NOTE: 'order-pay' and 'order-received' rewrite tags are added by WC
+	 *
+	 * @return void
+	 */
+	private function add_rewrite_rules(): void {
+		add_rewrite_tag( '%wcpos%', '([^&]+)' );
+		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
+		add_rewrite_tag( '%wcpos-login%', '([^&]+)' );
+		add_rewrite_tag( '%wcpos-auth%', '([^&]+)' );
+		add_rewrite_rule( $this->pos_regex, 'index.php?wcpos=1', 'top' );
+		add_rewrite_rule( $this->pos_login_regex, 'index.php?wcpos-login=1', 'top' );
+		add_rewrite_rule( $this->pos_auth_regex, 'index.php?wcpos-auth=1', 'top' );
+		add_rewrite_rule( $this->pos_checkout_regex, 'index.php?$matches[1]=$matches[2]&wcpos=1', 'top' );
+	}
+
+	/**
+	 * Loads order templates, additionally checks query var is a valid order id.
+	 *
+	 * @param array $classnames
+	 *
+	 * @return void
+	 */
+	private function load_checkout_template( array $classnames ): void {
+		global $wp;
+
+		foreach ( $classnames as $query_var => $classname ) {
+			if ( isset( $wp->query_vars[ $query_var ] ) ) {
+				$order_id = absint( $wp->query_vars[ $query_var ] );
+
+				if ( class_exists( $classname ) && $order_id ) {
+					$template = new $classname( $order_id );
+					$template->get_template();
+
+					return;
+				}
+			}
+		}
+
+		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+	}
+
+	/**
+	 * Loads all other templates.
+	 *
+	 * @param string $classname
+	 *
+	 * @return void
+	 */
+	private function load_template( string $classname ): void {
+		if ( class_exists( $classname ) ) {
+			$template = new $classname();
+			$template->get_template();
+
+			return;
+		}
+
+		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 	}
 }

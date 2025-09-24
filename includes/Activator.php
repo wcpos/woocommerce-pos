@@ -12,9 +12,6 @@ namespace WCPOS\WooCommercePOS;
 
 use const DOING_AJAX;
 
-/**
- *
- */
 class Activator {
 	public function __construct() {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
@@ -29,7 +26,7 @@ class Activator {
 		// Check for min requirements to run
 		if ( $this->php_check() && $this->woocommerce_check() ) {
 			// check permalinks
-			if ( is_admin() && ( ! defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
+			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
 				$this->permalink_check();
 			}
 
@@ -50,7 +47,7 @@ class Activator {
 	 * @param $network_wide
 	 */
 	public function activate( $network_wide ): void {
-		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 			if ( $network_wide ) {
 				// Get all blog ids
 				$blog_ids = $this->get_blog_ids();
@@ -79,7 +76,23 @@ class Activator {
 		// add pos capabilities to non POS roles
 		$this->add_pos_capability(
 			array(
-				'administrator' => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
+				'administrator' => array(
+					'manage_woocommerce_pos',
+					'access_woocommerce_pos',
+					'edit_wcpos_store',
+					'read_wcpos_store',
+					'delete_wcpos_store',
+					'edit_wcpos_stores',
+					'edit_others_wcpos_stores',
+					'publish_wcpos_stores',
+					'read_private_wcpos_stores',
+					'delete_wcpos_stores',
+					'delete_private_wcpos_stores',
+					'delete_published_wcpos_stores',
+					'delete_others_wcpos_stores',
+					'edit_private_wcpos_stores',
+					'edit_published_wcpos_stores',
+				),
 				'shop_manager'  => array( 'manage_woocommerce_pos', 'access_woocommerce_pos' ),
 			)
 		);
@@ -112,7 +125,7 @@ class Activator {
 			return true;
 		}
 
-		$message = sprintf(
+		$message = \sprintf(
 			__( '<strong>WooCommerce POS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
 			PHP_MIN_VERSION,
 			'http://www.wpupdatephp.com/update/'
@@ -129,7 +142,7 @@ class Activator {
 			return true;
 		}
 
-		$message = sprintf(
+		$message = \sprintf(
 			__( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
 			'http://wordpress.org/plugins/woocommerce/',
 			WC_MIN_VERSION,
@@ -151,7 +164,7 @@ class Activator {
 		}
 
 		$message = __( '<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly', 'woocommerce-pos' ) . '. ';
-		$message .= sprintf( '<a href="%s">%s</a>', admin_url( 'options-permalink.php' ), __( 'Enable permalinks', 'woocommerce-pos' ) ) . ' &raquo;';
+		$message .= \sprintf( '<a href="%s">%s</a>', admin_url( 'options-permalink.php' ), __( 'Enable permalinks', 'woocommerce-pos' ) ) . ' &raquo;';
 
 		Admin\Notices::add( $message );
 	}
@@ -263,23 +276,23 @@ class Activator {
 	}
 
 	/**
-	 * If \WCPOS\WooCommercePOSPro\ is installed, check the version is above MIN_PRO_VERSION
+	 * If \WCPOS\WooCommercePOSPro\ is installed, check the version is above MIN_PRO_VERSION.
 	 */
-	private function pro_version_check() {
+	private function pro_version_check(): void {
 		if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
 			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) {
-				/**
+				/*
 				 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
 				 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
 				 */
-				if ( ! function_exists( 'deactivate_plugins' ) ) {
+				if ( ! \function_exists( 'deactivate_plugins' ) ) {
 					require_once ABSPATH . '/wp-admin/includes/plugin.php';
 				}
 
 				// WooCommerce POS Pro is activated, but the version is too low
 				deactivate_plugins( 'woocommerce-pos-pro/woocommerce-pos-pro.php' );
 
-				$message = sprintf(
+				$message = \sprintf(
 					__( '<strong>WooCommerce POS</strong> requires <a href="%1$s">WooCommerce POS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce POS Pro</a>', 'woocommerce-pos' ),
 					'https://wcpos.com/my-account',
 					MIN_PRO_VERSION,

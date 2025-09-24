@@ -10,23 +10,19 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
-use WP_Error;
+use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
+use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
-use WP_REST_Controller;
-use WCPOS\WooCommercePOS\Services\Auth as AuthService;
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 
-/**
- *
- */
 class Auth extends WP_REST_Controller {
-		/**
-		 * Endpoint namespace.
-		 *
-		 * @var string
-		 */
+	/**
+	 * Endpoint namespace.
+	 *
+	 * @var string
+	 */
 	protected $namespace = SHORT_NAME . '/v1';
 
 	/**
@@ -34,7 +30,7 @@ class Auth extends WP_REST_Controller {
 	 *
 	 * @var string
 	 */
-	protected $rest_base = 'jwt';
+	protected $rest_base = 'auth';
 
 	/**
 	 * Stores constructor.
@@ -42,76 +38,31 @@ class Auth extends WP_REST_Controller {
 	public function __construct() {
 	}
 
-	/**
-	 *
-	 */
 	public function register_routes(): void {
-		// Generate JWT token
+		// Test authorization method support (public endpoint)
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/authorize',
+			'/' . $this->rest_base . '/test',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'generate_token' ),
-				'permission_callback' => function ( WP_REST_Request $request ) {
-					// special case for user=demo param
-					if ( $request->get_param( 'user' ) === 'demo' ) {
-						return true;
-					}
-
-					$authorization = $request->get_header( 'authorization' );
-
-					return ! is_null( $authorization );
-				},
+				'callback'            => array( $this, 'test_authorization' ),
+				'permission_callback' => '__return_true', // Public endpoint - no authentication required
 			)
 		);
 
-		// Validate JWT token
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/validate',
-			array(
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( $this, 'validate_token' ),
-				'permission_callback' => '__return_true',
-				'args'                => array(
-					'jwt' => array(
-						'description' => __( 'JWT token.', 'woocommerce-pos' ),
-						'type'        => 'string',
-					),
-				),
-			)
-		);
-
-		// Refresh JWT token
+		// Refresh access token using refresh token
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/refresh',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'refresh_token' ),
-				'permission_callback' => '__return_true',
+				'permission_callback' => '__return_true', // Public endpoint - validates refresh token internally
 				'args'                => array(
-					'jwt' => array(
-						'description' => __( 'JWT token.', 'woocommerce-pos' ),
+					'refresh_token' => array(
+						'description' => __( 'The refresh token to use for generating a new access token.', 'woocommerce-pos' ),
 						'type'        => 'string',
-					),
-				),
-			)
-		);
-
-		// Revoke JWT token
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/revoke',
-			array(
-				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => array( $this, 'revoke_token' ),
-				'permission_callback' => '__return_true',
-				'args'                => array(
-					'jwt' => array(
-						'description' => __( 'JWT token.', 'woocommerce-pos' ),
-						'type'        => 'string',
+						'required'    => true,
 					),
 				),
 			)
@@ -120,83 +71,116 @@ class Auth extends WP_REST_Controller {
 
 
 	/**
-	 * Get the user and password in the request body and generate a JWT.
+	 * Test authorization method endpoint.
 	 *
-	 * @NOTE - not allowing REST Auth at the moment
+	 * This public endpoint tests whether the server supports Authorization headers
+	 * or requires query parameters for authorization. This is important because
+	 * some servers block Authorization headers for security reasons.
 	 *
-	 * @param WP_REST_Request $request
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function generate_token( WP_REST_Request $request ) {
-		$token                     = str_replace( 'Basic ', '', $request->get_header( 'authorization' ) );
-		$decoded                   = base64_decode( $token, true );
-		list($username, $password) = explode( ':', $decoded );
-
-		/** Try to authenticate the user with the passed credentials*/
-		$user = wp_authenticate( $username, $password );
-
-		// If the authentication fails return an error
-		if ( is_wp_error( $user ) ) {
-			$error_code = $user->get_error_code();
-
-			$user_data = new WP_Error(
-				'woocommerce_pos_' . $error_code,
-				$user->get_error_message( $error_code ),
-				array(
-					'status' => 403,
-				)
-			);
-		} else {
-			$auth_service = AuthService::instance();
-			$user_data = $auth_service->get_user_data( $user );
-			$stores = array_map(
-				function ( $store ) {
-					return $store->get_data();
-				},
-				wcpos_get_stores()
-			);
-			$user_data['stores'] = $stores;
-		}
-
-		/**
-		 * Let the user modify the data before sending it back
-		 *
-		 * @param {object} $data
-		 * @param {WP_User} $user
-		 *
-		 * @returns {object} Response data
-		 *
-		 * @since 1.0.0
-		 *
-		 * @hook woocommerce_pos_jwt_auth_token_before_dispatch
-		 */
-		$user_data = apply_filters( 'woocommerce_pos_jwt_auth_token_before_dispatch', $user_data, $user );
-
-		return rest_ensure_response( $user_data );
-	}
-
-	/**
-	 * Validate JWT Token.
+	 * @param WP_REST_Request $request The REST request object.
 	 *
-	 * @param WP_REST_Request $request
 	 * @return WP_REST_Response
 	 */
-	public function validate_token( WP_REST_Request $request ): WP_REST_Response {
-		$token = $request->get_param( 'jwt' );
+	public function test_authorization( WP_REST_Request $request ): WP_REST_Response {
+		// Check for Authorization header
+		$header_auth     = $request->get_header( 'authorization' );
+		$has_header_auth = ! empty( $header_auth );
+
+		// Check for authorization query parameter
+		$param_auth     = $request->get_param( 'authorization' );
+		$has_param_auth = ! empty( $param_auth );
+
+		// Only return success if we received authorization via at least one method
+		if ( ! $has_header_auth && ! $has_param_auth ) {
+			return rest_ensure_response( array(
+				'status'  => 'error',
+				'message' => 'No authorization token detected',
+			) );
+		}
+
+		$response_data = array(
+			'status'     => 'success',
+			'message'    => 'Authorization token detected successfully',
+		);
+
+		// Add authorization details
+		$response_data['received_header_auth'] = $has_header_auth;
+		if ( $has_header_auth ) {
+			$response_data['header_value'] = $header_auth;
+		}
+
+		$response_data['received_param_auth'] = $has_param_auth;
+		if ( $has_param_auth ) {
+			$response_data['param_value'] = $param_auth;
+		}
+
+		// Indicate which method was used
+		if ( $has_header_auth && $has_param_auth ) {
+			$response_data['auth_method'] = 'both';
+		} elseif ( $has_header_auth ) {
+			$response_data['auth_method'] = 'header';
+		} else {
+			$response_data['auth_method'] = 'param';
+		}
+
+		return rest_ensure_response( $response_data );
+	}
+
+	/**
+	 * Refresh access token using a valid refresh token.
+	 *
+	 * This endpoint allows clients to obtain a new access token using a valid refresh token.
+	 * Compatible with the axios-auth-refresh library and follows OAuth 2.0 refresh token flow.
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function refresh_token( WP_REST_Request $request ): WP_REST_Response {
+		$refresh_token = $request->get_param( 'refresh_token' );
+
+		if ( empty( $refresh_token ) ) {
+			return rest_ensure_response( array(
+				'error'             => 'invalid_request',
+				'error_description' => 'Missing refresh_token parameter',
+			), 400 );
+		}
+
 		$auth_service = AuthService::instance();
-		$result = $auth_service->validate_token( $token );
-		return rest_ensure_response( $result );
-	}
+		$result       = $auth_service->refresh_access_token( $refresh_token );
 
-	/**
-	 * Refresh JWT Token.
-	 */
-	public function refresh_token(): void {
-	}
+		if ( is_wp_error( $result ) ) {
+			$error_code = $result->get_error_code();
+			$error_msg  = $result->get_error_message();
+			$status     = $result->get_error_data()['status'] ?? 400;
 
-	/**
-	 * Revoke JWT Token.
-	 */
-	public function revoke_token(): void {
+			// Map error codes to OAuth 2.0 standard error responses
+			$oauth_error = 'invalid_grant'; // Default OAuth error for refresh token issues
+			
+			if ( false !== strpos( $error_code, 'invalid_token' ) || false !== strpos( $error_code, 'revoked' ) ) {
+				$oauth_error = 'invalid_grant';
+			} elseif ( false !== strpos( $error_code, 'user_not_found' ) ) {
+				$oauth_error = 'invalid_grant';
+			}
+
+			return rest_ensure_response( array(
+				'error'             => $oauth_error,
+				'error_description' => $error_msg,
+			), $status );
+		}
+
+		// Calculate expires_in for axios-auth-refresh compatibility
+		$current_time = time();
+		$expires_in   = max( 0, $result['expires_at'] - $current_time );
+
+		// Return response in format compatible with axios-auth-refresh
+		$response_data = array(
+			'access_token' => $result['access_token'],
+			'token_type'   => $result['token_type'],
+			'expires_in'   => $expires_in,
+			'expires_at'   => $result['expires_at'],
+		);
+
+		return rest_ensure_response( $response_data );
 	}
 }
