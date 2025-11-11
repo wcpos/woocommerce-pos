@@ -23,7 +23,7 @@ const Access = () => {
 
 	return (
 		<>
-			<div className="wcpos-p-4">
+			<div className="wcpos:p-4">
 				<Notice status="info" isDismissible={false}>
 					<UT
 						_str="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
@@ -45,16 +45,16 @@ const Access = () => {
 					.
 				</Notice>
 			</div>
-			<div className="sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 wcpos-p-4 wcpos-pt-0">
+			<div className="wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:p-4 wcpos:pt-0">
 				<div className="">
 					<ul>
 						{map(data, (role: { name: string }, id) => (
 							<li
 								key={id}
 								className={classNames(
-									'wcpos-p-4 wcpos-mb-1 wcpos-rounded wcpos-font-medium wcpos-text-sm hover:wcpos-bg-gray-100 wcpos-cursor-pointer',
+									'wcpos:p-4 wcpos:mb-1 wcpos:rounded wcpos:font-medium wcpos:text-sm wcpos:hover:bg-gray-100 wcpos:cursor-pointer',
 									id === selected &&
-										'wcpos-bg-wp-admin-theme-color-lightest hover:wcpos-bg-wp-admin-theme-color-lightest'
+										'wcpos:bg-wp-admin-theme-color-lightest wcpos:hover:bg-wp-admin-theme-color-lightest'
 								)}
 								onClick={() => {
 									setSelected(id);
@@ -70,7 +70,7 @@ const Access = () => {
 						map(capabilities, (caps, group) => {
 							return (
 								<div key={group}>
-									<h2 className="wcpos-text-base">
+									<h2 className="wcpos:text-base">
 										{
 											{
 												wcpos: 'WCPOS',

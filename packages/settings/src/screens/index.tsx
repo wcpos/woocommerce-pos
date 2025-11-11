@@ -58,7 +58,7 @@ const Main = ({ initialScreen }: Props) => {
 		return (
 			<ErrorBoundary FallbackComponent={Error}>
 				{notice && (
-					<div className="wcpos-p-4">
+					<div className="wcpos:p-4">
 						<Notice status={notice.type} onRemove={() => setNotice(null)}>
 							{notice.message}
 						</Notice>
@@ -72,8 +72,8 @@ const Main = ({ initialScreen }: Props) => {
 	};
 
 	return (
-		<div className="wcpos-container wcpos-mx-auto wcpos-max-w-screen-md wcpos-py-0 md:wcpos-py-4 md:wcpos-pr-4 wcpos-space-y-4">
-			<div className="wcpos-bg-white wcpos-rounded-lg">
+		<div className="wcpos:container wcpos:mx-auto wcpos:max-w-screen-md wcpos:py-0 wcpos:md:py-4 wcpos:md:pr-4 wcpos:space-y-4">
+			<div className="wcpos:bg-white wcpos:rounded-lg">
 				<Header />
 				<Tabs<(typeof routes)[number]>
 					renderScene={renderScene}
@@ -97,7 +97,7 @@ const Main = ({ initialScreen }: Props) => {
 					}}
 				/>
 			</div>
-			<div className="wcpos-bg-white wcpos-rounded-lg">
+			<div className="wcpos:bg-white wcpos:rounded-lg">
 				<Footer />
 			</div>
 		</div>
