@@ -32,6 +32,22 @@ The prefix comes **BEFORE** the variant in v4:
 
 All **226+ occurrences across 19 files** were updated, including proper handling of variants!
 
+#### Deprecated Utilities Replaced
+Updated all deprecated v3 utilities to v4 equivalents:
+
+**Opacity Modifiers:**
+- ✅ `wcpos:ring-opacity-5` → `wcpos:ring-black/5`
+- ✅ `wcpos:ring-opacity-75` → `wcpos:ring-white/75`
+
+**Renamed Utilities:**
+- ✅ `wcpos:shadow-sm` → `wcpos:shadow-xs` (3 occurrences)
+
+**No Issues Found:**
+- ✅ No deprecated flex-shrink/flex-grow utilities
+- ✅ No overflow-ellipsis (would use wcpos:text-ellipsis)
+- ✅ No standalone `rounded` (would be wcpos:rounded-sm)
+- ✅ No standalone `ring` (would be wcpos:ring-3)
+
 #### PostCSS Configuration (`postcss.config.js`)
 - **Before**: `tailwindcss: {}`
 - **After**: `'@tailwindcss/postcss': {}`

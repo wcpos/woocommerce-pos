@@ -146,7 +146,7 @@ const License = () => {
 					type="text"
 					name="license-key"
 					id="license-key"
-					className="wcpos:mt-1 wcpos:focus:ring-indigo-500 wcpos:focus:border-wp-admin-theme-color wcpos:block wcpos:w-full wcpos:shadow-sm wcpos:sm:text-sm wcpos:border-gray-300 wcpos:rounded-md"
+					className="wcpos:mt-1 wcpos:focus:ring-indigo-500 wcpos:focus:border-wp-admin-theme-color wcpos:block wcpos:w-full wcpos:shadow-xs wcpos:sm:text-sm wcpos:border-gray-300 wcpos:rounded-md"
 					onChange={throttle(handleChange, 100)}
 				/>
 			</div>
