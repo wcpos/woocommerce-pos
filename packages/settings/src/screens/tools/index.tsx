@@ -13,9 +13,9 @@ const Tools = () => {
 	const { data, mutate } = useSettingsApi('tools');
 
 	return (
-		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
+		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 			<div></div>
-			<div className="wcpos-col-span-2">
+			<div className="wcpos:col-span-2">
 				<ToggleControl
 					label={
 						<Label

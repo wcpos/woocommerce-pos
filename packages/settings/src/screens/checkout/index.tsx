@@ -25,8 +25,8 @@ const Checkout = () => {
 
 	return (
 		<>
-			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
-				<div className="wcpos-flex sm:wcpos-justify-end">
+			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
+				<div className="wcpos:flex wcpos:sm:justify-end">
 					<Label
 						tip={t('Change the default order status for POS sales', { _tags: 'wp-admin-settings' })}
 					>
@@ -45,7 +45,7 @@ const Checkout = () => {
 				</div>
 				<div></div>
 				<div></div>
-				<div className="wcpos-col-span-2">
+				<div className="wcpos:col-span-2">
 					<ToggleControl
 						label={
 							<Label
@@ -63,7 +63,7 @@ const Checkout = () => {
 					/>
 				</div>
 				<div></div>
-				<div className="wcpos-col-span-2">
+				<div className="wcpos:col-span-2">
 					<ToggleControl
 						label={
 							<Label
@@ -82,8 +82,8 @@ const Checkout = () => {
 				</div>
 			</div>
 
-			<div className="wcpos-px-4 wcpos-pb-5">
-				<h2 className="wcpos-text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
+			<div className="wcpos:px-4 wcpos:pb-5">
+				<h2 className="wcpos:text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
 				<p>
 					{t(
 						'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.',

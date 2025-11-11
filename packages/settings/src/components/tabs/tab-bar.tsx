@@ -20,7 +20,7 @@ export const TabBar = ({
 	focusedIndex,
 }: TabBarProps) => {
 	return (
-		<div className="wcpos-flex wcpos-space-x-4 wcpos-justify-center">
+		<div className="wcpos:flex wcpos:space-x-4 wcpos:justify-center">
 			{routes.map((route, i) => {
 				const focused = i === focusedIndex;
 				return (

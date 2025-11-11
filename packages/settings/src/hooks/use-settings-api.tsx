@@ -1,4 +1,4 @@
-import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useSuspenseQuery, useMutation } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { merge, cloneDeep, get } from 'lodash';
 
@@ -24,7 +24,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	const { setNotice } = useNotices();
 	const endpoint = `wcpos/v1/settings/${id}?wcpos=1`;
 
-	const { data } = useQuery({
+	const { data } = useSuspenseQuery({
 		queryKey: [id],
 		queryFn: async () => {
 			const response = await apiFetch<Record<string, unknown>>({

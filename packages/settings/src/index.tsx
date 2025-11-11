@@ -18,7 +18,6 @@ import './index.css';
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
-			suspense: true,
 			staleTime: 10 * 60 * 1000, // 10 minutes
 		},
 	},

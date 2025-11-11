@@ -10,7 +10,7 @@ const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
 	const message = get(error, 'message', 'Unknown error');
 
 	return (
-		<div className="wcpos-p-4">
+		<div className="wcpos:p-4">
 			<Notice status="error" onRemove={resetErrorBoundary}>
 				<p>
 					{t('Something went wrong', { _tags: 'wp-admin-settings' })}: <code>{message}</code>
