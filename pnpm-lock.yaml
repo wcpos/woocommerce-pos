@@ -176,7 +176,7 @@ importers:
         version: 3.3.2
       sass-loader:
         specifier: 14.2.1
-        version: 14.2.1(node-sass@9.0.0)(webpack@5.92.0)
+        version: 14.2.1(node-sass@9.0.0)(sass@1.94.0)(webpack@5.92.0)
       style-loader:
         specifier: 4.0.0
         version: 4.0.0(webpack@5.92.0)
@@ -397,9 +397,6 @@ importers:
       mini-css-extract-plugin:
         specifier: 2.9.0
         version: 2.9.0(webpack@5.92.0)
-      node-sass:
-        specifier: 9.0.0
-        version: 9.0.0
       npm-run-all:
         specifier: 4.1.5
         version: 4.1.5
@@ -415,9 +412,12 @@ importers:
       prettier:
         specifier: 3.3.2
         version: 3.3.2
+      sass:
+        specifier: ^1.84.0
+        version: 1.94.0
       sass-loader:
         specifier: 14.2.1
-        version: 14.2.1(node-sass@9.0.0)(webpack@5.92.0)
+        version: 14.2.1(node-sass@9.0.0)(sass@1.94.0)(webpack@5.92.0)
       style-loader:
         specifier: 4.0.0
         version: 4.0.0(webpack@5.92.0)
@@ -1658,6 +1658,88 @@ packages:
     resolution: {integrity: sha512-yx6KAqlt3TAHBduS2fMQtJDL2ufIHnDRArrJEOoTTuizxqmjLT+psGYOHpmMl3gvQpFJ11Hs76guUUktzAF9Bg==}
     engines: {node: '>=12.0.0'}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
+  '@parcel/watcher-android-arm64@2.5.1':
+    resolution: {integrity: sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm64]
+    os: [android]
+
+  '@parcel/watcher-darwin-arm64@2.5.1':
+    resolution: {integrity: sha512-eAzPv5osDmZyBhou8PoF4i6RQXAfeKL9tjb3QzYuccXFMQU0ruIc/POh30ePnaOyD1UXdlKguHBmsTs53tVoPw==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@parcel/watcher-darwin-x64@2.5.1':
+    resolution: {integrity: sha512-1ZXDthrnNmwv10A0/3AJNZ9JGlzrF82i3gNQcWOzd7nJ8aj+ILyW1MTxVk35Db0u91oD5Nlk9MBiujMlwmeXZg==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@parcel/watcher-freebsd-x64@2.5.1':
+    resolution: {integrity: sha512-SI4eljM7Flp9yPuKi8W0ird8TI/JK6CSxju3NojVI6BjHsTyK7zxA9urjVjEKJ5MBYC+bLmMcbAWlZ+rFkLpJQ==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@parcel/watcher-linux-arm-glibc@2.5.1':
+    resolution: {integrity: sha512-RCdZlEyTs8geyBkkcnPWvtXLY44BCeZKmGYRtSgtwwnHR4dxfHRG3gR99XdMEdQ7KeiDdasJwwvNSF5jKtDwdA==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm]
+    os: [linux]
+
+  '@parcel/watcher-linux-arm-musl@2.5.1':
+    resolution: {integrity: sha512-6E+m/Mm1t1yhB8X412stiKFG3XykmgdIOqhjWj+VL8oHkKABfu/gjFj8DvLrYVHSBNC+/u5PeNrujiSQ1zwd1Q==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm]
+    os: [linux]
+
+  '@parcel/watcher-linux-arm64-glibc@2.5.1':
+    resolution: {integrity: sha512-LrGp+f02yU3BN9A+DGuY3v3bmnFUggAITBGriZHUREfNEzZh/GO06FF5u2kx8x+GBEUYfyTGamol4j3m9ANe8w==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@parcel/watcher-linux-arm64-musl@2.5.1':
+    resolution: {integrity: sha512-cFOjABi92pMYRXS7AcQv9/M1YuKRw8SZniCDw0ssQb/noPkRzA+HBDkwmyOJYp5wXcsTrhxO0zq1U11cK9jsFg==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@parcel/watcher-linux-x64-glibc@2.5.1':
+    resolution: {integrity: sha512-GcESn8NZySmfwlTsIur+49yDqSny2IhPeZfXunQi48DMugKeZ7uy1FX83pO0X22sHntJ4Ub+9k34XQCX+oHt2A==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@parcel/watcher-linux-x64-musl@2.5.1':
+    resolution: {integrity: sha512-n0E2EQbatQ3bXhcH2D1XIAANAcTZkQICBPVaxMeaCVBtOpBZpWJuf7LwyWPSBDITb7In8mqQgJ7gH8CILCURXg==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@parcel/watcher-win32-arm64@2.5.1':
+    resolution: {integrity: sha512-RFzklRvmc3PkjKjry3hLF9wD7ppR4AKcWNzH7kXR7GUe0Igb3Nz8fyPwtZCSquGrhU5HhUNDr/mKBqj7tqA2Vw==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@parcel/watcher-win32-ia32@2.5.1':
+    resolution: {integrity: sha512-c2KkcVN+NJmuA7CGlaGD1qJh1cLfDnQsHjE89E60vUEMlqduHGCdCLJCID5geFVM0dOtA3ZiIO8BoEQmzQVfpQ==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [ia32]
+    os: [win32]
+
+  '@parcel/watcher-win32-x64@2.5.1':
+    resolution: {integrity: sha512-9lHBdJITeNR++EvSQVUcaZoWupyHfXe1jZvGZ06O/5MflPcuPLtEphScIBL+AiCWBO46tDSHzWyD0uDmmZqsgA==}
+    engines: {node: '>= 10.0.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@parcel/watcher@2.5.1':
+    resolution: {integrity: sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg==}
+    engines: {node: '>= 10.0.0'}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -3451,6 +3533,10 @@ packages:
     resolution: {integrity: sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw==}
     engines: {node: '>= 8.10.0'}
 
+  chokidar@4.0.3:
+    resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
+    engines: {node: '>= 14.16.0'}
+
   chownr@2.0.0:
     resolution: {integrity: sha512-bIomtDF5KGpdogkLd9VspvFzk9KfpyyGlS8YFVZl7TGPBHL5snIOnxeshwVgPteQ9b4Eydl+pVbIyE1DcvCWgQ==}
     engines: {node: '>=10'}
@@ -3926,6 +4012,11 @@ packages:
     resolution: {integrity: sha512-OCg2UsLbXK7GmmpzMXhYkdO64vhJ1ROUUGaTFyHjVwEdMEcTTRj7W1TxLbSBxdY8QLBPCcp66MTyaSy0RpO17A==}
     peerDependencies:
       valtio: '*'
+
+  detect-libc@1.0.3:
+    resolution: {integrity: sha512-pGjwhsmsp4kL2RTz08wcOlGN83otlqHeD/Z5T8GXZB+/YcpQ/dgo+lbU8ZsGxV0HIvqqxo9l7mqYwyYMD9bKDg==}
+    engines: {node: '>=0.10'}
+    hasBin: true
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -4843,6 +4934,9 @@ packages:
   ignore@7.0.3:
     resolution: {integrity: sha512-bAH5jbK/F3T3Jls4I0SO1hmPR0dKU0a7+SY6n1yzRtG54FLO8d6w/nxLFX2Nb7dBu6cCWXPaAME6cYqFUMmuCA==}
     engines: {node: '>= 4'}
+
+  immutable@5.1.4:
+    resolution: {integrity: sha512-p6u1bG3YSnINT5RQmx/yRZBpenIl30kVxkTLDyHLIMk0gict704Q9n+thfDI7lTRm9vXdDYutVzXhzcThxTnXA==}
 
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
@@ -5823,6 +5917,9 @@ packages:
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
 
+  node-addon-api@7.1.1:
+    resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
+
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
     engines: {node: 4.x || >=6.0.0}
@@ -6738,6 +6835,10 @@ packages:
     resolution: {integrity: sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==}
     engines: {node: '>=8.10.0'}
 
+  readdirp@4.1.2:
+    resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
+    engines: {node: '>= 14.18.0'}
+
   reakit-system@0.15.2:
     resolution: {integrity: sha512-TvRthEz0DmD0rcJkGamMYx+bATwnGNWJpe/lc8UV2Js8nnPvkaxrHk5fX9cVASFrWbaIyegZHCWUBfxr30bmmA==}
     peerDependencies:
@@ -6957,6 +7058,11 @@ packages:
         optional: true
       webpack:
         optional: true
+
+  sass@1.94.0:
+    resolution: {integrity: sha512-Dqh7SiYcaFtdv5Wvku6QgS5IGPm281L+ZtVD1U2FJa7Q0EFRlq8Z3sjYtz6gYObsYThUOz9ArwFqPZx+1azILQ==}
+    engines: {node: '>=14.0.0'}
+    hasBin: true
 
   scheduler@0.20.2:
     resolution: {integrity: sha512-2eWfGgAqqWFGqtdMmcL5zCMK1U8KlXv8SQFGglL3CEtd0aDVDWgeF/YoCmvln55m5zSk3J/20hTaSBeSObsQDQ==}
@@ -9515,6 +9621,67 @@ snapshots:
 
   '@oclif/screen@3.0.8': {}
 
+  '@parcel/watcher-android-arm64@2.5.1':
+    optional: true
+
+  '@parcel/watcher-darwin-arm64@2.5.1':
+    optional: true
+
+  '@parcel/watcher-darwin-x64@2.5.1':
+    optional: true
+
+  '@parcel/watcher-freebsd-x64@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-arm-glibc@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-arm-musl@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-arm64-glibc@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-arm64-musl@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-x64-glibc@2.5.1':
+    optional: true
+
+  '@parcel/watcher-linux-x64-musl@2.5.1':
+    optional: true
+
+  '@parcel/watcher-win32-arm64@2.5.1':
+    optional: true
+
+  '@parcel/watcher-win32-ia32@2.5.1':
+    optional: true
+
+  '@parcel/watcher-win32-x64@2.5.1':
+    optional: true
+
+  '@parcel/watcher@2.5.1':
+    dependencies:
+      detect-libc: 1.0.3
+      is-glob: 4.0.3
+      micromatch: 4.0.8
+      node-addon-api: 7.1.1
+    optionalDependencies:
+      '@parcel/watcher-android-arm64': 2.5.1
+      '@parcel/watcher-darwin-arm64': 2.5.1
+      '@parcel/watcher-darwin-x64': 2.5.1
+      '@parcel/watcher-freebsd-x64': 2.5.1
+      '@parcel/watcher-linux-arm-glibc': 2.5.1
+      '@parcel/watcher-linux-arm-musl': 2.5.1
+      '@parcel/watcher-linux-arm64-glibc': 2.5.1
+      '@parcel/watcher-linux-arm64-musl': 2.5.1
+      '@parcel/watcher-linux-x64-glibc': 2.5.1
+      '@parcel/watcher-linux-x64-musl': 2.5.1
+      '@parcel/watcher-win32-arm64': 2.5.1
+      '@parcel/watcher-win32-ia32': 2.5.1
+      '@parcel/watcher-win32-x64': 2.5.1
+    optional: true
+
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
@@ -10047,7 +10214,7 @@ snapshots:
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.4.0)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/wordpress__data': 7.0.0(react@18.3.1)
       '@types/wordpress__keycodes': 2.18.0
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       react-autosize-textarea: 7.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
@@ -10061,7 +10228,7 @@ snapshots:
     dependencies:
       '@types/react': 18.3.3
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.4.0)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
       - react
@@ -10075,7 +10242,7 @@ snapshots:
       '@types/wordpress__components': 23.8.0(@emotion/is-prop-valid@1.4.0)(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/wordpress__notices': 4.0.0(react@18.3.1)
       '@types/wordpress__rich-text': 3.4.6(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       downshift: 6.1.12(react@18.3.1)
       re-resizable: 6.11.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
@@ -10102,7 +10269,7 @@ snapshots:
 
   '@types/wordpress__keycodes@2.18.0':
     dependencies:
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 4.34.0
 
   '@types/wordpress__notices@4.0.0(react@18.3.1)':
     dependencies:
@@ -10454,24 +10621,24 @@ snapshots:
     dependencies:
       '@woocommerce/number': 2.4.0
       '@wordpress/deprecated': 2.12.3
-      '@wordpress/element': 4.4.1
-      '@wordpress/html-entities': 3.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/html-entities': 3.58.0
       '@wordpress/i18n': 3.20.0
 
   '@woocommerce/data@4.1.0(@types/react@18.3.3)(@wordpress/core-data@4.4.6(react@18.3.1))(lodash@4.17.21)(moment@2.30.1)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@woocommerce/date': 4.2.0(lodash@4.17.21)
       '@woocommerce/navigation': 8.1.0(@types/react@18.3.3)(lodash@4.17.21)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
-      '@wordpress/api-fetch': 6.3.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
+      '@wordpress/api-fetch': 6.55.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
       '@wordpress/core-data': 4.4.6(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
       '@wordpress/data-controls': 2.30.0(react@18.3.1)
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/element': 4.4.1
-      '@wordpress/hooks': 3.6.1
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/url': 3.7.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/element': 4.20.0
+      '@wordpress/hooks': 3.58.0
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/url': 3.59.0
       dompurify: 2.5.8
       md5: 2.3.0
       moment: 2.30.1
@@ -10488,8 +10655,8 @@ snapshots:
   '@woocommerce/date@4.2.0(lodash@4.17.21)':
     dependencies:
       '@types/d3-time-format': 2.3.4
-      '@wordpress/date': 4.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/date': 4.58.0
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
       moment: 2.30.1
       moment-timezone: 0.5.47
@@ -10497,13 +10664,13 @@ snapshots:
 
   '@woocommerce/navigation@8.1.0(@types/react@18.3.3)(lodash@4.17.21)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     dependencies:
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/components': 19.8.6(@types/react@18.3.3)(react-dom@18.3.1(react@18.3.1))(react-with-direction@1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
-      '@wordpress/compose': 5.4.2(react@18.3.1)
-      '@wordpress/element': 4.4.1
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/compose': 5.20.0(react@18.3.1)
+      '@wordpress/element': 4.20.0
+      '@wordpress/hooks': 3.58.0
       '@wordpress/notices': 3.31.0(react@18.3.1)
-      '@wordpress/url': 3.7.1
+      '@wordpress/url': 3.59.0
       history: 5.3.0
       lodash: 4.17.21
       qs: 6.14.0
@@ -10528,7 +10695,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.7
       '@wordpress/dom-ready': 3.58.0
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/i18n': 4.58.0
 
   '@wordpress/a11y@4.20.0':
     dependencies:
@@ -10544,8 +10711,8 @@ snapshots:
   '@wordpress/api-fetch@6.3.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/url': 3.7.1
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/url': 3.59.0
 
   '@wordpress/api-fetch@6.55.0':
     dependencies:
@@ -10763,20 +10930,20 @@ snapshots:
       '@emotion/styled': 11.14.1(@emotion/react@11.14.0(@types/react@18.3.3)(react@18.3.1))(@types/react@18.3.3)(react@18.3.1)
       '@emotion/utils': 1.0.0
       '@use-gesture/react': 10.3.1(react@18.3.1)
-      '@wordpress/a11y': 3.6.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
-      '@wordpress/date': 4.6.1
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/dom': 3.6.1
-      '@wordpress/element': 4.4.1
+      '@wordpress/a11y': 3.58.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
+      '@wordpress/date': 4.58.0
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/dom': 3.58.0
+      '@wordpress/element': 4.20.0
       '@wordpress/escape-html': 2.58.0
-      '@wordpress/hooks': 3.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/hooks': 3.58.0
+      '@wordpress/i18n': 4.58.0
       '@wordpress/icons': 8.2.3
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 3.58.0
       '@wordpress/primitives': 3.56.0
-      '@wordpress/rich-text': 5.4.3(react@18.3.1)
+      '@wordpress/rich-text': 5.20.0(react@18.3.1)
       '@wordpress/warning': 2.58.0
       classnames: 2.5.1
       colord: 2.9.3
@@ -11031,11 +11198,11 @@ snapshots:
       '@babel/runtime': 7.24.7
       '@types/lodash': 4.17.5
       '@types/mousetrap': 1.6.15
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/dom': 3.6.1
-      '@wordpress/element': 4.4.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/dom': 3.58.0
+      '@wordpress/element': 4.20.0
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/keycodes': 3.58.0
       '@wordpress/priority-queue': 2.58.0
       clipboard: 2.0.11
       lodash: 4.17.21
@@ -11097,15 +11264,15 @@ snapshots:
   '@wordpress/core-data@4.4.6(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/blocks': 11.21.0(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/deprecated': 3.6.1
-      '@wordpress/element': 4.4.1
-      '@wordpress/html-entities': 3.6.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/deprecated': 3.58.0
+      '@wordpress/element': 4.20.0
+      '@wordpress/html-entities': 3.58.0
+      '@wordpress/i18n': 4.58.0
       '@wordpress/is-shallow-equal': 4.58.0
-      '@wordpress/url': 3.7.1
+      '@wordpress/url': 3.59.0
       equivalent-key-map: 0.2.2
       lodash: 4.17.21
       memize: 1.1.0
@@ -11268,7 +11435,7 @@ snapshots:
   '@wordpress/deprecated@3.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/hooks': 3.58.0
 
   '@wordpress/deprecated@4.20.0':
     dependencies:
@@ -11452,7 +11619,7 @@ snapshots:
   '@wordpress/i18n@4.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/hooks': 3.6.1
+      '@wordpress/hooks': 3.58.0
       gettext-parser: 1.4.0
       lodash: 4.17.21
       memize: 1.1.0
@@ -11504,7 +11671,7 @@ snapshots:
   '@wordpress/icons@8.2.3':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       '@wordpress/primitives': 3.56.0
 
   '@wordpress/icons@9.49.0':
@@ -11536,8 +11703,8 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.7
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/element': 4.4.1
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/keycodes': 3.58.0
       lodash: 4.17.21
       react: 18.3.1
       rememo: 3.0.0
@@ -11550,7 +11717,7 @@ snapshots:
   '@wordpress/keycodes@3.6.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
 
   '@wordpress/keycodes@4.20.0':
@@ -11565,10 +11732,10 @@ snapshots:
   '@wordpress/media-utils@3.4.1':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/api-fetch': 6.3.1
+      '@wordpress/api-fetch': 6.55.0
       '@wordpress/blob': 3.58.0
-      '@wordpress/element': 4.4.1
-      '@wordpress/i18n': 4.6.1
+      '@wordpress/element': 4.20.0
+      '@wordpress/i18n': 4.58.0
       lodash: 4.17.21
 
   '@wordpress/notices@3.31.0(react@18.3.1)':
@@ -11702,13 +11869,13 @@ snapshots:
   '@wordpress/rich-text@5.4.3(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.24.7
-      '@wordpress/a11y': 3.6.1
-      '@wordpress/compose': 5.4.2(react@18.3.1)
+      '@wordpress/a11y': 3.58.0
+      '@wordpress/compose': 5.20.0(react@18.3.1)
       '@wordpress/data': 6.15.0(react@18.3.1)
-      '@wordpress/element': 4.4.1
+      '@wordpress/element': 4.20.0
       '@wordpress/escape-html': 2.58.0
-      '@wordpress/i18n': 4.6.1
-      '@wordpress/keycodes': 3.6.1
+      '@wordpress/i18n': 4.58.0
+      '@wordpress/keycodes': 3.58.0
       lodash: 4.17.21
       memize: 1.1.0
       react: 18.3.1
@@ -12399,6 +12566,10 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
+  chokidar@4.0.3:
+    dependencies:
+      readdirp: 4.1.2
+
   chownr@2.0.0: {}
 
   chrome-trace-event@1.0.4: {}
@@ -12864,6 +13035,9 @@ snapshots:
   derive-valtio@0.1.0(valtio@1.13.2(@types/react@18.3.3)(react@18.3.1)):
     dependencies:
       valtio: 1.13.2(@types/react@18.3.3)(react@18.3.1)
+
+  detect-libc@1.0.3:
+    optional: true
 
   detect-libc@2.1.2: {}
 
@@ -13980,6 +14154,8 @@ snapshots:
   ignore@5.3.2: {}
 
   ignore@7.0.3: {}
+
+  immutable@5.1.4: {}
 
   import-fresh@3.3.1:
     dependencies:
@@ -15136,6 +15312,9 @@ snapshots:
 
   node-abort-controller@3.1.1: {}
 
+  node-addon-api@7.1.1:
+    optional: true
+
   node-fetch@2.7.0(encoding@0.1.13):
     dependencies:
       whatwg-url: 5.0.0
@@ -16180,6 +16359,8 @@ snapshots:
     dependencies:
       picomatch: 2.3.1
 
+  readdirp@4.1.2: {}
+
   reakit-system@0.15.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       react: 18.3.1
@@ -16391,12 +16572,21 @@ snapshots:
       scss-tokenizer: 0.4.3
       yargs: 17.7.2
 
-  sass-loader@14.2.1(node-sass@9.0.0)(webpack@5.92.0):
+  sass-loader@14.2.1(node-sass@9.0.0)(sass@1.94.0)(webpack@5.92.0):
     dependencies:
       neo-async: 2.6.2
     optionalDependencies:
       node-sass: 9.0.0
+      sass: 1.94.0
       webpack: 5.92.0(webpack-cli@5.1.4)
+
+  sass@1.94.0:
+    dependencies:
+      chokidar: 4.0.3
+      immutable: 5.1.4
+      source-map-js: 1.2.1
+    optionalDependencies:
+      '@parcel/watcher': 2.5.1
 
   scheduler@0.20.2:
     dependencies:

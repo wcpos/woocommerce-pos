@@ -87,8 +87,7 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 						'wcpos:text-left',
 						'wcpos:focus:outline-none',
 						'focus-visible:wcpos:ring-2',
-						'focus-visible:wcpos:ring-white',
-						'focus-visible:wcpos:ring-opacity-75',
+						'focus-visible:wcpos:ring-white/75',
 						'focus-visible:wcpos:ring-offset-2',
 						'focus-visible:wcpos:ring-offset-teal-300',
 						'wcpos:sm:text-sm',
@@ -147,8 +146,7 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 							'wcpos:text-base',
 							'wcpos:shadow-lg',
 							'wcpos:ring-1',
-							'wcpos:ring-black',
-							'wcpos:ring-opacity-5',
+							'wcpos:ring-black/5',
 							'wcpos:focus:outline-none',
 							'wcpos:sm:text-sm',
 						])}
@@ -214,7 +212,7 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 											) : null}
 										</>
 									)}
-								</CB.Option>
+								</CBOption>
 							))
 						)}
 					</CBOptions>
