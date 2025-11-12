@@ -325,5 +325,114 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$this->assertEquals( 'Chrome', $device_info['browser'] );
 		$this->assertEquals( 'Windows', $device_info['os'] );
 	}
+
+	/**
+	 * Test access token contains JTI.
+	 */
+	public function test_access_token_contains_jti(): void {
+		$token   = $this->auth_service->generate_access_token( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $token, 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $decoded );
+		$this->assertObjectHasProperty( 'jti', $decoded );
+		$this->assertNotEmpty( $decoded->jti );
+	}
+
+	/**
+	 * Test access token linked to refresh token.
+	 */
+	public function test_access_token_linked_to_refresh_token(): void {
+		$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+
+		$this->assertIsArray( $tokens );
+		$this->assertArrayHasKey( 'access_token', $tokens );
+		$this->assertArrayHasKey( 'refresh_token', $tokens );
+
+		// Decode both tokens
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh_decoded );
+
+		// Access token should have refresh_jti linking to refresh token
+		$this->assertObjectHasProperty( 'refresh_jti', $access_decoded );
+		$this->assertEquals( $refresh_decoded->jti, $access_decoded->refresh_jti );
+	}
+
+	/**
+	 * Test access token blacklist.
+	 */
+	public function test_access_token_blacklist(): void {
+		// Generate access token
+		$token   = $this->auth_service->generate_access_token( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $token, 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $decoded );
+
+		// Blacklist the token
+		$result = $this->auth_service->blacklist_access_token( $decoded->jti, 3600 );
+		$this->assertTrue( $result );
+
+		// Try to validate blacklisted token
+		$validated = $this->auth_service->validate_token( $token, 'access' );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_token_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Test session revocation with blacklist.
+	 */
+	public function test_revoke_session_with_blacklist(): void {
+		// Generate token pair
+		$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+
+		// Decode to get JTIs
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		// Access token should be valid
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+
+		// Revoke session with blacklist
+		$result = $this->auth_service->revoke_session_with_blacklist(
+			$this->test_user->ID,
+			$refresh_decoded->jti,
+			$access_decoded->jti
+		);
+		$this->assertTrue( $result );
+
+		// Refresh token should be revoked
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$this->assertCount( 0, $sessions );
+
+		// Access token should be blacklisted
+		$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+	}
+
+	/**
+	 * Test public update_session_activity method.
+	 */
+	public function test_public_update_session_activity(): void {
+		// Generate refresh token
+		$token   = $this->auth_service->generate_refresh_token( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $token, 'refresh' );
+
+		// Get initial session
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$initial_last_active = $sessions[0]['last_active'];
+
+		// Sleep briefly
+		sleep( 1 );
+
+		// Update activity using public method
+		$result = $this->auth_service->update_session_activity( $this->test_user->ID, $decoded->jti );
+		$this->assertTrue( $result );
+
+		// Verify last_active was updated
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$this->assertGreaterThan( $initial_last_active, $sessions[0]['last_active'] );
+	}
 }
 

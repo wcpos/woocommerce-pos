@@ -115,6 +115,17 @@ class Auth {
 				);
 			}
 
+			// Check if access token is blacklisted (for instant revocation)
+			if ( 'access' === $token_type && isset( $decoded_token->jti ) ) {
+				if ( $this->is_access_token_blacklisted( $decoded_token->jti ) ) {
+					return new WP_Error(
+						'woocommerce_pos_auth_token_revoked',
+						'Access token has been revoked',
+						array( 'status' => 403 )
+					);
+				}
+			}
+
 			// Everything looks good return the decoded token
 			return $decoded_token;
 		} catch ( Exception $e ) {
@@ -133,10 +144,11 @@ class Auth {
 	 * Generate an access token for the provided user (short-lived).
 	 *
 	 * @param WP_User $user
+	 * @param string  $refresh_jti Optional refresh token JTI to link access token to session.
 	 *
 	 * @return string|WP_Error
 	 */
-	public function generate_access_token( WP_User $user ) {
+	public function generate_access_token( WP_User $user, string $refresh_jti = '' ) {
 		// First thing, check the secret key if not exist return a error
 		if ( ! $this->get_secret_key() ) {
 			return new WP_Error(
@@ -166,10 +178,14 @@ class Auth {
 		 */
 		$expire = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
 
+		// Generate unique JTI for access token
+		$jti = wp_generate_uuid4();
+
 		$token = array(
 			'iss'  => get_bloginfo( 'url' ),
 			'iat'  => $issued_at,
 			'exp'  => $expire,
+			'jti'  => $jti,
 			'type' => 'access',
 			'data' => array(
 				'user' => array(
@@ -177,6 +193,11 @@ class Auth {
 				),
 			),
 		);
+
+		// Link to refresh token if provided
+		if ( ! empty( $refresh_jti ) ) {
+			$token['refresh_jti'] = $refresh_jti;
+		}
 
 		/*
 		 * Let the user modify the access token data before the sign.
@@ -274,14 +295,22 @@ class Auth {
 	 * @return array|WP_Error
 	 */
 	public function generate_token_pair( WP_User $user ) {
-		$access_token = $this->generate_access_token( $user );
-		if ( is_wp_error( $access_token ) ) {
-			return $access_token;
-		}
-
+		// Generate refresh token first to get its JTI
 		$refresh_token = $this->generate_refresh_token( $user );
 		if ( is_wp_error( $refresh_token ) ) {
 			return $refresh_token;
+		}
+
+		// Decode to get the JTI
+		$decoded_refresh = $this->validate_token( $refresh_token, 'refresh' );
+		if ( is_wp_error( $decoded_refresh ) ) {
+			return $decoded_refresh;
+		}
+
+		// Generate access token with link to refresh token
+		$access_token = $this->generate_access_token( $user, $decoded_refresh->jti ?? '' );
+		if ( is_wp_error( $access_token ) ) {
+			return $access_token;
 		}
 
 		$issued_at = time();
@@ -399,8 +428,8 @@ class Auth {
 		// Update last_active timestamp for this session
 		$this->update_session_activity( $decoded->data->user->id, $decoded->jti ?? '' );
 
-		// Generate new access token (refresh token stays the same)
-		$new_access_token = $this->generate_access_token( $user );
+		// Generate new access token with link to refresh token (refresh token stays the same)
+		$new_access_token = $this->generate_access_token( $user, $decoded->jti ?? '' );
 		if ( is_wp_error( $new_access_token ) ) {
 			return $new_access_token;
 		}
@@ -587,7 +616,7 @@ class Auth {
 	 *
 	 * @return bool
 	 */
-	private function update_session_activity( int $user_id, string $jti ): bool {
+	public function update_session_activity( int $user_id, string $jti ): bool {
 		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
 		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
 			return false;
@@ -767,5 +796,64 @@ class Auth {
 		}
 
 		return $device_info;
+	}
+
+	/**
+	 * Blacklist an access token by JTI (for instant revocation).
+	 *
+	 * @param string $jti Access token JTI.
+	 * @param int    $ttl Time to live in seconds (until token expires).
+	 *
+	 * @return bool
+	 */
+	public function blacklist_access_token( string $jti, int $ttl ): bool {
+		if ( empty( $jti ) ) {
+			return false;
+		}
+
+		// Use transient with TTL matching token expiration
+		return set_transient( "wcpos_blacklist_{$jti}", true, $ttl );
+	}
+
+	/**
+	 * Check if an access token is blacklisted.
+	 *
+	 * @param string $jti Access token JTI.
+	 *
+	 * @return bool
+	 */
+	private function is_access_token_blacklisted( string $jti ): bool {
+		if ( empty( $jti ) ) {
+			return false;
+		}
+
+		// Check transient
+		return false !== get_transient( "wcpos_blacklist_{$jti}" );
+	}
+
+	/**
+	 * Revoke session and blacklist current access token.
+	 *
+	 * @param int    $user_id
+	 * @param string $refresh_jti Refresh token JTI.
+	 * @param string $access_jti Optional access token JTI to blacklist immediately.
+	 *
+	 * @return bool
+	 */
+	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti, string $access_jti = '' ): bool {
+		// Revoke the refresh token (session)
+		$revoked = $this->revoke_session( $user_id, $refresh_jti );
+
+		// Blacklist the current access token if provided
+		if ( $revoked && ! empty( $access_jti ) ) {
+			// Calculate TTL - access tokens expire in 30 minutes by default
+			$issued_at = time();
+			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+			$ttl       = max( 0, $expire - $issued_at );
+
+			$this->blacklist_access_token( $access_jti, $ttl );
+		}
+
+		return $revoked;
 	}
 }

@@ -324,7 +324,12 @@ class Auth extends WP_REST_Controller {
 		}
 
 		$auth_service = AuthService::instance();
-		$result       = $auth_service->revoke_session( (int) $user_id, $jti );
+
+		// Try to get the access token JTI from the request to blacklist it
+		$access_jti = $this->get_current_access_jti_from_request( $request );
+
+		// Revoke session and blacklist current access token
+		$result = $auth_service->revoke_session_with_blacklist( (int) $user_id, $jti, $access_jti );
 
 		if ( $result ) {
 			return rest_ensure_response( array(
@@ -527,5 +532,43 @@ class Auth extends WP_REST_Controller {
 		}
 
 		return $decoded->jti ?? null;
+	}
+
+	/**
+	 * Get current access token JTI from the request's authorization token.
+	 *
+	 * @param WP_REST_Request $request The REST request object.
+	 *
+	 * @return string
+	 */
+	private function get_current_access_jti_from_request( WP_REST_Request $request ): string {
+		// Try to get the token from Authorization header
+		$auth_header = $request->get_header( 'authorization' );
+
+		if ( empty( $auth_header ) ) {
+			// Try query parameter
+			$auth_header = $request->get_param( 'authorization' );
+		}
+
+		if ( empty( $auth_header ) ) {
+			return '';
+		}
+
+		// Extract token from "Bearer TOKEN"
+		$token = str_replace( 'Bearer ', '', $auth_header );
+
+		if ( empty( $token ) ) {
+			return '';
+		}
+
+		// Decode the access token to get its JTI
+		$auth_service = AuthService::instance();
+		$decoded      = $auth_service->validate_token( $token, 'access' );
+
+		if ( is_wp_error( $decoded ) ) {
+			return '';
+		}
+
+		return $decoded->jti ?? '';
 	}
 }
