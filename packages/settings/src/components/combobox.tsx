@@ -97,12 +97,12 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 						ref={inputRef}
 						className={classNames([
 							'wcpos:w-full',
-							'!wcpos:border-none',
+							'wcpos:border-none',
 							'wcpos:py-2',
 							'wcpos:pl-3',
 							'wcpos:pr-10',
 							'wcpos:text-sm',
-							'wcpos:leading-5',
+							// 'wcpos:leading-5',
 							// 'wcpos:text-gray-900',
 							'wcpos:focus:ring-0',
 						])}
