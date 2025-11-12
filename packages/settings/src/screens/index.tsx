@@ -10,7 +10,6 @@ import Footer from './footer';
 import General from './general';
 import Header from './header';
 import License from './license';
-import Tools from './tools';
 import Error from '../components/error';
 import Notice from '../components/notice';
 import Tabs from '../components/tabs';
@@ -22,7 +21,6 @@ const screens = {
 	checkout: Checkout,
 	access: Access,
 	license: License,
-	tools: Tools,
 };
 
 export type ScreenKeys = keyof typeof screens;
@@ -44,7 +42,6 @@ const Main = ({ initialScreen }: Props) => {
 		{ key: 'general', title: t('General', { _tags: 'wp-admin-settings ' }) },
 		{ key: 'checkout', title: t('Checkout', { _tags: 'wp-admin-settings' }) },
 		{ key: 'access', title: t('Access', { _tags: 'wp-admin-settings' }) },
-		{ key: 'tools', title: t('Tools', { _tags: 'wp-admin-settings' }) },
 		{ key: 'license', title: t('License', { _tags: 'wp-admin-settings' }) },
 	];
 

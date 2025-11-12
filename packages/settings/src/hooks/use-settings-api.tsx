@@ -5,17 +5,6 @@ import { merge, cloneDeep, get } from 'lodash';
 import useSnackbar from '../components/snackbar';
 import useNotices from '../hooks/use-notices';
 
-const placeholders = {
-	general: {},
-	checkout: {},
-	'payment-gateways': {
-		gateways: {},
-	},
-	access: {},
-	license: {},
-	tools: {},
-};
-
 type PlaceholderKeys = keyof typeof placeholders;
 
 const useSettingsApi = (id: PlaceholderKeys) => {
@@ -42,7 +31,6 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 
 			return response;
 		},
-		placeholderData: placeholders[id],
 	});
 
 	const mutation = useMutation({

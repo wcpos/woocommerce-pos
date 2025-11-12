@@ -1,5 +1,5 @@
-@import "tailwindcss" prefix(wcpos);
-@config "../tailwind.config.js";
+@import "tailwindcss" prefix(wcpos) important;
+/* @config "../tailwind.config.js"; */
 
 @theme {
 	/* Custom colors for WordPress admin theme */

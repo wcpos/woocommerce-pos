@@ -112,7 +112,7 @@ const General = () => {
 					/>
 				</React.Suspense>
 			</div>
-			<div>
+			<div className="wcpos:flex wcpos:items-center">
 				<CheckboxControl
 					label={t('Use cashier account', { _tags: 'wp-admin-settings' })}
 					checked={!!data?.default_customer_is_cashier}

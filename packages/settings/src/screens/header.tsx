@@ -9,7 +9,7 @@ const Header = () => {
 			<div className="wcpos:w-16">
 				<PosIcon />
 			</div>
-			<h2 className="wcpos:text-2xl wcpos:font-bold wcpos:leading-7 wcpos:text-gray-900 wcpos:sm:text-3xl wcpos:sm:truncate">
+			<h2 className="wcpos:text-2xl wcpos:font-bold wcpos:text-gray-900 wcpos:sm:text-3xl wcpos:sm:truncate">
 				{t('Settings', { _tags: 'wp-admin-settings' })}
 			</h2>
 		</header>
