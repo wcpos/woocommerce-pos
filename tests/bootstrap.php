@@ -8,8 +8,6 @@ use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\BypassFinalsHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\StaticMockerHack;
 use Automattic\WooCommerce\Testing\Tools\DependencyManagement\MockableLegacyProxy;
-use ReflectionException;
-use ReflectionProperty;
 
 error_reporting( E_ALL );
 ini_set( 'display_errors', 1 );
@@ -187,7 +185,7 @@ class Bootstrap {
 		CodeHacker::enable();
 	}
 
-	/**
+	/*
 	 * Re-initialize the dependency injection engine.
 	 *
 	 * This adjusts the container for testing, enabling the use of mockable proxies and other test-specific overrides.
