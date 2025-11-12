@@ -10,6 +10,7 @@ import Footer from './footer';
 import General from './general';
 import Header from './header';
 import License from './license';
+import Sessions from './sessions';
 import Error from '../components/error';
 import Notice from '../components/notice';
 import Tabs from '../components/tabs';
@@ -20,6 +21,7 @@ const screens = {
 	general: General,
 	checkout: Checkout,
 	access: Access,
+	sessions: Sessions,
 	license: License,
 };
 
@@ -42,6 +44,7 @@ const Main = ({ initialScreen }: Props) => {
 		{ key: 'general', title: t('General', { _tags: 'wp-admin-settings ' }) },
 		{ key: 'checkout', title: t('Checkout', { _tags: 'wp-admin-settings' }) },
 		{ key: 'access', title: t('Access', { _tags: 'wp-admin-settings' }) },
+		{ key: 'sessions', title: t('Sessions', { _tags: 'wp-admin-settings' }) },
 		{ key: 'license', title: t('License', { _tags: 'wp-admin-settings' }) },
 	];
 
@@ -80,6 +83,11 @@ const Main = ({ initialScreen }: Props) => {
 						setIndex(idx);
 					}}
 					onTabItemHover={(idx, route) => {
+						// Skip prefetch for sessions tab as it uses different API endpoints
+						if (route.key === 'sessions') {
+							return;
+						}
+						
 						queryClient.prefetchQuery({
 							queryKey: [route.key],
 							queryFn: async () => {

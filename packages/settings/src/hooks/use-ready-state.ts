@@ -37,6 +37,11 @@ const useReadyState = ({ initialScreen }: Props) => {
 	}, []);
 
 	const prefetchSettings = React.useCallback(() => {
+		// Skip prefetch for sessions tab as it uses different API endpoints
+		if (initialScreen === 'sessions') {
+			return Promise.resolve();
+		}
+
 		return queryClient.prefetchQuery({
 			queryKey: [initialScreen],
 			queryFn: async () => {

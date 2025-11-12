@@ -396,6 +396,9 @@ class Auth {
 			);
 		}
 
+		// Update last_active timestamp for this session
+		$this->update_session_activity( $decoded->data->user->id, $decoded->jti ?? '' );
+
 		// Generate new access token (refresh token stays the same)
 		$new_access_token = $this->generate_access_token( $user );
 		if ( is_wp_error( $new_access_token ) ) {
@@ -465,10 +468,20 @@ class Auth {
 			return $token['expires'] > time();
 		});
 
-		// Add new token
+		// Capture session metadata
+		$current_time = time();
+		$ip_address   = $this->get_client_ip();
+		$user_agent   = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		$device_info  = $this->parse_user_agent( $user_agent );
+
+		// Add new token with metadata
 		$refresh_tokens[ $jti ] = array(
-			'expires' => $expires,
-			'created' => time(),
+			'expires'     => $expires,
+			'created'     => $current_time,
+			'last_active' => $current_time,
+			'ip_address'  => $ip_address,
+			'user_agent'  => $user_agent,
+			'device_info' => $device_info,
 		);
 
 		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
@@ -489,5 +502,270 @@ class Auth {
 		}
 
 		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
+	}
+
+	/**
+	 * Get all active sessions for a user.
+	 *
+	 * @param int $user_id
+	 *
+	 * @return array
+	 */
+	public function get_user_sessions( int $user_id ): array {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) ) {
+			return array();
+		}
+
+		$sessions     = array();
+		$current_time = time();
+
+		foreach ( $refresh_tokens as $jti => $token_data ) {
+			// Skip expired sessions
+			if ( $token_data['expires'] <= $current_time ) {
+				continue;
+			}
+
+			$sessions[] = array(
+				'jti'         => $jti,
+				'created'     => $token_data['created'] ?? $current_time,
+				'last_active' => $token_data['last_active'] ?? $token_data['created'] ?? $current_time,
+				'expires'     => $token_data['expires'],
+				'ip_address'  => $token_data['ip_address'] ?? '',
+				'user_agent'  => $token_data['user_agent'] ?? '',
+				'device_info' => $token_data['device_info'] ?? array(),
+			);
+		}
+
+		// Sort by last_active descending (most recent first)
+		usort( $sessions, function( $a, $b ) {
+			return $b['last_active'] - $a['last_active'];
+		});
+
+		return $sessions;
+	}
+
+	/**
+	 * Revoke a specific session by JTI (alias for revoke_refresh_token for clarity).
+	 *
+	 * @param int    $user_id
+	 * @param string $jti
+	 *
+	 * @return bool
+	 */
+	public function revoke_session( int $user_id, string $jti ): bool {
+		return $this->revoke_refresh_token( $user_id, $jti );
+	}
+
+	/**
+	 * Revoke all sessions except the current one.
+	 *
+	 * @param int    $user_id
+	 * @param string $current_jti
+	 *
+	 * @return bool
+	 */
+	public function revoke_all_sessions_except( int $user_id, string $current_jti ): bool {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) ) {
+			return false;
+		}
+
+		// Keep only the current session
+		$refresh_tokens = array_filter( $refresh_tokens, function( $token, $jti ) use ( $current_jti ) {
+			return $jti === $current_jti;
+		}, ARRAY_FILTER_USE_BOTH );
+
+		return update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Update last_active timestamp for a session.
+	 *
+	 * @param int    $user_id
+	 * @param string $jti
+	 *
+	 * @return bool
+	 */
+	private function update_session_activity( int $user_id, string $jti ): bool {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $jti ] ) ) {
+			return false;
+		}
+
+		$refresh_tokens[ $jti ]['last_active'] = time();
+
+		return update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Check if the current user can manage sessions for the target user.
+	 *
+	 * @param int $target_user_id
+	 *
+	 * @return bool
+	 */
+	public function can_manage_user_sessions( int $target_user_id ): bool {
+		$current_user_id = get_current_user_id();
+
+		// User can manage their own sessions
+		if ( $current_user_id === $target_user_id ) {
+			return true;
+		}
+
+		// Administrators can manage anyone's sessions
+		if ( current_user_can( 'manage_options' ) ) {
+			return true;
+		}
+
+		// Shop managers can manage anyone's sessions
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Get client IP address.
+	 *
+	 * @return string
+	 */
+	private function get_client_ip(): string {
+		$ip_address = '';
+
+		// Check for various proxy headers
+		$headers = array(
+			'HTTP_CF_CONNECTING_IP', // Cloudflare
+			'HTTP_X_FORWARDED_FOR',
+			'HTTP_X_REAL_IP',
+			'REMOTE_ADDR',
+		);
+
+		foreach ( $headers as $header ) {
+			if ( ! empty( $_SERVER[ $header ] ) ) {
+				$ip_address = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
+				// Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs)
+				if ( strpos( $ip_address, ',' ) !== false ) {
+					$ip_parts   = explode( ',', $ip_address );
+					$ip_address = trim( $ip_parts[0] );
+				}
+				break;
+			}
+		}
+
+		// Validate and sanitize IP
+		if ( filter_var( $ip_address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6 ) ) {
+			return $ip_address;
+		}
+
+		return '';
+	}
+
+	/**
+	 * Parse user agent string to extract device information.
+	 *
+	 * @param string $user_agent
+	 *
+	 * @return array
+	 */
+	private function parse_user_agent( string $user_agent ): array {
+		$device_info = array(
+			'device_type'     => 'unknown',
+			'browser'         => 'unknown',
+			'browser_version' => '',
+			'os'              => 'unknown',
+			'app_type'        => 'web', // web, ios_app, android_app, electron_app
+		);
+
+		if ( empty( $user_agent ) ) {
+			return $device_info;
+		}
+
+		// Detect WooCommerce POS apps first (custom identifiers)
+		// Your apps should add identifiers like: "WCPOS-iOS/1.0.0" or "WooCommercePOS-iOS/1.0.0"
+		if ( preg_match( '/WCPOS[-_]?iOS|WooCommercePOS[-_]?iOS/i', $user_agent ) ) {
+			$device_info['app_type']     = 'ios_app';
+			$device_info['browser']      = 'WooCommerce POS';
+			$device_info['device_type']  = preg_match( '/ipad/i', $user_agent ) ? 'tablet' : 'mobile';
+			if ( preg_match( '/WCPOS[-_]?iOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			}
+		} elseif ( preg_match( '/WCPOS[-_]?Android|WooCommercePOS[-_]?Android/i', $user_agent ) ) {
+			$device_info['app_type']     = 'android_app';
+			$device_info['browser']      = 'WooCommerce POS';
+			$device_info['device_type']  = preg_match( '/tablet/i', $user_agent ) ? 'tablet' : 'mobile';
+			if ( preg_match( '/WCPOS[-_]?Android[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			}
+		} elseif ( preg_match( '/WCPOS[-_]?Electron|WooCommercePOS[-_]?Electron|Electron.*WCPOS/i', $user_agent ) ) {
+			$device_info['app_type']    = 'electron_app';
+			$device_info['browser']     = 'WooCommerce POS';
+			$device_info['device_type'] = 'desktop';
+			if ( preg_match( '/WCPOS[-_]?Electron[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/Electron\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			}
+		}
+
+		// Detect standard device type (if not already set by app detection)
+		if ( 'web' === $device_info['app_type'] ) {
+			if ( preg_match( '/mobile|android|iphone|ipod|blackberry|iemobile|opera mini/i', $user_agent ) ) {
+				$device_info['device_type'] = 'mobile';
+			} elseif ( preg_match( '/tablet|ipad|playbook|silk/i', $user_agent ) ) {
+				$device_info['device_type'] = 'tablet';
+			} else {
+				$device_info['device_type'] = 'desktop';
+			}
+		}
+
+		// Detect browser (skip if we already detected a WCPOS app)
+		if ( 'WooCommerce POS' !== $device_info['browser'] ) {
+			if ( preg_match( '/MSIE|Trident/i', $user_agent ) ) {
+				$device_info['browser'] = 'Internet Explorer';
+				if ( preg_match( '/MSIE ([0-9.]+)/', $user_agent, $matches ) ) {
+					$device_info['browser_version'] = $matches[1];
+				}
+			} elseif ( preg_match( '/Edge\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser']         = 'Edge';
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/Edg\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser']         = 'Edge';
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/Firefox\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser']         = 'Firefox';
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/Chrome\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser']         = 'Chrome';
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/Safari\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				// Safari should be checked after Chrome because Chrome also contains Safari
+				if ( ! preg_match( '/Chrome/i', $user_agent ) ) {
+					$device_info['browser']         = 'Safari';
+					$device_info['browser_version'] = $matches[1];
+				}
+			} elseif ( preg_match( '/Opera\/([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser']         = 'Opera';
+				$device_info['browser_version'] = $matches[1];
+			}
+		}
+
+		// Detect OS
+		if ( preg_match( '/Windows NT ([0-9.]+)/i', $user_agent, $matches ) ) {
+			$device_info['os'] = 'Windows';
+		} elseif ( preg_match( '/Mac OS X ([0-9_]+)/i', $user_agent, $matches ) ) {
+			$device_info['os'] = 'macOS';
+		} elseif ( preg_match( '/Android ([0-9.]+)/i', $user_agent, $matches ) ) {
+			$device_info['os'] = 'Android';
+		} elseif ( preg_match( '/iPhone OS ([0-9_]+)/i', $user_agent, $matches ) ) {
+			$device_info['os'] = 'iOS';
+		} elseif ( preg_match( '/iPad.*OS ([0-9_]+)/i', $user_agent, $matches ) ) {
+			$device_info['os'] = 'iPadOS';
+		} elseif ( preg_match( '/Linux/i', $user_agent ) ) {
+			$device_info['os'] = 'Linux';
+		}
+
+		return $device_info;
 	}
 }
