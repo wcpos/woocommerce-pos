@@ -157,6 +157,7 @@ class Init {
 		new Products();
 		new Orders();
 		new Emails();
+		new Templates();
 	}
 
 	/**
@@ -164,7 +165,7 @@ class Init {
 	 */
 	private function init_frontend(): void {
 		if ( ! is_admin() ) {
-			new Templates();
+			new Template_Router();
 			new Form_Handler();
 		}
 	}
@@ -178,6 +179,7 @@ class Init {
 				new AJAX();
 			} else {
 				new Admin();
+				new Templates\Defaults();
 			}
 		}
 	}

@@ -1,5 +1,9 @@
 <?php
 /**
+ * Templates Class.
+ *
+ * Handles registration and management of custom templates.
+ *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
@@ -7,173 +11,281 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WC_Abstract_Order;
+use WP_Query;
 
 class Templates {
 	/**
-	 * @var string POS frontend slug
+	 * Constructor.
 	 */
-	private $pos_regex;
-
-	/**
-	 * @var string POS login slug
-	 */
-	private $pos_login_regex;
-
-	/**
-	 * @var string POS auth slug
-	 */
-	private $pos_auth_regex;
-
-	/**
-	 * @var string POS checkout slug
-	 *
-	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
-	 * eg: x-frame-options: SAMEORIGIN
-	 */
-	private $pos_checkout_regex;
-
-
 	public function __construct() {
-		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
-		$this->pos_login_regex    = '^wcpos-login/?';
-		$this->pos_auth_regex     = '^wcpos-auth/?';
-		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
-
-		$this->add_rewrite_rules();
-
-		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
-		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
-
-		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
-		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
+		// Register immediately since this is already being called during 'init'
+		$this->register_post_type();
+		$this->register_taxonomy();
 	}
 
 	/**
-	 * Make sure cache contains POS rewrite rules.
+	 * Register the custom post type for templates.
 	 *
-	 * @param $rules
-	 *
-	 * @return array|bool
+	 * @return void
 	 */
-	public function rewrite_rules( $rules ) {
-		return isset( $rules[ $this->pos_regex ], $rules[ $this->pos_login_regex ], $rules[ $this->pos_auth_regex ], $rules[ $this->pos_checkout_regex ] ) ? $rules : false;
+	public function register_post_type(): void {
+		$labels = array(
+			'name'                  => _x( 'Templates', 'Post Type General Name', 'woocommerce-pos' ),
+			'singular_name'         => _x( 'Template', 'Post Type Singular Name', 'woocommerce-pos' ),
+			'menu_name'             => __( 'Templates', 'woocommerce-pos' ),
+			'name_admin_bar'        => __( 'Template', 'woocommerce-pos' ),
+			'archives'              => __( 'Template Archives', 'woocommerce-pos' ),
+			'attributes'            => __( 'Template Attributes', 'woocommerce-pos' ),
+			'parent_item_colon'     => __( 'Parent Template:', 'woocommerce-pos' ),
+			'all_items'             => __( 'All Templates', 'woocommerce-pos' ),
+			'add_new_item'          => __( 'Add New Template', 'woocommerce-pos' ),
+			'add_new'               => __( 'Add New', 'woocommerce-pos' ),
+			'new_item'              => __( 'New Template', 'woocommerce-pos' ),
+			'edit_item'             => __( 'Edit Template', 'woocommerce-pos' ),
+			'update_item'           => __( 'Update Template', 'woocommerce-pos' ),
+			'view_item'             => __( 'View Template', 'woocommerce-pos' ),
+			'view_items'            => __( 'View Templates', 'woocommerce-pos' ),
+			'search_items'          => __( 'Search Template', 'woocommerce-pos' ),
+			'not_found'             => __( 'Not found', 'woocommerce-pos' ),
+			'not_found_in_trash'    => __( 'Not found in Trash', 'woocommerce-pos' ),
+			'featured_image'        => __( 'Featured Image', 'woocommerce-pos' ),
+			'set_featured_image'    => __( 'Set featured image', 'woocommerce-pos' ),
+			'remove_featured_image' => __( 'Remove featured image', 'woocommerce-pos' ),
+			'use_featured_image'    => __( 'Use as featured image', 'woocommerce-pos' ),
+			'insert_into_item'      => __( 'Insert into template', 'woocommerce-pos' ),
+			'uploaded_to_this_item' => __( 'Uploaded to this template', 'woocommerce-pos' ),
+			'items_list'            => __( 'Templates list', 'woocommerce-pos' ),
+			'items_list_navigation' => __( 'Templates list navigation', 'woocommerce-pos' ),
+			'filter_items_list'     => __( 'Filter templates list', 'woocommerce-pos' ),
+		);
+
+		$args = array(
+			'label'               => __( 'Template', 'woocommerce-pos' ),
+			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
+			'labels'              => $labels,
+			'supports'            => array( 'title', 'editor', 'revisions' ),
+			'taxonomies'          => array( 'wcpos_template_type' ),
+			'hierarchical'        => false,
+			'public'              => false,
+			'show_ui'             => true,
+			'show_in_menu'        => false, // We'll add it manually to the POS menu
+			'menu_position'       => 5,
+			'show_in_admin_bar'   => true,
+			'show_in_nav_menus'   => false,
+			'can_export'          => true,
+			'has_archive'         => false,
+			'exclude_from_search' => true,
+			'publicly_queryable'  => false,
+			'capability_type'     => 'post',
+			'capabilities'        => array(
+				'edit_post'          => 'manage_woocommerce_pos',
+				'read_post'          => 'manage_woocommerce_pos',
+				'delete_post'        => 'manage_woocommerce_pos',
+				'edit_posts'         => 'manage_woocommerce_pos',
+				'edit_others_posts'  => 'manage_woocommerce_pos',
+				'delete_posts'       => 'manage_woocommerce_pos',
+				'publish_posts'      => 'manage_woocommerce_pos',
+				'read_private_posts' => 'manage_woocommerce_pos',
+			),
+			'show_in_rest'        => true,
+			'rest_base'           => 'wcpos_templates',
+		);
+
+		register_post_type( 'wcpos_template', $args );
 	}
 
 	/**
-	 * Output the matched template.
+	 * Register the taxonomy for template types.
+	 *
+	 * @return void
 	 */
-	public function template_redirect(): void {
-		global $wp;
+	public function register_taxonomy(): void {
+		$labels = array(
+			'name'                       => _x( 'Template Types', 'Taxonomy General Name', 'woocommerce-pos' ),
+			'singular_name'              => _x( 'Template Type', 'Taxonomy Singular Name', 'woocommerce-pos' ),
+			'menu_name'                  => __( 'Template Types', 'woocommerce-pos' ),
+			'all_items'                  => __( 'All Template Types', 'woocommerce-pos' ),
+			'parent_item'                => __( 'Parent Template Type', 'woocommerce-pos' ),
+			'parent_item_colon'          => __( 'Parent Template Type:', 'woocommerce-pos' ),
+			'new_item_name'              => __( 'New Template Type Name', 'woocommerce-pos' ),
+			'add_new_item'               => __( 'Add New Template Type', 'woocommerce-pos' ),
+			'edit_item'                  => __( 'Edit Template Type', 'woocommerce-pos' ),
+			'update_item'                => __( 'Update Template Type', 'woocommerce-pos' ),
+			'view_item'                  => __( 'View Template Type', 'woocommerce-pos' ),
+			'separate_items_with_commas' => __( 'Separate template types with commas', 'woocommerce-pos' ),
+			'add_or_remove_items'        => __( 'Add or remove template types', 'woocommerce-pos' ),
+			'choose_from_most_used'      => __( 'Choose from the most used', 'woocommerce-pos' ),
+			'popular_items'              => __( 'Popular Template Types', 'woocommerce-pos' ),
+			'search_items'               => __( 'Search Template Types', 'woocommerce-pos' ),
+			'not_found'                  => __( 'Not Found', 'woocommerce-pos' ),
+			'no_terms'                   => __( 'No template types', 'woocommerce-pos' ),
+			'items_list'                 => __( 'Template types list', 'woocommerce-pos' ),
+			'items_list_navigation'      => __( 'Template types list navigation', 'woocommerce-pos' ),
+		);
 
-		$rewrite_rules_to_templates = array(
-			$this->pos_regex          => __NAMESPACE__ . '\\Templates\\Frontend',
-			$this->pos_login_regex    => __NAMESPACE__ . '\\Templates\\Login',
-			$this->pos_auth_regex     => __NAMESPACE__ . '\\Templates\\Auth',
-			$this->pos_checkout_regex => array(
-				'order-pay'      => __NAMESPACE__ . '\\Templates\\Payment',
-				'order-received' => __NAMESPACE__ . '\\Templates\\Received',
-				'wcpos-receipt'  => __NAMESPACE__ . '\\Templates\\Receipt',
+		$args = array(
+			'labels'            => $labels,
+			'hierarchical'      => false,
+			'public'            => false,
+			'show_ui'           => true,
+			'show_admin_column' => true,
+			'show_in_nav_menus' => false,
+			'show_tagcloud'     => false,
+			'show_in_rest'      => true,
+			'capabilities'      => array(
+				'manage_terms' => 'manage_woocommerce_pos',
+				'edit_terms'   => 'manage_woocommerce_pos',
+				'delete_terms' => 'manage_woocommerce_pos',
+				'assign_terms' => 'manage_woocommerce_pos',
 			),
 		);
 
-		foreach ( $rewrite_rules_to_templates as $rule => $classname ) {
-			if ( $wp->matched_rule === $rule ) {
-				if ( \is_array( $classname ) ) {
-					$this->load_checkout_template( $classname );
-				} else {
-					$this->load_template( $classname );
-				}
-				exit;
-			}
-		}
+		register_taxonomy( 'wcpos_template_type', array( 'wcpos_template' ), $args );
+
+		// Register default template types
+		$this->register_default_template_types();
 	}
 
-
 	/**
-	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
-	 * version of the receipt.
+	 * Get template by ID.
 	 *
-	 * @param string            $order_received_url
-	 * @param WC_Abstract_Order $order
+	 * @param int $template_id Template post ID.
 	 *
-	 * @return string
+	 * @return null|array Template data or null if not found.
 	 */
-	public function order_received_url( string $order_received_url, WC_Abstract_Order $order ): string {
-		global $wp;
+	public static function get_template( int $template_id ): ?array {
+		$post = get_post( $template_id );
 
-		// check is pos
-		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
-			return $order_received_url;
+		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
+			return null;
 		}
 
-		$redirect = add_query_arg(
-			array(
-				'key' => $order->get_order_key(),
+		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
+		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : '';
+
+		return array(
+			'id'            => $post->ID,
+			'title'         => $post->post_title,
+			'content'       => $post->post_content,
+			'type'          => $type,
+			'language'      => get_post_meta( $template_id, '_template_language', true ),
+			'is_default'    => (bool) get_post_meta( $template_id, '_template_default', true ),
+			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
+			'is_active'     => (bool) get_post_meta( $template_id, '_template_active', true ),
+			'date_created'  => $post->post_date,
+			'date_modified' => $post->post_modified,
+		);
+	}
+
+	/**
+	 * Get active template for a specific type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return null|array Active template data or null if not found.
+	 */
+	public static function get_active_template( string $type ): ?array {
+		$args = array(
+			'post_type'      => 'wcpos_template',
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'meta_query'     => array(
+				array(
+					'key'   => '_template_active',
+					'value' => '1',
+				),
 			),
-			get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() )
+			'tax_query'      => array(
+				array(
+					'taxonomy' => 'wcpos_template_type',
+					'field'    => 'slug',
+					'terms'    => $type,
+				),
+			),
 		);
 
-		return $redirect;
+		$query = new WP_Query( $args );
+
+		if ( $query->have_posts() ) {
+			return self::get_template( $query->posts[0]->ID );
+		}
+
+		return null;
 	}
 
 	/**
-	 * @NOTE: 'order-pay' and 'order-received' rewrite tags are added by WC
+	 * Set template as active.
 	 *
-	 * @return void
+	 * @param int $template_id Template post ID.
+	 *
+	 * @return bool True on success, false on failure.
 	 */
-	private function add_rewrite_rules(): void {
-		add_rewrite_tag( '%wcpos%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-receipt%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-login%', '([^&]+)' );
-		add_rewrite_tag( '%wcpos-auth%', '([^&]+)' );
-		add_rewrite_rule( $this->pos_regex, 'index.php?wcpos=1', 'top' );
-		add_rewrite_rule( $this->pos_login_regex, 'index.php?wcpos-login=1', 'top' );
-		add_rewrite_rule( $this->pos_auth_regex, 'index.php?wcpos-auth=1', 'top' );
-		add_rewrite_rule( $this->pos_checkout_regex, 'index.php?$matches[1]=$matches[2]&wcpos=1', 'top' );
-	}
+	public static function set_active_template( int $template_id ): bool {
+		$template = self::get_template( $template_id );
 
-	/**
-	 * Loads order templates, additionally checks query var is a valid order id.
-	 *
-	 * @param array $classnames
-	 *
-	 * @return void
-	 */
-	private function load_checkout_template( array $classnames ): void {
-		global $wp;
+		if ( ! $template ) {
+			return false;
+		}
 
-		foreach ( $classnames as $query_var => $classname ) {
-			if ( isset( $wp->query_vars[ $query_var ] ) ) {
-				$order_id = absint( $wp->query_vars[ $query_var ] );
+		// Deactivate all other templates of the same type
+		$args = array(
+			'post_type'      => 'wcpos_template',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'meta_query'     => array(
+				array(
+					'key'   => '_template_active',
+					'value' => '1',
+				),
+			),
+			'tax_query'      => array(
+				array(
+					'taxonomy' => 'wcpos_template_type',
+					'field'    => 'slug',
+					'terms'    => $template['type'],
+				),
+			),
+		);
 
-				if ( class_exists( $classname ) && $order_id ) {
-					$template = new $classname( $order_id );
-					$template->get_template();
+		$query = new WP_Query( $args );
 
-					return;
-				}
+		if ( $query->have_posts() ) {
+			foreach ( $query->posts as $post ) {
+				delete_post_meta( $post->ID, '_template_active' );
 			}
 		}
 
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		// Activate the new template
+		return false !== update_post_meta( $template_id, '_template_active', '1' );
 	}
 
 	/**
-	 * Loads all other templates.
-	 *
-	 * @param string $classname
+	 * Register default template types (receipt, report).
 	 *
 	 * @return void
 	 */
-	private function load_template( string $classname ): void {
-		if ( class_exists( $classname ) ) {
-			$template = new $classname();
-			$template->get_template();
-
-			return;
+	private function register_default_template_types(): void {
+		// Check if terms already exist to avoid duplicates
+		if ( ! term_exists( 'receipt', 'wcpos_template_type' ) ) {
+			wp_insert_term(
+				'Receipt',
+				'wcpos_template_type',
+				array(
+					'slug'        => 'receipt',
+					'description' => __( 'Receipt templates for printing orders', 'woocommerce-pos' ),
+				)
+			);
 		}
 
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		if ( ! term_exists( 'report', 'wcpos_template_type' ) ) {
+			wp_insert_term(
+				'Report',
+				'wcpos_template_type',
+				array(
+					'slug'        => 'report',
+					'description' => __( 'Report templates for analytics', 'woocommerce-pos' ),
+				)
+			);
+		}
 	}
 }

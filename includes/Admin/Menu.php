@@ -145,6 +145,14 @@ class Menu {
 			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
 		);
 
+		add_submenu_page(
+			PLUGIN_NAME,
+			__( 'Templates', 'woocommerce-pos' ),
+			__( 'Templates', 'woocommerce-pos' ),
+			'manage_woocommerce_pos',
+			'edit.php?post_type=wcpos_template'
+		);
+
 		// adjust submenu
 		global $submenu;
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
