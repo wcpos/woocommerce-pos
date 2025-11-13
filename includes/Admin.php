@@ -78,6 +78,7 @@ class Admin {
 	public function init(): void {
 		new Notices();
 		new Pro_Plugin_Updater();
+		new Admin\Templates();
 	}
 
 	/**

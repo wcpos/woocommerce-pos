@@ -1,26 +1,26 @@
-=== WooCommerce POS - Point of Sale ===
+=== WCPOS - Point of Sale (POS) plugin for WooCommerce ===
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.12
+Stable tag: 1.7.13
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-WooCommerce POS is a simple application for taking orders at the Point of Sale using your WooCommerce store.
+WCPOS is a simple application for taking orders at the Point of Sale using your WooCommerce store.
 
 == Description ==
 
-WooCommerce POS is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
+WCPOS is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
 
 > 🕒 Install and start taking orders in less than 2 minutes.
 
 = 🎥 DEMO =
-You can see a demo of the WooCommerce POS plugin in action by going to [demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
+You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
 or download the desktop application:
-⬇️ [Download WooCommerce POS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
-⬇️ [Download WooCommerce POS for Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
-⬇️ [Download WooCommerce POS for Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
+⬇️ [Download WCPOS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
+⬇️ [Download WCPOS for Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
+⬇️ [Download WCPOS for Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
 
 = ✨ FEATURES = 
 * **Cross-platform:** Accessible via browser or desktop application _(iOS & Android coming soon)_
@@ -51,12 +51,12 @@ or download the desktop application:
 
 = Automatic installation =
 1. Go to Plugins screen and select Add New.
-2. Search for "WooCommerce POS" in the WordPress Plugin Directory.
+2. Search for "WCPOS" in the WordPress Plugin Directory.
 3. Install the plugin
 4. Click Activate Plugin to activate it.
 
 = Pro installation =
-If you have purchased a license for [WooCommerce POS Pro](http://wcpos.com/pro) please follow the steps below to install and activate the plugin:
+If you have purchased a license for [WCPOS Pro](http://wcpos.com/pro) please follow the steps below to install and activate the plugin:
 
 1. Go to: http://wcpos.com/my-account/
 2. Under My Downloads, click the download link and save the plugin to your desktop.
@@ -67,7 +67,7 @@ If you have purchased a license for [WooCommerce POS Pro](http://wcpos.com/pro) 
 = Manual installation =
 To install a WordPress Plugin manually:
 
-1. Download the WooCommerce POS plugin to your desktop.
+1. Download the WCPOS plugin to your desktop.
 2. If downloaded as a zip archive, extract the Plugin folder to your desktop.
 3. With your FTP program, upload the Plugin folder to the wp-content/plugins folder in your WordPress directory online.
 4. Go to Plugins screen and find the newly uploaded Plugin in the list.
@@ -75,7 +75,7 @@ To install a WordPress Plugin manually:
 
 == Frequently Asked Questions ==
 
-= Where can I find more information on WooCommerce POS? =
+= Where can I find more information on WCPOS? =
 There is more information on our website at [https://wcpos.com](https://wcpos.com).
 
 * FAQ - https://wcpos.com/faq
@@ -84,7 +84,7 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Screenshots ==
 
-1. WooCommerce POS main screen
+1. WCPOS main screen
 
 == Changelog ==
 
@@ -138,8 +138,8 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 = 1.7.1 - 2024/11/14 = 
 * Fix: Error updating quantity for Product Variations when decimal quantities enabled
-* Plugin Conflict: The wePOS plugin alters the standard WC REST API response, which in turn breaks WooCommerce POS
-This small update adds code to prevent WooCommerce POS from being activated if wePOS is detected
+* Plugin Conflict: The wePOS plugin alters the standard WC REST API response, which in turn breaks WCPOS
+This small update adds code to prevent WCPOS from being activated if wePOS is detected
 
 = 1.7.0 - 2024/11/13 =
 * Enhancement: Updated all React components to use modern standards (Tailwind, Radix UI), improving reliability and usability

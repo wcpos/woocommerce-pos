@@ -63,10 +63,44 @@ class Receipt {
 			}
 
 			/**
-			 * Put WC_Order into the global scope so that the template can access it.
+			 * Fires before rendering the receipt template.
+			 *
+			 * @param int             $order_id Order ID.
+			 * @param WC_Abstract_Order $order   Order object.
+			 *
+			 * @since 1.8.0
+			 *
+			 * @hook woocommerce_pos_before_template_render
 			 */
-			$path  = $this->get_template_path( 'receipt.php' );
-			include $path;
+			do_action( 'woocommerce_pos_before_template_render', $this->order_id, $order );
+
+			/**
+			 * Check for custom template first.
+			 */
+			$custom_template = $this->get_custom_template();
+
+			if ( $custom_template ) {
+				$this->render_custom_template( $custom_template, $order );
+			} else {
+				/**
+				 * Put WC_Order into the global scope so that the template can access it.
+				 */
+				$path = $this->get_template_path( 'receipt.php' );
+				include $path;
+			}
+
+			/**
+			 * Fires after rendering the receipt template.
+			 *
+			 * @param int             $order_id Order ID.
+			 * @param WC_Abstract_Order $order   Order object.
+			 *
+			 * @since 1.8.0
+			 *
+			 * @hook woocommerce_pos_after_template_render
+			 */
+			do_action( 'woocommerce_pos_after_template_render', $this->order_id, $order );
+
 			exit;
 		} catch ( Exception $e ) {
 			wc_print_notice( $e->getMessage(), 'error' );
@@ -91,5 +125,86 @@ class Receipt {
 		 * @hook woocommerce_pos_print_receipt_path
 		 */
 		return apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( $file_name ) );
+	}
+
+	/**
+	 * Get the active custom receipt template.
+	 *
+	 * @return array|null Custom template data or null if not found.
+	 */
+	private function get_custom_template(): ?array {
+		/**
+		 * Filters the active receipt template.
+		 *
+		 * @param array|null $template Active template data or null.
+		 *
+		 * @returns array|null Active template data or null.
+		 *
+		 * @since 1.8.0
+		 *
+		 * @hook woocommerce_pos_active_receipt_template
+		 */
+		$template = apply_filters( 'woocommerce_pos_active_receipt_template', null );
+
+		if ( $template ) {
+			return $template;
+		}
+
+		// Get active receipt template from database
+		return Templates::get_active_template( 'receipt' );
+	}
+
+	/**
+	 * Render a custom template.
+	 *
+	 * @param array             $template Custom template data.
+	 * @param \WC_Abstract_Order $order    Order object.
+	 *
+	 * @return void
+	 */
+	private function render_custom_template( array $template, \WC_Abstract_Order $order ): void {
+		// If template has a file path, use that
+		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) ) {
+			include $template['file_path'];
+			return;
+		}
+
+		// Otherwise, render from content stored in database
+		if ( ! empty( $template['content'] ) ) {
+			// Create a temporary file to execute the PHP template
+			$temp_file = $this->create_temp_template_file( $template['content'] );
+
+			if ( $temp_file ) {
+				include $temp_file;
+				unlink( $temp_file ); // Clean up temporary file
+			}
+		}
+	}
+
+	/**
+	 * Create a temporary file for the template content.
+	 *
+	 * @param string $content Template content.
+	 *
+	 * @return string|false Path to temporary file or false on failure.
+	 */
+	private function create_temp_template_file( string $content ) {
+		$upload_dir = wp_upload_dir();
+		$temp_dir   = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-templates';
+
+		// Create directory if it doesn't exist
+		if ( ! file_exists( $temp_dir ) ) {
+			wp_mkdir_p( $temp_dir );
+		}
+
+		// Create temporary file
+		$temp_file = tempnam( $temp_dir, 'receipt_' );
+
+		if ( $temp_file ) {
+			file_put_contents( $temp_file, $content );
+			return $temp_file;
+		}
+
+		return false;
 	}
 }
