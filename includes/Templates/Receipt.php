@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 class Receipt {
 	/**
@@ -151,7 +152,7 @@ class Receipt {
 		}
 
 		// Get active receipt template from database
-		return Templates::get_active_template( 'receipt' );
+		return TemplatesManager::get_active_template( 'receipt' );
 	}
 
 	/**
