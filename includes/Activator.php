@@ -97,6 +97,9 @@ class Activator {
 			)
 		);
 
+		// Migrate templates on activation
+		Templates\Defaults::run_migration();
+
 		// set the auto redirection on next page load
 		// set_transient( 'woocommere_pos_welcome', 1, 30 );
 	}
@@ -266,6 +269,7 @@ class Activator {
 			'0.4.6'        => 'updates/update-0.4.6.php',
 			'1.0.0-beta.1' => 'updates/update-1.0.0-beta.1.php',
 			'1.6.1'        => 'updates/update-1.6.1.php',
+			'1.8.0'        => 'updates/update-1.8.0.php',
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&

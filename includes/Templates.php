@@ -21,6 +21,45 @@ class Templates {
 		// Register immediately since this is already being called during 'init'
 		$this->register_post_type();
 		$this->register_taxonomy();
+
+		// Disable Gutenberg for template post type
+		add_filter( 'use_block_editor_for_post_type', array( $this, 'disable_gutenberg' ), 10, 2 );
+		
+		// Disable visual editor (TinyMCE) for templates
+		add_filter( 'user_can_richedit', array( $this, 'disable_visual_editor' ), 10, 1 );
+	}
+
+	/**
+	 * Disable Gutenberg editor for template post type.
+	 *
+	 * @param bool   $use_block_editor Whether to use the block editor.
+	 * @param string $post_type        Post type.
+	 *
+	 * @return bool Modified value.
+	 */
+	public function disable_gutenberg( bool $use_block_editor, string $post_type ): bool {
+		if ( 'wcpos_template' === $post_type ) {
+			return false;
+		}
+
+		return $use_block_editor;
+	}
+
+	/**
+	 * Disable visual editor for template post type.
+	 *
+	 * @param bool $default Whether the user can use the visual editor.
+	 *
+	 * @return bool Modified value.
+	 */
+	public function disable_visual_editor( bool $default ): bool {
+		global $post;
+
+		if ( $post && 'wcpos_template' === $post->post_type ) {
+			return false;
+		}
+
+		return $default;
 	}
 
 	/**
@@ -37,7 +76,7 @@ class Templates {
 			'archives'              => __( 'Template Archives', 'woocommerce-pos' ),
 			'attributes'            => __( 'Template Attributes', 'woocommerce-pos' ),
 			'parent_item_colon'     => __( 'Parent Template:', 'woocommerce-pos' ),
-			'all_items'             => __( 'All Templates', 'woocommerce-pos' ),
+			'all_items'             => __( 'Templates', 'woocommerce-pos' ),
 			'add_new_item'          => __( 'Add New Template', 'woocommerce-pos' ),
 			'add_new'               => __( 'Add New', 'woocommerce-pos' ),
 			'new_item'              => __( 'New Template', 'woocommerce-pos' ),
@@ -68,7 +107,7 @@ class Templates {
 			'hierarchical'        => false,
 			'public'              => false,
 			'show_ui'             => true,
-			'show_in_menu'        => false, // We'll add it manually to the POS menu
+			'show_in_menu'        => \WCPOS\WooCommercePOS\PLUGIN_NAME, // Register under POS menu
 			'menu_position'       => 5,
 			'show_in_admin_bar'   => true,
 			'show_in_nav_menus'   => false,
@@ -87,7 +126,7 @@ class Templates {
 				'publish_posts'      => 'manage_woocommerce_pos',
 				'read_private_posts' => 'manage_woocommerce_pos',
 			),
-			'show_in_rest'        => true,
+			'show_in_rest'        => false, // Disable Gutenberg
 			'rest_base'           => 'wcpos_templates',
 		);
 
@@ -132,6 +171,7 @@ class Templates {
 			'show_in_nav_menus' => false,
 			'show_tagcloud'     => false,
 			'show_in_rest'      => true,
+			'meta_box_cb'       => array( $this, 'template_type_metabox' ),
 			'capabilities'      => array(
 				'manage_terms' => 'manage_woocommerce_pos',
 				'edit_terms'   => 'manage_woocommerce_pos',
@@ -172,6 +212,8 @@ class Templates {
 			'is_default'    => (bool) get_post_meta( $template_id, '_template_default', true ),
 			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
 			'is_active'     => (bool) get_post_meta( $template_id, '_template_active', true ),
+			'is_plugin'     => (bool) get_post_meta( $template_id, '_template_plugin', true ),
+			'is_theme'      => (bool) get_post_meta( $template_id, '_template_theme', true ),
 			'date_created'  => $post->post_date,
 			'date_modified' => $post->post_modified,
 		);
@@ -287,5 +329,55 @@ class Templates {
 				)
 			);
 		}
+	}
+
+	/**
+	 * Custom metabox for template type selection.
+	 * Ensures one type is always selected with 'receipt' as default.
+	 *
+	 * @param \WP_Post $post    Post object.
+	 * @param array    $box     Metabox arguments.
+	 *
+	 * @return void
+	 */
+	public function template_type_metabox( \WP_Post $post, array $box ): void {
+		$taxonomy = $box['args']['taxonomy'];
+		$terms    = get_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+			)
+		);
+
+		if ( empty( $terms ) || is_wp_error( $terms ) ) {
+			return;
+		}
+
+		// Get current terms
+		$current_terms = wp_get_post_terms( $post->ID, $taxonomy );
+		$current_slug  = ! empty( $current_terms ) && ! is_wp_error( $current_terms ) ? $current_terms[0]->slug : 'receipt';
+
+		?>
+		<div id="taxonomy-<?php echo esc_attr( $taxonomy ); ?>" class="categorydiv">
+			<div id="<?php echo esc_attr( $taxonomy ); ?>-all" class="tabs-panel">
+				<ul id="<?php echo esc_attr( $taxonomy ); ?>checklist" class="categorychecklist form-no-clear">
+					<?php foreach ( $terms as $term ) : ?>
+						<li>
+							<label class="selectit">
+								<input 
+									type="radio" 
+									name="tax_input[<?php echo esc_attr( $taxonomy ); ?>][]" 
+									value="<?php echo esc_attr( $term->slug ); ?>"
+									<?php checked( $current_slug, $term->slug ); ?>
+									required
+								/>
+								<?php echo esc_html( $term->name ); ?>
+							</label>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+		</div>
+		<?php
 	}
 }

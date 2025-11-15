@@ -179,7 +179,6 @@ class Init {
 				new AJAX();
 			} else {
 				new Admin();
-				new Templates\Defaults();
 			}
 		}
 	}
