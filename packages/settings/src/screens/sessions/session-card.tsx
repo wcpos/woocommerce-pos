@@ -45,17 +45,19 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 	};
 
 	const getDeviceIcon = (deviceInfo: Session['device_info']) => {
-		// Check app type first for native apps
+		// Check app type first
 		switch (deviceInfo.app_type) {
 			case 'ios_app':
-				return '📱'; // iOS app icon
+				// Default to tablet for iOS unless explicitly iPhone
+				return deviceInfo.device_type === 'mobile' ? '📱' : '📲';
 			case 'android_app':
-				return '🤖'; // Android app icon
+				// Default to tablet for Android unless explicitly mobile
+				return deviceInfo.device_type === 'mobile' ? '📱' : '📲';
 			case 'electron_app':
-				return '🖥️'; // Desktop app icon
+				return '💻'; // Desktop app icon
 			case 'web':
 			default:
-				// Fall back to device type for web browsers
+				// Web browser - use globe for desktop, phone/tablet for mobile
 				switch (deviceInfo.device_type) {
 					case 'mobile':
 						return '📱';
@@ -63,7 +65,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						return '📲';
 					case 'desktop':
 					default:
-						return '💻';
+						return '🌐'; // Globe icon for web
 				}
 		}
 	};
@@ -71,14 +73,14 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 	const getAppTypeLabel = (appType?: string) => {
 		switch (appType) {
 			case 'ios_app':
-				return t('iOS App', { _tags: 'wp-admin-settings' });
+				return t('iOS Application', { _tags: 'wp-admin-settings' });
 			case 'android_app':
-				return t('Android App', { _tags: 'wp-admin-settings' });
+				return t('Android Application', { _tags: 'wp-admin-settings' });
 			case 'electron_app':
-				return t('Desktop App', { _tags: 'wp-admin-settings' });
+				return t('Desktop Application', { _tags: 'wp-admin-settings' });
 			case 'web':
 			default:
-				return t('Web', { _tags: 'wp-admin-settings' });
+				return t('Web Application', { _tags: 'wp-admin-settings' });
 		}
 	};
 
@@ -129,16 +131,17 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						{/* Title and button */}
 						<div className="wcpos:flex wcpos:items-start wcpos:justify-between wcpos:gap-2">
 							<div className="wcpos:flex-1">
-								<h3 className="wcpos:font-medium wcpos:text-sm wcpos:text-gray-900 wcpos:leading-tight">
-									{session.device_info.browser}{' '}
+								<h3 className="wcpos:font-semibold wcpos:text-sm wcpos:text-gray-900 wcpos:leading-tight">
+									{getAppTypeLabel(session.device_info.app_type)}
 									{session.device_info.browser_version && (
 										<span className="wcpos:text-gray-500 wcpos:font-normal wcpos:text-xs">
+											{' '}
 											{session.device_info.browser_version}
 										</span>
 									)}
 								</h3>
 								<p className="wcpos:text-xs wcpos:text-gray-600 wcpos:mt-0.5">
-									{session.device_info.os}
+									{session.device_info.browser} • {session.device_info.os}
 								</p>
 							</div>
 
@@ -157,23 +160,8 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 							)}
 						</div>
 
-						{/* Platform badge and last active */}
+						{/* Last active */}
 						<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:mt-2 wcpos:mb-2">
-							<span
-								className={classNames(
-									'wcpos:inline-flex wcpos:items-center wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded wcpos:text-xs wcpos:font-medium',
-									session.device_info.app_type === 'web'
-										? 'wcpos:bg-blue-100 wcpos:text-blue-800'
-										: session.device_info.app_type === 'ios_app'
-										? 'wcpos:bg-purple-100 wcpos:text-purple-800'
-										: session.device_info.app_type === 'android_app'
-										? 'wcpos:bg-green-100 wcpos:text-green-800'
-										: 'wcpos:bg-gray-100 wcpos:text-gray-800'
-								)}
-							>
-								{getAppTypeLabel(session.device_info.app_type)}
-							</span>
-							<span className="wcpos:text-xs wcpos:text-gray-400">•</span>
 							<span className="wcpos:text-xs wcpos:text-gray-600">
 								{getTimeAgo(session.last_active)}
 							</span>
