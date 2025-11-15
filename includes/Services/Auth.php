@@ -480,60 +480,6 @@ class Auth {
 	}
 
 	/**
-	 * Store refresh token JTI for tracking/revocation.
-	 *
-	 * @param int    $user_id
-	 * @param string $jti
-	 * @param int    $expires
-	 */
-	private function store_refresh_token_jti( int $user_id, string $jti, int $expires ): void {
-		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
-		if ( ! \is_array( $refresh_tokens ) ) {
-			$refresh_tokens = array();
-		}
-
-		// Clean up expired tokens
-		$refresh_tokens = array_filter( $refresh_tokens, function( $token ) {
-			return $token['expires'] > time();
-		});
-
-		// Capture session metadata
-		$current_time = time();
-		$ip_address   = $this->get_client_ip();
-		$user_agent   = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
-		$device_info  = $this->parse_user_agent( $user_agent );
-
-		// Add new token with metadata
-		$refresh_tokens[ $jti ] = array(
-			'expires'     => $expires,
-			'created'     => $current_time,
-			'last_active' => $current_time,
-			'ip_address'  => $ip_address,
-			'user_agent'  => $user_agent,
-			'device_info' => $device_info,
-		);
-
-		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
-	}
-
-	/**
-	 * Check if refresh token is still valid (not revoked).
-	 *
-	 * @param int    $user_id
-	 * @param string $jti
-	 *
-	 * @return bool
-	 */
-	private function is_refresh_token_valid( int $user_id, string $jti ): bool {
-		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
-		if ( ! \is_array( $refresh_tokens ) ) {
-			return false;
-		}
-
-		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
-	}
-
-	/**
 	 * Get all active sessions for a user.
 	 *
 	 * @param int $user_id
@@ -557,11 +503,11 @@ class Auth {
 
 			$sessions[] = array(
 				'jti'         => $jti,
-				'created'     => $token_data['created'] ?? $current_time,
+				'created'     => $token_data['created']     ?? $current_time,
 				'last_active' => $token_data['last_active'] ?? $token_data['created'] ?? $current_time,
 				'expires'     => $token_data['expires'],
-				'ip_address'  => $token_data['ip_address'] ?? '',
-				'user_agent'  => $token_data['user_agent'] ?? '',
+				'ip_address'  => $token_data['ip_address']  ?? '',
+				'user_agent'  => $token_data['user_agent']  ?? '',
 				'device_info' => $token_data['device_info'] ?? array(),
 			);
 		}
@@ -656,6 +602,103 @@ class Auth {
 	}
 
 	/**
+	 * Blacklist an access token by JTI (for instant revocation).
+	 *
+	 * @param string $jti Access token JTI.
+	 * @param int    $ttl Time to live in seconds (until token expires).
+	 *
+	 * @return bool
+	 */
+	public function blacklist_access_token( string $jti, int $ttl ): bool {
+		if ( empty( $jti ) ) {
+			return false;
+		}
+
+		// Use transient with TTL matching token expiration
+		return set_transient( "wcpos_blacklist_{$jti}", true, $ttl );
+	}
+
+	/**
+	 * Revoke session and blacklist current access token.
+	 *
+	 * @param int    $user_id
+	 * @param string $refresh_jti Refresh token JTI.
+	 * @param string $access_jti  Optional access token JTI to blacklist immediately.
+	 *
+	 * @return bool
+	 */
+	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti, string $access_jti = '' ): bool {
+		// Revoke the refresh token (session)
+		$revoked = $this->revoke_session( $user_id, $refresh_jti );
+
+		// Blacklist the current access token if provided
+		if ( $revoked && ! empty( $access_jti ) ) {
+			// Calculate TTL - access tokens expire in 30 minutes by default
+			$issued_at = time();
+			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+			$ttl       = max( 0, $expire - $issued_at );
+
+			$this->blacklist_access_token( $access_jti, $ttl );
+		}
+
+		return $revoked;
+	}
+
+	/**
+	 * Store refresh token JTI for tracking/revocation.
+	 *
+	 * @param int    $user_id
+	 * @param string $jti
+	 * @param int    $expires
+	 */
+	private function store_refresh_token_jti( int $user_id, string $jti, int $expires ): void {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) ) {
+			$refresh_tokens = array();
+		}
+
+		// Clean up expired tokens
+		$refresh_tokens = array_filter( $refresh_tokens, function( $token ) {
+			return $token['expires'] > time();
+		});
+
+		// Capture session metadata
+		$current_time = time();
+		$ip_address   = $this->get_client_ip();
+		$user_agent   = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		$device_info  = $this->parse_user_agent( $user_agent );
+
+		// Add new token with metadata
+		$refresh_tokens[ $jti ] = array(
+			'expires'     => $expires,
+			'created'     => $current_time,
+			'last_active' => $current_time,
+			'ip_address'  => $ip_address,
+			'user_agent'  => $user_agent,
+			'device_info' => $device_info,
+		);
+
+		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Check if refresh token is still valid (not revoked).
+	 *
+	 * @param int    $user_id
+	 * @param string $jti
+	 *
+	 * @return bool
+	 */
+	private function is_refresh_token_valid( int $user_id, string $jti ): bool {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) ) {
+			return false;
+		}
+
+		return isset( $refresh_tokens[ $jti ] ) && $refresh_tokens[ $jti ]['expires'] > time();
+	}
+
+	/**
 	 * Get client IP address.
 	 *
 	 * @return string
@@ -675,10 +718,11 @@ class Auth {
 			if ( ! empty( $_SERVER[ $header ] ) ) {
 				$ip_address = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
 				// Handle comma-separated IPs (X-Forwarded-For can contain multiple IPs)
-				if ( strpos( $ip_address, ',' ) !== false ) {
+				if ( false !== strpos( $ip_address, ',' ) ) {
 					$ip_parts   = explode( ',', $ip_address );
 					$ip_address = trim( $ip_parts[0] );
 				}
+
 				break;
 			}
 		}
@@ -712,28 +756,35 @@ class Auth {
 		}
 
 		// Detect WooCommerce POS apps first (custom identifiers)
-		// Your apps should add identifiers like: "WCPOS-iOS/1.0.0" or "WooCommercePOS-iOS/1.0.0"
-		if ( preg_match( '/WCPOS[-_]?iOS|WooCommercePOS[-_]?iOS/i', $user_agent ) ) {
+		// Check for Electron app (including just "WooCommercePOS" in user agent with Electron)
+		if ( preg_match( '/Electron/i', $user_agent ) && preg_match( '/WooCommercePOS|WCPOS/i', $user_agent ) ) {
+			$device_info['app_type']    = 'electron_app';
+			$device_info['browser']     = 'WooCommerce POS';
+			$device_info['device_type'] = 'desktop';
+			// Try to extract WooCommercePOS version
+			if ( preg_match( '/WooCommercePOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/WCPOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			}
+		} elseif ( preg_match( '/WCPOS[-_]?iOS|WooCommercePOS[-_]?iOS/i', $user_agent ) ) {
 			$device_info['app_type']     = 'ios_app';
 			$device_info['browser']      = 'WooCommerce POS';
-			$device_info['device_type']  = preg_match( '/ipad/i', $user_agent ) ? 'tablet' : 'mobile';
+			// Default to tablet unless explicitly detected as phone
+			$device_info['device_type']  = preg_match( '/iphone|ipod/i', $user_agent ) ? 'mobile' : 'tablet';
 			if ( preg_match( '/WCPOS[-_]?iOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
+				$device_info['browser_version'] = $matches[1];
+			} elseif ( preg_match( '/WooCommercePOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
 				$device_info['browser_version'] = $matches[1];
 			}
 		} elseif ( preg_match( '/WCPOS[-_]?Android|WooCommercePOS[-_]?Android/i', $user_agent ) ) {
 			$device_info['app_type']     = 'android_app';
 			$device_info['browser']      = 'WooCommerce POS';
-			$device_info['device_type']  = preg_match( '/tablet/i', $user_agent ) ? 'tablet' : 'mobile';
+			// Default to tablet unless explicitly detected as mobile
+			$device_info['device_type']  = preg_match( '/mobile/i', $user_agent ) && ! preg_match( '/tablet/i', $user_agent ) ? 'mobile' : 'tablet';
 			if ( preg_match( '/WCPOS[-_]?Android[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
 				$device_info['browser_version'] = $matches[1];
-			}
-		} elseif ( preg_match( '/WCPOS[-_]?Electron|WooCommercePOS[-_]?Electron|Electron.*WCPOS/i', $user_agent ) ) {
-			$device_info['app_type']    = 'electron_app';
-			$device_info['browser']     = 'WooCommerce POS';
-			$device_info['device_type'] = 'desktop';
-			if ( preg_match( '/WCPOS[-_]?Electron[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
-				$device_info['browser_version'] = $matches[1];
-			} elseif ( preg_match( '/Electron\/([0-9.]+)/i', $user_agent, $matches ) ) {
+			} elseif ( preg_match( '/WooCommercePOS[\/\s]([0-9.]+)/i', $user_agent, $matches ) ) {
 				$device_info['browser_version'] = $matches[1];
 			}
 		}
@@ -799,23 +850,6 @@ class Auth {
 	}
 
 	/**
-	 * Blacklist an access token by JTI (for instant revocation).
-	 *
-	 * @param string $jti Access token JTI.
-	 * @param int    $ttl Time to live in seconds (until token expires).
-	 *
-	 * @return bool
-	 */
-	public function blacklist_access_token( string $jti, int $ttl ): bool {
-		if ( empty( $jti ) ) {
-			return false;
-		}
-
-		// Use transient with TTL matching token expiration
-		return set_transient( "wcpos_blacklist_{$jti}", true, $ttl );
-	}
-
-	/**
 	 * Check if an access token is blacklisted.
 	 *
 	 * @param string $jti Access token JTI.
@@ -829,31 +863,5 @@ class Auth {
 
 		// Check transient
 		return false !== get_transient( "wcpos_blacklist_{$jti}" );
-	}
-
-	/**
-	 * Revoke session and blacklist current access token.
-	 *
-	 * @param int    $user_id
-	 * @param string $refresh_jti Refresh token JTI.
-	 * @param string $access_jti Optional access token JTI to blacklist immediately.
-	 *
-	 * @return bool
-	 */
-	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti, string $access_jti = '' ): bool {
-		// Revoke the refresh token (session)
-		$revoked = $this->revoke_session( $user_id, $refresh_jti );
-
-		// Blacklist the current access token if provided
-		if ( $revoked && ! empty( $access_jti ) ) {
-			// Calculate TTL - access tokens expire in 30 minutes by default
-			$issued_at = time();
-			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-			$ttl       = max( 0, $expire - $issued_at );
-
-			$this->blacklist_access_token( $access_jti, $ttl );
-		}
-
-		return $revoked;
 	}
 }
