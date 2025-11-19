@@ -6,7 +6,7 @@
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
  */
 
-defined( 'ABSPATH' ) || exit;
+\defined( 'ABSPATH' ) || exit;
 ?>
 <!DOCTYPE html>
 <html>
@@ -122,7 +122,7 @@ defined( 'ABSPATH' ) || exit;
 <div id="root">
 	<div id="splash">
 		<img src="<?php echo esc_attr( WCPOS\WooCommercePOS\PLUGIN_URL ); ?>assets/img/wcpos-icon.svg"
-			 alt="WooCommerce POS"/>
+			 alt="WCPOS"/>
 	</div>
 </div>
 

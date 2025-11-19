@@ -534,7 +534,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( 'billing' == $request['save_to'] ) {
 			$order->set_billing_email( $email );
 			$order->save();
-			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WooCommerce POS.', 'woocommerce-pos' ), $email ), false, true );
+			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WCPOS.', 'woocommerce-pos' ), $email ), false, true );
 		}
 
 		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' );
@@ -546,7 +546,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		WC()->mailer()->customer_invoice( $order );
 
 		// Note the event.
-		$order->add_order_note( \sprintf( __( 'Order details manually sent to %s from WooCommerce POS.', 'woocommerce-pos' ), $email ), false, true );
+		$order->add_order_note( \sprintf( __( 'Order details manually sent to %s from WCPOS.', 'woocommerce-pos' ), $email ), false, true );
 
 		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' );
 
@@ -683,7 +683,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
-	 * Add extra data for woocommerce pos orders.
+	 * Add extra data for wcpos orders.
 	 * - Add custom 'created_via' prop for POS orders, used in WC Admin display.
 	 *
 	 * @param WC_Abstract_Order $order The object being saved.

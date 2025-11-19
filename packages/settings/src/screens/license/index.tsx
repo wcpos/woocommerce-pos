@@ -83,7 +83,7 @@ const License = () => {
 					<a href="https://wcpos.com/pro">
 						<img
 							src="https://wcpos.com/wp-content/themes/woocommerce-pos/img/woopos-pro-logo-600.png"
-							alt-="WooCommerce POS Pro"
+							alt-="WCPOS Pro"
 							width={100}
 							height={100}
 						/>
@@ -92,7 +92,7 @@ const License = () => {
 				<div className="wcpos-col-span-2">
 					<p>
 						{t(
-							'If you would like to support the development of WooCommerce POS, please consider purchasing a Pro license.',
+							'If you would like to support the development of WCPOS, please consider purchasing a Pro license.',
 							{
 								_tags: 'wp-admin-settings',
 							}
@@ -100,7 +100,7 @@ const License = () => {
 					</p>
 					<p>
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WooCommerce POS Pro', {
+							{t('Upgrade to WCPOS Pro', {
 								_tags: 'wp-admin-settings',
 							})}
 						</a>
@@ -124,7 +124,7 @@ const License = () => {
 						/>
 					</p>
 					<p>
-						{t('Your support helps fund the ongoing development of WooCommerce POS.', {
+						{t('Your support helps fund the ongoing development of WCPOS.', {
 							_tags: 'wp-admin-settings',
 						})}
 					</p>

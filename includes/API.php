@@ -1,11 +1,10 @@
 <?php
 /**
- * WooCommerce POS REST API Class, ie: /wcpos/v1/ endpoints.
+ * WCPOS REST API Class, ie: /wcpos/v1/ endpoints.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
- * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -17,10 +16,6 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 
-
-/**
- *
- */
 class API {
 	/**
 	 * WCPOS REST API namespaces and endpoints.
@@ -62,35 +57,35 @@ class API {
 	/**
 	 * Register routes for all controllers.
 	 */
-	public function register_routes() {
+	public function register_routes(): void {
 		/**
-		 * Filter the list of controller classes used in the WooCommerce POS REST API.
+		 * Filter the list of controller classes used in the WCPOS REST API.
 		 *
 		 * This filter allows customizing or extending the set of controller classes that handle
-		 * REST API routes for the WooCommerce POS. By filtering these controllers, plugins can
+		 * REST API routes for the WCPOS. By filtering these controllers, plugins can
 		 * modify existing endpoints or add new controllers for additional functionality.
 		 *
 		 * @since 1.5.0
 		 *
 		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
-		 *        - 'auth'                  => Fully qualified name of the class handling authentication.
-		 *        - 'settings'              => Fully qualified name of the class handling settings.
-		 *        - 'stores'                => Fully qualified name of the class handling stores management.
-		 *        - 'products'              => Fully qualified name of the class handling products.
-		 *        - 'product_variations'    => Fully qualified name of the class handling product variations.
-		 *        - 'orders'                => Fully qualified name of the class handling orders.
-		 *        - 'customers'             => Fully qualified name of the class handling customers.
-		 *        - 'product_tags'          => Fully qualified name of the class handling product tags.
-		 *        - 'product_categories'    => Fully qualified name of the class handling product categories.
-		 *        - 'taxes'                 => Fully qualified name of the class handling taxes.
-		 *        - 'shipping_methods'      => Fully qualified name of the class handling shipping methods.
-		 *        - 'tax_classes'           => Fully qualified name of the class handling tax classes.
-		 *        - 'order_statuses'        => Fully qualified name of the class handling order statuses.
+		 *                           - 'auth'                  => Fully qualified name of the class handling authentication.
+		 *                           - 'settings'              => Fully qualified name of the class handling settings.
+		 *                           - 'stores'                => Fully qualified name of the class handling stores management.
+		 *                           - 'products'              => Fully qualified name of the class handling products.
+		 *                           - 'product_variations'    => Fully qualified name of the class handling product variations.
+		 *                           - 'orders'                => Fully qualified name of the class handling orders.
+		 *                           - 'customers'             => Fully qualified name of the class handling customers.
+		 *                           - 'product_tags'          => Fully qualified name of the class handling product tags.
+		 *                           - 'product_categories'    => Fully qualified name of the class handling product categories.
+		 *                           - 'taxes'                 => Fully qualified name of the class handling taxes.
+		 *                           - 'shipping_methods'      => Fully qualified name of the class handling shipping methods.
+		 *                           - 'tax_classes'           => Fully qualified name of the class handling tax classes.
+		 *                           - 'order_statuses'        => Fully qualified name of the class handling order statuses.
 		 */
 		$classes = apply_filters(
 			'woocommerce_pos_rest_api_controllers',
 			array(
-				// woocommerce pos rest api controllers.
+				// WCPOS rest api controllers.
 				'auth'                  => API\Auth::class,
 				'settings'              => API\Settings::class,
 				'stores'                => API\Stores::class,
@@ -197,7 +192,7 @@ class API {
 	/**
 	 * Extract the Authorization Bearer token from the request.
 	 *
-	 * @return string|false
+	 * @return false|string
 	 */
 	public function get_auth_header() {
 		// Check if HTTP_AUTHORIZATION is set in $_SERVER
@@ -222,7 +217,7 @@ class API {
 	/**
 	 * Adds info to the WP REST API index response.
 	 * - UUID
-	 * - Version Info
+	 * - Version Info.
 	 *
 	 * @param WP_REST_Response $response Response data.
 	 *
@@ -234,10 +229,10 @@ class API {
 			$uuid = Uuid::uuid4()->toString();
 			update_option( 'woocommerce_pos_uuid', $uuid );
 		}
-		$response->data['uuid'] = $uuid;
-		$response->data['wp_version'] = get_bloginfo( 'version' );
-		$response->data['wc_version'] = WC()->version;
-		$response->data['wcpos_version'] = VERSION;
+		$response->data['uuid']             = $uuid;
+		$response->data['wp_version']       = get_bloginfo( 'version' );
+		$response->data['wc_version']       = WC()->version;
+		$response->data['wcpos_version']    = VERSION;
 		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
 
 		/**
@@ -290,44 +285,6 @@ class API {
 	}
 
 	/**
-	 * Some servers have a limit on the number of include/exclude we can use in a request.
-	 * Worst thing is there is often no error message, the request returns an empty response.
-	 *
-	 * For example, WP Engine has a limit of 1024 characters?
-	 * https://wpengine.com/support/using-dev-tools/#Long_Queries_in_wp_db
-	 *
-	 * @TODO - For long queries, I should find a better solution than this.
-	 *
-	 * @param string|array $param_value
-	 * @param int          $max_length
-	 * @return array
-	 */
-	private function shorten_param_array( $param_value, $max_length ) {
-		$param_array  = is_array( $param_value ) ? $param_value : explode( ',', $param_value );
-		$param_string = implode( ',', $param_array );
-
-		if ( strlen( $param_string ) > $max_length ) {
-			shuffle( $param_array ); // Shuffle to randomize
-
-			$new_param_string   = '';
-			$random_param_array = array();
-
-			foreach ( $param_array as $id ) {
-				if ( strlen( $new_param_string . $id ) < $max_length ) {
-					$new_param_string .= $id . ',';
-					$random_param_array[] = $id;
-				} else {
-					break; // Stop when maximum length is reached
-				}
-			}
-
-			return $random_param_array;
-		}
-
-		return $param_array;
-	}
-
-	/**
 	 * Filters the REST API dispatch request result.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
@@ -338,13 +295,13 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		if ( isset( $handler['callback'] ) && is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
+		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
 			$controller = $handler['callback'][0];
 
 			// Check if the controller object is one of our registered controllers.
 			foreach ( $this->controllers as $key => $wcpos_controller ) {
 				if ( $controller === $wcpos_controller ) {
-					/**
+					/*
 					 * I'm adding some additional PHP settings before the response. Placing them here so they only apply to the POS API.
 					 *
 					 * - error_reporting(0) - Turn off error reporting
@@ -365,12 +322,52 @@ class API {
 					if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
 						return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
 					}
+
 					break;
 				}
 			}
 		}
 
 		return $dispatch_result;
+	}
+
+	/**
+	 * Some servers have a limit on the number of include/exclude we can use in a request.
+	 * Worst thing is there is often no error message, the request returns an empty response.
+	 *
+	 * For example, WP Engine has a limit of 1024 characters?
+	 * https://wpengine.com/support/using-dev-tools/#Long_Queries_in_wp_db
+	 *
+	 * @TODO - For long queries, I should find a better solution than this.
+	 *
+	 * @param array|string $param_value
+	 * @param int          $max_length
+	 *
+	 * @return array
+	 */
+	private function shorten_param_array( $param_value, $max_length ) {
+		$param_array  = \is_array( $param_value ) ? $param_value : explode( ',', $param_value );
+		$param_string = implode( ',', $param_array );
+
+		if ( \strlen( $param_string ) > $max_length ) {
+			shuffle( $param_array ); // Shuffle to randomize
+
+			$new_param_string   = '';
+			$random_param_array = array();
+
+			foreach ( $param_array as $id ) {
+				if ( \strlen( $new_param_string . $id ) < $max_length ) {
+					$new_param_string .= $id . ',';
+					$random_param_array[] = $id;
+				} else {
+					break; // Stop when maximum length is reached
+				}
+			}
+
+			return $random_param_array;
+		}
+
+		return $param_array;
 	}
 
 	/**
@@ -383,7 +380,7 @@ class API {
 	private function authenticate( $user_id ) {
 		// check if there is an auth header
 		$auth_header = $this->get_auth_header();
-		if ( ! is_string( $auth_header ) ) {
+		if ( ! \is_string( $auth_header ) ) {
 			return $user_id;
 		}
 
@@ -391,17 +388,18 @@ class API {
 		list($token) = sscanf( $auth_header, 'Bearer %s' );
 
 		if ( $token ) {
-			$auth_service = Auth::instance();
+			$auth_service  = Auth::instance();
 			$decoded_token = $auth_service->validate_token( $token );
 
 			// Check if validate_token returned WP_Error and user_id is null
-			if ( is_wp_error( $decoded_token ) && $user_id === null ) {
-					return $decoded_token;
+			if ( is_wp_error( $decoded_token ) && null === $user_id ) {
+				return $decoded_token;
 			}
 
 			// If the token is valid, set the user_id
 			if ( ! is_wp_error( $decoded_token ) ) {
 				$user_id = $decoded_token->data->user->id;
+
 				return absint( $user_id );
 			}
 		}

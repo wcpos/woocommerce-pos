@@ -27,7 +27,7 @@ jobs:
           wp package install wp-cli/i18n-command:2.2.8
 
       - name: Update POT file
-        run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WooCommerce POS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
+        run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WCPOS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}"
 
       - name: Check for changes
         id: git-diff

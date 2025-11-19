@@ -23,9 +23,9 @@ class Test_Setup extends WP_UnitTestCase {
 		// wordpress
 		self::assertTrue( \function_exists( 'do_action' ) );
 
-		// woocommerce pos plugin
+		// WCPOS plugin
 		$this->assertTrue( class_exists( 'WCPOS\WooCommercePOS\Activator' ) );
-		$this->assertEquals( 'wcpos', constant( 'WCPOS\WooCommercePOS\SHORT_NAME' ) );
+		$this->assertEquals( 'wcpos', \constant( 'WCPOS\WooCommercePOS\SHORT_NAME' ) );
 
 		// woocommerce plugin and test helpers
 		self::assertTrue( \function_exists( 'wc_create_new_customer' ) );

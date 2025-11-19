@@ -1,5 +1,5 @@
 <div align="center">
-  <h1><a href="https://wcpos.com">WooCommerce POS</a> plugin</h1>
+  <h1><a href="https://wcpos.com">WCPOS</a> – Point of Sale (POS) plugin for WooCommerce</h1>
   <p>A WordPress plugin for taking WooCommerce orders at the Point of Sale.</p>
   <p>
     <a href="https://github.com/wcpos/woocommerce-pos/actions/workflows/tests.yml">
@@ -40,7 +40,7 @@ Coming soon.
 ## 👷 Workflows
 
 We recommend [LocalWP](https://localwp.com/) for creating a WordPress install on your local machine. 
-You can either clone the WooCommerce POS repository into the `/wp-content/plugins/` folder or create a symbolic link (recommended).
+You can either clone the WCPOS repository into the `/wp-content/plugins/` folder or create a symbolic link (recommended).
 
 ```sh
 git clone https://github.com/wcpos/woocommerce-pos.git

@@ -5,10 +5,10 @@ namespace WCPOS\WooCommercePOS\Integrations;
 use const WCPOS\WooCommercePOS\PLUGIN_FILE;
 
 /**
- * wePOS Integration
+ * wePOS Integration.
  *
  * wePOS alters the WC REST API response for variable products, it includes the full list of variations
- * instead of just the variation IDs. This breaks variations for WooCommerce POS (and anyone else).
+ * instead of just the variation IDs. This breaks variations for WCPOS (and anyone else).
  */
 class WePOS {
 	/**
@@ -34,7 +34,7 @@ class WePOS {
 	 */
 	public function render_conflict_notice(): void {
 		echo '<div class="notice notice-error is-dismissible">
-            <p>' . esc_html__( 'WooCommerce POS cannot run alongside the wePOS plugin due to compatibility issues. WooCommerce POS has been deactivated.', 'woocommerce-pos' ) . '</p>
+            <p>' . esc_html__( 'WCPOS cannot run alongside the wePOS plugin due to compatibility issues. WCPOS has been deactivated.', 'woocommerce-pos' ) . '</p>
         </div>';
 	}
 }

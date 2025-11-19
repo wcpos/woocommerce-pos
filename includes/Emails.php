@@ -56,7 +56,7 @@ class Emails {
 
 	/**
 	 * Manage admin email sending for POS orders.
-	 * Only affects orders created via WooCommerce POS.
+	 * Only affects orders created via WCPOS.
 	 *
 	 * @param bool           $enabled     Whether the email is enabled.
 	 * @param null|WC_Order  $order       The order object.
@@ -84,7 +84,7 @@ class Emails {
 
 	/**
 	 * Manage customer email sending for POS orders.
-	 * Only affects orders created via WooCommerce POS.
+	 * Only affects orders created via WCPOS.
 	 *
 	 * @param bool           $enabled     Whether the email is enabled.
 	 * @param null|WC_Order  $order       The order object.

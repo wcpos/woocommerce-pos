@@ -82,7 +82,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/orders/(?P<id>[\d]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/orders/batch', $routes );
 
-		// added by WooCommerce POS
+		// added by WCPOS
 		$this->assertArrayHasKey( '/wcpos/v1/orders/(?P<order_id>[\d]+)/email', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/orders/statuses', $routes );
 	}
@@ -536,7 +536,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$email         = 'sendtest@example.com';
 		$email_sent    = false;
 		$note_added    = false;
-		$expected_note = \sprintf( 'Order details manually sent to %s from WooCommerce POS.', $email );
+		$expected_note = \sprintf( 'Order details manually sent to %s from WCPOS.', $email );
 
 		$email_sent_callback = function () use ( &$email_sent ): void {
 			$email_sent = true;

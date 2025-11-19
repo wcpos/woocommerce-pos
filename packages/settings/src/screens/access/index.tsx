@@ -73,7 +73,7 @@ const Access = () => {
 									<h2 className="wcpos-text-base">
 										{
 											{
-												wcpos: 'WooCommerce POS',
+												wcpos: 'WCPOS',
 												wc: 'WooCommerce',
 												wp: 'WordPress',
 											}[group]

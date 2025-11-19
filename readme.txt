@@ -88,7 +88,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.8.0 - 2025/08/XX =
+= 1.7.14 - 2025/11/19 =
+* Change: Plugin name changed from "WooCommerce POS" to "WCPOS" to comply with WooCommerce trademark requirements
+* Note: This is a branding change only - all functionality remains the same
 
 = 1.7.13 - 2025/08/06 = 
 * Fix: New Order emails to send after order calculations
@@ -151,3 +153,6 @@ This small update adds code to prevent WCPOS from being activated if wePOS is de
 * Pro: New Reports page for End of Day Reporting (Z-Report)
 
 == Upgrade Notice ==
+
+= 1.7.14 =
+Important: Plugin name has changed from "WooCommerce POS" to "WCPOS" due to trademark requirements. This is a branding change only - all your settings, data, and functionality remain exactly the same.

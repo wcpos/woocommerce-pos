@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Global helper functions for WooCommerce POS.
+ * Global helper functions for WCPOS.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
  *

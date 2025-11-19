@@ -53,7 +53,7 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 			'slug',
 			'description',
 			'count',
-			// woocommerce pos
+			// WCPOS
 			'uuid',
 		);
 	}
@@ -104,10 +104,7 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_tag_includes() {
+	public function test_product_tag_includes(): void {
 		$tag1        = ProductHelper::create_product_tag( 'Music' );
 		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
@@ -122,10 +119,7 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $tag1['term_id'], $data[0]['id'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_tag_excludes() {
+	public function test_product_tag_excludes(): void {
 		$tag1        = ProductHelper::create_product_tag( 'Music' );
 		$tag2        = ProductHelper::create_product_tag( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
@@ -140,10 +134,7 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $tag2['term_id'], $data[0]['id'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_tag_search_with_includes() {
+	public function test_product_tag_search_with_includes(): void {
 		$tag1        = ProductHelper::create_product_tag( 'Music1' );
 		$tag2        = ProductHelper::create_product_tag( 'Music2' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );
@@ -159,10 +150,7 @@ class Test_Product_Tags_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $tag1['term_id'], $data[0]['id'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_tag_search_with_excludes() {
+	public function test_product_tag_search_with_excludes(): void {
 		$tag1        = ProductHelper::create_product_tag( 'Music1' );
 		$tag2        = ProductHelper::create_product_tag( 'Music2' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/tags' );

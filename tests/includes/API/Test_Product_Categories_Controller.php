@@ -57,7 +57,7 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 			'image',
 			'menu_order',
 			'count',
-			// woocommerce pos
+			// WCPOS
 			'uuid',
 		);
 	}
@@ -109,10 +109,7 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( Uuid::isValid( $data['uuid'] ), 'The UUID value is not valid.' );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_category_includes() {
+	public function test_product_category_includes(): void {
 		$cat1        = ProductHelper::create_product_category( 'Music' );
 		$cat2        = ProductHelper::create_product_category( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
@@ -130,7 +127,7 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * NOTE: There is one category installed in the test setup.
 	 */
-	public function test_product_category_excludes() {
+	public function test_product_category_excludes(): void {
 		$cat1        = ProductHelper::create_product_category( 'Music' );
 		$cat2        = ProductHelper::create_product_category( 'Clothes' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
@@ -147,10 +144,7 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( $cat2['term_id'], $ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_product_category_search_with_includes() {
+	public function test_product_category_search_with_includes(): void {
 		$cat1        = ProductHelper::create_product_category( 'Music1' );
 		$cat2        = ProductHelper::create_product_category( 'Music2' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
@@ -169,7 +163,7 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * NOTE: There is one category installed in the test setup.
 	 */
-	public function test_product_category_search_with_excludes() {
+	public function test_product_category_search_with_excludes(): void {
 		$cat1        = ProductHelper::create_product_category( 'Music1' );
 		$cat2        = ProductHelper::create_product_category( 'Music2' );
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/products/categories' );
@@ -185,11 +179,8 @@ class Test_Product_Categories_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $cat2['term_id'], $data[0]['id'] );
 	}
 
-	/**
-	 *
-	 */
-	public function test_unique_product_category_uuid() {
-		$uuid = UUID::uuid4()->toString();
+	public function test_unique_product_category_uuid(): void {
+		$uuid = Uuid::uuid4()->toString();
 		$cat1 = ProductHelper::create_product_category( 'Music1' );
 		add_term_meta( $cat1['term_id'], '_woocommerce_pos_uuid', $uuid );
 

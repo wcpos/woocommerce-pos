@@ -6,19 +6,18 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
- * @package WooCommercePOS\Admin
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
 
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
- * Class Settings
+ * Class Settings.
  */
 class Settings {
 	/**
@@ -28,10 +27,10 @@ class Settings {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
 		/*
-		 * Initializes the settings for WooCommerce POS in the admin panel.
+		 * Initializes the settings for WCPOS in the admin panel.
 		 *
 		 * This action hook can be used to run additional initialization routines
-		 * when the WooCommerce POS settings are being set up in the admin panel.
+		 * when the WCPOS settings are being set up in the admin panel.
 		 *
 		 * @since 1.0.0
 		 *
@@ -122,7 +121,7 @@ class Settings {
 		$barcodes         = array_values( $settings_service->get_barcodes() );
 		$order_statuses   = $settings_service->get_order_statuses();
 
-		return sprintf(
+		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s

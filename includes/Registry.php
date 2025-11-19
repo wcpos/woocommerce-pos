@@ -1,19 +1,16 @@
 <?php
 /**
- * Global registry for WooCommerce POS.
+ * Global registry for WCPOS.
  *
  * - stores instances of classes that may be required to remove_action or remove_filter.
  *
  * @author  Paul Kilmurray <paul@kilbot.com>
+ *
  * @see     https://wcpos.com
- * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
-/**
- *
- */
 class Registry {
 	/**
 	 * Singleton instance.
@@ -36,6 +33,7 @@ class Registry {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
 		}
+
 		return self::$instance;
 	}
 
@@ -45,7 +43,7 @@ class Registry {
 	 * @param string $key
 	 * @param object $object
 	 */
-	public function set( $key, $object ) {
+	public function set( $key, $object ): void {
 		$this->storage[ $key ] = $object;
 	}
 
@@ -55,6 +53,6 @@ class Registry {
 	 * @param string $key
 	 */
 	public function get( $key ) {
-		return isset( $this->storage[ $key ] ) ? $this->storage[ $key ] : null;
+		return $this->storage[ $key ] ?? null;
 	}
 }

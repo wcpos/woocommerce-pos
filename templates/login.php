@@ -9,21 +9,21 @@
 <!DOCTYPE html>
 <html <?php language_attributes(); ?>>
 <head>
-	<title>WooCommerce POS Login</title>
+	<title>WCPOS Login</title>
 	<meta http-equiv="Content-Type" content="<?php bloginfo( 'html_type' ); ?>; charset=<?php bloginfo( 'charset' ); ?>" />
 	<?php
 		wp_enqueue_style( 'login' );
-		do_action( 'login_enqueue_scripts' );
-		do_action( 'login_head' );
-		$login_header_url = apply_filters( 'login_headerurl', __( 'https://wordpress.org/', 'login' ) );
-		$login_header_title = apply_filters( 'login_headertitle', __( 'Powered by WordPress', 'login' ) );
-	$classes = array( 'login-action-login', 'wp-core-ui' );
-	if ( is_rtl() ) {
-			$classes[] = 'rtl';
-	}
-	$classes[] = ' locale-' . sanitize_html_class( strtolower( str_replace( '_', '-', get_locale() ) ) );
-	$classes = apply_filters( 'login_body_class', $classes, 'login' );
-	?>
+do_action( 'login_enqueue_scripts' );
+do_action( 'login_head' );
+$login_header_url   = apply_filters( 'login_headerurl', __( 'https://wordpress.org/', 'login' ) );
+$login_header_title = apply_filters( 'login_headertitle', __( 'Powered by WordPress', 'login' ) );
+$classes            = array( 'login-action-login', 'wp-core-ui' );
+if ( is_rtl() ) {
+	$classes[] = 'rtl';
+}
+$classes[] = ' locale-' . sanitize_html_class( strtolower( str_replace( '_', '-', get_locale() ) ) );
+$classes   = apply_filters( 'login_body_class', $classes, 'login' );
+?>
 </head>
 <body class="login no-js <?php echo esc_attr( implode( ' ', $classes ) ); ?>">
 <script type="text/javascript">
@@ -34,17 +34,17 @@
 	<h1><a href="<?php echo esc_url( $login_header_url ); ?>" title="<?php echo esc_attr( $login_header_title ); ?>" tabindex="-1"><?php bloginfo( 'name' ); ?></a></h1>
 
 	<?php
-	// Login message filter.
-	$message = apply_filters( 'login_messages', '' );
+// Login message filter.
+$message = apply_filters( 'login_messages', '' );
 
-	if ( ! empty( $message ) ) {
-		echo '<p class="message">' . $message . '</p>' . "\n";
-	}
+if ( ! empty( $message ) ) {
+	echo '<p class="message">' . $message . '</p>' . "\n";
+}
 
-	if ( ! empty( $error_string ) ) {
-		echo '<div id="login_error">' . $error_string . '</div>';
-	}
-	?>
+if ( ! empty( $error_string ) ) {
+	echo '<div id="login_error">' . $error_string . '</div>';
+}
+?>
 	<form name="loginform" id="loginform" action="" method="post">
 			<p>
 				<label for="user_login"><?php _e( 'Username or Email Address' ); ?></label>

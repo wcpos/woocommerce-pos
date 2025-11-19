@@ -97,7 +97,7 @@ const Gateways = () => {
 							_tags: 'wp-admin-settings',
 						})}{' '}
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WooCommerce POS Pro', {
+							{t('Upgrade to WCPOS Pro', {
 								_tags: 'wp-admin-settings',
 							})}
 						</a>
