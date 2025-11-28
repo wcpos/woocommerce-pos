@@ -17,6 +17,7 @@
  */
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
+use WCPOS\WooCommercePOS\Logger;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use WCPOS\WooCommercePOS\Services\Settings;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -232,5 +233,40 @@ if ( ! \function_exists( 'woocommerce_pos_is_pos_order' ) ) {
 		$created_via = $order->get_created_via();
 
 		return 'woocommerce-pos' === $created_via || '1' === $legacy;
+	}
+}
+
+
+if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
+	/**
+	 * Get a default WooCommerce template.
+	 *
+	 * @param string $template_name Template name.
+	 * @param array  $args          Arguments.
+	 */
+	function wcpos_get_woocommerce_template( $template_name, $args = array() ): void {
+		$plugin_path = WC()->plugin_path();
+		$template    = trailingslashit( $plugin_path . '/templates' ) . $template_name;
+
+		/**
+		 * Filter the default WooCommerce template path.
+		 *
+		 * @param string $template      Template path.
+		 * @param string $template_name Template name.
+		 * @param array  $args          Arguments.
+		 */
+		$template = apply_filters( 'wcpos_locate_woocommerce_template', $template, $template_name, $args );
+
+		if ( ! file_exists( $template ) ) {
+			Logger::log( \sprintf( 'WooCommerce default template not found: %s', $template ) );
+
+			return;
+		}
+
+		if ( $args && \is_array( $args ) ) {
+			extract( $args ); // phpcs:ignore WordPress.PHP.DontExtract.extract_extract
+		}
+
+		include $template;
 	}
 }

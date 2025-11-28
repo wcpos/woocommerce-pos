@@ -18,11 +18,11 @@
 		wp_head();
 	} else {
 		// Manually call necessary functions when wp_head is disabled.
-		if ( function_exists( 'wp_enqueue_block_template_skip_link' ) ) {
+		if ( \function_exists( 'wp_enqueue_block_template_skip_link' ) ) {
 			wp_enqueue_block_template_skip_link();
 		}
 	}
-	?>
+?>
 	<style>
 		html, body, ul, li, fieldset, address {
 			font-family: sans-serif;
@@ -310,38 +310,38 @@
 <body <?php body_class(); ?>>
 <div class="woocommerce">
 	<?php
-		// Troubleshooting form section
-		echo $this->get_troubleshooting_form_html();
-	?>
+	// Troubleshooting form section
+	echo $this->get_troubleshooting_form_html();
+?>
 
 	<?php woocommerce_output_all_notices(); ?>
 
 	<?php
-		// Cashier details section
-		echo $this->get_cashier_details_html();
-	?>
+	// Cashier details section
+	echo $this->get_cashier_details_html();
+?>
 
 	<?php
-		// Paying customer details section
-		echo $this->get_paying_customer_details_html();
-	?>
+	// Paying customer details section
+	echo $this->get_paying_customer_details_html();
+?>
 
 	<?php
-		// Coupon form section
-		echo $this->get_coupon_form_html();
-	?>
+	// Coupon form section
+	echo $this->get_coupon_form_html();
+?>
 
 	<?php
-		// WooCommerce payment form
-		wc_get_template(
-			'checkout/form-pay.php',
-			array(
-				'order' => $this->order,
-				'available_gateways' => $available_gateways,
-				'order_button_text' => $order_button_text,
-			)
-		);
-		?>
+	// WooCommerce payment form
+	wcpos_get_woocommerce_template(
+		'checkout/form-pay.php',
+		array(
+			'order'              => $this->order,
+			'available_gateways' => $available_gateways,
+			'order_button_text'  => $order_button_text,
+		)
+	);
+?>
 </div>
 
 <?php
