@@ -237,6 +237,13 @@ class API {
 		$response->data['wcpos_version']    = VERSION;
 		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
 
+		// Add WCPOS authentication endpoint to the response.
+		$response->data['authentication']['wcpos'] = array(
+			'endpoints' => array(
+				'authorization' => Template_Router::get_auth_url(),
+			),
+		);
+
 		/**
 		 * Remove the routes from the response.
 		 *

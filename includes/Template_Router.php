@@ -15,6 +15,11 @@ use WC_Abstract_Order;
 
 class Template_Router {
 	/**
+	 * Auth path slug for POS authorization endpoint.
+	 */
+	public const AUTH_PATH = 'wcpos-auth';
+
+	/**
 	 * @var string POS frontend slug
 	 */
 	private $pos_regex;
@@ -41,7 +46,7 @@ class Template_Router {
 	public function __construct() {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
 		$this->pos_login_regex    = '^wcpos-login/?';
-		$this->pos_auth_regex     = '^wcpos-auth/?';
+		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?';
 		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
 
 		$this->add_rewrite_rules();
@@ -51,6 +56,15 @@ class Template_Router {
 
 		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
 		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
+	}
+
+	/**
+	 * Get the full URL for the POS authorization endpoint.
+	 *
+	 * @return string
+	 */
+	public static function get_auth_url(): string {
+		return home_url( self::AUTH_PATH . '/' );
 	}
 
 	/**
