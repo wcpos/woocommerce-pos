@@ -668,6 +668,38 @@ class Auth {
 		$user_agent   = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 		$device_info  = $this->parse_user_agent( $user_agent );
 
+		// Check for explicit platform declaration from native apps (passed as query param in auth URL)
+		$platform = isset( $_REQUEST['platform'] ) ? sanitize_text_field( $_REQUEST['platform'] ) : '';
+		$version  = isset( $_REQUEST['version'] ) ? sanitize_text_field( $_REQUEST['version'] ) : '';
+		$build    = isset( $_REQUEST['build'] ) ? sanitize_text_field( $_REQUEST['build'] ) : '';
+
+		// Override app_type if platform was explicitly provided by the client
+		if ( \in_array( $platform, array( 'ios', 'android', 'electron', 'web' ), true ) ) {
+			$device_info['app_type'] = 'web' === $platform ? 'web' : $platform . '_app';
+
+			// Set appropriate device type based on platform
+			if ( 'ios' === $platform || 'android' === $platform ) {
+				$device_info['device_type'] = 'tablet'; // Default to tablet for mobile apps
+			} elseif ( 'electron' === $platform ) {
+				$device_info['device_type'] = 'desktop';
+			}
+
+			// Use version from param if provided
+			if ( ! empty( $version ) ) {
+				$device_info['browser_version'] = $version;
+			}
+
+			// Store build number if provided
+			if ( ! empty( $build ) ) {
+				$device_info['build'] = $build;
+			}
+
+			// Set browser to WooCommerce POS for native apps
+			if ( 'web' !== $platform ) {
+				$device_info['browser'] = 'WooCommerce POS';
+			}
+		}
+
 		// Add new token with metadata
 		$refresh_tokens[ $jti ] = array(
 			'expires'     => $expires,
