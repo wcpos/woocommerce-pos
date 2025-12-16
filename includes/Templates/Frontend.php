@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Admin\Permalink;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
+use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -127,8 +128,9 @@ class Frontend {
 				'wc_version'         => WC()->version,
 				'wcpos_version'      => VERSION,
 				'wp_api_url'         => get_rest_url(),
-				'wc_api_url'         => get_rest_url( null, 'wc/v3' ),
-				'wc_api_auth_url'    => get_rest_url( null, 'wcpos/v1/jwt' ),
+				'wc_api_url'         => trailingslashit( get_rest_url( null, 'wc/v3' ) ),
+				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v1' ) ),
+				'wc_api_auth_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
