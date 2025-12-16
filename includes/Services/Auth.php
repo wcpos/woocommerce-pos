@@ -341,13 +341,26 @@ class Auth {
 	 * Get user's data (minimal set for security).
 	 *
 	 * @param WP_User $user
+	 * @param bool    $is_web_frontend Whether this is the web frontend context.
+	 *                                 When true, manages web session cookie to prevent
+	 *                                 session proliferation on page refresh.
 	 *
 	 * @return array
 	 */
-	public function get_user_data( WP_User $user ): array {
+	public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {
+		// For web frontend, revoke previous session to prevent proliferation on page refresh
+		if ( $is_web_frontend ) {
+			$this->cleanup_previous_web_session( $user->ID );
+		}
+
 		$tokens = $this->generate_token_pair( $user );
 		if ( is_wp_error( $tokens ) ) {
 			return array();
+		}
+
+		// For web frontend, store the new session JTI in a cookie for cleanup on next page load
+		if ( $is_web_frontend ) {
+			$this->set_web_session_cookie( $tokens['refresh_token'] );
 		}
 
 		return array(
@@ -895,5 +908,63 @@ class Auth {
 
 		// Check transient
 		return false !== get_transient( "wcpos_blacklist_{$jti}" );
+	}
+
+	/**
+	 * Clean up previous web session to prevent session proliferation.
+	 *
+	 * The web application generates new tokens on every page load. This method
+	 * revokes the previous session (stored in a cookie) so only one web session
+	 * exists per browser at a time.
+	 *
+	 * @param int $user_id
+	 */
+	private function cleanup_previous_web_session( int $user_id ): void {
+		$cookie_name = 'wcpos_web_session_jti';
+
+		if ( ! isset( $_COOKIE[ $cookie_name ] ) ) {
+			return;
+		}
+
+		$previous_jti = sanitize_text_field( wp_unslash( $_COOKIE[ $cookie_name ] ) );
+
+		if ( empty( $previous_jti ) ) {
+			return;
+		}
+
+		// Revoke the previous session (silently - don't care if it fails)
+		$this->revoke_session( $user_id, $previous_jti );
+	}
+
+	/**
+	 * Set a cookie to track the current web session JTI.
+	 *
+	 * @param string $refresh_token The refresh token to extract JTI from.
+	 */
+	private function set_web_session_cookie( string $refresh_token ): void {
+		$decoded = $this->validate_token( $refresh_token, 'refresh' );
+
+		if ( is_wp_error( $decoded ) || empty( $decoded->jti ) ) {
+			return;
+		}
+
+		$cookie_name = 'wcpos_web_session_jti';
+		$jti         = $decoded->jti;
+		$expires     = $decoded->exp ?? ( time() + DAY_IN_SECONDS * 30 );
+
+		// Set cookie with same expiry as refresh token
+		// Use httponly for security, but not secure flag as POS may run on localhost
+		setcookie(
+			$cookie_name,
+			$jti,
+			array(
+				'expires'  => $expires,
+				'path'     => COOKIEPATH,
+				'domain'   => COOKIE_DOMAIN,
+				'secure'   => is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Lax',
+			)
+		);
 	}
 }

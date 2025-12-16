@@ -134,7 +134,7 @@ class Frontend {
 				'locale'             => get_locale(),
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
-			'wp_credentials' => $auth_service->get_user_data( $user ),
+			'wp_credentials' => $auth_service->get_user_data( $user, true ),
 			'stores'         => $stores,
 		);
 

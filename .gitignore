@@ -32,3 +32,4 @@ hookdocs
 phpunit.xml
 tests/logs/junit.xml
 .turbo
+.cursor

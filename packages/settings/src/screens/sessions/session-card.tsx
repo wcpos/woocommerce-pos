@@ -171,7 +171,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						<div className="wcpos:bg-gray-50 wcpos:rounded wcpos:px-2 wcpos:py-1.5 wcpos:space-y-1">
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center">
 								<span className="wcpos:text-gray-500">{t('IP', { _tags: 'wp-admin-settings' })}</span>
-								<span className="wcpos:font-mono wcpos:text-gray-900 wcpos:text-[11px]">{session.ip_address || 'N/A'}</span>
+								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{session.ip_address || 'N/A'}</span>
 							</div>
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center wcpos:border-t wcpos:border-gray-200 wcpos:pt-1">
 								<span className="wcpos:text-gray-500">{t('Created', { _tags: 'wp-admin-settings' })}</span>
