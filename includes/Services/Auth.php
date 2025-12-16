@@ -116,11 +116,23 @@ class Auth {
 			}
 
 			// Check if access token is blacklisted (for instant revocation)
-			if ( 'access' === $token_type && isset( $decoded_token->jti ) ) {
-				if ( $this->is_access_token_blacklisted( $decoded_token->jti ) ) {
+			// We check both the access token's own JTI and its parent refresh_jti
+			if ( 'access' === $token_type ) {
+				// Check if this specific access token is blacklisted
+				if ( isset( $decoded_token->jti ) && $this->is_token_blacklisted( $decoded_token->jti ) ) {
 					return new WP_Error(
 						'woocommerce_pos_auth_token_revoked',
 						'Access token has been revoked',
+						array( 'status' => 403 )
+					);
+				}
+
+				// Check if the parent session (refresh token) is blacklisted
+				// This catches ALL access tokens for a revoked session
+				if ( isset( $decoded_token->refresh_jti ) && $this->is_token_blacklisted( $decoded_token->refresh_jti ) ) {
+					return new WP_Error(
+						'woocommerce_pos_auth_session_revoked',
+						'Session has been revoked',
 						array( 'status' => 403 )
 					);
 				}
@@ -488,7 +500,27 @@ class Auth {
 	 *
 	 * @return bool
 	 */
+	/**
+	 * Revoke all refresh tokens for a user with blacklisting.
+	 *
+	 * @param int $user_id
+	 *
+	 * @return bool
+	 */
 	public function revoke_all_refresh_tokens( int $user_id ): bool {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+
+		// Blacklist all sessions for instant access token invalidation
+		if ( \is_array( $refresh_tokens ) ) {
+			$issued_at = time();
+			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+			$ttl       = max( 0, $expire - $issued_at );
+
+			foreach ( $refresh_tokens as $jti => $token_data ) {
+				$this->blacklist_token( $jti, $ttl );
+			}
+		}
+
 		return delete_user_meta( $user_id, '_woocommerce_pos_refresh_tokens' );
 	}
 
@@ -553,13 +585,32 @@ class Auth {
 	 *
 	 * @return bool
 	 */
+	/**
+	 * Revoke all sessions except the current one, with blacklisting.
+	 *
+	 * @param int    $user_id
+	 * @param string $current_jti
+	 *
+	 * @return bool
+	 */
 	public function revoke_all_sessions_except( int $user_id, string $current_jti ): bool {
 		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
 		if ( ! \is_array( $refresh_tokens ) ) {
 			return false;
 		}
 
-		// Keep only the current session
+		// Blacklist all sessions except current for instant access token invalidation
+		$issued_at = time();
+		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		$ttl       = max( 0, $expire - $issued_at );
+
+		foreach ( $refresh_tokens as $jti => $token_data ) {
+			if ( $jti !== $current_jti ) {
+				$this->blacklist_token( $jti, $ttl );
+			}
+		}
+
+		// Keep only the current session in user meta
 		$refresh_tokens = array_filter( $refresh_tokens, function( $token, $jti ) use ( $current_jti ) {
 			return $jti === $current_jti;
 		}, ARRAY_FILTER_USE_BOTH );
@@ -615,14 +666,18 @@ class Auth {
 	}
 
 	/**
-	 * Blacklist an access token by JTI (for instant revocation).
+	 * Blacklist a token JTI (for instant revocation).
 	 *
-	 * @param string $jti Access token JTI.
-	 * @param int    $ttl Time to live in seconds (until token expires).
+	 * Can be used for access token JTIs or refresh token JTIs (session).
+	 * When a refresh_jti is blacklisted, all access tokens linked to it
+	 * become invalid.
+	 *
+	 * @param string $jti Token JTI to blacklist.
+	 * @param int    $ttl Time to live in seconds.
 	 *
 	 * @return bool
 	 */
-	public function blacklist_access_token( string $jti, int $ttl ): bool {
+	public function blacklist_token( string $jti, int $ttl ): bool {
 		if ( empty( $jti ) ) {
 			return false;
 		}
@@ -632,26 +687,28 @@ class Auth {
 	}
 
 	/**
-	 * Revoke session and blacklist current access token.
+	 * Revoke session and blacklist it for instant access token invalidation.
+	 *
+	 * By blacklisting the refresh_jti, ALL access tokens linked to this session
+	 * become immediately invalid (they contain refresh_jti in their payload).
 	 *
 	 * @param int    $user_id
-	 * @param string $refresh_jti Refresh token JTI.
-	 * @param string $access_jti  Optional access token JTI to blacklist immediately.
+	 * @param string $refresh_jti Refresh token JTI (session identifier).
 	 *
 	 * @return bool
 	 */
-	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti, string $access_jti = '' ): bool {
-		// Revoke the refresh token (session)
+	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti ): bool {
+		// Revoke the refresh token (session) from user meta
 		$revoked = $this->revoke_session( $user_id, $refresh_jti );
 
-		// Blacklist the current access token if provided
-		if ( $revoked && ! empty( $access_jti ) ) {
-			// Calculate TTL - access tokens expire in 30 minutes by default
+		if ( $revoked ) {
+			// Blacklist the session JTI - this invalidates ALL access tokens for this session
+			// TTL matches access token expiry (30 min default) since that's how long we need to block
 			$issued_at = time();
 			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
 			$ttl       = max( 0, $expire - $issued_at );
 
-			$this->blacklist_access_token( $access_jti, $ttl );
+			$this->blacklist_token( $refresh_jti, $ttl );
 		}
 
 		return $revoked;
@@ -895,13 +952,15 @@ class Auth {
 	}
 
 	/**
-	 * Check if an access token is blacklisted.
+	 * Check if a token JTI is blacklisted.
 	 *
-	 * @param string $jti Access token JTI.
+	 * Works for both access token JTIs and refresh token JTIs (sessions).
+	 *
+	 * @param string $jti Token JTI to check.
 	 *
 	 * @return bool
 	 */
-	private function is_access_token_blacklisted( string $jti ): bool {
+	private function is_token_blacklisted( string $jti ): bool {
 		if ( empty( $jti ) ) {
 			return false;
 		}

@@ -361,17 +361,17 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test access token blacklist.
+	 * Test token blacklist (can blacklist any JTI - access token or session).
 	 */
-	public function test_access_token_blacklist(): void {
+	public function test_token_blacklist(): void {
 		// Generate access token
 		$token   = $this->auth_service->generate_access_token( $this->test_user );
 		$decoded = $this->auth_service->validate_token( $token, 'access' );
 
 		$this->assertNotInstanceOf( WP_Error::class, $decoded );
 
-		// Blacklist the token
-		$result = $this->auth_service->blacklist_access_token( $decoded->jti, 3600 );
+		// Blacklist the token by its JTI
+		$result = $this->auth_service->blacklist_token( $decoded->jti, 3600 );
 		$this->assertTrue( $result );
 
 		// Try to validate blacklisted token
@@ -382,6 +382,9 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 	/**
 	 * Test session revocation with blacklist.
+	 *
+	 * When a session is revoked, the refresh_jti is blacklisted, which
+	 * invalidates ALL access tokens linked to that session.
 	 */
 	public function test_revoke_session_with_blacklist(): void {
 		// Generate token pair
@@ -391,24 +394,25 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
 		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
 
-		// Access token should be valid
+		// Access token should be valid and linked to refresh token
 		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertEquals( $refresh_decoded->jti, $access_decoded->refresh_jti );
 
-		// Revoke session with blacklist
+		// Revoke session with blacklist (blacklists the refresh_jti)
 		$result = $this->auth_service->revoke_session_with_blacklist(
 			$this->test_user->ID,
-			$refresh_decoded->jti,
-			$access_decoded->jti
+			$refresh_decoded->jti
 		);
 		$this->assertTrue( $result );
 
-		// Refresh token should be revoked
+		// Refresh token should be revoked from user meta
 		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
 		$this->assertCount( 0, $sessions );
 
-		// Access token should be blacklisted
+		// Access token should be invalid because its refresh_jti is blacklisted
 		$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
 		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
 	}
 
 	/**
