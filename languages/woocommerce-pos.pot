@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.7.14\n"
+"Project-Id-Version: WCPOS 1.8.0\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-19T15:46:48+00:00\n"
+"POT-Creation-Date: 2025-12-17T22:36:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -112,36 +112,176 @@ msgstr ""
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
-msgid "Something went wrong. Please try again later."
+msgid "Enter template name"
 msgstr ""
 
-msgid "Your WooCommerce Pro license is inactive"
+msgid "This is a read-only plugin template. View the code below. To customize, create a new template."
 msgstr ""
 
-msgid "Your WooCommerce Pro license has expired"
+msgid "Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language."
 msgstr ""
 
-msgid "Your WooCommerce Pro license is valid and active."
+msgid "Template Code Editor"
 msgstr ""
 
-msgid "You are receiving plugin updates."
+msgid "Template Settings"
 msgstr ""
 
-msgid "Your WooCommerce Pro license is inactive."
+msgid "Template Actions"
 msgstr ""
 
+msgid "Template Preview"
+msgstr ""
+
+msgid "Language"
+msgstr ""
+
+msgid "File Path"
+msgstr ""
+
+msgid "If provided, template will be loaded from this file instead of database content."
+msgstr ""
+
+msgid "Plugin Template"
+msgstr ""
+
+msgid "This is a plugin template and cannot be modified directly. If you edit the content, it will be saved as a new custom template."
+msgstr ""
+
+msgid "Plugin Template (Read-Only)"
+msgstr ""
+
+msgid "This template is provided by the plugin and cannot be edited."
+msgstr ""
+
+msgid "This template is currently active"
+msgstr ""
+
+msgid "Set as Active Template"
+msgstr ""
+
+msgid "Preview is only available for receipt templates."
+msgstr ""
+
+msgid "No POS orders found. Create an order in the POS to preview templates."
+msgstr ""
+
+msgid "Preview with Order:"
+msgstr ""
+
+msgid "Open in New Tab"
+msgstr ""
+
+msgid "Refresh Preview"
+msgstr ""
+
+msgid "Invalid template ID."
+msgstr ""
+
+msgid "Security check failed."
+msgstr ""
+
+msgid "You do not have permission to activate templates."
+msgstr ""
+
+msgid "Activate"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Theme Template"
+msgstr ""
+
+#. translators: %d: number of templates created
 #, php-format
-msgid "<a href=\"%s\">Click here</a> to activate your license key."
+msgid "%d template created successfully."
+msgid_plural "%d templates created successfully."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Template activated successfully."
 msgstr ""
 
-msgid "Your WooCommerce Pro license has expired."
+msgid "Failed to activate template."
 msgstr ""
 
-#, php-format
-msgid "<a href=\"%s\">Please renew</a> to receive updates."
+msgid "Template validation warning:"
 msgstr ""
 
-msgid "JWT token."
+msgid "You do not have permission to create templates."
+msgstr ""
+
+msgid "No templates found"
+msgstr ""
+
+msgid "Get started by creating default templates from your plugin files."
+msgstr ""
+
+msgid "Create Default Templates"
+msgstr ""
+
+msgid "The refresh token to use for generating a new access token."
+msgstr ""
+
+msgid "The user ID to get sessions for. Defaults to current user."
+msgstr ""
+
+msgid "The user ID to delete sessions for."
+msgstr ""
+
+msgid "Whether to keep the current session."
+msgstr ""
+
+msgid "The session JTI to delete."
+msgstr ""
+
+msgid "The user ID that owns the session."
+msgstr ""
+
+msgid "Missing required parameters."
+msgstr ""
+
+msgid "Session revoked successfully."
+msgstr ""
+
+msgid "Failed to revoke session."
+msgstr ""
+
+msgid "Missing user_id parameter."
+msgstr ""
+
+msgid "Could not determine current session."
+msgstr ""
+
+msgid "Sessions revoked successfully."
+msgstr ""
+
+msgid "Failed to revoke sessions."
+msgstr ""
+
+msgid "Unique identifier for the cashier (WordPress user ID)."
+msgstr ""
+
+msgid "Unique identifier for the store."
+msgstr ""
+
+msgid "Authentication required."
+msgstr ""
+
+msgid "Cashier not found."
+msgstr ""
+
+msgid "User does not have POS cashier permissions."
+msgstr ""
+
+msgid "You can only access your own cashier data."
+msgstr ""
+
+msgid "Failed to retrieve store data."
+msgstr ""
+
+msgid "Store not found or not accessible by this cashier."
 msgstr ""
 
 msgid "Filter customers by roles."
@@ -176,13 +316,22 @@ msgstr ""
 msgid "Order details manually sent to %s from WCPOS."
 msgstr ""
 
-msgid "Failed to retrieve store data"
+msgid "Unique identifier for the template."
 msgstr ""
 
-msgid "Store not found"
+msgid "Current page of the collection."
 msgstr ""
 
-msgid "You do not have permissions to view this data."
+msgid "Maximum number of items to be returned in result set."
+msgstr ""
+
+msgid "Filter by template type."
+msgstr ""
+
+msgid "Sorry, you cannot list templates."
+msgstr ""
+
+msgid "Sorry, you cannot view this template."
 msgstr ""
 
 msgid "Order does not exist."
@@ -271,7 +420,164 @@ msgstr ""
 msgid "Invalid visibility option provided"
 msgstr ""
 
-msgid "Template not found."
+msgctxt "Post Type General Name"
+msgid "Templates"
+msgstr ""
+
+msgctxt "Post Type Singular Name"
+msgid "Template"
+msgstr ""
+
+msgid "Templates"
+msgstr ""
+
+msgid "Template"
+msgstr ""
+
+msgid "Template Archives"
+msgstr ""
+
+msgid "Template Attributes"
+msgstr ""
+
+msgid "Parent Template:"
+msgstr ""
+
+msgid "Add New Template"
+msgstr ""
+
+msgid "Add New"
+msgstr ""
+
+msgid "New Template"
+msgstr ""
+
+msgid "Edit Template"
+msgstr ""
+
+msgid "Update Template"
+msgstr ""
+
+msgid "View Template"
+msgstr ""
+
+msgid "View Templates"
+msgstr ""
+
+msgid "Search Template"
+msgstr ""
+
+msgid "Not found"
+msgstr ""
+
+msgid "Not found in Trash"
+msgstr ""
+
+msgid "Featured Image"
+msgstr ""
+
+msgid "Set featured image"
+msgstr ""
+
+msgid "Remove featured image"
+msgstr ""
+
+msgid "Use as featured image"
+msgstr ""
+
+msgid "Insert into template"
+msgstr ""
+
+msgid "Uploaded to this template"
+msgstr ""
+
+msgid "Templates list"
+msgstr ""
+
+msgid "Templates list navigation"
+msgstr ""
+
+msgid "Filter templates list"
+msgstr ""
+
+msgid "POS Templates"
+msgstr ""
+
+msgctxt "Taxonomy General Name"
+msgid "Template Types"
+msgstr ""
+
+msgctxt "Taxonomy Singular Name"
+msgid "Template Type"
+msgstr ""
+
+msgid "Template Types"
+msgstr ""
+
+msgid "All Template Types"
+msgstr ""
+
+msgid "Parent Template Type"
+msgstr ""
+
+msgid "Parent Template Type:"
+msgstr ""
+
+msgid "New Template Type Name"
+msgstr ""
+
+msgid "Add New Template Type"
+msgstr ""
+
+msgid "Edit Template Type"
+msgstr ""
+
+msgid "Update Template Type"
+msgstr ""
+
+msgid "View Template Type"
+msgstr ""
+
+msgid "Separate template types with commas"
+msgstr ""
+
+msgid "Add or remove template types"
+msgstr ""
+
+msgid "Choose from the most used"
+msgstr ""
+
+msgid "Popular Template Types"
+msgstr ""
+
+msgid "Search Template Types"
+msgstr ""
+
+msgid "Not Found"
+msgstr ""
+
+msgid "No template types"
+msgstr ""
+
+msgid "Template types list"
+msgstr ""
+
+msgid "Template types list navigation"
+msgstr ""
+
+msgid "Receipt templates for printing orders"
+msgstr ""
+
+msgid "Report templates for analytics"
+msgstr ""
+
+msgid "Pro Receipt Template"
+msgstr ""
+
+msgid "Core Receipt Template"
+msgstr ""
+
+msgid "Theme Receipt Template"
 msgstr ""
 
 msgid "This order cannot be paid for. Please contact us if you need assistance."
@@ -320,6 +626,55 @@ msgid "Sorry, this order is invalid."
 msgstr ""
 
 msgid "You do not have permission to view this receipt."
+msgstr ""
+
+msgid "Receipt Error"
+msgstr ""
+
+msgid "Receipt Template Error"
+msgstr ""
+
+msgid "There was a problem rendering the receipt template. This is usually caused by a syntax error or undefined variable in the template code."
+msgstr ""
+
+msgid "File:"
+msgstr ""
+
+msgid "Line:"
+msgstr ""
+
+msgid "Suggestions:"
+msgstr ""
+
+msgid "Check the template file for syntax errors (missing semicolons, brackets, etc.)"
+msgstr ""
+
+msgid "Ensure all variables used in the template are defined"
+msgstr ""
+
+msgid "Verify that any custom functions or classes exist"
+msgstr ""
+
+msgid "Try resetting to the default receipt template"
+msgstr ""
+
+msgid "Please contact the site administrator for assistance."
+msgstr ""
+
+msgid "Invalid template language."
+msgstr ""
+
+#. translators: %s: pattern that was found
+#, php-format
+msgid "Template contains potentially dangerous JavaScript code: %s"
+msgstr ""
+
+#. translators: %s: error message
+#, php-format
+msgid "PHP syntax error: %s"
+msgstr ""
+
+msgid "Template not found."
 msgstr ""
 
 msgid "Point of Sale"
