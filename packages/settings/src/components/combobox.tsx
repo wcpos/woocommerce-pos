@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Combobox as CB, Transition } from '@headlessui/react';
+import { Combobox as CB, ComboboxButton as CBButton, ComboboxInput as CBInput, ComboboxOptions as CBOptions, ComboboxOption as CBOption, Transition } from '@headlessui/react';
 import classNames from 'classnames';
 
 import Check from '../../assets/check.svg';
@@ -72,40 +72,39 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 	 */
 	return (
 		<CB value={selected} onChange={handleChange}>
-			<div className="wcpos-relative">
-				<CB.Button
+			<div className="wcpos:relative">
+				<CBButton
 					as="div"
 					className={classNames([
-						'wcpos-relative',
-						'wcpos-w-full',
-						'wcpos-cursor-default',
-						'wcpos-overflow-hidden',
-						'wcpos-rounded-md',
-						'wcpos-bg-white',
-						'wcpos-border',
-						'wcpos-border-gray-300',
-						'wcpos-text-left',
-						'focus:wcpos-outline-none',
-						'focus-visible:wcpos-ring-2',
-						'focus-visible:wcpos-ring-white',
-						'focus-visible:wcpos-ring-opacity-75',
-						'focus-visible:wcpos-ring-offset-2',
-						'focus-visible:wcpos-ring-offset-teal-300',
-						'sm:wcpos-text-sm',
+						'wcpos:relative',
+						'wcpos:w-full',
+						'wcpos:cursor-default',
+						'wcpos:overflow-hidden',
+						'wcpos:rounded-md',
+						'wcpos:bg-white',
+						'wcpos:border',
+						'wcpos:border-gray-300',
+						'wcpos:text-left',
+						'wcpos:focus:outline-none',
+						'focus-visible:wcpos:ring-2',
+						'focus-visible:wcpos:ring-white/75',
+						'focus-visible:wcpos:ring-offset-2',
+						'focus-visible:wcpos:ring-offset-teal-300',
+						'wcpos:sm:text-sm',
 					])}
 				>
-					<CB.Input
+					<CBInput
 						ref={inputRef}
 						className={classNames([
-							'wcpos-w-full',
-							'!wcpos-border-none',
-							'wcpos-py-2',
-							'wcpos-pl-3',
-							'wcpos-pr-10',
-							'wcpos-text-sm',
-							'wcpos-leading-5',
-							// 'wcpos-text-gray-900',
-							'focus:wcpos-ring-0',
+							'wcpos:w-full',
+							'wcpos:border-none',
+							'wcpos:py-2',
+							'wcpos:pl-3',
+							'wcpos:pr-10',
+							'wcpos:text-sm',
+							// 'wcpos:leading-5',
+							// 'wcpos:text-gray-900',
+							'wcpos:focus:ring-0',
 						])}
 						displayValue={(option) => option.label}
 						onChange={handleSearch}
@@ -114,18 +113,18 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 					/>
 					<span
 						className={classNames([
-							'wcpos-absolute',
-							'wcpos-inset-y-0',
-							'wcpos-right-0',
-							'wcpos-flex',
-							'wcpos-items-center',
-							'wcpos-pr-2',
-							'wcpos-bg-white',
+							'wcpos:absolute',
+							'wcpos:inset-y-0',
+							'wcpos:right-0',
+							'wcpos:flex',
+							'wcpos:items-center',
+							'wcpos:pr-2',
+							'wcpos:bg-white',
 						])}
 					>
-						<ChevronDown className="wcpos-h-5 w-5" aria-hidden="true" />
+						<ChevronDown className="wcpos:h-5 w-5" aria-hidden="true" />
 					</span>
-				</CB.Button>
+				</CBButton>
 				<Transition
 					as={React.Fragment}
 					leave="transition ease-in duration-100"
@@ -133,50 +132,49 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 					leaveTo="opacity-0"
 					afterLeave={() => setQuery('')}
 				>
-					<CB.Options
+					<CBOptions
 						className={classNames([
-							'wcpos-absolute',
-							'wcpos-z-10',
-							'wcpos-mt-1',
-							'wcpos-max-h-60',
-							'wcpos-w-full',
-							'wcpos-overflow-auto',
-							'wcpos-rounded-md',
-							'wcpos-bg-white',
-							'wcpos-py-1',
-							'wcpos-text-base',
-							'wcpos-shadow-lg',
-							'wcpos-ring-1',
-							'wcpos-ring-black',
-							'wcpos-ring-opacity-5',
-							'focus:wcpos-outline-none',
-							'sm:wcpos-text-sm',
+							'wcpos:absolute',
+							'wcpos:z-10',
+							'wcpos:mt-1',
+							'wcpos:max-h-60',
+							'wcpos:w-full',
+							'wcpos:overflow-auto',
+							'wcpos:rounded-md',
+							'wcpos:bg-white',
+							'wcpos:py-1',
+							'wcpos:text-base',
+							'wcpos:shadow-lg',
+							'wcpos:ring-1',
+							'wcpos:ring-black/5',
+							'wcpos:focus:outline-none',
+							'wcpos:sm:text-sm',
 						])}
 					>
 						{loading ? (
-							<div className="wcpos-relative wcpos-cursor-default wcpos-select-none wcpos-py-2 wcpos-px-4 wcpos-text-gray-700">
+							<div className="wcpos:relative wcpos:cursor-default wcpos:select-none wcpos:py-2 wcpos:px-4 wcpos:text-gray-700">
 								Loading...
 							</div>
 						) : options.length === 0 && query !== '' ? (
-							<div className="wcpos-relative wcpos-cursor-default wcpos-select-none wcpos-py-2 wcpos-px-4 wcpos-text-gray-700">
+							<div className="wcpos:relative wcpos:cursor-default wcpos:select-none wcpos:py-2 wcpos:px-4 wcpos:text-gray-700">
 								Nothing found.
 							</div>
 						) : (
 							options.map((option) => (
-								<CB.Option
+								<CBOption
 									key={option.value}
 									className={({ active }) =>
 										classNames(
-											'wcpos-relative',
-											'wcpos-cursor-default',
-											'wcpos-select-none',
-											'wcpos-py-2',
-											'wcpos-pl-10',
-											'wcpos-pr-4',
-											'wcpos-m-0',
-											{ 'wcpos-bg-wp-admin-theme-color-lightest': active },
-											{ 'wcpos-text-wp-admin-theme-color-darker-10': active },
-											{ 'wcpos-text-gray-900': !active }
+											'wcpos:relative',
+											'wcpos:cursor-default',
+											'wcpos:select-none',
+											'wcpos:py-2',
+											'wcpos:pl-10',
+											'wcpos:pr-4',
+											'wcpos:m-0',
+											{ 'wcpos:bg-wp-admin-theme-color-lightest': active },
+											{ 'wcpos:text-wp-admin-theme-color-darker-10': active },
+											{ 'wcpos:text-gray-900': !active }
 										)
 									}
 									value={option}
@@ -184,8 +182,8 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 									{({ selected, active }) => (
 										<>
 											<span
-												className={`wcpos-block wcpos-truncate ${
-													selected ? 'wcpos-font-medium' : 'wcpos-font-normal'
+												className={`wcpos:block wcpos:truncate ${
+													selected ? 'wcpos:font-medium' : 'wcpos:font-normal'
 												}`}
 											>
 												{option.label}
@@ -194,19 +192,19 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 												<span
 													className={classNames(
 														[
-															'wcpos-absolute',
-															'wcpos-inset-y-0',
-															'wcpos-left-0',
-															'wcpos-flex',
-															'wcpos-items-center',
-															'wcpos-pl-3',
-															'wcpos-text-wp-admin-theme-color-darker-10',
+															'wcpos:absolute',
+															'wcpos:inset-y-0',
+															'wcpos:left-0',
+															'wcpos:flex',
+															'wcpos:items-center',
+															'wcpos:pl-3',
+															'wcpos:text-wp-admin-theme-color-darker-10',
 														],
-														{ 'wcpos-text-white': active, 'wcpos-text-teal-600': !active }
+														{ 'wcpos:text-white': active, 'wcpos:text-teal-600': !active }
 													)}
 												>
 													<Check
-														className="wcpos-h-5 wcpos-w-5"
+														className="wcpos:h-5 wcpos:w-5"
 														fill="#006ba1"
 														aria-hidden="true"
 													/>
@@ -214,10 +212,10 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 											) : null}
 										</>
 									)}
-								</CB.Option>
+								</CBOption>
 							))
 						)}
-					</CB.Options>
+					</CBOptions>
 				</Transition>
 			</div>
 		</CB>

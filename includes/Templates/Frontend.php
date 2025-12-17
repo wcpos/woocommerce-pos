@@ -8,9 +8,11 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Admin\Permalink;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
+use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -83,11 +85,14 @@ class Frontend {
 	 * Output the footer scripts.
 	 */
 	public function footer(): void {
-		$development    = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
-		$user           = wp_get_current_user();
-		$github_url     = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.7/';
-		$auth_service   = Auth::instance();
-		$stores         = array_map(
+		$development          = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+		$user                 = wp_get_current_user();
+		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8.0-alpha.0/build/';
+		$wcpos_permalink_slug = Permalink::get_slug();
+		$wcpos_permalink_slug = empty( $wcpos_permalink_slug ) ? 'pos' : $wcpos_permalink_slug;
+		$wcpos_permalink_slug = '/' . ltrim( $wcpos_permalink_slug, '/' );
+		$auth_service         = Auth::instance();
+		$stores               = array_map(
 			function ( $store ) {
 				return $store->get_data();
 			},
@@ -108,7 +113,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $github_url . 'metadata.json',
+			'manifest'       => $cdn_base_url . 'metadata.json',
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
@@ -123,12 +128,13 @@ class Frontend {
 				'wc_version'         => WC()->version,
 				'wcpos_version'      => VERSION,
 				'wp_api_url'         => get_rest_url(),
-				'wc_api_url'         => get_rest_url( null, 'wc/v3' ),
-				'wc_api_auth_url'    => get_rest_url( null, 'wcpos/v1/jwt' ),
+				'wc_api_url'         => trailingslashit( get_rest_url( null, 'wc/v3' ) ),
+				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v1' ) ),
+				'wcpos_login_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
-			'wp_credentials' => $auth_service->get_user_data( $user ),
+			'wp_credentials' => $auth_service->get_user_data( $user, true ),
 			'stores'         => $stores,
 		);
 
@@ -145,7 +151,6 @@ class Frontend {
 		 */
 		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
-		$dev_bundle    = site_url( '/entry.bundle?platform=web&dev=true&hot=false&transform.routerRoot=app' );
 
 		/**
 		 * Add path to worker scripts.
@@ -183,53 +188,43 @@ class Frontend {
 
     var idbWorker = '{$idbWorker}';
     var initialProps = {$initial_props};
+    var cdnBaseUrl = '{$cdn_base_url}';
+	var baseUrl = '{$wcpos_permalink_slug}';
     </script>" . "\n";
+		
+		echo "<script>
+		var request = new Request(initialProps.manifest);
 
-		// The actual app bundle
-		if ( $development ) {
-			// Development Mode
-			echo "<script>
-			getScript('{$dev_bundle}', function() {
-					console.log('Development JavaScript bundle loaded');
-			});
-			</script>" . "\n";
-		} else {
-			// Production Mode
-			echo "<script>
-			var request = new Request(initialProps.manifest);
+		window.fetch(request)
+				.then(function(response) { return response.json(); })
+				.then(function(data) {
+						var bundle = data.fileMetadata.web.bundle;
+						var bundleUrl = cdnBaseUrl + bundle;
 
-			window.fetch(request)
-					.then(function(response) { return response.json(); })
-					.then(function(data) {
-							var baseUrl = '{$github_url}';
-							var bundle = data.fileMetadata.web.bundle;
-							var bundleUrl = baseUrl + bundle;
+						// Check if CSS file is specified in the manifest
+						if (data.fileMetadata.web.css) {
+								var cssFile = data.fileMetadata.web.css;
+								var cssUrl = cdnBaseUrl + cssFile;
 
-							// Check if CSS file is specified in the manifest
-							if (data.fileMetadata.web.css) {
-									var cssFile = data.fileMetadata.web.css;
-									var cssUrl = baseUrl + cssFile;
-
-									// Load CSS first
-									loadCSS(cssUrl, function() {
-											console.log('CSS loaded');
-											// Load JavaScript after CSS is loaded
-											getScript(bundleUrl, function() {
-													console.log('JavaScript bundle loaded');
-											});
-									});
-							} else {
-									// If no CSS file, load JavaScript immediately
-									getScript(bundleUrl, function() {
-											console.log('JavaScript bundle loaded');
-									});
-							}
-					})
-					.catch(function(error) {
-							console.error('Error fetching manifest:', error);
-					});
-			</script>" . "\n";
-		}
+								// Load CSS first
+								loadCSS(cssUrl, function() {
+										console.log('CSS loaded');
+										// Load JavaScript after CSS is loaded
+										getScript(bundleUrl, function() {
+												console.log('JavaScript bundle loaded');
+										});
+								});
+						} else {
+								// If no CSS file, load JavaScript immediately
+								getScript(bundleUrl, function() {
+										console.log('JavaScript bundle loaded');
+								});
+						}
+				})
+				.catch(function(error) {
+						console.error('Error fetching manifest:', error);
+				});
+		</script>" . "\n";
 	}
 
 	private function pos_logout_url() {

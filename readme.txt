@@ -88,12 +88,19 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.8.0 - 2025/11/XX =
+
 = 1.7.14 - 2025/11/19 =
 * Change: Plugin name changed from "WooCommerce POS" to "WCPOS" to comply with WooCommerce trademark requirements
 * Note: This is a branding change only - all functionality remains the same
 
 = 1.7.13 - 2025/08/06 = 
 * Fix: New Order emails to send after order calculations
+
+= 1.7.12 - 2025/07/25 = 
+* Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt
+* Fix: Remove the X-Frame-Options Header for which prevents desktop application users from logging in
+* Fix: Checkout email settings have been tested and should now work
 
 = 1.7.12 - 2025/07/25 = 
 * Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt

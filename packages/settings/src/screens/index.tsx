@@ -10,7 +10,7 @@ import Footer from './footer';
 import General from './general';
 import Header from './header';
 import License from './license';
-import Tools from './tools';
+import Sessions from './sessions';
 import Error from '../components/error';
 import Notice from '../components/notice';
 import Tabs from '../components/tabs';
@@ -21,8 +21,8 @@ const screens = {
 	general: General,
 	checkout: Checkout,
 	access: Access,
+	sessions: Sessions,
 	license: License,
-	tools: Tools,
 };
 
 export type ScreenKeys = keyof typeof screens;
@@ -44,7 +44,7 @@ const Main = ({ initialScreen }: Props) => {
 		{ key: 'general', title: t('General', { _tags: 'wp-admin-settings ' }) },
 		{ key: 'checkout', title: t('Checkout', { _tags: 'wp-admin-settings' }) },
 		{ key: 'access', title: t('Access', { _tags: 'wp-admin-settings' }) },
-		{ key: 'tools', title: t('Tools', { _tags: 'wp-admin-settings' }) },
+		{ key: 'sessions', title: t('Sessions', { _tags: 'wp-admin-settings' }) },
 		{ key: 'license', title: t('License', { _tags: 'wp-admin-settings' }) },
 	];
 
@@ -58,7 +58,7 @@ const Main = ({ initialScreen }: Props) => {
 		return (
 			<ErrorBoundary FallbackComponent={Error}>
 				{notice && (
-					<div className="wcpos-p-4">
+					<div className="wcpos:p-4">
 						<Notice status={notice.type} onRemove={() => setNotice(null)}>
 							{notice.message}
 						</Notice>
@@ -72,8 +72,8 @@ const Main = ({ initialScreen }: Props) => {
 	};
 
 	return (
-		<div className="wcpos-container wcpos-mx-auto wcpos-max-w-screen-md wcpos-py-0 md:wcpos-py-4 md:wcpos-pr-4 wcpos-space-y-4">
-			<div className="wcpos-bg-white wcpos-rounded-lg">
+		<div className="wcpos:container wcpos:mx-auto wcpos:max-w-screen-md wcpos:py-0 wcpos:md:py-4 wcpos:md:pr-4 wcpos:space-y-4">
+			<div className="wcpos:bg-white wcpos:rounded-lg">
 				<Header />
 				<Tabs<(typeof routes)[number]>
 					renderScene={renderScene}
@@ -83,6 +83,11 @@ const Main = ({ initialScreen }: Props) => {
 						setIndex(idx);
 					}}
 					onTabItemHover={(idx, route) => {
+						// Skip prefetch for sessions tab as it uses different API endpoints
+						if (route.key === 'sessions') {
+							return;
+						}
+						
 						queryClient.prefetchQuery({
 							queryKey: [route.key],
 							queryFn: async () => {
@@ -97,7 +102,7 @@ const Main = ({ initialScreen }: Props) => {
 					}}
 				/>
 			</div>
-			<div className="wcpos-bg-white wcpos-rounded-lg">
+			<div className="wcpos:bg-white wcpos:rounded-lg">
 				<Footer />
 			</div>
 		</div>

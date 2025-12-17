@@ -23,7 +23,6 @@ use WCPOS\WooCommercePOS\Admin\Plugins;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Settings;
-use WCPOS\WooCommercePOS\Admin\Updaters\Pro_Plugin_Updater;
 use WP_Screen;
 
 /**
@@ -77,7 +76,7 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
-		new Pro_Plugin_Updater();
+		new Admin\Templates();
 	}
 
 	/**

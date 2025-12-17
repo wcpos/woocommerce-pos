@@ -23,9 +23,9 @@ const General = () => {
 	const { data, mutate } = useSettingsApi('general');
 
 	return (
-		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
+		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 			{/* <div></div>
-			<div className="wcpos-col-span-2">
+			<div className="wcpos:col-span-2">
 				<ToggleControl
 					label={
 						<Label
@@ -43,7 +43,7 @@ const General = () => {
 				/>
 			</div> */}
 			<div></div>
-			<div className="wcpos-col-span-2">
+			<div className="wcpos:col-span-2">
 				<ToggleControl
 					label={
 						<Label
@@ -61,7 +61,7 @@ const General = () => {
 				/>
 			</div>
 			<div></div>
-			<div className="wcpos-col-span-2">
+			<div className="wcpos:col-span-2">
 				<ToggleControl
 					label={
 						<Label
@@ -79,7 +79,7 @@ const General = () => {
 				/>
 			</div>
 			<div></div>
-			<div className="wcpos-col-span-2">
+			<div className="wcpos:col-span-2">
 				<ToggleControl
 					label={
 						<Label>
@@ -94,7 +94,7 @@ const General = () => {
 					}}
 				/>
 			</div>
-			<div className="wcpos-flex sm:wcpos-justify-end">
+			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
 					tip={t('The default customer for POS orders, eg: Guest', { _tags: 'wp-admin-settings' })}
 				>
@@ -112,7 +112,7 @@ const General = () => {
 					/>
 				</React.Suspense>
 			</div>
-			<div>
+			<div className="wcpos:flex wcpos:items-center">
 				<CheckboxControl
 					label={t('Use cashier account', { _tags: 'wp-admin-settings' })}
 					checked={!!data?.default_customer_is_cashier}
@@ -121,7 +121,7 @@ const General = () => {
 					}}
 				/>
 			</div>
-			<div className="wcpos-flex sm:wcpos-justify-end">
+			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
 					tip={t('Product meta field to be used as barcode, eg: _sku or _barcode', {
 						_tags: 'wp-admin-settings',

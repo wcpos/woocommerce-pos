@@ -1,20 +1,9 @@
-import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
+import { useQueryClient, useSuspenseQuery, useMutation } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { merge, cloneDeep, get } from 'lodash';
 
 import useSnackbar from '../components/snackbar';
 import useNotices from '../hooks/use-notices';
-
-const placeholders = {
-	general: {},
-	checkout: {},
-	'payment-gateways': {
-		gateways: {},
-	},
-	access: {},
-	license: {},
-	tools: {},
-};
 
 type PlaceholderKeys = keyof typeof placeholders;
 
@@ -24,7 +13,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	const { setNotice } = useNotices();
 	const endpoint = `wcpos/v1/settings/${id}?wcpos=1`;
 
-	const { data } = useQuery({
+	const { data } = useSuspenseQuery({
 		queryKey: [id],
 		queryFn: async () => {
 			const response = await apiFetch<Record<string, unknown>>({
@@ -42,7 +31,6 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 
 			return response;
 		},
-		placeholderData: placeholders[id],
 	});
 
 	const mutation = useMutation({

@@ -51,7 +51,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			overlayClassName="my-extra-modal-overlay-class"
 			title={gateway.title}
 			onRequestClose={closeModal}
-			className="wcpos-max-w-md"
+			className="wcpos:max-w-md"
 		>
 			<Notice status="info" isDismissible={false}>
 				<T
@@ -64,8 +64,8 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 					}
 				/>
 			</Notice>
-			<div className="wcpos-py-2">
-				<label htmlFor="title" className="wcpos-block wcpos-mb-1 wcpos-font-medium wcpos-text-sm">
+			<div className="wcpos:py-2">
+				<label htmlFor="title" className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm">
 					{t('Title', { _tags: 'wp-admin-settings' })}
 				</label>
 				<input
@@ -76,11 +76,11 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 					type="text"
 					value={title}
 					onChange={handleChange}
-					className="wcpos-w-full wcpos-p-2 wcpos-rounded wcpos-border wcpos-border-gray-300 focus:wcpos-border-wp-admin-theme-color"
+					className="wcpos:w-full wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
 				/>
 			</div>
-			<div className="wcpos-py-2">
-				<label htmlFor="description" className="wcpos-block mb-1 wcpos-font-medium wcpos-text-sm">
+			<div className="wcpos:py-2">
+				<label htmlFor="description" className="wcpos:block mb-1 wcpos:font-medium wcpos:text-sm">
 					{t('Description', { _tags: 'wp-admin-settings' })}
 				</label>
 				<textarea
@@ -88,10 +88,10 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 					name="description"
 					value={description}
 					onChange={handleChange}
-					className="wcpos-w-full wcpos-h-20 wcpos-p-2 wcpos-rounded wcpos-border wcpos-border-gray-300 focus:wcpos-border-wp-admin-theme-color"
+					className="wcpos:w-full wcpos:h-20 wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
 				/>
 			</div>
-			<div className="wcpos-text-right wcpos-pt-4">
+			<div className="wcpos:text-right wcpos:pt-4">
 				<Button onClick={closeModal}>{t('Cancel', { _tags: 'wp-admin-settings' })}</Button>
 				<Button variant="primary" onClick={handleSave}>
 					{t('Save', { _tags: 'wp-admin-settings' })}

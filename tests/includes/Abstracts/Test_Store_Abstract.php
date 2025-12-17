@@ -2,7 +2,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Abstracts;
 
-use Automattic\WooCommerce\Testing\Tools\CodeHacking\Hacks\FunctionsMockerHack;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
 
@@ -78,17 +77,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	}
 
 	public function test_get_store_name(): void {
-		// @TODO - mocking functions doesn't work, I don't know why?
-		FunctionsMockerHack::add_function_mocks(
-			array(
-				'get_bloginfo' => function ( $show = '' ) {
-					echo "Mocked get_bloginfo called with parameter: $show\n";
-
-					return 'Mocked Store Name';
-				},
-			)
-		);
-
+		// Test uses the real get_bloginfo function from WordPress test environment
 		$store_name = $this->store->get_name();
 		$this->assertIsString( $store_name );
 		$this->assertEquals( 'Test Blog', $store_name );

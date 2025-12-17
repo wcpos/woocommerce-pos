@@ -70,7 +70,7 @@ class API {
 		 * @param array $controllers Associative array of controller identifiers to their corresponding class names.
 		 *                           - 'auth'                  => Fully qualified name of the class handling authentication.
 		 *                           - 'settings'              => Fully qualified name of the class handling settings.
-		 *                           - 'stores'                => Fully qualified name of the class handling stores management.
+		 *                           - 'cashier'               => Fully qualified name of the class handling cashier management.
 		 *                           - 'products'              => Fully qualified name of the class handling products.
 		 *                           - 'product_variations'    => Fully qualified name of the class handling product variations.
 		 *                           - 'orders'                => Fully qualified name of the class handling orders.
@@ -88,7 +88,8 @@ class API {
 				// WCPOS rest api controllers.
 				'auth'                  => API\Auth::class,
 				'settings'              => API\Settings::class,
-				'stores'                => API\Stores::class,
+				'cashier'               => API\Cashier::class,
+				'templates'             => API\Templates_Controller::class,
 
 				// extend WC REST API controllers.
 				'products'              => API\Products_Controller::class,
@@ -97,6 +98,7 @@ class API {
 				'customers'             => API\Customers_Controller::class,
 				'product_tags'          => API\Product_Tags_Controller::class,
 				'product_categories'    => API\Product_Categories_Controller::class,
+				'product_brands'        => API\Product_Brands_Controller::class,
 				'taxes'                 => API\Taxes_Controller::class,
 				'shipping_methods'      => API\Shipping_Methods_Controller::class,
 				'tax_classes'           => API\Tax_Classes_Controller::class,
@@ -234,6 +236,13 @@ class API {
 		$response->data['wc_version']       = WC()->version;
 		$response->data['wcpos_version']    = VERSION;
 		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
+
+		// Add WCPOS authentication endpoint to the response.
+		$response->data['authentication']['wcpos'] = array(
+			'endpoints' => array(
+				'authorization' => Template_Router::get_auth_url(),
+			),
+		);
 
 		/**
 		 * Remove the routes from the response.

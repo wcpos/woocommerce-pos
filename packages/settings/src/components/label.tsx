@@ -9,12 +9,12 @@ interface LabelProps {
 
 const Label = ({ children, tip }: LabelProps) => {
 	return (
-		<div className="wcpos-flex wcpos-items-center wcpos-gap-2">
+		<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
 			{children}
 			{tip && (
 				<Tooltip text={tip}>
 					<span>
-						<Icon icon="editor-help" className="wcpos-text-gray-300" />
+						<Icon icon="editor-help" className="wcpos:text-gray-300" />
 					</span>
 				</Tooltip>
 			)}

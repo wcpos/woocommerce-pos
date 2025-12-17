@@ -4,7 +4,6 @@ namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
-use WCPOS\WooCommercePOS\Admin\Updaters\Pro_Plugin_Updater;
 
 	/**
 	 *

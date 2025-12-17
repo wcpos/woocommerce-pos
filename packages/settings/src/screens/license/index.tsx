@@ -78,8 +78,8 @@ const License = () => {
 
 	if (!data?.instance) {
 		return (
-			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
-				<div className="sm:wcpos-text-right wcpos-text-8xl">
+			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
+				<div className="wcpos:sm:text-right wcpos:text-8xl">
 					<a href="https://wcpos.com/pro">
 						<img
 							src="https://wcpos.com/wp-content/themes/woocommerce-pos/img/woopos-pro-logo-600.png"
@@ -89,7 +89,7 @@ const License = () => {
 						/>
 					</a>
 				</div>
-				<div className="wcpos-col-span-2">
+				<div className="wcpos:col-span-2">
 					<p>
 						{t(
 							'If you would like to support the development of WCPOS, please consider purchasing a Pro license.',
@@ -112,9 +112,9 @@ const License = () => {
 
 	if (data.activated) {
 		return (
-			<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4 sm:wcpos-px-6 wcpos-items-center">
-				<div className="sm:wcpos-text-right wcpos-text-8xl">🎉</div>
-				<div className="wcpos-col-span-2">
+			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
+				<div className="wcpos:sm:text-right wcpos:text-8xl">🎉</div>
+				<div className="wcpos:col-span-2">
 					<h3>{t('Thank You!', { _tags: 'wp-admin-settings' })}</h3>
 					<p>
 						<T
@@ -137,8 +137,8 @@ const License = () => {
 	}
 
 	return (
-		<div className="wcpos-px-4 wcpos-py-5 sm:wcpos-grid sm:wcpos-grid-cols-3 sm:wcpos-gap-4">
-			<div className="wcpos-flex sm:wcpos-justify-end">
+		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
+			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label>{t('License Key', { _tags: 'wp-admin-settings' })}</Label>
 			</div>
 			<div>
@@ -146,7 +146,7 @@ const License = () => {
 					type="text"
 					name="license-key"
 					id="license-key"
-					className="wcpos-mt-1 focus:wcpos-ring-indigo-500 focus:wcpos-border-wp-admin-theme-color wcpos-block wcpos-w-full wcpos-shadow-sm sm:wcpos-text-sm wcpos-border-gray-300 wcpos-rounded-md"
+					className="wcpos:mt-1 wcpos:focus:ring-indigo-500 wcpos:focus:border-wp-admin-theme-color wcpos:block wcpos:w-full wcpos:shadow-xs wcpos:sm:text-sm wcpos:border-gray-300 wcpos:rounded-md"
 					onChange={throttle(handleChange, 100)}
 				/>
 			</div>
