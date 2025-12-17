@@ -62,6 +62,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 
 		add_filter( 'woocommerce_rest_prepare_customer', array( $this, 'wcpos_customer_response' ), 10, 3 );
 		add_filter( 'woocommerce_rest_customer_query', array( $this, 'wcpos_customer_query' ), 10, 2 );
+		add_filter( 'is_protected_meta', array( $this, 'wcpos_allow_uuid_meta' ), 10, 3 );
 
 		/*
 		 * Check if the request is for all customers and if the 'posts_per_page' is set to -1.
@@ -229,7 +230,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$filtered_meta_data = array_filter(
 				$raw_meta_data,
 				function ( $meta ) {
-					return '_woocommerce_pos_uuid' === $meta->key || ! is_protected_meta( $meta->key, 'user' );
+					return ! is_protected_meta( $meta->key, 'user' );
 				}
 			);
 
@@ -576,5 +577,25 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID NOT IN ($ids_format) ", $exclude_ids );
 		}
+	}
+
+	/**
+	 * Allow the _woocommerce_pos_uuid meta key to be saved via the REST API.
+	 *
+	 * By default, meta keys starting with '_' are protected and cannot be set via the REST API.
+	 * We need to allow our UUID meta key so that UUIDs sent from the POS app are preserved.
+	 *
+	 * @param bool   $protected Whether the meta key is considered protected.
+	 * @param string $meta_key  The meta key being checked.
+	 * @param string $meta_type The type of object the meta is for (post, user, etc.).
+	 *
+	 * @return bool Whether the meta key should be protected.
+	 */
+	public function wcpos_allow_uuid_meta( $protected, $meta_key, $meta_type ) {
+		if ( '_woocommerce_pos_uuid' === $meta_key && 'user' === $meta_type ) {
+			return false;
+		}
+
+		return $protected;
 	}
 }
