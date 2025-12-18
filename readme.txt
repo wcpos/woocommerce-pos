@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.7.14
+Stable tag: 1.8.0
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -17,13 +17,18 @@ WCPOS is a simple application for taking orders at the Point of Sale using your 
 
 = 🎥 DEMO =
 You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos](https://demo.wcpos.com/pos) with 🔑`login/pass` : `demo/demo`
-or download the desktop application:
-⬇️ [Download WCPOS for Windows](https://updates.wcpos.com/electron/download/win32-x64)
-⬇️ [Download WCPOS for Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
-⬇️ [Download WCPOS for Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
+
+**Desktop Apps:**
+⬇️ [Windows](https://updates.wcpos.com/electron/download/win32-x64)
+⬇️ [Mac (Intel)](https://updates.wcpos.com/electron/download/darwin-x64)
+⬇️ [Mac (Apple Silicon)](https://updates.wcpos.com/electron/download/darwin-arm64)
+
+**Mobile Apps (Beta):**
+📱 [iOS (TestFlight)](https://testflight.apple.com/join/JGBdVRrW)
+📱 [Android (Google Play)](https://play.google.com/apps/internaltest/4701620234973853884)
 
 = ✨ FEATURES = 
-* **Cross-platform:** Accessible via browser or desktop application _(iOS & Android coming soon)_
+* **Cross-platform:** Accessible via browser, desktop, iOS & Android _(mobile apps in beta)_
 * **Offline Storage:** Fast product search and order processing
 * **Flexible Cart:** Add products not listed in WooCommerce
 * **Barcode Support:** Scan products directly into the cart
@@ -88,7 +93,24 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.8.0 - 2025/11/XX =
+= 1.8.0 - 2025/12/18 =
+**🎉 Major Update - Native Mobile Apps & Improved Architecture**
+
+This release marks a significant milestone for WCPOS! The entire codebase has been rewritten to support our new native iOS and Android applications (currently in beta).
+
+* **New:** Native iOS app now available via [TestFlight](https://testflight.apple.com/join/JGBdVRrW)
+* **New:** Native Android app now available via [Google Play Beta](https://play.google.com/apps/internaltest/4701620234973853884)
+* **New:** Theme support - choose between light and dark modes
+* **New:** Receipt template editor (beta) - customize your receipts directly in the settings
+* **New:** Session management - view and revoke active sessions from the POS Settings
+* **New:** Support for WooCommerce Cost of Goods Sold (COGS) field
+* **New:** Product Brands API endpoint for better brand management
+* **Improved:** Error logging - no more mysterious "Invalid response from server" messages! Errors now provide clear, actionable information
+* **Improved:** Authentication system with better security and session handling
+* **Improved:** Styling updated to Tailwind v4 for a more consistent UI
+* **Pro:** WCPOS Pro is now a standalone plugin - download from [wcpos.com/my-account](https://wcpos.com/my-account)
+
+⚠️ **Note:** This is a major update. We recommend updating when you have time to test the POS thoroughly. You can rollback to version 1.7.14 if needed.
 
 = 1.7.14 - 2025/11/19 =
 * Change: Plugin name changed from "WooCommerce POS" to "WCPOS" to comply with WooCommerce trademark requirements
