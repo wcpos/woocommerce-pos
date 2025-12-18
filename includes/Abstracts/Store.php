@@ -7,7 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Abstracts;
 
-// use WC_Admin_Settings; // this messes up tests.
+use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
+use WC_Countries;
 use function wc_format_country_state_string;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -18,8 +19,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Abstract Store class.
  *
  * Handles the store data, and provides CRUD methods.
+ * Implements StoreInterface to ensure API consistency with Pro version.
  */
-class Store extends \WC_Data {
+class Store extends \WC_Data implements StoreInterface {
 	/**
 	 * This is the name of this object type.
 	 *
@@ -33,40 +35,47 @@ class Store extends \WC_Data {
 	 * @var array
 	 */
 	protected $data = array(
-		'name' => '',
-		'locale' => '',
-		'store_address' => '',
-		'store_address_2' => '',
-		'store_city' => '',
-		'store_postcode' => '',
-		'store_state' => '',
-		'store_country' => '',
-		// 'default_country' => '',
-		'default_customer_address' => '',
-		'calc_taxes' => '',
-		'enable_coupons' => '',
+		'name'                        => '',
+		'locale'                      => '',
+		'store_address'               => '',
+		'store_address_2'             => '',
+		'store_city'                  => '',
+		'store_postcode'              => '',
+		'store_state'                 => '',
+		'store_country'               => '',
+		'default_customer_address'    => '',
+		'calc_taxes'                  => '',
+		'enable_coupons'              => '',
 		'calc_discounts_sequentially' => '',
-		'currency' => '',
-		'currency_pos' => '',
-		'price_thousand_sep' => '',
-		'price_decimal_sep' => '',
-		'price_num_decimals' => '',
-		'prices_include_tax' => '',
-		'tax_based_on' => '',
-		'tax_address' => array(
-			'country' => '',
-			'state' => '',
+		'currency'                    => '',
+		'currency_pos'                => '',
+		'price_thousand_sep'          => '',
+		'price_decimal_sep'           => '',
+		'price_num_decimals'          => '',
+		'prices_include_tax'          => '',
+		'tax_based_on'                => '',
+		'tax_address'                 => array(
+			'country'  => '',
+			'state'    => '',
 			'postcode' => '',
-			'city' => '',
+			'city'     => '',
 		),
-		'shipping_tax_class' => '',
-		'tax_round_at_subtotal' => '',
-		'tax_display_shop' => '',
-		'tax_display_cart' => '',
-		'price_display_suffix' => '',
-		'tax_total_display' => '',
-		'default_customer' => 0,
+		'shipping_tax_class'          => '',
+		'tax_round_at_subtotal'       => '',
+		'tax_display_shop'            => '',
+		'tax_display_cart'            => '',
+		'price_display_suffix'        => '',
+		'tax_total_display'           => '',
+		'default_customer'            => 0,
 		'default_customer_is_cashier' => false,
+		// Pro properties (with WooCommerce defaults in free version).
+		'url'                         => '',
+		'phone'                       => '',
+		'email'                       => '',
+		'opening_hours'               => '',
+		'personal_notes'              => '',
+		'policies_and_conditions'     => '',
+		'footer_imprint'              => '',
 	);
 
 	/**
@@ -78,6 +87,7 @@ class Store extends \WC_Data {
 		$this->set_woocommerce_general_settings();
 		$this->set_woocommerce_tax_settings();
 		$this->set_woocommerce_pos_settings();
+		$this->set_pro_property_defaults();
 	}
 
 	/**
@@ -437,5 +447,129 @@ class Store extends \WC_Data {
 	 */
 	public function get_default_customer_is_cashier( $context = 'view' ) {
 		return $this->get_prop( 'default_customer_is_cashier', $context );
+	}
+
+	/**
+	 * Set Pro property defaults from WooCommerce settings.
+	 *
+	 * These properties are fully customizable in the Pro version,
+	 * but in the free version we derive sensible defaults from WooCommerce.
+	 */
+	protected function set_pro_property_defaults() {
+		$this->set_prop( 'url', \home_url() );
+		$this->set_prop( 'phone', '' ); // No WooCommerce equivalent.
+		$this->set_prop( 'email', \get_option( 'woocommerce_email_from_address', \get_option( 'admin_email' ) ) );
+		$this->set_prop( 'opening_hours', '' );
+		$this->set_prop( 'personal_notes', '' );
+		$this->set_prop( 'policies_and_conditions', '' );
+		$this->set_prop( 'footer_imprint', '' );
+	}
+
+	/**
+	 * Get Store URL.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_url( $context = 'view' ) {
+		return $this->get_prop( 'url', $context );
+	}
+
+	/**
+	 * Get Store phone number.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_phone( $context = 'view' ) {
+		return $this->get_prop( 'phone', $context );
+	}
+
+	/**
+	 * Get Store email address.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_email( $context = 'view' ) {
+		return $this->get_prop( 'email', $context );
+	}
+
+	/**
+	 * Get Store opening hours.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_opening_hours( $context = 'view' ) {
+		return $this->get_prop( 'opening_hours', $context );
+	}
+
+	/**
+	 * Get Store personal notes.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_personal_notes( $context = 'view' ) {
+		return $this->get_prop( 'personal_notes', $context );
+	}
+
+	/**
+	 * Get Store policies and conditions.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_policies_and_conditions( $context = 'view' ) {
+		return $this->get_prop( 'policies_and_conditions', $context );
+	}
+
+	/**
+	 * Get Store footer imprint.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_footer_imprint( $context = 'view' ) {
+		return $this->get_prop( 'footer_imprint', $context );
+	}
+
+	/**
+	 * Get Store formatted address.
+	 *
+	 * @return string
+	 */
+	public function get_formatted_address() {
+		$countries = new WC_Countries();
+
+		return $countries->get_formatted_address(
+			array(
+				'address_1' => $this->get_store_address(),
+				'address_2' => $this->get_store_address_2(),
+				'city'      => $this->get_store_city(),
+				'state'     => $this->get_store_state(),
+				'postcode'  => $this->get_store_postcode(),
+				'country'   => $this->get_store_country(),
+			)
+		);
+	}
+
+	/**
+	 * Get Store logo image source.
+	 *
+	 * In the free version, this returns the site's custom logo if set.
+	 *
+	 * @param  string $size Image size. Default 'full'.
+	 * @return array|false Array of image data, or false if no image.
+	 */
+	public function get_logo_image_src( $size = 'full' ) {
+		$custom_logo_id = \get_theme_mod( 'custom_logo' );
+
+		if ( $custom_logo_id ) {
+			return \wp_get_attachment_image_src( $custom_logo_id, $size );
+		}
+
+		return false;
 	}
 }
