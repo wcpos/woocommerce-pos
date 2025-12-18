@@ -161,5 +161,5 @@ This small update adds code to prevent WCPOS from being activated if wePOS is de
 
 == Upgrade Notice ==
 
-= 1.7.14 =
-Important: Plugin name has changed from "WooCommerce POS" to "WCPOS" due to trademark requirements. This is a branding change only - all your settings, data, and functionality remain exactly the same.
+= 1.8.0 =
+**Major Update** - Update when you have time to test the POS. You can rollback to the previous version if needed. Pro users: WCPOS Pro is now standalone - download the latest version from wcpos.com/my-account
