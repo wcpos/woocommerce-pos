@@ -87,7 +87,7 @@ class Frontend {
 	public function footer(): void {
 		$development          = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
 		$user                 = wp_get_current_user();
-		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8.0/build/';
+		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
 		$wcpos_permalink_slug = Permalink::get_slug();
 		$wcpos_permalink_slug = empty( $wcpos_permalink_slug ) ? 'pos' : $wcpos_permalink_slug;
 		$wcpos_permalink_slug = '/' . ltrim( $wcpos_permalink_slug, '/' );
