@@ -91,6 +91,9 @@ class API {
 				'cashier'               => API\Cashier::class,
 				'templates'             => API\Templates_Controller::class,
 
+				// TODO: remove this?
+				'stores'                => API\Stores::class,
+
 				// extend WC REST API controllers.
 				'products'              => API\Products_Controller::class,
 				'product_variations'    => API\Product_Variations_Controller::class,

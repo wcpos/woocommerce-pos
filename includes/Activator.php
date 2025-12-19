@@ -293,8 +293,8 @@ class Activator {
 					require_once ABSPATH . '/wp-admin/includes/plugin.php';
 				}
 
-				// WCPOS Pro is activated, but the version is too low
-				deactivate_plugins( 'woocommerce-pos-pro/woocommerce-pos-pro.php' );
+				// WCPOS Pro is activated, but the version is too low - use the constant for dynamic folder name
+				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE );
 
 				$message = \sprintf(
 					__( '<strong>WCPOS</strong> requires <a href="%1$s">WCPOS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WCPOS Pro</a>', 'woocommerce-pos' ),
