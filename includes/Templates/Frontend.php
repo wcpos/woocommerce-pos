@@ -20,6 +20,13 @@ use const WCPOS\WooCommercePOS\VERSION;
  */
 class Frontend {
 	/**
+	 * Stores user credentials data for use in footer().
+	 *
+	 * @var array
+	 */
+	private array $wp_credentials = array();
+
+	/**
 	 * @return void
 	 */
 	public function get_template(): void {
@@ -60,6 +67,12 @@ class Frontend {
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
 
+		// Generate user credentials BEFORE including template to ensure cookies can be set.
+		// The set_web_session_cookie() call in Auth::get_user_data() requires headers not yet sent.
+		$user                 = wp_get_current_user();
+		$auth_service         = Auth::instance();
+		$this->wp_credentials = $auth_service->get_user_data( $user, true );
+
 		include woocommerce_pos_locate_template( 'pos.php' );
 		exit;
 	}
@@ -85,13 +98,30 @@ class Frontend {
 	 * Output the footer scripts.
 	 */
 	public function footer(): void {
-		$development          = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+		/**
+		 * Filters whether the POS is in development mode.
+		 *
+		 * When true, loads the web bundle from localhost instead of CDN.
+		 * Useful for local development of the web application.
+		 *
+		 * @since 1.8.0
+		 *
+		 * @param bool $development Whether development mode is enabled.
+		 *                          Defaults to checking WCPOS_DEVELOPMENT constant,
+		 *                          then $_ENV['DEVELOPMENT'].
+		 *
+		 * @hook woocommerce_pos_development_mode
+		 */
+		$development = apply_filters(
+			'woocommerce_pos_development_mode',
+			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] )
+		);
+
 		$user                 = wp_get_current_user();
 		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
 		$wcpos_permalink_slug = Permalink::get_slug();
 		$wcpos_permalink_slug = empty( $wcpos_permalink_slug ) ? 'pos' : $wcpos_permalink_slug;
 		$wcpos_permalink_slug = '/' . ltrim( $wcpos_permalink_slug, '/' );
-		$auth_service         = Auth::instance();
 		$stores               = array_map(
 			function ( $store ) {
 				return $store->get_data();
@@ -134,7 +164,7 @@ class Frontend {
 				'locale'             => get_locale(),
 				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
-			'wp_credentials' => $auth_service->get_user_data( $user, true ),
+			'wp_credentials' => $this->wp_credentials,
 			'stores'         => $stores,
 		);
 
