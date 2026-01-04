@@ -162,7 +162,6 @@ class Frontend {
 				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v1' ) ),
 				'wcpos_login_url'    => Template_Router::get_auth_url(),
 				'locale'             => get_locale(),
-				'use_jwt_as_param'   => woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' ),
 			),
 			'wp_credentials' => $this->wp_credentials,
 			'stores'         => $stores,
