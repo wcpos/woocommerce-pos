@@ -25,7 +25,7 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 
 **Mobile Apps (Beta):**
 📱 [iOS (TestFlight)](https://testflight.apple.com/join/JGBdVRrW)
-📱 [Android (Google Play)](https://play.google.com/apps/internaltest/4701620234973853884)
+📱 [Android (Google Play)](https://play.google.com/apps/testing/com.wcpos.main)
 
 = ✨ FEATURES = 
 * **Cross-platform:** Accessible via browser, desktop, iOS & Android _(mobile apps in beta)_
