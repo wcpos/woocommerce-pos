@@ -7,11 +7,11 @@ Stable tag: 1.8.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-WCPOS is a simple application for taking orders at the Point of Sale using your WooCommerce store.
+WCPOS is a simple application for taking orders at the Point of Sale (POS) using your WooCommerce store.
 
 == Description ==
 
-WCPOS is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
+WCPOS (formerly WooCommerce POS) is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
 
 > 🕒 Install and start taking orders in less than 2 minutes.
 
