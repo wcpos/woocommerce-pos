@@ -22,18 +22,53 @@
 
 namespace WCPOS\WooCommercePOS;
 
-// Define plugin constants.
-const VERSION     = '1.8.3';
-const PLUGIN_NAME = 'woocommerce-pos';
-const SHORT_NAME  = 'wcpos';
-\define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
-\define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
-\define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugin_dir_url( __FILE__ ) ) );
+// Define plugin constants (use define() with checks to avoid conflicts when Pro plugin is active).
+if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
+	\define( __NAMESPACE__ . '\VERSION', '1.8.3' );
+}
+if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
+	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
+}
+if ( ! \defined( __NAMESPACE__ . '\SHORT_NAME' ) ) {
+	\define( __NAMESPACE__ . '\SHORT_NAME', 'wcpos' );
+}
+if ( ! \defined( __NAMESPACE__ . '\PLUGIN_FILE' ) ) {
+	\define( __NAMESPACE__ . '\PLUGIN_FILE', plugin_basename( __FILE__ ) ); // 'woocommerce-pos/woocommerce-pos.php'
+}
+if ( ! \defined( __NAMESPACE__ . '\PLUGIN_PATH' ) ) {
+	\define( __NAMESPACE__ . '\PLUGIN_PATH', trailingslashit( plugin_dir_path( __FILE__ ) ) );
+}
+if ( ! \defined( __NAMESPACE__ . '\PLUGIN_URL' ) ) {
+	\define( __NAMESPACE__ . '\PLUGIN_URL', trailingslashit( plugin_dir_url( __FILE__ ) ) );
+}
 
 // Minimum requirements.
-const WC_MIN_VERSION  = '5.3';
-const PHP_MIN_VERSION = '7.4';
-const MIN_PRO_VERSION = '1.8.0';
+if ( ! \defined( __NAMESPACE__ . '\WC_MIN_VERSION' ) ) {
+	\define( __NAMESPACE__ . '\WC_MIN_VERSION', '5.3' );
+}
+if ( ! \defined( __NAMESPACE__ . '\PHP_MIN_VERSION' ) ) {
+	\define( __NAMESPACE__ . '\PHP_MIN_VERSION', '7.4' );
+}
+if ( ! \defined( __NAMESPACE__ . '\MIN_PRO_VERSION' ) ) {
+	\define( __NAMESPACE__ . '\MIN_PRO_VERSION', '1.8.0' );
+}
+
+// If Pro plugin is active, bail out early to avoid conflicts.
+// Pro includes all free plugin functionality, so there's no need to initialize both.
+// We check the option directly since Pro may not have loaded yet (alphabetical order).
+$pro_plugin_file = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
+$active_plugins  = get_option( 'active_plugins', array() );
+$pro_is_active   = \in_array( $pro_plugin_file, $active_plugins, true );
+
+// Also check network-activated plugins on multisite.
+if ( ! $pro_is_active && is_multisite() ) {
+	$network_plugins = get_site_option( 'active_sitewide_plugins', array() );
+	$pro_is_active   = isset( $network_plugins[ $pro_plugin_file ] );
+}
+
+if ( $pro_is_active ) {
+	return;
+}
 
 // Load .env flags (for development).
 function wcpos_load_env( $file ): void {

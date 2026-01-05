@@ -37,6 +37,12 @@ class Plugins {
 			__( 'Settings' ) . '</a>',
 		);
 
+		// Add "Upgrade to Pro" link if Pro is not installed.
+		if ( ! defined( 'WCPOS\WooCommercePOSPro\VERSION' ) ) {
+			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" style="color: #d63638; font-weight: 600;">' .
+				__( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>';
+		}
+
 		return $settings + $actions;
 	}
 
