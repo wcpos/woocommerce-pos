@@ -8,7 +8,6 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\Admin\Permalink;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Auth;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -119,9 +118,7 @@ class Frontend {
 
 		$user                 = wp_get_current_user();
 		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
-		$wcpos_permalink_slug = Permalink::get_slug();
-		$wcpos_permalink_slug = empty( $wcpos_permalink_slug ) ? 'pos' : $wcpos_permalink_slug;
-		$wcpos_permalink_slug = '/' . ltrim( $wcpos_permalink_slug, '/' );
+		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
 				return $store->get_data();
@@ -218,7 +215,7 @@ class Frontend {
     var idbWorker = '{$idbWorker}';
     var initialProps = {$initial_props};
     var cdnBaseUrl = '{$cdn_base_url}';
-	var baseUrl = '{$wcpos_permalink_slug}';
+	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
 		
 		echo "<script>
