@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.4
+Stable tag: 1.8.5
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.5 - 2026/01/05 = 
+* Fix: PSR-4 issue with folder
 
 = 1.8.4 - 2026/01/05 = 
 * Fix: show correct order when re-opening

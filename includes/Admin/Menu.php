@@ -81,7 +81,7 @@ class Menu {
 	 * Render the upgrade page.
 	 */
 	public function display_upgrade_page(): void {
-		include_once 'templates/upgrade.php';
+		include_once 'views/upgrade.php';
 	}
 
 	/**
