@@ -1,15 +1,15 @@
-# Copyright (C) 2025 kilbot
+# Copyright (C) 2026 kilbot
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.8.2\n"
+"Project-Id-Version: WCPOS 1.8.3\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-12-19T19:15:57+00:00\n"
+"POT-Creation-Date: 2026-01-05T13:23:15+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -126,6 +126,40 @@ msgstr ""
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
+msgid "Activate"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Plugin Template"
+msgstr ""
+
+msgid "Theme Template"
+msgstr ""
+
+msgid "Security check failed."
+msgstr ""
+
+msgid "You do not have permission to create templates."
+msgstr ""
+
+msgid "No templates found"
+msgstr ""
+
+msgid "Get started by creating default templates from your plugin files."
+msgstr ""
+
+msgid "Create Default Templates"
+msgstr ""
+
+#. translators: %d: number of templates created
+#, php-format
+msgid "%d template created successfully."
+msgid_plural "%d templates created successfully."
+msgstr[0] ""
+msgstr[1] ""
+
 msgid "Enter template name"
 msgstr ""
 
@@ -154,9 +188,6 @@ msgid "File Path"
 msgstr ""
 
 msgid "If provided, template will be loaded from this file instead of database content."
-msgstr ""
-
-msgid "Plugin Template"
 msgstr ""
 
 msgid "This is a plugin template and cannot be modified directly. If you edit the content, it will be saved as a new custom template."
@@ -192,27 +223,8 @@ msgstr ""
 msgid "Invalid template ID."
 msgstr ""
 
-msgid "Security check failed."
-msgstr ""
-
 msgid "You do not have permission to activate templates."
 msgstr ""
-
-msgid "Activate"
-msgstr ""
-
-msgid "Active"
-msgstr ""
-
-msgid "Theme Template"
-msgstr ""
-
-#. translators: %d: number of templates created
-#, php-format
-msgid "%d template created successfully."
-msgid_plural "%d templates created successfully."
-msgstr[0] ""
-msgstr[1] ""
 
 msgid "Template activated successfully."
 msgstr ""
@@ -221,18 +233,6 @@ msgid "Failed to activate template."
 msgstr ""
 
 msgid "Template validation warning:"
-msgstr ""
-
-msgid "You do not have permission to create templates."
-msgstr ""
-
-msgid "No templates found"
-msgstr ""
-
-msgid "Get started by creating default templates from your plugin files."
-msgstr ""
-
-msgid "Create Default Templates"
 msgstr ""
 
 msgid "The refresh token to use for generating a new access token."
