@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.3
+Stable tag: 1.8.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.4 - 2026/01/05 = 
+* Fix: show correct order when re-opening
+* Fix: images not showing due to CORS
+* Fix: saving site info on desktop and mobile applications
+* Fix: sub-directory URLs for the web application
+* Fix: Rich Text Editor conflict with some plugins
+* Improve: login for desktop and native applications
 
 = 1.8.3 - 2025/12/23 =
 * Fix: 'Headers already sent' warnings effecting some users
