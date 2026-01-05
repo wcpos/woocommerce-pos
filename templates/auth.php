@@ -63,6 +63,15 @@ $error        = $wcpos_auth_instance->get_error();
 		
 		<?php wp_nonce_field( 'wcpos_auth', '_wpnonce' ); ?>
 		
+		<!-- Auth session token for expiring auth URLs -->
+		<input type="hidden" name="auth_session" value="<?php echo esc_attr( $wcpos_auth_instance->get_auth_session() ); ?>" />
+		
+		<!-- Honeypot field - should remain empty, hidden from users via CSS -->
+		<div style="position: absolute; left: -9999px;" aria-hidden="true">
+			<label for="wcpos-website">Website</label>
+			<input type="text" name="wcpos_website" id="wcpos-website" value="" tabindex="-1" autocomplete="off" />
+		</div>
+		
 		<p class="submit">
 			<input type="submit" name="wcpos-submit" id="wcpos-submit" class="button button-primary button-large" value="<?php esc_attr_e('Log In'); ?>">
 		</p>
