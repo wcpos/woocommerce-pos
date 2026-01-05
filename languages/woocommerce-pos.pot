@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.8.3\n"
+"Project-Id-Version: WCPOS 1.8.4\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-01-05T13:23:15+00:00\n"
+"POT-Creation-Date: 2026-01-05T17:29:53+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -592,6 +592,42 @@ msgid "Receipt templates for printing orders"
 msgstr ""
 
 msgid "Report templates for analytics"
+msgstr ""
+
+msgid "Missing or invalid redirect_uri parameter."
+msgstr ""
+
+msgid "Missing state parameter."
+msgstr ""
+
+msgid "Too many requests. Please try again later."
+msgstr ""
+
+msgid "Auth session expired. Please try logging in again from the app."
+msgstr ""
+
+msgid "Invalid auth session. Please try logging in again from the app."
+msgstr ""
+
+msgid "Security check failed. Please try again."
+msgstr ""
+
+msgid "Authentication failed."
+msgstr ""
+
+msgid "This account is temporarily locked due to too many failed login attempts. Please try again later."
+msgstr ""
+
+msgid "You do not have permission to access the POS."
+msgstr ""
+
+msgid "Failed to generate authentication tokens."
+msgstr ""
+
+msgid "Please enter both username and password."
+msgstr ""
+
+msgid "Invalid username or password."
 msgstr ""
 
 msgid "Pro Receipt Template"
