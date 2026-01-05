@@ -117,7 +117,7 @@ class Frontend {
 		);
 
 		$user                 = wp_get_current_user();
-		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/?v=' . VERSION;
+		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
 		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
@@ -140,7 +140,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $cdn_base_url . 'metadata.json',
+			'manifest'       => $cdn_base_url . 'metadata.json?v=' . VERSION,
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
