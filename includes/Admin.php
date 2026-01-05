@@ -23,6 +23,8 @@ use WCPOS\WooCommercePOS\Admin\Plugins;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Settings;
+use WCPOS\WooCommercePOS\Admin\Templates\List_Templates;
+use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
 use WP_Screen;
 
 /**
@@ -66,6 +68,8 @@ class Admin {
 			'shop_order'                 => Single_Order::class,
 			'edit-shop_order'            => List_Orders::class,
 			'plugins'                    => Plugins::class,
+			'wcpos_template'             => Single_Template::class,
+			'edit-wcpos_template'        => List_Templates::class,
 			'woocommerce_page_wc-orders' => array( $this, 'handle_wc_hpos_orders_screen' ),
 			'woocommerce_page_wc-admin'  => array( $this, 'handle_wc_analytics_screen' ),
 		);
@@ -76,7 +80,6 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
-		new Admin\Templates();
 	}
 
 	/**

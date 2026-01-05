@@ -1,32 +1,64 @@
 <?php
 /**
- * Admin Templates Class.
+ * Admin Single Template View.
  *
- * Handles the admin UI for template editing.
+ * Handles the admin UI for editing a single template.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
  */
 
-namespace WCPOS\WooCommercePOS\Admin;
+namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
-class Templates {
+class Single_Template {
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
+		// Disable Gutenberg for template post type
+		add_filter( 'use_block_editor_for_post_type', array( $this, 'disable_gutenberg' ), 10, 2 );
+
+		// Disable visual editor (TinyMCE) for templates
+		add_filter( 'user_can_richedit', array( $this, 'disable_visual_editor' ) );
+
 		add_action( 'add_meta_boxes_wcpos_template', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-		add_filter( 'post_row_actions', array( $this, 'post_row_actions' ), 10, 2 );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_post_wcpos_activate_template', array( $this, 'activate_template' ) );
-		add_action( 'admin_post_wcpos_create_default_templates', array( $this, 'create_default_templates' ) );
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
+	}
+
+	/**
+	 * Disable Gutenberg editor for template post type.
+	 *
+	 * @param bool   $use_block_editor Whether to use the block editor.
+	 * @param string $post_type        Post type.
+	 *
+	 * @return bool Modified value.
+	 */
+	public function disable_gutenberg( bool $use_block_editor, string $post_type ): bool {
+		if ( 'wcpos_template' === $post_type ) {
+			return false;
+		}
+
+		return $use_block_editor;
+	}
+
+	/**
+	 * Disable visual editor for template post type.
+	 * This is safe because we're only instantiated on wcpos_template screens.
+	 *
+	 * @param bool $default Whether the user can use the visual editor.
+	 *
+	 * @return bool Modified value.
+	 */
+	public function disable_visual_editor( bool $default ): bool {
+		return false;
 	}
 
 	/**
@@ -213,7 +245,7 @@ class Templates {
 	 */
 	public function render_preview_metabox( \WP_Post $post ): void {
 		$template = TemplatesManager::get_template( $post->ID );
-		
+
 		// Only show preview for receipt templates
 		if ( ! $template || 'receipt' !== $template['type'] ) {
 			?>
@@ -299,9 +331,9 @@ class Templates {
 			wp_safe_redirect(
 				add_query_arg(
 					array(
-						'post'             => $template_id,
-						'action'           => 'edit',
-						'wcpos_activated'  => '1',
+						'post'            => $template_id,
+						'action'          => 'edit',
+						'wcpos_activated' => '1',
 					),
 					admin_url( 'post.php' )
 				)
@@ -310,9 +342,9 @@ class Templates {
 			wp_safe_redirect(
 				add_query_arg(
 					array(
-						'post'           => $template_id,
-						'action'         => 'edit',
-						'wcpos_error'    => 'activation_failed',
+						'post'        => $template_id,
+						'action'      => 'edit',
+						'wcpos_error' => 'activation_failed',
 					),
 					admin_url( 'post.php' )
 				)
@@ -475,88 +507,15 @@ class Templates {
 	}
 
 	/**
-	 * Add custom row actions.
-	 *
-	 * @param array    $actions Row actions.
-	 * @param \WP_Post $post    Post object.
-	 *
-	 * @return array Modified row actions.
-	 */
-	public function post_row_actions( array $actions, \WP_Post $post ): array {
-		if ( 'wcpos_template' !== $post->post_type ) {
-			return $actions;
-		}
-
-		$template = TemplatesManager::get_template( $post->ID );
-
-		if ( $template && ! $template['is_active'] ) {
-			$actions['activate'] = \sprintf(
-				'<a href="%s">%s</a>',
-				esc_url( $this->get_activate_url( $post->ID ) ),
-				esc_html__( 'Activate', 'woocommerce-pos' )
-			);
-		}
-
-		if ( $template && $template['is_active'] ) {
-			$actions['active'] = '<span style="color: #00a32a; font-weight: bold;">' . esc_html__( 'Active', 'woocommerce-pos' ) . '</span>';
-		}
-
-		// Remove delete/edit actions for plugin templates
-		if ( $template && $template['is_plugin'] ) {
-			unset( $actions['trash'] );
-			unset( $actions['inline hide-if-no-js'] );
-			
-			// Change "Edit" to "View" for plugin templates
-			if ( isset( $actions['edit'] ) ) {
-				$actions['view'] = str_replace( 'Edit', 'View', $actions['edit'] );
-				unset( $actions['edit'] );
-			}
-			
-			$actions['source'] = '<span style="color: #666;">' . esc_html__( 'Plugin Template', 'woocommerce-pos' ) . '</span>';
-		}
-
-		// Add badge for theme templates
-		if ( $template && $template['is_theme'] ) {
-			$actions['source'] = '<span style="color: #666;">' . esc_html__( 'Theme Template', 'woocommerce-pos' ) . '</span>';
-		}
-
-		return $actions;
-	}
-
-	/**
 	 * Display admin notices.
 	 *
 	 * @return void
 	 */
 	public function admin_notices(): void {
-		$screen = get_current_screen();
-
-		// Show "no templates" notice on the templates list page
-		if ( $screen && 'edit-wcpos_template' === $screen->id ) {
-			$this->maybe_show_no_templates_notice();
-		}
-
 		global $post;
 
 		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
 			return;
-		}
-
-		// Templates created success notice
-		if ( isset( $_GET['wcpos_templates_created'] ) && $_GET['wcpos_templates_created'] > 0 ) {
-			?>
-			<div class="notice notice-success is-dismissible">
-				<p>
-					<?php
-					printf(
-						// translators: %d: number of templates created
-						esc_html( _n( '%d template created successfully.', '%d templates created successfully.', (int) $_GET['wcpos_templates_created'], 'woocommerce-pos' ) ),
-						(int) $_GET['wcpos_templates_created']
-					);
-			?>
-				</p>
-			</div>
-			<?php
 		}
 
 		// Activation success notice
@@ -587,47 +546,6 @@ class Templates {
 			<?php
 			delete_transient( 'wcpos_template_validation_error_' . $post->ID );
 		}
-	}
-
-	/**
-	 * Handle manual template creation.
-	 *
-	 * @return void
-	 */
-	public function create_default_templates(): void {
-		// Verify nonce
-		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( $_GET['_wpnonce'], 'wcpos_create_default_templates' ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
-		}
-
-		// Check capability
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			wp_die( esc_html__( 'You do not have permission to create templates.', 'woocommerce-pos' ) );
-		}
-
-		// Run migration
-		TemplatesManager\Defaults::run_migration();
-
-		// Count created templates
-		$templates = get_posts(
-			array(
-				'post_type'      => 'wcpos_template',
-				'post_status'    => 'publish',
-				'posts_per_page' => -1,
-			)
-		);
-
-		// Redirect back with success message
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'post_type'               => 'wcpos_template',
-					'wcpos_templates_created' => \count( $templates ),
-				),
-				admin_url( 'edit.php' )
-			)
-		);
-		exit;
 	}
 
 	/**
@@ -678,44 +596,5 @@ class Templates {
 			'wcpos_activate_template_' . $template_id
 		);
 	}
-
-	/**
-	 * Show notice if no templates exist.
-	 *
-	 * @return void
-	 */
-	private function maybe_show_no_templates_notice(): void {
-		// Check if any templates exist
-		$templates = get_posts(
-			array(
-				'post_type'      => 'wcpos_template',
-				'post_status'    => 'any',
-				'posts_per_page' => 1,
-			)
-		);
-
-		if ( ! empty( $templates ) ) {
-			return; // Templates exist, no notice needed
-		}
-
-		// Show notice with button to create default templates
-		$create_url = wp_nonce_url(
-			admin_url( 'admin-post.php?action=wcpos_create_default_templates' ),
-			'wcpos_create_default_templates'
-		);
-
-		?>
-		<div class="notice notice-info">
-			<p>
-				<strong><?php esc_html_e( 'No templates found', 'woocommerce-pos' ); ?></strong><br>
-				<?php esc_html_e( 'Get started by creating default templates from your plugin files.', 'woocommerce-pos' ); ?>
-			</p>
-			<p>
-				<a href="<?php echo esc_url( $create_url ); ?>" class="button button-primary">
-					<?php esc_html_e( 'Create Default Templates', 'woocommerce-pos' ); ?>
-				</a>
-			</p>
-		</div>
-		<?php
-	}
 }
+

@@ -21,45 +21,6 @@ class Templates {
 		// Register immediately since this is already being called during 'init'
 		$this->register_post_type();
 		$this->register_taxonomy();
-
-		// Disable Gutenberg for template post type
-		add_filter( 'use_block_editor_for_post_type', array( $this, 'disable_gutenberg' ), 10, 2 );
-		
-		// Disable visual editor (TinyMCE) for templates
-		add_filter( 'user_can_richedit', array( $this, 'disable_visual_editor' ), 10, 1 );
-	}
-
-	/**
-	 * Disable Gutenberg editor for template post type.
-	 *
-	 * @param bool   $use_block_editor Whether to use the block editor.
-	 * @param string $post_type        Post type.
-	 *
-	 * @return bool Modified value.
-	 */
-	public function disable_gutenberg( bool $use_block_editor, string $post_type ): bool {
-		if ( 'wcpos_template' === $post_type ) {
-			return false;
-		}
-
-		return $use_block_editor;
-	}
-
-	/**
-	 * Disable visual editor for template post type.
-	 *
-	 * @param bool $default Whether the user can use the visual editor.
-	 *
-	 * @return bool Modified value.
-	 */
-	public function disable_visual_editor( bool $default ): bool {
-		global $post;
-
-		if ( $post && 'wcpos_template' === $post->post_type ) {
-			return false;
-		}
-
-		return $default;
 	}
 
 	/**
