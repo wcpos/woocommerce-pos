@@ -88,7 +88,7 @@ class Auth {
 	 * Constructor.
 	 */
 	public function __construct() {
-		remove_action( 'login_init', 'send_frame_options_header', 10 );
+		// Hide the admin bar for a clean login UI
 		add_filter( 'show_admin_bar', '__return_false' );
 
 		// Initialize properties
@@ -167,7 +167,17 @@ class Auth {
 	 * @return void
 	 */
 	public function get_template(): void {
-		do_action( 'login_init' );
+		// NOTE: We intentionally do NOT call do_action('login_init') here.
+		// This auth form bypasses WordPress's standard login flow to avoid
+		// interference from security plugins (2FA, captcha, etc.)
+
+		/*
+		 * Fires before the WCPOS auth template is rendered.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_auth_template_redirect
+		 */
 		do_action( 'woocommerce_pos_auth_template_redirect' );
 
 		// Make this instance available to the template
@@ -190,24 +200,24 @@ class Auth {
 			return '';
 		}
 
-		// Parse the URI to check scheme
-		$parsed = wp_parse_url( $uri );
-		if ( ! $parsed || empty( $parsed['scheme'] ) ) {
-			return '';
+		// Remove control characters
+		$uri = preg_replace( '/[\x00-\x1f\x7f]/', '', $uri );
+
+		// Check if URI starts with an allowed scheme
+		foreach ( self::ALLOWED_SCHEMES as $scheme ) {
+			if ( 0 === stripos( $uri, $scheme . '://' ) ) {
+				// For http/https, use esc_url for full validation
+				if ( 'http' === $scheme || 'https' === $scheme ) {
+					return esc_url( $uri, array( 'http', 'https' ) );
+				}
+
+				// For custom schemes (wcpos://, exp://), just return it
+				// These are app deep links, not web URLs
+				return $uri;
+			}
 		}
 
-		// Only allow specific schemes
-		if ( ! \in_array( strtolower( $parsed['scheme'] ), self::ALLOWED_SCHEMES, true ) ) {
-			return '';
-		}
-
-		// For http/https, validate it's a proper URL
-		if ( \in_array( $parsed['scheme'], array( 'http', 'https' ), true ) ) {
-			return esc_url( $uri, array( 'https', 'http' ) );
-		}
-
-		// For custom schemes (wcpos://, exp://), do basic sanitization
-		return esc_url( $uri, self::ALLOWED_SCHEMES );
+		return '';
 	}
 
 	/**
