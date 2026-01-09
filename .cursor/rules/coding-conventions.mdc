@@ -1,0 +1,335 @@
+---
+description: WooCommerce POS WordPress plugin coding conventions and best practices
+globs:
+alwaysApply: true
+---
+
+# Coding Conventions for WooCommerce POS WordPress Plugin
+
+## ⚠️ CRITICAL: AI Behavior Rules
+
+### NEVER Make Assumptions
+- **ALWAYS verify assumptions before implementing changes**
+- Before modifying a method, search for ALL usages: `grep -r "method_name(" includes/`
+- Don't assume a method is only used in one place
+- Don't assume the context in which code runs (web, native app, CLI, etc.)
+- If unsure, ASK the user rather than guessing
+
+### Verify Before Changing
+```bash
+# Before modifying any function/method, ALWAYS search for usages:
+grep -r "function_name(" includes/
+grep -r "->method_name(" includes/
+grep -r "::static_method(" includes/
+```
+
+### Ask Before Widespread Changes
+- **ALWAYS ask before making changes that affect multiple files** (more than 2-3 files)
+- If a solution requires modifying shared code, STOP and verify all consumers first
+- Consider backwards compatibility for public methods
+- Propose the approach and get approval before implementing
+
+### Debug Before Fixing
+- When debugging, add logging to confirm the hypothesis BEFORE making code changes
+- Use `Logger::log()` to trace execution
+- Ask the user to test and provide log output
+- Only implement a fix after logs confirm the root cause
+
+## PHP Coding Standards
+
+### Follow WordPress Coding Standards
+- Use WordPress PHP Coding Standards (WPCS)
+- Run `composer run phpcs` to check code style
+- Run `composer run phpcbf` to auto-fix issues
+
+### Naming Conventions
+```php
+// Classes: PascalCase
+class Auth_Service {}
+
+// Methods and functions: snake_case
+public function get_user_data() {}
+
+// Variables: snake_case
+$user_data = [];
+$refresh_tokens = [];
+
+// Constants: UPPER_SNAKE_CASE
+const PLUGIN_VERSION = '1.0.0';
+define( 'WCPOS_VERSION', '1.0.0' );
+
+// Hooks: lowercase with underscores, prefixed
+do_action( 'woocommerce_pos_before_login' );
+apply_filters( 'woocommerce_pos_jwt_expire', $expire );
+```
+
+### Type Hints and Return Types
+```php
+// ✅ Good - Use type hints
+public function get_user_sessions( int $user_id ): array {
+    // ...
+}
+
+public function revoke_session( int $user_id, string $jti ): bool {
+    // ...
+}
+
+// ✅ Good - Nullable types when appropriate
+public function get_token( ?string $header = null ): ?string {
+    // ...
+}
+```
+
+### Documentation
+```php
+/**
+ * Short description of what the method does.
+ *
+ * Longer description if needed, explaining behavior,
+ * side effects, or important notes.
+ *
+ * @param int    $user_id The WordPress user ID.
+ * @param string $jti     The JWT token identifier.
+ *
+ * @return bool True on success, false on failure.
+ */
+public function revoke_session( int $user_id, string $jti ): bool {
+    // ...
+}
+```
+
+### Array Syntax
+```php
+// ✅ Good - Short array syntax with proper alignment
+$data = array(
+    'key1' => 'value1',
+    'key2' => 'value2',
+);
+
+// ❌ Avoid - Old array() syntax is acceptable per WPCS, but be consistent
+```
+
+### Escaping and Sanitization
+```php
+// ✅ Always sanitize input
+$user_id = absint( $_GET['user_id'] );
+$username = sanitize_text_field( $_POST['username'] );
+$email = sanitize_email( $_POST['email'] );
+
+// ✅ Always escape output
+echo esc_html( $message );
+echo esc_attr( $attribute );
+echo esc_url( $url );
+echo wp_kses_post( $html_content );
+
+// ✅ Use nonces for forms
+wp_nonce_field( 'wcpos_action', '_wpnonce' );
+if ( ! wp_verify_nonce( $_POST['_wpnonce'], 'wcpos_action' ) ) {
+    wp_die( 'Security check failed' );
+}
+```
+
+## REST API Conventions
+
+### Endpoint Structure
+```php
+// Register routes in register_routes() method
+register_rest_route(
+    'wcpos/v1',
+    '/sessions',
+    array(
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => array( $this, 'get_sessions' ),
+        'permission_callback' => array( $this, 'check_permissions' ),
+    )
+);
+```
+
+### Response Format
+```php
+// ✅ Good - Consistent response structure
+return new WP_REST_Response(
+    array(
+        'success' => true,
+        'data'    => $sessions,
+    ),
+    200
+);
+
+// ✅ Good - Error responses
+return new WP_Error(
+    'woocommerce_pos_auth_failed',
+    __( 'Authentication failed', 'woocommerce-pos' ),
+    array( 'status' => 401 )
+);
+```
+
+## Services Pattern
+
+### Singleton Pattern
+```php
+class Auth {
+    private static $instance = null;
+
+    private function __construct() {
+        // Private constructor
+    }
+
+    public static function instance(): self {
+        if ( null === self::$instance ) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+}
+
+// Usage
+$auth = Auth::instance();
+```
+
+### Method Visibility
+- `public` - Part of the API, may be called externally
+- `private` - Internal implementation details
+- When adding parameters to public methods, use defaults for backwards compatibility:
+
+```php
+// ✅ Good - Backwards compatible
+public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {
+    // New parameter has a default value
+}
+```
+
+## Logging
+
+### Use the Logger Class
+```php
+use WCPOS\WooCommercePOS\Logger;
+
+// ✅ Good - Use Logger
+Logger::log( 'Session revoked for user: ' . $user_id );
+Logger::log( sprintf( 'Error: %s', $error_message ) );
+
+// ❌ Never use error_log directly
+error_log( 'Something happened' );
+```
+
+## Database Operations
+
+### Use WordPress Functions
+```php
+// ✅ Good - User meta
+update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $tokens );
+$tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+
+// ✅ Good - Options
+update_option( 'woocommerce_pos_setting', $value );
+$value = get_option( 'woocommerce_pos_setting', $default );
+
+// ✅ Good - Transients for caching
+set_transient( 'wcpos_cache_key', $data, HOUR_IN_SECONDS );
+$data = get_transient( 'wcpos_cache_key' );
+```
+
+## Hooks and Filters
+
+### Naming Convention
+```php
+// Actions - something happened
+do_action( 'woocommerce_pos_session_revoked', $user_id, $jti );
+do_action( 'woocommerce_pos_before_token_generation', $user );
+
+// Filters - modify a value
+$expire = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $default_expire, $issued_at );
+$data = apply_filters( 'woocommerce_pos_user_data', $data, $user );
+```
+
+### Document Hooks
+```php
+/**
+ * Filters the JWT access token expiration time.
+ *
+ * @since 1.8.0
+ *
+ * @param int $expire    The expiration timestamp.
+ * @param int $issued_at The issued at timestamp.
+ *
+ * @return int Modified expiration timestamp.
+ *
+ * @hook woocommerce_pos_jwt_access_token_expire
+ */
+$expire = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $expire, $issued_at );
+```
+
+## Testing
+
+### Test File Location
+- Tests go in `tests/includes/` mirroring the source structure
+- Test classes extend `WP_UnitTestCase`
+- Test methods prefixed with `test_`
+
+```php
+// tests/includes/Services/Test_Auth_Service.php
+class Test_Auth_Service extends WP_UnitTestCase {
+    public function test_generate_token_pair_returns_valid_tokens() {
+        // ...
+    }
+}
+```
+
+### Run Tests
+```bash
+composer run test           # Run all tests
+composer run test -- --filter=Test_Auth  # Run specific test class
+```
+
+## Common Pitfalls to Avoid
+
+### 1. Assuming Method Context
+```php
+// ❌ Bad - Assuming where a method is called from
+public function get_user_data( WP_User $user ): array {
+    // This assumes only web frontend calls this
+    $this->cleanup_previous_web_session( $user->ID );
+}
+
+// ✅ Good - Explicit context parameter
+public function get_user_data( WP_User $user, bool $is_web_frontend = false ): array {
+    if ( $is_web_frontend ) {
+        $this->cleanup_previous_web_session( $user->ID );
+    }
+}
+```
+
+### 2. Not Checking $_REQUEST Origin
+```php
+// ❌ Bad - Assuming $_REQUEST is always available/relevant
+$platform = $_REQUEST['platform'] ?? '';
+
+// ✅ Good - Check if in appropriate context
+if ( isset( $_REQUEST['platform'] ) ) {
+    $platform = sanitize_text_field( $_REQUEST['platform'] );
+}
+```
+
+### 3. Breaking Backwards Compatibility
+```php
+// ❌ Bad - Changing method signature
+public function get_user_data( WP_User $user, bool $required_param ): array {
+
+// ✅ Good - Optional parameter with default
+public function get_user_data( WP_User $user, bool $optional_param = false ): array {
+```
+
+## File Organization
+
+```
+includes/
+├── Abstracts/          # Abstract base classes
+├── Admin/              # Admin-only functionality
+├── API/                # REST API controllers
+├── Gateways/           # Payment gateways
+├── Integrations/       # Third-party integrations
+├── Services/           # Core business logic (Auth, Settings, etc.)
+├── Templates/          # Template rendering classes
+└── updates/            # Database migration scripts
+```
