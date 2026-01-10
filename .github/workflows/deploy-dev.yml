@@ -1,0 +1,45 @@
+name: Deploy to Dev Site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🏗 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗 Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.8.0'
+
+      - name: 👷 Build
+        run: |
+          pnpm install
+          composer prefix-dependencies
+          composer install --no-dev
+          pnpm settings build
+          pnpm analytics build
+
+      - name: 🔑 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 37.27.45.20 >> ~/.ssh/known_hosts
+
+      - name: 🚀 Deploy to dev-free.wcpos.com
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='tests' \
+            --exclude='.github' \
+            --exclude='packages/*/node_modules' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ root@37.27.45.20:/data/wordpress/dev-free/html/wp-content/plugins/woocommerce-pos/
