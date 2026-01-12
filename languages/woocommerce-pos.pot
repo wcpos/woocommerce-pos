@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.8.4\n"
+"Project-Id-Version: WCPOS 1.8.6\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-01-05T17:29:53+00:00\n"
+"POT-Creation-Date: 2026-01-12T18:03:19+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -126,44 +126,64 @@ msgstr ""
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
-msgid "Activate"
+msgid "Default Templates"
+msgstr ""
+
+msgid "These templates are automatically detected from your plugin and theme files. They cannot be deleted."
+msgstr ""
+
+msgid "Template"
+msgstr ""
+
+msgid "Source"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "Actions"
+msgstr ""
+
+msgid "Theme"
+msgstr ""
+
+msgid "Plugin"
 msgstr ""
 
 msgid "Active"
 msgstr ""
 
-msgid "Plugin Template"
+msgid "Inactive"
 msgstr ""
 
-msgid "Theme Template"
+msgid "Activate"
+msgstr ""
+
+msgid "Copy"
+msgstr ""
+
+msgid "Custom Templates"
+msgstr ""
+
+msgid "Create your own custom templates or copy a default template to customize."
+msgstr ""
+
+msgid "Invalid template ID."
 msgstr ""
 
 msgid "Security check failed."
 msgstr ""
 
-msgid "You do not have permission to create templates."
+msgid "You do not have permission to activate templates."
 msgstr ""
 
-msgid "No templates found"
+msgid "Template activated successfully."
 msgstr ""
 
-msgid "Get started by creating default templates from your plugin files."
+msgid "Failed to activate template."
 msgstr ""
-
-msgid "Create Default Templates"
-msgstr ""
-
-#. translators: %d: number of templates created
-#, php-format
-msgid "%d template created successfully."
-msgid_plural "%d templates created successfully."
-msgstr[0] ""
-msgstr[1] ""
 
 msgid "Enter template name"
-msgstr ""
-
-msgid "This is a read-only plugin template. View the code below. To customize, create a new template."
 msgstr ""
 
 msgid "Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language."
@@ -184,19 +204,10 @@ msgstr ""
 msgid "Language"
 msgstr ""
 
-msgid "File Path"
+msgid "File Path (Optional)"
 msgstr ""
 
-msgid "If provided, template will be loaded from this file instead of database content."
-msgstr ""
-
-msgid "This is a plugin template and cannot be modified directly. If you edit the content, it will be saved as a new custom template."
-msgstr ""
-
-msgid "Plugin Template (Read-Only)"
-msgstr ""
-
-msgid "This template is provided by the plugin and cannot be edited."
+msgid "If provided, template will be loaded from this file instead of the editor content."
 msgstr ""
 
 msgid "This template is currently active"
@@ -220,19 +231,18 @@ msgstr ""
 msgid "Refresh Preview"
 msgstr ""
 
-msgid "Invalid template ID."
+msgid "You do not have permission to create templates."
 msgstr ""
 
-msgid "You do not have permission to activate templates."
+msgid "Template not found."
 msgstr ""
 
-msgid "Template activated successfully."
+#. translators: %s: original template title
+#, php-format
+msgid "Copy of %s"
 msgstr ""
 
-msgid "Failed to activate template."
-msgstr ""
-
-msgid "Template validation warning:"
+msgid "Failed to create template copy."
 msgstr ""
 
 msgid "The refresh token to use for generating a new access token."
@@ -339,7 +349,13 @@ msgstr ""
 msgid "You do not have permissions to view this data."
 msgstr ""
 
-msgid "Unique identifier for the template."
+msgid "Unique identifier for the template (numeric for database, string for virtual)."
+msgstr ""
+
+msgid "Template type."
+msgstr ""
+
+msgid "No active template found."
 msgstr ""
 
 msgid "Current page of the collection."
@@ -349,6 +365,9 @@ msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
 msgid "Filter by template type."
+msgstr ""
+
+msgid "Scope under which the request is made."
 msgstr ""
 
 msgid "Sorry, you cannot list templates."
@@ -452,9 +471,6 @@ msgid "Template"
 msgstr ""
 
 msgid "Templates"
-msgstr ""
-
-msgid "Template"
 msgstr ""
 
 msgid "Template Archives"
@@ -588,6 +604,15 @@ msgstr ""
 msgid "Template types list navigation"
 msgstr ""
 
+msgid "Theme Receipt Template"
+msgstr ""
+
+msgid "Pro Receipt Template"
+msgstr ""
+
+msgid "Default Receipt Template"
+msgstr ""
+
 msgid "Receipt templates for printing orders"
 msgstr ""
 
@@ -628,15 +653,6 @@ msgid "Please enter both username and password."
 msgstr ""
 
 msgid "Invalid username or password."
-msgstr ""
-
-msgid "Pro Receipt Template"
-msgstr ""
-
-msgid "Core Receipt Template"
-msgstr ""
-
-msgid "Theme Receipt Template"
 msgstr ""
 
 msgid "This order cannot be paid for. Please contact us if you need assistance."
@@ -739,9 +755,6 @@ msgstr ""
 #. translators: %s: function name
 #, php-format
 msgid "Template contains dangerous function: %s(). This function is not allowed for security reasons."
-msgstr ""
-
-msgid "Template not found."
 msgstr ""
 
 msgid "Point of Sale"
