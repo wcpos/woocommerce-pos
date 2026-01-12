@@ -28,29 +28,38 @@ jobs:
 
       - name: 📦 Create deployment package
         run: |
-          # Create tarball excluding unnecessary files
-          tar --exclude='.git' \
-              --exclude='.github' \
-              --exclude='node_modules' \
-              --exclude='packages/*/node_modules' \
-              --exclude='vendor' \
-              --exclude='tests' \
-              --exclude='.gitignore' \
-              --exclude='.editorconfig' \
-              --exclude='composer.json' \
-              --exclude='composer.lock' \
-              --exclude='package.json' \
-              --exclude='pnpm-lock.yaml' \
-              --exclude='pnpm-workspace.yaml' \
-              --exclude='turbo.json' \
-              --exclude='tsconfig.json' \
-              --exclude='.eslintrc*' \
-              --exclude='.prettierrc*' \
-              --exclude='*.md' \
-              --exclude='packages/*/src' \
-              --exclude='packages/*/tsconfig.json' \
-              --exclude='packages/*/package.json' \
-              -czf woocommerce-pos.tar.gz .
+          # Create staging directory
+          mkdir -p deploy-staging
+          
+          # Copy files excluding build artifacts and source files
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='packages/*/node_modules' \
+            --exclude='vendor' \
+            --exclude='tests' \
+            --exclude='.gitignore' \
+            --exclude='.editorconfig' \
+            --exclude='composer.json' \
+            --exclude='composer.lock' \
+            --exclude='package.json' \
+            --exclude='pnpm-lock.yaml' \
+            --exclude='pnpm-workspace.yaml' \
+            --exclude='turbo.json' \
+            --exclude='tsconfig.json' \
+            --exclude='.eslintrc*' \
+            --exclude='.prettierrc*' \
+            --exclude='*.md' \
+            --exclude='packages/*/src' \
+            --exclude='packages/*/tsconfig.json' \
+            --exclude='packages/*/package.json' \
+            ./ deploy-staging/
+          
+          # Create tarball from staging directory
+          cd deploy-staging
+          tar -czf ../woocommerce-pos.tar.gz .
+          cd ..
 
       - name: 🔑 Setup SSH
         run: |
