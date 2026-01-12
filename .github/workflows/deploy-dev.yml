@@ -26,20 +26,101 @@ jobs:
           pnpm settings build
           pnpm analytics build
 
+      - name: 📦 Create deployment package
+        run: |
+          # Create tarball excluding unnecessary files
+          tar --exclude='.git' \
+              --exclude='.github' \
+              --exclude='node_modules' \
+              --exclude='packages/*/node_modules' \
+              --exclude='vendor' \
+              --exclude='tests' \
+              --exclude='.gitignore' \
+              --exclude='.editorconfig' \
+              --exclude='composer.json' \
+              --exclude='composer.lock' \
+              --exclude='package.json' \
+              --exclude='pnpm-lock.yaml' \
+              --exclude='pnpm-workspace.yaml' \
+              --exclude='turbo.json' \
+              --exclude='tsconfig.json' \
+              --exclude='.eslintrc*' \
+              --exclude='.prettierrc*' \
+              --exclude='*.md' \
+              --exclude='packages/*/src' \
+              --exclude='packages/*/tsconfig.json' \
+              --exclude='packages/*/package.json' \
+              -czf woocommerce-pos.tar.gz .
+
       - name: 🔑 Setup SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.HETZNER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 37.27.45.20 >> ~/.ssh/known_hosts
+          ssh-keyscan -H 213.239.218.130 >> ~/.ssh/known_hosts
 
       - name: 🚀 Deploy to dev-free.wcpos.com
         run: |
-          rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='node_modules' \
-            --exclude='tests' \
-            --exclude='.github' \
-            --exclude='packages/*/node_modules' \
-            -e "ssh -o StrictHostKeyChecking=no" \
-            ./ root@37.27.45.20:/data/wordpress/dev-free/html/wp-content/plugins/woocommerce-pos/
+          # Upload tarball
+          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz root@213.239.218.130:/tmp/
+          
+          # Extract and deploy
+          ssh -o StrictHostKeyChecking=no root@213.239.218.130 << 'EOF'
+            set -e
+            PLUGIN_DIR="/data/wordpress/dev-free/html/wp-content/plugins/woocommerce-pos"
+            
+            # Create directory
+            mkdir -p "$PLUGIN_DIR"
+            
+            # Backup current version (optional)
+            if [ -d "$PLUGIN_DIR" ] && [ "$(ls -A $PLUGIN_DIR)" ]; then
+              mv "$PLUGIN_DIR" "${PLUGIN_DIR}.backup.$(date +%s)"
+            fi
+            
+            # Extract new version
+            mkdir -p "$PLUGIN_DIR"
+            cd "$PLUGIN_DIR"
+            tar -xzf /tmp/woocommerce-pos.tar.gz
+            
+            # Fix permissions
+            chown -R 82:82 "$PLUGIN_DIR"
+            
+            # Cleanup
+            rm -f /tmp/woocommerce-pos.tar.gz
+            rm -rf "${PLUGIN_DIR}.backup."* 2>/dev/null || true
+            
+            echo "✅ Deployed to dev-free.wcpos.com"
+          EOF
+
+      - name: 🚀 Deploy to dev-pro.wcpos.com
+        run: |
+          # Upload tarball
+          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz root@213.239.218.130:/tmp/
+          
+          # Extract and deploy
+          ssh -o StrictHostKeyChecking=no root@213.239.218.130 << 'EOF'
+            set -e
+            PLUGIN_DIR="/data/wordpress/dev-pro/html/wp-content/plugins/woocommerce-pos"
+            
+            # Create directory
+            mkdir -p "$PLUGIN_DIR"
+            
+            # Backup current version (optional)
+            if [ -d "$PLUGIN_DIR" ] && [ "$(ls -A $PLUGIN_DIR)" ]; then
+              mv "$PLUGIN_DIR" "${PLUGIN_DIR}.backup.$(date +%s)"
+            fi
+            
+            # Extract new version
+            mkdir -p "$PLUGIN_DIR"
+            cd "$PLUGIN_DIR"
+            tar -xzf /tmp/woocommerce-pos.tar.gz
+            
+            # Fix permissions
+            chown -R 82:82 "$PLUGIN_DIR"
+            
+            # Cleanup
+            rm -f /tmp/woocommerce-pos.tar.gz
+            rm -rf "${PLUGIN_DIR}.backup."* 2>/dev/null || true
+            
+            echo "✅ Deployed to dev-pro.wcpos.com"
+          EOF
