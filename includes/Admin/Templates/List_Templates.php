@@ -17,12 +17,13 @@ use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 class List_Templates {
 	/**
 	 * Constructor.
+	 *
+	 * Note: admin_post_wcpos_activate_template and admin_post_wcpos_copy_template
+	 * are registered in Admin.php to ensure they're available on admin-post.php requests.
 	 */
 	public function __construct() {
 		add_filter( 'post_row_actions', array( $this, 'post_row_actions' ), 10, 2 );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
-		add_action( 'admin_post_wcpos_activate_template', array( $this, 'activate_template' ) );
-		add_action( 'admin_post_wcpos_copy_template', array( $this, 'copy_template' ) );
 		add_action( 'admin_head', array( $this, 'remove_third_party_notices' ), 1 );
 		add_filter( 'views_edit-wcpos_template', array( $this, 'display_virtual_templates_filter' ) );
 	}

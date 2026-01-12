@@ -80,6 +80,32 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
+
+		// Register admin-post.php handlers for templates (must be registered early, not screen-dependent).
+		add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
+		add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
+	}
+
+	/**
+	 * Handle template activation via admin-post.php.
+	 * Delegates to List_Templates class.
+	 *
+	 * @return void
+	 */
+	public function handle_activate_template(): void {
+		$handler = new List_Templates();
+		$handler->activate_template();
+	}
+
+	/**
+	 * Handle template copy via admin-post.php.
+	 * Delegates to List_Templates class.
+	 *
+	 * @return void
+	 */
+	public function handle_copy_template(): void {
+		$handler = new List_Templates();
+		$handler->copy_template();
 	}
 
 	/**
