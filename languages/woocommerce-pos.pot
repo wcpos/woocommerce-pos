@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-01-12T18:03:19+00:00\n"
+"POT-Creation-Date: 2026-01-12T20:50:40+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -177,7 +177,21 @@ msgstr ""
 msgid "You do not have permission to activate templates."
 msgstr ""
 
+msgid "You do not have permission to copy templates."
+msgstr ""
+
+msgid "Template not found."
+msgstr ""
+
+#. translators: %s: original template title
+#, php-format
+msgid "Copy of %s"
+msgstr ""
+
 msgid "Template activated successfully."
+msgstr ""
+
+msgid "Template copied successfully. You can now edit your custom template."
 msgstr ""
 
 msgid "Failed to activate template."
@@ -232,14 +246,6 @@ msgid "Refresh Preview"
 msgstr ""
 
 msgid "You do not have permission to create templates."
-msgstr ""
-
-msgid "Template not found."
-msgstr ""
-
-#. translators: %s: original template title
-#, php-format
-msgid "Copy of %s"
 msgstr ""
 
 msgid "Failed to create template copy."
