@@ -559,6 +559,15 @@ class Single_Template {
 			<?php
 		}
 
+		// Copy success notice.
+		if ( isset( $_GET['wcpos_copied'] ) && '1' === $_GET['wcpos_copied'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Template copied successfully. You can now edit your custom template.', 'woocommerce-pos' ); ?></p>
+			</div>
+			<?php
+		}
+
 		// Error notice.
 		if ( isset( $_GET['wcpos_error'] ) ) {
 			?>

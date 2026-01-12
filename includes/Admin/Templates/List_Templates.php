@@ -22,6 +22,7 @@ class List_Templates {
 		add_filter( 'post_row_actions', array( $this, 'post_row_actions' ), 10, 2 );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_post_wcpos_activate_template', array( $this, 'activate_template' ) );
+		add_action( 'admin_post_wcpos_copy_template', array( $this, 'copy_template' ) );
 		add_action( 'admin_head', array( $this, 'remove_third_party_notices' ), 1 );
 		add_filter( 'views_edit-wcpos_template', array( $this, 'display_virtual_templates_filter' ) );
 	}
@@ -361,6 +362,73 @@ class List_Templates {
 	}
 
 	/**
+	 * Handle copying a virtual template to a new database template.
+	 *
+	 * @return void
+	 */
+	public function copy_template(): void {
+		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
+
+		if ( empty( $template_id ) ) {
+			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+		}
+
+		// Verify nonce.
+		$nonce_action = 'wcpos_copy_template_' . $template_id;
+
+		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', $nonce_action ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_die( esc_html__( 'You do not have permission to copy templates.', 'woocommerce-pos' ) );
+		}
+
+		// Get the virtual template.
+		$template = TemplatesManager::get_virtual_template( $template_id );
+
+		if ( ! $template ) {
+			wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		}
+
+		// Read the template file content.
+		$content = '';
+		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) ) {
+			$content = file_get_contents( $template['file_path'] );
+		}
+
+		// Create a new post with the template content.
+		$post_id = wp_insert_post(
+			array(
+				'post_title'   => sprintf(
+					/* translators: %s: original template title */
+					__( 'Copy of %s', 'woocommerce-pos' ),
+					$template['title']
+				),
+				'post_content' => $content,
+				'post_status'  => 'publish',
+				'post_type'    => 'wcpos_template',
+			)
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			wp_die( esc_html( $post_id->get_error_message() ) );
+		}
+
+		// Set the template type taxonomy.
+		if ( ! empty( $template['type'] ) ) {
+			wp_set_object_terms( $post_id, $template['type'], 'wcpos_template_type' );
+		}
+
+		// Set meta fields.
+		update_post_meta( $post_id, '_template_language', $template['language'] ?? 'php' );
+
+		// Redirect to edit the new template.
+		wp_safe_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&wcpos_copied=1' ) );
+		exit;
+	}
+
+	/**
 	 * Display admin notices for the templates list page.
 	 *
 	 * @return void
@@ -376,6 +444,15 @@ class List_Templates {
 			?>
 			<div class="notice notice-success is-dismissible">
 				<p><?php esc_html_e( 'Template activated successfully.', 'woocommerce-pos' ); ?></p>
+			</div>
+			<?php
+		}
+
+		// Copy success notice (shown on edit screen after redirect).
+		if ( isset( $_GET['wcpos_copied'] ) && '1' === $_GET['wcpos_copied'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Template copied successfully. You can now edit your custom template.', 'woocommerce-pos' ); ?></p>
 			</div>
 			<?php
 		}
