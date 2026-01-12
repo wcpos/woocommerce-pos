@@ -2,7 +2,9 @@
 /**
  * Templates Class.
  *
- * Handles registration and management of custom templates.
+ * Handles registration and management of templates.
+ * Plugin and theme templates are detected from filesystem (virtual).
+ * Custom templates are stored in database as wcpos_template posts.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -15,16 +17,29 @@ use WP_Query;
 
 class Templates {
 	/**
+	 * Virtual template ID constants.
+	 */
+	const TEMPLATE_THEME       = 'theme';
+	const TEMPLATE_PLUGIN_PRO  = 'plugin-pro';
+	const TEMPLATE_PLUGIN_CORE = 'plugin-core';
+
+	/**
+	 * Supported template types.
+	 */
+	const SUPPORTED_TYPES = array( 'receipt', 'report' );
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		// Register immediately since this is already being called during 'init'
+		// Register immediately since this is already being called during 'init'.
 		$this->register_post_type();
 		$this->register_taxonomy();
 	}
 
 	/**
 	 * Register the custom post type for templates.
+	 * Only custom user-created templates are stored in the database.
 	 *
 	 * @return void
 	 */
@@ -68,7 +83,7 @@ class Templates {
 			'hierarchical'        => false,
 			'public'              => false,
 			'show_ui'             => true,
-			'show_in_menu'        => \WCPOS\WooCommercePOS\PLUGIN_NAME, // Register under POS menu
+			'show_in_menu'        => \WCPOS\WooCommercePOS\PLUGIN_NAME, // Register under POS menu.
 			'menu_position'       => 5,
 			'show_in_admin_bar'   => true,
 			'show_in_nav_menus'   => false,
@@ -87,7 +102,7 @@ class Templates {
 				'publish_posts'      => 'manage_woocommerce_pos',
 				'read_private_posts' => 'manage_woocommerce_pos',
 			),
-			'show_in_rest'        => false, // Disable Gutenberg
+			'show_in_rest'        => false, // Disable Gutenberg.
 			'rest_base'           => 'wcpos_templates',
 		);
 
@@ -143,12 +158,12 @@ class Templates {
 
 		register_taxonomy( 'wcpos_template_type', array( 'wcpos_template' ), $args );
 
-		// Register default template types
+		// Register default template types.
 		$this->register_default_template_types();
 	}
 
 	/**
-	 * Get template by ID.
+	 * Get a database template by ID.
 	 *
 	 * @param int $template_id Template post ID.
 	 *
@@ -162,62 +177,218 @@ class Templates {
 		}
 
 		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
-		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : '';
+		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
 
 		return array(
 			'id'            => $post->ID,
 			'title'         => $post->post_title,
 			'content'       => $post->post_content,
 			'type'          => $type,
-			'language'      => get_post_meta( $template_id, '_template_language', true ),
-			'is_default'    => (bool) get_post_meta( $template_id, '_template_default', true ),
+			'language'      => get_post_meta( $template_id, '_template_language', true ) ?: 'php',
 			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
-			'is_active'     => (bool) get_post_meta( $template_id, '_template_active', true ),
-			'is_plugin'     => (bool) get_post_meta( $template_id, '_template_plugin', true ),
-			'is_theme'      => (bool) get_post_meta( $template_id, '_template_theme', true ),
+			'is_virtual'    => false,
+			'source'        => 'custom',
 			'date_created'  => $post->post_date,
 			'date_modified' => $post->post_modified,
 		);
 	}
 
 	/**
+	 * Get a virtual (filesystem) template by ID.
+	 *
+	 * @param string $template_id Virtual template ID (theme, plugin-pro, plugin-core).
+	 * @param string $type        Template type (receipt, report).
+	 *
+	 * @return null|array Template data or null if not found.
+	 */
+	public static function get_virtual_template( string $template_id, string $type = 'receipt' ): ?array {
+		$file_path = self::get_virtual_template_path( $template_id, $type );
+
+		if ( ! $file_path || ! file_exists( $file_path ) ) {
+			return null;
+		}
+
+		$titles = array(
+			self::TEMPLATE_THEME       => __( 'Theme Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_PLUGIN_PRO  => __( 'Pro Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_PLUGIN_CORE => __( 'Default Receipt Template', 'woocommerce-pos' ),
+		);
+
+		return array(
+			'id'         => $template_id,
+			'title'      => $titles[ $template_id ] ?? $template_id,
+			'content'    => file_get_contents( $file_path ),
+			'type'       => $type,
+			'language'   => 'php',
+			'file_path'  => $file_path,
+			'is_virtual' => true,
+			'source'     => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
+		);
+	}
+
+	/**
+	 * Get the file path for a virtual template.
+	 *
+	 * @param string $template_id Virtual template ID.
+	 * @param string $type        Template type.
+	 *
+	 * @return null|string File path or null if not found.
+	 */
+	public static function get_virtual_template_path( string $template_id, string $type = 'receipt' ): ?string {
+		$file_name = $type . '.php';
+
+		switch ( $template_id ) {
+			case self::TEMPLATE_THEME:
+				$path = get_stylesheet_directory() . '/woocommerce-pos/' . $file_name;
+				return file_exists( $path ) ? $path : null;
+
+			case self::TEMPLATE_PLUGIN_PRO:
+				if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) ) {
+					$path = \WCPOS\WooCommercePOSPro\PLUGIN_PATH . 'templates/' . $file_name;
+					return file_exists( $path ) ? $path : null;
+				}
+				return null;
+
+			case self::TEMPLATE_PLUGIN_CORE:
+				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/' . $file_name;
+				return file_exists( $path ) ? $path : null;
+
+			default:
+				return null;
+		}
+	}
+
+	/**
+	 * Detect all available filesystem templates for a type.
+	 * Returns templates in priority order: Theme > Pro > Core.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return array Array of available virtual templates.
+	 */
+	public static function detect_filesystem_templates( string $type = 'receipt' ): array {
+		$templates = array();
+
+		// Check in priority order: Theme > Pro > Core.
+		$priority_order = array(
+			self::TEMPLATE_THEME,
+			self::TEMPLATE_PLUGIN_PRO,
+			self::TEMPLATE_PLUGIN_CORE,
+		);
+
+		foreach ( $priority_order as $template_id ) {
+			$template = self::get_virtual_template( $template_id, $type );
+			if ( $template ) {
+				$templates[] = $template;
+			}
+		}
+
+		return $templates;
+	}
+
+	/**
+	 * Get the default (highest priority) filesystem template for a type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return null|array Default template data or null if none found.
+	 */
+	public static function get_default_template( string $type = 'receipt' ): ?array {
+		$templates = self::detect_filesystem_templates( $type );
+		return ! empty( $templates ) ? $templates[0] : null;
+	}
+
+	/**
+	 * Get the ID of the active template for a type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return null|int|string Active template ID (int for database, string for virtual), or null.
+	 */
+	public static function get_active_template_id( string $type = 'receipt' ) {
+		$active_id = get_option( 'wcpos_active_template_' . $type, null );
+
+		// If no explicit active template, use the default.
+		if ( null === $active_id || '' === $active_id ) {
+			$default = self::get_default_template( $type );
+			return $default ? $default['id'] : null;
+		}
+
+		// Check if it's a numeric (database) ID.
+		if ( is_numeric( $active_id ) ) {
+			$template = self::get_template( (int) $active_id );
+			if ( $template ) {
+				return (int) $active_id;
+			}
+			// Template was deleted, fall back to default.
+			delete_option( 'wcpos_active_template_' . $type );
+			$default = self::get_default_template( $type );
+			return $default ? $default['id'] : null;
+		}
+
+		// It's a virtual template ID - check if it still exists.
+		$template = self::get_virtual_template( $active_id, $type );
+		if ( $template ) {
+			return $active_id;
+		}
+
+		// Virtual template no longer exists (plugin deactivated?), fall back.
+		delete_option( 'wcpos_active_template_' . $type );
+		$default = self::get_default_template( $type );
+		return $default ? $default['id'] : null;
+	}
+
+	/**
 	 * Get active template for a specific type.
+	 * Returns the full template data.
 	 *
 	 * @param string $type Template type (receipt, report).
 	 *
 	 * @return null|array Active template data or null if not found.
 	 */
-	public static function get_active_template( string $type ): ?array {
-		$args = array(
-			'post_type'      => 'wcpos_template',
-			'post_status'    => 'publish',
-			'posts_per_page' => 1,
-			'meta_query'     => array(
-				array(
-					'key'   => '_template_active',
-					'value' => '1',
-				),
-			),
-			'tax_query'      => array(
-				array(
-					'taxonomy' => 'wcpos_template_type',
-					'field'    => 'slug',
-					'terms'    => $type,
-				),
-			),
-		);
+	public static function get_active_template( string $type = 'receipt' ): ?array {
+		$active_id = self::get_active_template_id( $type );
 
-		$query = new WP_Query( $args );
-
-		if ( $query->have_posts() ) {
-			return self::get_template( $query->posts[0]->ID );
+		if ( null === $active_id ) {
+			return null;
 		}
 
-		return null;
+		// Check if it's a database template (numeric ID).
+		if ( is_numeric( $active_id ) ) {
+			return self::get_template( (int) $active_id );
+		}
+
+		// It's a virtual template.
+		return self::get_virtual_template( $active_id, $type );
 	}
 
 	/**
-	 * Set template as active.
+	 * Set the active template by ID.
+	 *
+	 * @param int|string $template_id Template ID (int for database, string for virtual).
+	 * @param string     $type        Template type (receipt, report).
+	 *
+	 * @return bool True on success, false on failure.
+	 */
+	public static function set_active_template_id( $template_id, string $type = 'receipt' ): bool {
+		// Validate the template exists.
+		if ( is_numeric( $template_id ) ) {
+			$template = self::get_template( (int) $template_id );
+			if ( ! $template ) {
+				return false;
+			}
+		} else {
+			$template = self::get_virtual_template( $template_id, $type );
+			if ( ! $template ) {
+				return false;
+			}
+		}
+
+		return update_option( 'wcpos_active_template_' . $type, $template_id );
+	}
+
+	/**
+	 * Set template as active (legacy method for backwards compatibility).
 	 *
 	 * @param int $template_id Template post ID.
 	 *
@@ -225,41 +396,33 @@ class Templates {
 	 */
 	public static function set_active_template( int $template_id ): bool {
 		$template = self::get_template( $template_id );
-
 		if ( ! $template ) {
 			return false;
 		}
 
-		// Deactivate all other templates of the same type
-		$args = array(
-			'post_type'      => 'wcpos_template',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'meta_query'     => array(
-				array(
-					'key'   => '_template_active',
-					'value' => '1',
-				),
-			),
-			'tax_query'      => array(
-				array(
-					'taxonomy' => 'wcpos_template_type',
-					'field'    => 'slug',
-					'terms'    => $template['type'],
-				),
-			),
-		);
+		return self::set_active_template_id( $template_id, $template['type'] );
+	}
 
-		$query = new WP_Query( $args );
-
-		if ( $query->have_posts() ) {
-			foreach ( $query->posts as $post ) {
-				delete_post_meta( $post->ID, '_template_active' );
-			}
+	/**
+	 * Check if a template is currently active.
+	 *
+	 * @param int|string $template_id Template ID.
+	 * @param string     $type        Template type.
+	 *
+	 * @return bool True if active.
+	 */
+	public static function is_active_template( $template_id, string $type = 'receipt' ): bool {
+		$active_id = self::get_active_template_id( $type );
+		if ( null === $active_id ) {
+			return false;
 		}
 
-		// Activate the new template
-		return false !== update_post_meta( $template_id, '_template_active', '1' );
+		// Normalize for comparison.
+		if ( is_numeric( $template_id ) && is_numeric( $active_id ) ) {
+			return (int) $template_id === (int) $active_id;
+		}
+
+		return (string) $template_id === (string) $active_id;
 	}
 
 	/**
@@ -268,7 +431,7 @@ class Templates {
 	 * @return void
 	 */
 	private function register_default_template_types(): void {
-		// Check if terms already exist to avoid duplicates
+		// Check if terms already exist to avoid duplicates.
 		if ( ! term_exists( 'receipt', 'wcpos_template_type' ) ) {
 			wp_insert_term(
 				'Receipt',
@@ -314,7 +477,7 @@ class Templates {
 			return;
 		}
 
-		// Get current terms
+		// Get current terms.
 		$current_terms = wp_get_post_terms( $post->ID, $taxonomy );
 		$current_slug  = ! empty( $current_terms ) && ! is_wp_error( $current_terms ) ? $current_terms[0]->slug : 'receipt';
 
@@ -342,3 +505,4 @@ class Templates {
 		<?php
 	}
 }
+

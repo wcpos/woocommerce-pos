@@ -9,6 +9,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-// Run template migration
-Templates\Defaults::run_migration();
+// This update originally ran template migration.
+// Migration logic has been moved to 1.8.7 cleanup script.
 

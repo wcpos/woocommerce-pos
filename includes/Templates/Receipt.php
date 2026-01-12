@@ -320,7 +320,7 @@ class Receipt {
 			return $template;
 		}
 
-		// Get active receipt template from database
+		// Get active receipt template (can be virtual or from database).
 		return TemplatesManager::get_active_template( 'receipt' );
 	}
 

@@ -13,6 +13,8 @@ use WP_REST_Server;
 
 /**
  * Class Templates REST API Controller.
+ *
+ * Returns both virtual (filesystem) templates and custom (database) templates.
  */
 class Templates_Controller extends WP_REST_Controller {
 	/**
@@ -35,7 +37,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return void
 	 */
 	public function register_routes(): void {
-		// List all templates
+		// List all templates (virtual + database).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -47,19 +49,38 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// Get single template
+		// Get single template (supports numeric and string IDs).
 		register_rest_route(
 			$this->namespace,
-			'/' . $this->rest_base . '/(?P<id>[\d]+)',
+			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_item' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the template.', 'woocommerce-pos' ),
-						'type'        => 'integer',
+						'description' => __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
+						'type'        => 'string',
 						'required'    => true,
+					),
+				),
+			)
+		);
+
+		// Get active template for a type.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/active',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_active' ),
+				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'args'                => array(
+					'type' => array(
+						'description' => __( 'Template type.', 'woocommerce-pos' ),
+						'type'        => 'string',
+						'default'     => 'receipt',
+						'enum'        => array( 'receipt', 'report' ),
 					),
 				),
 			)
@@ -68,21 +89,31 @@ class Templates_Controller extends WP_REST_Controller {
 
 	/**
 	 * Get a collection of templates.
+	 * Returns virtual templates first, then database templates.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
 	 */
 	public function get_items( $request ) {
+		$type      = $request->get_param( 'type' ) ?? 'receipt';
+		$templates = array();
+
+		// Get virtual (filesystem) templates first.
+		$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
+		foreach ( $virtual_templates as $template ) {
+			$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $type );
+			$templates[]           = $this->prepare_item_for_response( $template, $request );
+		}
+
+		// Get database templates.
 		$args = array(
 			'post_type'      => 'wcpos_template',
 			'post_status'    => 'publish',
 			'posts_per_page' => $request->get_param( 'per_page' ) ?? -1,
-			'paged'          => $request->get_param( 'page' )     ?? 1,
+			'paged'          => $request->get_param( 'page' ) ?? 1,
 		);
 
-		// Filter by template type
-		$type = $request->get_param( 'type' );
 		if ( $type ) {
 			$args['tax_query'] = array(
 				array(
@@ -93,33 +124,44 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$query     = new WP_Query( $args );
-		$templates = array();
+		$query = new WP_Query( $args );
 
 		foreach ( $query->posts as $post ) {
 			$template = TemplatesManager::get_template( $post->ID );
 			if ( $template ) {
-				$templates[] = $this->prepare_item_for_response( $template, $request );
+				$template['is_active'] = TemplatesManager::is_active_template( $post->ID, $template['type'] );
+				$templates[]           = $this->prepare_item_for_response( $template, $request );
 			}
 		}
 
+		$total_items = \count( $virtual_templates ) + $query->found_posts;
+
 		$response = rest_ensure_response( $templates );
-		$response->header( 'X-WP-Total', $query->found_posts );
-		$response->header( 'X-WP-TotalPages', $query->max_num_pages );
+		$response->header( 'X-WP-Total', $total_items );
+		$response->header( 'X-WP-TotalPages', max( 1, $query->max_num_pages ) );
 
 		return $response;
 	}
 
 	/**
 	 * Get a single template.
+	 * Supports both numeric IDs (database) and string IDs (virtual).
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
 	 */
 	public function get_item( $request ) {
-		$id       = (int) $request['id'];
-		$template = TemplatesManager::get_template( $id );
+		$id   = $request['id'];
+		$type = $request->get_param( 'type' ) ?? 'receipt';
+
+		// Check if it's a numeric ID (database template).
+		if ( is_numeric( $id ) ) {
+			$template = TemplatesManager::get_template( (int) $id );
+		} else {
+			// It's a virtual template ID.
+			$template = TemplatesManager::get_virtual_template( $id, $type );
+		}
 
 		if ( ! $template ) {
 			return new WP_Error(
@@ -128,6 +170,32 @@ class Templates_Controller extends WP_REST_Controller {
 				array( 'status' => 404 )
 			);
 		}
+
+		$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $template['type'] );
+
+		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
+	}
+
+	/**
+	 * Get the active template for a type.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function get_active( $request ) {
+		$type     = $request->get_param( 'type' ) ?? 'receipt';
+		$template = TemplatesManager::get_active_template( $type );
+
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_no_active_template',
+				__( 'No active template found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$template['is_active'] = true;
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
 	}
@@ -141,6 +209,12 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return array Prepared template data.
 	 */
 	public function prepare_item_for_response( $template, $request ) {
+		// Remove content from listing to reduce payload size.
+		$context = $request->get_param( 'context' ) ?? 'view';
+		if ( 'edit' !== $context && isset( $template['content'] ) ) {
+			unset( $template['content'] );
+		}
+
 		return $template;
 	}
 
@@ -168,7 +242,16 @@ class Templates_Controller extends WP_REST_Controller {
 			'type'     => array(
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
 				'type'              => 'string',
+				'default'           => 'receipt',
 				'enum'              => array( 'receipt', 'report' ),
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'context'  => array(
+				'description'       => __( 'Scope under which the request is made.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'default'           => 'view',
+				'enum'              => array( 'view', 'edit' ),
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
@@ -213,3 +296,4 @@ class Templates_Controller extends WP_REST_Controller {
 		return true;
 	}
 }
+

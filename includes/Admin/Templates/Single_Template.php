@@ -18,10 +18,10 @@ class Single_Template {
 	 * Constructor.
 	 */
 	public function __construct() {
-		// Disable Gutenberg for template post type
+		// Disable Gutenberg for template post type.
 		add_filter( 'use_block_editor_for_post_type', array( $this, 'disable_gutenberg' ), 10, 2 );
 
-		// Disable visual editor (TinyMCE) for templates
+		// Disable visual editor (TinyMCE) for templates.
 		add_filter( 'user_can_richedit', array( $this, 'disable_visual_editor' ) );
 
 		add_action( 'add_meta_boxes_wcpos_template', array( $this, 'add_meta_boxes' ) );
@@ -29,6 +29,7 @@ class Single_Template {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_post_wcpos_activate_template', array( $this, 'activate_template' ) );
+		add_action( 'admin_post_wcpos_copy_template', array( $this, 'copy_template' ) );
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
 	}
@@ -89,24 +90,9 @@ class Single_Template {
 			return;
 		}
 
-		$template = TemplatesManager::get_template( $post->ID );
-		if ( ! $template ) {
-			return;
-		}
+		$message = __( 'Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language.', 'woocommerce-pos' );
 
-		// For plugin templates, load content from file if post content is empty
-		if ( $template['is_plugin'] && empty( $post->post_content ) && ! empty( $template['file_path'] ) ) {
-			if ( file_exists( $template['file_path'] ) ) {
-				$post->post_content = file_get_contents( $template['file_path'] );
-			}
-		}
-
-		$color   = $template['is_plugin'] ? '#d63638' : '#72aee6';
-		$message = $template['is_plugin']
-			? __( 'This is a read-only plugin template. View the code below. To customize, create a new template.', 'woocommerce-pos' )
-			: __( 'Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language.', 'woocommerce-pos' );
-
-		echo '<div class="wcpos-template-info" style="margin: 10px 0; padding: 10px; background: #f0f0f1; border-left: 4px solid ' . esc_attr( $color ) . ';">';
+		echo '<div class="wcpos-template-info" style="margin: 10px 0; padding: 10px; background: #f0f0f1; border-left: 4px solid #72aee6;">';
 		echo '<p style="margin: 0;">';
 		echo '<strong>' . esc_html__( 'Template Code Editor', 'woocommerce-pos' ) . '</strong><br>';
 		echo esc_html( $message );
@@ -160,7 +146,6 @@ class Single_Template {
 
 		$template  = TemplatesManager::get_template( $post->ID );
 		$language  = $template ? $template['language'] : 'php';
-		$is_plugin = $template ? $template['is_plugin'] : false;
 		$file_path = $template ? $template['file_path'] : '';
 
 		?>
@@ -168,7 +153,7 @@ class Single_Template {
 			<label for="wcpos_template_language">
 				<strong><?php esc_html_e( 'Language', 'woocommerce-pos' ); ?></strong>
 			</label>
-			<select name="wcpos_template_language" id="wcpos_template_language" style="width: 100%;" <?php echo $is_plugin ? 'disabled' : ''; ?>>
+			<select name="wcpos_template_language" id="wcpos_template_language" style="width: 100%;">
 				<option value="php" <?php selected( $language, 'php' ); ?>>PHP</option>
 				<option value="javascript" <?php selected( $language, 'javascript' ); ?>>JavaScript</option>
 			</select>
@@ -176,7 +161,7 @@ class Single_Template {
 
 		<p>
 			<label for="wcpos_template_file_path">
-				<strong><?php esc_html_e( 'File Path', 'woocommerce-pos' ); ?></strong>
+				<strong><?php esc_html_e( 'File Path (Optional)', 'woocommerce-pos' ); ?></strong>
 			</label>
 			<input 
 				type="text" 
@@ -185,17 +170,9 @@ class Single_Template {
 				value="<?php echo esc_attr( $file_path ); ?>" 
 				style="width: 100%;"
 				placeholder="/path/to/template.php"
-				<?php echo $is_plugin ? 'readonly' : ''; ?>
 			/>
-			<small><?php esc_html_e( 'If provided, template will be loaded from this file instead of database content.', 'woocommerce-pos' ); ?></small>
+			<small><?php esc_html_e( 'If provided, template will be loaded from this file instead of the editor content.', 'woocommerce-pos' ); ?></small>
 		</p>
-
-		<?php if ( $is_plugin ) { ?>
-			<p style="color: #d63638;">
-				<strong><?php esc_html_e( 'Plugin Template', 'woocommerce-pos' ); ?></strong><br>
-				<small><?php esc_html_e( 'This is a plugin template and cannot be modified directly. If you edit the content, it will be saved as a new custom template.', 'woocommerce-pos' ); ?></small>
-			</p>
-		<?php } ?>
 		<?php
 	}
 
@@ -208,22 +185,17 @@ class Single_Template {
 	 */
 	public function render_actions_metabox( \WP_Post $post ): void {
 		$template  = TemplatesManager::get_template( $post->ID );
-		$is_active = $template ? $template['is_active'] : false;
-		$is_plugin = $template ? $template['is_plugin'] : false;
+		$type      = $template ? $template['type'] : 'receipt';
+		$is_active = $template ? TemplatesManager::is_active_template( $post->ID, $type ) : false;
 
-		?>
-		<?php if ( $is_plugin ) { ?>
-			<p style="margin-bottom: 15px;">
-				<strong><?php esc_html_e( 'Plugin Template (Read-Only)', 'woocommerce-pos' ); ?></strong><br>
-				<small><?php esc_html_e( 'This template is provided by the plugin and cannot be edited.', 'woocommerce-pos' ); ?></small>
-			</p>
-		<?php } ?>
-
-		<?php if ( $is_active ) { ?>
+		if ( $is_active ) {
+			?>
 			<p style="color: #00a32a; font-weight: bold;">
 				✓ <?php esc_html_e( 'This template is currently active', 'woocommerce-pos' ); ?>
 			</p>
-		<?php } else { ?>
+			<?php
+		} else {
+			?>
 			<p>
 				<a href="<?php echo esc_url( $this->get_activate_url( $post->ID ) ); ?>" 
 				   class="button button-primary button-large" 
@@ -231,9 +203,8 @@ class Single_Template {
 					<?php esc_html_e( 'Set as Active Template', 'woocommerce-pos' ); ?>
 				</a>
 			</p>
-		<?php } ?>
-
-		<?php
+			<?php
+		}
 	}
 
 	/**
@@ -246,7 +217,7 @@ class Single_Template {
 	public function render_preview_metabox( \WP_Post $post ): void {
 		$template = TemplatesManager::get_template( $post->ID );
 
-		// Only show preview for receipt templates
+		// Only show preview for receipt templates.
 		if ( ! $template || 'receipt' !== $template['type'] ) {
 			?>
 			<p><?php esc_html_e( 'Preview is only available for receipt templates.', 'woocommerce-pos' ); ?></p>
@@ -254,7 +225,7 @@ class Single_Template {
 			return;
 		}
 
-		// Get the last POS order
+		// Get the last POS order.
 		$last_order = $this->get_last_pos_order();
 
 		if ( ! $last_order ) {
@@ -264,7 +235,7 @@ class Single_Template {
 			return;
 		}
 
-		// Build preview URL
+		// Build preview URL.
 		$preview_url = $this->get_receipt_preview_url( $last_order );
 
 		?>
@@ -311,11 +282,11 @@ class Single_Template {
 	 * @return void
 	 */
 	public function activate_template(): void {
-		if ( ! isset( $_GET['template_id'] ) ) {
+		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
+
+		if ( empty( $template_id ) ) {
 			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
 		}
-
-		$template_id = absint( $_GET['template_id'] );
 
 		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_activate_template_' . $template_id ) ) {
 			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
@@ -325,31 +296,105 @@ class Single_Template {
 			wp_die( esc_html__( 'You do not have permission to activate templates.', 'woocommerce-pos' ) );
 		}
 
-		$success = TemplatesManager::set_active_template( $template_id );
+		// Determine template type.
+		$type = 'receipt';
+		if ( is_numeric( $template_id ) ) {
+			$template = TemplatesManager::get_template( (int) $template_id );
+			if ( $template ) {
+				$type = $template['type'];
+			}
+		}
 
-		if ( $success ) {
+		$success = TemplatesManager::set_active_template_id( $template_id, $type );
+
+		if ( is_numeric( $template_id ) ) {
+			// Redirect back to post edit screen.
 			wp_safe_redirect(
 				add_query_arg(
 					array(
 						'post'            => $template_id,
 						'action'          => 'edit',
-						'wcpos_activated' => '1',
+						'wcpos_activated' => $success ? '1' : '0',
 					),
 					admin_url( 'post.php' )
 				)
 			);
 		} else {
+			// Redirect to template list.
 			wp_safe_redirect(
 				add_query_arg(
 					array(
-						'post'        => $template_id,
-						'action'      => 'edit',
-						'wcpos_error' => 'activation_failed',
+						'post_type'       => 'wcpos_template',
+						'wcpos_activated' => $success ? '1' : '0',
 					),
-					admin_url( 'post.php' )
+					admin_url( 'edit.php' )
 				)
 			);
 		}
+		exit;
+	}
+
+	/**
+	 * Handle copying a virtual template to create a custom one.
+	 *
+	 * @return void
+	 */
+	public function copy_template(): void {
+		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
+
+		if ( empty( $template_id ) ) {
+			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_copy_template_' . $template_id ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_die( esc_html__( 'You do not have permission to create templates.', 'woocommerce-pos' ) );
+		}
+
+		// Get the virtual template.
+		$virtual_template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
+
+		if ( ! $virtual_template ) {
+			wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		}
+
+		// Create a new custom template from the virtual one.
+		$post_id = wp_insert_post(
+			array(
+				'post_title'   => sprintf(
+					/* translators: %s: original template title */
+					__( 'Copy of %s', 'woocommerce-pos' ),
+					$virtual_template['title']
+				),
+				'post_content' => $virtual_template['content'],
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'draft',
+			)
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			wp_die( esc_html__( 'Failed to create template copy.', 'woocommerce-pos' ) );
+		}
+
+		// Set taxonomy.
+		wp_set_object_terms( $post_id, $virtual_template['type'], 'wcpos_template_type' );
+
+		// Set meta.
+		update_post_meta( $post_id, '_template_language', $virtual_template['language'] );
+
+		// Redirect to edit the new template.
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'post'   => $post_id,
+					'action' => 'edit',
+				),
+				admin_url( 'post.php' )
+			)
+		);
 		exit;
 	}
 
@@ -362,35 +407,29 @@ class Single_Template {
 	 * @return void
 	 */
 	public function save_post( int $post_id, \WP_Post $post ): void {
-		// Check nonce
+		// Check nonce.
 		if ( ! isset( $_POST['wcpos_template_settings_nonce'] ) ||
 			 ! wp_verify_nonce( $_POST['wcpos_template_settings_nonce'], 'wcpos_template_settings' ) ) {
 			return;
 		}
 
-		// Check autosave
+		// Check autosave.
 		if ( \defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 			return;
 		}
 
-		// Check permissions
+		// Check permissions.
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return;
 		}
 
-		// Check if it's a plugin template - these cannot be edited
-		$template = TemplatesManager::get_template( $post_id );
-		if ( $template && $template['is_plugin'] ) {
-			return; // Don't allow editing plugin templates
-		}
-
-		// Ensure template has a type - default to 'receipt'
+		// Ensure template has a type - default to 'receipt'.
 		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
 		if ( empty( $terms ) || is_wp_error( $terms ) ) {
 			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
-		// Save language
+		// Save language.
 		if ( isset( $_POST['wcpos_template_language'] ) ) {
 			$language = sanitize_text_field( $_POST['wcpos_template_language'] );
 			if ( \in_array( $language, array( 'php', 'javascript' ), true ) ) {
@@ -398,7 +437,7 @@ class Single_Template {
 			}
 		}
 
-		// Save file path
+		// Save file path.
 		if ( isset( $_POST['wcpos_template_file_path'] ) ) {
 			$file_path = sanitize_text_field( $_POST['wcpos_template_file_path'] );
 			if ( empty( $file_path ) ) {
@@ -427,16 +466,12 @@ class Single_Template {
 			return;
 		}
 
-		// Check if this is a plugin template
-		$template  = TemplatesManager::get_template( $post->ID );
-		$is_plugin = $template ? $template['is_plugin'] : false;
-
-		// Enqueue CodeMirror for code editing
+		// Enqueue CodeMirror for code editing.
 		wp_enqueue_code_editor( array( 'type' => 'application/x-httpd-php' ) );
 		wp_enqueue_script( 'wp-theme-plugin-editor' );
 		wp_enqueue_style( 'wp-codemirror' );
 
-		// Add CSS to hide Visual editor tab and set editor height
+		// Add CSS to hide Visual editor tab and set editor height.
 		wp_add_inline_style(
 			'wp-codemirror',
 			'
@@ -454,8 +489,7 @@ class Single_Template {
 			'
 		);
 
-		// Add custom script for template editor
-		$is_plugin_js = $is_plugin ? 'true' : 'false';
+		// Add custom script for template editor.
 		wp_add_inline_script(
 			'wp-theme-plugin-editor',
 			"
@@ -470,7 +504,6 @@ class Single_Template {
 				if (typeof wp !== 'undefined' && wp.codeEditor) {
 					var editorSettings = wp.codeEditor.defaultSettings ? _.clone(wp.codeEditor.defaultSettings) : {};
 					var language = $('#wcpos_template_language').val();
-					var isPlugin = " . $is_plugin_js . ";
 					
 					// Set mode based on language
 					editorSettings.codemirror = _.extend(
@@ -486,9 +519,8 @@ class Single_Template {
 							matchBrackets: true,
 							autoCloseBrackets: true,
 							autoCloseTags: true,
-							readOnly: isPlugin,
-							lint: false,  // Disable linting to prevent false errors
-							gutters: ['CodeMirror-linenumbers']  // Only show line numbers, no error gutters
+							lint: false,
+							gutters: ['CodeMirror-linenumbers']
 						}
 					);
 					
@@ -518,7 +550,7 @@ class Single_Template {
 			return;
 		}
 
-		// Activation success notice
+		// Activation success notice.
 		if ( isset( $_GET['wcpos_activated'] ) && '1' === $_GET['wcpos_activated'] ) {
 			?>
 			<div class="notice notice-success is-dismissible">
@@ -527,24 +559,13 @@ class Single_Template {
 			<?php
 		}
 
-		// Error notice
+		// Error notice.
 		if ( isset( $_GET['wcpos_error'] ) ) {
 			?>
 			<div class="notice notice-error is-dismissible">
 				<p><?php esc_html_e( 'Failed to activate template.', 'woocommerce-pos' ); ?></p>
 			</div>
 			<?php
-		}
-
-		// Validation error notice
-		$validation_error = get_transient( 'wcpos_template_validation_error_' . $post->ID );
-		if ( $validation_error ) {
-			?>
-			<div class="notice notice-warning is-dismissible">
-				<p><strong><?php esc_html_e( 'Template validation warning:', 'woocommerce-pos' ); ?></strong> <?php echo esc_html( $validation_error ); ?></p>
-			</div>
-			<?php
-			delete_transient( 'wcpos_template_validation_error_' . $post->ID );
 		}
 	}
 
