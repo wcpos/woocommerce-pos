@@ -227,6 +227,18 @@ class Templates {
 	}
 
 	/**
+	 * Check if the Pro license is active.
+	 *
+	 * @return bool True if Pro license is active.
+	 */
+	public static function is_pro_license_active(): bool {
+		if ( \function_exists( 'woocommerce_pos_pro_activated' ) ) {
+			return (bool) woocommerce_pos_pro_activated();
+		}
+		return false;
+	}
+
+	/**
 	 * Get the file path for a virtual template.
 	 *
 	 * @param string $template_id Virtual template ID.
@@ -243,7 +255,8 @@ class Templates {
 				return file_exists( $path ) ? $path : null;
 
 			case self::TEMPLATE_PLUGIN_PRO:
-				if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) ) {
+				// Pro template requires both the plugin AND an active license.
+				if ( \defined( 'WCPOS\WooCommercePOSPro\PLUGIN_PATH' ) && self::is_pro_license_active() ) {
 					$path = \WCPOS\WooCommercePOSPro\PLUGIN_PATH . 'templates/' . $file_name;
 					return file_exists( $path ) ? $path : null;
 				}
