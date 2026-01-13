@@ -26,6 +26,10 @@ class List_Templates {
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_head', array( $this, 'remove_third_party_notices' ), 1 );
 		add_filter( 'views_edit-wcpos_template', array( $this, 'display_virtual_templates_filter' ) );
+
+		// Add custom columns for Custom Templates table.
+		add_filter( 'manage_wcpos_template_posts_columns', array( $this, 'add_custom_columns' ) );
+		add_action( 'manage_wcpos_template_posts_custom_column', array( $this, 'render_custom_column' ), 10, 2 );
 	}
 
 	/**
@@ -215,9 +219,10 @@ class List_Templates {
 				<table class="wp-list-table widefat fixed striped">
 					<thead>
 						<tr>
-							<th style="width: 40%;"><?php esc_html_e( 'Template', 'woocommerce-pos' ); ?></th>
-							<th style="width: 20%;"><?php esc_html_e( 'Source', 'woocommerce-pos' ); ?></th>
-							<th style="width: 20%;"><?php esc_html_e( 'Status', 'woocommerce-pos' ); ?></th>
+							<th style="width: 35%;"><?php esc_html_e( 'Template', 'woocommerce-pos' ); ?></th>
+							<th style="width: 15%;"><?php esc_html_e( 'Type', 'woocommerce-pos' ); ?></th>
+							<th style="width: 15%;"><?php esc_html_e( 'Source', 'woocommerce-pos' ); ?></th>
+							<th style="width: 15%;"><?php esc_html_e( 'Status', 'woocommerce-pos' ); ?></th>
 							<th style="width: 20%;"><?php esc_html_e( 'Actions', 'woocommerce-pos' ); ?></th>
 						</tr>
 					</thead>
@@ -229,6 +234,9 @@ class List_Templates {
 									<strong><?php echo esc_html( $template['title'] ); ?></strong>
 									<br>
 									<span class="template-path"><?php echo esc_html( $template['file_path'] ); ?></span>
+								</td>
+								<td>
+									<?php echo esc_html( ucfirst( $template['type'] ) ); ?>
 								</td>
 								<td>
 									<?php if ( 'theme' === $template['source'] ) : ?>
@@ -494,6 +502,60 @@ class List_Templates {
 			admin_url( 'admin-post.php?action=wcpos_copy_template&template_id=' . rawurlencode( $template_id ) ),
 			'wcpos_copy_template_' . $template_id
 		);
+	}
+
+	/**
+	 * Add custom columns to the Custom Templates list table.
+	 *
+	 * @param array $columns Existing columns.
+	 *
+	 * @return array Modified columns.
+	 */
+	public function add_custom_columns( array $columns ): array {
+		$new_columns = array();
+
+		foreach ( $columns as $key => $label ) {
+			$new_columns[ $key ] = $label;
+
+			// Add Status column after Title.
+			if ( 'title' === $key ) {
+				$new_columns['wcpos_status'] = __( 'Status', 'woocommerce-pos' );
+			}
+		}
+
+		return $new_columns;
+	}
+
+	/**
+	 * Render custom column content.
+	 *
+	 * @param string $column  Column name.
+	 * @param int    $post_id Post ID.
+	 *
+	 * @return void
+	 */
+	public function render_custom_column( string $column, int $post_id ): void {
+		if ( 'wcpos_status' !== $column ) {
+			return;
+		}
+
+		$template = TemplatesManager::get_template( $post_id );
+		if ( ! $template ) {
+			return;
+		}
+
+		$is_active = TemplatesManager::is_active_template( $post_id, $template['type'] );
+
+		if ( $is_active ) {
+			echo '<span style="color: #00a32a; font-weight: bold;">';
+			echo '<span class="dashicons dashicons-yes-alt"></span> ';
+			esc_html_e( 'Active', 'woocommerce-pos' );
+			echo '</span>';
+		} else {
+			echo '<span style="color: #646970;">';
+			esc_html_e( 'Inactive', 'woocommerce-pos' );
+			echo '</span>';
+		}
 	}
 }
 

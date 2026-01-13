@@ -585,18 +585,24 @@ class Single_Template {
 	 * @return null|\WC_Order Order object or null if not found.
 	 */
 	private function get_last_pos_order(): ?\WC_Order {
+		// Get recent orders and check each one for POS origin.
+		// This approach works with both legacy and HPOS storage.
 		$args = array(
-			'limit'      => 1,
-			'orderby'    => 'date',
-			'order'      => 'DESC',
-			'status'     => 'completed',
-			'meta_key'   => '_created_via',
-			'meta_value' => 'woocommerce-pos',
+			'limit'   => 20, // Check the last 20 orders to find a POS one.
+			'orderby' => 'date',
+			'order'   => 'DESC',
+			'status'  => array( 'completed', 'processing', 'on-hold', 'pending' ),
 		);
 
 		$orders = wc_get_orders( $args );
 
-		return ! empty( $orders ) ? $orders[0] : null;
+		foreach ( $orders as $order ) {
+			if ( wcpos_is_pos_order( $order ) ) {
+				return $order;
+			}
+		}
+
+		return null;
 	}
 
 	/**
