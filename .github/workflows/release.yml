@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   build:
@@ -23,12 +24,13 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           git fetch --prune --unshallow
           LAST_TAG=$(git describe --tags --abbrev=0)
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
           if [[ "v$VERSION" == "$LAST_TAG" ]]; then
             echo "Version has not changed. Skipping release..."
-            echo "::set-output name=release::false"
+            echo "release=false" >> $GITHUB_OUTPUT
           else
             echo "Version has changed. Creating new release..."
-            echo "::set-output name=release::true"
+            echo "release=true" >> $GITHUB_OUTPUT
           fi
 
       - name: 📦 Create Release
@@ -71,5 +73,21 @@ jobs:
           cd ..
           gh release upload v${{ env.VERSION }} woocommerce-pos.zip --clobber
           rm -rf temp_dir
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📝 Request Release Notes from CodeRabbit
+        if: steps.check_version.outputs.release == 'true'
+        run: |
+          # Prepend version context to the template
+          echo "**Release:** v${{ env.VERSION }}" > /tmp/release_request.md
+          echo "**Previous Tag:** ${{ env.LAST_TAG }}" >> /tmp/release_request.md
+          echo "" >> /tmp/release_request.md
+          cat .github/RELEASE_NOTES_REQUEST.md >> /tmp/release_request.md
+          
+          gh issue create \
+            --title "📝 Generate release notes for v${{ env.VERSION }}" \
+            --body-file /tmp/release_request.md \
+            --label "release-notes,automated"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

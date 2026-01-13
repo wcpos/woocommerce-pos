@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.6
+Stable tag: 1.8.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,13 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.7 - 2026/01/13 =
+* New: Template management system for customizing receipts
+* New: Preview modal for templates in admin
+* New: wcpos_ function prefix aliases (woocommerce_pos_ deprecated)
+* Fix: Pro template only shows when license is active
+* Fix: Template admin UI improvements and column ordering
 
 = 1.8.6 - 2026/01/06 = 
 * Fix: 'missing redirect_uri' error during login

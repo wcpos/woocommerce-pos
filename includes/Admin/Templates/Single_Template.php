@@ -144,9 +144,8 @@ class Single_Template {
 	public function render_settings_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
-		$template  = TemplatesManager::get_template( $post->ID );
-		$language  = $template ? $template['language'] : 'php';
-		$file_path = $template ? $template['file_path'] : '';
+		$template = TemplatesManager::get_template( $post->ID );
+		$language = $template ? $template['language'] : 'php';
 
 		?>
 		<p>
@@ -157,21 +156,6 @@ class Single_Template {
 				<option value="php" <?php selected( $language, 'php' ); ?>>PHP</option>
 				<option value="javascript" <?php selected( $language, 'javascript' ); ?>>JavaScript</option>
 			</select>
-		</p>
-
-		<p>
-			<label for="wcpos_template_file_path">
-				<strong><?php esc_html_e( 'File Path (Optional)', 'woocommerce-pos' ); ?></strong>
-			</label>
-			<input 
-				type="text" 
-				name="wcpos_template_file_path" 
-				id="wcpos_template_file_path" 
-				value="<?php echo esc_attr( $file_path ); ?>" 
-				style="width: 100%;"
-				placeholder="/path/to/template.php"
-			/>
-			<small><?php esc_html_e( 'If provided, template will be loaded from this file instead of the editor content.', 'woocommerce-pos' ); ?></small>
 		</p>
 		<?php
 	}
@@ -437,16 +421,6 @@ class Single_Template {
 			$language = sanitize_text_field( $_POST['wcpos_template_language'] );
 			if ( \in_array( $language, array( 'php', 'javascript' ), true ) ) {
 				update_post_meta( $post_id, '_template_language', $language );
-			}
-		}
-
-		// Save file path.
-		if ( isset( $_POST['wcpos_template_file_path'] ) ) {
-			$file_path = sanitize_text_field( $_POST['wcpos_template_file_path'] );
-			if ( empty( $file_path ) ) {
-				delete_post_meta( $post_id, '_template_file_path' );
-			} else {
-				update_post_meta( $post_id, '_template_file_path', $file_path );
 			}
 		}
 	}
