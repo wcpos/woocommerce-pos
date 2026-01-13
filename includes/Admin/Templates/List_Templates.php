@@ -515,11 +515,21 @@ class List_Templates {
 		$new_columns = array();
 
 		foreach ( $columns as $key => $label ) {
-			$new_columns[ $key ] = $label;
-
-			// Add Status column after Title.
-			if ( 'title' === $key ) {
+			// Add Status column before the taxonomy column (Template Type).
+			if ( 'taxonomy-wcpos_template_type' === $key ) {
 				$new_columns['wcpos_status'] = __( 'Status', 'woocommerce-pos' );
+			}
+
+			$new_columns[ $key ] = $label;
+		}
+
+		// Fallback if taxonomy column wasn't found - add at the end before date.
+		if ( ! isset( $new_columns['wcpos_status'] ) ) {
+			$date_column = $new_columns['date'] ?? null;
+			unset( $new_columns['date'] );
+			$new_columns['wcpos_status'] = __( 'Status', 'woocommerce-pos' );
+			if ( $date_column ) {
+				$new_columns['date'] = $date_column;
 			}
 		}
 

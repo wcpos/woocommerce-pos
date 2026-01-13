@@ -597,7 +597,7 @@ class Single_Template {
 		$orders = wc_get_orders( $args );
 
 		foreach ( $orders as $order ) {
-			if ( wcpos_is_pos_order( $order ) ) {
+			if ( \wcpos_is_pos_order( $order ) ) {
 				return $order;
 			}
 		}
