@@ -235,8 +235,8 @@ class Single_Template {
 			return;
 		}
 
-		// Build preview URL.
-		$preview_url = $this->get_receipt_preview_url( $last_order );
+		// Build preview URL with template ID for preview.
+		$preview_url = $this->get_receipt_preview_url( $last_order, $post->ID );
 
 		?>
 		<div class="wcpos-template-preview">
@@ -250,6 +250,9 @@ class Single_Template {
 						<?php esc_html_e( 'Open in New Tab', 'woocommerce-pos' ); ?>
 					</a>
 				</span>
+			</p>
+			<p class="description" style="margin-bottom: 10px;">
+				<?php esc_html_e( 'Note: Save the template first to see your latest changes in the preview.', 'woocommerce-pos' ); ?>
 			</p>
 			<div style="border: 1px solid #ddd; background: #fff;">
 				<iframe 
@@ -608,13 +611,17 @@ class Single_Template {
 	/**
 	 * Get receipt preview URL for an order.
 	 *
-	 * @param \WC_Order $order Order object.
+	 * @param \WC_Order $order       Order object.
+	 * @param int       $template_id Template ID to preview.
 	 *
 	 * @return string Receipt URL.
 	 */
-	private function get_receipt_preview_url( \WC_Order $order ): string {
+	private function get_receipt_preview_url( \WC_Order $order, int $template_id ): string {
 		return add_query_arg(
-			array( 'key' => $order->get_order_key() ),
+			array(
+				'key'                    => $order->get_order_key(),
+				'wcpos_preview_template' => $template_id,
+			),
 			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
 		);
 	}

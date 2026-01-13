@@ -320,6 +320,21 @@ class Receipt {
 			return $template;
 		}
 
+		// Check for preview template parameter (used in admin preview).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$preview_id = sanitize_text_field( wp_unslash( $_GET['wcpos_preview_template'] ) );
+
+			if ( is_numeric( $preview_id ) ) {
+				// Database template.
+				return TemplatesManager::get_template( (int) $preview_id );
+			} else {
+				// Virtual template.
+				return TemplatesManager::get_virtual_template( $preview_id, 'receipt' );
+			}
+		}
+
 		// Get active receipt template (can be virtual or from database).
 		return TemplatesManager::get_active_template( 'receipt' );
 	}

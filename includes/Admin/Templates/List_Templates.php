@@ -151,6 +151,7 @@ class List_Templates {
 		}
 
 		$virtual_templates = TemplatesManager::detect_filesystem_templates( 'receipt' );
+		$preview_order     = $this->get_last_pos_order();
 
 		if ( empty( $virtual_templates ) ) {
 			return $views;
@@ -210,6 +211,73 @@ class List_Templates {
 				margin: 0;
 				color: #646970;
 			}
+			/* Preview Modal Styles */
+			.wcpos-preview-modal {
+				display: none;
+				position: fixed;
+				z-index: 100000;
+				left: 0;
+				top: 0;
+				width: 100%;
+				height: 100%;
+				background-color: rgba(0, 0, 0, 0.7);
+			}
+			.wcpos-preview-modal.active {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.wcpos-preview-modal-content {
+				background: #fff;
+				width: 90%;
+				max-width: 500px;
+				max-height: 90vh;
+				border-radius: 4px;
+				box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+				display: flex;
+				flex-direction: column;
+			}
+			.wcpos-preview-modal-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				padding: 15px 20px;
+				border-bottom: 1px solid #dcdcde;
+				background: #f6f7f7;
+				border-radius: 4px 4px 0 0;
+			}
+			.wcpos-preview-modal-header h2 {
+				margin: 0;
+				font-size: 1.2em;
+			}
+			.wcpos-preview-modal-close {
+				background: none;
+				border: none;
+				font-size: 24px;
+				cursor: pointer;
+				color: #646970;
+				padding: 0;
+				line-height: 1;
+			}
+			.wcpos-preview-modal-close:hover {
+				color: #d63638;
+			}
+			.wcpos-preview-modal-body {
+				flex: 1;
+				overflow: hidden;
+			}
+			.wcpos-preview-modal-body iframe {
+				width: 100%;
+				height: 70vh;
+				border: none;
+			}
+			.wcpos-preview-modal-footer {
+				padding: 15px 20px;
+				border-top: 1px solid #dcdcde;
+				text-align: right;
+				background: #f6f7f7;
+				border-radius: 0 0 4px 4px;
+			}
 		</style>
 
 		<div class="wcpos-virtual-templates-wrapper">
@@ -260,6 +328,11 @@ class List_Templates {
 									<?php endif; ?>
 								</td>
 								<td>
+									<?php if ( 'receipt' === $template['type'] && $preview_order ) : ?>
+										<button type="button" class="button button-small wcpos-preview-btn" data-url="<?php echo esc_url( $this->get_preview_url( $template['id'], $preview_order ) ); ?>" data-title="<?php echo esc_attr( $template['title'] ); ?>">
+											<?php esc_html_e( 'Preview', 'woocommerce-pos' ); ?>
+										</button>
+									<?php endif; ?>
 									<?php if ( ! $is_active ) : ?>
 										<a href="<?php echo esc_url( $this->get_activate_url( $template['id'] ) ); ?>" class="button button-small">
 											<?php esc_html_e( 'Activate', 'woocommerce-pos' ); ?>
@@ -280,6 +353,70 @@ class List_Templates {
 				<p><?php esc_html_e( 'Create your own custom templates or copy a default template to customize.', 'woocommerce-pos' ); ?></p>
 			</div>
 		</div>
+
+		<!-- Preview Modal -->
+		<div id="wcpos-preview-modal" class="wcpos-preview-modal">
+			<div class="wcpos-preview-modal-content">
+				<div class="wcpos-preview-modal-header">
+					<h2 id="wcpos-preview-modal-title"><?php esc_html_e( 'Template Preview', 'woocommerce-pos' ); ?></h2>
+					<button type="button" class="wcpos-preview-modal-close" aria-label="<?php esc_attr_e( 'Close', 'woocommerce-pos' ); ?>">&times;</button>
+				</div>
+				<div class="wcpos-preview-modal-body">
+					<iframe id="wcpos-preview-iframe" src="about:blank"></iframe>
+				</div>
+				<div class="wcpos-preview-modal-footer">
+					<a id="wcpos-preview-newtab" href="#" target="_blank" class="button">
+						<?php esc_html_e( 'Open in New Tab', 'woocommerce-pos' ); ?>
+					</a>
+					<button type="button" class="button button-primary wcpos-preview-modal-close">
+						<?php esc_html_e( 'Close', 'woocommerce-pos' ); ?>
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		jQuery(document).ready(function($) {
+			var modal = $('#wcpos-preview-modal');
+			var iframe = $('#wcpos-preview-iframe');
+			var modalTitle = $('#wcpos-preview-modal-title');
+			var newTabLink = $('#wcpos-preview-newtab');
+
+			// Open modal on preview button click
+			$('.wcpos-preview-btn').on('click', function(e) {
+				e.preventDefault();
+				var url = $(this).data('url');
+				var title = $(this).data('title');
+				
+				modalTitle.text(title + ' - <?php echo esc_js( __( 'Preview', 'woocommerce-pos' ) ); ?>');
+				iframe.attr('src', url);
+				newTabLink.attr('href', url);
+				modal.addClass('active');
+			});
+
+			// Close modal
+			$('.wcpos-preview-modal-close').on('click', function() {
+				modal.removeClass('active');
+				iframe.attr('src', 'about:blank');
+			});
+
+			// Close on background click
+			modal.on('click', function(e) {
+				if (e.target === this) {
+					modal.removeClass('active');
+					iframe.attr('src', 'about:blank');
+				}
+			});
+
+			// Close on Escape key
+			$(document).on('keydown', function(e) {
+				if (e.key === 'Escape' && modal.hasClass('active')) {
+					modal.removeClass('active');
+					iframe.attr('src', 'about:blank');
+				}
+			});
+		});
+		</script>
 		<?php
 
 		return $views;
@@ -506,6 +643,7 @@ class List_Templates {
 
 	/**
 	 * Add custom columns to the Custom Templates list table.
+	 * Order: Title | Type | Status | Date
 	 *
 	 * @param array $columns Existing columns.
 	 *
@@ -515,15 +653,18 @@ class List_Templates {
 		$new_columns = array();
 
 		foreach ( $columns as $key => $label ) {
-			// Add Status column before the taxonomy column (Template Type).
+			// Rename "Template Types" to "Type".
 			if ( 'taxonomy-wcpos_template_type' === $key ) {
+				$new_columns[ $key ] = __( 'Type', 'woocommerce-pos' );
+				// Add Status column after Type.
 				$new_columns['wcpos_status'] = __( 'Status', 'woocommerce-pos' );
+				continue;
 			}
 
 			$new_columns[ $key ] = $label;
 		}
 
-		// Fallback if taxonomy column wasn't found - add at the end before date.
+		// Fallback if taxonomy column wasn't found - add Status before date.
 		if ( ! isset( $new_columns['wcpos_status'] ) ) {
 			$date_column = $new_columns['date'] ?? null;
 			unset( $new_columns['date'] );
@@ -566,6 +707,51 @@ class List_Templates {
 			esc_html_e( 'Inactive', 'woocommerce-pos' );
 			echo '</span>';
 		}
+	}
+
+	/**
+	 * Get the last POS order for preview.
+	 * Compatible with both traditional posts and HPOS.
+	 *
+	 * @return null|\WC_Order Order object or null if not found.
+	 */
+	private function get_last_pos_order(): ?\WC_Order {
+		// Get recent orders and check each one for POS origin.
+		// This approach works with both legacy and HPOS storage.
+		$args = array(
+			'limit'   => 20,
+			'orderby' => 'date',
+			'order'   => 'DESC',
+			'status'  => array( 'completed', 'processing', 'on-hold', 'pending' ),
+		);
+
+		$orders = wc_get_orders( $args );
+
+		foreach ( $orders as $order ) {
+			if ( \wcpos_is_pos_order( $order ) ) {
+				return $order;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Get preview URL for a template.
+	 *
+	 * @param string    $template_id Template ID (can be virtual or numeric).
+	 * @param \WC_Order $order       Order to preview with.
+	 *
+	 * @return string Preview URL.
+	 */
+	private function get_preview_url( string $template_id, \WC_Order $order ): string {
+		return add_query_arg(
+			array(
+				'key'                    => $order->get_order_key(),
+				'wcpos_preview_template' => $template_id,
+			),
+			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
+		);
 	}
 }
 
