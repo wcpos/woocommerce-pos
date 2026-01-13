@@ -81,9 +81,13 @@ class Admin {
 	public function init(): void {
 		new Notices();
 
-		// Register admin-post.php handlers for templates (must be registered early, not screen-dependent).
-		add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
-		add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
+		// Register admin-post.php handlers only when our specific actions are requested.
+		// This keeps the footprint minimal and avoids conflicts with other plugins.
+		$action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( \in_array( $action, array( 'wcpos_activate_template', 'wcpos_copy_template' ), true ) ) {
+			add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
+			add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
+		}
 	}
 
 	/**

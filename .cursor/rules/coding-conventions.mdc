@@ -320,6 +320,35 @@ public function get_user_data( WP_User $user, bool $required_param ): array {
 public function get_user_data( WP_User $user, bool $optional_param = false ): array {
 ```
 
+### 4. Minimize Admin Hook Footprint
+Keep scripts and hooks isolated to only the pages where they're needed. This reduces potential conflicts with other plugins.
+
+```php
+// ❌ Bad - Registering hooks globally on admin_init
+public function init(): void {
+    add_action( 'admin_post_wcpos_my_action', array( $this, 'handle_action' ) );
+}
+
+// ✅ Good - Only register when our action is being requested
+public function init(): void {
+    $action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
+    if ( 'wcpos_my_action' === $action ) {
+        add_action( 'admin_post_wcpos_my_action', array( $this, 'handle_action' ) );
+    }
+}
+
+// ✅ Good - Use current_screen to load screen-specific handlers
+public function current_screen( $screen ): void {
+    if ( 'edit-wcpos_template' === $screen->id ) {
+        new List_Templates();
+    }
+}
+```
+
+**Note**: `admin_post_{action}` hooks fire on `admin-post.php` requests, which have a different screen than the originating page. If handlers are registered in screen-dependent classes, they won't be available. Either:
+1. Register with a request action check in `admin_init`
+2. Or use a centralized handler that delegates to the appropriate class
+
 ## File Organization
 
 ```
