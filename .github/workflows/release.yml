@@ -87,7 +87,6 @@ jobs:
           
           gh issue create \
             --title "📝 Generate release notes for v${{ env.VERSION }}" \
-            --body-file /tmp/release_request.md \
-            --label "release-notes,automated"
+            --body-file /tmp/release_request.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
