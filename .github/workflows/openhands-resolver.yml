@@ -1,0 +1,33 @@
+name: OpenHands Resolver
+
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request:
+    types: [opened, synchronize, labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  resolve:
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'openhands')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'openhands')) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@openhands'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Call OpenHands Resolver
+        uses: All-Hands-AI/OpenHands@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openhands-api-key: ${{ secrets.OPENHANDS_API_KEY }}
+          openhands-base-url: https://openhands.wcpos.com
+          max-iterations: 50
