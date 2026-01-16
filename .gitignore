@@ -32,4 +32,6 @@ hookdocs
 phpunit.xml
 tests/logs/junit.xml
 .turbo
+# Ignore .cursor except rules (needed for AI agents)
 .cursor
+!.cursor/rules
