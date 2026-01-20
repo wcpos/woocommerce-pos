@@ -36,3 +36,17 @@ jobs:
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
           SLUG: woocommerce-pos
         continue-on-error: true
+
+      - name: 🔔 Notify users of update
+        if: steps.deploy.outcome == 'success'
+        run: |
+          # Wait a bit for WordPress.org API to update
+          sleep 30
+          
+          # Trigger update notification for free plugin users
+          curl -X POST "${{ secrets.UPDATES_SERVER_URL }}/v1/broadcast/update-available" \
+            -H "Authorization: Bearer ${{ secrets.BROADCAST_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"type": "free"}' \
+            --fail --silent --show-error
+        continue-on-error: true
