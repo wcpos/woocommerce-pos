@@ -306,24 +306,34 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	 * Test device info parsing.
 	 */
 	public function test_device_info_parsing(): void {
+		// Save original user agent
+		$original_user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
 		// Set a known user agent
 		$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 		// Generate token which should trigger device parsing
-		$token    = $this->auth_service->generate_refresh_token( $this->test_user );
+		$this->auth_service->generate_refresh_token( $this->test_user );
 		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
 
 		$this->assertCount( 1, $sessions );
 		$device_info = $sessions[0]['device_info'];
-		
+
 		$this->assertArrayHasKey( 'device_type', $device_info );
 		$this->assertArrayHasKey( 'browser', $device_info );
 		$this->assertArrayHasKey( 'browser_version', $device_info );
 		$this->assertArrayHasKey( 'os', $device_info );
-		
+
 		$this->assertEquals( 'desktop', $device_info['device_type'] );
 		$this->assertEquals( 'Chrome', $device_info['browser'] );
 		$this->assertEquals( 'Windows', $device_info['os'] );
+
+		// Restore original user agent
+		if ( null === $original_user_agent ) {
+			unset( $_SERVER['HTTP_USER_AGENT'] );
+		} else {
+			$_SERVER['HTTP_USER_AGENT'] = $original_user_agent;
+		}
 	}
 
 	/**

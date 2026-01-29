@@ -32,13 +32,21 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 	private $original_settings;
 
 	/**
+	 * Original no stock amount option.
+	 *
+	 * @var mixed
+	 */
+	private $original_no_stock_amount;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 
 		// Store original settings
-		$this->original_settings = get_option( 'woocommerce_pos_settings_general' );
+		$this->original_settings        = get_option( 'woocommerce_pos_settings_general' );
+		$this->original_no_stock_amount = get_option( 'woocommerce_notify_no_stock_amount' );
 	}
 
 	/**
@@ -50,6 +58,13 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 			update_option( 'woocommerce_pos_settings_general', $this->original_settings );
 		} else {
 			delete_option( 'woocommerce_pos_settings_general' );
+		}
+
+		// Restore original no stock amount
+		if ( false !== $this->original_no_stock_amount ) {
+			update_option( 'woocommerce_notify_no_stock_amount', $this->original_no_stock_amount );
+		} else {
+			delete_option( 'woocommerce_notify_no_stock_amount' );
 		}
 
 		parent::tearDown();
@@ -145,9 +160,6 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$product = ProductHelper::create_simple_product();
 		update_post_meta( $product->get_id(), '_pos_visibility', 'pos_only' );
 
-		// Set up settings to have the product ID as POS only
-		$settings_instance = Settings::instance();
-
 		$products = new Products();
 		$query    = new WP_Query();
 		$query->set( 'post_type', 'product' );
@@ -155,8 +167,9 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		// Call the method (this won't actually exclude since we're in test context)
 		$products->hide_pos_only_products( $query );
 
-		// Test passes if no error is thrown
-		$this->assertTrue( true );
+		// Verify the query was not adversely modified
+		$this->assertEquals( 'product', $query->get( 'post_type' ) );
+		$this->assertInstanceOf( WP_Query::class, $query );
 	}
 
 	/**

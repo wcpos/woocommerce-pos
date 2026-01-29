@@ -75,6 +75,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 		// Restore original default country
 		if ( false !== $this->original_default_country ) {
 			update_option( 'woocommerce_default_country', $this->original_default_country );
+		} else {
+			delete_option( 'woocommerce_default_country' );
 		}
 
 		// Clean up any POS request state

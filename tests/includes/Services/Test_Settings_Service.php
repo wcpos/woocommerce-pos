@@ -14,14 +14,51 @@ use WP_UnitTestCase;
 class Test_Settings_Service extends WP_UnitTestCase {
 	private $settings;
 
+	/**
+	 * Original settings values.
+	 *
+	 * @var array
+	 */
+	private $original_options = array();
+
+	/**
+	 * Option keys to track.
+	 *
+	 * @var array
+	 */
+	private static $option_keys = array(
+		'woocommerce_pos_settings_general',
+		'woocommerce_pos_settings_checkout',
+		'woocommerce_pos_settings_payment_gateways',
+		'woocommerce_pos_settings_tools',
+		'woocommerce_pos_settings_license',
+		'woocommerce_pos_settings_access',
+		'woocommerce_pos_visibility_products',
+		'woocommerce_pos_visibility_variations',
+	);
+
 	public function setUp(): void {
 		parent::setUp();
 		$this->settings = Settings::instance();
+
+		// Store original option values
+		foreach ( self::$option_keys as $key ) {
+			$this->original_options[ $key ] = get_option( $key );
+		}
 	}
 
 	public function tearDown(): void {
-		parent::tearDown();
+		// Restore original option values
+		foreach ( self::$option_keys as $key ) {
+			if ( false !== $this->original_options[ $key ] ) {
+				update_option( $key, $this->original_options[ $key ] );
+			} else {
+				delete_option( $key );
+			}
+		}
+
 		unset( $this->settings );
+		parent::tearDown();
 	}
 
 	/**

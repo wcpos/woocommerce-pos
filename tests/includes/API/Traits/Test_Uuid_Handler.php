@@ -201,7 +201,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 		$product->save();
 
 		// Clear cache
-		wc_get_product( $product->get_id() );
+		clean_post_cache( $product->get_id() );
 
 		// Try to add UUID again
 		$product = wc_get_product( $product->get_id() );
