@@ -52,6 +52,11 @@ class Init {
 	 * permission callbacks run. This is especially important for authorization via
 	 * query parameter (?authorization=Bearer...) which some servers require.
 	 *
+	 * Note: We don't check for X-WCPOS header here because:
+	 * 1. The header check uses getallheaders() which may not work in all environments
+	 * 2. JWT authentication should work regardless - the token itself is proof of WCPOS usage
+	 * 3. Invalid tokens (non-WCPOS) will fail validation anyway
+	 *
 	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
 	 * @return false|int User ID if authenticated, original value otherwise.
@@ -62,14 +67,9 @@ class Init {
 			return $user_id;
 		}
 
-		// Only process for WCPOS REST API requests
-		if ( ! wcpos_request( 'header' ) ) {
-			return $user_id;
-		}
-
-		// Check for authorization token
+		// Check for authorization token (header or param)
 		$auth_header = $this->get_auth_header_early();
-		if ( ! \is_string( $auth_header ) ) {
+		if ( ! \is_string( $auth_header ) || empty( $auth_header ) ) {
 			return $user_id;
 		}
 
@@ -79,7 +79,7 @@ class Init {
 			return $user_id;
 		}
 
-		// Validate token
+		// Validate token - this will fail for non-WCPOS tokens
 		$auth_service  = AuthService::instance();
 		$decoded_token = $auth_service->validate_token( $token );
 
