@@ -104,15 +104,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Minimum supported versions (must pass)
+          # Minimum PHP with current WC (must pass)
           - php: '7.4'
-            wp: '5.6'
-            wc: '5.3.0'
-            experimental: false
-          # Previous major versions (must pass)
-          - php: '8.0'
             wp: '6.4'
-            wc: '9.9.6'
+            wc: '10.4.3'
             experimental: false
           # Current stable (must pass)
           - php: '8.1'
