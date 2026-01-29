@@ -295,8 +295,6 @@ jobs:
           - php: '8.3'
             wp: 'latest'
             wc: 'latest'
-            wp_core: 'null'
-            wc_url: 'https://downloads.wordpress.org/plugin/woocommerce.zip'
             experimental: true
 
     steps:
@@ -355,8 +353,18 @@ jobs:
 
       - name: Configure wp-env for matrix versions
         run: |
-          WP_CORE="${{ matrix.wp_core || format('"WordPress/WordPress#{0}"', matrix.wp) }}"
-          WC_URL="${{ matrix.wc_url || format('https://downloads.wordpress.org/plugin/woocommerce.{0}.zip', matrix.wc) }}"
+          if [ "${{ matrix.wp }}" = "latest" ]; then
+            WP_CORE="null"
+          else
+            WP_CORE="\"WordPress/WordPress#${{ matrix.wp }}\""
+          fi
+
+          if [ "${{ matrix.wc }}" = "latest" ]; then
+            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.zip"
+          else
+            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip"
+          fi
+
           cat > .wp-env.json << EOF
           {
             "core": $WP_CORE,
