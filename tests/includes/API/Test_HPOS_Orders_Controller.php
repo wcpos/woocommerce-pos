@@ -611,14 +611,18 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid.' );
 
 		// now, save the order back to the API
-		$request       = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$request->set_body_params( $data );
+		$update_request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$update_request->set_body_params( $data );
+		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
 
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( 1, \count( $data['line_items'] ), 'There should be one line item.' );
+		$this->assertEquals( 200, $update_response->get_status() );
+		$this->assertEquals( 1, \count( $update_data['line_items'] ), 'There should be one line item.' );
 
-		// Look for the pa_size key in meta_data
-		foreach ( $data['line_items'][0]['meta_data'] as $meta ) {
+		// Reset count and look for the pa_size key in meta_data
+		$count = 0;
+		$attr  = '';
+		foreach ( $update_data['line_items'][0]['meta_data'] as $meta ) {
 			if ( 'pa_size' === $meta['key'] ) {
 				$count++;
 				$attr = $meta['value'];

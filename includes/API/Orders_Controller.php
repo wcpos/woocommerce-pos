@@ -13,7 +13,6 @@ use Exception;
 use WC_Abstract_Order;
 use WC_Email_Customer_Invoice;
 use WC_Order_Item;
-use WC_Order_Query;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
@@ -950,7 +949,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Only modify if this is an order query
 		if ( isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'] ) {
-			$order = isset( $this->wcpos_request ) ? strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' ) : 'ASC';
+			$order   = isset( $this->wcpos_request ) ? strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' ) : 'ASC';
 			$orderby = "{$wpdb->posts}.post_status {$order}";
 
 			// Remove filter after use

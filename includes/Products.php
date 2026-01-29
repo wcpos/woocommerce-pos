@@ -69,32 +69,43 @@ class Products {
 	}
 
 	/**
-	 * Filters the WHERE clause of the query.
+	 * Hide POS only products and variations from front-end queries.
 	 *
-	 * @param string   $where The WHERE clause of the query.
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
-	 *
-	 * @return string
+	 * @param \WP_Query $query The WP_Query instance (passed by reference).
 	 */
 	public function hide_pos_only_products( $query ) {
-		// Ensure this only runs for the main WooCommerce queries on product-related queries
-		if ( ! is_admin() && ! woocommerce_pos_request() && 'product' === $query->get( 'post_type' ) ) {
+		// Only run for front-end queries, not admin or POS requests
+		if ( is_admin() || woocommerce_pos_request() ) {
+			return;
+		}
 
-			$settings_instance = Settings::instance();
+		$post_type        = $query->get( 'post_type' );
+		$settings_instance = Settings::instance();
+		$exclude_ids       = array();
+
+		// Handle product queries
+		if ( 'product' === $post_type ) {
 			$settings = $settings_instance->get_pos_only_product_visibility_settings();
-
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_map( 'intval', (array) $settings['ids'] ); // Sanitize IDs as integers
-
-				// Merge any existing excluded IDs with the new ones
-				$existing_excludes = $query->get( 'post__not_in' );
-				if ( ! is_array( $existing_excludes ) ) {
-					$existing_excludes = array();
-				}
-
-				// Set the post__not_in query parameter to exclude specified IDs
-				$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
 			}
+		}
+
+		// Handle product_variation queries
+		if ( 'product_variation' === $post_type ) {
+			$settings = $settings_instance->get_pos_only_variations_visibility_settings();
+			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
+				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+			}
+		}
+
+		// Apply exclusions if any
+		if ( ! empty( $exclude_ids ) ) {
+			$existing_excludes = $query->get( 'post__not_in' );
+			if ( ! is_array( $existing_excludes ) ) {
+				$existing_excludes = array();
+			}
+			$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
 		}
 	}
 

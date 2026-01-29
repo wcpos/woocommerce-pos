@@ -856,6 +856,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			function ( $settings ) {
 				$settings['barcode_field']     = '_barcode';
 				$settings['pos_only_products'] = true;
+
 				return $settings;
 			}
 		);
@@ -922,13 +923,33 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
 
 		// make sure online_only variations are not returned
-		update_post_meta( $variation_ids1[1], '_pos_visibility', 'online_only' );
+		// Note: visibility is controlled via the settings option, not post meta
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array( $variation_ids1[1] ) ),
+					),
+				),
+			)
+		);
 		$request->set_query_params( array( 'search' => $random_barcode2 ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( array( $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+
+		// Clean up
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
 	public function test_all_variation_with_includes(): void {

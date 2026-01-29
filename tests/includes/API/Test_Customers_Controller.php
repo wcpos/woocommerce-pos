@@ -142,7 +142,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'first_name',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -155,7 +155,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'first_name',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -176,7 +176,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'last_name',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -189,7 +189,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'last_name',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -210,7 +210,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'email',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -223,7 +223,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'email',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response    = $this->server->dispatch( $request );
@@ -260,7 +260,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'username',
-				'order' => 'asc',
+				'order'   => 'asc',
 			)
 		);
 		$response        = $this->server->dispatch( $request );
@@ -276,7 +276,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_query_params(
 			array(
 				'orderby' => 'username',
-				'order' => 'desc',
+				'order'   => 'desc',
 			)
 		);
 		$response        = $this->server->dispatch( $request );
@@ -418,9 +418,6 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'Doe', $data['last_name'] );
 	}
 
-	/**
-	 *
-	 */
 	public function test_update_customer(): void {
 		$customer = CustomerHelper::create_customer(
 			array(
@@ -447,7 +444,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test customer search with includes
+	 * Test customer search with includes.
 	 */
 	public function test_customer_search_with_includes(): void {
 		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
@@ -456,8 +453,8 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
-				'role' => 'all',
-				'search' => 'John',
+				'role'    => 'all',
+				'search'  => 'John',
 				'include' => $customer2->get_id(),
 			)
 		);
@@ -469,9 +466,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $customer2->get_id(), $data[0]['id'] );
 	}
 
-		/**
-		 * Test customer search with includes
-		 */
+	/**
+	 * Test customer search with includes.
+	 */
 	public function test_customer_search_with_excludes(): void {
 		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
 		$customer2 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );
@@ -479,8 +476,8 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
-				'role' => 'all',
-				'search' => 'John',
+				'role'    => 'all',
+				'search'  => 'John',
 				'exclude' => $customer2->get_id(),
 			)
 		);
@@ -492,11 +489,8 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $customer1->get_id(), $data[0]['id'] );
 	}
 
-	/**
-	 *
-	 */
 	public function test_customer_uuid_is_unique(): void {
-		$uuid = UUID::uuid4()->toString();
+		$uuid       = Uuid::uuid4()->toString();
 		$customer1  = CustomerHelper::create_customer();
 		$customer1->update_meta_data( '_woocommerce_pos_uuid', $uuid );
 		$customer1->save_meta_data();
