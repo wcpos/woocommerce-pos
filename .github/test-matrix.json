@@ -33,10 +33,8 @@
     "items": [
       {
         "feature": "Tax total formatting in REST API line_items.taxes and tax_lines",
-        "before": "WC < 10.0 returns unpadded values (e.g. '1', '0.22')",
-        "after": "WC >= 10.0 returns 6-decimal padded values (e.g. '1.000000', '0.220000')",
         "affectedTests": ["Test_Order_Taxes"],
-        "note": "Top-level order fields (total, total_tax, cart_tax, fee_lines.total) are formatted via wc_format_decimal with dp and are consistent across versions."
+        "note": "Tax totals may include trailing zeros in some WC versions. Tests compare as floats to be format-agnostic."
       },
       {
         "feature": "Product brands field in REST API",
