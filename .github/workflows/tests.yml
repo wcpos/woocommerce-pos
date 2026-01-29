@@ -109,6 +109,7 @@ jobs:
         wp: ['6.6', '6.7', 'latest']
         wc: ['9.5.2', '10.4.3', 'latest']
         experimental: [false]
+        coverage: [false]
         exclude:
           # WC 10.x requires WP 6.8+, so exclude WC 10.x with older WP
           - wp: '6.6'
@@ -120,11 +121,18 @@ jobs:
           - wp: '6.7'
             wc: 'latest'
         include:
+          # Only collect coverage on the stable configuration (much faster without coverage)
+          - php: '8.2'
+            wp: '6.7'
+            wc: '9.5.2'
+            experimental: false
+            coverage: true
           # Mark bleeding edge combinations as experimental (allowed to fail)
           - php: '8.3'
             wp: 'latest'
             wc: 'latest'
             experimental: true
+            coverage: false
 
     steps:
       - name: Checkout code
@@ -135,7 +143,8 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           tools: composer
-          coverage: xdebug
+          # Coverage is handled inside wp-env Docker container with Xdebug
+          coverage: none
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -210,7 +219,14 @@ jobs:
           cat .wp-env.json
 
       - name: Start WordPress Environment
-        run: pnpm run wp-env start --xdebug=coverage
+        run: |
+          if [ "${{ matrix.coverage }}" = "true" ]; then
+            # Start with coverage enabled (uses PCOV configured in PHP)
+            pnpm run wp-env start --xdebug=coverage
+          else
+            # Start without coverage for faster tests
+            pnpm run wp-env start
+          fi
 
       - name: Check WordPress and WooCommerce versions
         run: |
@@ -231,7 +247,7 @@ jobs:
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
-        if: matrix.php == '8.1' && matrix.experimental == false
+        if: matrix.coverage == true
         with:
           name: coverage-report
           path: coverage/

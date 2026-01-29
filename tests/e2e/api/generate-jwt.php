@@ -5,7 +5,7 @@
  * Usage: wp eval-file generate-jwt.php
  */
 
-$auth = \WCPOS\WooCommercePOS\Services\Auth::instance();
+$auth = WCPOS\WooCommercePOS\Services\Auth::instance();
 $user = get_user_by( 'login', 'admin' );
 
 if ( ! $user ) {
