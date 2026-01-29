@@ -3,11 +3,11 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WP_UnitTestCase;
-use WP_Query;
-use WCPOS\WooCommercePOS\Products;
-use WC_Product_Variation;
 use WC_Install;
+use WC_Product_Variation;
+use WCPOS\WooCommercePOS\Products;
+use WP_Query;
+use WP_UnitTestCase;
 
 /**
  * @internal
@@ -21,7 +21,7 @@ class Test_Products extends WP_UnitTestCase {
 		WC_Install::create_pages();
 		$shop_page_id = wc_get_page_id( 'shop' );
 		$this->assertTrue(
-			$shop_page_id && get_post_status( $shop_page_id ) == 'publish',
+			$shop_page_id && 'publish' == get_post_status( $shop_page_id ),
 			'The WooCommerce "shop" page is not set up.'
 		);
 	}
@@ -30,14 +30,12 @@ class Test_Products extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
-	/**
-	 *
-	 */
-	public function test_pos_only_products() {
+	public function test_pos_only_products(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
 			function ( $settings ) {
 				$settings['pos_only_products'] = true;
+
 				return $settings;
 			}
 		);
@@ -77,8 +75,8 @@ class Test_Products extends WP_UnitTestCase {
 
 		// Mimic the main WooCommerce query
 		$query_args = array(
-			'post_type' => 'product',
-			'post_status' => 'publish',
+			'post_type'      => 'product',
+			'post_status'    => 'publish',
 			'posts_per_page' => -1, // Get all products for testing
 		);
 
@@ -95,21 +93,19 @@ class Test_Products extends WP_UnitTestCase {
 		$this->assertNotContains( $hidden_product->get_id(), $queried_ids );
 	}
 
-	/**
-	 *
-	 */
-	public function test_pos_only_variations() {
+	public function test_pos_only_variations(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
 			function ( $settings ) {
 				$settings['pos_only_products'] = true;
+
 				return $settings;
 			}
 		);
 		new Products(); // reinstantiate the class to apply the filter
 
 		// create variations
-		$product = ProductHelper::create_variation_product();
+		$product     = ProductHelper::create_variation_product();
 		$variation_3 = new WC_Product_Variation();
 		$variation_3->set_props(
 			array(
@@ -151,10 +147,10 @@ class Test_Products extends WP_UnitTestCase {
 
 		// Mimic the main WooCommerce query for product variations
 		$query_args = array(
-			'post_type'     => 'product_variation',
-			'post_status'   => 'publish',
+			'post_type'      => 'product_variation',
+			'post_status'    => 'publish',
 			'posts_per_page' => -1, // Get all variations for testing
-			'post_parent'   => $product->get_id(), // Ensure variations of the specific product are fetched
+			'post_parent'    => $product->get_id(), // Ensure variations of the specific product are fetched
 		);
 
 		$this->go_to( wc_get_page_id( 'shop' ) );

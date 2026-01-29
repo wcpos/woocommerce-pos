@@ -544,7 +544,12 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1.5, $data['stock_quantity'] );
 	}
 
-	// @TODO - this works in the POS, but not in the tests, I have no idea why
+	/**
+	 * @TODO - this works in the POS, but not in the tests.
+	 * The issue is that route schema validation is captured at registration time (rest_api_init),
+	 * before test filters can modify the decimal_qty setting. The setting needs to be applied
+	 * BEFORE the API routes are registered. See testing.mdc for details.
+	 */
 	public function test_product_update_decimal_quantities(): void {
 		$this->setup_decimal_quantity_tests();
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
