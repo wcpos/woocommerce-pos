@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Test matrix configuration for WCPOS CI. Update these versions when new releases are available.",
+  "lastUpdated": "2026-01-29",
+  "php": {
+    "previous": "8.1",
+    "stable": "8.2",
+    "bleeding": "8.3",
+    "comment": "PHP versions to test. stable is used for smoke test and coverage."
+  },
+  "wordpress": {
+    "previous": "6.6",
+    "stable": "6.7",
+    "bleeding": "latest",
+    "comment": "WordPress versions. 'latest' always gets the newest stable from WordPress.org."
+  },
+  "woocommerce": {
+    "previous": "9.5.2",
+    "stable": "10.4.3",
+    "bleeding": "latest",
+    "comment": "WooCommerce versions. Note: WC 10.x requires WP 6.8+. Check compatibility when updating."
+  },
+  "compatibility": {
+    "comment": "Version compatibility notes",
+    "rules": [
+      "WooCommerce 10.x requires WordPress 6.8+",
+      "WooCommerce 9.x requires WordPress 6.6+",
+      "PHP 7.4 is minimum for WooCommerce, but we test 8.1+ for better performance"
+    ]
+  }
+}
