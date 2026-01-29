@@ -3,6 +3,8 @@
  * WCPOS Store Functions.
  *
  * Functions for store specific things.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 \defined( 'ABSPATH' ) || exit;
@@ -22,7 +24,13 @@ use WCPOS\WooCommercePOS\Abstracts\Store;
  *                             paginate is true, or just an array of values.
  */
 if ( ! \function_exists( 'wcpos_get_stores' ) ) {
-	function wcpos_get_stores( $args = array() ) {
+	/**
+	 * Get stores based on certain parameters.
+	 *
+	 * @param array $args Array of args.
+	 * @return array
+	 */
+	function wcpos_get_stores( $args = array() ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = new Store();
 
 		return apply_filters( 'woocommerce_pos_get_stores', array( $store ), $args );
@@ -41,7 +49,13 @@ if ( ! \function_exists( 'wcpos_get_stores' ) ) {
  * @return Store|null|false
  */
 if ( ! \function_exists( 'wcpos_get_store' ) ) {
-	function wcpos_get_store( $the_store = false ) {
+	/**
+	 * Main function for returning store.
+	 *
+	 * @param mixed $the_store Post object or post ID of the product.
+	 * @return Store|null|false
+	 */
+	function wcpos_get_store( $the_store = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = new Store();
 
 		return apply_filters( 'woocommerce_pos_get_store', $store, $the_store );
@@ -60,7 +74,13 @@ if ( ! \function_exists( 'wcpos_get_store' ) ) {
  * @return Store|null|false
  */
 if ( ! \function_exists( 'wcpos_get_store_name' ) ) {
-	function wcpos_get_store_name( $the_store = false ) {
+	/**
+	 * Helper to get the store name by ID.
+	 *
+	 * @param mixed $the_store Post object or post ID of the product.
+	 * @return string
+	 */
+	function wcpos_get_store_name( $the_store = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = wcpos_get_store( $the_store );
 
 		return $store->get_name();

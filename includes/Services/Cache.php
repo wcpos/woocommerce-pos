@@ -1,6 +1,8 @@
 <?php
 /**
  * Cache Helper class
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Services;
@@ -11,7 +13,7 @@ use WCPOS\Vendor\Phpfastcache\EventManager;
 use WCPOS\Vendor\Phpfastcache\Helper\Psr16Adapter;
 
 /**
- *
+ * Cache class.
  */
 class Cache {
 	/**
@@ -19,12 +21,12 @@ class Cache {
 	 *
 	 * @param string $instance_id Instance ID.
 	 *
-	 * @return Psr16Adapter
+	 * @return Psr16Adapter|object
 	 */
 	public static function get_cache_instance( string $instance_id = 'default' ) {
 		static $cache = null;
 
-		if ( $cache === null ) {
+		if ( null === $cache ) {
 			$upload_dir = wp_upload_dir();
 			$cache_dir = $upload_dir['basedir'] . '/woocommerce_pos_cache';
 
@@ -32,6 +34,7 @@ class Cache {
 				wp_mkdir_p( $cache_dir );
 			}
 
+			// @phpstan-ignore-next-line.
 			$config = new Config(
 				array(
 					'path' => $cache_dir,
@@ -41,9 +44,11 @@ class Cache {
 			$event_manager = EventManager::getInstance();
 
 			// Generate a unique instance ID for each logged-in user.
+			// @phpstan-ignore-next-line.
 			$driver = new Driver( $config, $instance_id );
 			$driver->setEventManager( $event_manager );
 
+			// @phpstan-ignore-next-line.
 			$cache = new Psr16Adapter( $driver );
 		}
 

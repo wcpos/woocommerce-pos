@@ -1,4 +1,9 @@
 <?php
+/**
+ * Customers_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -81,7 +86,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
 
-		// Check and remove email format validation from the billing property
+		// Check and remove email format validation from the billing property.
 		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
 			unset( $schema['properties']['billing']['properties']['email']['format'] );
 		}
@@ -96,9 +101,9 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		// Check if 'orderby' is set and is an array before modifying it
+		// Check if 'orderby' is set and is an array before modifying it.
 		if ( isset( $params['orderby'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Add new fields to the 'orderby' enum list
+			// Add new fields to the 'orderby' enum list.
 			$new_orderby_options = array(
 				'first_name',
 				'last_name',
@@ -150,7 +155,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		);
 
-		// Proceed with the parent method to handle the creation
+		// Proceed with the parent method to handle the creation.
 		return parent::create_item( $request );
 	}
 
@@ -167,7 +172,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			return $valid_email;
 		}
 
-		// Proceed with the parent method to handle the creation
+		// Proceed with the parent method to handle the creation.
 		return parent::update_item( $request );
 	}
 
@@ -175,20 +180,20 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * Validate billing email.
 	 * NOTE: we have removed the format check to allow empty email addresses.
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request The REST request object.
 	 *
 	 * @return bool|WP_Error
 	 */
 	public function wcpos_validate_billing_email( WP_REST_Request $request ) {
-		// Your custom validation logic for the request data
+		// Your custom validation logic for the request data.
 		$billing = $request['billing'] ?? null;
 		$email   = \is_array( $billing ) ? ( $billing['email'] ?? null ) : null;
 
 		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
 			return new WP_Error(
 				'rest_invalid_param',
-				// translators: Use default WordPress translation
-				__( 'Invalid email address.' ),
+				// translators: Use default WordPress translation.
+				__( 'Invalid email address.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -270,7 +275,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
-		// Start timing execution
+		// Start timing execution.
 		$start_time = microtime( true );
 
 		$modified_after        = $request->get_param( 'modified_after' );
@@ -280,7 +285,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 
 		$args = array(
 			'fields' => array( 'ID', 'user_registered' ), // Return only the ID and registered date.
-			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier']
+			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier'].
 		);
 
 		/*
@@ -301,15 +306,15 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					WHERE meta_key = 'last_update'
 				";
 
-				// If modified_after param is set, add the condition to the query
+				// If modified_after param is set, add the condition to the query.
 				if ( $modified_after ) {
 					$modified_after_timestamp = strtotime( $modified_after );
 					$query .= $wpdb->prepare( ' AND meta_value > %d', $modified_after_timestamp );
 				}
 
-				$last_update_results = $wpdb->get_results( $query );
+				$last_update_results = $wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared conditionally above.
 
-				// Manually create the associative array of user_id => last_update
+				// Manually create the associative array of user_id => last_update.
 				foreach ( $last_update_results as $result ) {
 					$last_updates[ $result->user_id ] = is_numeric( $result->meta_value ) ? gmdate( 'Y-m-d\TH:i:s', (int) $result->meta_value ) : null;
 				}
@@ -348,7 +353,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 								if ( isset( $last_updates[ $user->ID ] ) && ! empty( $last_updates[ $user->ID ] ) ) {
 									$user_info['date_modified_gmt'] = $last_updates[ $user->ID ];
 								} else {
-									$user_info['date_modified_gmt'] = null; // users can have null date_modified_gmt
+									$user_info['date_modified_gmt'] = null; // users can have null date_modified_gmt.
 								}
 							}
 							yield $user_info;
@@ -366,7 +371,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 
@@ -454,7 +459,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			 * We will unset the search param and add a hook to modify the user query to search the user table
 			 */
 			unset( $prepared_args['search'] );
-			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use
+			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use.
 			add_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
 
 			$search_meta_query = array(
@@ -510,7 +515,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		if ( ! empty( $request['roles'] ) && \is_array( $request['roles'] ) ) {
 			$roles                     = array_map( 'sanitize_text_field', $request['roles'] );
 			$prepared_args['role__in'] = $roles;
-			// remove $prepared_args['role'] to prevent it from overriding $prepared_args['role__in']
+			// remove $prepared_args['role'] to prevent it from overriding $prepared_args['role__in'].
 			unset( $prepared_args['role'] );
 		}
 
@@ -568,6 +573,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID IN ($ids_format) ", $include_ids );
 		}
 
@@ -575,6 +581,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 			$query->query_where .= $wpdb->prepare( " AND {$wpdb->users}.ID NOT IN ($ids_format) ", $exclude_ids );
 		}
 	}

@@ -1,6 +1,8 @@
 <?php
 /**
+ * HPOS_List_Orders.
  *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
@@ -25,11 +27,11 @@ class HPOS_List_Orders extends List_Orders {
 	 * handle_bulk_actions-edit-shop_order   handle_bulk_actions-woocommerce_page_wc-orders
 	 */
 	public function __construct() {
-		// add filter dropdown to orders list page
+		// add filter dropdown to orders list page.
 		add_action( 'woocommerce_order_list_table_restrict_manage_orders', array( $this, 'order_filter_dropdown' ) );
 		add_filter( 'woocommerce_order_list_table_prepare_items_query_args', array( $this, 'query_args' ) );
 
-		// add column for POS orders
+		// add column for POS orders.
 		add_filter( 'manage_woocommerce_page_wc-orders_columns', array( $this, 'pos_shop_order_column' ) );
 		add_action( 'manage_woocommerce_page_wc-orders_custom_column', array( $this, 'orders_custom_column_content' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'pos_order_column_width' ) );
@@ -58,7 +60,7 @@ class HPOS_List_Orders extends List_Orders {
 	 * @return array
 	 */
 	public function query_args( $args ) {
-		$pos_order_filter = $_GET['pos_order'] ?? '';
+		$pos_order_filter = isset( $_GET['pos_order'] ) ? sanitize_text_field( wp_unslash( $_GET['pos_order'] ) ) : '';
 
 		if ( $pos_order_filter ) {
 			if ( ! isset( $args['field_query'] ) ) {

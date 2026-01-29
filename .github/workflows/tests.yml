@@ -58,8 +58,7 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Run PHPCS
-        run: composer run lint-report | cs2pr
-        continue-on-error: true  # TODO: Fix lint errors and remove this
+        run: set -o pipefail; composer run lint-report 2>/dev/null | sed -n '/<?xml/,/<\/checkstyle>/p' | cs2pr
 
   static-analysis:
     name: Static Analysis (PHPStan)
@@ -91,7 +90,6 @@ jobs:
 
       - name: Run PHPStan
         run: composer run phpstan
-        continue-on-error: true
 
   # Smoke test - runs first on current stable versions to fail fast
   # Uses latest WP + WC to test what most users actually have
@@ -252,27 +250,48 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Version matrix - update these when new versions release
-        # See .github/test-matrix.json for version policy
-        # PHP: previous (8.1), stable (8.2), bleeding (8.3)
-        # WP:  previous (6.6), stable (6.7), bleeding (latest)
-        # WC:  previous (9.5.2), stable (10.4.3), bleeding (latest)
-        php: ['8.1', '8.2', '8.3']
-        wp: ['6.6', '6.7', 'latest']
-        wc: ['9.5.2', '10.4.3', 'latest']
-        experimental: [false]
-        exclude:
-          # WC 10.x requires WP 6.8+ (check .github/test-matrix.json for compatibility rules)
-          - wp: '6.6'
-            wc: '10.4.3'
-          - wp: '6.6'
-            wc: 'latest'
-          - wp: '6.7'
-            wc: '10.4.3'
-          - wp: '6.7'
-            wc: 'latest'
+        # Explicit matrix — all versions pinned, no "latest".
+        # See .github/test-matrix.json for version policy and compatibility.
+        # WC 9.5.x requires WP >= 6.6 | WC 10.4.x requires WP >= 6.8
         include:
-          # Mark bleeding edge as experimental (allowed to fail)
+          # Minimum PHP + oldest supported combo
+          - php: '7.4'
+            wp: '6.7'
+            wc: '9.5.2'
+          # Minimum PHP + current stable
+          - php: '7.4'
+            wp: '6.9'
+            wc: '10.4.3'
+          # Mid PHP + older WP/WC
+          - php: '8.1'
+            wp: '6.7'
+            wc: '9.5.2'
+          # Mid PHP + minimum WP for WC 10.4
+          - php: '8.1'
+            wp: '6.8'
+            wc: '10.4.3'
+          # Mid PHP + current stable
+          - php: '8.1'
+            wp: '6.9'
+            wc: '10.4.3'
+          # Stable PHP + current stable
+          - php: '8.2'
+            wp: '6.9'
+            wc: '10.4.3'
+          # Bleeding PHP + older combo
+          - php: '8.3'
+            wp: '6.7'
+            wc: '9.5.2'
+          # Bleeding PHP + current stable
+          - php: '8.3'
+            wp: '6.9'
+            wc: '10.4.3'
+          # Experimental: next PHP (allowed to fail)
+          - php: '8.4'
+            wp: '6.9'
+            wc: '10.4.3'
+            experimental: true
+          # Bleeding edge: latest WP + WC (incl. betas/RCs, allowed to fail)
           - php: '8.3'
             wp: 'latest'
             wc: 'latest'
@@ -334,21 +353,18 @@ jobs:
 
       - name: Configure wp-env for matrix versions
         run: |
-          # Set WordPress core version
           if [ "${{ matrix.wp }}" = "latest" ]; then
             WP_CORE="null"
           else
             WP_CORE="\"WordPress/WordPress#${{ matrix.wp }}\""
           fi
 
-          # Set WooCommerce version URL
           if [ "${{ matrix.wc }}" = "latest" ]; then
             WC_URL="https://downloads.wordpress.org/plugin/woocommerce.zip"
           else
             WC_URL="https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip"
           fi
 
-          # Update .wp-env.json with matrix versions
           cat > .wp-env.json << EOF
           {
             "core": $WP_CORE,

@@ -1,4 +1,9 @@
 <?php
+/**
+ * Taxes_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -11,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Taxes_Controller' ) ) {
 use Exception;
 use WC_REST_Taxes_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -65,7 +71,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	/**
 	 * Check whether a given request has permission to read taxes.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
+	 * @param  \WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
@@ -81,7 +87,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	/**
 	 * Check if a given request has access to read a tax.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
+	 * @param  \WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|boolean
 	 */
 	public function get_item_permissions_check( $request ) {
@@ -98,7 +104,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 * Filter tax object returned from the REST API.
 	 *
 	 * @param WP_REST_Response $response The response object.
-	 * @param stdClass         $tax      Tax object used to create response.
+	 * @param \stdClass        $tax      Tax object used to create response.
 	 * @param WP_REST_Request  $request  Request object.
 	 */
 	public function wcpos_prepare_tax_response( $response, $tax, $request ) {
@@ -111,7 +117,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		 */
 		$data['uuid'] = (string) $tax->tax_rate_id;
 
-		// Reset the new response data
+		// Reset the new response data.
 		$response->set_data( $data );
 
 		return $response;
@@ -154,8 +160,8 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		global $wpdb;
 
 		if ( strpos( $query, "{$wpdb->prefix}woocommerce_tax_rates" ) !== false ) {
-			// remove the filter so it doesn't run again
-			remove_filter( 'query', array( $this, 'wcpos_tax_add_include_exclude_to_sql' ), 10, 1 );
+			// remove the filter so it doesn't run again.
+			remove_filter( 'query', array( $this, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
 
 			// Handle include IDs.
 			if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
@@ -191,12 +197,12 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		global $wpdb;
 
 		if ( strpos( $query, 'WHERE' ) !== false ) {
-			// Insert condition in existing WHERE clause
+			// Insert condition in existing WHERE clause.
 			$query = str_replace( 'WHERE', "WHERE $condition AND", $query );
 		} else {
-			// Insert WHERE clause before ORDER BY or at the end of the query
+			// Insert WHERE clause before ORDER BY or at the end of the query.
 			$pos = strpos( $query, 'ORDER BY' );
-			if ( $pos !== false ) {
+			if ( false !== $pos ) {
 				$query = substr_replace( $query, " WHERE $condition ", $pos, 0 );
 			} else {
 				$query .= " WHERE $condition";
@@ -222,9 +228,12 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 
 		try {
 			/**
-			 * @TODO - taxes doen't have a modified date, so we can't filter by modified_after
-			 * - ideally WooCommerce would provide a modified_after filter for terms
-			 * - for now we'll just return empty for modified terms
+			 * Taxes don't have a modified date, so we can't filter by modified_after.
+			 *
+			 * Ideally WooCommerce would provide a modified_after filter for terms.
+			 * For now we'll just return empty for modified terms.
+			 *
+			 * @TODO Add modified_after support for taxes.
 			 */
 			$results = $modified_after ? array() : $wpdb->get_results(
 				'
@@ -250,7 +259,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 			$server_load = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

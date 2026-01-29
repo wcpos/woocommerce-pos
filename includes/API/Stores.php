@@ -1,6 +1,8 @@
 <?php
 /**
  * Stores API.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -14,7 +16,10 @@ if ( ! class_exists( 'WP_REST_Controller' ) ) {
 use Exception;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
+use WP_Error;
 use WP_REST_Controller;
+use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Stores API.
@@ -78,8 +83,8 @@ class Stores extends WP_REST_Controller {
 			}
 
 			$response = rest_ensure_response( $response );
-			$response->header( 'X-WP-Total', \count( $stores ) );
-			$response->header( 'X-WP-TotalPages', 1 );
+			$response->header( 'X-WP-Total', (string) \count( $stores ) );
+			$response->header( 'X-WP-TotalPages', (string) 1 );
 
 			return $response;
 		} catch ( Exception $e ) {
@@ -160,11 +165,10 @@ class Stores extends WP_REST_Controller {
 	/**
 	 * Prepare links for the request.
 	 *
-	 * @param WC_Product      $product Product object.
+	 * @param Store           $store   Store object.
 	 * @param WP_REST_Request $request Request object.
-	 * @param mixed           $store
 	 *
-	 * @return array Links for the given product.
+	 * @return array Links for the given store.
 	 */
 	protected function prepare_links( $store, $request ) {
 		return array(

@@ -1,8 +1,12 @@
 <?php
+/**
+ * Templates_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use WP_Error;
 use WP_Query;
@@ -10,6 +14,8 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 /**
  * Class Templates REST API Controller.
@@ -137,8 +143,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$total_items = \count( $virtual_templates ) + $query->found_posts;
 
 		$response = rest_ensure_response( $templates );
-		$response->header( 'X-WP-Total', $total_items );
-		$response->header( 'X-WP-TotalPages', max( 1, $query->max_num_pages ) );
+		$response->header( 'X-WP-Total', (string) $total_items );
+		$response->header( 'X-WP-TotalPages', (string) max( 1, $query->max_num_pages ) );
 
 		return $response;
 	}
@@ -206,7 +212,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @param array           $template Template data.
 	 * @param WP_REST_Request $request  Request object.
 	 *
-	 * @return array Prepared template data.
+	 * @return array|WP_REST_Response Prepared template data.
 	 */
 	public function prepare_item_for_response( $template, $request ) {
 		// Remove content from listing to reduce payload size.
@@ -296,4 +302,3 @@ class Templates_Controller extends WP_REST_Controller {
 		return true;
 	}
 }
-

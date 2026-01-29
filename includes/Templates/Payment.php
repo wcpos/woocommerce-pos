@@ -1,8 +1,11 @@
 <?php
 /**
+ * Payment template.
+ *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -10,6 +13,9 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Exception;
 use WCPOS\WooCommercePOS\Services\Settings;
 
+/**
+ * Payment class.
+ */
 class Payment {
 	/**
 	 * The order ID.
@@ -21,6 +27,7 @@ class Payment {
 	/**
 	 * The gateway ID.
 	 *
+	 * @phpstan-ignore-next-line
 	 * @var string
 	 */
 	private $gateway_id;
@@ -62,6 +69,8 @@ class Payment {
 
 	/**
 	 * Constructor.
+	 *
+	 * @param int $order_id The order ID.
 	 */
 	public function __construct( int $order_id ) {
 		$this->order_id   = $order_id;
@@ -72,12 +81,12 @@ class Payment {
 		$this->disable_wp_head   = (bool) $settings_service->get_settings( 'checkout', 'disable_wp_head' );
 		$this->disable_wp_footer = (bool) $settings_service->get_settings( 'checkout', 'disable_wp_footer' );
 
-		// this is a checkout page
+		// this is a checkout page.
 		add_filter( 'woocommerce_is_checkout', '__return_true' );
-		// remove the terms and conditions checkbox
+		// remove the terms and conditions checkbox.
 		add_filter( 'woocommerce_checkout_show_terms', '__return_false' );
 
-		// remove junk from head
+		// remove junk from head.
 		add_filter( 'show_admin_bar', '__return_false' );
 		remove_action( 'wp_head', 'rsd_link' );
 		remove_action( 'wp_head', 'wp_generator' );
@@ -133,7 +142,7 @@ class Payment {
 			woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
 		);
 
-		// Loop through all enqueued styles and dequeue those that are in the exclusion list
+		// Loop through all enqueued styles and dequeue those that are in the exclusion list.
 		if ( \is_array( $style_exclude_list ) ) {
 			foreach ( $wp_styles->queue as $handle ) {
 				if ( \in_array( $handle, $style_exclude_list, true ) ) {
@@ -142,7 +151,7 @@ class Payment {
 			}
 		}
 
-		// Loop through all enqueued scripts and dequeue those that are in the exclusion list
+		// Loop through all enqueued scripts and dequeue those that are in the exclusion list.
 		if ( \is_array( $script_exclude_list ) ) {
 			foreach ( $wp_scripts->queue as $handle ) {
 				if ( \in_array( $handle, $script_exclude_list, true ) ) {
@@ -154,21 +163,23 @@ class Payment {
 
 
 	/**
+	 * Render the payment template.
+	 *
 	 * @return void
 	 */
 	public function get_template(): void {
 		if ( ! \defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
-			\define( 'WOOCOMMERCE_CHECKOUT', true );
+			\define( 'WOOCOMMERCE_CHECKOUT', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WooCommerce constant.
 		}
 
 		// if ( ! $this->gateway_id ) {
 		// wp_die( esc_html__( 'No gateway selected', 'woocommerce-pos' ) );
-		// }
+		// }.
 
 		do_action( 'woocommerce_pos_before_pay' );
 
 		try {
-			// initialize order and nonces before the user is switched to customer
+			// initialize order and nonces before the user is switched to customer.
 			$this->initialize_order_and_nonces();
 
 			/*
@@ -182,7 +193,7 @@ class Payment {
 			add_filter( 'nonce_user_logged_out', array( $this, 'nonce_user_logged_out' ), 10, 2 );
 
 			// create nonce for customer
-			// $nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';
+			// $nonce_field = '<input type="hidden" id="woocommerce-pay-nonce" name="woocommerce-pay-nonce" value="' . $this->create_customer_nonce() . '" />';.
 
 			// Logged in customer trying to pay for someone else's order.
 			if ( ! current_user_can( 'pay_for_order', $this->order_id ) ) {
@@ -196,9 +207,9 @@ class Payment {
 			// if ( isset( $available_gateways[ $this->gateway_id ] ) ) {
 			// $gateway         = $available_gateways[ $this->gateway_id ];
 			// $gateway->chosen = true;
-			// }
+			// }.
 
-			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) );
+			$order_button_text = apply_filters( 'woocommerce_pay_order_button_text', __( 'Pay for order', 'woocommerce-pos' ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
 			include woocommerce_pos_locate_template( 'payment.php' );
 		} catch ( Exception $e ) {
@@ -213,8 +224,8 @@ class Payment {
 	 */
 	public function get_troubleshooting_form_html(): string {
 		global $wp_styles, $wp_scripts;
-		$styleHandles  = $wp_styles->queue;
-		$scriptHandles = $wp_scripts->queue;
+		$style_handles  = $wp_styles->queue;
+		$script_handles = $wp_scripts->queue;
 
 		$style_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_style_handles',
@@ -226,37 +237,37 @@ class Payment {
 			woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
 		);
 
-		$mergedStyleHandles  = array_unique( array_merge( $styleHandles, $style_exclude_list ) );
-		$mergedScriptHandles = array_unique( array_merge( $scriptHandles, $script_exclude_list ) );
+		$merged_style_handles  = array_unique( array_merge( $style_handles, $style_exclude_list ) );
+		$merged_script_handles = array_unique( array_merge( $script_handles, $script_exclude_list ) );
 
 		ob_start();
 		?>
 			<div class="woocommerce-pos-troubleshooting">
 				<div style="text-align:right">
-					<button type="button" class="open-troubleshooting-modal"><?php _e( 'Checkout Settings', 'woocommerce-pos' ); ?></button>
+					<button type="button" class="open-troubleshooting-modal"><?php esc_html_e( 'Checkout Settings', 'woocommerce-pos' ); ?></button>
 				</div>
 				<div id="troubleshooting-modal" class="troubleshooting-modal" style="display: none;">
 					<div class="troubleshooting-modal-content">
 						<span class="close-troubleshooting-modal">&times;</span>
 						<form id="troubleshooting-form" method="POST">
-							<p class="woocommerce-info"><?php _e( 'Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts.', 'woocommerce-pos' ); ?></p>
+							<p class="woocommerce-info"><?php esc_html_e( 'Scripts and styles may interfere with the custom payment template, use this form to dequeue any problematic scripts.', 'woocommerce-pos' ); ?></p>
 							<div style="margin-bottom: 20px;">
-								<h3><?php _e( 'Disable All Styles and Scripts', 'woocommerce-pos' ); ?></h3>
+								<h3><?php esc_html_e( 'Disable All Styles and Scripts', 'woocommerce-pos' ); ?></h3>
 								<label for="disable_wp_head">
 									<input type="checkbox" id="disable_wp_head" name="disable_wp_head" value="1" <?php checked( $this->disable_wp_head ); ?>>
-									<?php _e( 'Disable wp_head', 'woocommerce-pos' ); ?>
+									<?php esc_html_e( 'Disable wp_head', 'woocommerce-pos' ); ?>
 								</label>
 								<br>
 								<label for="disable_wp_footer">
 									<input type="checkbox" id="disable_wp_footer" name="disable_wp_footer" value="1" <?php checked( $this->disable_wp_footer ); ?>>
-									<?php _e( 'Disable wp_footer', 'woocommerce-pos' ); ?>
+									<?php esc_html_e( 'Disable wp_footer', 'woocommerce-pos' ); ?>
 								</label>
 							</div>
 							<div style="display: flex; justify-content: space-between;margin-bottom:20px;">
 								<div style="flex: 1;">
-									<h3><?php _e( 'Disable Selected Styles', 'woocommerce-pos' ); ?></h3>
+									<h3><?php esc_html_e( 'Disable Selected Styles', 'woocommerce-pos' ); ?></h3>
 									<?php
-									foreach ( $mergedStyleHandles as $handle ) {
+									foreach ( $merged_style_handles as $handle ) {
 										$checked = ! \in_array( $handle, $style_exclude_list, true ) ? 'checked' : '';
 										?>
 										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="styles[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?>>
@@ -265,9 +276,9 @@ class Payment {
 									<?php } ?>
 								</div>
 								<div style="flex: 1;">
-									<h3><?php _e( 'Disable Selected Scripts', 'woocommerce-pos' ); ?></h3>
+									<h3><?php esc_html_e( 'Disable Selected Scripts', 'woocommerce-pos' ); ?></h3>
 									<?php
-									foreach ( $mergedScriptHandles as $handle ) {
+									foreach ( $merged_script_handles as $handle ) {
 										$checked = ! \in_array( $handle, $script_exclude_list, true ) ? 'checked' : '';
 										?>
 										<input type="checkbox" id="<?php echo esc_attr( $handle ); ?>" name="scripts[]" value="<?php echo esc_attr( $handle ); ?>" <?php echo esc_attr( $checked ); ?>>
@@ -277,7 +288,7 @@ class Payment {
 								</div>
 							</div>
 							<input type="hidden" name="troubleshooting_form_nonce" value="<?php echo esc_attr( $this->troubleshooting_form_nonce ); ?>" />
-							<button type="submit"><?php _e( 'Submit', 'woocommerce-pos' ); ?></button>
+							<button type="submit"><?php esc_html_e( 'Submit', 'woocommerce-pos' ); ?></button>
 						</form>
 					</div>
 				</div>
@@ -361,7 +372,7 @@ class Payment {
 
 				</section><!-- /.col2-set -->
 
-				<?php do_action( 'woocommerce_order_details_after_customer_details', $this->order ); ?>
+				<?php do_action( 'woocommerce_order_details_after_customer_details', $this->order ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook. ?>
 
 			</section>
 		</div>
@@ -378,9 +389,6 @@ class Payment {
 	/**
 	 * Render the coupon form HTML.
 	 *
-	 * @param \WC_Order $order
-	 * @param string    $coupon_nonce
-	 *
 	 * @return string
 	 */
 	public function get_coupon_form_html(): string {
@@ -396,15 +404,15 @@ class Payment {
 
 						<?php
 						$coupons = $this->order->get_items( 'coupon' );
-		if ( $coupons ) {
-			echo '<h3>' . __( 'Applied coupons', 'woocommerce' ) . '</h3>';
-			echo '<ul>';
-			foreach ( $coupons as $coupon ) {
-				echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
-			}
-			echo '</ul>';
-		}
-		?>
+						if ( $coupons ) {
+							echo '<h3>' . esc_html__( 'Applied coupons', 'woocommerce' ) . '</h3>';
+							echo '<ul>';
+							foreach ( $coupons as $coupon ) {
+								echo '<li>' . esc_html( $coupon->get_code() ) . ' <button type="submit" class="button" name="pos_remove_coupon" value="' . esc_attr( $coupon->get_code() ) . '">' . esc_html__( 'Remove', 'woocommerce' ) . '</button></li>';
+							}
+							echo '</ul>';
+						}
+						?>
 				</form>
 		</div>
 		<?php
@@ -415,8 +423,8 @@ class Payment {
 	 * Fix: when checking out as Guest on the desktop application, WordPress gets a $uid from the
 	 * session, eg: 't_8b04f8283e7edc5aeee2867c89dd06'. This causes the nonce check to fail.
 	 *
-	 * @param mixed $uid
-	 * @param mixed $action
+	 * @param mixed $uid    The user ID.
+	 * @param mixed $action The nonce action.
 	 */
 	public function nonce_user_logged_out( $uid, $action ) {
 		if ( 'woocommerce-pay' === $action ) {
@@ -450,46 +458,46 @@ class Payment {
 	 * @return void
 	 */
 	private function check_troubleshooting_form_submission(): void {
-		// Check if our form has been submitted
+		// Check if our form has been submitted.
 		if ( isset( $_POST['troubleshooting_form_nonce'] ) ) {
-			// Verify the nonce
+			// Verify the nonce.
 			if ( ! wp_verify_nonce( $_POST['troubleshooting_form_nonce'], 'troubleshooting_form_nonce' ) ) {
-				// Nonce doesn't verify, we should stop execution here
+				// Nonce doesn't verify, we should stop execution here.
 				die( 'Nonce value cannot be verified.' );
 			}
 
-			// This will hold your sanitized data
+			// This will hold your sanitized data.
 			$sanitized_data = array();
 
-			// Sanitize all_styles array
+			// Sanitize all_styles array.
 			if ( isset( $_POST['all_styles'] ) && \is_array( $_POST['all_styles'] ) ) {
-				$sanitized_data['all_styles'] = array_map( 'sanitize_text_field', $_POST['all_styles'] );
+				$sanitized_data['all_styles'] = array_map( 'sanitize_text_field', wp_unslash( $_POST['all_styles'] ) );
 			}
 
-			// Sanitize styles array
+			// Sanitize styles array.
 			if ( isset( $_POST['styles'] ) && \is_array( $_POST['styles'] ) ) {
-				$sanitized_data['styles'] = array_map( 'sanitize_text_field', $_POST['styles'] );
+				$sanitized_data['styles'] = array_map( 'sanitize_text_field', wp_unslash( $_POST['styles'] ) );
 			} else {
-				$sanitized_data['styles'] = array();  // consider all styles unchecked if 'styles' is not submitted
+				$sanitized_data['styles'] = array();  // consider all styles unchecked if 'styles' is not submitted.
 			}
 
-			// Sanitize all_scripts array
+			// Sanitize all_scripts array.
 			if ( isset( $_POST['all_scripts'] ) && \is_array( $_POST['all_scripts'] ) ) {
-				$sanitized_data['all_scripts'] = array_map( 'sanitize_text_field', $_POST['all_scripts'] );
+				$sanitized_data['all_scripts'] = array_map( 'sanitize_text_field', wp_unslash( $_POST['all_scripts'] ) );
 			}
 
-			// Sanitize scripts array
+			// Sanitize scripts array.
 			if ( isset( $_POST['scripts'] ) && \is_array( $_POST['scripts'] ) ) {
-				$sanitized_data['scripts'] = array_map( 'sanitize_text_field', $_POST['scripts'] );
+				$sanitized_data['scripts'] = array_map( 'sanitize_text_field', wp_unslash( $_POST['scripts'] ) );
 			} else {
-				$sanitized_data['scripts'] = array();  // consider all scripts unchecked if 'scripts' is not submitted
+				$sanitized_data['scripts'] = array();  // consider all scripts unchecked if 'scripts' is not submitted.
 			}
 
-			// Calculate unchecked styles and scripts
+			// Calculate unchecked styles and scripts.
 			$unchecked_styles  = isset( $sanitized_data['all_styles'] ) ? array_diff( $sanitized_data['all_styles'], $sanitized_data['styles'] ) : array();
 			$unchecked_scripts = isset( $sanitized_data['all_scripts'] ) ? array_diff( $sanitized_data['all_scripts'], $sanitized_data['scripts'] ) : array();
 
-			// Sanitize disable_wp_head and disable_wp_footer options
+			// Sanitize disable_wp_head and disable_wp_footer options.
 			$disable_wp_head   = isset( $_POST['disable_wp_head'] ) ? (bool) $_POST['disable_wp_head'] : false;
 			$disable_wp_footer = isset( $_POST['disable_wp_footer'] ) ? (bool) $_POST['disable_wp_footer'] : false;
 
@@ -512,6 +520,8 @@ class Payment {
 
 	/**
 	 * Custom version of wp_create_nonce that uses the customer ID.
+	 *
+	 * @phpstan-ignore-next-line
 	 */
 	private function create_customer_nonce() {
 		$user = wp_get_current_user();
@@ -519,7 +529,7 @@ class Payment {
 		// if ( ! $uid ) {
 		// ** This filter is documented in wp-includes/pluggable.php */
 		// $uid = apply_filters( 'nonce_user_logged_out', $uid, $action );
-		// }
+		// }.
 
 		$token = '';
 		$i     = wp_nonce_tick();

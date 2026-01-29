@@ -7,10 +7,14 @@
  * @author  Paul Kilmurray <paul@kilbot.com>
  *
  * @see     https://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
+/**
+ * Registry class.
+ */
 class Registry {
 	/**
 	 * Singleton instance.
@@ -40,8 +44,8 @@ class Registry {
 	/**
 	 * Registers a new instance.
 	 *
-	 * @param string $key
-	 * @param object $object
+	 * @param string $key    The registry key.
+	 * @param object $object The object to store.
 	 */
 	public function set( $key, $object ): void {
 		$this->storage[ $key ] = $object;
@@ -50,7 +54,7 @@ class Registry {
 	/**
 	 * Retrieves an instance by key.
 	 *
-	 * @param string $key
+	 * @param string $key The registry key.
 	 */
 	public function get( $key ) {
 		return $this->storage[ $key ] ?? null;

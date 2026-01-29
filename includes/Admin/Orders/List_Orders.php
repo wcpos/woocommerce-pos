@@ -1,4 +1,9 @@
 <?php
+/**
+ * List_Orders.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\Admin\Orders;
 
@@ -6,17 +11,20 @@ use WC_Abstract_Order;
 use WP_Query;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 
+/**
+ * List_Orders class.
+ */
 class List_Orders {
 
 	/**
 	 * List_Orders constructor.
 	 */
 	public function __construct() {
-		// add filter dropdown to orders list page
+		// add filter dropdown to orders list page.
 		add_action( 'restrict_manage_posts', array( $this, 'order_filter_dropdown' ) );
 		add_filter( 'parse_query', array( $this, 'parse_query' ) );
 
-		// add column for POS orders
+		// add column for POS orders.
 		add_filter( 'manage_edit-shop_order_columns', array( $this, 'pos_shop_order_column' ) );
 		add_action( 'manage_shop_order_posts_custom_column', array( $this, 'pos_orders_list_column_content' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'pos_order_column_width' ) );
@@ -28,7 +36,7 @@ class List_Orders {
 	 * @return void
 	 */
 	public function order_filter_dropdown(): void {
-		$selected = $_GET['pos_order'] ?? '';
+		$selected = isset( $_GET['pos_order'] ) ? sanitize_text_field( wp_unslash( $_GET['pos_order'] ) ) : '';
 
 		$options = array(
 			'yes' => __( 'POS', 'woocommerce-pos' ),
@@ -148,10 +156,12 @@ class List_Orders {
 
 
 	/**
+	 * Add inline CSS for the POS order column width.
+	 *
 	 * @return void
 	 */
 	public function pos_order_column_width(): void {
-		// Define the URL of your custom icon
+		// Define the URL of your custom icon.
 		$icon_url = PLUGIN_URL . '/assets/img/wp-menu-icon.svg';
 
 		$css = '

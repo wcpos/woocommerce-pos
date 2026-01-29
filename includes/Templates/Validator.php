@@ -7,12 +7,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use WP_Error;
 
+/**
+ * Validator class.
+ */
 class Validator {
 	/**
 	 * List of dangerous PHP functions that should be flagged.
@@ -87,12 +91,12 @@ class Validator {
 	public static function sanitize( string $content, string $language ): string {
 		if ( 'php' === $language ) {
 			// For PHP, we don't want to sanitize too much as it would break the code
-			// Just ensure proper slashing for storage
+			// Just ensure proper slashing for storage.
 			return $content;
 		}
 
 		if ( 'javascript' === $language ) {
-			// For JavaScript, similarly we want to preserve the code structure
+			// For JavaScript, similarly we want to preserve the code structure.
 			return $content;
 		}
 
@@ -132,11 +136,11 @@ class Validator {
 			'content_hash' => md5( $content ),
 		);
 
-		// Store in option (you might want to use a custom table for better performance)
+		// Store in option (you might want to use a custom table for better performance).
 		$logs   = get_option( 'wcpos_template_validation_logs', array() );
 		$logs[] = $log_entry;
 
-		// Keep only last 100 entries
+		// Keep only last 100 entries.
 		if ( \count( $logs ) > 100 ) {
 			$logs = \array_slice( $logs, -100 );
 		}
@@ -152,13 +156,13 @@ class Validator {
 	 * @return true|WP_Error True on success, WP_Error on failure.
 	 */
 	private static function validate_php( string $content ) {
-		// Check for syntax errors
+		// Check for syntax errors.
 		$syntax_check = self::check_php_syntax( $content );
 		if ( is_wp_error( $syntax_check ) ) {
 			return $syntax_check;
 		}
 
-		// Check for dangerous functions
+		// Check for dangerous functions.
 		$dangerous_check = self::check_dangerous_functions( $content );
 		if ( is_wp_error( $dangerous_check ) ) {
 			return $dangerous_check;
@@ -186,7 +190,7 @@ class Validator {
 	 */
 	private static function validate_javascript( string $content ) {
 		// Basic validation for JavaScript
-		// Check for obviously dangerous patterns
+		// Check for obviously dangerous patterns.
 		$dangerous_patterns = array(
 			'/eval\s*\(/i',
 			'/Function\s*\(/i',
@@ -199,7 +203,7 @@ class Validator {
 				return new WP_Error(
 					'dangerous_javascript',
 					\sprintf(
-						// translators: %s: pattern that was found
+						// translators: %s: pattern that was found.
 						__( 'Template contains potentially dangerous JavaScript code: %s', 'woocommerce-pos' ),
 						$pattern
 					)
@@ -228,7 +232,7 @@ class Validator {
 	 * @return true|WP_Error True if syntax is valid, WP_Error otherwise.
 	 */
 	private static function check_php_syntax( string $content ) {
-		// Use php -l to check syntax if available
+		// Use php -l to check syntax if available.
 		if ( \function_exists( 'exec' ) && ! \defined( 'DISABLE_TEMPLATE_SYNTAX_CHECK' ) ) {
 			$temp_file = tempnam( sys_get_temp_dir(), 'wcpos_template_' );
 			file_put_contents( $temp_file, $content );
@@ -243,7 +247,7 @@ class Validator {
 				return new WP_Error(
 					'php_syntax_error',
 					\sprintf(
-						// translators: %s: error message
+						// translators: %s: error message.
 						__( 'PHP syntax error: %s', 'woocommerce-pos' ),
 						implode( "\n", $output )
 					)
@@ -251,12 +255,12 @@ class Validator {
 			}
 		}
 
-		// Fallback: Basic check for unclosed PHP tags
+		// Fallback: Basic check for unclosed PHP tags.
 		$open_tags  = substr_count( $content, '<?php' ) + substr_count( $content, '<?' );
 		$close_tags = substr_count( $content, '?>' );
 
 		// Note: It's valid to have more open tags than close tags (files can end without closing tag)
-		// But if we have more close tags, that's definitely an error
+		// But if we have more close tags, that's definitely an error.
 		if ( $close_tags > $open_tags ) {
 			return new WP_Error(
 				'php_syntax_error',
@@ -286,11 +290,11 @@ class Validator {
 		 */
 		$dangerous = apply_filters( 'woocommerce_pos_template_dangerous_functions', self::$dangerous_functions );
 
-		// Remove comments from content to avoid false positives
+		// Remove comments from content to avoid false positives.
 		$content_without_comments = preg_replace( '/\/\*[\s\S]*?\*\/|\/\/.*$/m', '', $content );
 
 		foreach ( $dangerous as $function ) {
-			// Check for function calls
+			// Check for function calls.
 			if ( preg_match( '/\b' . preg_quote( $function, '/' ) . '\s*\(/i', $content_without_comments ) ) {
 				/**
 				 * Filters whether to allow dangerous functions in templates.
@@ -309,7 +313,7 @@ class Validator {
 					return new WP_Error(
 						'dangerous_function',
 						\sprintf(
-							// translators: %s: function name
+							// translators: %s: function name.
 							__( 'Template contains dangerous function: %s(). This function is not allowed for security reasons.', 'woocommerce-pos' ),
 							$function
 						)

@@ -11,20 +11,45 @@ parameters:
     bootstrapFiles:
         - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
         - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
-    
+        - phpstan-constants.php
+
     # Ignore errors in third-party code
     ignoreErrors:
         # Allow dynamic property access for WordPress objects
         - '#Access to an undefined property WC_Order::\$#'
         - '#Access to an undefined property WC_Product::\$#'
         - '#Access to an undefined property WP_User::\$#'
-        
+        - '#Access to an undefined property WC_Meta_Data::\$#'
+        - '#Access to an undefined property WooCommerce::\$#'
+
         # Allow calls to undefined methods on mock objects in tests
         - '#Call to an undefined method .+::expects\(\)#'
-        
-        # WordPress global functions that PHPStan doesn't know about
-        - '#Function .+ not found#'
-        
+
+        # WC methods/classes not in stubs
+        - '#Call to an undefined method WC_Data::#'
+        - '#Call to an undefined method WC_Product::get_global_unique_id\(\)#'
+        - '#Call to an undefined method WC_Order_Item::#'
+        - '#Call to an undefined method WC_Abstract_Order::#'
+        - '#Call to method .+ on an unknown class#'
+        - '#Access to property .+ on an unknown class#'
+        - '#PHPDoc tag @throws with type .+ is not subtype of Throwable#'
+
+        # Vendor-prefixed classes
+        - '#on an unknown class WCPOS\\Vendor\\#'
+
+        # WordPress/WooCommerce function parameter mismatches in stubs
+        - '#Function rest_ensure_response invoked with#'
+        - '#Function remove_action invoked with#'
+
+        # WordPress constants not in stubs
+        - '#Used constant DOING_AJAX not found#'
+
+        # Ignore missing typehints for iterables and generics
+        -
+            identifier: missingType.iterableValue
+        -
+            identifier: missingType.generics
+
     # Treat these as universal object crates (dynamic properties allowed)
     universalObjectCratesClasses:
         - WP_Post
@@ -32,13 +57,9 @@ parameters:
         - WC_Order
         - WC_Product
         - WC_Customer
-    
+
     # Report unmatched ignored errors
     reportUnmatchedIgnoredErrors: false
-    
-    # Check for missing typehints
-    checkMissingIterableValueType: false
-    checkGenericClassInNonGenericObjectType: false
 
 includes:
     - vendor/szepeviktor/phpstan-wordpress/extension.neon

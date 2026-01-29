@@ -1,17 +1,20 @@
 <?php
-
 /**
  * Add a POS settings on the permalink admin page.
  *
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see     http://www.wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 
+/**
+ * Permalink class.
+ */
 class Permalink {
 	public const DB_KEY = 'woocommerce_pos_settings_permalink';
 
@@ -28,8 +31,8 @@ class Permalink {
 	 */
 	public function pos_slug_input(): void {
 		$slug = self::get_slug();
-		if ( 'pos' == $slug ) {
-			$slug = ''; // use placeholder
+		if ( 'pos' === $slug ) {
+			$slug = ''; // use placeholder.
 		}
 		echo '<input name="woocommerce_pos_permalink" type="text" class="regular-text code" value="' . esc_attr( $slug ) . '" placeholder="pos" />';
 		wp_nonce_field( 'wcpos-permalinks', 'wcpos-permalinks-nonce' );
@@ -63,7 +66,7 @@ class Permalink {
 	private function init(): void {
 		add_settings_field(
 			'woocommerce-pos-permalink',
-			_x( 'POS base', 'Permalink setting, eg: /pos', PLUGIN_NAME ),
+			_x( 'POS base', 'Permalink setting, eg: /pos', 'woocommerce-pos' ),
 			array( $this, 'pos_slug_input' ),
 			'permalink',
 			'optional'

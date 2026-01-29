@@ -3,29 +3,43 @@
   "description": "Test matrix configuration for WCPOS CI. Update these versions when new releases are available.",
   "lastUpdated": "2026-01-29",
   "php": {
-    "previous": "8.1",
+    "minimum": "7.4",
     "stable": "8.2",
     "bleeding": "8.3",
-    "comment": "PHP versions to test. stable is used for smoke test and coverage."
+    "experimental": "8.4",
+    "comment": "Plugin requires PHP >= 7.4 per composer.json. WooCommerce recommends 8.3+."
   },
   "wordpress": {
-    "previous": "6.6",
-    "stable": "6.7",
-    "bleeding": "latest",
-    "comment": "WordPress versions. 'latest' always gets the newest stable from WordPress.org."
+    "previous": "6.7",
+    "stable": "6.9",
+    "comment": "WP 6.8 is the minimum for WC 10.4.x. WP 6.9 is current stable."
   },
   "woocommerce": {
     "previous": "9.5.2",
     "stable": "10.4.3",
-    "bleeding": "latest",
-    "comment": "WooCommerce versions. Note: WC 10.x requires WP 6.8+. Check compatibility when updating."
+    "comment": "WC 9.5.x requires WP >= 6.6. WC 10.4.x requires WP >= 6.8."
   },
   "compatibility": {
-    "comment": "Version compatibility notes",
     "rules": [
-      "WooCommerce 10.x requires WordPress 6.8+",
-      "WooCommerce 9.x requires WordPress 6.6+",
-      "PHP 7.4 is minimum for WooCommerce, but we test 8.1+ for better performance"
+      "WooCommerce 10.4.x requires WordPress 6.8+",
+      "WooCommerce 9.5.x requires WordPress 6.6+",
+      "Plugin requires PHP >= 7.4"
+    ]
+  },
+  "knownDifferences": {
+    "items": [
+      {
+        "feature": "Tax total formatting in REST API line_items.taxes and tax_lines",
+        "affectedTests": ["Test_Order_Taxes"],
+        "note": "Tax totals may include trailing zeros in some WC versions. Tests compare as floats to be format-agnostic."
+      },
+      {
+        "feature": "Product brands field in REST API",
+        "addedIn": "WC 9.9.0",
+        "reference": "https://github.com/woocommerce/woocommerce/pull/55945",
+        "affectedTests": ["Test_Products_Controller"],
+        "note": "The 'brands' field was added to the product REST API schema when WooCommerce Brands was integrated into core. Tests conditionally include this field based on WC_VERSION."
+      }
     ]
   }
 }

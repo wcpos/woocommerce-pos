@@ -8,12 +8,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
+/**
+ * List_Templates class.
+ */
 class List_Templates {
 	/**
 	 * Constructor.
@@ -557,6 +561,7 @@ class List_Templates {
 			)
 		);
 
+		// @phpstan-ignore-next-line
 		if ( is_wp_error( $post_id ) ) {
 			wp_die( esc_html( $post_id->get_error_message() ) );
 		}

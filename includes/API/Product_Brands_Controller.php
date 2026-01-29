@@ -1,4 +1,9 @@
 <?php
+/**
+ * Product_Brands_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -11,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Product_Brands_Controller' ) ) {
 use Exception;
 use WC_REST_Product_Brands_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -74,10 +80,10 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	public function wcpos_product_brands_response( WP_REST_Response $response, object $item, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Make sure the term has a uuid
+		// Make sure the term has a uuid.
 		$data['uuid'] = $this->get_term_uuid( $item );
 
-		// Reset the new response data
+		// Reset the new response data.
 		$response->set_data( $data );
 
 		return $response;
@@ -102,18 +108,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	/**
 	 * Filters the terms query SQL clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
-	 *
-	 * @var string The SELECT clause of the query.
-	 * @var string The JOIN clause of the query.
-	 * @var string The WHERE clause of the query.
-	 * @var string The DISTINCT clause of the query.
-	 * @var string The ORDER BY clause of the query.
-	 * @var string The ORDER clause of the query.
-	 * @var string The LIMIT clause of the query.
-	 *             }
-	 *
+	 * @param string[] $clauses    Associative array of the clauses for the query.
 	 * @param string[] $taxonomies An array of taxonomy names.
 	 * @param array    $args       An array of term query arguments.
 	 *
@@ -122,18 +117,18 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	public function wcpos_terms_clauses_include_exclude( array $clauses, array $taxonomies, array $args ) {
 		global $wpdb;
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$clauses['where'] .= $wpdb->prepare( " AND t.term_id IN ($ids_format) ", $include_ids );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$clauses['where'] .= $wpdb->prepare( " AND t.term_id NOT IN ($ids_format) ", $exclude_ids );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 		}
 
 		return $clauses;
@@ -159,6 +154,8 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 
 		try {
 			/**
+			 * Get all term IDs for the taxonomy.
+			 *
 			 * @TODO - terms don't have a modified date, it would be good to add a term_meta for last_update
 			 * - ideally WooCommerce would provide a modified_after filter for terms
 			 * - for now we'll just return empty for modified terms
@@ -182,7 +179,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

@@ -1,7 +1,9 @@
 <?php
 /**
  * Update to 1.6.1
- * - changing POS Only products to use settings rather than postmeta.
+ * Changing POS Only products to use settings rather than postmeta.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -20,7 +22,7 @@ function woocommerce_pos_update_pos_visibility_settings_to_1_6_1() {
 	// Check if the option already exists.
 	$visibility_settings = get_option( $option_key );
 
-	if ( $visibility_settings !== false ) {
+	if ( false !== $visibility_settings ) {
 		// The option already exists, no need to update.
 		return;
 	}

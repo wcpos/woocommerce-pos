@@ -32,20 +32,22 @@ jobs:
       - name: Check for changes
         id: git-diff
         run: |
-          # Extract the current and previous versions of the .pot file
-          git show HEAD:languages/woocommerce-pos.pot > old.pot
+          git show HEAD:languages/woocommerce-pos.pot > old.pot 2>/dev/null || {
+            echo "changes=true" >> $GITHUB_OUTPUT
+            rm -f old.pot
+            exit 0
+          }
+
           tail -n +16 languages/woocommerce-pos.pot > new-trimmed.pot
           tail -n +16 old.pot > old-trimmed.pot
-      
-          # Compare the trimmed files
+
           if diff old-trimmed.pot new-trimmed.pot; then
             echo "No changes detected."
           else
-            echo "::set-output name=changes::true"
+            echo "changes=true" >> $GITHUB_OUTPUT
           fi
-      
-          # Clean up temporary files
-          rm old.pot new-trimmed.pot old-trimmed.pot
+
+          rm -f old.pot new-trimmed.pot old-trimmed.pot
 
       - name: Commit updated POT file
         if: steps.git-diff.outputs.changes == 'true'
@@ -54,4 +56,21 @@ jobs:
           commit_message: 'chore(i18n): update languages/woocommerce-pos.pot'
           file_pattern: '*.pot'
 
+      - name: Generate GitHub App token
+        if: steps.git-diff.outputs.changes == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TRANSLATION_APP_ID }}
+          private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: translations
 
+      - name: Trigger translations repo
+        if: steps.git-diff.outputs.changes == 'true'
+        run: |
+          gh workflow run extract-php.yml \
+            --repo wcpos/translations \
+            --field free_ref="${{ github.sha }}"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

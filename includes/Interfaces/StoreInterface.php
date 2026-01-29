@@ -3,6 +3,8 @@
  * Store Interface.
  *
  * Defines the API contract for Store classes in both free and Pro versions.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Interfaces;

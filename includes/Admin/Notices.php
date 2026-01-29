@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Admin Notices
  * - add notices via static method or filter.
@@ -7,12 +6,20 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+/**
+ * Notices class.
+ */
 class Notices {
-	// @var
+	/**
+	 * Stored notices.
+	 *
+	 * @var array
+	 */
 	private static $notices = array();
 
 	/**
@@ -25,9 +32,9 @@ class Notices {
 	/**
 	 * Add a message for display.
 	 *
-	 * @param string $message
-	 * @param string $type        (error | warning | success | info)
-	 * @param bool   $dismissable
+	 * @param string $message     The notice message.
+	 * @param string $type        The notice type.
+	 * @param bool   $dismissable Whether the notice is dismissable.
 	 */
 	public static function add( $message = '', $type = 'error', $dismissable = true ): void {
 		self::$notices[] = array(
@@ -63,7 +70,7 @@ class Notices {
 				$classes .= ' is-dismissable';
 			}
 			if ( $notice['message'] ) {
-				echo '<div class="' . $classes . '"><p>' .
+				echo '<div class="' . esc_attr( $classes ) . '"><p>' .
 					 wp_kses( $notice['message'], wp_kses_allowed_html( 'post' ) ) .
 					 '</p></div>';
 			}

@@ -1,8 +1,11 @@
 <?php
 /**
+ * Receipt template handler.
+ *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -10,17 +13,29 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Exception;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
+/**
+ * Receipt class.
+ */
 class Receipt {
 	/**
+	 * The order ID.
+	 *
 	 * @var int
 	 */
 	private $order_id;
 
 	/**
-	 * @var bool Flag to track if we're rendering a template.
+	 * Flag to track if we're rendering a template.
+	 *
+	 * @var bool
 	 */
 	private static $rendering = false;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param int $order_id The order ID.
+	 */
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
 
@@ -51,6 +66,8 @@ class Receipt {
 
 
 	/**
+	 * Get the receipt template.
+	 *
 	 * @return void
 	 */
 	public function get_template(): void {
@@ -278,7 +295,9 @@ class Receipt {
 	}
 
 	/**
-	 * @param string $file_name
+	 * Get the template path.
+	 *
+	 * @param string $file_name The template file name.
 	 *
 	 * @return null|mixed
 	 */
@@ -348,21 +367,21 @@ class Receipt {
 	 * @return void
 	 */
 	private function render_custom_template( array $template, \WC_Abstract_Order $order ): void {
-		// If template has a file path, use that
+		// If template has a file path, use that.
 		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) ) {
 			include $template['file_path'];
 
 			return;
 		}
 
-		// Otherwise, render from content stored in database
+		// Otherwise, render from content stored in database.
 		if ( ! empty( $template['content'] ) ) {
-			// Create a temporary file to execute the PHP template
+			// Create a temporary file to execute the PHP template.
 			$temp_file = $this->create_temp_template_file( $template['content'] );
 
 			if ( $temp_file ) {
 				include $temp_file;
-				unlink( $temp_file ); // Clean up temporary file
+				unlink( $temp_file ); // Clean up temporary file.
 			}
 		}
 	}
@@ -378,12 +397,12 @@ class Receipt {
 		$upload_dir = wp_upload_dir();
 		$temp_dir   = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-templates';
 
-		// Create directory if it doesn't exist
+		// Create directory if it doesn't exist.
 		if ( ! file_exists( $temp_dir ) ) {
 			wp_mkdir_p( $temp_dir );
 		}
 
-		// Create temporary file
+		// Create temporary file.
 		$temp_file = tempnam( $temp_dir, 'receipt_' );
 
 		if ( $temp_file ) {

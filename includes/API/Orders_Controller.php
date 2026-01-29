@@ -1,4 +1,9 @@
 <?php
+/**
+ * Orders_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -13,6 +18,8 @@ use Exception;
 use WC_Abstract_Order;
 use WC_Email_Customer_Invoice;
 use WC_Order_Item;
+use WC_Order_Item_Fee;
+use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
@@ -21,6 +28,7 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
+use WP_Query;
 use WP_REST_Server;
 
 /**
@@ -42,7 +50,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	/**
 	 * Store the request object for use in lifecycle methods.
 	 *
-	 * @var WP_REST_Request
+	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
 
@@ -88,12 +96,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$request->set_param( 'dp', '6' );
 
 		$this->wcpos_request = $request;
-		// set hpos_enabled again for tests to work @TODO - fix this
+		// set hpos_enabled again for tests to work @TODO - fix this.
 		$this->hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 
 		add_filter( 'woocommerce_rest_prepare_shop_order_object', array( $this, 'wcpos_order_response' ), 10, 3 );
 		add_filter( 'woocommerce_order_get_items', array( $this, 'wcpos_order_get_items' ), 10, 3 );
-		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 2 );
+		add_action( 'woocommerce_before_order_object_save', array( $this, 'wcpos_before_order_object_save' ), 10, 1 );
 		add_filter( 'woocommerce_rest_shop_order_object_query', array( $this, 'wcpos_shop_order_query' ), 10, 2 );
 		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( $this, 'wcpos_order_item_fee_after_calculate_taxes' ), 10, 2 );
 
@@ -182,7 +190,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		// Check for 'stock_quantity' and allow decimal.
-		if ( $this->wcpos_allow_decimal_quantities()     &&
+		if ( $this->wcpos_allow_decimal_quantities() &&
 			   isset( $schema['properties']['line_items'] ) &&
 			   \is_array( $schema['properties']['line_items']['items']['properties'] ) ) {
 			$schema['properties']['line_items']['items']['properties']['quantity']['type'] = array( 'number' );
@@ -271,7 +279,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * @param string $action 'create' to add line item or 'update' to update it.
 	 * @param object $item   Passed when updating an item. Null during creation.
 	 *
-	 * @throws WC_REST_Exception Invalid data, server error.
+	 * @throws \WC_REST_Exception Invalid data, server error.
 	 *
 	 * @return WC_Order_Item_Product
 	 */
@@ -288,7 +296,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( 'create' !== $action && $item->get_variation_id() ) {
 			$attributes = wc_get_product_variation_attributes( $item->get_variation_id() );
 
-			// Loop through attributes and remove any duplicates
+			// Loop through attributes and remove any duplicates.
 			foreach ( $attributes as $key => $value ) {
 				$attribute = str_replace( 'attribute_', '', $key );
 				$meta_data = $item->get_meta( $attribute, false );
@@ -341,7 +349,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 */
 		parent::maybe_set_item_meta_data( $item, $posted );
 
-		// Ensure this is a product line item, not a fee or shipping
+		// Ensure this is a product line item, not a fee or shipping.
 		if ( ! \is_object( $item ) || 'WC_Order_Item_Product' !== \get_class( $item ) ) {
 			return;
 		}
@@ -351,7 +359,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$item->add_meta_data( '_sku', $posted['sku'], true );
 		}
 
-		// Only proceed if there's a variation ID and we have posted meta
+		// Only proceed if there's a variation ID and we have posted meta.
 		if ( ! $item->get_variation_id() || empty( $posted['meta_data'] ) || ! \is_array( $posted['meta_data'] ) ) {
 			return;
 		}
@@ -374,12 +382,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					$name = wc_attribute_label( $slug );
 				}
 
-				// find the value from $posted['meta_data']
+				// find the value from $posted['meta_data'].
 				foreach ( $posted['meta_data'] as $meta ) {
-					// Match posted attribute label to the $name we just determined
+					// Match posted attribute label to the $name we just determined.
 					if ( isset( $meta['display_key'], $meta['display_value'] ) && $meta['display_key'] === $name ) {
 						$posted_value = $meta['display_value'];
-						// Only update if the posted value is non-empty
+						// Only update if the posted value is non-empty.
 						if ( $posted_value ) {
 							$item->update_meta_data(
 								$slug,
@@ -387,7 +395,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 								$meta['id'] ?? ''
 							);
 
-							break; // Stop searching once found
+							break; // Stop searching once found.
 						}
 					}
 				}
@@ -401,8 +409,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * This is a problem because if people want to apply a negative fee to an order, and set tax_status to 'none', it will give
 	 * the wrong result.
 	 *
-	 * @param WC_Order_Item_Fee $fee_item          The fee item.
-	 * @param array             $calculate_tax_for The tax calculation data.
+	 * @param \WC_Order_Item_Fee $fee_item          The fee item.
+	 * @param array              $calculate_tax_for The tax calculation data.
 	 */
 	public function wcpos_order_item_fee_after_calculate_taxes( $fee_item, $calculate_tax_for ): void {
 		if ( $fee_item->get_total() < 0 ) {
@@ -412,17 +420,17 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 			if ( 'taxable' === $tax_status ) {
 				// Use the tax_class if set, otherwise default.
-				$calculate_tax_for['tax_class'] = $tax_class ?: '';
+				$calculate_tax_for['tax_class'] = $tax_class ? $tax_class : '';
 
 				// Find rates and calculate taxes for the fee.
 				$tax_rates      = WC_Tax::find_rates( $calculate_tax_for );
-				$discount_taxes = WC_Tax::calc_tax( $fee_item->get_total(), $tax_rates );
+				$discount_taxes = WC_Tax::calc_tax( (float) $fee_item->get_total(), $tax_rates );
 
 				// Apply calculated taxes to the fee item.
 				$fee_item->set_taxes( array( 'total' => $discount_taxes ) );
 			} else {
 				// Set taxes to none if tax_status is 'none'.
-				$fee_item->set_taxes( false );
+				$fee_item->set_taxes( array() );
 			}
 
 			// Save the updated fee item.
@@ -468,8 +476,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! \is_null( $email ) && '' !== $email && ! is_email( $email ) ) {
 			return new WP_Error(
 				'rest_invalid_param',
-				// translators: Use default WordPress translation
-				__( 'Invalid email address.' ),
+				// translators: Use default WordPress translation.
+				__( 'Invalid email address.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -483,12 +491,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		// Ensure 'per_page' is an array and has a 'minimum' key
+		// Ensure 'per_page' is an array and has a 'minimum' key.
 		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
-		// Ensure 'orderby' is an array and has an 'enum' key that is also an array
+		// Ensure 'orderby' is an array and has an 'enum' key that is also an array.
 		if ( isset( $params['orderby'] ) && \is_array( $params['orderby'] ) && isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			$params['orderby']['enum'] = array_merge(
 				$params['orderby']['enum'],
@@ -496,7 +504,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
-		// Add 'pos_cashier' parameter
+		// Add 'pos_cashier' parameter.
 		$params['pos_cashier'] = array(
 			'description' => __( 'Filter orders by POS cashier.', 'woocommerce-pos' ),
 			'type'        => 'integer',
@@ -533,10 +541,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( 'billing' == $request['save_to'] ) {
 			$order->set_billing_email( $email );
 			$order->save();
-			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WCPOS.', 'woocommerce-pos' ), $email ), false, true );
+			// translators: %s: email address.
+			$order->add_order_note( \sprintf( __( 'Email address %s added to billing details from WCPOS.', 'woocommerce-pos' ), $email ), 0, true );
 		}
 
-		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' );
+		do_action( 'woocommerce_before_resend_order_emails', $order, 'customer_invoice' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 		add_filter( 'woocommerce_email_recipient_customer_invoice', array( $this, 'wcpos_recipient_email_address' ), 99 );
 
 		// Send the customer invoice email.
@@ -545,9 +554,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		WC()->mailer()->customer_invoice( $order );
 
 		// Note the event.
-		$order->add_order_note( \sprintf( __( 'Order details manually sent to %s from WCPOS.', 'woocommerce-pos' ), $email ), false, true );
+		// translators: %s: email address.
+		$order->add_order_note( \sprintf( __( 'Order details manually sent to %s from WCPOS.', 'woocommerce-pos' ), $email ), 0, true );
 
-		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' );
+		do_action( 'woocommerce_after_resend_order_email', $order, 'customer_invoice' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce core hook.
 
 		$request->set_param( 'context', 'edit' );
 
@@ -570,22 +580,23 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	/**
 	 * Get the recipient email address, for manual sending of order emails.
 	 *
-	 * @param string                    $recipient.
-	 * @param WC_Abstract_Order         $order.
-	 * @param WC_Email_Customer_Invoice $WC_Email_Customer_Invoice.
-	 *
 	 * @return string
 	 */
 	public function wcpos_recipient_email_address() {
 		return $this->wcpos_request['email'];
 	}
 
+	/**
+	 * Get formatted order statuses.
+	 *
+	 * @return WP_REST_Response
+	 */
 	public function wcpos_get_order_statuses() {
 		$statuses           = wc_get_order_statuses();
 		$formatted_statuses = array();
 
 		foreach ( $statuses as $status_key => $status_name ) {
-			// Remove the 'wc-' prefix from the status key
+			// Remove the 'wc-' prefix from the status key.
 			$status_id   = 'wc-' === substr( $status_key, 0, 3 ) ? substr( $status_key, 3 ) : $status_key;
 
 			$formatted_statuses[] = array(
@@ -597,6 +608,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		return rest_ensure_response( $formatted_statuses );
 	}
 
+	/**
+	 * Get the public order statuses schema.
+	 *
+	 * @return array
+	 */
 	public function wcpos_get_public_order_statuses_schema() {
 		return array(
 			'$schema'    => 'http://json-schema.org/draft-04/schema#',
@@ -604,13 +620,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id' => array(
-					'description' => __( 'Unique identifier for the order status.', 'woocommerce-pos-pro' ),
+					'description' => __( 'Unique identifier for the order status.', 'woocommerce-pos' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),
 				'name' => array(
-					'description' => __( 'Display name of the order status.', 'woocommerce-pos-pro' ),
+					'description' => __( 'Display name of the order status.', 'woocommerce-pos' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
@@ -620,6 +636,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Modify the order response.
+	 *
 	 * @param WP_REST_Response  $response The response object.
 	 * @param WC_Abstract_Order $order    Object data.
 	 * @param WP_REST_Request   $request  Request object.
@@ -629,7 +647,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_order_response( WP_REST_Response $response, WC_Abstract_Order $order, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Add UUID to order
+		// Add UUID to order.
 		$this->maybe_add_post_uuid( $order );
 
 		// Add payment link to the order.
@@ -652,8 +670,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
-		// Make sure we parse the meta data before returning the response
-		$order->save_meta_data(); // make sure the meta data is saved
+		// Make sure we parse the meta data before returning the response.
+		$order->save_meta_data(); // make sure the meta data is saved.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
 
 		$response->set_data( $data );
@@ -687,7 +705,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * @param WC_Abstract_Order $order The object being saved.
 	 *
-	 * @throws WC_Data_Exception
+	 * @throws \WC_Data_Exception If order data is invalid.
 	 */
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
@@ -702,7 +720,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$cashier_id = $order->get_meta( '_pos_user' );
 
 		if ( ! $cashier_id ) {
-			$order->update_meta_data( '_pos_user', $user_id );
+			$order->update_meta_data( '_pos_user', (string) $user_id );
 		}
 	}
 
@@ -759,14 +777,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is generated from array_fill with %d placeholders.
 		}
 
 		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is generated from array_fill with %d placeholders.
 		}
 
 		return $where;
@@ -776,19 +794,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Filters all query clauses at once.
 	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
-	 *
-	 * @var string The SELECT clause of the query.
-	 * @var string The JOIN clause of the query.
-	 * @var string The WHERE clause of the query.
-	 * @var string The GROUP BY clause of the query.
-	 * @var string The ORDER BY clause of the query.
-	 * @var string The LIMIT clause of the query.
-	 *             }
-	 *
-	 * @param OrdersTableQuery $query The OrdersTableQuery instance (passed by reference).
-	 * @param array            $args  Query args.
+	 * @param string[] $clauses Associative array of the clauses for the query.
+	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
+	 * @param array    $args    Query args.
 	 */
 	public function wcpos_hpos_orders_table_query_clauses( array $clauses, $query, array $args ) {
 		// Handle 'wcpos_include'.
@@ -842,7 +850,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 			// Add modified_after condition if provided.
 			if ( $modified_after ) {
-				$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+				$modified_after_date = gmdate( 'Y-m-d H:i:s', strtotime( $modified_after ) );
 				$sql .= $wpdb->prepare( ' AND date_updated_gmt > %s', $modified_after_date );
 			}
 
@@ -855,7 +863,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 			// Add modified_after condition if provided.
 			if ( $modified_after ) {
-				$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+				$modified_after_date = gmdate( 'Y-m-d H:i:s', strtotime( $modified_after ) );
 				$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
 			}
 
@@ -864,7 +872,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		try {
-			$results           = $wpdb->get_results( $sql, ARRAY_A );
+			$results           = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is built with prepare() for dynamic parts, static parts are safe.
 			$formatted_results = $this->wcpos_format_all_posts_response( $results );
 
 			// Get the total number of orders for the given criteria.
@@ -876,7 +884,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 
@@ -892,19 +900,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * Filters all query clauses at once.
 	 * Covers the fields (SELECT), JOIN, WHERE, GROUP BY, ORDER BY, and LIMIT clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
-	 *
-	 * @var string The SELECT clause of the query.
-	 * @var string The JOIN clause of the query.
-	 * @var string The WHERE clause of the query.
-	 * @var string The GROUP BY clause of the query.
-	 * @var string The ORDER BY clause of the query.
-	 * @var string The LIMIT clause of the query.
-	 *             }
-	 *
-	 * @param OrdersTableQuery $query The OrdersTableQuery instance (passed by reference).
-	 * @param array            $args  Query args.
+	 * @param string[] $clauses Associative array of the clauses for the query.
+	 * @param object   $query   The OrdersTableQuery instance (passed by reference).
+	 * @param array    $args    Query args.
 	 *
 	 * @return string[] $clauses
 	 */
@@ -944,15 +942,15 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 *
 	 * @return string Modified ORDER BY clause.
 	 */
-	public function wcpos_legacy_order_status_orderby( string $orderby, \WP_Query $query ): string {
+	public function wcpos_legacy_order_status_orderby( string $orderby, WP_Query $query ): string {
 		global $wpdb;
 
-		// Only modify if this is an order query
+		// Only modify if this is an order query.
 		if ( isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'] ) {
 			$order   = isset( $this->wcpos_request ) ? strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' ) : 'ASC';
 			$orderby = "{$wpdb->posts}.post_status {$order}";
 
-			// Remove filter after use
+			// Remove filter after use.
 			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
 		}
 
@@ -976,7 +974,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
 			switch ( $request['orderby'] ) {
 				case 'status':
-					// Use posts_orderby filter since post_status isn't a valid WP_Query orderby
+					// Use posts_orderby filter since post_status isn't a valid WP_Query orderby.
 					add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
 
 					break;

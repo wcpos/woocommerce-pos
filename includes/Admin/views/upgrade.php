@@ -5,7 +5,9 @@
  * @author    Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see      http://www.kilbot.com
+ * @package WCPOS\WooCommercePOS
  */
+
 ?>
 
 <div class="wrap clear">

@@ -91,7 +91,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WordPress settings.
 	 */
 	public function set_wordpress_settings() {
 		$this->set_prop( 'name', \get_bloginfo( 'name' ) );
@@ -99,7 +99,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce general settings.
 	 */
 	public function set_woocommerce_general_settings() {
 		$default_country = \WC_Admin_Settings::get_option( 'woocommerce_default_country' );
@@ -124,7 +124,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce tax settings.
 	 */
 	public function set_woocommerce_tax_settings() {
 		$this->set_prop( 'prices_include_tax', \WC_Admin_Settings::get_option( 'woocommerce_prices_include_tax' ) );
@@ -151,7 +151,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce POS settings.
 	 */
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', woocommerce_pos_get_settings( 'general', 'default_customer' ) );
@@ -225,9 +225,11 @@ class Store extends \WC_Data implements StoreInterface {
 	 * @param  string $context What the value is for. Valid values are view and edit.
 	 * @return string
 	 */
+	// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Commented-out code.
 	// public function get_default_country( $context = 'view' ) {
-	// 	return $this->get_prop( 'default_country', $context );
+	// return $this->get_prop( 'default_country', $context );
 	// }
+	// phpcs:enable Squiz.Commenting.InlineComment.InvalidEndChar
 
 	/**
 	 * Get Store state code.
@@ -273,7 +275,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store enable coupons.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_enable_coupons( $context = 'view' ) {
 		return $this->get_prop( 'enable_coupons', $context );
@@ -283,7 +285,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store calculate discounts sequentially.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_calc_discounts_sequentially( $context = 'view' ) {
 		return $this->get_prop( 'calc_discounts_sequentially', $context );
@@ -343,7 +345,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store prices include tax.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_prices_include_tax( $context = 'view' ) {
 		return $this->get_prop( 'prices_include_tax', $context );
@@ -383,7 +385,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax round at subtotal.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_round_at_subtotal( $context = 'view' ) {
 		return $this->get_prop( 'tax_round_at_subtotal', $context );
@@ -393,7 +395,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax display shop.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_display_shop( $context = 'view' ) {
 		return $this->get_prop( 'tax_display_shop', $context );
@@ -403,7 +405,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax display cart.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_display_cart( $context = 'view' ) {
 		return $this->get_prop( 'tax_display_cart', $context );

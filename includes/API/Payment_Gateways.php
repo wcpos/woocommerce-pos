@@ -1,4 +1,9 @@
 <?php
+/**
+ * Payment_Gateways.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -6,17 +11,30 @@ use WC_Payment_Gateway;
 use WP_REST_Request;
 use WP_REST_Response;
 
+/**
+ * Payment_Gateways class.
+ */
 class Payment_Gateways {
-	/* @var WP_REST_Request $request */
+	/**
+	 * The REST request.
+	 *
+	 * @phpstan-ignore-next-line
+	 *
+	 * @var WP_REST_Request
+	 */
 	private $request;
 
-	/* @var $settings */
+	/**
+	 * The POS settings.
+	 *
+	 * @var array
+	 */
 	private $settings;
 
 	/**
 	 * Payment Gateways constructor.
 	 *
-	 * @param $request WP_REST_Request
+	 * @param WP_REST_Request $request The REST request.
 	 */
 	public function __construct( WP_REST_Request $request ) {
 		$this->request = $request;
@@ -29,10 +47,10 @@ class Payment_Gateways {
 	/**
 	 * Authorize payment_gateways API (read only) for cashiers.
 	 *
-	 * @param mixed $permission
-	 * @param mixed $context
-	 * @param mixed $object_id
-	 * @param mixed $object
+	 * @param mixed $permission The current permission.
+	 * @param mixed $context    The context of the request.
+	 * @param mixed $object_id  The object ID.
+	 * @param mixed $object     The object type.
 	 */
 	public function check_permissions( $permission, $context, $object_id, $object ) {
 		if ( ! $permission && 'payment_gateways' === $object && 'read' === $context ) {
@@ -45,9 +63,9 @@ class Payment_Gateways {
 	/**
 	 * Filter payment gateway objects returned from the REST API.
 	 *
-	 * @param WP_REST_Response $response The response object.
+	 * @param WP_REST_Response   $response The response object.
 	 * @param WC_Payment_Gateway $gateway  Payment gateway object.
-	 * @param WP_REST_Request $request  Request object.
+	 * @param WP_REST_Request    $request  Request object.
 	 */
 	public function prepare_payment_gateway( WP_REST_Response $response, WC_Payment_Gateway $gateway, WP_REST_Request $request ): WP_REST_Response {
 		$pos_setting = $this->settings['gateways'][ $gateway->id ] ?? null;

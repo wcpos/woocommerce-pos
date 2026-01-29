@@ -10,12 +10,12 @@ namespace WCPOS\WooCommercePOS\Admin\Orders;
 use WC_Abstract_Order;
 
 /**
- *
+ * Single_Order class.
  */
 class Single_Order {
 
 	/**
-	 *
+	 * Constructor.
 	 */
 	public function __construct() {
 		add_filter( 'wc_order_is_editable', array( $this, 'wc_order_is_editable' ), 10, 2 );
@@ -30,6 +30,7 @@ class Single_Order {
 	 * It's possible another plugin could just re-init after us, but this will work for most cases.
 	 */
 	public function add_available_gateways() {
+		// @phpstan-ignore-next-line
 		if ( WC()->payment_gateways() ) {
 			$payment_gateways = WC()->payment_gateways->payment_gateways;
 			$settings = woocommerce_pos_get_settings( 'payment_gateways' );
@@ -41,7 +42,7 @@ class Single_Order {
 				}
 			}
 
-			// Directly set the modified gateways back to the WooCommerce Payment Gateways instance
+			// Directly set the modified gateways back to the WooCommerce Payment Gateways instance.
 			WC()->payment_gateways->payment_gateways = $payment_gateways;
 		}
 	}
@@ -49,8 +50,8 @@ class Single_Order {
 	/**
 	 * Makes POS orders editable by default.
 	 *
-	 * @param bool              $is_editable
-	 * @param WC_Abstract_Order $order
+	 * @param bool              $is_editable Whether the order is editable.
+	 * @param WC_Abstract_Order $order       The order object.
 	 *
 	 * @return bool
 	 */
@@ -84,7 +85,7 @@ class Single_Order {
 		if ( $cashier_id ) {
 			$user = get_user_by( 'id', $cashier_id );
 			if ( $user ) {
-				echo '<option value="' . esc_attr( $user->ID ) . '"' . selected( true, true, false ) . '>' . esc_html( $user->display_name . ' (#' . $user->ID . ' &ndash; ' . $user->user_email ) . ')</option>';
+				echo '<option value="' . esc_attr( (string) $user->ID ) . '"' . selected( true, true, false ) . '>' . esc_html( $user->display_name . ' (#' . $user->ID . ' &ndash; ' . $user->user_email ) . ')</option>';
 			}
 		}
 		echo '</select>';
@@ -94,11 +95,11 @@ class Single_Order {
 	/**
 	 * Save store select in order admin.
 	 *
-	 * @param int $post_id
+	 * @param int $post_id The post ID.
 	 */
 	public function save_cashier_select( $post_id ): void {
-		// Security checks
-		if ( ! isset( $_POST['pos_cashier_select_nonce'] ) || ! wp_verify_nonce( $_POST['pos_cashier_select_nonce'], 'pos_cashier_select_action' ) ) {
+		// Security checks.
+		if ( ! isset( $_POST['pos_cashier_select_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_cashier_select_nonce'] ) ), 'pos_cashier_select_action' ) ) {
 			return;
 		}
 
@@ -107,21 +108,21 @@ class Single_Order {
 		 */
 		$order = wc_get_order( $post_id );
 
-		// Check if $order is instance of WC_Abstract_Order and $_POST['_pos_user'] is set
+		// Check if $order is instance of WC_Abstract_Order and $_POST['_pos_user'] is set.
 		if ( $order instanceof WC_Abstract_Order && isset( $_POST['_pos_user'] ) ) {
-			$new_pos_cashier     = (int) sanitize_text_field( $_POST['_pos_user'] );
+			$new_pos_cashier     = (int) sanitize_text_field( wp_unslash( $_POST['_pos_user'] ) );
 			$current_pos_cashier = (int) $order->get_meta( '_pos_user' );
 
-			// Update meta only if _pos_user has changed
+			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
-				$order->update_meta_data( '_pos_user', $new_pos_cashier );
+				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
 				$order->save();
 
-				// Add an order note indicating the change
+				// Add an order note indicating the change.
 				$current_cashier    = get_userdata( $current_pos_cashier );
 				$new_cashier        = get_userdata( $new_pos_cashier );
 				$note               = sprintf(
-					// translators: 1: old POS cashier, 2: new POS cashier
+					// translators: 1: old POS cashier, 2: new POS cashier.
 					__( 'POS cashier changed from %1$s to %2$s.', 'woocommerce-pos' ),
 					$current_cashier ? $current_cashier->display_name : __( 'Unknown', 'woocommerce-pos' ),
 					$new_cashier ? $new_cashier->display_name : __( 'Unknown', 'woocommerce-pos' )

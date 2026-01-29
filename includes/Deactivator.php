@@ -16,6 +16,9 @@ namespace WCPOS\WooCommercePOS;
  * Fired during plugin deactivation.
  */
 class Deactivator {
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		register_deactivation_hook( PLUGIN_FILE, array( $this, 'deactivate' ) );
 	}
@@ -23,12 +26,12 @@ class Deactivator {
 	/**
 	 * Fired when the plugin is deactivated.
 	 *
-	 * @param $network_wide
+	 * @param bool $network_wide Whether to deactivate network-wide.
 	 */
-	public function deactivate( $network_wide ): void {
+	public function deactivate( bool $network_wide ): void {
 		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 			if ( $network_wide ) {
-				// Get all blog ids
+				// Get all blog ids.
 				$blog_ids = $this->get_blog_ids();
 
 				foreach ( $blog_ids as $blog_id ) {
@@ -49,11 +52,11 @@ class Deactivator {
 	 * Fired when the plugin is deactivated.
 	 */
 	public function single_deactivate(): void {
-		// remove pos capabilities
+		// remove pos capabilities.
 		$this->remove_pos_capability();
 
-		// remove pos rewrite rule
-		flush_rewrite_rules( false ); // false will not overwrite .htaccess
+		// remove pos rewrite rule.
+		flush_rewrite_rules( false ); // false will not overwrite .htaccess.
 	}
 
 	/**
@@ -65,16 +68,17 @@ class Deactivator {
 	private static function get_blog_ids() {
 		global $wpdb;
 
-		// get an array of blog ids
+		// get an array of blog ids.
 		$sql = "SELECT blog_id FROM $wpdb->blogs
       WHERE archived = '0' AND spam = '0'
       AND deleted = '0'";
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query contains no user input.
 		return $wpdb->get_col( $sql );
 	}
 
 	/**
-	 * remove default pos capabilities to administrator and
+	 * Remove default pos capabilities to administrator and
 	 * shop_manager roles.
 	 */
 	private static function remove_pos_capability(): void {

@@ -48,7 +48,7 @@
     "lint": "phpcs --standard=./.phpcs.xml.dist",
     "lint-report": "phpcs --standard=./.phpcs.xml.dist --report=checkstyle",
     "fix": "php-cs-fixer fix .",
-    "phpstan": "phpstan analyse --memory-limit=512M",
+    "phpstan": "phpstan analyse --memory-limit=2G",
     "prefix-dependencies": [
       "composer --working-dir=php-scoper install",
       "cd php-scoper && vendor/bin/php-scoper add-prefix --output-dir=../vendor_prefixed --force && cd ..",

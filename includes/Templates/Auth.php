@@ -11,6 +11,8 @@
  * - Auth session expiration
  * - State parameter validation
  * - Redirect URI scheme validation
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
@@ -88,16 +90,16 @@ class Auth {
 	 * Constructor.
 	 */
 	public function __construct() {
-		// Hide the admin bar for a clean login UI
+		// Hide the admin bar for a clean login UI.
 		add_filter( 'show_admin_bar', '__return_false' );
 
-		// Initialize properties
-		$this->redirect_uri = $this->validate_redirect_uri( $_REQUEST['redirect_uri'] ?? '' );
-		$this->state        = sanitize_text_field( $_REQUEST['state'] ?? '' );
-		$this->auth_session = sanitize_text_field( $_REQUEST['auth_session'] ?? '' );
+		// Initialize properties.
+		$this->redirect_uri = $this->validate_redirect_uri( isset( $_REQUEST['redirect_uri'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['redirect_uri'] ) ) : '' );
+		$this->state        = sanitize_text_field( wp_unslash( $_REQUEST['state'] ?? '' ) );
+		$this->auth_session = sanitize_text_field( wp_unslash( $_REQUEST['auth_session'] ?? '' ) );
 		$this->error        = '';
 
-		// Validate required parameters
+		// Validate required parameters.
 		if ( empty( $this->redirect_uri ) ) {
 			$this->error = __( 'Missing or invalid redirect_uri parameter.', 'woocommerce-pos' );
 
@@ -110,12 +112,12 @@ class Auth {
 			return;
 		}
 
-		// Create or validate auth session (for expiring auth URLs)
+		// Create or validate auth session (for expiring auth URLs).
 		if ( ! $this->validate_or_create_auth_session() ) {
 			return;
 		}
 
-		// Check IP rate limit before processing
+		// Check IP rate limit before processing.
 		if ( $this->is_ip_rate_limited() ) {
 			$this->error = __( 'Too many requests. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( '', 'rate_limited' );
@@ -123,7 +125,7 @@ class Auth {
 			return;
 		}
 
-		// Handle form submission
+		// Handle form submission.
 		$this->handle_form_submission();
 	}
 
@@ -164,12 +166,14 @@ class Auth {
 	}
 
 	/**
+	 * Render the auth template.
+	 *
 	 * @return void
 	 */
 	public function get_template(): void {
 		// NOTE: We intentionally do NOT call do_action('login_init') here.
 		// This auth form bypasses WordPress's standard login flow to avoid
-		// interference from security plugins (2FA, captcha, etc.)
+		// interference from security plugins (2FA, captcha, etc.).
 
 		/*
 		 * Fires before the WCPOS auth template is rendered.
@@ -180,9 +184,9 @@ class Auth {
 		 */
 		do_action( 'woocommerce_pos_auth_template_redirect' );
 
-		// Make this instance available to the template
-		global $wcpos_auth_instance;
-		$wcpos_auth_instance = $this;
+		// Make this instance available to the template.
+		global $wcpos_auth_instance; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
+		$wcpos_auth_instance = $this; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
 
 		include woocommerce_pos_locate_template( 'auth.php' );
 		exit;
@@ -191,7 +195,7 @@ class Auth {
 	/**
 	 * Validate and sanitize redirect URI.
 	 *
-	 * @param string $uri
+	 * @param string $uri The URI to validate.
 	 *
 	 * @return string Empty string if invalid.
 	 */
@@ -200,19 +204,19 @@ class Auth {
 			return '';
 		}
 
-		// Remove control characters
+		// Remove control characters.
 		$uri = preg_replace( '/[\x00-\x1f\x7f]/', '', $uri );
 
-		// Check if URI starts with an allowed scheme
+		// Check if URI starts with an allowed scheme.
 		foreach ( self::ALLOWED_SCHEMES as $scheme ) {
 			if ( 0 === stripos( $uri, $scheme . '://' ) ) {
-				// For http/https, use esc_url for full validation
+				// For http/https, use esc_url for full validation.
 				if ( 'http' === $scheme || 'https' === $scheme ) {
 					return esc_url( $uri, array( 'http', 'https' ) );
 				}
 
 				// For custom schemes (wcpos://, exp://), just return it
-				// These are app deep links, not web URLs
+				// These are app deep links, not web URLs.
 				return $uri;
 			}
 		}
@@ -229,14 +233,14 @@ class Auth {
 		$session_key = 'wcpos_auth_session_' . md5( $this->state . $this->redirect_uri );
 
 		if ( empty( $this->auth_session ) ) {
-			// First visit - create session
+			// First visit - create session.
 			$this->auth_session = wp_generate_password( 32, false );
 			set_transient( $session_key, $this->auth_session, self::AUTH_SESSION_EXPIRY );
 
 			return true;
 		}
 
-		// Validate existing session
+		// Validate existing session.
 		$stored_session = get_transient( $session_key );
 
 		if ( ! $stored_session ) {
@@ -260,31 +264,31 @@ class Auth {
 	 * @return void
 	 */
 	private function handle_form_submission(): void {
-		if ( 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
+		if ( ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
 			return;
 		}
 
-		// Verify nonce for security
+		// Verify nonce for security.
 		if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'wcpos_auth' ) ) {
 			$this->error = __( 'Security check failed. Please try again.', 'woocommerce-pos' );
 
 			return;
 		}
 
-		// Check honeypot field (should be empty)
+		// Check honeypot field (should be empty).
 		if ( ! empty( $_POST['wcpos_website'] ?? '' ) ) {
-			// Bot detected - silently fail with generic error
+			// Bot detected - silently fail with generic error.
 			$this->log_auth_attempt( '', 'honeypot_triggered' );
-			sleep( 2 ); // Slow down bots
+			sleep( 2 ); // Slow down bots.
 			$this->error = __( 'Authentication failed.', 'woocommerce-pos' );
 
 			return;
 		}
 
-		$username = sanitize_user( $_POST['wcpos-log'] ?? '' );
-		$password = $_POST['wcpos-pwd'] ?? '';
+		$username = sanitize_user( wp_unslash( $_POST['wcpos-log'] ?? '' ) );
+		$password = isset( $_POST['wcpos-pwd'] ) ? wp_unslash( $_POST['wcpos-pwd'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Password must not be sanitized before authentication.
 
-		// Check if username is locked out
+		// Check if username is locked out.
 		if ( $this->is_username_locked( $username ) ) {
 			$this->error = __( 'This account is temporarily locked due to too many failed login attempts. Please try again later.', 'woocommerce-pos' );
 			$this->log_auth_attempt( $username, 'locked_out' );
@@ -292,7 +296,7 @@ class Auth {
 			return;
 		}
 
-		// Authenticate user directly (bypasses wp_authenticate filter chain)
+		// Authenticate user directly (bypasses wp_authenticate filter chain).
 		$user = $this->authenticate_direct( $username, $password );
 
 		if ( is_wp_error( $user ) ) {
@@ -304,7 +308,7 @@ class Auth {
 			return;
 		}
 
-		// Check if user has access to POS
+		// Check if user has access to POS.
 		if ( ! user_can( $user, 'access_woocommerce_pos' ) ) {
 			$this->log_auth_attempt( $username, 'no_permission' );
 			$this->error = __( 'You do not have permission to access the POS.', 'woocommerce-pos' );
@@ -312,17 +316,17 @@ class Auth {
 			return;
 		}
 
-		// Clear failed attempts on successful login
+		// Clear failed attempts on successful login.
 		$this->clear_failed_attempts( $username );
 
-		// Clean up auth session
+		// Clean up auth session.
 		$session_key = 'wcpos_auth_session_' . md5( $this->state . $this->redirect_uri );
 		delete_transient( $session_key );
 
-		// Log successful auth
+		// Log successful auth.
 		$this->log_auth_attempt( $username, 'success' );
 
-		// Generate JWT token using Services/Auth
+		// Generate JWT token using Services/Auth.
 		$auth_service  = AuthService::instance();
 		$redirect_data = $auth_service->get_redirect_data( $user );
 
@@ -332,7 +336,7 @@ class Auth {
 			return;
 		}
 
-		// On success, redirect back to app (or fallback to dashboard)
+		// On success, redirect back to app (or fallback to dashboard).
 		$redirect_params = array(
 			'access_token'  => rawurlencode( $redirect_data['access_token'] ),
 			'refresh_token' => rawurlencode( $redirect_data['refresh_token'] ),
@@ -343,7 +347,7 @@ class Auth {
 			'display_name'  => rawurlencode( $redirect_data['display_name'] ),
 		);
 
-		// Include state parameter if it was provided
+		// Include state parameter if it was provided.
 		if ( ! empty( $this->state ) ) {
 			$redirect_params['state'] = rawurlencode( $this->state );
 		}
@@ -368,8 +372,8 @@ class Auth {
 	 * - Auth session expiration
 	 * - Honeypot fields
 	 *
-	 * @param string $username
-	 * @param string $password
+	 * @param string $username The username.
+	 * @param string $password The password.
 	 *
 	 * @return WP_Error|WP_User
 	 */
@@ -381,23 +385,23 @@ class Auth {
 			);
 		}
 
-		// Get user by login or email
+		// Get user by login or email.
 		$user = get_user_by( 'login', $username );
 		if ( ! $user ) {
 			$user = get_user_by( 'email', $username );
 		}
 
 		if ( ! $user ) {
-			// Use generic message to prevent username enumeration
+			// Use generic message to prevent username enumeration.
 			return new WP_Error(
 				'invalid_credentials',
 				__( 'Invalid username or password.', 'woocommerce-pos' )
 			);
 		}
 
-		// Check if password is correct
+		// Check if password is correct.
 		if ( ! wp_check_password( $password, $user->user_pass, $user->ID ) ) {
-			// Use same generic message
+			// Use same generic message.
 			return new WP_Error(
 				'invalid_credentials',
 				__( 'Invalid username or password.', 'woocommerce-pos' )
@@ -452,7 +456,7 @@ class Auth {
 	/**
 	 * Check if username is locked out.
 	 *
-	 * @param string $username
+	 * @param string $username The username to check.
 	 *
 	 * @return bool
 	 */
@@ -469,7 +473,7 @@ class Auth {
 	/**
 	 * Record a failed login attempt for a username.
 	 *
-	 * @param string $username
+	 * @param string $username The username that failed.
 	 *
 	 * @return void
 	 */
@@ -485,12 +489,12 @@ class Auth {
 
 		set_transient( $attempts_key, $attempts, self::LOCKOUT_DURATION );
 
-		// Lock account after max attempts
+		// Lock account after max attempts.
 		if ( $attempts >= self::MAX_FAILED_ATTEMPTS ) {
 			$lock_key = 'wcpos_auth_lock_' . $username_key;
 			set_transient( $lock_key, time(), self::LOCKOUT_DURATION );
 
-			// Log the lockout
+			// Log the lockout.
 			Logger::log(
 				\sprintf(
 					'WCPOS Auth: Account locked - username: %s, IP: %s, attempts: %d',
@@ -505,7 +509,7 @@ class Auth {
 	/**
 	 * Clear failed attempts after successful login.
 	 *
-	 * @param string $username
+	 * @param string $username The username to clear.
 	 *
 	 * @return void
 	 */
@@ -526,7 +530,7 @@ class Auth {
 	 */
 	private function get_client_ip(): string {
 		$headers = array(
-			'HTTP_CF_CONNECTING_IP', // Cloudflare
+			'HTTP_CF_CONNECTING_IP', // Cloudflare.
 			'HTTP_X_FORWARDED_FOR',
 			'HTTP_X_REAL_IP',
 			'REMOTE_ADDR',
@@ -535,7 +539,7 @@ class Auth {
 		foreach ( $headers as $header ) {
 			if ( ! empty( $_SERVER[ $header ] ) ) {
 				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-				// Handle comma-separated IPs
+				// Handle comma-separated IPs.
 				if ( false !== strpos( $ip, ',' ) ) {
 					$parts = explode( ',', $ip );
 					$ip    = trim( $parts[0] );
@@ -553,8 +557,8 @@ class Auth {
 	/**
 	 * Log authentication attempt.
 	 *
-	 * @param string $username
-	 * @param string $status     success, failed, rate_limited, locked_out, honeypot_triggered, no_permission
+	 * @param string $username   The username attempted.
+	 * @param string $status     The status: success, failed, rate_limited, locked_out, honeypot_triggered, no_permission.
 	 * @param string $error_code Optional error code for failed attempts.
 	 *
 	 * @return void
@@ -563,9 +567,9 @@ class Auth {
 		$log_entry = \sprintf(
 			'WCPOS Auth: %s - username: %s, IP: %s, state: %s',
 			$status,
-			$username ?: 'unknown',
+			$username ? $username : 'unknown',
 			$this->get_client_ip(),
-			substr( $this->state, 0, 8 ) . '...' // Truncate state for logs
+			substr( $this->state, 0, 8 ) . '...' // Truncate state for logs.
 		);
 
 		if ( $error_code ) {

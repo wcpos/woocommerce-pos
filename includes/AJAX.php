@@ -1,13 +1,18 @@
 <?php
+/**
+ * AJAX.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 
-	/**
-	 *
-	 */
+/**
+ * AJAX class.
+ */
 class AJAX {
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Product admin pages.
@@ -30,6 +35,8 @@ class AJAX {
 
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Order admin pages.
+	 *
+	 * @phpstan-ignore-next-line
 	 *
 	 * @var string[]
 	 */
@@ -56,8 +63,9 @@ class AJAX {
 			return;
 		}
 
-		// ignore for WP Admin heartbeat requests
-		if ( isset( $_POST['action'] ) && 'heartbeat' == $_POST['action'] ) {
+		// ignore for WP Admin heartbeat requests.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Only reading action name, no form processing.
+		if ( isset( $_POST['action'] ) && 'heartbeat' === $_POST['action'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			return;
 		}
 
@@ -68,7 +76,7 @@ class AJAX {
 			add_action( 'wp_ajax_' . $ajax_event, array( $this, 'load_list_products_class' ), 9 );
 		}
 
-		// we need to hook into these actions to save our custom fields via AJAX
+		// we need to hook into these actions to save our custom fields via AJAX.
 		add_action(
 			'woocommerce_product_quick_edit_save',
 			array(
@@ -78,6 +86,8 @@ class AJAX {
 		);
 
 		/**
+		 * Fix for AJAX quick edit.
+		 *
 		 * @TODO - I need to fix this AJAX mess.
 		 * When a quick edit is saved, WooCommerce returns a re-rendered row to replace the existing row.
 		 * Because it's via AJAX, our 'manage_product_posts_custom_column' hook won't run, so it won't include our updated value.

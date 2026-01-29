@@ -1,19 +1,18 @@
 <?php
-
 /**
  * POS Settings.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin;
 
-use const WCPOS\WooCommercePOS\PLUGIN_NAME;
-
-use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -50,8 +49,8 @@ class Settings {
 				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
 			</div>
 		</div>',
-			__( 'Error', 'woocommerce-pos' ),
-			__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
+			esc_html__( 'Error', 'woocommerce-pos' ),
+			esc_html__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
 		);
 	}
 
@@ -63,7 +62,7 @@ class Settings {
 	 * @return void
 	 */
 	public function enqueue_assets(): void {
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) );
 		$dir            = $is_development ? 'build' : 'assets';
 
 		wp_enqueue_style(
@@ -99,14 +98,14 @@ class Settings {
 			true
 		);
 
-		// Add inline script
+		// Add inline script.
 		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
 
 		if ( $is_development ) {
 			wp_enqueue_script(
 				'webpack-live-reload',
 				'http://localhost:35729/livereload.js',
-				null,
+				array(),
 				null,
 				true
 			);
@@ -114,6 +113,8 @@ class Settings {
 	}
 
 	/**
+	 * Generate the inline script for settings.
+	 *
 	 * @return string
 	 */
 	private function inline_script(): string {

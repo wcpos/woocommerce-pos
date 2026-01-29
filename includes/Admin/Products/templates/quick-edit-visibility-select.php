@@ -1,21 +1,31 @@
 <?php
 /**
  * Admin View: Quick Edit Product.
+ *
+ * @package WCPOS\WooCommercePOS
  */
+
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; // Exit if accessed directly
+	exit; // Exit if accessed directly.
 }
+
+/**
+ * Quick edit visibility select template.
+ *
+ * @var array $options
+ */
 ?>
 
 <fieldset class="inline-edit-col-left">
 	<div class="inline-edit-col">
 		<div class="inline-edit-group">
 			<label class="inline-edit-status alignleft">
-				<span class="title"><?php _e( 'POS visibility', 'woocommerce-pos' ); ?></span>
+				<span class="title"><?php esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?></span>
 				<select name="_pos_visibility">
 					<?php
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.
 					foreach ( $options as $name => $label ) {
-						echo '<option value="' . $name . '">' . $label . '</option>';
+						echo '<option value="' . esc_attr( $name ) . '">' . esc_html( $label ) . '</option>';
 					}
 					?>
 				</select>

@@ -1,6 +1,8 @@
 <?php
 /**
+ * Form Handler.
  *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -8,10 +10,13 @@ namespace WCPOS\WooCommercePOS;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 
 /**
- *
+ * Form_Handler class.
  */
 class Form_Handler {
 
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		// May need $wp global to access query vars.
 		add_action( 'wp', array( $this, 'pay_action' ), 10 );
@@ -35,6 +40,7 @@ class Form_Handler {
 	public function pay_action() {
 		global $wp;
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce in the pay form handler.
 		if ( woocommerce_pos_request() && isset( $_POST['woocommerce_pay'], $_GET['key'] ) ) {
 			$order_id  = absint( $wp->query_vars['order-pay'] );
 			$order     = wc_get_order( $order_id );
@@ -62,7 +68,7 @@ class Form_Handler {
 			// remove 'token' when wcpos_jwt is fully implemented.
 			$token_key = isset( $_GET['wcpos_jwt'] ) ? 'wcpos_jwt' : ( isset( $_GET['token'] ) ? 'token' : null );
 
-			if ( $token_key === null || ! isset( $_GET[ $token_key ] ) ) {
+			if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
 				wp_die(
 					esc_html__( 'Token not provided.', 'woocommerce-pos' ),
 					esc_html__( 'Error', 'woocommerce-pos' ),
@@ -88,7 +94,7 @@ class Form_Handler {
 	}
 
 	/**
-	 *
+	 * Process the coupon action.
 	 */
 	public function coupon_action() {
 		global $wp;

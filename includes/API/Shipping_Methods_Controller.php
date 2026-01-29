@@ -1,6 +1,8 @@
 <?php
 /**
  * REST API WC Shipping Methods controller
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -28,8 +30,8 @@ class Shipping_Methods_Controller extends WC_REST_Shipping_Methods_Controller {
 	/**
 	 * Check whether a given request has permission to view shipping methods.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|boolean
+	 * @param  \WP_REST_Request $request Full details about the request.
+	 * @return \WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
 		if ( is_user_logged_in() ) {

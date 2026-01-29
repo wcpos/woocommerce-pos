@@ -1,4 +1,9 @@
 <?php
+/**
+ * Cashier.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\Services;
 
@@ -205,12 +210,12 @@ class Cashier {
 	 * @return bool True if access is allowed.
 	 */
 	public function validate_cashier_access( int $current_user_id, int $requested_id ): bool {
-		// Users can access their own data
+		// Users can access their own data.
 		if ( $current_user_id === $requested_id ) {
 			return true;
 		}
 
-		// Administrators can access any cashier data
+		// Administrators can access any cashier data.
 		return current_user_can( 'manage_woocommerce' );
 	}
 }

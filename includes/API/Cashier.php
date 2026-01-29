@@ -1,6 +1,8 @@
 <?php
 /**
  * Cashier API.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -44,7 +46,7 @@ class Cashier extends WP_REST_Controller {
 	 * Register the routes for the cashier controller.
 	 */
 	public function register_routes(): void {
-		// Get cashier data: /wcpos/v1/cashier/{id}
+		// Get cashier data: /wcpos/v1/cashier/{id}.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
@@ -62,7 +64,7 @@ class Cashier extends WP_REST_Controller {
 			)
 		);
 
-		// Get cashier stores: /wcpos/v1/cashier/{id}/stores
+		// Get cashier stores: /wcpos/v1/cashier/{id}/stores.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)/stores',
@@ -80,7 +82,7 @@ class Cashier extends WP_REST_Controller {
 			)
 		);
 
-		// Get specific store for cashier: /wcpos/v1/cashier/{id}/stores/{store_id}
+		// Get specific store for cashier: /wcpos/v1/cashier/{id}/stores/{store_id}.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)/stores/(?P<store_id>[\d]+)',
@@ -114,7 +116,7 @@ class Cashier extends WP_REST_Controller {
 	 * @return bool|WP_Error True if authorized, WP_Error otherwise.
 	 */
 	public function check_cashier_permissions( WP_REST_Request $request ) {
-		// Check if user is authenticated
+		// Check if user is authenticated.
 		if ( ! is_user_logged_in() ) {
 			return new WP_Error(
 				'woocommerce_pos_rest_unauthorized',
@@ -126,7 +128,7 @@ class Cashier extends WP_REST_Controller {
 		$current_user_id = get_current_user_id();
 		$requested_id    = (int) $request->get_param( 'id' );
 
-		// Check if the requested user exists
+		// Check if the requested user exists.
 		$user = get_user_by( 'id', $requested_id );
 		if ( ! $user ) {
 			return new WP_Error(
@@ -138,7 +140,7 @@ class Cashier extends WP_REST_Controller {
 
 		$cashier_service = CashierService::instance();
 
-		// Check if user has POS cashier permissions
+		// Check if user has POS cashier permissions.
 		if ( ! $cashier_service->has_cashier_permissions( $user ) ) {
 			return new WP_Error(
 				'woocommerce_pos_rest_forbidden',
@@ -147,7 +149,7 @@ class Cashier extends WP_REST_Controller {
 			);
 		}
 
-		// Validate access permissions
+		// Validate access permissions.
 		if ( ! $cashier_service->validate_cashier_access( $current_user_id, $requested_id ) ) {
 			return new WP_Error(
 				'woocommerce_pos_rest_forbidden',
@@ -219,12 +221,12 @@ class Cashier extends WP_REST_Controller {
 
 			foreach ( $stores as $store ) {
 				$data       = $this->prepare_store_for_response( $store, $request );
-				$response[] = $this->prepare_response_for_collection( $data );
+				$response[] = $data;
 			}
 
 			$response = rest_ensure_response( $response );
-			$response->header( 'X-WP-Total', \count( $stores ) );
-			$response->header( 'X-WP-TotalPages', 1 );
+			$response->header( 'X-WP-Total', (string) \count( $stores ) );
+			$response->header( 'X-WP-TotalPages', '1' );
 
 			return $response;
 		} catch ( Exception $e ) {
@@ -246,7 +248,7 @@ class Cashier extends WP_REST_Controller {
 	public function get_cashier_store( WP_REST_Request $request ) {
 		$user_id  = (int) $request->get_param( 'id' );
 		$store_id = (int) $request->get_param( 'store_id' );
-		
+
 		$user = get_user_by( 'id', $user_id );
 		if ( ! $user ) {
 			return new WP_Error(

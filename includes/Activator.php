@@ -1,18 +1,24 @@
 <?php
-
 /**
  * Activation checks and set up.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
 use const DOING_AJAX;
 
+/**
+ * Activator class.
+ */
 class Activator {
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		register_activation_hook( PLUGIN_FILE, array( $this, 'activate' ) );
 		add_action( 'wpmu_new_blog', array( $this, 'activate_new_site' ) );
@@ -23,18 +29,18 @@ class Activator {
 	 * Checks for valid install and begins execution of the plugin.
 	 */
 	public function init(): void {
-		// Check for min requirements to run
+		// Check for min requirements to run.
 		if ( $this->php_check() && $this->woocommerce_check() ) {
-			// check permalinks
-			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
+			// check permalinks.
+			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) { // @phpstan-ignore-line
 				$this->permalink_check();
 			}
 
-			// Init update script if required
+			// Init update script if required.
 			$this->version_check();
 			$this->pro_version_check();
 
-			// resolve plugin plugins
+			// resolve plugin plugins.
 			$this->plugin_check();
 
 			new Init();
@@ -44,12 +50,12 @@ class Activator {
 	/**
 	 * Fired when the plugin is activated.
 	 *
-	 * @param $network_wide
+	 * @param bool $network_wide Whether to activate network-wide.
 	 */
 	public function activate( $network_wide ): void {
 		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 			if ( $network_wide ) {
-				// Get all blog ids
+				// Get all blog ids.
 				$blog_ids = $this->get_blog_ids();
 
 				foreach ( $blog_ids as $blog_id ) {
@@ -70,10 +76,10 @@ class Activator {
 	 * Fired when the plugin is activated.
 	 */
 	public function single_activate(): void {
-		// create POS specific roles
+		// create POS specific roles.
 		$this->create_pos_roles();
 
-		// add pos capabilities to non POS roles
+		// add pos capabilities to non POS roles.
 		$this->add_pos_capability(
 			array(
 				'administrator' => array(
@@ -98,13 +104,13 @@ class Activator {
 		);
 
 		// set the auto redirection on next page load
-		// set_transient( 'woocommere_pos_welcome', 1, 30 );
+		// set_transient( 'woocommere_pos_welcome', 1, 30 );.
 	}
 
 	/**
 	 * Fired when a new site is activated with a WPMU environment.
 	 *
-	 * @param $blog_id
+	 * @param int $blog_id Blog ID.
 	 */
 	public function activate_new_site( $blog_id ): void {
 		if ( 1 !== did_action( 'wpmu_new_blog' ) ) {
@@ -126,6 +132,7 @@ class Activator {
 		}
 
 		$message = \sprintf(
+			// translators: 1: Minimum PHP version, 2: Update URL.
 			__( '<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
 			PHP_MIN_VERSION,
 			'http://www.wpupdatephp.com/update/'
@@ -143,6 +150,7 @@ class Activator {
 		}
 
 		$message = \sprintf(
+			// translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
 			__( '<strong>WCPOS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
 			'http://wordpress.org/plugins/woocommerce/',
 			WC_MIN_VERSION,
@@ -158,7 +166,7 @@ class Activator {
 	private function permalink_check(): void {
 		$permalinks = get_option( 'permalink_structure' );
 
-		// early return
+		// early return.
 		if ( $permalinks ) {
 			return;
 		}
@@ -189,7 +197,7 @@ class Activator {
 		// disable NextGEN Gallery resource manager
 		// if ( ! \defined( 'NGG_DISABLE_RESOURCE_MANAGER' ) ) {
 		// \define( 'NGG_DISABLE_RESOURCE_MANAGER', true );
-		// }
+		// }.
 	}
 
 	/**
@@ -201,19 +209,19 @@ class Activator {
 	private function get_blog_ids() {
 		global $wpdb;
 
-		// get an array of blog ids
+		// get an array of blog ids.
 		$sql = "SELECT blog_id FROM $wpdb->blogs
       WHERE archived = '0' AND spam = '0'
       AND deleted = '0'";
 
-		return $wpdb->get_col( $sql );
+		return $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Static query, no user input
 	}
 
 	/**
-	 * add POS specific roles.
+	 * Add POS specific roles.
 	 */
 	private function create_pos_roles(): void {
-		// Cashier role
+		// Cashier role.
 		$cashier_capabilities = array(
 			'read'                      => true,
 			'read_private_products'     => true,
@@ -238,10 +246,9 @@ class Activator {
 	}
 
 	/**
-	 * add default pos capabilities to administrator and
-	 * shop_manager roles.
+	 * Add default pos capabilities to administrator and shop_manager roles.
 	 *
-	 * @param $roles - an array of arrays representing the roles and their POS capabilities
+	 * @param array $roles An array of arrays representing the roles and their POS capabilities.
 	 */
 	private function add_pos_capability( $roles ): void {
 		foreach ( $roles as $slug => $caps ) {
@@ -257,8 +264,8 @@ class Activator {
 	/**
 	 * Upgrade database.
 	 *
-	 * @param $old
-	 * @param $current
+	 * @param string $old     Old version.
+	 * @param string $current Current version.
 	 */
 	private function db_upgrade( $old, $current ): void {
 		$db_updates = array(
@@ -282,7 +289,8 @@ class Activator {
 	 */
 	private function pro_version_check(): void {
 		if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
-			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) {
+			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) { // @phpstan-ignore-line
+
 				/*
 				 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
 				 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
@@ -291,10 +299,11 @@ class Activator {
 					require_once ABSPATH . '/wp-admin/includes/plugin.php';
 				}
 
-				// WCPOS Pro is activated, but the version is too low - use the constant for dynamic folder name
-				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE );
+				// WCPOS Pro is activated, but the version is too low - use the constant for dynamic folder name.
+				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE ); // @phpstan-ignore-line
 
 				$message = \sprintf(
+					// translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
 					__( '<strong>WCPOS</strong> requires <a href="%1$s">WCPOS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WCPOS Pro</a>', 'woocommerce-pos' ),
 					'https://wcpos.com/my-account',
 					MIN_PRO_VERSION,

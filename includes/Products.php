@@ -5,6 +5,7 @@
  * @author Paul Kilmurray <paul@kilbot.com>
  *
  * @see    https://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -15,6 +16,9 @@ use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Query;
 
+/**
+ * Products class.
+ */
 class Products {
 	/**
 	 * Constructor.
@@ -33,7 +37,7 @@ class Products {
 			// NOTE: this hook is marked as deprecated.
 			add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'prevent_pos_only_add_to_cart' ), 10, 2 );
 
-			// add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );
+			// add_filter( 'woocommerce_get_product_subcategories_args', array( $this, 'filter_category_count_exclude_pos_only' ) );.
 		}
 
 		/**
@@ -53,11 +57,11 @@ class Products {
 	 * Bump modified date on stock change.
 	 * - variation->id = parent id.
 	 *
-	 * @param WC_Product $product
+	 * @param WC_Product $product The product object.
 	 */
 	public function product_set_stock( WC_Product $product ): void {
 		$post_modified     = current_time( 'mysql' );
-		$post_modified_gmt = current_time( 'mysql', 1 );
+		$post_modified_gmt = current_time( 'mysql', true );
 		wp_update_post(
 			array(
 				'ID'                => $product->get_id(),
@@ -75,17 +79,17 @@ class Products {
 	 * @return void
 	 */
 	public function hide_pos_only_products( \WP_Query $query ): void {
-		// Only run for front-end queries, not admin or POS requests
+		// Only run for front-end queries, not admin or POS requests.
 		if ( is_admin() || woocommerce_pos_request() ) {
 			return;
 		}
 
-		// WP_Query post_type can be string or array
+		// WP_Query post_type can be string or array.
 		$post_types        = (array) $query->get( 'post_type' );
 		$settings_instance = Settings::instance();
 		$exclude_ids       = array();
 
-		// Handle product queries
+		// Handle product queries.
 		if ( \in_array( 'product', $post_types, true ) ) {
 			$settings = $settings_instance->get_pos_only_product_visibility_settings();
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
@@ -96,7 +100,7 @@ class Products {
 			}
 		}
 
-		// Handle product_variation queries
+		// Handle product_variation queries.
 		if ( \in_array( 'product_variation', $post_types, true ) ) {
 			$settings = $settings_instance->get_pos_only_variations_visibility_settings();
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
@@ -107,7 +111,7 @@ class Products {
 			}
 		}
 
-		// Apply exclusions if any
+		// Apply exclusions if any.
 		if ( ! empty( $exclude_ids ) ) {
 			$existing_excludes = $query->get( 'post__not_in' );
 			if ( ! \is_array( $existing_excludes ) ) {
@@ -156,8 +160,8 @@ class Products {
 	 *
 	 * NOTE: this hook is marked as deprecated.
 	 *
-	 * @param bool $passed
-	 * @param int  $product_id
+	 * @param bool $passed     Whether the product can be added to the cart.
+	 * @param int  $product_id The product ID.
 	 *
 	 * @return bool
 	 */
@@ -178,7 +182,7 @@ class Products {
 	 *
 	 * @param WC_Product $product Product.
 	 *
-	 * @throws NotPurchasableException Exception if product is POS Only.
+	 * @throws NotPurchasableException If the product is POS only.
 	 *
 	 * @return void
 	 */
@@ -191,9 +195,10 @@ class Products {
 		}
 
 		if ( $pos_only ) {
+			// @phpstan-ignore-next-line.
 			throw new NotPurchasableException(
 				'woocommerce_pos_product_not_purchasable',
-				$product->get_name()
+				esc_html( $product->get_name() )
 			);
 		}
 	}

@@ -1,17 +1,20 @@
 <?php
 /**
+ * Frontend template.
+ *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
-use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use WCPOS\WooCommercePOS\Services\Auth;
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 use WCPOS\WooCommercePOS\Template_Router;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -23,34 +26,40 @@ class Frontend {
 	 *
 	 * @var array
 	 */
-	private array $wp_credentials = array();
+	/** Stores user credentials data for use in footer.
+	 *
+	 * @var array
+	 */
+	private $wp_credentials = array();
 
 	/**
+	 * Render the frontend template.
+	 *
 	 * @return void
 	 */
 	public function get_template(): void {
-		// force ssl
+		// force ssl.
 		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
 			wp_safe_redirect( woocommerce_pos_url() );
 			exit;
 		}
 
-		// check auth
+		// check auth.
 		if ( ! is_user_logged_in() ) {
 			add_filter( 'login_url', array( $this, 'login_url' ) );
 			auth_redirect();
 		}
 
-		// check privileges
+		// check privileges.
 		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
-			// translators: wordpress
-			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.' ) );
+			// translators: wordpress.
+			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'woocommerce-pos' ) );
 		}
 
-		// disable cache plugins
+		// disable cache plugins.
 		$this->no_cache();
 
-		// last chance before frontend template is rendered
+		// last chance before frontend template is rendered.
 		do_action( 'woocommerce_pos_frontend_template_redirect' );
 
 		/*
@@ -62,7 +71,7 @@ class Frontend {
 			do_action_deprecated( 'woocommerce_pos_template_redirect', array(), 'Version_1.4.0', 'woocommerce_pos_frontend_template_redirect' );
 		}
 
-		// add head & footer actions
+		// add head & footer actions.
 		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
 		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
 
@@ -79,7 +88,7 @@ class Frontend {
 	/**
 	 * Add variable to login url to signify POS login.
 	 *
-	 * @param $login_url
+	 * @param string $login_url The login URL.
 	 *
 	 * @return mixed
 	 */
@@ -113,7 +122,7 @@ class Frontend {
 		 */
 		$development = apply_filters(
 			'woocommerce_pos_development_mode',
-			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] )
+			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		);
 
 		$user                 = wp_get_current_user();
@@ -167,9 +176,9 @@ class Frontend {
 		/**
 		 * Filters the javascript variables passed to the POS.
 		 *
-		 * @param {array} $vars
+		 * @param array $vars
 		 *
-		 * @returns {array} $vars
+		 * @returns array $vars
 		 *
 		 * @since 1.0.0
 		 *
@@ -181,9 +190,10 @@ class Frontend {
 		/**
 		 * Add path to worker scripts.
 		 */
-		$idbWorker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
+		$idb_worker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
 
-		// getScript helper and initialProps
+		// getScript helper and initialProps.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
 		echo "<script>
     function getScript(source, callback) {
         var script = document.createElement('script');
@@ -212,12 +222,12 @@ class Frontend {
         document.head.appendChild(link);
     }
 
-    var idbWorker = '{$idbWorker}';
+    var idbWorker = '{$idb_worker}';
     var initialProps = {$initial_props};
     var cdnBaseUrl = '{$cdn_base_url}';
 	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
-		
+
 		echo "<script>
 		var request = new Request(initialProps.manifest);
 
@@ -253,10 +263,16 @@ class Frontend {
 		</script>" . "\n";
 	}
 
+	/**
+	 * Get the POS logout URL.
+	 *
+	 * @return string
+	 */
 	private function pos_logout_url() {
 		/**
 		 * Get the login URL, allow other plugins to customise the URL. eg: WPS Hide Login.
 		 */
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook
 		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
 
 		$redirect_to  = urlencode( woocommerce_pos_url() );
@@ -274,17 +290,17 @@ class Frontend {
 	 * Disable caching conflicts.
 	 */
 	private function no_cache(): void {
-		// disable W3 Total Cache minify
+		// disable W3 Total Cache minify.
 		if ( ! \defined( 'DONOTMINIFY' ) ) {
-			\define( 'DONOTMINIFY', 'true' );
+			\define( 'DONOTMINIFY', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Third-party constant
 		}
 
-		// disable WP Super Cache
+		// disable WP Super Cache.
 		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
-			\define( 'DONOTCACHEPAGE', 'true' );
+			\define( 'DONOTCACHEPAGE', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Third-party constant
 		}
 
-		// disable Lite Speed Cache
-		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' );
+		// disable Lite Speed Cache.
+		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook
 	}
 }

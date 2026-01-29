@@ -1,4 +1,9 @@
 <?php
+/**
+ * WCPOS_REST_API.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API\Traits;
 
@@ -48,7 +53,7 @@ trait WCPOS_REST_API {
 	 *
 	 * @TODO - I need to find out why this is happening
 	 *
-	 * @param WC_Data $object
+	 * @param WC_Data $object The WC_Data object to parse meta from.
 	 *
 	 * @return array
 	 */
@@ -68,8 +73,8 @@ trait WCPOS_REST_API {
 	 *
 	 * This is just a helper function to try and alert us to these large responses
 	 *
-	 * @param WP_REST_Response $response
-	 * @param int              $id
+	 * @param WP_REST_Response $response The REST response object.
+	 * @param int              $id       The record ID.
 	 */
 	public function wcpos_log_large_rest_response( WP_REST_Response $response, int $id ): void {
 		$response_size     = \strlen( serialize( $response->data ) );
@@ -87,14 +92,14 @@ trait WCPOS_REST_API {
 	public function wcpos_allow_decimal_quantities() {
 		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
 
-		// Check for WP_Error
+		// Check for WP_Error.
 		if ( is_wp_error( $allow_decimal_quantities ) ) {
 			Logger::log( 'Error retrieving decimal_qty: ' . $allow_decimal_quantities->get_error_message() );
 
 			return false;
 		}
 
-		// make sure it's true, just in case there's a corrupt setting
+		// make sure it's true, just in case there's a corrupt setting.
 		return true === $allow_decimal_quantities;
 	}
 

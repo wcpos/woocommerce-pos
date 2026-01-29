@@ -1,4 +1,9 @@
 <?php
+/**
+ * Product_Helpers.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API\Traits;
 
@@ -10,7 +15,7 @@ trait Product_Helpers {
 	/**
 	 * Get custom barcode postmeta.
 	 *
-	 * @param WC_Product|WC_Product_Variation $object
+	 * @param WC_Product|WC_Product_Variation $object The product object.
 	 *
 	 * @return string
 	 */
@@ -35,14 +40,14 @@ trait Product_Helpers {
 	public function wcpos_get_barcode_field() {
 		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 
-		// Check for WP_Error
+		// Check for WP_Error.
 		if ( is_wp_error( $barcode_field ) ) {
 			Logger::log( 'Error retrieving barcode_field: ' . $barcode_field->get_error_message() );
 
 			return '';
 		}
 
-		// Check for non-string values
+		// Check for non-string values.
 		if ( ! \is_string( $barcode_field ) ) {
 			Logger::log( 'Unexpected data type for barcode_field. Expected string, got: ' . \gettype( $barcode_field ) );
 
@@ -60,14 +65,14 @@ trait Product_Helpers {
 	public function wcpos_pos_only_products_enabled() {
 		$pos_only_products_enabled = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
-		// Check for WP_Error
+		// Check for WP_Error.
 		if ( is_wp_error( $pos_only_products_enabled ) ) {
 			Logger::log( 'Error retrieving pos_only_products: ' . $pos_only_products_enabled->get_error_message() );
 
 			return false;
 		}
 
-		// make sure it's true, just in case there's a corrupt setting
+		// Make sure it's true, just in case there's a corrupt setting.
 		return true === $pos_only_products_enabled;
 	}
 }

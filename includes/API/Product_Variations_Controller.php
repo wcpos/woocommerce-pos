@@ -1,4 +1,9 @@
 <?php
+/**
+ * Product_Variations_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -71,6 +76,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		return $dispatch_result;
 	}
 
+	/**
+	 * Register routes.
+	 */
 	public function register_routes(): void {
 		parent::register_routes();
 
@@ -95,7 +103,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	public function get_item_schema() {
 		$schema = parent::get_item_schema();
 
-		// Add the 'barcode' property if 'properties' exists and is an array
+		// Add the 'barcode' property if 'properties' exists and is an array.
 		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
 			$schema['properties']['barcode'] = array(
 				'description' => __( 'Barcode', 'woocommerce-pos' ),
@@ -106,8 +114,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		}
 
 		// Check for 'stock_quantity' and allow decimal
-		// Note: 'number' is the valid JSON schema type for decimals (not 'float')
-		if ( $this->wcpos_allow_decimal_quantities()      &&
+		// Note: 'number' is the valid JSON schema type for decimals (not 'float').
+		if ( $this->wcpos_allow_decimal_quantities() &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
 			$schema['properties']['stock_quantity']['type'] = 'number';
@@ -123,21 +131,21 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	public function get_collection_params() {
 		$params = parent::get_collection_params();
 
-		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying
+		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying.
 		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
-		// Ensure 'orderby' is set and is an array before attempting to modify it
+		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Define new sorting options
+			// Define new sorting options.
 			$new_sort_options = array(
 				'sku',
 				'barcode',
 				'stock_quantity',
 				'stock_status',
 			);
-			// Merge new options, avoiding duplicates
+			// Merge new options, avoiding duplicates.
 			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], $new_sort_options ) );
 		}
 
@@ -156,18 +164,18 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	public function wcpos_variation_response( WP_REST_Response $response, WC_Data $variation, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Add the UUID to the product response
+		// Add the UUID to the product response.
 		$this->maybe_add_post_uuid( $variation );
 
-		// Add the barcode to the product response
-		$data['barcode'] = $this->wcpos_get_barcode( $variation );
+		// Add the barcode to the product response.
+		$data['barcode'] = $this->wcpos_get_barcode( $variation ); // @phpstan-ignore-line
 
-		// Check if the response has an image
+		// Check if the response has an image.
 		if ( isset( $data['image'] ) && ! empty( $data['image'] ) && isset( $data['image']['id'] ) ) {
 			// Replace the full size 'src' with the URL of the medium size image.
 			$medium_image_data = image_downsize( $data['image']['id'], 'medium' );
 
-			if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
+			if ( $medium_image_data ) {
 				$data['image']['src'] = $medium_image_data[0];
 			}
 		}
@@ -181,11 +189,11 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$data['parent_id'] = $variation->get_parent_id();
 		}
 		if ( ! isset( $data['name'] ) ) {
-			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : '';
+			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : ''; // @phpstan-ignore-line
 		}
 
-		// Make sure we parse the meta data before returning the response
-		$variation->save_meta_data(); // make sure the meta data is saved
+		// Make sure we parse the meta data before returning the response.
+		$variation->save_meta_data(); // make sure the meta data is saved.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $variation );
 
 		$response->set_data( $data );
@@ -248,24 +256,12 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$meta_fields[] = $barcode_field;
 		}
 
-		$barcode_field = $this->wcpos_get_barcode_field();
-		if ( '_sku' !== $barcode_field ) {
-			$fields_to_search[] = $barcode_field;
-		}
-
 		$search_conditions = array();
 
 		foreach ( $search_terms as $term ) {
 			$term = $n . $wpdb->esc_like( $term ) . $n;
 
-			// Search in post fields
-			foreach ( $post_fields as $field ) {
-				if ( ! empty( $field ) ) {
-					$search_conditions[] = $wpdb->prepare( "($wpdb->posts.$field LIKE %s)", $term );
-				}
-			}
-
-			// Search in meta fields
+			// Search in meta fields.
 			foreach ( $meta_fields as $field ) {
 				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
 			}
@@ -332,7 +328,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_posts_search' ), 10, 2 );
 		}
 
-		// if POS only products are enabled, exclude online-only products
+		// if POS only products are enabled, exclude online-only products.
 		if ( $this->wcpos_pos_only_products_enabled() ) {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_variation_exclude_online_only' ), 10, 2 );
 		}
@@ -361,11 +357,11 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$online_only       = $settings_instance->get_online_only_variations_visibility_settings();
 		$online_only_ids   = isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) ? $online_only['ids'] : array();
 
-		// Exclude online-only product IDs if POS only products are enabled
+		// Exclude online-only product IDs if POS only products are enabled.
 		if ( ! empty( $online_only_ids ) ) {
 			$online_only_ids = array_map( 'intval', (array) $online_only_ids );
 			$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
 		return $where;
@@ -382,18 +378,18 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 	public function wcpos_posts_where_product_variation_include_exclude( string $where, WP_Query $query ) {
 		global $wpdb;
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
 		return $where;
@@ -432,24 +428,24 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			if ( isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) && ! empty( $online_only['ids'] ) ) {
 				$online_only_ids = array_map( 'intval', (array) $online_only['ids'] );
 				$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids );
+				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- format string is safe.
 			}
 		}
 
 		// Add modified_after condition if provided.
 		if ( $modified_after ) {
-			$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$modified_after_date = wp_date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
 			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
 		}
 
 		// Dynamically add the post_parent clause if a parent ID is provided.
 		if ( $parent_id ) {
-			$sql = $wpdb->prepare( $sql . " AND {$wpdb->posts}.post_parent = %d", $parent_id );
+			$sql = $wpdb->prepare( $sql . " AND {$wpdb->posts}.post_parent = %d", $parent_id ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is built with prepare() above.
 		}
 
 		try {
 			// Execute the query.
-			$results           = $wpdb->get_results( $sql, ARRAY_A );
+			$results           = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built with prepare() above.
 			$formatted_results = $this->wcpos_format_all_posts_response( $results );
 
 			// Get the total number of orders for the given criteria.
@@ -461,7 +457,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 
@@ -498,7 +494,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$args          = parent::prepare_objects_query( $request );
 		$barcode_field = $this->wcpos_get_barcode_field();
 
-		// Add custom 'orderby' options
+		// Add custom 'orderby' options.
 		if ( isset( $request['orderby'] ) ) {
 			switch ( $request['orderby'] ) {
 				case 'sku':

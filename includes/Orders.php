@@ -6,12 +6,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
 use WC_Order;
+use WC_Order_Item;
+use WC_Order_Item_Product;
+use WC_Order_Item_Shipping;
 use WC_Product;
 use WC_Product_Simple;
 
@@ -38,7 +42,9 @@ class Orders {
 	}
 
 	/**
-	 * @param array $order_statuses
+	 * Add custom POS order statuses.
+	 *
+	 * @param array $order_statuses Existing order statuses.
 	 *
 	 * @return array
 	 */
@@ -54,14 +60,14 @@ class Orders {
 	 *
 	 * NOTE: $needs_payment is meant to be a boolean, but I have seen it as null.
 	 *
-	 * @param bool              $needs_payment
-	 * @param WC_Abstract_Order $order
-	 * @param array             $valid_order_statuses
+	 * @param bool              $needs_payment        Whether payment is needed.
+	 * @param WC_Abstract_Order $order                The order object.
+	 * @param array             $valid_order_statuses Valid order statuses for payment.
 	 *
 	 * @return bool
 	 */
 	public function order_needs_payment( $needs_payment, WC_Abstract_Order $order, array $valid_order_statuses ) {
-		// If the order total is zero and status is a POS status, then allow payment to be taken, ie: Gift Card
+		// If the order total is zero and status is a POS status, then allow payment to be taken, ie: Gift Card.
 		if ( 0 == $order->get_total() && \in_array( $order->get_status(), array( 'pos-open', 'pos-partial' ), true ) ) {
 			return true;
 		}
@@ -72,8 +78,8 @@ class Orders {
 	/**
 	 * Note: the wc- prefix is not used here because it is added by WooCommerce.
 	 *
-	 * @param array             $order_statuses
-	 * @param WC_Abstract_Order $order
+	 * @param array             $order_statuses Valid order statuses.
+	 * @param WC_Abstract_Order $order          The order object.
 	 *
 	 * @return array
 	 */
@@ -85,8 +91,10 @@ class Orders {
 	}
 
 	/**
-	 * @param array             $order_statuses
-	 * @param WC_Abstract_Order $order
+	 * Valid order statuses for payment complete.
+	 *
+	 * @param array             $order_statuses Valid order statuses.
+	 * @param WC_Abstract_Order $order          The order object.
 	 *
 	 * @return array
 	 */
@@ -98,9 +106,11 @@ class Orders {
 	}
 
 	/**
-	 * @param string            $status
-	 * @param int               $id
-	 * @param WC_Abstract_Order $order
+	 * Payment complete order status.
+	 *
+	 * @param string            $status Order status.
+	 * @param int               $id     Order ID.
+	 * @param WC_Abstract_Order $order  The order object.
 	 *
 	 * @return string
 	 */
@@ -115,7 +125,7 @@ class Orders {
 	/**
 	 * Hides uuid from appearing on Order Edit page.
 	 *
-	 * @param array $meta_keys
+	 * @param array $meta_keys Hidden meta keys.
 	 *
 	 * @return array
 	 */
@@ -126,8 +136,8 @@ class Orders {
 	/**
 	 * Filter the product object for an order item.
 	 *
-	 * @param bool|WC_Product       $product The product object or false if not found
-	 * @param WC_Order_Item_Product $item    The order item object
+	 * @param bool|WC_Product       $product The product object or false if not found.
+	 * @param WC_Order_Item_Product $item    The order item object.
 	 *
 	 * @return bool|WC_Product
 	 */
@@ -136,11 +146,12 @@ class Orders {
 			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
 			$product = new WC_Product_Simple();
 
-			// set name & sku
+			// set name & sku.
 			$product->set_name( $item->get_name() );
-			$product->set_sku( $item->get_meta( '_sku', true ) ?: '' );
+			$sku = $item->get_meta( '_sku', true );
+			$product->set_sku( $sku ? $sku : '' );
 
-			// set price and regular_price
+			// set price and regular_price.
 			$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
 			$pos_data      = json_decode( $pos_data_json, true );
 
@@ -164,7 +175,7 @@ class Orders {
 	/**
 	 * Get tax location for this order.
 	 *
-	 * @param array             $args  array Override the location.
+	 * @param array             $args  Override the location.
 	 * @param WC_Abstract_Order $order The order object.
 	 *
 	 * @return array
@@ -202,6 +213,8 @@ class Orders {
 	 * Calculate taxes for an order item.
 	 *
 	 * @param WC_Order_Item|WC_Order_Item_Shipping $item Order item object.
+	 *
+	 * @return void
 	 */
 	public function order_item_after_calculate_taxes( $item ): void {
 		$meta_data = $item->get_meta_data();
@@ -227,7 +240,7 @@ class Orders {
 	 * Register the POS order statuses.
 	 */
 	private function register_order_status(): void {
-		// Order status for open orders
+		// Order status for open orders.
 		register_post_status(
 			'wc-pos-open',
 			array(
@@ -236,7 +249,7 @@ class Orders {
 				'exclude_from_search'       => false,
 				'show_in_admin_all_list'    => true,
 				'show_in_admin_status_list' => true,
-				// translators: %s is the number of orders with POS - Open status
+				// translators: %s is the number of orders with POS - Open status.
 				'label_count'               => _n_noop(
 					'POS - Open <span class="count">(%s)</span>',
 					'POS - Open <span class="count">(%s)</span>',
@@ -245,7 +258,7 @@ class Orders {
 			)
 		);
 
-		// Order status for partial payment orders
+		// Order status for partial payment orders.
 		register_post_status(
 			'wc-pos-partial',
 			array(
@@ -254,7 +267,7 @@ class Orders {
 				'exclude_from_search'       => false,
 				'show_in_admin_all_list'    => true,
 				'show_in_admin_status_list' => true,
-				// translators: %s is the number of orders with POS - Partial Payment status
+				// translators: %s is the number of orders with POS - Partial Payment status.
 				'label_count'               => _n_noop(
 					'POS - Partial Payment <span class="count">(%s)</span>',
 					'POS - Partial Payment <span class="count">(%s)</span>',

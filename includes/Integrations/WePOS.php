@@ -1,13 +1,18 @@
 <?php
+/**
+ * WePOS.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\Integrations;
 
 use const WCPOS\WooCommercePOS\PLUGIN_FILE;
 
 /**
- * wePOS Integration.
+ * WePOS Integration.
  *
- * wePOS alters the WC REST API response for variable products, it includes the full list of variations
+ * WePOS alters the WC REST API response for variable products, it includes the full list of variations
  * instead of just the variation IDs. This breaks variations for WCPOS (and anyone else).
  */
 class WePOS {
@@ -22,7 +27,7 @@ class WePOS {
 	 * Check for wePOS plugin conflict.
 	 */
 	public function check_conflict(): void {
-		// Check if wePOS is active
+		// Check if wePOS is active.
 		if ( is_plugin_active( 'wepos/wepos.php' ) ) {
 			deactivate_plugins( PLUGIN_FILE );
 			add_action( 'admin_notices', array( $this, 'render_conflict_notice' ) );
