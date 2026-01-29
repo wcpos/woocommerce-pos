@@ -938,6 +938,29 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Modify ORDER BY clause for legacy (non-HPOS) order status sorting.
+	 *
+	 * @param string   $orderby The ORDER BY clause.
+	 * @param WP_Query $query   The WP_Query instance.
+	 *
+	 * @return string Modified ORDER BY clause.
+	 */
+	public function wcpos_legacy_order_status_orderby( string $orderby, \WP_Query $query ): string {
+		global $wpdb;
+
+		// Only modify if this is an order query
+		if ( isset( $query->query_vars['post_type'] ) && 'shop_order' === $query->query_vars['post_type'] ) {
+			$order = isset( $this->wcpos_request ) ? strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' ) : 'ASC';
+			$orderby = "{$wpdb->posts}.post_status {$order}";
+
+			// Remove filter after use
+			remove_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10 );
+		}
+
+		return $orderby;
+	}
+
+	/**
 	 * Prepare objects query.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -954,8 +977,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		if ( isset( $request['orderby'] ) && ! $this->hpos_enabled ) {
 			switch ( $request['orderby'] ) {
 				case 'status':
-					// NOTE: 'post_status' is not a valid orderby option for WC_Order_Query.
-					$args['orderby'] = 'post_status';
+					// Use posts_orderby filter since post_status isn't a valid WP_Query orderby
+					add_filter( 'posts_orderby', array( $this, 'wcpos_legacy_order_status_orderby' ), 10, 2 );
 
 					break;
 				case 'customer_id':

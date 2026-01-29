@@ -1,0 +1,54 @@
+# Codecov configuration for WCPOS
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "50...100"
+  
+  status:
+    project:
+      default:
+        # Don't fail the build if coverage drops
+        informational: true
+        # Target coverage threshold (start low, increase over time)
+        target: 50%
+        # Allow coverage to drop by up to 5%
+        threshold: 5%
+    patch:
+      default:
+        # Don't require coverage on new code initially
+        informational: true
+        target: 50%
+
+# Ignore certain paths from coverage
+ignore:
+  - "tests/**/*"
+  - "vendor/**/*"
+  - "vendor_prefixed/**/*"
+  - "includes/updates/**/*"
+  - "packages/**/*"
+
+# Comment configuration for PRs
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+
+# Flags for different test types
+flags:
+  unittests:
+    paths:
+      - includes/
+    carryforward: true
+
+# Parsers
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no

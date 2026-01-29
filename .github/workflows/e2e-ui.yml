@@ -1,0 +1,107 @@
+name: E2E UI Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "includes/Admin/**"
+      - "templates/**"
+      - "tests/e2e/ui/**"
+      - ".github/workflows/e2e-ui.yml"
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-ui:
+    name: E2E UI Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          tools: composer
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10.8.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: |
+          pnpm install
+          composer prefix-dependencies
+          composer install --prefer-dist --no-progress
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: tests/e2e/ui
+
+      - name: Start WordPress Environment
+        run: pnpm run wp-env start
+
+      - name: Wait for WordPress to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8888/wp-json/ > /dev/null; then
+              echo "WordPress is ready"
+              break
+            fi
+            echo "Waiting for WordPress... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run Playwright tests
+        run: npx playwright test --config=tests/e2e/ui/playwright.config.ts
+        env:
+          WP_BASE_URL: http://localhost:8888
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: tests/e2e/ui/playwright-report/
+          retention-days: 7
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: tests/e2e/ui/playwright-results.xml
+          retention-days: 7
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: tests/e2e/ui/playwright-results.xml
+          check_name: E2E UI Test Results

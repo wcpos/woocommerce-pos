@@ -106,10 +106,11 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		}
 
 		// Check for 'stock_quantity' and allow decimal
+		// Note: 'number' is the valid JSON schema type for decimals (not 'float')
 		if ( $this->wcpos_allow_decimal_quantities()      &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
-			$schema['properties']['stock_quantity']['type'] = 'float';
+			$schema['properties']['stock_quantity']['type'] = 'number';
 		}
 
 		return $schema;

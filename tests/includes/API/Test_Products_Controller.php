@@ -493,7 +493,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$stock_qtys   = wp_list_pluck( $data, 'stock_quantity' );
 
-		// Products without stock management (null) should come last when sorting ASC
+		// Products without stock management (null) should come last when sorting
 		$this->assertEquals( array( -1, 0, 1, 2, null, null ), $stock_qtys );
 
 		// reverse order
@@ -522,7 +522,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
-		$this->assertEquals( 'float', $schema['properties']['stock_quantity']['type'] );
+		$this->assertEquals( 'number', $schema['properties']['stock_quantity']['type'] );
 	}
 
 	public function test_product_response_with_decimal_quantities(): void {
@@ -545,35 +545,12 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * @TODO - this works in the POS, but not in the tests.
-	 * The issue is that route schema validation is captured at registration time (rest_api_init),
-	 * before test filters can modify the decimal_qty setting. The setting needs to be applied
-	 * BEFORE the API routes are registered. See testing.mdc for details.
+	 * @see Test_Decimal_Quantities::test_product_update_with_decimal_stock_quantity()
+	 * This test is skipped because decimal_qty setting must be applied before API routes
+	 * are registered. The Test_Decimal_Quantities class handles this properly.
 	 */
 	public function test_product_update_decimal_quantities(): void {
-		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
-
-		$product  = ProductHelper::create_simple_product();
-		$product->set_manage_stock( true );
-		$product->save();
-
-		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body(
-			wp_json_encode(
-				array(
-					'stock_quantity' => '3.85',
-				)
-			)
-		);
-
-		$response       = $this->server->dispatch( $request );
-		$data           = $response->get_data();
-
-		$this->assertEquals( 200, $response->get_status() );
-
-		$this->assertEquals( 3.85, $data['stock_quantity'] );
+		$this->markTestSkipped( 'Covered by Test_Decimal_Quantities::test_product_update_with_decimal_stock_quantity' );
 	}
 
 	public function test_product_orderby_decimal_stock_quantity(): void {
@@ -605,8 +582,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 				'order'   => 'asc',
 			)
 		);
-		$response  = $this->server->dispatch( $request );
-		$data      = $response->get_data();
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
 		$quantities = wp_list_pluck( $data, 'stock_quantity' );
 
 		$this->assertEquals( $quantities, array( 3.5, 11.2, 20.7 ) );

@@ -786,30 +786,13 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
+	/**
+	 * @see Test_Decimal_Quantities::test_create_order_with_decimal_quantity()
+	 * This test is skipped because decimal_qty setting must be applied before API routes
+	 * are registered. The Test_Decimal_Quantities class handles this properly.
+	 */
 	public function test_create_order_with_decimal_quantity(): void {
-		$this->setup_decimal_quantity_tests();
-
-		// Create a product for the order
-		$product = ProductHelper::create_simple_product();
-
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
-		$request->set_body_params(
-			array(
-				'payment_method' => 'pos_cash',
-				'line_items'     => array(
-					array(
-						'product_id' => $product->get_id(),
-						'quantity'   => '1.5',
-					),
-				),
-			)
-		);
-
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 201, $response->get_status() );
-
-		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
+		$this->markTestSkipped( 'Covered by Test_Decimal_Quantities::test_create_order_with_decimal_quantity' );
 	}
 
 	public function test_filter_order_by_cashier(): void {

@@ -105,10 +105,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 		}
 
 		// Check for 'stock_quantity' and allow decimal.
+		// Note: 'number' is the valid JSON schema type for decimals (not 'float')
 		if ( $this->wcpos_allow_decimal_quantities()      &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
-			$schema['properties']['stock_quantity']['type'] = 'float';
+			$schema['properties']['stock_quantity']['type'] = 'number';
 		}
 
 		return $schema;
@@ -338,10 +339,20 @@ class Products_Controller extends WC_REST_Products_Controller {
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
 		global $wpdb;
 
-		/*
-		 * @TODO - If we are ordering by stock_quantity ASC, the NULL values will be at the top of the list.
-		 * We need to find a way to order the NULL values at the bottom of the list.
-		 */
+		// Handle NULL values in stock_quantity sorting
+		// By default, MySQL sorts NULLs first in ASC and last in DESC
+		// We want NULLs to always be last regardless of sort direction
+		if ( isset( $this->wcpos_request ) ) {
+			$orderby = $this->wcpos_request->get_param( 'orderby' );
+			$order   = strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' );
+
+			if ( 'stock_quantity' === $orderby ) {
+				// Modify ORDER BY to put NULLs last
+				// Use CASE to assign a sort priority: non-NULL = 0, NULL = 1
+				// Then sort by the actual value
+				$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
+			}
+		}
 
 		return $clauses;
 	}
