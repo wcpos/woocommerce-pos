@@ -60,6 +60,9 @@ jobs:
           composer prefix-dependencies
           composer install --prefer-dist --no-progress
 
+      - name: Disable development mode for CI
+        run: rm -f .env
+
       - name: Build JS assets
         run: |
           # Build settings page React app

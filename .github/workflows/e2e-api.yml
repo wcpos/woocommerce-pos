@@ -128,14 +128,34 @@ jobs:
 
       - name: Generate JWT token for API tests
         run: |
-          # Generate JWT tokens using PHP file (avoids shell escaping issues)
-          TOKENS=$(pnpm run wp-env run cli -- wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/generate-jwt.php)
-          # Extract tokens from JSON output (skip pnpm output lines)
-          TOKENS_JSON=$(echo "$TOKENS" | grep -o '{.*}')
-          JWT_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.access_token')
-          REFRESH_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.refresh_token')
+          # Generate JWT tokens using PHP file and write to a shared file
+          TOKEN_FILE="tests/e2e/api/jwt-tokens.json"
+          pnpm run wp-env run cli -- bash -c "wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/generate-jwt.php > wp-content/plugins/woocommerce-pos/${TOKEN_FILE}"
+
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "Token file not created: $TOKEN_FILE"
+            exit 1
+          fi
+
+          if jq -e '.error' "$TOKEN_FILE" >/dev/null; then
+            echo "Token generation error:"
+            cat "$TOKEN_FILE"
+            exit 1
+          fi
+
+          JWT_TOKEN=$(jq -r '.access_token // empty' "$TOKEN_FILE")
+          REFRESH_TOKEN=$(jq -r '.refresh_token // empty' "$TOKEN_FILE")
+
+          if [ -z "$JWT_TOKEN" ] || [ -z "$REFRESH_TOKEN" ]; then
+            echo "Failed to parse tokens from $TOKEN_FILE"
+            cat "$TOKEN_FILE"
+            exit 1
+          fi
+
           echo "JWT_TOKEN=$JWT_TOKEN" >> $GITHUB_ENV
           echo "REFRESH_TOKEN=$REFRESH_TOKEN" >> $GITHUB_ENV
+
+          rm -f "$TOKEN_FILE"
 
       - name: Run Newman API tests
         run: |

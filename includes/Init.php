@@ -38,9 +38,13 @@ class Init {
 		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
 
 		/*
-		 * Add JWT authentication filter EARLY - before rest_api_init.
-		 * This is critical because determine_current_user is called before rest_api_init,
-		 * so the API class filters would be too late to handle param-based auth.
+		 * Add JWT authentication filter.
+		 *
+		 * Hook order: plugins_loaded -> init (determine_current_user) -> rest_api_init
+		 *
+		 * This filter runs at priority 20 (after WordPress core's cookie auth at priority 10).
+		 * It must be registered here (during plugins_loaded) because determine_current_user
+		 * fires during 'init', which is BEFORE rest_api_init where our API class loads.
 		 */
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
 	}
