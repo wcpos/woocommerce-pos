@@ -157,6 +157,42 @@ jobs:
 
           rm -f "$TOKEN_FILE"
 
+      - name: Debug API authentication
+        run: |
+          echo "=== Testing auth/test endpoint (permission_callback: __return_true) ==="
+          curl -s -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
+            "http://localhost:8888/?rest_route=/wcpos/v1/auth/test" | jq .
+
+          echo ""
+          echo "=== Testing products endpoint (requires authentication) ==="
+          curl -s -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
+            "http://localhost:8888/?rest_route=/wcpos/v1/products" | jq .
+
+          echo ""
+          echo "=== Testing products with param auth ==="
+          curl -s -H "X-WCPOS: 1" \
+            "http://localhost:8888/?rest_route=/wcpos/v1/products&authorization=Bearer%20$JWT_TOKEN" | jq .
+
+          echo ""
+          echo "=== Check admin user capabilities ==="
+          pnpm run wp-env run cli -- wp user list-caps 1 2>/dev/null | grep -i "pos" || echo "No POS capabilities found!"
+
+          echo ""
+          echo "=== Validate JWT token via WP-CLI ==="
+          pnpm run wp-env run cli -- wp eval "
+            \$auth = WCPOS\WooCommercePOS\Services\Auth::instance();
+            \$result = \$auth->validate_token('$JWT_TOKEN');
+            if (is_wp_error(\$result)) {
+              echo 'Token validation FAILED: ' . \$result->get_error_message();
+            } else {
+              echo 'Token validation OK - User ID: ' . \$result->data->user->id;
+            }
+          " 2>/dev/null
+
+          echo ""
+          echo "=== Check blog URL vs token issuer ==="
+          pnpm run wp-env run cli -- wp eval "echo get_bloginfo('url');" 2>/dev/null
+
       - name: Run Newman API tests
         run: |
           pnpm exec newman run tests/e2e/api/wcpos-api.postman_collection.json \

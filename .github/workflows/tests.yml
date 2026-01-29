@@ -119,7 +119,7 @@ jobs:
           echo "Latest WordPress: $WP_VERSION"
           
           # Get latest stable WooCommerce version + URL
-          PLUGIN_INFO=$(curl -s https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce)
+          PLUGIN_INFO=$(curl -s "https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce&request[fields][versions]=1")
           STABLE_VERSIONS=$(echo "$PLUGIN_INFO" | jq -r '.versions | keys[] | select(. != "trunk") | select(test("^[0-9]+(\\.[0-9]+)*$"))')
           WC_VERSION=""
           WC_URL=""
