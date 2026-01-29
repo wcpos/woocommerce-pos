@@ -118,7 +118,11 @@ jobs:
           echo "Latest WordPress: $WP_VERSION"
           
           # Get latest WooCommerce version
-          WC_VERSION=$(curl -s https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce | jq -r '.version')
+          PLUGIN_INFO=$(curl -s https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce)
+          WC_VERSION=$(echo "$PLUGIN_INFO" | jq -r '.versions | keys[] | select(. != "trunk") | select(test("^(?:[0-9]+\\.)*[0-9]+$"))' | sort -V | tail -n 1)
+          if [ -z "$WC_VERSION" ] || [ "$WC_VERSION" = "null" ]; then
+            WC_VERSION=$(echo "$PLUGIN_INFO" | jq -r '.version')
+          fi
           echo "wc=$WC_VERSION" >> $GITHUB_OUTPUT
           echo "Latest WooCommerce: $WC_VERSION"
 
@@ -180,7 +184,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "https://downloads.wordpress.org/plugin/woocommerce.zip",
+              "https://downloads.wordpress.org/plugin/woocommerce.${{ steps.versions.outputs.wc }}.zip",
               "."
             ],
             "config": {
@@ -427,7 +431,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "https://downloads.wordpress.org/plugin/woocommerce.zip",
+              "https://downloads.wordpress.org/plugin/woocommerce.${{ needs.smoke-test.outputs.wc_version }}.zip",
               "."
             ],
             "config": {
