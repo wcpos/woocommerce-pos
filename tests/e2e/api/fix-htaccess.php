@@ -1,9 +1,11 @@
 <?php
 /**
- * Add SetEnvIf Authorization rule to .htaccess.
+ * Write .htaccess with Authorization passthrough and WordPress rewrite rules.
  *
- * Apache strips the Authorization header by default. This rule passes it
- * through to PHP as $_SERVER['HTTP_AUTHORIZATION'].
+ * This script handles two issues in CI:
+ * 1. Apache strips the Authorization header — SetEnvIf passes it to PHP.
+ * 2. `wp rewrite flush --hard` may fail to write .htaccess in wp-env Docker,
+ *    so we ensure WordPress rewrite rules are present for pretty permalinks.
  *
  * We use a PHP file instead of shell commands to avoid $1 backreference
  * being eaten by multiple layers of shell escaping (YAML → wp-env → bash).
@@ -12,20 +14,24 @@
  */
 
 $htaccess_path = ABSPATH . '.htaccess';
-$htaccess      = file_exists( $htaccess_path ) ? file_get_contents( $htaccess_path ) : '';
-$rule          = 'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1';
 
-if ( strpos( $htaccess, 'SetEnvIf Authorization' ) !== false ) {
-	// Remove any existing (possibly broken) SetEnvIf Authorization line
-	$htaccess = preg_replace( '/^SetEnvIf Authorization.*$/m', '', $htaccess );
-	$htaccess = preg_replace( '/^\s*#\s*Pass Authorization header.*$/m', '', $htaccess );
-	$htaccess = ltrim( $htaccess );
-}
+$htaccess = <<<'HTACCESS'
+# Pass Authorization header to PHP
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 
-// Prepend the rule
-$htaccess = "# Pass Authorization header to PHP\n" . $rule . "\n\n" . $htaccess;
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
+HTACCESS;
 
-file_put_contents( $htaccess_path, $htaccess );
+file_put_contents( $htaccess_path, $htaccess . "\n" );
 
-echo "Updated .htaccess with SetEnvIf Authorization rule\n";
+echo "Written .htaccess:\n";
 echo file_get_contents( $htaccess_path );

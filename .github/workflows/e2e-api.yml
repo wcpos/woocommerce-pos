@@ -141,51 +141,21 @@ jobs:
 
           rm -f "$TOKEN_FILE"
 
-      - name: Debug API authentication
+      - name: Verify API setup
         run: |
-          echo "=== Testing auth/test endpoint (permission_callback: __return_true) ==="
-          curl -s -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
-            "http://localhost:8888/?rest_route=/wcpos/v1/auth/test" | jq .
-
-          echo ""
-          echo "=== Testing products endpoint (requires authentication) ==="
-          curl -s -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
-            "http://localhost:8888/?rest_route=/wcpos/v1/products" | jq .
-
-          echo ""
-          echo "=== Testing products with param auth ==="
-          curl -s -H "X-WCPOS: 1" \
-            "http://localhost:8888/?rest_route=/wcpos/v1/products&authorization=Bearer%20$JWT_TOKEN" | jq .
-
-          echo ""
-          echo "=== Check .htaccess content (after rewrite flush) ==="
+          echo "=== .htaccess content ==="
           pnpm run wp-env run wordpress -- cat /var/www/html/.htaccess
 
           echo ""
-          echo "=== Dump \$_SERVER auth-related keys from actual HTTP request ==="
-          pnpm run wp-env run wordpress -- cp wp-content/plugins/woocommerce-pos/tests/e2e/api/debug-headers.php /var/www/html/debug-headers.php
-          curl -s -H "Authorization: Bearer TESTVALUE123" -H "X-WCPOS: 1" "http://localhost:8888/debug-headers.php" | jq .
-          pnpm run wp-env run wordpress -- rm -f /var/www/html/debug-headers.php
+          echo "=== Verify pretty permalinks ==="
+          curl -s -o /dev/null -w "HTTP %{http_code}" -H "X-WCPOS: 1" http://localhost:8888/wp-json/wcpos/v1/auth/test
+          echo ""
 
           echo ""
-          echo "=== Check admin user capabilities ==="
-          pnpm run wp-env run cli -- wp user list-caps 1 2>/dev/null | grep -i "pos" || echo "No POS capabilities found!"
-
+          echo "=== Verify query string auth ==="
+          curl -s -o /dev/null -w "HTTP %{http_code}" -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
+            "http://localhost:8888/?rest_route=/wcpos/v1/products"
           echo ""
-          echo "=== Validate JWT token via WP-CLI ==="
-          pnpm run wp-env run cli -- wp eval "
-            \$auth = WCPOS\WooCommercePOS\Services\Auth::instance();
-            \$result = \$auth->validate_token('$JWT_TOKEN');
-            if (is_wp_error(\$result)) {
-              echo 'Token validation FAILED: ' . \$result->get_error_message();
-            } else {
-              echo 'Token validation OK - User ID: ' . \$result->data->user->id;
-            }
-          " 2>/dev/null
-
-          echo ""
-          echo "=== Check blog URL vs token issuer ==="
-          pnpm run wp-env run cli -- wp eval "echo get_bloginfo('url');" 2>/dev/null
 
       - name: Run Newman API tests
         run: |
