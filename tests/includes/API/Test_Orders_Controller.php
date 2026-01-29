@@ -536,6 +536,102 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that manual email endpoint works even when automated POS emails are disabled.
+	 *
+	 * The manual email endpoint (/orders/{id}/email) is separate from automated emails
+	 * and should work regardless of the checkout email settings.
+	 */
+	public function test_manual_email_works_when_automated_emails_disabled(): void {
+		// Disable automated POS emails
+		$settings = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['admin_emails']    = false;
+		$settings['customer_emails'] = false;
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$email      = 'manual-test@example.com';
+		$email_sent = false;
+
+		$email_sent_callback = function () use ( &$email_sent ): void {
+			$email_sent = true;
+		};
+
+		add_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
+		$request->set_body_params(
+			array(
+				'email' => $email,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( $email_sent, 'Manual email should be sent even when automated emails are disabled' );
+
+		remove_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+	}
+
+	/**
+	 * Test that manual email endpoint handles invalid email address.
+	 *
+	 * Note: Currently the endpoint accepts any string as email and relies on WooCommerce
+	 * to handle/fail the actual send. This test documents current behavior.
+	 * TODO: Consider adding email format validation to the endpoint.
+	 */
+	public function test_manual_email_accepts_string_email(): void {
+		$order      = OrderHelper::create_order();
+		$email_sent = false;
+
+		$email_sent_callback = function () use ( &$email_sent ): void {
+			$email_sent = true;
+		};
+
+		add_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
+		$request->set_body_params(
+			array(
+				'email' => 'invalid-email-address',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		// Currently accepts any string - WooCommerce handles validation during send
+		$this->assertEquals( 200, $response->get_status(), 'Endpoint accepts any string as email' );
+
+		remove_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+	}
+
+	/**
+	 * Test that manual email endpoint requires an email address.
+	 */
+	public function test_manual_email_requires_email_param(): void {
+		$order   = OrderHelper::create_order();
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
+		// Don't set email param
+		$response = $this->server->dispatch( $request );
+
+		// Should return an error when email is missing
+		$this->assertNotEquals( 200, $response->get_status(), 'Request without email should fail' );
+	}
+
+	/**
+	 * Test that manual email endpoint returns 404 for non-existent order.
+	 */
+	public function test_manual_email_returns_404_for_missing_order(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/999999/email' );
+		$request->set_body_params(
+			array(
+				'email' => 'test@example.com',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 404, $response->get_status(), 'Non-existent order should return 404' );
+	}
+
+	/**
 	 * Saving variation attributes.
 	 *
 	 * GOTCHA: saving a variation attributes will cause duplication, eg:
