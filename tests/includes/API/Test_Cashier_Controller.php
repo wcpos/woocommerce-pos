@@ -7,8 +7,6 @@
  * - Permission checks (authentication, own data access)
  * - Cashier data retrieval
  * - Store access endpoints
- *
- * @package WCPOS\WooCommercePOS\Tests\API
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
@@ -307,6 +305,7 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 			'woocommerce_pos_rest_prepare_cashier',
 			function ( $data, $user, $request ) {
 				$data['custom_field'] = 'test_value';
+
 				return $data;
 			},
 			10,

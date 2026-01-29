@@ -3,11 +3,11 @@
  * Email Helper for testing email functionality.
  *
  * Provides utilities to capture, inspect, and assert email sending behavior.
- *
- * @package WCPOS\WooCommercePOS\Tests\Helpers
  */
 
 namespace WCPOS\WooCommercePOS\Tests\Helpers;
+
+use ReflectionClass;
 
 /**
  * EmailHelper class.
@@ -62,10 +62,10 @@ class EmailHelper {
 	 */
 	public static function capture_email( array $args ): array {
 		self::$captured_emails[] = array(
-			'to'          => $args['to'] ?? '',
-			'subject'     => $args['subject'] ?? '',
-			'message'     => $args['message'] ?? '',
-			'headers'     => $args['headers'] ?? '',
+			'to'          => $args['to']          ?? '',
+			'subject'     => $args['subject']     ?? '',
+			'message'     => $args['message']     ?? '',
+			'headers'     => $args['headers']     ?? '',
 			'attachments' => $args['attachments'] ?? array(),
 			'timestamp'   => time(),
 			'source'      => 'wp_mail',
@@ -83,10 +83,10 @@ class EmailHelper {
 	 */
 	public static function on_email_sent( $return, $email_id, $email ): void {
 		// Find the last captured email and add WC email info
-		$count = count( self::$captured_emails );
+		$count = \count( self::$captured_emails );
 		if ( $count > 0 ) {
 			self::$captured_emails[ $count - 1 ]['wc_email_id']   = $email_id;
-			self::$captured_emails[ $count - 1 ]['wc_email_type'] = get_class( $email );
+			self::$captured_emails[ $count - 1 ]['wc_email_type'] = \get_class( $email );
 			self::$captured_emails[ $count - 1 ]['wc_success']    = $return;
 		}
 	}
@@ -103,10 +103,11 @@ class EmailHelper {
 	/**
 	 * Get the last captured email.
 	 *
-	 * @return array|null The last captured email or null if none.
+	 * @return null|array The last captured email or null if none.
 	 */
 	public static function get_last_email(): ?array {
-		$count = count( self::$captured_emails );
+		$count = \count( self::$captured_emails );
+
 		return $count > 0 ? self::$captured_emails[ $count - 1 ] : null;
 	}
 
@@ -116,7 +117,7 @@ class EmailHelper {
 	 * @return int Number of captured emails.
 	 */
 	public static function get_email_count(): int {
-		return count( self::$captured_emails );
+		return \count( self::$captured_emails );
 	}
 
 	/**
@@ -132,7 +133,7 @@ class EmailHelper {
 	 * @return bool True if at least one email was captured.
 	 */
 	public static function has_emails(): bool {
-		return count( self::$captured_emails ) > 0;
+		return \count( self::$captured_emails ) > 0;
 	}
 
 	/**
@@ -144,14 +145,15 @@ class EmailHelper {
 	 */
 	public static function email_sent_to( string $to ): bool {
 		foreach ( self::$captured_emails as $email ) {
-			if ( is_array( $email['to'] ) ) {
-				if ( in_array( $to, $email['to'], true ) ) {
+			if ( \is_array( $email['to'] ) ) {
+				if ( \in_array( $to, $email['to'], true ) ) {
 					return true;
 				}
 			} elseif ( $email['to'] === $to ) {
 				return true;
 			}
 		}
+
 		return false;
 	}
 
@@ -165,14 +167,15 @@ class EmailHelper {
 	public static function get_emails_to( string $to ): array {
 		$emails = array();
 		foreach ( self::$captured_emails as $email ) {
-			if ( is_array( $email['to'] ) ) {
-				if ( in_array( $to, $email['to'], true ) ) {
+			if ( \is_array( $email['to'] ) ) {
+				if ( \in_array( $to, $email['to'], true ) ) {
 					$emails[] = $email;
 				}
 			} elseif ( $email['to'] === $to ) {
 				$emails[] = $email;
 			}
 		}
+
 		return $emails;
 	}
 
@@ -190,6 +193,7 @@ class EmailHelper {
 				$emails[] = $email;
 			}
 		}
+
 		return $emails;
 	}
 
@@ -201,7 +205,7 @@ class EmailHelper {
 	 * @return bool True if the email type was sent.
 	 */
 	public static function wc_email_sent( string $email_id ): bool {
-		return count( self::get_emails_by_wc_id( $email_id ) ) > 0;
+		return \count( self::get_emails_by_wc_id( $email_id ) ) > 0;
 	}
 
 	/**
@@ -214,10 +218,11 @@ class EmailHelper {
 	public static function get_emails_by_subject( string $subject_contains ): array {
 		$emails = array();
 		foreach ( self::$captured_emails as $email ) {
-			if ( strpos( $email['subject'], $subject_contains ) !== false ) {
+			if ( false !== strpos( $email['subject'], $subject_contains ) ) {
 				$emails[] = $email;
 			}
 		}
+
 		return $emails;
 	}
 
@@ -229,10 +234,10 @@ class EmailHelper {
 	 */
 	public static function reset_mailer(): void {
 		// Clear the mailer singleton
-		if ( function_exists( 'WC' ) && WC()->mailer() ) {
+		if ( \function_exists( 'WC' ) && WC()->mailer() ) {
 			// Force reinitialization by clearing emails array
-			$mailer = WC()->mailer();
-			$reflection = new \ReflectionClass( $mailer );
+			$mailer     = WC()->mailer();
+			$reflection = new ReflectionClass( $mailer );
 			if ( $reflection->hasProperty( 'emails' ) ) {
 				$property = $reflection->getProperty( 'emails' );
 				$property->setAccessible( true );

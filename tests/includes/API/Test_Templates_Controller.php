@@ -8,8 +8,6 @@
  * - Template listing (virtual and database)
  * - Single template retrieval
  * - Active template retrieval
- *
- * @package WCPOS\WooCommercePOS\Tests\API
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;

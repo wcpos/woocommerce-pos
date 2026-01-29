@@ -543,7 +543,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_manual_email_works_when_automated_emails_disabled(): void {
 		// Disable automated POS emails
-		$settings = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings                    = get_option( 'woocommerce_pos_settings_checkout', array() );
 		$settings['admin_emails']    = false;
 		$settings['customer_emails'] = false;
 		update_option( 'woocommerce_pos_settings_checkout', $settings );

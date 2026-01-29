@@ -44,7 +44,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$secret_key = $this->auth_service->get_secret_key();
 		$this->assertNotEmpty( $secret_key );
 		$this->assertIsString( $secret_key );
-		$this->assertEquals( 64, strlen( $secret_key ) );
+		$this->assertEquals( 64, \strlen( $secret_key ) );
 	}
 
 	/**
@@ -54,7 +54,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$secret_key = $this->auth_service->get_refresh_secret_key();
 		$this->assertNotEmpty( $secret_key );
 		$this->assertIsString( $secret_key );
-		$this->assertEquals( 64, strlen( $secret_key ) );
+		$this->assertEquals( 64, \strlen( $secret_key ) );
 	}
 
 	/**
@@ -310,7 +310,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 		// Generate token which should trigger device parsing
-		$token   = $this->auth_service->generate_refresh_token( $this->test_user );
+		$token    = $this->auth_service->generate_refresh_token( $this->test_user );
 		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
 
 		$this->assertCount( 1, $sessions );
@@ -424,7 +424,7 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$decoded = $this->auth_service->validate_token( $token, 'refresh' );
 
 		// Get initial session
-		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$sessions            = $this->auth_service->get_user_sessions( $this->test_user->ID );
 		$initial_last_active = $sessions[0]['last_active'];
 
 		// Sleep briefly
@@ -438,5 +438,199 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
 		$this->assertGreaterThan( $initial_last_active, $sessions[0]['last_active'] );
 	}
-}
 
+	// ==========================================================================
+	// DIRECT METHOD TESTS (for line coverage)
+	// ==========================================================================
+
+	/**
+	 * Direct test: get_user_data returns expected structure.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_user_data
+	 */
+	public function test_direct_get_user_data(): void {
+		$result = $this->auth_service->get_user_data( $this->test_user );
+
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey( 'id', $result );
+		$this->assertArrayHasKey( 'username', $result );
+		$this->assertArrayHasKey( 'email', $result );
+		$this->assertArrayHasKey( 'display_name', $result );
+		$this->assertArrayHasKey( 'first_name', $result );
+		$this->assertArrayHasKey( 'last_name', $result );
+		$this->assertArrayHasKey( 'avatar_url', $result );
+
+		$this->assertEquals( $this->test_user->ID, $result['id'] );
+		$this->assertEquals( $this->test_user->user_login, $result['username'] );
+	}
+
+	/**
+	 * Direct test: get_user_data with web frontend flag.
+	 *
+	 * NOTE: This test is skipped because the web frontend flag triggers cookie operations
+	 * which fail in PHPUnit (headers already sent).
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_user_data
+	 */
+	public function test_direct_get_user_data_web_frontend(): void {
+		$this->markTestSkipped( 'Web frontend flag triggers cookie operations that fail in PHPUnit' );
+	}
+
+	/**
+	 * Direct test: get_redirect_data returns expected structure.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_redirect_data
+	 */
+	public function test_direct_get_redirect_data(): void {
+		$result = $this->auth_service->get_redirect_data( $this->test_user );
+
+		$this->assertIsArray( $result );
+		$this->assertArrayHasKey( 'access_token', $result );
+		$this->assertArrayHasKey( 'refresh_token', $result );
+		$this->assertArrayHasKey( 'token_type', $result );
+		$this->assertArrayHasKey( 'expires_at', $result );
+		$this->assertArrayHasKey( 'uuid', $result );
+		$this->assertArrayHasKey( 'id', $result );
+		$this->assertArrayHasKey( 'display_name', $result );
+	}
+
+	/**
+	 * Direct test: validate_token with invalid token.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::validate_token
+	 */
+	public function test_direct_validate_token_invalid(): void {
+		$result = $this->auth_service->validate_token( 'invalid.token.here', 'access' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertEquals( 'woocommmerce_pos_auth_invalid_token', $result->get_error_code() );
+	}
+
+	/**
+	 * Direct test: validate_token with empty token.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::validate_token
+	 */
+	public function test_direct_validate_token_empty(): void {
+		$result = $this->auth_service->validate_token( '', 'access' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+	}
+
+	/**
+	 * Direct test: validate_token type mismatch.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::validate_token
+	 */
+	public function test_direct_validate_token_type_mismatch(): void {
+		// Generate access token but try to validate as refresh
+		$token  = $this->auth_service->generate_access_token( $this->test_user );
+		$result = $this->auth_service->validate_token( $token, 'refresh' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+	}
+
+	/**
+	 * Direct test: generate_token (legacy method).
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::generate_token
+	 */
+	public function test_direct_generate_token_legacy(): void {
+		$result = $this->auth_service->generate_token( $this->test_user );
+
+		// Legacy generate_token now just returns access token string
+		$this->assertIsString( $result );
+		$this->assertNotEmpty( $result );
+
+		// Verify it's a valid access token
+		$decoded = $this->auth_service->validate_token( $result, 'access' );
+		$this->assertNotInstanceOf( WP_Error::class, $decoded );
+	}
+
+	/**
+	 * Direct test: refresh_access_token with invalid token.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::refresh_access_token
+	 */
+	public function test_direct_refresh_access_token_invalid(): void {
+		$result = $this->auth_service->refresh_access_token( 'invalid.refresh.token' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+	}
+
+	/**
+	 * Direct test: revoke_refresh_token.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::revoke_refresh_token
+	 */
+	public function test_direct_revoke_refresh_token(): void {
+		// Generate refresh token
+		$token   = $this->auth_service->generate_refresh_token( $this->test_user );
+		$decoded = $this->auth_service->validate_token( $token, 'refresh' );
+
+		// Revoke it
+		$result = $this->auth_service->revoke_refresh_token( $this->test_user->ID, $decoded->jti );
+
+		$this->assertTrue( $result );
+
+		// Verify it's gone
+		$sessions = $this->auth_service->get_user_sessions( $this->test_user->ID );
+		$this->assertCount( 0, $sessions );
+	}
+
+	/**
+	 * Direct test: revoke_refresh_token with nonexistent JTI.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::revoke_refresh_token
+	 */
+	public function test_direct_revoke_refresh_token_nonexistent(): void {
+		$result = $this->auth_service->revoke_refresh_token( $this->test_user->ID, 'nonexistent-jti' );
+
+		// Should return false if no matching token found
+		$this->assertFalse( $result );
+	}
+
+	/**
+	 * Direct test: generate_access_token with refresh JTI.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::generate_access_token
+	 */
+	public function test_direct_generate_access_token_with_refresh_jti(): void {
+		$refresh_jti = 'test-refresh-jti-' . wp_generate_uuid4();
+		$token       = $this->auth_service->generate_access_token( $this->test_user, $refresh_jti );
+
+		$this->assertIsString( $token );
+
+		$decoded = $this->auth_service->validate_token( $token, 'access' );
+		$this->assertNotInstanceOf( WP_Error::class, $decoded );
+		$this->assertEquals( $refresh_jti, $decoded->refresh_jti );
+	}
+
+	/**
+	 * Direct test: get_user_sessions for user with no sessions.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::get_user_sessions
+	 */
+	public function test_direct_get_user_sessions_empty(): void {
+		// Create a new user with no sessions
+		$new_user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+
+		$sessions = $this->auth_service->get_user_sessions( $new_user->ID );
+
+		$this->assertIsArray( $sessions );
+		$this->assertEmpty( $sessions );
+
+		wp_delete_user( $new_user->ID );
+	}
+
+	/**
+	 * Direct test: update_session_activity for nonexistent session.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Services\Auth::update_session_activity
+	 */
+	public function test_direct_update_session_activity_nonexistent(): void {
+		$result = $this->auth_service->update_session_activity( $this->test_user->ID, 'nonexistent-jti' );
+
+		$this->assertFalse( $result );
+	}
+}

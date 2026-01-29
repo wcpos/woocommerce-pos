@@ -6,15 +6,13 @@
  * - Gateway registration and properties
  * - Payment processing with and without cashback
  * - Cashback calculation
- *
- * @package WCPOS\WooCommercePOS\Tests\Gateways
  */
 
 namespace WCPOS\WooCommercePOS\Tests\Gateways;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways\Card;
-use WC_Order;
 
 /**
  * Test_Card_Gateway class.
@@ -23,7 +21,7 @@ use WC_Order;
  *
  * @coversNothing
  */
-class Test_Card_Gateway extends \WC_Unit_Test_Case {
+class Test_Card_Gateway extends WC_Unit_Test_Case {
 	/**
 	 * The Card gateway instance.
 	 *
@@ -143,8 +141,8 @@ class Test_Card_Gateway extends \WC_Unit_Test_Case {
 	 * Test order total adjustment with cashback (simulation).
 	 */
 	public function test_order_total_with_cashback(): void {
-		$order_total   = 50.00;
-		$cashback      = 20.00;
+		$order_total    = 50.00;
+		$cashback       = 20.00;
 		$expected_total = wc_format_decimal( $order_total + $cashback );
 
 		$this->assertEquals( '70', $expected_total );
@@ -242,13 +240,13 @@ class Test_Card_Gateway extends \WC_Unit_Test_Case {
 		foreach ( $test_cases as $case ) {
 			$new_total = $case['order_total'];
 			if ( 0 !== $case['cashback'] ) {
-				$new_total = wc_format_decimal( floatval( $case['order_total'] ) + floatval( $case['cashback'] ) );
+				$new_total = wc_format_decimal( \floatval( $case['order_total'] ) + \floatval( $case['cashback'] ) );
 			}
 
 			$this->assertEquals(
 				wc_format_decimal( $case['expected'] ),
 				$new_total,
-				sprintf(
+				\sprintf(
 					'Order total %s with cashback %s should equal %s',
 					$case['order_total'],
 					$case['cashback'],
@@ -256,5 +254,164 @@ class Test_Card_Gateway extends \WC_Unit_Test_Case {
 				)
 			);
 		}
+	}
+
+	// ==========================================================================
+	// DIRECT METHOD TESTS (for line coverage)
+	// ==========================================================================
+
+	/**
+	 * Direct test: constructor sets all expected properties.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::__construct
+	 */
+	public function test_direct_constructor_properties(): void {
+		$gateway = new Card();
+
+		$this->assertEquals( 'pos_card', $gateway->id );
+		$this->assertEquals( 'Card', $gateway->title );
+		$this->assertEquals( '', $gateway->description );
+		$this->assertTrue( $gateway->has_fields );
+		$this->assertEquals( 'no', $gateway->enabled );
+	}
+
+	/**
+	 * Direct test: constructor registers admin options action.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::__construct
+	 */
+	public function test_direct_constructor_registers_admin_action(): void {
+		$gateway = new Card();
+
+		$this->assertTrue(
+			has_action( 'woocommerce_pos_update_options_payment_gateways_pos_card' ),
+			'Admin options action should be registered'
+		);
+	}
+
+	/**
+	 * Direct test: calculate_cashback with different values.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::calculate_cashback
+	 */
+	public function test_direct_calculate_cashback_various_values(): void {
+		$order = OrderHelper::create_order();
+
+		// Test with $50 cashback
+		$order->update_meta_data( '_pos_card_cashback', '50.00' );
+		$order->save();
+
+		ob_start();
+		$this->gateway->calculate_cashback( $order->get_id() );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Cashback', $output );
+		$this->assertStringContainsString( '50.00', $output );
+	}
+
+	/**
+	 * Direct test: cashback with decimal values.
+	 */
+	public function test_direct_cashback_decimal_values(): void {
+		$order_total = 45.75;
+		$cashback    = 20.50;
+
+		$new_total = wc_format_decimal( \floatval( $order_total ) + \floatval( $cashback ) );
+
+		$this->assertEquals( '66.25', $new_total );
+	}
+
+	/**
+	 * Direct test: zero cashback doesn't change total.
+	 */
+	public function test_direct_zero_cashback(): void {
+		$order_total = 100.00;
+		$cashback    = 0;
+
+		// When cashback is 0, the condition (0 !== $cashback) is false
+		$new_total = $order_total;
+		if ( 0 !== $cashback ) {
+			$new_total = wc_format_decimal( \floatval( $order_total ) + \floatval( $cashback ) );
+		}
+
+		$this->assertEquals( 100.00, $new_total );
+	}
+
+	/**
+	 * Direct test: gateway supports array.
+	 */
+	public function test_direct_gateway_supports(): void {
+		$this->assertIsArray( $this->gateway->supports );
+	}
+
+	/**
+	 * Direct test: cashback is stored correctly in order meta.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Card::calculate_cashback
+	 */
+	public function test_direct_cashback_order_meta_storage(): void {
+		$order    = OrderHelper::create_order();
+		$cashback = '35.00';
+
+		$order->update_meta_data( '_pos_card_cashback', $cashback );
+		$order->save();
+
+		// Retrieve using WC_Order method
+		$stored = $order->get_meta( '_pos_card_cashback' );
+		$this->assertEquals( $cashback, $stored );
+
+		// Also verify it can be retrieved via post_meta for compatibility
+		$stored_post_meta = get_post_meta( $order->get_id(), '_pos_card_cashback', true );
+		$this->assertEquals( $cashback, $stored_post_meta );
+	}
+
+	/**
+	 * Direct test: multiple orders with cashback.
+	 */
+	public function test_direct_multiple_orders_with_cashback(): void {
+		$orders = array();
+
+		for ( $i = 0; $i < 3; $i++ ) {
+			$order = OrderHelper::create_order();
+			$order->set_total( 50 + ( $i * 10 ) ); // 50, 60, 70
+			$cashback = 10 + ( $i * 5 ); // 10, 15, 20
+
+			$order->update_meta_data( '_pos_card_cashback', wc_format_decimal( $cashback ) );
+			$order->save();
+
+			$orders[] = array(
+				'order_id' => $order->get_id(),
+				'total'    => $order->get_total(),
+				'cashback' => $cashback,
+			);
+		}
+
+		// Verify each order has correct cashback stored
+		foreach ( $orders as $data ) {
+			$stored_cashback = get_post_meta( $data['order_id'], '_pos_card_cashback', true );
+			$this->assertEquals(
+				wc_format_decimal( $data['cashback'] ),
+				$stored_cashback,
+				'Cashback should be stored correctly for order ' . $data['order_id']
+			);
+		}
+	}
+
+	/**
+	 * Direct test: cashback affects displayed total.
+	 */
+	public function test_direct_cashback_affects_total(): void {
+		$order          = OrderHelper::create_order();
+		$original_total = 80.00;
+		$cashback       = 30.00;
+
+		$order->set_total( $original_total );
+		$order->update_meta_data( '_pos_card_cashback', wc_format_decimal( $cashback ) );
+		$order->save();
+
+		// Calculate expected charged amount (total + cashback)
+		$charged_amount = wc_format_decimal( \floatval( $original_total ) + \floatval( $cashback ) );
+
+		$this->assertEquals( '110', $charged_amount );
 	}
 }

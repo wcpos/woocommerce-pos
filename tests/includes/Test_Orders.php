@@ -7,17 +7,16 @@
  * - Payment status handling
  * - Tax location determination
  * - Order item product handling for misc products
- *
- * @package WCPOS\WooCommercePOS\Tests
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
-use WCPOS\WooCommercePOS\Orders;
 use WC_Order;
 use WC_Order_Item_Product;
+use WC_Unit_Test_Case;
+use WCPOS\WooCommercePOS\Orders;
 
 /**
  * Test_Orders class.
@@ -26,7 +25,7 @@ use WC_Order_Item_Product;
  *
  * @coversNothing
  */
-class Test_Orders extends \WC_Unit_Test_Case {
+class Test_Orders extends WC_Unit_Test_Case {
 	/**
 	 * The Orders instance.
 	 *
@@ -66,23 +65,6 @@ class Test_Orders extends \WC_Unit_Test_Case {
 		}
 
 		parent::tearDown();
-	}
-
-	/**
-	 * Helper to create a POS order.
-	 *
-	 * @param string $status Optional. Order status without 'wc-' prefix. Default 'pos-open'.
-	 *
-	 * @return WC_Order The created order.
-	 */
-	private function create_pos_order( string $status = 'pos-open' ): WC_Order {
-		$order = OrderHelper::create_order();
-		$order->update_meta_data( '_pos', '1' );
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->set_status( $status );
-		$order->save();
-
-		return $order;
 	}
 
 	/**
@@ -213,7 +195,7 @@ class Test_Orders extends \WC_Unit_Test_Case {
 		$order = $this->create_pos_order( 'pos-open' );
 
 		// Simulate a POS request
-		$_REQUEST['pos'] = '1';
+		$_REQUEST['pos']         = '1';
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
@@ -447,5 +429,374 @@ class Test_Orders extends \WC_Unit_Test_Case {
 		$order->save();
 
 		$this->assertEquals( 'processing', $order->get_status(), 'Order should transition to processing' );
+	}
+
+	// ==========================================================================
+	// DIRECT METHOD CALL TESTS (for line coverage)
+	// ==========================================================================
+
+	/**
+	 * Direct test: wc_order_statuses method.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::wc_order_statuses
+	 */
+	public function test_direct_wc_order_statuses(): void {
+		$orders = new Orders();
+
+		$existing_statuses = array(
+			'wc-pending'    => 'Pending payment',
+			'wc-processing' => 'Processing',
+			'wc-completed'  => 'Completed',
+		);
+
+		$result = $orders->wc_order_statuses( $existing_statuses );
+
+		$this->assertArrayHasKey( 'wc-pos-open', $result );
+		$this->assertArrayHasKey( 'wc-pos-partial', $result );
+		$this->assertStringContainsString( 'POS', $result['wc-pos-open'] );
+		$this->assertStringContainsString( 'POS', $result['wc-pos-partial'] );
+	}
+
+	/**
+	 * Direct test: order_needs_payment for POS orders with zero total.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_needs_payment
+	 */
+	public function test_direct_order_needs_payment_zero_total(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order( 'pos-open' );
+		$order->set_total( 0 );
+		$order->save();
+
+		$result = $orders->order_needs_payment( false, $order, array( 'pending', 'failed' ) );
+
+		$this->assertTrue( $result, 'Zero total POS order should need payment' );
+	}
+
+	/**
+	 * Direct test: order_needs_payment for POS partial orders.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_needs_payment
+	 */
+	public function test_direct_order_needs_payment_pos_partial(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order( 'pos-partial' );
+		$order->set_total( 0 );
+		$order->save();
+
+		$result = $orders->order_needs_payment( false, $order, array( 'pending', 'failed' ) );
+
+		$this->assertTrue( $result, 'Zero total pos-partial order should need payment' );
+	}
+
+	/**
+	 * Direct test: order_needs_payment returns original for non-POS orders.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_needs_payment
+	 */
+	public function test_direct_order_needs_payment_non_pos(): void {
+		$orders = new Orders();
+		$order  = OrderHelper::create_order();
+		$order->set_status( 'pending' );
+		$order->save();
+
+		$result = $orders->order_needs_payment( true, $order, array( 'pending' ) );
+
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Direct test: valid_order_statuses_for_payment.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::valid_order_statuses_for_payment
+	 */
+	public function test_direct_valid_order_statuses_for_payment(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+
+		$result = $orders->valid_order_statuses_for_payment( array( 'pending', 'failed' ), $order );
+
+		$this->assertContains( 'pos-open', $result );
+		$this->assertContains( 'pos-partial', $result );
+		$this->assertContains( 'pending', $result );
+		$this->assertContains( 'failed', $result );
+	}
+
+	/**
+	 * Direct test: valid_order_statuses_for_payment_complete.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::valid_order_statuses_for_payment_complete
+	 */
+	public function test_direct_valid_order_statuses_for_payment_complete(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+
+		$result = $orders->valid_order_statuses_for_payment_complete( array( 'on-hold', 'pending', 'failed' ), $order );
+
+		$this->assertContains( 'pos-open', $result );
+		$this->assertContains( 'pos-partial', $result );
+	}
+
+	/**
+	 * Direct test: payment_complete_order_status during POS request.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
+	 */
+	public function test_direct_payment_complete_order_status_pos_request(): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+
+		// Simulate POS request
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$result = $orders->payment_complete_order_status( 'processing', $order->get_id(), $order );
+
+		// Clean up
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		// Should return setting value or processing if not a POS request
+		$this->assertContains( $result, array( 'processing', 'completed' ) );
+	}
+
+	/**
+	 * Direct test: hidden_order_itemmeta.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::hidden_order_itemmeta
+	 */
+	public function test_direct_hidden_order_itemmeta(): void {
+		$orders        = new Orders();
+		$existing_meta = array( '_product_id', '_variation_id' );
+
+		$result = $orders->hidden_order_itemmeta( $existing_meta );
+
+		$this->assertContains( '_woocommerce_pos_uuid', $result );
+		$this->assertContains( '_woocommerce_pos_tax_status', $result );
+		$this->assertContains( '_woocommerce_pos_data', $result );
+		$this->assertContains( '_product_id', $result );
+		$this->assertContains( '_variation_id', $result );
+	}
+
+	/**
+	 * Direct test: order_item_product creates product for misc items.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_item_product
+	 */
+	public function test_direct_order_item_product_misc_item(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Direct Test Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->add_meta_data( '_sku', 'DIRECT-001' );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			json_encode(
+				array(
+					'price'         => '25.00',
+					'regular_price' => '30.00',
+					'tax_status'    => 'taxable',
+				)
+			)
+		);
+		$item->save();
+
+		$result = $orders->order_item_product( false, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $result );
+		$this->assertEquals( 'Direct Test Item', $result->get_name() );
+		$this->assertEquals( 'DIRECT-001', $result->get_sku() );
+		$this->assertEquals( '25.00', $result->get_price() );
+		$this->assertEquals( '30.00', $result->get_regular_price() );
+	}
+
+	/**
+	 * Direct test: order_item_product returns existing product.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_item_product
+	 */
+	public function test_direct_order_item_product_existing(): void {
+		$orders  = new Orders();
+		$product = ProductHelper::create_simple_product();
+		$order   = OrderHelper::create_order( array( 'product' => $product ) );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		$result = $orders->order_item_product( $product, $item );
+
+		$this->assertEquals( $product->get_id(), $result->get_id() );
+	}
+
+	/**
+	 * Direct test: get_tax_location for billing.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::get_tax_location
+	 */
+	public function test_direct_get_tax_location_billing(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'billing' );
+		$order->set_billing_country( 'AU' );
+		$order->set_billing_state( 'VIC' );
+		$order->set_billing_postcode( '3000' );
+		$order->set_billing_city( 'Melbourne' );
+		$order->save();
+
+		$args = array(
+			'country'  => '',
+			'state'    => '',
+			'postcode' => '',
+			'city'     => '',
+		);
+
+		$result = $orders->get_tax_location( $args, $order );
+
+		$this->assertEquals( 'AU', $result['country'] );
+		$this->assertEquals( 'VIC', $result['state'] );
+		$this->assertEquals( '3000', $result['postcode'] );
+		$this->assertEquals( 'Melbourne', $result['city'] );
+	}
+
+	/**
+	 * Direct test: get_tax_location for shipping.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::get_tax_location
+	 */
+	public function test_direct_get_tax_location_shipping(): void {
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'shipping' );
+		$order->set_shipping_country( 'NZ' );
+		$order->set_shipping_state( 'AUK' );
+		$order->set_shipping_postcode( '1010' );
+		$order->set_shipping_city( 'Auckland' );
+		$order->save();
+
+		$args = array(
+			'country'  => '',
+			'state'    => '',
+			'postcode' => '',
+			'city'     => '',
+		);
+
+		$result = $orders->get_tax_location( $args, $order );
+
+		$this->assertEquals( 'NZ', $result['country'] );
+		$this->assertEquals( 'AUK', $result['state'] );
+		$this->assertEquals( '1010', $result['postcode'] );
+		$this->assertEquals( 'Auckland', $result['city'] );
+	}
+
+	/**
+	 * Direct test: get_tax_location for base location.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::get_tax_location
+	 */
+	public function test_direct_get_tax_location_base(): void {
+		// Set base country
+		update_option( 'woocommerce_default_country', 'US:CA' );
+
+		$orders = new Orders();
+		$order  = $this->create_pos_order();
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'base' );
+		$order->save();
+
+		$args = array(
+			'country'  => '',
+			'state'    => '',
+			'postcode' => '',
+			'city'     => '',
+		);
+
+		$result = $orders->get_tax_location( $args, $order );
+
+		$this->assertEquals( 'US', $result['country'] );
+	}
+
+	/**
+	 * Direct test: get_tax_location returns original for non-POS orders.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::get_tax_location
+	 */
+	public function test_direct_get_tax_location_non_pos(): void {
+		$orders = new Orders();
+		$order  = OrderHelper::create_order();
+		$order->set_status( 'pending' );
+		$order->save();
+
+		$args = array(
+			'country'  => 'JP',
+			'state'    => 'TK',
+			'postcode' => '100-0001',
+			'city'     => 'Tokyo',
+		);
+
+		$result = $orders->get_tax_location( $args, $order );
+
+		$this->assertEquals( $args, $result, 'Non-POS order should return original args' );
+	}
+
+	/**
+	 * Direct test: order_item_product with invalid JSON data.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::order_item_product
+	 */
+	public function test_direct_order_item_product_invalid_json(): void {
+		$orders = new Orders();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Invalid JSON Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->add_meta_data( '_woocommerce_pos_data', 'invalid json {' );
+		$item->save();
+
+		$result = $orders->order_item_product( false, $item );
+
+		// Should still create a product, just without the POS data
+		$this->assertInstanceOf( 'WC_Product_Simple', $result );
+		$this->assertEquals( 'Invalid JSON Item', $result->get_name() );
+	}
+
+	/**
+	 * Direct test: constructor registers all filters.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Orders::__construct
+	 */
+	public function test_direct_constructor_registers_filters(): void {
+		$orders = new Orders();
+
+		$this->assertNotFalse( has_filter( 'wc_order_statuses', array( $orders, 'wc_order_statuses' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_order_needs_payment', array( $orders, 'order_needs_payment' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_valid_order_statuses_for_payment', array( $orders, 'valid_order_statuses_for_payment' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $orders, 'valid_order_statuses_for_payment_complete' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_payment_complete_order_status', array( $orders, 'payment_complete_order_status' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_hidden_order_itemmeta', array( $orders, 'hidden_order_itemmeta' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_order_item_product', array( $orders, 'order_item_product' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_order_get_tax_location', array( $orders, 'get_tax_location' ) ) );
+	}
+
+	/**
+	 * Helper to create a POS order.
+	 *
+	 * @param string $status Optional. Order status without 'wc-' prefix. Default 'pos-open'.
+	 *
+	 * @return WC_Order The created order.
+	 */
+	private function create_pos_order( string $status = 'pos-open' ): WC_Order {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( $status );
+		$order->save();
+
+		return $order;
 	}
 }

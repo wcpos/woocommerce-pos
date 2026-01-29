@@ -7,8 +7,6 @@
  * - Permission checks
  * - Order status listing
  * - Status format (wc- prefix removal)
- *
- * @package WCPOS\WooCommercePOS\Tests\API
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;

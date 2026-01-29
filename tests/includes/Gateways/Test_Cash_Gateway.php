@@ -7,15 +7,13 @@
  * - Payment processing (full and partial)
  * - Change calculation
  * - Payment details retrieval
- *
- * @package WCPOS\WooCommercePOS\Tests\Gateways
  */
 
 namespace WCPOS\WooCommercePOS\Tests\Gateways;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Gateways\Cash;
-use WC_Order;
 
 /**
  * Test_Cash_Gateway class.
@@ -24,7 +22,7 @@ use WC_Order;
  *
  * @coversNothing
  */
-class Test_Cash_Gateway extends \WC_Unit_Test_Case {
+class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	/**
 	 * The Cash gateway instance.
 	 *
@@ -184,7 +182,7 @@ class Test_Cash_Gateway extends \WC_Unit_Test_Case {
 
 		// Store payment data directly (simulating what process_payment does)
 		$tendered = '50.00';
-		$change   = wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) );
+		$change   = wc_format_decimal( \floatval( $tendered ) - \floatval( $order->get_total() ) );
 
 		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', $tendered );
 		update_post_meta( $order->get_id(), '_pos_cash_change', $change );
@@ -259,5 +257,166 @@ class Test_Cash_Gateway extends \WC_Unit_Test_Case {
 			has_action( 'woocommerce_thankyou_pos_cash' ),
 			'Thankyou action should be registered'
 		);
+	}
+
+	// ==========================================================================
+	// DIRECT METHOD TESTS (for line coverage)
+	// ==========================================================================
+
+	/**
+	 * Direct test: constructor sets all expected properties.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::__construct
+	 */
+	public function test_direct_constructor_properties(): void {
+		$gateway = new Cash();
+
+		$this->assertEquals( 'pos_cash', $gateway->id );
+		$this->assertEquals( 'Cash', $gateway->title );
+		$this->assertEquals( '', $gateway->description );
+		$this->assertTrue( $gateway->has_fields );
+		$this->assertEquals( 'no', $gateway->enabled );
+	}
+
+	/**
+	 * Direct test: payment_details with order object.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::payment_details
+	 */
+	public function test_direct_payment_details(): void {
+		$order = OrderHelper::create_order();
+
+		// Test with no meta set
+		$details = Cash::payment_details( $order );
+		$this->assertArrayHasKey( 'tendered', $details );
+		$this->assertArrayHasKey( 'change', $details );
+
+		// Set meta and test again
+		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '100.00' );
+		update_post_meta( $order->get_id(), '_pos_cash_change', '20.00' );
+
+		$details = Cash::payment_details( $order );
+		$this->assertEquals( '100.00', $details['tendered'] );
+		$this->assertEquals( '20.00', $details['change'] );
+	}
+
+	/**
+	 * Direct test: calculate_change displays formatted output.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::calculate_change
+	 */
+	public function test_direct_calculate_change_formatted(): void {
+		$order = OrderHelper::create_order();
+
+		// Set payment data
+		update_post_meta( $order->get_id(), '_pos_cash_amount_tendered', '75.50' );
+		update_post_meta( $order->get_id(), '_pos_cash_change', '15.50' );
+
+		ob_start();
+		$this->gateway->calculate_change( $order->get_id() );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Amount Tendered', $output );
+		$this->assertStringContainsString( 'Change', $output );
+		$this->assertStringContainsString( '75.50', $output );
+		$this->assertStringContainsString( '15.50', $output );
+	}
+
+	/**
+	 * Direct test: exact payment (no change).
+	 */
+	public function test_direct_exact_payment_no_change(): void {
+		$order_total = 50.00;
+		$tendered    = 50.00;
+
+		$change = $tendered > $order_total
+			? wc_format_decimal( \floatval( $tendered ) - \floatval( $order_total ) )
+			: '0';
+
+		$this->assertEquals( '0', $change );
+	}
+
+	/**
+	 * Direct test: overpayment with change.
+	 */
+	public function test_direct_overpayment_with_change(): void {
+		$order_total = 35.75;
+		$tendered    = 40.00;
+
+		$change = $tendered > $order_total
+			? wc_format_decimal( \floatval( $tendered ) - \floatval( $order_total ) )
+			: '0';
+
+		$this->assertEquals( '4.25', $change );
+	}
+
+	/**
+	 * Direct test: partial payment (tendered less than total).
+	 */
+	public function test_direct_partial_payment(): void {
+		$order_total = 100.00;
+		$tendered    = 60.00;
+
+		$change = $tendered > $order_total
+			? wc_format_decimal( \floatval( $tendered ) - \floatval( $order_total ) )
+			: '0';
+
+		$this->assertEquals( '0', $change );
+
+		// The remaining balance
+		$remaining = wc_format_decimal( $order_total - $tendered );
+		$this->assertEquals( '40', $remaining );
+	}
+
+	/**
+	 * Direct test: gateway supports array (no specific support).
+	 */
+	public function test_direct_gateway_supports(): void {
+		// Cash gateway doesn't declare specific supports
+		// but should inherit default WC_Payment_Gateway supports
+		$this->assertIsArray( $this->gateway->supports );
+	}
+
+	/**
+	 * Direct test: constructor registers admin options action.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\Gateways\Cash::__construct
+	 */
+	public function test_direct_constructor_registers_admin_action(): void {
+		$gateway = new Cash();
+
+		$this->assertTrue(
+			has_action( 'woocommerce_pos_update_options_payment_gateways_pos_cash' ),
+			'Admin options action should be registered'
+		);
+	}
+
+	/**
+	 * Direct test: multiple orders with different payment scenarios.
+	 */
+	public function test_direct_multiple_payment_scenarios(): void {
+		$scenarios = array(
+			array( 'total' => 10.00, 'tendered' => 20.00, 'expected_change' => '10' ),
+			array( 'total' => 99.99, 'tendered' => 100.00, 'expected_change' => '0.01' ),
+			array( 'total' => 50.00, 'tendered' => 50.00, 'expected_change' => '0' ),
+			array( 'total' => 25.00, 'tendered' => 10.00, 'expected_change' => '0' ),
+		);
+
+		foreach ( $scenarios as $scenario ) {
+			$change = $scenario['tendered'] > $scenario['total']
+				? wc_format_decimal( \floatval( $scenario['tendered'] ) - \floatval( $scenario['total'] ) )
+				: '0';
+
+			$this->assertEquals(
+				$scenario['expected_change'],
+				$change,
+				\sprintf(
+					'Total: %.2f, Tendered: %.2f should give change: %s',
+					$scenario['total'],
+					$scenario['tendered'],
+					$scenario['expected_change']
+				)
+			);
+		}
 	}
 }

@@ -8,12 +8,11 @@
  * - Cashier data retrieval
  * - Store access management
  * - Permission validation
- *
- * @package WCPOS\WooCommercePOS\Tests\Services
  */
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
+use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Services\Cashier;
 use WP_User;
 
@@ -24,7 +23,7 @@ use WP_User;
  *
  * @coversNothing
  */
-class Test_Cashier_Service extends \WC_Unit_Test_Case {
+class Test_Cashier_Service extends WC_Unit_Test_Case {
 	/**
 	 * The Cashier service instance.
 	 *
@@ -387,6 +386,7 @@ class Test_Cashier_Service extends \WC_Unit_Test_Case {
 			'woocommerce_pos_cashier_data',
 			function ( $data, $user, $include_stores ) {
 				$data['custom_field'] = 'filtered_value';
+
 				return $data;
 			},
 			10,
