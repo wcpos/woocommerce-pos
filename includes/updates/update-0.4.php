@@ -25,3 +25,4 @@ foreach ( $roles as $slug ) {
 	}
 }
 // phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
+// phpcs:enable WordPress.WP.GlobalVariablesOverride.Prohibited

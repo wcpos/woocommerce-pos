@@ -621,7 +621,7 @@ class Auth {
 		// Keep only the current session in user meta.
 		$refresh_tokens = array_filter(
 			$refresh_tokens,
-			function ( $token, $jti ) use ( $current_jti ) {
+			function ( $_token, $jti ) use ( $current_jti ) {
 				return $jti === $current_jti;
 			},
 			ARRAY_FILTER_USE_BOTH

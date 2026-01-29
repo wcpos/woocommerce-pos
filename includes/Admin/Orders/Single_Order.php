@@ -99,7 +99,7 @@ class Single_Order {
 	 */
 	public function save_cashier_select( $post_id ): void {
 		// Security checks.
-		if ( ! isset( $_POST['pos_cashier_select_nonce'] ) || ! wp_verify_nonce( $_POST['pos_cashier_select_nonce'], 'pos_cashier_select_action' ) ) {
+		if ( ! isset( $_POST['pos_cashier_select_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_cashier_select_nonce'] ) ), 'pos_cashier_select_action' ) ) {
 			return;
 		}
 

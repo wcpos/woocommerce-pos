@@ -35,7 +35,7 @@ class Login {
 		if ( $login_attempt ) {
 			$creds = array();
 			$creds['user_login'] = isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( $_POST['log'] ) ) : '';
-			$creds['user_password'] = isset( $_POST['pwd'] ) ? sanitize_text_field( wp_unslash( $_POST['pwd'] ) ) : '';
+			$creds['user_password'] = isset( $_POST['pwd'] ) ? wp_unslash( $_POST['pwd'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Passwords must not be sanitized as it can strip valid characters.
 			// $creds['remember'] = isset( $_POST['rememberme'] );
 
 			$user = wp_signon( $creds, false );

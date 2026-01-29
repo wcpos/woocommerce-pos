@@ -72,7 +72,7 @@ trait Product_Helpers {
 			return false;
 		}
 
-		// make sure it's true, just in case there's a corrupt setting.
+		// Make sure it's true, just in case there's a corrupt setting.
 		return true === $pos_only_products_enabled;
 	}
 }

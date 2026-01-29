@@ -225,9 +225,11 @@ class Store extends \WC_Data implements StoreInterface {
 	 * @param  string $context What the value is for. Valid values are view and edit.
 	 * @return string
 	 */
+	// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Commented-out code.
 	// public function get_default_country( $context = 'view' ) {
 	// return $this->get_prop( 'default_country', $context );
-	// }.
+	// }
+	// phpcs:enable Squiz.Commenting.InlineComment.InvalidEndChar
 
 	/**
 	 * Get Store state code.

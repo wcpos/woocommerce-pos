@@ -46,9 +46,9 @@ class WC_API {
 	/**
 	 * Set WooCommerce REST API request flags.
 	 *
-	 * @param mixed $result  The dispatch result.
-	 * @param mixed $server  The server instance.
-	 * @param mixed $request The request object.
+	 * @param mixed            $result  The dispatch result.
+	 * @param \WP_REST_Server  $server  The server instance.
+	 * @param \WP_REST_Request $request The request object.
 	 */
 	public function set_woocommerce_rest_api_request_flags( $result, $server, $request ) {
 		$route = $request->get_route();

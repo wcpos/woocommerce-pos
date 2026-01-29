@@ -30,7 +30,7 @@ class Card extends WC_Payment_Gateway {
 		$this->enabled     = 'no';
 
 		// Actions.
-		// @phpstan-ignore-next-line.
+		// @phpstan-ignore-next-line -- Action hook type mismatch.
 		add_action(
 			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
 			array(

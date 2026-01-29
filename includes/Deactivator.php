@@ -28,7 +28,7 @@ class Deactivator {
 	 *
 	 * @param bool $network_wide Whether to deactivate network-wide.
 	 */
-	public function deactivate( $network_wide ): void {
+	public function deactivate( bool $network_wide ): void {
 		if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
 			if ( $network_wide ) {
 				// Get all blog ids.
