@@ -43,7 +43,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 	/**
 	 * Original default country.
 	 *
-	 * @var string|false
+	 * @var false|string
 	 */
 	private $original_default_country;
 

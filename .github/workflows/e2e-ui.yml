@@ -61,7 +61,7 @@ jobs:
           composer install --prefer-dist --no-progress
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Start WordPress Environment
         run: pnpm run wp-env start
@@ -100,7 +100,7 @@ jobs:
           curl -sf http://localhost:8888/ | head -c 200
 
       - name: Run Playwright tests
-        run: npx playwright test --config=tests/e2e/ui/playwright.config.ts
+        run: pnpm exec playwright test --config=tests/e2e/ui/playwright.config.ts
         env:
           WP_BASE_URL: http://localhost:8888
 

@@ -104,26 +104,23 @@ jobs:
 
       - name: Generate JWT token for API tests
         run: |
-          # Generate JWT token using wp eval
-          JWT_TOKEN=$(pnpm run wp-env run cli -- wp eval '
-            $auth = \WCPOS\WooCommercePOS\Services\Auth::instance();
+          # Generate JWT tokens using wp eval (escape backslashes for shell)
+          TOKENS=$(pnpm run wp-env run cli -- wp eval '
+            $auth = \\WCPOS\\WooCommercePOS\\Services\\Auth::instance();
             $user = get_user_by("login", "admin");
             $tokens = $auth->generate_token_pair($user);
-            echo $tokens["access_token"];
+            echo json_encode($tokens);
           ')
+          # Extract tokens from JSON output (skip pnpm output lines)
+          TOKENS_JSON=$(echo "$TOKENS" | grep -o '{.*}')
+          JWT_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.access_token')
+          REFRESH_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.refresh_token')
           echo "JWT_TOKEN=$JWT_TOKEN" >> $GITHUB_ENV
-          
-          REFRESH_TOKEN=$(pnpm run wp-env run cli -- wp eval '
-            $auth = \WCPOS\WooCommercePOS\Services\Auth::instance();
-            $user = get_user_by("login", "admin");
-            $tokens = $auth->generate_token_pair($user);
-            echo $tokens["refresh_token"];
-          ')
           echo "REFRESH_TOKEN=$REFRESH_TOKEN" >> $GITHUB_ENV
 
       - name: Run Newman API tests
         run: |
-          npx newman run tests/e2e/api/wcpos-api.postman_collection.json \
+          pnpm exec newman run tests/e2e/api/wcpos-api.postman_collection.json \
             --environment tests/e2e/api/environment.json \
             --env-var "jwt_token=$JWT_TOKEN" \
             --env-var "refresh_token=$REFRESH_TOKEN" \
