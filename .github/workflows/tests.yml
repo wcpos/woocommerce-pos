@@ -104,6 +104,7 @@ jobs:
       success: ${{ steps.test.outcome == 'success' }}
       wp_version: ${{ steps.versions.outputs.wp }}
       wc_version: ${{ steps.versions.outputs.wc }}
+      wc_url: ${{ steps.versions.outputs.wc_url }}
 
     steps:
       - name: Checkout code
@@ -117,14 +118,29 @@ jobs:
           echo "wp=$WP_VERSION" >> $GITHUB_OUTPUT
           echo "Latest WordPress: $WP_VERSION"
           
-          # Get latest WooCommerce version
+          # Get latest stable WooCommerce version + URL
           PLUGIN_INFO=$(curl -s https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce)
-          WC_VERSION=$(echo "$PLUGIN_INFO" | jq -r '.versions | keys[] | select(. != "trunk") | select(test("^(?:[0-9]+\\.)*[0-9]+$"))' | sort -V | tail -n 1)
-          if [ -z "$WC_VERSION" ] || [ "$WC_VERSION" = "null" ]; then
-            WC_VERSION=$(echo "$PLUGIN_INFO" | jq -r '.version')
+          STABLE_VERSIONS=$(echo "$PLUGIN_INFO" | jq -r '.versions | keys[] | select(. != "trunk") | select(test("^[0-9]+(\\.[0-9]+)*$"))')
+          WC_VERSION=""
+          WC_URL=""
+          for VERSION in $(echo "$STABLE_VERSIONS" | sort -V -r); do
+            URL=$(echo "$PLUGIN_INFO" | jq -r --arg v "$VERSION" '.versions[$v]')
+            if [ -n "$URL" ] && [ "$URL" != "null" ]; then
+              if curl -sfI "$URL" > /dev/null; then
+                WC_VERSION="$VERSION"
+                WC_URL="$URL"
+                break
+              fi
+            fi
+          done
+          if [ -z "$WC_VERSION" ] || [ -z "$WC_URL" ]; then
+            echo "Failed to resolve stable WooCommerce download URL" >&2
+            exit 1
           fi
           echo "wc=$WC_VERSION" >> $GITHUB_OUTPUT
+          echo "wc_url=$WC_URL" >> $GITHUB_OUTPUT
           echo "Latest WooCommerce: $WC_VERSION"
+          echo "WooCommerce URL: $WC_URL"
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -184,7 +200,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "https://downloads.wordpress.org/plugin/woocommerce.${{ steps.versions.outputs.wc }}.zip",
+              "${{ steps.versions.outputs.wc_url }}",
               "."
             ],
             "config": {
@@ -431,7 +447,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "https://downloads.wordpress.org/plugin/woocommerce.${{ needs.smoke-test.outputs.wc_version }}.zip",
+              "${{ needs.smoke-test.outputs.wc_url }}",
               "."
             ],
             "config": {
