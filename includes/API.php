@@ -200,18 +200,19 @@ class API {
 	 * @return false|string
 	 */
 	public function get_auth_header() {
-		// Check if HTTP_AUTHORIZATION is set in $_SERVER
-		if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+		// Check if HTTP_AUTHORIZATION is set and not empty
+		// (htaccess SetEnvIf can set an empty value when no header is present)
+		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
 			return sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] );
 		}
 
 		// Check for alternative header in $_SERVER
-		if ( isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
 			return sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		}
 
 		// Check for authorization param in URL ($_GET)
-		if ( isset( $_GET['authorization'] ) ) {
+		if ( ! empty( $_GET['authorization'] ) ) {
 			return sanitize_text_field( $_GET['authorization'] );
 		}
 

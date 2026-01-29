@@ -36,6 +36,59 @@ class Init {
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 5, 4 );
 		add_action( 'send_headers', array( $this, 'send_headers' ), 99, 1 );
 		add_action( 'send_headers', array( $this, 'remove_x_frame_options' ), 9999, 1 );
+
+		/*
+		 * Add JWT authentication filter EARLY - before rest_api_init.
+		 * This is critical because determine_current_user is called before rest_api_init,
+		 * so the API class filters would be too late to handle param-based auth.
+		 */
+		add_filter( 'determine_current_user', array( $this, 'determine_current_user_early' ), 20 );
+	}
+
+	/**
+	 * Early authentication check for JWT tokens.
+	 *
+	 * This runs BEFORE rest_api_init, so we can authenticate users before WP REST API
+	 * permission callbacks run. This is especially important for authorization via
+	 * query parameter (?authorization=Bearer...) which some servers require.
+	 *
+	 * @param false|int $user_id User ID if one has been determined, false otherwise.
+	 *
+	 * @return false|int User ID if authenticated, original value otherwise.
+	 */
+	public function determine_current_user_early( $user_id ) {
+		// Skip if user already authenticated
+		if ( ! empty( $user_id ) ) {
+			return $user_id;
+		}
+
+		// Only process for WCPOS REST API requests
+		if ( ! wcpos_request( 'header' ) ) {
+			return $user_id;
+		}
+
+		// Check for authorization token
+		$auth_header = $this->get_auth_header_early();
+		if ( ! \is_string( $auth_header ) ) {
+			return $user_id;
+		}
+
+		// Extract Bearer token
+		list( $token ) = sscanf( $auth_header, 'Bearer %s' );
+		if ( ! $token ) {
+			return $user_id;
+		}
+
+		// Validate token
+		$auth_service  = AuthService::instance();
+		$decoded_token = $auth_service->validate_token( $token );
+
+		if ( is_wp_error( $decoded_token ) ) {
+			return $user_id;
+		}
+
+		// Return the authenticated user ID
+		return absint( $decoded_token->data->user->id );
 	}
 
 	/**
@@ -141,6 +194,35 @@ class Init {
 				header_remove( 'X-Frame-Options' );
 			}
 		}
+	}
+
+	/**
+	 * Get authorization header/param value.
+	 *
+	 * Checks multiple sources for the authorization token:
+	 * 1. HTTP_AUTHORIZATION server variable (standard)
+	 * 2. REDIRECT_HTTP_AUTHORIZATION (Apache CGI workaround)
+	 * 3. authorization query parameter (for servers that strip auth headers)
+	 *
+	 * @return false|string The authorization value or false if not found.
+	 */
+	private function get_auth_header_early() {
+		// Check HTTP_AUTHORIZATION (not empty - htaccess SetEnvIf can set empty value)
+		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] );
+		}
+
+		// Check REDIRECT_HTTP_AUTHORIZATION (Apache CGI)
+		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
+			return sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		}
+
+		// Check authorization query param
+		if ( ! empty( $_GET['authorization'] ) ) {
+			return sanitize_text_field( $_GET['authorization'] );
+		}
+
+		return false;
 	}
 
 	/**
