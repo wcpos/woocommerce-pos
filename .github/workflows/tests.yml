@@ -291,6 +291,13 @@ jobs:
             wp: '6.9'
             wc: '10.4.3'
             experimental: true
+          # Bleeding edge: latest WP + WC (incl. betas/RCs, allowed to fail)
+          - php: '8.3'
+            wp: 'latest'
+            wc: 'latest'
+            wp_core: 'null'
+            wc_url: 'https://downloads.wordpress.org/plugin/woocommerce.zip'
+            experimental: true
 
     steps:
       - name: Checkout code
@@ -348,12 +355,14 @@ jobs:
 
       - name: Configure wp-env for matrix versions
         run: |
+          WP_CORE="${{ matrix.wp_core || format('"WordPress/WordPress#{0}"', matrix.wp) }}"
+          WC_URL="${{ matrix.wc_url || format('https://downloads.wordpress.org/plugin/woocommerce.{0}.zip', matrix.wc) }}"
           cat > .wp-env.json << EOF
           {
-            "core": "WordPress/WordPress#${{ matrix.wp }}",
+            "core": $WP_CORE,
             "phpVersion": "${{ matrix.php }}",
             "plugins": [
-              "https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip",
+              "$WC_URL",
               "."
             ],
             "config": {
