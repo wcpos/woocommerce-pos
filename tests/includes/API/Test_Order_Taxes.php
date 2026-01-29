@@ -87,12 +87,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Create a new order.
+	 * Helper to create a basic order request and return response data.
 	 */
-	public function test_create_order_with_tax(): void {
-		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
-		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
-
+	private function create_basic_tax_order(): array {
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		$request->set_body_params(
 			array(
@@ -121,8 +118,30 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 201, $response->get_status() );
+
+		return array(
+			'status' => $response->get_status(),
+			'data'   => $response->get_data(),
+		);
+	}
+
+	/**
+	 * Create a new order with tax — WC >= 10.0.
+	 *
+	 * WooCommerce 10.0 changed tax total formatting to include 6 decimal places (e.g. '1.000000').
+	 * Prior versions return unpadded values (e.g. '1').
+	 */
+	public function test_create_order_with_tax(): void {
+		if ( version_compare( WC_VERSION, '10.0', '<' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_tax_legacy.' );
+		}
+
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$result = $this->create_basic_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
 
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
@@ -137,15 +156,40 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Create a new order with customer billing address as tax location.
+	 * Create a new order with tax — WC < 10.0.
+	 *
+	 * Prior to WC 10.0, tax totals are returned without trailing decimal padding (e.g. '1' instead of '1.000000').
 	 */
-	public function test_create_order_with_customer_billing_address_as_tax_location(): void {
+	public function test_create_order_with_tax_legacy(): void {
+		if ( version_compare( WC_VERSION, '10.0', '>=' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_tax.' );
+		}
+
 		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
 		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
 
+		$result = $this->create_basic_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		// line item taxes
+		$this->assertEquals( 1, \count( $data['line_items'] ) );
+		$this->assertEquals( 1, \count( $data['line_items'][0]['taxes'] ) );
+		$this->assertEquals( '1', $data['line_items'][0]['taxes'][0]['total'] );
+
+		// order taxes
+		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
+		$this->assertEquals( '1', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
+		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
+	}
+
+	/**
+	 * Helper to create an order with billing-based tax and return response data.
+	 */
+	private function create_billing_tax_order(): array {
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
-		// Prepare your data as an array and then JSON-encode it
-		$data = array(
+		$data    = array(
 			'payment_method' => 'pos_cash',
 			'line_items'     => array(
 				array(
@@ -175,19 +219,24 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 			),
 		);
 
-		// Set the body to a JSON string
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( $data ) );
 
 		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 201, $response->get_status() );
 
-		// check meta data
+		return array(
+			'status' => $response->get_status(),
+			'data'   => $response->get_data(),
+		);
+	}
+
+	/**
+	 * Helper to assert common billing tax order metadata.
+	 */
+	private function assert_billing_tax_meta( array $data ): void {
 		$count        = 0;
 		$tax_based_on = '';
 
-		// Look for the _woocommerce_pos_uuid key in meta_data
 		foreach ( $data['meta_data'] as $meta ) {
 			if ( '_woocommerce_pos_tax_based_on' === $meta['key'] ) {
 				$count++;
@@ -197,6 +246,26 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_tax_based_on.' );
 		$this->assertEquals( 'billing', $tax_based_on, 'The value of _woocommerce_pos_tax_based_on should be billing.' );
+	}
+
+	/**
+	 * Create a new order with customer billing address as tax location — WC >= 10.0.
+	 *
+	 * WooCommerce 10.0 changed tax total formatting to include 6 decimal places.
+	 */
+	public function test_create_order_with_customer_billing_address_as_tax_location(): void {
+		if ( version_compare( WC_VERSION, '10.0', '<' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_customer_billing_address_as_tax_location_legacy.' );
+		}
+
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$result = $this->create_billing_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assert_billing_tax_meta( $data );
 
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
@@ -211,15 +280,42 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Create a new order with customer billing address as tax location.
+	 * Create a new order with customer billing address as tax location — WC < 10.0.
+	 *
+	 * Prior to WC 10.0, tax totals are returned without trailing decimal padding.
 	 */
-	public function test_create_order_with_customer_shipping_address_as_tax_location(): void {
+	public function test_create_order_with_customer_billing_address_as_tax_location_legacy(): void {
+		if ( version_compare( WC_VERSION, '10.0', '>=' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_customer_billing_address_as_tax_location.' );
+		}
+
 		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
 		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
 
+		$result = $this->create_billing_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assert_billing_tax_meta( $data );
+
+		// line item taxes
+		$this->assertEquals( 1, \count( $data['line_items'] ) );
+		$this->assertEquals( 1, \count( $data['line_items'][0]['taxes'] ) );
+		$this->assertEquals( '2', $data['line_items'][0]['taxes'][0]['total'] );
+
+		// order taxes
+		$this->assertEquals( 1, \count( $data['tax_lines'] ) );
+		$this->assertEquals( '2', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( 'VAT', $data['tax_lines'][0]['label'] );
+		$this->assertEquals( '20', $data['tax_lines'][0]['rate_percent'] );
+	}
+
+	/**
+	 * Helper to create an order with shipping-based tax and return response data.
+	 */
+	private function create_shipping_tax_order(): array {
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
-		// Prepare your data as an array and then JSON-encode it
-		$data = array(
+		$data    = array(
 			'payment_method' => 'pos_cash',
 			'line_items'     => array(
 				array(
@@ -230,9 +326,9 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 				),
 			),
 			'shipping' => array(
-				'country'    => 'US',
-				'state'      => 'AL',
-				'postcode'   => '12345',
+				'country'  => 'US',
+				'state'    => 'AL',
+				'postcode' => '12345',
 			),
 			'meta_data' => array(
 				array(
@@ -242,19 +338,24 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 			),
 		);
 
-		// Set the body to a JSON string
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( $data ) );
 
 		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 201, $response->get_status() );
 
-		// check meta data
+		return array(
+			'status' => $response->get_status(),
+			'data'   => $response->get_data(),
+		);
+	}
+
+	/**
+	 * Helper to assert common shipping tax order metadata.
+	 */
+	private function assert_shipping_tax_meta( array $data ): void {
 		$count        = 0;
 		$tax_based_on = '';
 
-		// Look for the _woocommerce_pos_uuid key in meta_data
 		foreach ( $data['meta_data'] as $meta ) {
 			if ( '_woocommerce_pos_tax_based_on' === $meta['key'] ) {
 				$count++;
@@ -263,7 +364,27 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_tax_based_on.' );
-		$this->assertEquals( 'shipping', $tax_based_on, 'The value of _woocommerce_pos_tax_based_on should be billing.' );
+		$this->assertEquals( 'shipping', $tax_based_on, 'The value of _woocommerce_pos_tax_based_on should be shipping.' );
+	}
+
+	/**
+	 * Create a new order with customer shipping address as tax location — WC >= 10.0.
+	 *
+	 * WooCommerce 10.0 changed tax total formatting to include 6 decimal places.
+	 */
+	public function test_create_order_with_customer_shipping_address_as_tax_location(): void {
+		if ( version_compare( WC_VERSION, '10.0', '<' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_customer_shipping_address_as_tax_location_legacy.' );
+		}
+
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$result = $this->create_shipping_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assert_shipping_tax_meta( $data );
 
 		// line item taxes
 		$this->assertEquals( 1, \count( $data['line_items'] ) );
@@ -284,6 +405,46 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '11.220000', $data['total'] );
 		$this->assertEquals( '1.220000', $data['cart_tax'] );
 		$this->assertEquals( '1.220000', $data['total_tax'] );
+	}
+
+	/**
+	 * Create a new order with customer shipping address as tax location — WC < 10.0.
+	 *
+	 * Prior to WC 10.0, tax totals are returned without trailing decimal padding.
+	 */
+	public function test_create_order_with_customer_shipping_address_as_tax_location_legacy(): void {
+		if ( version_compare( WC_VERSION, '10.0', '>=' ) ) {
+			$this->markTestSkipped( 'Tax total format changed in WC 10.0 — see test_create_order_with_customer_shipping_address_as_tax_location.' );
+		}
+
+		$this->assertEquals( 'base', WC_Admin_Settings::get_option( 'woocommerce_tax_based_on' ) );
+		$this->assertEquals( 'US:CA', WC_Admin_Settings::get_option( 'woocommerce_default_country' ) );
+
+		$result = $this->create_shipping_tax_order();
+		$data   = $result['data'];
+		$this->assertEquals( 201, $result['status'] );
+
+		$this->assert_shipping_tax_meta( $data );
+
+		// line item taxes
+		$this->assertEquals( 1, \count( $data['line_items'] ) );
+		$this->assertEquals( 2, \count( $data['line_items'][0]['taxes'] ) );
+		$this->assertEquals( '1', $data['line_items'][0]['taxes'][0]['total'] );
+		$this->assertEquals( '0.22', $data['line_items'][0]['taxes'][1]['total'] );
+
+		// order taxes
+		$this->assertEquals( 2, \count( $data['tax_lines'] ) );
+		$this->assertEquals( '1', $data['tax_lines'][0]['tax_total'] );
+		$this->assertEquals( 'US', $data['tax_lines'][0]['label'] );
+		$this->assertEquals( '10', $data['tax_lines'][0]['rate_percent'] );
+		$this->assertEquals( '0.22', $data['tax_lines'][1]['tax_total'] );
+		$this->assertEquals( 'US AL', $data['tax_lines'][1]['label'] );
+		$this->assertEquals( '2', $data['tax_lines'][1]['rate_percent'] );
+
+		// order total
+		$this->assertEquals( '11.22', $data['total'] );
+		$this->assertEquals( '1.22', $data['cart_tax'] );
+		$this->assertEquals( '1.22', $data['total_tax'] );
 	}
 
 	public function test_fee_lines_should_respect_tax_status_when_negative(): void {

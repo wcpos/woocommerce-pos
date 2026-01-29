@@ -45,9 +45,13 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Get all expected fields.
+	 *
+	 * Note: Some fields are version-dependent:
+	 * - 'brands' was added to the WC product REST API schema in WC 9.9.0 (PR #55945).
+	 * - 'global_unique_id' was added in WC 9.4.0.
 	 */
 	public function get_expected_response_fields() {
-		return array(
+		$fields = array(
 			'id',
 			'name',
 			'slug',
@@ -63,7 +67,6 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			'description',
 			'short_description',
 			'sku',
-			'brands',
 			'price',
 			'regular_price',
 			'sale_price',
@@ -122,6 +125,14 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 			// Added in WooCommerce 9.4.0
 			'global_unique_id',
 		);
+
+		// 'brands' was added to the product REST API schema in WC 9.9.0.
+		// See: https://github.com/woocommerce/woocommerce/pull/55945
+		if ( version_compare( WC_VERSION, '9.9.0', '>=' ) ) {
+			$fields[] = 'brands';
+		}
+
+		return $fields;
 	}
 
 	public function test_product_api_get_all_fields(): void {

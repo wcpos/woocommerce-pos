@@ -27,5 +27,24 @@
       "WooCommerce 9.x requires WordPress 6.6+",
       "PHP 7.4 is minimum for WooCommerce, but we test 8.1+ for better performance"
     ]
+  },
+  "knownDifferences": {
+    "comment": "WooCommerce version differences that affect test assertions. Tests use version_compare() to handle these.",
+    "items": [
+      {
+        "feature": "Tax total formatting in REST API line_items.taxes and tax_lines",
+        "before": "WC < 10.0 returns unpadded values (e.g. '1', '0.22')",
+        "after": "WC >= 10.0 returns 6-decimal padded values (e.g. '1.000000', '0.220000')",
+        "affectedTests": ["Test_Order_Taxes"],
+        "note": "Top-level order fields (total, total_tax, cart_tax, fee_lines.total) are formatted via wc_format_decimal with dp and are consistent across versions."
+      },
+      {
+        "feature": "Product brands field in REST API",
+        "addedIn": "WC 9.9.0",
+        "reference": "https://github.com/woocommerce/woocommerce/pull/55945",
+        "affectedTests": ["Test_Products_Controller"],
+        "note": "The 'brands' field was added to the product REST API schema when WooCommerce Brands was integrated into core. Tests conditionally include this field based on WC_VERSION."
+      }
+    ]
   }
 }
