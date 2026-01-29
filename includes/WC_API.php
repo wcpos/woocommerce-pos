@@ -5,17 +5,13 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
- * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
-use WP_Query;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WP_Query;
 
-/**
- *
- */
 class WC_API {
 	/**
 	 * Indicates if the current request is for WooCommerce products.
@@ -31,9 +27,6 @@ class WC_API {
 	 */
 	private $is_woocommerce_rest_api_variations_request = false;
 
-	/**
-	 *
-	 */
 	public function __construct() {
 		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
 
@@ -44,15 +37,17 @@ class WC_API {
 	}
 
 	/**
-	 *
+	 * @param mixed $result
+	 * @param mixed $server
+	 * @param mixed $request
 	 */
 	public function set_woocommerce_rest_api_request_flags( $result, $server, $request ) {
 		$route = $request->get_route();
 
-		if ( strpos( $route, '/wc/v3/products' ) === 0 || strpos( $route, '/wc/v2/products' ) === 0 || strpos( $route, '/wc/v1/products' ) === 0 ) {
+		if ( 0 === strpos( $route, '/wc/v3/products' ) || 0 === strpos( $route, '/wc/v2/products' ) || 0 === strpos( $route, '/wc/v1/products' ) ) {
 			$this->is_woocommerce_rest_api_products_request = true;
 
-			if ( strpos( $route, '/variations' ) !== false ) {
+			if ( false !== strpos( $route, '/variations' ) ) {
 				$this->is_woocommerce_rest_api_variations_request = true;
 			}
 		}
@@ -78,7 +73,7 @@ class WC_API {
 
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
 				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
-				$ids_format  = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+				$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
 				$where      .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
 			}
 		} elseif ( $this->is_woocommerce_rest_api_products_request ) {
@@ -87,7 +82,7 @@ class WC_API {
 
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
 				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
-				$ids_format  = implode( ',', array_fill( 0, count( $exclude_ids ), '%d' ) );
+				$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
 				$where      .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format)", $exclude_ids );
 			}
 		}

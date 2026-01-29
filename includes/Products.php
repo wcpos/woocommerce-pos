@@ -9,13 +9,12 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use WC_Product;
 use Automattic\WooCommerce\StoreApi\Exceptions\NotPurchasableException;
+use WC_Product;
+use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WP_Query;
 
-/**
- *
- */
 class Products {
 	/**
 	 * Constructor.
@@ -71,15 +70,15 @@ class Products {
 	/**
 	 * Hide POS only products and variations from front-end queries.
 	 *
-	 * @param \WP_Query $query The WP_Query instance (passed by reference).
+	 * @param WP_Query $query The WP_Query instance (passed by reference).
 	 */
-	public function hide_pos_only_products( $query ) {
+	public function hide_pos_only_products( $query ): void {
 		// Only run for front-end queries, not admin or POS requests
 		if ( is_admin() || woocommerce_pos_request() ) {
 			return;
 		}
 
-		$post_type        = $query->get( 'post_type' );
+		$post_type         = $query->get( 'post_type' );
 		$settings_instance = Settings::instance();
 		$exclude_ids       = array();
 
@@ -102,7 +101,7 @@ class Products {
 		// Apply exclusions if any
 		if ( ! empty( $exclude_ids ) ) {
 			$existing_excludes = $query->get( 'post__not_in' );
-			if ( ! is_array( $existing_excludes ) ) {
+			if ( ! \is_array( $existing_excludes ) ) {
 				$existing_excludes = array();
 			}
 			$query->set( 'post__not_in', array_merge( $existing_excludes, $exclude_ids ) );
@@ -112,15 +111,15 @@ class Products {
 	/**
 	 * Remove POS Only variations from the storefront.
 	 *
-	 * @param bool                  $visible Whether the variation is visible.
-	 * @param int                   $variation_id The variation ID.
-	 * @param int                   $product_id The product ID.
-	 * @param \WC_Product_Variation $variation The variation object.
+	 * @param bool                 $visible      Whether the variation is visible.
+	 * @param int                  $variation_id The variation ID.
+	 * @param int                  $product_id   The product ID.
+	 * @param WC_Product_Variation $variation    The variation object.
 	 */
 	public function hide_pos_only_variations( $visible, $variation_id, $product_id, $variation ) {
-		if ( \is_shop() || \is_product_category() || \is_product() ) {
+		if ( is_shop() || is_product_category() || is_product() ) {
 			$settings_instance = Settings::instance();
-			$pos_only = $settings_instance->is_variation_pos_only( $variation_id );
+			$pos_only          = $settings_instance->is_variation_pos_only( $variation_id );
 
 			if ( $pos_only ) {
 				return false;
@@ -154,8 +153,8 @@ class Products {
 	 * @return bool
 	 */
 	public function prevent_pos_only_add_to_cart( $passed, $product_id ) {
-		$settings_instance = Settings::instance();
-		$product_pos_only = $settings_instance->is_product_pos_only( $product_id );
+		$settings_instance  = Settings::instance();
+		$product_pos_only   = $settings_instance->is_product_pos_only( $product_id );
 		$variation_pos_only = $settings_instance->is_variation_pos_only( $product_id );
 
 		if ( $product_pos_only || $variation_pos_only ) {
@@ -168,13 +167,13 @@ class Products {
 	/**
 	 * Prevent POS Only products from being added to the cart via the Store API.
 	 *
-	 * @throws NotPurchasableException Exception if product is POS Only.
-
 	 * @param WC_Product $product Product.
+	 *
+	 * @throws NotPurchasableException Exception if product is POS Only.
 	 *
 	 * @return void
 	 */
-	public function store_api_prevent_pos_only_add_to_cart( WC_Product $product ) {
+	public function store_api_prevent_pos_only_add_to_cart( WC_Product $product ): void {
 		$settings_instance = Settings::instance();
 		if ( $product->is_type( 'variation' ) ) {
 			$pos_only = $settings_instance->is_variation_pos_only( $product->get_id() );
@@ -195,18 +194,19 @@ class Products {
 	 *
 	 * @param WC_Product $product Product.
 	 */
-	public function save_decimal_quantities( WC_Product $product ) {
+	public function save_decimal_quantities( WC_Product $product ): void {
 		if ( ! $product->get_manage_stock() ) {
 			$product->set_stock_status( 'instock' );
+
 			return;
 		}
 
-		$stock_quantity = $product->get_stock_quantity();
+		$stock_quantity               = $product->get_stock_quantity();
 		$stock_notification_threshold = absint( get_option( 'woocommerce_notify_no_stock_amount', 0 ) );
 
 		// Adjust the condition to consider stock quantities between 0 and 1 as instock if greater than 0.
 		$stock_is_above_notification_threshold = ( $stock_quantity > 0 && $stock_quantity > $stock_notification_threshold );
-		$backorders_are_allowed = ( 'no' !== $product->get_backorders() );
+		$backorders_are_allowed                = ( 'no' !== $product->get_backorders() );
 
 		if ( $stock_is_above_notification_threshold ) {
 			$new_stock_status = 'instock';
