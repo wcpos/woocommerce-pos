@@ -271,14 +271,18 @@ jobs:
 
       - name: Download coverage report
         uses: actions/download-artifact@v4
+        continue-on-error: true
+        id: download-coverage
         with:
           name: coverage-report
           path: coverage/
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
+        if: steps.download-coverage.outcome == 'success'
         with:
           files: coverage/clover.xml
+          flags: unittests
           fail_ci_if_error: false
           verbose: true
         env:

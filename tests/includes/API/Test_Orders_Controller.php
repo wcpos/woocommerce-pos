@@ -227,9 +227,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_orderby_customer(): void {
 		$customer1 = CustomerHelper::create_customer();
 		$customer2 = CustomerHelper::create_customer();
-		$order1    = OrderHelper::create_order( array( 'customer_id' => $customer1->get_id() ) );
-		$order2    = OrderHelper::create_order( array( 'customer_id' => $customer2->get_id() ) );
-		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		OrderHelper::create_order( array( 'customer_id' => $customer1->get_id() ) );
+		OrderHelper::create_order( array( 'customer_id' => $customer2->get_id() ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params(
 			array(
 				'orderby' => 'customer_id',
@@ -799,10 +799,12 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Create a test cashier user
 		$cashier_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
 
-		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_user', $cashier_id, true );
-		$order2->save();
+		// Create an order without cashier (should be excluded from results)
+		OrderHelper::create_order();
+		// Create an order with cashier (should be included in results)
+		$order_with_cashier = OrderHelper::create_order();
+		$order_with_cashier->add_meta_data( '_pos_user', $cashier_id, true );
+		$order_with_cashier->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'pos_cashier', $cashier_id );
@@ -812,18 +814,20 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 
-		$ids      = wp_list_pluck( $data, 'id' );
-		$this->assertEquals( array( $order2->get_id() ), $ids );
+		$ids = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order_with_cashier->get_id() ), $ids );
 	}
 
 	public function test_filter_order_by_store(): void {
 		// Use a unique store ID for testing (doesn't need to be a real store post)
 		$test_store_id = 12345;
 
-		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_store', $test_store_id, true );
-		$order2->save();
+		// Create an order without store (should be excluded from results)
+		OrderHelper::create_order();
+		// Create an order with store (should be included in results)
+		$order_with_store = OrderHelper::create_order();
+		$order_with_store->add_meta_data( '_pos_store', $test_store_id, true );
+		$order_with_store->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'pos_store', $test_store_id );
@@ -833,8 +837,8 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 
-		$ids      = wp_list_pluck( $data, 'id' );
-		$this->assertEquals( array( $order2->get_id() ), $ids );
+		$ids = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order_with_store->get_id() ), $ids );
 	}
 
 	/**

@@ -242,8 +242,6 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Sorting by meta_value on this field compares serialized strings, not actual role names.
 	 * To fix this properly, we'd need to use a pre_user_query filter to extract and sort
 	 * by the actual role name, which is complex and may have performance implications.
-	 *
-	 * @see https://github.com/wcpos/woocommerce-pos/issues/XXX
 	 */
 	public function test_orderby_role(): void {
 		$this->markTestSkipped( 'Role sorting is a known limitation - wp_capabilities is a serialized array' );

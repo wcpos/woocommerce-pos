@@ -70,31 +70,40 @@ class Products {
 	/**
 	 * Hide POS only products and variations from front-end queries.
 	 *
-	 * @param WP_Query $query The WP_Query instance (passed by reference).
+	 * @param \WP_Query $query The WP_Query instance (passed by reference).
+	 *
+	 * @return void
 	 */
-	public function hide_pos_only_products( $query ): void {
+	public function hide_pos_only_products( \WP_Query $query ): void {
 		// Only run for front-end queries, not admin or POS requests
 		if ( is_admin() || woocommerce_pos_request() ) {
 			return;
 		}
 
-		$post_type         = $query->get( 'post_type' );
+		// WP_Query post_type can be string or array
+		$post_types        = (array) $query->get( 'post_type' );
 		$settings_instance = Settings::instance();
 		$exclude_ids       = array();
 
 		// Handle product queries
-		if ( 'product' === $post_type ) {
+		if ( \in_array( 'product', $post_types, true ) ) {
 			$settings = $settings_instance->get_pos_only_product_visibility_settings();
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+				$exclude_ids = array_merge(
+					$exclude_ids,
+					array_map( 'intval', (array) $settings['ids'] )
+				);
 			}
 		}
 
 		// Handle product_variation queries
-		if ( 'product_variation' === $post_type ) {
+		if ( \in_array( 'product_variation', $post_types, true ) ) {
 			$settings = $settings_instance->get_pos_only_variations_visibility_settings();
 			if ( isset( $settings['ids'] ) && ! empty( $settings['ids'] ) ) {
-				$exclude_ids = array_map( 'intval', (array) $settings['ids'] );
+				$exclude_ids = array_merge(
+					$exclude_ids,
+					array_map( 'intval', (array) $settings['ids'] )
+				);
 			}
 		}
 
