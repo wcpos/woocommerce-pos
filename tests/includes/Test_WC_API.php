@@ -26,10 +26,9 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 	public function test_pos_only_products_via_store_api() {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+				return $settings;
 			}
 		);
 		new WC_API(); // reinstantiate the class to apply the filter
@@ -85,10 +84,9 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 	public function test_pos_only_variations_via_store_api() {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+				return $settings;
 			}
 		);
 		new WC_API(); // reinstantiate the class to apply the filter

@@ -36,10 +36,9 @@ class Test_Products extends WP_UnitTestCase {
 	public function test_pos_only_products() {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+				return $settings;
 			}
 		);
 		new Products(); // reinstantiate the class to apply the filter
@@ -102,10 +101,9 @@ class Test_Products extends WP_UnitTestCase {
 	public function test_pos_only_variations() {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+				return $settings;
 			}
 		);
 		new Products(); // reinstantiate the class to apply the filter
