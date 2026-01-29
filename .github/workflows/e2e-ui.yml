@@ -60,6 +60,13 @@ jobs:
           composer prefix-dependencies
           composer install --prefer-dist --no-progress
 
+      - name: Build JS assets
+        run: |
+          # Build settings page React app
+          pnpm --filter=@wcpos/settings build
+          # Verify the built file exists
+          ls -la assets/js/settings.js || echo "Warning: settings.js not found in assets/"
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
