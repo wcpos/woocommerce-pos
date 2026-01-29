@@ -2,7 +2,7 @@
   "core": null,
   "phpVersion": null,
   "plugins": [
-    "https://downloads.wordpress.org/plugin/woocommerce.zip",
+    "https://downloads.wordpress.org/plugin/woocommerce.10.4.3.zip",
     "."
   ],
   "config": {
