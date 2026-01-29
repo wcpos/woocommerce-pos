@@ -61,8 +61,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.WCPOS_APP_ID }}
-          private-key: ${{ secrets.WCPOS_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.TRANSLATION_APP_ID }}
+          private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
           owner: wcpos
           repositories: translations
 
