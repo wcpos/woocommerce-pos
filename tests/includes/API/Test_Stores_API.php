@@ -74,6 +74,14 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'price_display_suffix',
 			'tax_total_display',
 			'meta_data',
+			// Pro plugin fields (also present in free with default values)
+			'url',
+			'phone',
+			'email',
+			'opening_hours',
+			'personal_notes',
+			'policies_and_conditions',
+			'footer_imprint',
 			'_links',
 		);
 	}

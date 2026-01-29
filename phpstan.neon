@@ -1,0 +1,44 @@
+parameters:
+    level: 5
+    paths:
+        - includes
+    excludePaths:
+        - includes/updates/*
+        - vendor/*
+        - vendor_prefixed/*
+    
+    # WordPress and WooCommerce stubs
+    bootstrapFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+    
+    # Ignore errors in third-party code
+    ignoreErrors:
+        # Allow dynamic property access for WordPress objects
+        - '#Access to an undefined property WC_Order::\$#'
+        - '#Access to an undefined property WC_Product::\$#'
+        - '#Access to an undefined property WP_User::\$#'
+        
+        # Allow calls to undefined methods on mock objects in tests
+        - '#Call to an undefined method .+::expects\(\)#'
+        
+        # WordPress global functions that PHPStan doesn't know about
+        - '#Function .+ not found#'
+        
+    # Treat these as universal object crates (dynamic properties allowed)
+    universalObjectCratesClasses:
+        - WP_Post
+        - WP_User
+        - WC_Order
+        - WC_Product
+        - WC_Customer
+    
+    # Report unmatched ignored errors
+    reportUnmatchedIgnoredErrors: false
+    
+    # Check for missing typehints
+    checkMissingIterableValueType: false
+    checkGenericClassInNonGenericObjectType: false
+
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon

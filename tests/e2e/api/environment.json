@@ -1,0 +1,49 @@
+{
+	"id": "wcpos-e2e-environment",
+	"name": "WCPOS E2E Environment",
+	"values": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8888",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_username",
+			"value": "admin",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "admin_password",
+			"value": "password",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "test_product_id",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		},
+		{
+			"key": "test_order_id",
+			"value": "",
+			"type": "any",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment"
+}

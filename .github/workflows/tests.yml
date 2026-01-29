@@ -1,4 +1,5 @@
 name: Tests
+
 on:
   push:
     branches:
@@ -7,12 +8,29 @@ on:
       - "**.php"
       - "**.tsx"
       - "**.ts"
+      - "composer.json"
+      - "package.json"
+      - ".github/workflows/tests.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**.php"
+      - "**.tsx"
+      - "**.ts"
+      - "composer.json"
+      - "package.json"
+      - ".github/workflows/tests.yml"
   workflow_dispatch:
 
-jobs:
-  test:
-    name: Test
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -22,35 +40,250 @@ jobs:
       - name: Setup PHP with tools
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "7.4"
+          php-version: "8.1"
           tools: composer, cs2pr, phpcs
 
-      - name: 🏗 Setup pnpm
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run PHPCS
+        run: composer run lint-report | cs2pr
+        continue-on-error: true  # TODO: Fix lint errors and remove this
+
+  static-analysis:
+    name: Static Analysis (PHPStan)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP with tools
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          tools: composer
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run PHPStan
+        run: composer run phpstan
+        continue-on-error: true
+
+  test:
+    name: Test (PHP ${{ matrix.php }}, WP ${{ matrix.wp }}, WC ${{ matrix.wc }})
+    runs-on: ubuntu-latest
+    needs: lint
+    # Allow experimental builds to fail without failing the whole workflow
+    continue-on-error: ${{ matrix.experimental || false }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Minimum PHP with current WC (must pass)
+          # Note: WC 10.x requires WP 6.8+
+          - php: '7.4'
+            wp: '6.8'
+            wc: '10.4.3'
+            experimental: false
+          # Current stable (must pass)
+          - php: '8.1'
+            wp: '6.8'
+            wc: '10.4.3'
+            experimental: false
+          # Latest/bleeding edge (informational - can fail)
+          - php: '8.3'
+            wp: 'latest'
+            wc: 'latest'
+            experimental: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP with tools
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer
+          coverage: xdebug
+
+      - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: '10.8.0'
 
-      - name: 👷 Build
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-php${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-php${{ matrix.php }}-
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Prefix PHP dependencies
+        run: composer prefix-dependencies
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Configure wp-env for matrix versions
         run: |
-          pnpm install
-          composer prefix-dependencies
-          composer install
+          # Set WordPress core version
+          if [ "${{ matrix.wp }}" = "latest" ]; then
+            WP_CORE="null"
+          else
+            WP_CORE="\"WordPress/WordPress#${{ matrix.wp }}\""
+          fi
+
+          # Set WooCommerce version URL
+          if [ "${{ matrix.wc }}" = "latest" ]; then
+            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.zip"
+          else
+            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip"
+          fi
+
+          # Update .wp-env.json with matrix versions
+          cat > .wp-env.json << EOF
+          {
+            "core": $WP_CORE,
+            "phpVersion": "${{ matrix.php }}",
+            "plugins": [
+              "$WC_URL",
+              "."
+            ],
+            "config": {
+              "WP_DEBUG": true,
+              "SCRIPT_DEBUG": true,
+              "WP_PHP_BINARY": "php",
+              "WP_TESTS_EMAIL": "admin@example.org",
+              "WP_TESTS_TITLE": "Test Blog",
+              "WP_TESTS_DOMAIN": "http://localhost",
+              "WP_SITEURL": "http://localhost",
+              "WP_HOME": "http://localhost"
+            },
+            "mappings": {}
+          }
+          EOF
+          echo "Testing with WP ${{ matrix.wp }}, WC ${{ matrix.wc }}, PHP ${{ matrix.php }}"
+          cat .wp-env.json
 
       - name: Start WordPress Environment
         run: pnpm run wp-env start --xdebug=coverage
-  
-      - name: Check WooCommerce Activation
-        run: pnpm run wp-env run cli -- wp plugin list
 
-      - name: Linting the code
+      - name: Check WordPress and WooCommerce versions
         run: |
-          vendor/bin/phpcs -i
-          vendor/bin/phpcs --config-show
-          # vendor/bin/phpcs --report=checkstyle | cs2pr
-          pnpm run lint
-        continue-on-error: true
+          echo "=== Installed Versions ==="
+          pnpm run wp-env run cli -- wp core version
+          pnpm run wp-env run cli -- wp plugin list
 
-      - name: Running the tests
-        run: | 
-          pnpm run test
-          # cat phpunit.xml | cs2pr
+      - name: Run PHPUnit tests
+        run: pnpm run test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phpunit-results-php${{ matrix.php }}-wp${{ matrix.wp }}-wc${{ matrix.wc }}
+          path: phpunit.xml
+          retention-days: 7
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: matrix.php == '8.1' && matrix.experimental == false
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # Publish test results as PR comment
+  publish-results:
+    name: Publish Test Results
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+
+    permissions:
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: phpunit-results-*
+          path: test-results
+          merge-multiple: true
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "test-results/**/*.xml"
+          comment_mode: always
+          check_name: PHPUnit Test Results
+
+  # Upload coverage to Codecov
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        id: download-coverage
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        if: steps.download-coverage.outcome == 'success'
+        with:
+          files: coverage/clover.xml
+          flags: unittests
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

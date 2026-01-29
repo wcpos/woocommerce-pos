@@ -208,7 +208,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'completed', 'on-hold', 'pending', 'processing' ) );
+		$this->assertEquals( array( 'completed', 'on-hold', 'pending', 'processing' ), $statuses );
 
 		// reverse order
 		$request->set_query_params(
@@ -221,14 +221,15 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'processing', 'pending', 'on-hold', 'completed' ) );
+		$this->assertEquals( array( 'processing', 'pending', 'on-hold', 'completed' ), $statuses );
 	}
 
 	public function test_orderby_customer(): void {
-		$customer  = CustomerHelper::create_customer();
-		$order1    = OrderHelper::create_order( array( 'customer_id' => $customer->get_id() ) );
-		$order2    = OrderHelper::create_order();
-		$request   = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		OrderHelper::create_order( array( 'customer_id' => $customer1->get_id() ) );
+		OrderHelper::create_order( array( 'customer_id' => $customer2->get_id() ) );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_query_params(
 			array(
 				'orderby' => 'customer_id',
@@ -239,7 +240,10 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
 
-		$this->assertEquals( $customer_ids, array( 1, $customer->get_id() ) );
+		// Customer IDs should be sorted in ascending order
+		$expected_asc = array( $customer1->get_id(), $customer2->get_id() );
+		sort( $expected_asc );
+		$this->assertEquals( $expected_asc, $customer_ids );
 
 		// reverse order
 		$request->set_query_params(
@@ -252,7 +256,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data         = $response->get_data();
 		$customer_ids = wp_list_pluck( $data, 'customer_id' );
 
-		$this->assertEquals( $customer_ids, array( $customer->get_id(), 1 ) );
+		$expected_desc = array( $customer1->get_id(), $customer2->get_id() );
+		rsort( $expected_desc );
+		$this->assertEquals( $expected_desc, $customer_ids );
 	}
 
 	public function test_orderby_payment_method(): void {
@@ -534,8 +540,6 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * GOTCHA: saving a variation attributes will cause duplication, eg:
 	 * retrieve order from REST API, send back, now you have duplicate attributes.
-	 *
-	 * @TODO - this is working in the app, but not in the test??
 	 */
 	public function test_order_save_line_item_attributes(): void {
 		$product        = ProductHelper::create_variation_product();
@@ -566,22 +570,27 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid.' );
 
 		// now, save the order back to the API
-		$request       = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$request->set_body_params( $data );
+		$update_request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$update_request->set_body_params( $data );
+		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
 
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( 1, \count( $data['line_items'] ), 'There should be one line item.' );
+		$this->assertEquals( 200, $update_response->get_status() );
+		$this->assertEquals( 1, \count( $update_data['line_items'] ), 'There should be one line item after update.' );
 
-		// Look for the pa_size key in meta_data
-		foreach ( $data['line_items'][0]['meta_data'] as $meta ) {
+		// Reset counter and look for the pa_size key in meta_data after update
+		$attr  = '';
+		$count = 0;
+
+		foreach ( $update_data['line_items'][0]['meta_data'] as $meta ) {
 			if ( 'pa_size' === $meta['key'] ) {
 				$count++;
 				$attr = $meta['value'];
 			}
 		}
 
-		$this->assertEquals( 1, $count, 'There should only be one pa_size.' );
-		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid.' );
+		$this->assertEquals( 1, $count, 'There should only be one pa_size after update.' );
+		$this->assertEquals( 'small', $attr, 'The pa_size value is not valid after update.' );
 	}
 
 	/**
@@ -777,63 +786,59 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $order2->get_id() ), $ids );
 	}
 
+	/**
+	 * @see Test_Decimal_Quantities::test_create_order_with_decimal_quantity()
+	 * This test is skipped because decimal_qty setting must be applied before API routes
+	 * are registered. The Test_Decimal_Quantities class handles this properly.
+	 */
 	public function test_create_order_with_decimal_quantity(): void {
-		$this->setup_decimal_quantity_tests();
-
-		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
-		$request->set_body_params(
-			array(
-				'payment_method' => 'pos_cash',
-				'line_items'     => array(
-					array(
-						'product_id' => 1,
-						'quantity'   => '1.5',
-					),
-				),
-			)
-		);
-
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 201, $response->get_status() );
-
-		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
+		$this->markTestSkipped( 'Covered by Test_Decimal_Quantities::test_create_order_with_decimal_quantity' );
 	}
 
 	public function test_filter_order_by_cashier(): void {
-		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_user', 4, true );
-		$order2->save();
+		// Create a test cashier user
+		$cashier_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+
+		// Create an order without cashier (should be excluded from results)
+		OrderHelper::create_order();
+		// Create an order with cashier (should be included in results)
+		$order_with_cashier = OrderHelper::create_order();
+		$order_with_cashier->add_meta_data( '_pos_user', $cashier_id, true );
+		$order_with_cashier->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_param( 'pos_cashier', 4 );
+		$request->set_param( 'pos_cashier', $cashier_id );
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 
-		$ids      = wp_list_pluck( $data, 'id' );
-		$this->assertEquals( array( $order2->get_id() ), $ids );
+		$ids = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order_with_cashier->get_id() ), $ids );
 	}
 
 	public function test_filter_order_by_store(): void {
-		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_store', 64, true );
-		$order2->save();
+		// Use a unique store ID for testing (doesn't need to be a real store post)
+		$test_store_id = 12345;
+
+		// Create an order without store (should be excluded from results)
+		OrderHelper::create_order();
+		// Create an order with store (should be included in results)
+		$order_with_store = OrderHelper::create_order();
+		$order_with_store->add_meta_data( '_pos_store', $test_store_id, true );
+		$order_with_store->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_param( 'pos_store', 64 );
+		$request->set_param( 'pos_store', $test_store_id );
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 
-		$ids      = wp_list_pluck( $data, 'id' );
-		$this->assertEquals( array( $order2->get_id() ), $ids );
+		$ids = wp_list_pluck( $data, 'id' );
+		$this->assertEquals( array( $order_with_store->get_id() ), $ids );
 	}
 
 	/**

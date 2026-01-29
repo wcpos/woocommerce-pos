@@ -576,7 +576,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
 
 		$schema = $this->endpoint->get_item_schema();
-		$this->assertEquals( 'float', $schema['properties']['stock_quantity']['type'] );
+		$this->assertEquals( 'number', $schema['properties']['stock_quantity']['type'] );
 	}
 
 	public function test_variation_response_with_decimal_quantities(): void {
@@ -600,27 +600,13 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1.5, $data['stock_quantity'] );
 	}
 
-	// @TODO - this works in the POS, but not in the tests, I have no idea why
+	/**
+	 * @see Test_Decimal_Quantities::test_variation_update_with_decimal_stock_quantity()
+	 * This test is skipped because decimal_qty setting must be applied before API routes
+	 * are registered. The Test_Decimal_Quantities class handles this properly.
+	 */
 	public function test_variation_update_decimal_quantities(): void {
-		$this->setup_decimal_quantity_tests();
-		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
-
-		$product       = ProductHelper::create_variation_product();
-		$variation_ids = $product->get_children();
-		$variation     = wc_get_product( $variation_ids[0] );
-		$variation->set_manage_stock( true );
-		$variation->save();
-
-		$request  = $this->wp_rest_patch_request( '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0] );
-		$request->set_body_params(
-			array(
-				'stock_quantity' => '3.85',
-			)
-		);
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
-		$this->assertEquals( 200, $response->get_status() );
-		$this->assertEquals( 3.85, $data['stock_quantity'] );
+		$this->markTestSkipped( 'Covered by Test_Decimal_Quantities::test_variation_update_with_decimal_stock_quantity' );
 	}
 
 	public function test_variation_orderby_decimal_stock_quantity(): void {
@@ -867,11 +853,11 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		// enable barcode and pos_only_products
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'barcode_field'     => '_barcode',
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['barcode_field']     = '_barcode';
+				$settings['pos_only_products'] = true;
+
+				return $settings;
 			}
 		);
 
@@ -937,13 +923,33 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $variation_ids1[1], $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
 
 		// make sure online_only variations are not returned
-		update_post_meta( $variation_ids1[1], '_pos_visibility', 'online_only' );
+		// Note: visibility is controlled via the settings option, not post meta
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'products'   => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array() ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'pos_only'    => array( 'ids' => array() ),
+						'online_only' => array( 'ids' => array( $variation_ids1[1] ) ),
+					),
+				),
+			)
+		);
 		$request->set_query_params( array( 'search' => $random_barcode2 ) );
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( array( $variation_ids2[1] ), wp_list_pluck( $data, 'id' ) );
+
+		// Clean up
+		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
 	public function test_all_variation_with_includes(): void {

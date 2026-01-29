@@ -5,6 +5,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_REST_Unit_Test_Case;
 use WCPOS\WooCommercePOS\WC_API;
+use WP_REST_Request;
 
 /**
  * @internal
@@ -20,16 +21,13 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		parent::tearDown();
 	}
 
-	/**
-	 *
-	 */
-	public function test_pos_only_products_via_store_api() {
+	public function test_pos_only_products_via_store_api(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+
+				return $settings;
 			}
 		);
 		new WC_API(); // reinstantiate the class to apply the filter
@@ -68,7 +66,7 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 
 		// Make WC REST request
 		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
-		$request = new \WP_REST_Request( 'GET', '/wc/v3/products' );
+		$request  = new WP_REST_Request( 'GET', '/wc/v3/products' );
 		$response = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
@@ -79,22 +77,19 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		delete_option( 'woocommerce_pos_settings_visibility' );
 	}
 
-		/**
-		 *
-		 */
-	public function test_pos_only_variations_via_store_api() {
+	public function test_pos_only_variations_via_store_api(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',
-			function () {
-				return array(
-					'pos_only_products' => true,
-				);
+			function ( $settings ) {
+				$settings['pos_only_products'] = true;
+
+				return $settings;
 			}
 		);
 		new WC_API(); // reinstantiate the class to apply the filter
 
 		// Create a variable product
-		$variable = ProductHelper::create_variation_product();
+		$variable      = ProductHelper::create_variation_product();
 		$variation_ids = $variable->get_children();
 		update_option(
 			'woocommerce_pos_settings_visibility',
@@ -125,7 +120,7 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		// Make WC REST request
 		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
 
-		$request = new \WP_REST_Request( 'GET', '/wc/v3/products/' . $variable->get_id() . '/variations' );
+		$request  = new WP_REST_Request( 'GET', '/wc/v3/products/' . $variable->get_id() . '/variations' );
 		$response = $this->server->dispatch( $request );
 
 		$data = $response->get_data();
@@ -133,7 +128,7 @@ class Test_WC_API extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 1, \count( $data ) );
 		$this->assertEquals( $variation_ids[1], $data[0]['id'] );
 
-		/**
+		/*
 		 * @TODO should we remove the id from the parent response also?
 		 * The WooCommerce code uses $object->get_children() to get the variation ids, NOT
 		 * $object->get_visible_children() so it seems they return all variations ids regardless of visibility.

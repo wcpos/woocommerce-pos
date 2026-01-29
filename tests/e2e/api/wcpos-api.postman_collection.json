@@ -1,0 +1,583 @@
+{
+	"info": {
+		"_postman_id": "wcpos-api-tests",
+		"name": "WCPOS API Tests",
+		"description": "End-to-end API tests for WCPOS REST endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login - Valid Credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains JWT token', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('jwt');",
+									"    pm.expect(jsonData.jwt).to.be.a('string');",
+									"    pm.environment.set('jwt_token', jsonData.jwt);",
+									"});",
+									"",
+									"pm.test('Response contains refresh token', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('refresh_token');",
+									"    pm.environment.set('refresh_token', jsonData.refresh_token);",
+									"});",
+									"",
+									"pm.test('Response contains user data', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('user');",
+									"    pm.expect(jsonData.user).to.have.property('id');",
+									"    pm.expect(jsonData.user).to.have.property('username');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
+						}
+					}
+				},
+				{
+					"name": "Login - Invalid Credentials",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function() {",
+									"    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
+									"});",
+									"",
+									"pm.test('Response contains error', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('code');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"invalid_user\",\n    \"password\": \"wrong_password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains new JWT token', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('jwt');",
+									"    pm.environment.set('jwt_token', jsonData.jwt);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "jwt", "refresh"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "Get All Products",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Products have required fields', function() {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        var product = jsonData[0];",
+									"        pm.expect(product).to.have.property('id');",
+									"        pm.expect(product).to.have.property('name');",
+									"        pm.expect(product).to.have.property('price');",
+									"        pm.expect(product).to.have.property('sku');",
+									"        pm.expect(product).to.have.property('barcode');",
+									"        pm.environment.set('test_product_id', product.id);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/products",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "products"]
+						}
+					}
+				},
+				{
+					"name": "Get Product IDs Only",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains only id field', function() {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        var product = jsonData[0];",
+									"        pm.expect(product).to.have.property('id');",
+									"        pm.expect(Object.keys(product).length).to.equal(1);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/products?fields[]=id",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "products"],
+							"query": [
+								{
+									"key": "fields[]",
+									"value": "id"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Search Products",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/products?search=dummy",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "products"],
+							"query": [
+								{
+									"key": "search",
+									"value": "dummy"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Orders",
+			"item": [
+				{
+					"name": "Get All Orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/orders",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "orders"]
+						}
+					}
+				},
+				{
+					"name": "Create Order",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 201', function() {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test('Order was created via POS', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.created_via).to.equal('woocommerce-pos');",
+									"});",
+									"",
+									"pm.test('Order has line items', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.line_items).to.be.an('array');",
+									"    pm.expect(jsonData.line_items.length).to.be.at.least(1);",
+									"});",
+									"",
+									"pm.test('Store order ID for later tests', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set('test_order_id', jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"payment_method\": \"pos_cash\",\n    \"line_items\": [\n        {\n            \"product_id\": 0,\n            \"name\": \"Test Product\",\n            \"quantity\": 1,\n            \"price\": 10\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/orders",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "orders"]
+						}
+					}
+				},
+				{
+					"name": "Get Order Statuses",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array of statuses', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0]).to.have.property('id');",
+									"        pm.expect(jsonData[0]).to.have.property('name');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/orders/statuses",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "orders", "statuses"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Customers",
+			"item": [
+				{
+					"name": "Get All Customers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/customers",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "customers"]
+						}
+					}
+				},
+				{
+					"name": "Search Customers",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/customers?search=admin",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "customers"],
+							"query": [
+								{
+									"key": "search",
+									"value": "admin"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Settings",
+			"item": [
+				{
+					"name": "Get Settings",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains general settings', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/settings/general",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "settings", "general"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8888"
+		}
+	]
+}
