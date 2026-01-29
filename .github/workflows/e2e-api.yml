@@ -89,43 +89,14 @@ jobs:
           # Ensure plugins are active
           pnpm run wp-env run cli -- wp plugin activate woocommerce woocommerce-pos
           
-          # Create .htaccess with Authorization header passthrough
-          # Apache CGI/FastCGI strips Authorization header by default
-          pnpm run wp-env run wordpress -- bash -c 'cat > /var/www/html/.htaccess << EOF
-          # Pass Authorization header to PHP
-          SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=\$1
-
-          # BEGIN WordPress
-          <IfModule mod_rewrite.c>
-          RewriteEngine On
-          RewriteBase /
-          RewriteRule ^index\.php$ - [L]
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteCond %{REQUEST_FILENAME} !-d
-          RewriteRule . /index.php [L]
-          </IfModule>
-          # END WordPress
-          EOF'
-          
-          # Verify .htaccess was created
-          pnpm run wp-env run wordpress -- cat /var/www/html/.htaccess
-          
-          # Set permalinks structure (this regenerates .htaccess rules too)
+          # Set permalinks structure
           pnpm run wp-env run cli -- wp rewrite structure '/%postname%/' --hard
           pnpm run wp-env run cli -- wp rewrite flush --hard
 
-          # Re-add Authorization header passthrough AFTER rewrite flush
-          # (wp rewrite flush --hard may overwrite .htaccess, removing our SetEnvIf rule)
-          pnpm run wp-env run cli -- wp eval '
-            $htaccess = file_get_contents("/var/www/html/.htaccess");
-            $rule = "SetEnvIf Authorization \"(.*)\" HTTP_AUTHORIZATION=\$1\n";
-            if (strpos($htaccess, "SetEnvIf Authorization") === false) {
-              file_put_contents("/var/www/html/.htaccess", $rule . $htaccess);
-              echo "Added SetEnvIf rule to .htaccess";
-            } else {
-              echo "SetEnvIf rule already present";
-            }
-          '
+          # Add Authorization header passthrough to .htaccess AFTER rewrite flush
+          # Apache strips the Authorization header by default; SetEnvIf passes it to PHP
+          # We use a PHP script to avoid shell escaping issues with $1 backreference
+          pnpm run wp-env run cli -- wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/fix-htaccess.php
           
           # Verify REST API is accessible with X-WCPOS header
           curl -sf -H "X-WCPOS: 1" "http://localhost:8888/?rest_route=/" | jq '.namespaces | map(select(. == "wcpos/v1"))' || echo "Checking alternative..."
