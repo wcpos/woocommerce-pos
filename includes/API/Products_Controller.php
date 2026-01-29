@@ -108,7 +108,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		if ( $this->wcpos_allow_decimal_quantities()      &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
-			$schema['properties']['stock_quantity']['type'] = 'float';
+			$schema['properties']['stock_quantity']['type'] = 'number';
 		}
 
 		return $schema;

@@ -789,13 +789,16 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_create_order_with_decimal_quantity(): void {
 		$this->setup_decimal_quantity_tests();
 
+		// Create a product for the order
+		$product = ProductHelper::create_simple_product();
+
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		$request->set_body_params(
 			array(
 				'payment_method' => 'pos_cash',
 				'line_items'     => array(
 					array(
-						'product_id' => 1,
+						'product_id' => $product->get_id(),
 						'quantity'   => '1.5',
 					),
 				),

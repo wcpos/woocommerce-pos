@@ -825,13 +825,16 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	public function test_create_order_with_decimal_quantity(): void {
 		$this->setup_decimal_quantity_tests();
 
+		// Create a product for the order
+		$product = ProductHelper::create_simple_product();
+
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
 		$request->set_body_params(
 			array(
 				'payment_method' => 'pos_cash',
 				'line_items'     => array(
 					array(
-						'product_id' => 1,
+						'product_id' => $product->get_id(),
 						'quantity'   => '1.5',
 					),
 				),
@@ -846,13 +849,16 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	}
 
 	public function test_filter_order_by_cashier(): void {
+		// Create a test cashier user
+		$cashier_id = $this->factory->user->create( array( 'role' => 'administrator' ) );
+
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_user', 4, true );
+		$order2->add_meta_data( '_pos_user', $cashier_id, true );
 		$order2->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_param( 'pos_cashier', 4 );
+		$request->set_param( 'pos_cashier', $cashier_id );
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
@@ -864,13 +870,16 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	}
 
 	public function test_filter_order_by_store(): void {
+		// Use a test store ID
+		$test_store_id = 12345;
+
 		$order1 = OrderHelper::create_order();
 		$order2 = OrderHelper::create_order();
-		$order2->add_meta_data( '_pos_store', 64, true );
+		$order2->add_meta_data( '_pos_store', $test_store_id, true );
 		$order2->save();
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
-		$request->set_param( 'pos_store', 64 );
+		$request->set_param( 'pos_store', $test_store_id );
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
