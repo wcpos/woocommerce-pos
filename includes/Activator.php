@@ -32,7 +32,7 @@ class Activator {
 		// Check for min requirements to run.
 		if ( $this->php_check() && $this->woocommerce_check() ) {
 			// check permalinks.
-			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) {
+			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) { // @phpstan-ignore-line
 				$this->permalink_check();
 			}
 
@@ -289,7 +289,8 @@ class Activator {
 	 */
 	private function pro_version_check(): void {
 		if ( class_exists( '\WCPOS\WooCommercePOSPro\Activator' ) ) {
-			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) {
+			if ( version_compare( \WCPOS\WooCommercePOSPro\VERSION, MIN_PRO_VERSION, '<' ) ) { // @phpstan-ignore-line
+
 				/*
 				 * NOTE: the deactivate_plugins function is not available in the frontend or ajax
 				 * This is an extreme situation where the Pro plugin could crash the site, so we need to deactivate it
@@ -299,7 +300,7 @@ class Activator {
 				}
 
 				// WCPOS Pro is activated, but the version is too low - use the constant for dynamic folder name.
-				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE );
+				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE ); // @phpstan-ignore-line
 
 				$message = \sprintf(
 					// translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.

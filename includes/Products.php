@@ -61,7 +61,7 @@ class Products {
 	 */
 	public function product_set_stock( WC_Product $product ): void {
 		$post_modified     = current_time( 'mysql' );
-		$post_modified_gmt = current_time( 'mysql', 1 );
+		$post_modified_gmt = current_time( 'mysql', true );
 		wp_update_post(
 			array(
 				'ID'                => $product->get_id(),
@@ -182,7 +182,7 @@ class Products {
 	 *
 	 * @param WC_Product $product Product.
 	 *
-	 * @throws NotPurchasableException Exception if product is POS Only.
+	 * @throws NotPurchasableException If the product is POS only.
 	 *
 	 * @return void
 	 */
@@ -195,6 +195,7 @@ class Products {
 		}
 
 		if ( $pos_only ) {
+			// @phpstan-ignore-next-line.
 			throw new NotPurchasableException(
 				'woocommerce_pos_product_not_purchasable',
 				esc_html( $product->get_name() )

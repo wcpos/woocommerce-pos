@@ -8,6 +8,12 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
+
+/**
+ * Quick edit visibility select template.
+ *
+ * @var array $options
+ */
 ?>
 
 <fieldset class="inline-edit-col-left">

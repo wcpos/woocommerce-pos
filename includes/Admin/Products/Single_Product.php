@@ -14,7 +14,7 @@ namespace WCPOS\WooCommercePOS\Admin\Products;
 
 use WCPOS\WooCommercePOS\Registry;
 use WCPOS\WooCommercePOS\Services\Settings;
-use const DOING_AUTOSAVE;
+use WP_Post;
 
 /**
  * Single_Product class for POS product admin functionality.
@@ -30,6 +30,7 @@ class Single_Product {
 	/**
 	 * Visibility options for POS products.
 	 *
+	 * @phpstan-ignore-next-line
 	 * @var array
 	 */
 	private $options;
@@ -198,7 +199,7 @@ class Single_Product {
 	 */
 	public function save_post( $post_id, $post ): void {
 		// If this is an autosave, our form has not been submitted, so we don't want to do anything.
-		if ( \defined( '\DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
+		if ( \defined( 'DOING_AUTOSAVE' ) && \DOING_AUTOSAVE ) { // @phpstan-ignore-line
 			return;
 		}
 

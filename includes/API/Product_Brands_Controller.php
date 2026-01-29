@@ -16,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Product_Brands_Controller' ) ) {
 use Exception;
 use WC_REST_Product_Brands_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -107,18 +108,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	/**
 	 * Filters the terms query SQL clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
-	 *
-	 * @var string The SELECT clause of the query.
-	 * @var string The JOIN clause of the query.
-	 * @var string The WHERE clause of the query.
-	 * @var string The DISTINCT clause of the query.
-	 * @var string The ORDER BY clause of the query.
-	 * @var string The ORDER clause of the query.
-	 * @var string The LIMIT clause of the query.
-	 *             }
-	 *
+	 * @param string[] $clauses    Associative array of the clauses for the query.
 	 * @param string[] $taxonomies An array of taxonomy names.
 	 * @param array    $args       An array of term query arguments.
 	 *
@@ -189,7 +179,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

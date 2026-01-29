@@ -176,9 +176,9 @@ class Frontend {
 		/**
 		 * Filters the javascript variables passed to the POS.
 		 *
-		 * @param {array} $vars
+		 * @param array $vars
 		 *
-		 * @returns {array} $vars
+		 * @returns array $vars
 		 *
 		 * @since 1.0.0
 		 *

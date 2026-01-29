@@ -543,7 +543,7 @@ class Settings {
 
 		$post_type  = $args['post_type'];
 		$scope      = $args['scope'] ?? 'default';
-		$visibility = $args['visibility'] ?? '';
+		$visibility = $args['visibility'];
 		$ids        = \is_array( $args['ids'] ) ? $args['ids'] : array( $args['ids'] );
 		$ids        = array_filter( array_map( 'intval', $ids ) ); // Force to array of integers.
 

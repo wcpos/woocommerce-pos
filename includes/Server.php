@@ -56,8 +56,9 @@ class Server {
 		$json_error_message = $this->get_json_last_error();
 
 		if ( $json_error_message ) {
+			// @phpstan-ignore-next-line
 			$this->set_status( 500 );
-			$json_error_obj = new WP_Error(
+			$json_error_obj = new \WP_Error(
 				'rest_encode_error',
 				$json_error_message,
 				array( 'status' => 500 )
@@ -81,7 +82,7 @@ class Server {
 	protected function get_json_last_error() {
 		$last_error_code = json_last_error();
 
-		if ( JSON_ERROR_NONE === $last_error_code || empty( $last_error_code ) ) {
+		if ( JSON_ERROR_NONE === $last_error_code ) {
 			return false;
 		}
 

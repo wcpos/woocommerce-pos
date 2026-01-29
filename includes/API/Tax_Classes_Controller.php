@@ -30,8 +30,8 @@ class Tax_Classes_Controller extends WC_REST_Tax_Classes_Controller {
 	/**
 	 * Check whether a given request has permission to view tax classes.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|boolean
+	 * @param  \WP_REST_Request $request Full details about the request.
+	 * @return \WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
 		if ( is_user_logged_in() ) {

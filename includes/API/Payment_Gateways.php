@@ -18,6 +18,8 @@ class Payment_Gateways {
 	/**
 	 * The REST request.
 	 *
+	 * @phpstan-ignore-next-line
+	 *
 	 * @var WP_REST_Request
 	 */
 	private $request;

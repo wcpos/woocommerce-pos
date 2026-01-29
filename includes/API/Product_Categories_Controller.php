@@ -16,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Product_Categories_Controller' ) ) {
 use Exception;
 use WC_REST_Product_Categories_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -150,7 +151,7 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 	 *
 	 * @return WP_REST_Response|WP_Error
 	 */
-	public function wcpos_get_all_posts( $request ) {
+	public function wcpos_get_all_posts( WP_REST_Request $request ) {
 		// Start timing execution.
 		$start_time = microtime( true );
 		$modified_after = $request->get_param( 'modified_after' );
@@ -188,7 +189,7 @@ class Product_Categories_Controller extends WC_REST_Product_Categories_Controlle
 			$server_load = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

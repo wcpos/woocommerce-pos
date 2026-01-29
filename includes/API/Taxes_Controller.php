@@ -16,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Taxes_Controller' ) ) {
 use Exception;
 use WC_REST_Taxes_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -70,7 +71,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	/**
 	 * Check whether a given request has permission to read taxes.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
+	 * @param  \WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
@@ -86,7 +87,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	/**
 	 * Check if a given request has access to read a tax.
 	 *
-	 * @param  WP_REST_Request $request Full details about the request.
+	 * @param  \WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|boolean
 	 */
 	public function get_item_permissions_check( $request ) {
@@ -103,7 +104,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 * Filter tax object returned from the REST API.
 	 *
 	 * @param WP_REST_Response $response The response object.
-	 * @param stdClass         $tax      Tax object used to create response.
+	 * @param \stdClass        $tax      Tax object used to create response.
 	 * @param WP_REST_Request  $request  Request object.
 	 */
 	public function wcpos_prepare_tax_response( $response, $tax, $request ) {
@@ -160,7 +161,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 
 		if ( strpos( $query, "{$wpdb->prefix}woocommerce_tax_rates" ) !== false ) {
 			// remove the filter so it doesn't run again.
-			remove_filter( 'query', array( $this, 'wcpos_tax_add_include_exclude_to_sql' ), 10, 1 );
+			remove_filter( 'query', array( $this, 'wcpos_tax_add_include_exclude_to_sql' ), 10 );
 
 			// Handle include IDs.
 			if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
@@ -258,7 +259,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 			$server_load = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

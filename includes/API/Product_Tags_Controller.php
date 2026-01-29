@@ -16,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Product_Tags_Controller' ) ) {
 use Exception;
 use WC_REST_Product_Tags_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -188,7 +189,7 @@ class Product_Tags_Controller extends WC_REST_Product_Tags_Controller {
 			$server_load = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 
@@ -196,7 +197,7 @@ class Product_Tags_Controller extends WC_REST_Product_Tags_Controller {
 		} catch ( Exception $e ) {
 			Logger::log( 'Error fetching product tags IDs: ' . $e->getMessage() );
 
-			return new \WP_Error(
+			return new WP_Error(
 				'woocommerce_pos_rest_cannot_fetch',
 				'Error fetching product tags IDs.',
 				array( 'status' => 500 )

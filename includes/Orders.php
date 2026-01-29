@@ -13,6 +13,9 @@ namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
 use WC_Order;
+use WC_Order_Item;
+use WC_Order_Item_Product;
+use WC_Order_Item_Shipping;
 use WC_Product;
 use WC_Product_Simple;
 

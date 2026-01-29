@@ -161,7 +161,7 @@ class API {
 	 *
 	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
-	 * @return false|int|void
+	 * @return false|int|\WP_Error
 	 */
 	public function determine_current_user( $user_id ) {
 		$this->is_auth_checked = true;
@@ -182,8 +182,8 @@ class API {
 	 */
 	public function rest_authentication_errors( $errors ) {
 		// Pass through other errors.
-		if ( ! empty( $error ) ) {
-			return $error;
+		if ( ! empty( $errors ) ) {
+			return $errors;
 		}
 
 		// check if determine_current_user has been called.
@@ -333,9 +333,9 @@ class API {
 					 * The precision settings are to prevent floating point weirdness, eg: stock_quantity 3.6 becomes 3.6000000000000001
 					 */
 					error_reporting( 0 );
-					@ini_set( 'display_errors', 0 ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed -- intentionally disabling error display for POS API responses.
-					@ini_set( 'precision', 10 );
-					@ini_set( 'serialize_precision', 10 );
+					@ini_set( 'display_errors', '0' ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed -- intentionally disabling error display for POS API responses.
+					@ini_set( 'precision', '10' );
+					@ini_set( 'serialize_precision', '10' );
 
 					// Check if the controller has a 'wcpos_dispatch_request' method.
 					if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
@@ -394,7 +394,7 @@ class API {
 	 *
 	 * @param false|int $user_id User ID if one has been determined, false otherwise.
 	 *
-	 * @return int|WP_Error
+	 * @return false|int|\WP_Error
 	 */
 	private function authenticate( $user_id ) {
 		// check if there is an auth header.
@@ -411,7 +411,7 @@ class API {
 			$decoded_token = $auth_service->validate_token( $token );
 
 			// Check if validate_token returned WP_Error and user_id is null.
-			if ( is_wp_error( $decoded_token ) && null === $user_id ) {
+			if ( is_wp_error( $decoded_token ) && false === $user_id ) {
 				return $decoded_token;
 			}
 

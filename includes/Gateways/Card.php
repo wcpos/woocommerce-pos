@@ -30,6 +30,7 @@ class Card extends WC_Payment_Gateway {
 		$this->enabled     = 'no';
 
 		// Actions.
+		// @phpstan-ignore-next-line.
 		add_action(
 			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
 			array(
@@ -50,7 +51,7 @@ class Card extends WC_Payment_Gateway {
 
 		$currency_pos = get_option( 'woocommerce_currency_pos' );
 
-		if ( 'left' == $currency_pos || 'left_space' ) {
+		if ( 'left' == $currency_pos || 'left_space' == $currency_pos ) {
 			$left_addon  = '<span class="input-group-addon">' . get_woocommerce_currency_symbol( get_woocommerce_currency() ) . '</span>';
 			$right_addon = '';
 		} else {

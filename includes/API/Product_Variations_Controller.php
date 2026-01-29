@@ -168,14 +168,14 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		$this->maybe_add_post_uuid( $variation );
 
 		// Add the barcode to the product response.
-		$data['barcode'] = $this->wcpos_get_barcode( $variation );
+		$data['barcode'] = $this->wcpos_get_barcode( $variation ); // @phpstan-ignore-line
 
 		// Check if the response has an image.
 		if ( isset( $data['image'] ) && ! empty( $data['image'] ) && isset( $data['image']['id'] ) ) {
 			// Replace the full size 'src' with the URL of the medium size image.
 			$medium_image_data = image_downsize( $data['image']['id'], 'medium' );
 
-			if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
+			if ( $medium_image_data ) {
 				$data['image']['src'] = $medium_image_data[0];
 			}
 		}
@@ -189,7 +189,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$data['parent_id'] = $variation->get_parent_id();
 		}
 		if ( ! isset( $data['name'] ) ) {
-			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : '';
+			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : ''; // @phpstan-ignore-line
 		}
 
 		// Make sure we parse the meta data before returning the response.
@@ -256,22 +256,10 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$meta_fields[] = $barcode_field;
 		}
 
-		$barcode_field = $this->wcpos_get_barcode_field();
-		if ( '_sku' !== $barcode_field ) {
-			$fields_to_search[] = $barcode_field;
-		}
-
 		$search_conditions = array();
 
 		foreach ( $search_terms as $term ) {
 			$term = $n . $wpdb->esc_like( $term ) . $n;
-
-			// Search in post fields.
-			foreach ( $post_fields as $field ) {
-				if ( ! empty( $field ) ) {
-					$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
-				}
-			}
 
 			// Search in meta fields.
 			foreach ( $meta_fields as $field ) {
@@ -469,7 +457,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

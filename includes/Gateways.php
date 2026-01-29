@@ -18,7 +18,7 @@ class Gateways {
 	 * Constructor.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
+		add_filter( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
 		add_filter( 'woocommerce_available_payment_gateways', array( $this, 'available_payment_gateways' ), 99 );
 	}
 
@@ -27,7 +27,7 @@ class Gateways {
 	 * BEWARE: some gateways/themes/plugins call this very early on every page!!
 	 * We cannot guarantee that $wp is set, so we cannot use woocommerce_pos_request.
 	 *
-	 * @param null|array $gateways The registered payment gateways.
+	 * @param array $gateways The registered payment gateways.
 	 *
 	 * @return array
 	 */

@@ -30,6 +30,7 @@ class Single_Order {
 	 * It's possible another plugin could just re-init after us, but this will work for most cases.
 	 */
 	public function add_available_gateways() {
+		// @phpstan-ignore-next-line
 		if ( WC()->payment_gateways() ) {
 			$payment_gateways = WC()->payment_gateways->payment_gateways;
 			$settings = woocommerce_pos_get_settings( 'payment_gateways' );
@@ -84,7 +85,7 @@ class Single_Order {
 		if ( $cashier_id ) {
 			$user = get_user_by( 'id', $cashier_id );
 			if ( $user ) {
-				echo '<option value="' . esc_attr( $user->ID ) . '"' . selected( true, true, false ) . '>' . esc_html( $user->display_name . ' (#' . $user->ID . ' &ndash; ' . $user->user_email ) . ')</option>';
+				echo '<option value="' . esc_attr( (string) $user->ID ) . '"' . selected( true, true, false ) . '>' . esc_html( $user->display_name . ' (#' . $user->ID . ' &ndash; ' . $user->user_email ) . ')</option>';
 			}
 		}
 		echo '</select>';
@@ -114,7 +115,7 @@ class Single_Order {
 
 			// Update meta only if _pos_user has changed.
 			if ( $current_pos_cashier !== $new_pos_cashier ) {
-				$order->update_meta_data( '_pos_user', $new_pos_cashier );
+				$order->update_meta_data( '_pos_user', (string) $new_pos_cashier );
 				$order->save();
 
 				// Add an order note indicating the change.

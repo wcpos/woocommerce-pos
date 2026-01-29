@@ -325,7 +325,7 @@ class List_Products {
 				$selected = 'online_only';
 			}
 
-			echo '<div class="hidden" id="woocommerce_pos_inline_' . esc_attr( $post_id ) . '" data-visibility="' . esc_attr( $selected ) . '"></div>';
+			echo '<div class="hidden" id="woocommerce_pos_inline_' . esc_attr( (string) $post_id ) . '" data-visibility="' . esc_attr( $selected ) . '"></div>';
 		}
 	}
 

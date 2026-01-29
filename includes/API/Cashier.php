@@ -221,12 +221,12 @@ class Cashier extends WP_REST_Controller {
 
 			foreach ( $stores as $store ) {
 				$data       = $this->prepare_store_for_response( $store, $request );
-				$response[] = $this->prepare_response_for_collection( $data );
+				$response[] = $data;
 			}
 
 			$response = rest_ensure_response( $response );
-			$response->header( 'X-WP-Total', \count( $stores ) );
-			$response->header( 'X-WP-TotalPages', 1 );
+			$response->header( 'X-WP-Total', (string) \count( $stores ) );
+			$response->header( 'X-WP-TotalPages', '1' );
 
 			return $response;
 		} catch ( Exception $e ) {

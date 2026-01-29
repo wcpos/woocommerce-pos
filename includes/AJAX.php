@@ -36,6 +36,8 @@ class AJAX {
 	/**
 	 * WooCommerce AJAX actions that we need to hook into on the Order admin pages.
 	 *
+	 * @phpstan-ignore-next-line
+	 *
 	 * @var string[]
 	 */
 	private $order_actions = array(

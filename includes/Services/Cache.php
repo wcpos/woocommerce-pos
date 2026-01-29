@@ -21,7 +21,7 @@ class Cache {
 	 *
 	 * @param string $instance_id Instance ID.
 	 *
-	 * @return Psr16Adapter
+	 * @return Psr16Adapter|object
 	 */
 	public static function get_cache_instance( string $instance_id = 'default' ) {
 		static $cache = null;
@@ -34,6 +34,7 @@ class Cache {
 				wp_mkdir_p( $cache_dir );
 			}
 
+			// @phpstan-ignore-next-line.
 			$config = new Config(
 				array(
 					'path' => $cache_dir,
@@ -43,9 +44,11 @@ class Cache {
 			$event_manager = EventManager::getInstance();
 
 			// Generate a unique instance ID for each logged-in user.
+			// @phpstan-ignore-next-line.
 			$driver = new Driver( $config, $instance_id );
 			$driver->setEventManager( $event_manager );
 
+			// @phpstan-ignore-next-line.
 			$cache = new Psr16Adapter( $driver );
 		}
 

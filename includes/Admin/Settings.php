@@ -105,7 +105,7 @@ class Settings {
 			wp_enqueue_script(
 				'webpack-live-reload',
 				'http://localhost:35729/livereload.js',
-				null,
+				array(),
 				null,
 				true
 			);

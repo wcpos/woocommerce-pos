@@ -285,7 +285,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_general_settings( WP_REST_Request $request ) {
 		$general_settings = woocommerce_pos_get_settings( 'general' );
@@ -308,7 +308,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_checkout_settings( WP_REST_Request $request ) {
 		$checkout_settings = woocommerce_pos_get_settings( 'checkout' );
@@ -331,7 +331,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_payment_gateways_settings( WP_REST_Request $request ) {
 		$payment_gateways_settings = woocommerce_pos_get_settings( 'payment_gateways' );
@@ -354,7 +354,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_access_settings( WP_REST_Request $request ) {
 		$access_settings = woocommerce_pos_get_settings( 'access' );
@@ -377,7 +377,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_tools_settings( WP_REST_Request $request ) {
 		$tools_settings = woocommerce_pos_get_settings( 'tools' );
@@ -400,7 +400,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array|WP_REST_Response
+	 * @return array|WP_Error|WP_REST_Response
 	 */
 	public function get_license_settings( WP_REST_Request $request ) {
 		$license_settings = woocommerce_pos_get_settings( 'license' );

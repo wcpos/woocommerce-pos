@@ -69,7 +69,7 @@ class Data_Order_Statuses_Controller extends WC_REST_Data_Controller {
 		/**
 		 * Prepare a data resource object for serialization.
 		 *
-		 * @param stdClass        $resource Resource data.
+		 * @param \stdClass       $resource Resource data.
 		 * @param WP_REST_Request $request  Request object.
 		 * @return WP_REST_Response $response Response data.
 		 */

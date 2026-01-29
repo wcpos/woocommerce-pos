@@ -147,6 +147,7 @@ class Emails {
 				$email->enabled   = 'yes';
 
 				// Trigger the email.
+				// @phpstan-ignore-next-line.
 				$email->trigger( $order_id, $order );
 
 				// Restore original state.

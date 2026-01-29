@@ -9,11 +9,17 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
 
+/**
+ * Variables passed from Single_Product::post_submitbox_misc_actions().
+ *
+ * @var \WCPOS\WooCommercePOS\Admin\Products\Single_Product $this
+ * @var string $selected
+ */
 ?>
 
 <div class="misc-pub-section" id="pos-visibility">
 	<?php esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?>:
-	<strong id="pos-visibility-display"><?php echo esc_html( $this->options[ $selected ] ); ?></strong>
+	<strong id="pos-visibility-display"><?php echo esc_html( $this->options[ $selected ] ); // @phpstan-ignore-line ?></strong>
 	<a href="#pos-visibility" id="pos-visibility-show" class="hide-if-no-js"
 	   style="display: inline;">
 	   <?php
@@ -24,7 +30,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 
 	<div id="pos-visibility-select" class="hide-if-js" style="display: none;">
 		<?php
-		foreach ( $this->options as $value => $label ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
+		foreach ( $this->options as $value => $label ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- @phpstan-ignore-line
 			$checked = $value == $selected ? 'checked="checked"' : ''; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
 			?>
 			<label style="display:block;margin: 5px 0;">

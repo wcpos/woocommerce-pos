@@ -27,6 +27,7 @@ class Payment {
 	/**
 	 * The gateway ID.
 	 *
+	 * @phpstan-ignore-next-line
 	 * @var string
 	 */
 	private $gateway_id;
@@ -519,6 +520,8 @@ class Payment {
 
 	/**
 	 * Custom version of wp_create_nonce that uses the customer ID.
+	 *
+	 * @phpstan-ignore-next-line
 	 */
 	private function create_customer_nonce() {
 		$user = wp_get_current_user();

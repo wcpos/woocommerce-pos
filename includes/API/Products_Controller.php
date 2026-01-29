@@ -53,7 +53,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	/**
 	 * Store the current request object.
 	 *
-	 * @var WP_REST_Request
+	 * @var WP_REST_Request|null
 	 */
 	protected $wcpos_request;
 
@@ -179,7 +179,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 				$image_id          = $image['id'];
 				$medium_image_data = image_downsize( $image_id, 'medium' );
 
-				if ( $medium_image_data && isset( $medium_image_data[0] ) ) {
+				if ( $medium_image_data ) {
 					$data['images'][ $key ]['src'] = $medium_image_data[0];
 				} else {
 					$data['images'][ $key ]['src'] = $image['src'];
@@ -300,9 +300,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 			// Search in post fields.
 			foreach ( $post_fields as $field ) {
-				if ( ! empty( $field ) ) {
-					$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
-				}
+				$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
 			}
 
 			// Search in meta fields.
@@ -327,18 +325,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * Covers the WHERE, GROUP BY, JOIN, ORDER BY, DISTINCT,
 	 * fields (SELECT), and LIMIT clauses.
 	 *
-	 * @param string[] $clauses {
-	 *                          Associative array of the clauses for the query.
-	 *
-	 * @var string The WHERE clause of the query.
-	 * @var string The GROUP BY clause of the query.
-	 * @var string The JOIN clause of the query.
-	 * @var string The ORDER BY clause of the query.
-	 * @var string The DISTINCT clause of the query.
-	 * @var string The SELECT clause of the query.
-	 * @var string The LIMIT clause of the query.
-	 *             }
-	 *
+	 * @param string[] $clauses  Associative array of the clauses for the query.
 	 * @param WP_Query $wp_query The WP_Query instance (passed by reference).
 	 */
 	public function wcpos_posts_clauses( array $clauses, WP_Query $wp_query ): array {
@@ -536,7 +523,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$server_load       = $this->get_server_load();
 
 			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (int) $total );
+			$response->header( 'X-WP-Total', (string) $total );
 			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
 			$response->header( 'X-Server-Load', json_encode( $server_load ) );
 

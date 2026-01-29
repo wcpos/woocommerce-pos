@@ -16,7 +16,10 @@ if ( ! class_exists( 'WP_REST_Controller' ) ) {
 use Exception;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
+use WP_Error;
 use WP_REST_Controller;
+use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * Stores API.
@@ -80,8 +83,8 @@ class Stores extends WP_REST_Controller {
 			}
 
 			$response = rest_ensure_response( $response );
-			$response->header( 'X-WP-Total', \count( $stores ) );
-			$response->header( 'X-WP-TotalPages', 1 );
+			$response->header( 'X-WP-Total', (string) \count( $stores ) );
+			$response->header( 'X-WP-TotalPages', (string) 1 );
 
 			return $response;
 		} catch ( Exception $e ) {

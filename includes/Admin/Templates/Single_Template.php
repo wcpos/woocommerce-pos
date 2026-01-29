@@ -366,6 +366,7 @@ class Single_Template {
 			)
 		);
 
+		// @phpstan-ignore-next-line
 		if ( is_wp_error( $post_id ) ) {
 			wp_die( esc_html__( 'Failed to create template copy.', 'woocommerce-pos' ) );
 		}

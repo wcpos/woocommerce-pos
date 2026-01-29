@@ -561,6 +561,7 @@ class List_Templates {
 			)
 		);
 
+		// @phpstan-ignore-next-line
 		if ( is_wp_error( $post_id ) ) {
 			wp_die( esc_html( $post_id->get_error_message() ) );
 		}

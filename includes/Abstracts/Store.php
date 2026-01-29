@@ -273,7 +273,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store enable coupons.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_enable_coupons( $context = 'view' ) {
 		return $this->get_prop( 'enable_coupons', $context );
@@ -283,7 +283,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store calculate discounts sequentially.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_calc_discounts_sequentially( $context = 'view' ) {
 		return $this->get_prop( 'calc_discounts_sequentially', $context );
@@ -343,7 +343,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store prices include tax.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_prices_include_tax( $context = 'view' ) {
 		return $this->get_prop( 'prices_include_tax', $context );
@@ -383,7 +383,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax round at subtotal.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_round_at_subtotal( $context = 'view' ) {
 		return $this->get_prop( 'tax_round_at_subtotal', $context );
@@ -393,7 +393,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax display shop.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_display_shop( $context = 'view' ) {
 		return $this->get_prop( 'tax_display_shop', $context );
@@ -403,7 +403,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store tax display cart.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return bool
+	 * @return string
 	 */
 	public function get_tax_display_cart( $context = 'view' ) {
 		return $this->get_prop( 'tax_display_cart', $context );

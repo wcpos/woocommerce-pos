@@ -87,7 +87,7 @@ class Auth {
 	public function validate_token( $token = '', $token_type = 'access' ) {
 		try {
 			$secret_key    = 'refresh' === $token_type ? $this->get_refresh_secret_key() : $this->get_secret_key();
-			$decoded_token = JWT::decode( $token, new Key( $secret_key, 'HS256' ) );
+			$decoded_token = JWT::decode( $token, new Key( $secret_key, 'HS256' ) ); // @phpstan-ignore-line
 
 			// The Token is decoded now validate the iss.
 			if ( get_bloginfo( 'url' ) != $decoded_token->iss ) {
@@ -184,10 +184,10 @@ class Auth {
 		 * Filters the JWT access token expire time.
 		 * Default: 30 minutes for access tokens.
 		 *
-		 * @param {int} $expire_time
-		 * @param {int} $issued_at
+		 * @param int $expire_time
+		 * @param int $issued_at
 		 *
-		 * @returns {int} Expire time
+		 * @returns int Expire time
 		 *
 		 * @since 1.8.0
 		 *
@@ -257,10 +257,10 @@ class Auth {
 		 * Filters the JWT refresh token expire time.
 		 * Default: 30 days for refresh tokens.
 		 *
-		 * @param {int} $expire_time
-		 * @param {int} $issued_at
+		 * @param int $expire_time
+		 * @param int $issued_at
 		 *
-		 * @returns {int} Expire time
+		 * @returns int Expire time
 		 *
 		 * @since 1.8.0
 		 *
@@ -287,10 +287,10 @@ class Auth {
 		/**
 		 * Let the user modify the refresh token data before the sign.
 		 *
-		 * @param {array} $token
-		 * @param {WP_User} $user
+		 * @param array $token
+		 * @param WP_User $user
 		 *
-		 * @returns {array} Token
+		 * @returns array Token
 		 *
 		 * @since 1.8.0
 		 *
@@ -1033,8 +1033,8 @@ class Auth {
 			$jti,
 			array(
 				'expires'  => $expires,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
+				'path'     => \defined( 'COOKIEPATH' ) ? COOKIEPATH : '/', // @phpstan-ignore-line
+				'domain'   => \defined( 'COOKIE_DOMAIN' ) ? COOKIE_DOMAIN : '', // @phpstan-ignore-line
 				'secure'   => is_ssl(),
 				'httponly' => true,
 				'samesite' => 'Lax',

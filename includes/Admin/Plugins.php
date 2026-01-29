@@ -50,32 +50,8 @@ class Plugins {
 	 * Fires at the end of the update message container in each row of the plugins list table.
 	 * Thanks to: http://andidittrich.de/2015/05/howto-upgrade-notice-for-wordpress-plugins.html.
 	 *
-	 * @param array  $plugin_data {
-	 *                            An array of plugin metadata.
-	 *
-	 * @var string The human-readable name of the plugin.
-	 * @var string Plugin URI.
-	 * @var string Plugin version.
-	 * @var string Plugin description.
-	 * @var string Plugin author.
-	 * @var string Plugin author URI.
-	 * @var string Plugin text domain.
-	 * @var string Relative path to the plugin's .mo file(s).
-	 * @var bool   Whether the plugin can only be activated network wide.
-	 * @var string The human-readable title of the plugin.
-	 * @var string Plugin author's name.
-	 * @var bool   Whether there's an available update. Default null.
-	 *             }
-	 *
-	 * @param object $r {
-	 *                 An object of metadata about the available plugin update.
-	 *
-	 * @var int    Plugin ID.
-	 * @var string Plugin slug.
-	 * @var string New plugin version.
-	 * @var string Plugin URL.
-	 * @var string Plugin update package URL.
-	 *             }
+	 * @param array  $plugin_data An array of plugin metadata.
+	 * @param object $r           An object of metadata about the available plugin update.
 	 *
 	 * @since 2.8.0
 	 */
@@ -85,6 +61,7 @@ class Plugins {
 		$current_version = VERSION;
 
 		// Show major update notice when upgrading to 1.8.x from earlier versions.
+		// @phpstan-ignore-next-line.
 		if ( version_compare( $new_version, '1.8.0', '>=' ) && version_compare( $current_version, '1.8.0', '<' ) ) {
 			$this->show_major_update_notice();
 		}
