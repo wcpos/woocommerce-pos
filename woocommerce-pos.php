@@ -18,6 +18,7 @@
  * WC requires at least: 5.3.
  *
  * @see      http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -56,22 +57,26 @@ if ( ! \defined( __NAMESPACE__ . '\MIN_PRO_VERSION' ) ) {
 // If Pro plugin is active, bail out early to avoid conflicts.
 // Pro includes all free plugin functionality, so there's no need to initialize both.
 // We check the option directly since Pro may not have loaded yet (alphabetical order).
-$pro_plugin_file = 'woocommerce-pos-pro/woocommerce-pos-pro.php';
-$active_plugins  = get_option( 'active_plugins', array() );
-$pro_is_active   = \in_array( $pro_plugin_file, $active_plugins, true );
+$wcpos_pro_plugin_file = 'woocommerce-pos-pro/woocommerce-pos-pro.php'; // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- namespaced file scope.
+$wcpos_active_plugins  = get_option( 'active_plugins', array() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- namespaced file scope.
+$wcpos_pro_is_active   = \in_array( $wcpos_pro_plugin_file, $wcpos_active_plugins, true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- namespaced file scope.
 
 // Also check network-activated plugins on multisite.
-if ( ! $pro_is_active && is_multisite() ) {
-	$network_plugins = get_site_option( 'active_sitewide_plugins', array() );
-	$pro_is_active   = isset( $network_plugins[ $pro_plugin_file ] );
+if ( ! $wcpos_pro_is_active && is_multisite() ) {
+	$wcpos_network_plugins = get_site_option( 'active_sitewide_plugins', array() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- namespaced file scope.
+	$wcpos_pro_is_active = isset( $wcpos_network_plugins[ $wcpos_pro_plugin_file ] ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- namespaced file scope.
 }
 
-if ( $pro_is_active ) {
+if ( $wcpos_pro_is_active ) {
 	return;
 }
 
-// Load .env flags (for development).
-function wcpos_load_env( $file ): void {
+/**
+ * Load .env flags for development.
+ *
+ * @param string $file The path to the .env file.
+ */
+function wcpos_load_env( $file ): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- namespaced.
 	if ( ! file_exists( $file ) ) {
 		return;
 	}
@@ -93,8 +98,10 @@ function wcpos_load_env( $file ): void {
 	}
 }
 
-// Autoload vendor and prefixed libraries.
-function wcpos_load_autoloaders(): void {
+/**
+ * Autoload vendor and prefixed libraries.
+ */
+function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- namespaced.
 	$vendor_autoload          = __DIR__ . '/vendor/autoload.php';
 	$vendor_prefixed_autoload = __DIR__ . '/vendor_prefixed/autoload.php';
 
@@ -144,31 +151,35 @@ add_action(
 );
 
 // Caching can cause all sorts of issues with the POS, so we attempt to disable caching for POS templates.
-add_action( 'plugins_loaded', function (): void {
-	// Check request URI as early as possible.
-	if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
-		return;
-	}
-
-	if ( preg_match( '#^/(wcpos-login|wcpos-checkout)(/|$)#i', $_SERVER['REQUEST_URI'] ) ) {
-		// 1) Hard kill all LSCache features (cache + optimisation).
-		if ( ! \defined( 'LITESPEED_DISABLE_ALL' ) ) {
-			\define( 'LITESPEED_DISABLE_ALL', true );
+add_action(
+	'plugins_loaded',
+	function (): void {
+		// Check request URI as early as possible.
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
+			return;
 		}
 
-		// 2) Belt-and-braces: mark the response non-cacheable for older LSCache versions.
-		if ( ! \defined( 'LSCACHE_NO_CACHE' ) ) {
-			\define( 'LSCACHE_NO_CACHE', true );
-		}
+		if ( preg_match( '#^/(wcpos-login|wcpos-checkout)(/|$)#i', sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) ) ) {
+			// 1) Hard kill all LSCache features (cache + optimisation).
+			if ( ! \defined( 'LITESPEED_DISABLE_ALL' ) ) {
+				\define( 'LITESPEED_DISABLE_ALL', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
 
-		// 3) Disable W3 Total Cache minify
-		if ( ! \defined( 'DONOTMINIFY' ) ) {
-			\define( 'DONOTMINIFY', 'true' );
-		}
+			// 2) Belt-and-braces: mark the response non-cacheable for older LSCache versions.
+			if ( ! \defined( 'LSCACHE_NO_CACHE' ) ) {
+				\define( 'LSCACHE_NO_CACHE', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
 
-		// 4) Disable WP Super Cache
-		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
-			\define( 'DONOTCACHEPAGE', 'true' );
+			// 3) Disable W3 Total Cache minify
+			if ( ! \defined( 'DONOTMINIFY' ) ) {
+				\define( 'DONOTMINIFY', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
+
+			// 4) Disable WP Super Cache
+			if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
+				\define( 'DONOTCACHEPAGE', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- third-party constant.
+			}
 		}
-	}
-}, 0 );
+	},
+	0
+);

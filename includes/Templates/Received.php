@@ -1,5 +1,7 @@
 <?php
 /**
+ * Received order template.
+ *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
@@ -11,12 +13,22 @@ namespace WCPOS\WooCommercePOS\Templates;
 use Exception;
 use WCPOS\WooCommercePOS\Server;
 
+/**
+ * Received class.
+ */
 class Received {
 	/**
+	 * Order ID.
+	 *
 	 * @var int
 	 */
 	private $order_id;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param int $order_id The order ID.
+	 */
 	public function __construct( int $order_id ) {
 		$this->order_id = $order_id;
 
@@ -24,9 +36,12 @@ class Received {
 	}
 
 
+	/**
+	 * Get and display the received template.
+	 */
 	public function get_template(): void {
 		try {
-			// get order
+			// get order.
 			$order = \wc_get_order( $this->order_id );
 
 			// Order or receipt url is invalid.
@@ -36,9 +51,11 @@ class Received {
 
 			// if ( ! $order->is_paid() ) {
 			// wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-			// }
+			// }.
 
 			/**
+			 * Temporary hack for order JSON retrieval.
+			 *
 			 * @TODO - this is a hack and needs to be fixed
 			 * @NOTE - the received template will be removed once we move to session based checkout
 			 *
@@ -48,7 +65,7 @@ class Received {
 			$order_json               = $server->wp_rest_request( '/wcpos/v1/orders/' . $this->order_id );
 			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
 			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
-			$order_complete           = $completed_status !== 'pos-open';
+			$order_complete           = 'pos-open' !== $completed_status;
 
 			// @TODO - display message for errors
 

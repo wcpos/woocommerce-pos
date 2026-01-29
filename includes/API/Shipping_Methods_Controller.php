@@ -1,6 +1,8 @@
 <?php
 /**
  * REST API WC Shipping Methods controller
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;

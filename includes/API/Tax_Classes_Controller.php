@@ -1,6 +1,8 @@
 <?php
 /**
  * REST API Tax Classes controller class.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;

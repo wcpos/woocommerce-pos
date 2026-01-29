@@ -1,5 +1,4 @@
 <?php
-
 /**
  * WP Admin Class
  * conditionally loads classes for WP Admin.
@@ -7,6 +6,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see     http://www.wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -167,6 +167,9 @@ class Admin {
 		}
 	}
 
+	/**
+	 * Handle WooCommerce HPOS orders screen.
+	 */
 	public function handle_wc_hpos_orders_screen(): void {
 		if ( isset( $_GET['action'] ) && 'edit' === $_GET['action'] ) {
 			new HPOS_Single_Order();
@@ -175,12 +178,15 @@ class Admin {
 		}
 	}
 
+	/**
+	 * Handle WooCommerce analytics screen.
+	 */
 	public function handle_wc_analytics_screen(): void {
 		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
 			$wc_admin_page_controller = PageController::get_instance();
 			if ( $wc_admin_page_controller ) {
 				$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
-				$id                       = $wc_admin_current_page['id']     ?? null;
+				$id                       = $wc_admin_current_page['id'] ?? null;
 				$parent                   = $wc_admin_current_page['parent'] ?? null;
 
 				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {

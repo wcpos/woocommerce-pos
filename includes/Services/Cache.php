@@ -1,6 +1,8 @@
 <?php
 /**
  * Cache Helper class
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Services;
@@ -11,7 +13,7 @@ use WCPOS\Vendor\Phpfastcache\EventManager;
 use WCPOS\Vendor\Phpfastcache\Helper\Psr16Adapter;
 
 /**
- *
+ * Cache class.
  */
 class Cache {
 	/**
@@ -24,7 +26,7 @@ class Cache {
 	public static function get_cache_instance( string $instance_id = 'default' ) {
 		static $cache = null;
 
-		if ( $cache === null ) {
+		if ( null === $cache ) {
 			$upload_dir = wp_upload_dir();
 			$cache_dir = $upload_dir['basedir'] . '/woocommerce_pos_cache';
 

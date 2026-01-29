@@ -1,6 +1,8 @@
 <?php
 /**
  * REST API Data controller.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -49,7 +51,7 @@ class Data_Order_Statuses_Controller extends WC_REST_Data_Controller {
 		$data     = array();
 
 		foreach ( $statuses as $status => $label ) {
-			// Remove the 'wc-' prefix from the status
+			// Remove the 'wc-' prefix from the status.
 			$status = str_replace( 'wc-', '', $status );
 
 			$resource = array(

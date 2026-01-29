@@ -23,17 +23,19 @@ class Login {
 	}
 
 	/**
+	 * Get the login template.
+	 *
 	 * @return void
 	 */
 	public function get_template(): void {
 		$login_attempt = isset( $_POST['_wpnonce'] ) && wp_verify_nonce( $_POST['_wpnonce'], 'woocommerce_pos_login' );
 
-		// Login attempt detected
+		// Login attempt detected.
 		$error_string = '';
 		if ( $login_attempt ) {
 			$creds = array();
-			$creds['user_login'] = $_POST['log'];
-			$creds['user_password'] = $_POST['pwd'];
+			$creds['user_login'] = isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( $_POST['log'] ) ) : '';
+			$creds['user_password'] = isset( $_POST['pwd'] ) ? sanitize_text_field( wp_unslash( $_POST['pwd'] ) ) : '';
 			// $creds['remember'] = isset( $_POST['rememberme'] );
 
 			$user = wp_signon( $creds, false );
@@ -49,9 +51,9 @@ class Login {
 			}
 		}
 
-		do_action( 'login_init' );
+		do_action( 'woocommerce_pos_login_init' );
 
-		do_action( 'login_form_login' );
+		do_action( 'woocommerce_pos_login_form_login' );
 
 		include woocommerce_pos_locate_template( 'login.php' );
 		exit;
@@ -60,7 +62,7 @@ class Login {
 	/**
 	 * Login success
 	 *
-	 * @param WP_User $user
+	 * @param WP_User $user The authenticated user.
 	 *
 	 * @return void
 	 */
@@ -78,7 +80,7 @@ class Login {
 
 		echo '<script>
 	(function() {
-        var credentials = ' . $credentials . " 
+        var credentials = ' . wp_json_encode( $user_data ) . "
 
         // Check if postMessage function exists for window.top
         if (typeof window.top.postMessage === 'function') {

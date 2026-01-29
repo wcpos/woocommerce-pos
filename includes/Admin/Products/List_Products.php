@@ -7,6 +7,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see     http://www.wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
@@ -16,25 +17,31 @@ use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Query;
 
 /**
- *
+ * List_Products class.
  */
 class List_Products {
 	/**
+	 * The barcode field key.
+	 *
 	 * @var string
 	 */
 	private $barcode_field;
 
 	/**
+	 * Visibility options.
+	 *
 	 * @var array
 	 */
 	private $options;
 
 
-
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 
-		// visibility options
+		// visibility options.
 		$this->options = array(
 			''            => __( 'POS & Online', 'woocommerce-pos' ),
 			'pos_only'    => __( 'POS Only', 'woocommerce-pos' ),
@@ -42,10 +49,10 @@ class List_Products {
 		);
 
 		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
-			// product
+			// product.
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
-			// variations
+			// variations.
 			add_action(
 				'woocommerce_product_after_variable_attributes',
 				array(
@@ -87,7 +94,7 @@ class List_Products {
 	}
 
 	/**
-	 *
+	 * Add barcode field to product options.
 	 */
 	public function woocommerce_product_options_sku(): void {
 		woocommerce_wp_text_input(
@@ -101,18 +108,20 @@ class List_Products {
 	}
 
 	/**
-	 * @param $post_id
+	 * Save barcode field on product meta.
+	 *
+	 * @param int $post_id The post ID.
 	 */
 	public function woocommerce_process_product_meta( $post_id ): void {
-		if ( isset( $_POST[ $this->barcode_field ] ) ) {
-			update_post_meta( $post_id, $this->barcode_field, sanitize_text_field( $_POST[ $this->barcode_field ] ) );
+		if ( isset( $_POST[ $this->barcode_field ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
+			update_post_meta( $post_id, $this->barcode_field, sanitize_text_field( wp_unslash( $_POST[ $this->barcode_field ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 		}
 	}
 
 	/**
 	 * Admin filters for POS / Online visibility.
 	 *
-	 * @param array $views
+	 * @param array $views The existing views.
 	 *
 	 * @return array
 	 */
@@ -130,7 +139,7 @@ class List_Products {
 
 		$settings_instance = Settings::instance();
 
-		// Get the product IDs for the POS and Online only products
+		// Get the product IDs for the POS and Online only products.
 		$pos_only = $settings_instance->get_pos_only_product_visibility_settings();
 		$pos_only_ids = isset( $pos_only['ids'] ) && is_array( $pos_only['ids'] ) ? array_map( 'intval', (array) $pos_only['ids'] ) : array();
 		$online_only = $settings_instance->get_online_only_product_visibility_settings();
@@ -153,8 +162,8 @@ class List_Products {
 
 			if ( ! empty( $ids ) ) {
 				$sql = "SELECT count(DISTINCT ID) FROM {$wpdb->posts} WHERE post_type = 'product'";
-				$sql .= $wpdb->prepare( " AND ID IN ($format) ", $ids );
-				$count = $wpdb->get_var( $sql );
+				$sql .= $wpdb->prepare( " AND ID IN ($format) ", $ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $format is from array_fill with %d.
+				$count = $wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Built with prepare().
 			}
 
 			$class             = ( isset( $_GET['pos_visibility'] ) && $_GET['pos_visibility'] == $key ) ? 'current' : '';
@@ -163,7 +172,7 @@ class List_Products {
 			$new_views[ $key ] = '<a href="' . esc_url( $query_string ) . '" class="' . esc_attr( $class ) . '">' . esc_html( $label ) . ' <span class="count">(' . esc_html( number_format_i18n( $count ) ) . ')</a></a>';
 		}
 
-		// Insert before the 'sort' key
+		// Insert before the 'sort' key.
 		$offset = array_search( 'publish', array_keys( $views ), true );
 		$views  = array_merge(
 			\array_slice( $views, 0, $offset + 1 ),
@@ -178,8 +187,8 @@ class List_Products {
 	/**
 	 * Modify the SQL clauses for the query to filter by POS visibility.
 	 *
-	 * @param array    $clauses
-	 * @param WP_Query $query
+	 * @param array    $clauses The SQL clauses.
+	 * @param WP_Query $query   The query object.
 	 *
 	 * @return array
 	 */
@@ -206,7 +215,7 @@ class List_Products {
 				// No IDs, show no records.
 				$clauses['where'] .= ' AND 1=0 ';
 			} else {
-				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $pos_only_ids );
+				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $pos_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $format is from array_fill with %d.
 			}
 		} elseif ( 'online_only' === $visibility ) {
 			$online_only = $settings_instance->get_online_only_product_visibility_settings();
@@ -216,7 +225,7 @@ class List_Products {
 				// No IDs, show no records.
 				$clauses['where'] .= ' AND 1=0 ';
 			} else {
-				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $online_only_ids );
+				$clauses['where'] .= $wpdb->prepare( " AND ID IN ($format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $format is from array_fill with %d.
 			}
 		}
 
@@ -224,8 +233,10 @@ class List_Products {
 	}
 
 	/**
-	 * @param $column_name
-	 * @param $post_type
+	 * Render bulk edit visibility select.
+	 *
+	 * @param string $column_name The column name.
+	 * @param string $post_type   The post type.
 	 */
 	public function bulk_edit( $column_name, $post_type ): void {
 		if ( 'name' != $column_name || 'product' != $post_type ) {
@@ -239,8 +250,10 @@ class List_Products {
 	}
 
 	/**
-	 * @param $column_name
-	 * @param $post_type
+	 * Render quick edit visibility select.
+	 *
+	 * @param string $column_name The column name.
+	 * @param string $post_type   The post type.
 	 */
 	public function quick_edit( $column_name, $post_type ): void {
 		if ( 'product_cat' != $column_name || 'product' != $post_type ) {
@@ -253,18 +266,18 @@ class List_Products {
 	/**
 	 * NOTE: This is required for AJAX save to work on the quick edit form.
 	 *
-	 * @param WC_Product $product
+	 * @param WC_Product $product The product object.
 	 *
 	 * @return void
 	 */
 	public static function quick_edit_save( WC_Product $product ): void {
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_POST['_pos_visibility'] ) && in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
+		if ( isset( $_POST['_pos_visibility'] ) && in_array( $_POST['_pos_visibility'], $valid_options, true ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
-				'visibility' => sanitize_text_field( $_POST['_pos_visibility'] ),
+				'visibility' => sanitize_text_field( wp_unslash( $_POST['_pos_visibility'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 				'ids' => array( $product->get_id() ),
 			);
 			$settings_instance->update_visibility_settings( $args );
@@ -272,18 +285,20 @@ class List_Products {
 	}
 
 	/**
-	 * @param WC_Product $product
+	 * Save bulk edit visibility.
+	 *
+	 * @param WC_Product $product The product object.
 	 *
 	 * @return void
 	 */
 	public function bulk_edit_save( WC_Product $product ): void {
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_GET['_pos_visibility'] ) && in_array( $_GET['_pos_visibility'], $valid_options, true ) ) {
+		if ( isset( $_GET['_pos_visibility'] ) && in_array( $_GET['_pos_visibility'], $valid_options, true ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 			$settings_instance = Settings::instance();
 			$args = array(
 				'post_type' => 'products',
-				'visibility' => $_GET['_pos_visibility'],
+				'visibility' => sanitize_text_field( wp_unslash( $_GET['_pos_visibility'] ) ),
 				'ids' => array( $product->get_id() ),
 			);
 			$settings_instance->update_visibility_settings( $args );
@@ -291,8 +306,10 @@ class List_Products {
 	}
 
 	/**
-	 * @param $column
-	 * @param $post_id
+	 * Output custom product column data.
+	 *
+	 * @param string $column  The column name.
+	 * @param int    $post_id The post ID.
 	 */
 	public function custom_product_column( $column, $post_id ): void {
 		if ( 'name' == $column ) {
@@ -308,15 +325,14 @@ class List_Products {
 				$selected = 'online_only';
 			}
 
-			echo '<div class="hidden" id="woocommerce_pos_inline_' . $post_id . '" data-visibility="' . $selected . '"></div>';
+			echo '<div class="hidden" id="woocommerce_pos_inline_' . esc_attr( $post_id ) . '" data-visibility="' . esc_attr( $selected ) . '"></div>';
 		}
 	}
 
 	/**
-	 * Filter to allow us to exclude meta keys from product duplication..
+	 * Filter to allow us to exclude meta keys from product duplication.
 	 *
-	 * @param array $exclude_meta The keys to exclude from the duplicate.
-	 * @param array $existing_meta_keys The meta keys that the product already has.
+	 * @param array $meta_keys The keys to exclude from the duplicate.
 	 *
 	 * @return array
 	 */

@@ -15,7 +15,7 @@ namespace WCPOS\WooCommercePOS;
  */
 class Gateways {
 	/**
-	 *
+	 * Constructor.
 	 */
 	public function __construct() {
 		add_action( 'woocommerce_payment_gateways', array( $this, 'payment_gateways' ) );
@@ -27,19 +27,19 @@ class Gateways {
 	 * BEWARE: some gateways/themes/plugins call this very early on every page!!
 	 * We cannot guarantee that $wp is set, so we cannot use woocommerce_pos_request.
 	 *
-	 * @param null|array $gateways
+	 * @param null|array $gateways The registered payment gateways.
 	 *
 	 * @return array
 	 */
 	public function payment_gateways( array $gateways ) {
 		global $plugin_page;
 
-		// Early exit for WooCommerce settings, ie: don't show POS gateways
+		// Early exit for WooCommerce settings, ie: don't show POS gateways.
 		if ( is_admin() && 'wc-settings' == $plugin_page ) {
 			return $gateways;
 		}
 
-		// All other cases, the default POS gateways are added
+		// All other cases, the default POS gateways are added.
 		return array_merge(
 			$gateways,
 			array(
@@ -79,13 +79,14 @@ class Gateways {
 				if ( isset( $settings['gateways'][ $gateway->id ]['title'] ) ) {
 					$gateway->title = $settings['gateways'][ $gateway->id ]['title'];
 				}
+
 				/*
 				 * There is an issue over-writing the description field because some gateways use this for info,
 				 * eg: Account Funds uses it to show the current balance.
 				 */
 				// if ( isset( $settings['gateways'][ $gateway->id ]['description'] ) ) {
 				// $gateway->description = $settings['gateways'][ $gateway->id ]['description'];
-				// }
+				// }.
 
 				$gateway->icon    = '';
 				$gateway->enabled = 'yes';
@@ -95,7 +96,7 @@ class Gateways {
 			}
 		}
 
-		// Order the available gateways according to the settings
+		// Order the available gateways according to the settings.
 		uksort(
 			$_available_gateways,
 			function ( $a, $b ) use ( $settings ) {

@@ -1,8 +1,12 @@
 <?php
+/**
+ * Templates_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use WP_Error;
 use WP_Query;
@@ -10,6 +14,8 @@ use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 /**
  * Class Templates REST API Controller.
@@ -296,4 +302,3 @@ class Templates_Controller extends WP_REST_Controller {
 		return true;
 	}
 }
-

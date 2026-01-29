@@ -5,6 +5,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -16,6 +17,9 @@ use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
 
+/**
+ * API class.
+ */
 class API {
 	/**
 	 * WCPOS REST API namespaces and endpoints.
@@ -31,11 +35,13 @@ class API {
 	 */
 	protected $is_auth_checked = false;
 
-
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		$this->register_routes();
 
-		// Allows requests from WCPOS Desktop and Mobile Apps
+		// Allows requests from WCPOS Desktop and Mobile Apps.
 		add_filter( 'rest_allowed_cors_headers', array( $this, 'rest_allowed_cors_headers' ), 10, 1 );
 		add_filter( 'rest_pre_serve_request', array( $this, 'rest_pre_serve_request' ), 10, 4 );
 
@@ -46,10 +52,10 @@ class API {
 		add_filter( 'determine_current_user', array( $this, 'determine_current_user' ), 20 );
 		add_filter( 'rest_authentication_errors', array( $this, 'rest_authentication_errors' ), 50, 1 );
 
-		// Adds info about the WordPress install
+		// Adds info about the WordPress install.
 		add_filter( 'rest_index', array( $this, 'rest_index' ), 10, 1 );
 
-		// These filters allow changes to the WC REST API response
+		// These filters allow changes to the WC REST API response.
 		add_filter( 'rest_dispatch_request', array( $this, 'rest_dispatch_request' ), 10, 4 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'rest_pre_dispatch' ), 10, 3 );
 	}
@@ -172,15 +178,15 @@ class API {
 	 *
 	 * We need to make sure our
 	 *
-	 * @param mixed $errors
+	 * @param mixed $errors Authentication errors.
 	 */
 	public function rest_authentication_errors( $errors ) {
-		// Pass through other errors
+		// Pass through other errors.
 		if ( ! empty( $error ) ) {
 			return $error;
 		}
 
-		// check if determine_current_user has been called
+		// check if determine_current_user has been called.
 		if ( ! $this->is_auth_checked ) {
 			// Authentication hasn't occurred during `determine_current_user`, so check auth.
 			$user_id = $this->authenticate( false );
@@ -201,22 +207,22 @@ class API {
 	 */
 	public function get_auth_header() {
 		// Check if HTTP_AUTHORIZATION is set and not empty
-		// (htaccess SetEnvIf can set an empty value when no header is present)
+		// (htaccess SetEnvIf can set an empty value when no header is present).
 		if ( ! empty( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( $_SERVER['HTTP_AUTHORIZATION'] );
+			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) );
 		}
 
-		// Check for alternative header in $_SERVER
+		// Check for alternative header in $_SERVER.
 		if ( ! empty( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) ) {
-			return sanitize_text_field( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+			return sanitize_text_field( wp_unslash( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ) );
 		}
 
-		// Check for authorization param in URL ($_GET)
+		// Check for authorization param in URL ($_GET).
 		if ( ! empty( $_GET['authorization'] ) ) {
-			return sanitize_text_field( $_GET['authorization'] );
+			return sanitize_text_field( wp_unslash( $_GET['authorization'] ) );
 		}
 
-		// Return false if none of the variables are set
+		// Return false if none of the variables are set.
 		return false;
 	}
 
@@ -278,7 +284,7 @@ class API {
 	public function rest_pre_dispatch( $result, $server, $request ) {
 		$max_length = 10000;
 
-		// Process 'include' parameter
+		// Process 'include' parameter.
 		$include = $request->get_param( 'include' );
 		if ( $include ) {
 			$processed_include = $this->shorten_param_array( $include, $max_length );
@@ -286,7 +292,7 @@ class API {
 			unset( $request['include'] );
 		}
 
-		// Process 'exclude' parameter
+		// Process 'exclude' parameter.
 		$exclude = $request->get_param( 'exclude' );
 		if ( $exclude ) {
 			$processed_exclude = $this->shorten_param_array( $exclude, $max_length );
@@ -327,7 +333,7 @@ class API {
 					 * The precision settings are to prevent floating point weirdness, eg: stock_quantity 3.6 becomes 3.6000000000000001
 					 */
 					error_reporting( 0 );
-					@ini_set( 'display_errors', 0 );
+					@ini_set( 'display_errors', 0 ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed -- intentionally disabling error display for POS API responses.
 					@ini_set( 'precision', 10 );
 					@ini_set( 'serialize_precision', 10 );
 
@@ -353,8 +359,8 @@ class API {
 	 *
 	 * @TODO - For long queries, I should find a better solution than this.
 	 *
-	 * @param array|string $param_value
-	 * @param int          $max_length
+	 * @param array|string $param_value The parameter value.
+	 * @param int          $max_length  The maximum length.
 	 *
 	 * @return array
 	 */
@@ -363,7 +369,7 @@ class API {
 		$param_string = implode( ',', $param_array );
 
 		if ( \strlen( $param_string ) > $max_length ) {
-			shuffle( $param_array ); // Shuffle to randomize
+			shuffle( $param_array ); // Shuffle to randomize.
 
 			$new_param_string   = '';
 			$random_param_array = array();
@@ -373,7 +379,7 @@ class API {
 					$new_param_string .= $id . ',';
 					$random_param_array[] = $id;
 				} else {
-					break; // Stop when maximum length is reached
+					break; // Stop when maximum length is reached.
 				}
 			}
 
@@ -391,25 +397,25 @@ class API {
 	 * @return int|WP_Error
 	 */
 	private function authenticate( $user_id ) {
-		// check if there is an auth header
+		// check if there is an auth header.
 		$auth_header = $this->get_auth_header();
 		if ( ! \is_string( $auth_header ) ) {
 			return $user_id;
 		}
 
-		// Extract Bearer token from Authorization Header
+		// Extract Bearer token from Authorization Header.
 		list($token) = sscanf( $auth_header, 'Bearer %s' );
 
 		if ( $token ) {
 			$auth_service  = Auth::instance();
 			$decoded_token = $auth_service->validate_token( $token );
 
-			// Check if validate_token returned WP_Error and user_id is null
+			// Check if validate_token returned WP_Error and user_id is null.
 			if ( is_wp_error( $decoded_token ) && null === $user_id ) {
 				return $decoded_token;
 			}
 
-			// If the token is valid, set the user_id
+			// If the token is valid, set the user_id.
 			if ( ! is_wp_error( $decoded_token ) ) {
 				$user_id = $decoded_token->data->user->id;
 

@@ -7,6 +7,7 @@
  * @see        https://wcpos.com
  *
  * @extends     WC_Payment_Gateway
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Gateways;
@@ -16,7 +17,7 @@ use WC_Order_Item_Fee;
 use WC_Payment_Gateway;
 
 /**
- *
+ * Cash class.
  */
 class Cash extends WC_Payment_Gateway {
 	/**
@@ -30,7 +31,7 @@ class Cash extends WC_Payment_Gateway {
 		$this->has_fields  = true;
 		$this->enabled     = 'no';
 
-		// Actions
+		// Actions.
 		add_action(
 			'woocommerce_pos_update_options_payment_gateways_' . $this->id,
 			array(
@@ -42,7 +43,9 @@ class Cash extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * @param WC_Order $order
+	 * Get payment details.
+	 *
+	 * @param WC_Order $order Order object.
 	 *
 	 * @return array
 	 */
@@ -79,18 +82,19 @@ class Cash extends WC_Payment_Gateway {
 		echo '
 		<div class="form-row" id="pos-cash-tendered_field" style="display: flex; justify-content: space-between;">
 			<div style="flex: 1;">
-				<label for="pos-cash-tendered" style="padding-left:0">' . __( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
+				<label for="pos-cash-tendered" style="padding-left:0">' . esc_html__( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
 				<div class="input-group">
-					' . $left_addon . '
-					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . __( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
-					' . $right_addon . '
+					' . wp_kses_post( $left_addon ) . '
+					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . esc_attr__( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
+					' . wp_kses_post( $right_addon ) . '
 				</div>
 			</div>
 			<div style="flex: 1;">
-				<label style="padding-left:0">' . __( 'Change', 'woocommerce-pos' ) . '</label>
+				<label style="padding-left:0">' . esc_html__( 'Change', 'woocommerce-pos' ) . '</label>
 				<div id="pos-cash-change-display"></div>
-			</div>
-			' . wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' ) . '
+			</div>';
+		wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' );
+		echo '
 		</div>
     ';
 
@@ -119,33 +123,35 @@ class Cash extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * @param int $order_id
+	 * Process the payment.
+	 *
+	 * @param int $order_id Order ID.
 	 *
 	 * @return string[]
 	 */
 	public function process_payment( $order_id ): array {
-		// Check nonce
-		if ( ! isset( $_POST['pos_cash_payment_nonce_field'] ) || ! wp_verify_nonce( $_POST['pos_cash_payment_nonce_field'], 'pos_cash_payment_nonce' ) ) {
-			wp_die( __( 'Nonce verification failed', 'woocommerce-pos' ) );
+		// Check nonce.
+		if ( ! isset( $_POST['pos_cash_payment_nonce_field'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_cash_payment_nonce_field'] ) ), 'pos_cash_payment_nonce' ) ) {
+			wp_die( esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
 		}
 
-		// get order object
+		// get order object.
 		$order = new WC_Order( $order_id );
 		$tendered = $order->get_total();
 
-		// get pos_cash data from $_POST
+		// get pos_cash data from $_POST.
 		if ( isset( $_POST['pos-cash-tendered'] ) && ! empty( $_POST['pos-cash-tendered'] ) ) {
-			$tendered = wc_format_decimal( wp_unslash( $_POST['pos-cash-tendered'] ) );
+			$tendered = wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['pos-cash-tendered'] ) ) );
 		}
 		$change = $tendered > $order->get_total() ? wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) ) : '0';
 		$order->update_meta_data( '_pos_cash_amount_tendered', $tendered );
 		$order->update_meta_data( '_pos_cash_change', $change );
 
 		if ( $tendered >= $order->get_total() ) {
-			// payment complete
+			// payment complete.
 			$order->payment_complete();
 		} else {
-			// Add negative fee to adjust order total
+			// Add negative fee to adjust order total.
 			$fee = new WC_Order_Item_Fee();
 			$fee->set_props(
 				array(
@@ -169,14 +175,14 @@ class Cash extends WC_Payment_Gateway {
 			$order->set_total( wc_format_decimal( floatval( $order->get_total() ) - floatval( $tendered ) ) );
 			$order->save();
 
-			// Set order status to 'wc-pos-partial'
+			// Set order status to 'wc-pos-partial'.
 			$order->update_status( 'wc-pos-partial' );
 		}
 
 		// Return thankyou redirect
 		// $redirect = add_query_arg(array(
 		// 'wcpos' => 1,
-		// ), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));
+		// ), get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() ));.
 
 		return array(
 			'result'   => 'success',
@@ -185,14 +191,16 @@ class Cash extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * @param $order_id
+	 * Calculate and display change.
+	 *
+	 * @param int $order_id Order ID.
 	 */
 	public function calculate_change( $order_id ): void {
 		$message  = '';
 		$tendered = get_post_meta( $order_id, '_pos_cash_amount_tendered', true );
 		$change   = get_post_meta( $order_id, '_pos_cash_change', true );
 
-		// construct message
+		// construct message.
 		if ( $tendered && $change ) {
 			$message = __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $tendered ) . '<br>';
@@ -200,6 +208,6 @@ class Cash extends WC_Payment_Gateway {
 			$message .= wc_price( $change );
 		}
 
-		echo $message;
+		echo wp_kses_post( $message );
 	}
 }

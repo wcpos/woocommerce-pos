@@ -9,12 +9,15 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Update script with file-scoped variables.
+// phpcs:disable WordPress.WP.GlobalVariablesOverride.Prohibited -- Using $post_id as loop variable, not overriding WP global.
 
 global $wpdb;
 
@@ -108,4 +111,3 @@ $templates_without_type = get_posts(
 foreach ( $templates_without_type as $post_id ) {
 	wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 }
-

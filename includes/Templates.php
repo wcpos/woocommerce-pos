@@ -9,12 +9,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
 use WP_Query;
 
+/**
+ * Templates class.
+ */
 class Templates {
 	/**
 	 * Virtual template ID constants.
@@ -184,7 +188,7 @@ class Templates {
 			'title'         => $post->post_title,
 			'content'       => $post->post_content,
 			'type'          => $type,
-			'language'      => get_post_meta( $template_id, '_template_language', true ) ?: 'php',
+			'language'      => get_post_meta( $template_id, '_template_language', true ) ? get_post_meta( $template_id, '_template_language', true ) : 'php',
 			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
 			'is_virtual'    => false,
 			'source'        => 'custom',

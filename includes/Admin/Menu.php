@@ -15,7 +15,7 @@ use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
- *
+ * Menu class.
  */
 class Menu {
 	/**
@@ -43,7 +43,7 @@ class Menu {
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
 		}
 
-		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );
+		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
 
 	/**
@@ -63,11 +63,11 @@ class Menu {
 		$pos = array_search( PLUGIN_NAME, $menu_order, true );
 
 		if ( false !== $woo && false !== $pos ) {
-			// rearrange menu
+			// rearrange menu.
 			unset( $menu_order[ $pos ] );
 			array_splice( $menu_order, ++$woo, 0, PLUGIN_NAME );
 
-			// rearrange submenu
+			// rearrange submenu.
 			global $submenu;
 			$pos_submenu      = &$submenu[ PLUGIN_NAME ];
 			$pos_submenu[500] = $pos_submenu[1];
@@ -86,6 +86,8 @@ class Menu {
 
 	/**
 	 * Add POS submenu to WooCommerce Analytics menu.
+	 *
+	 * @param array $report_pages The analytics report pages.
 	 */
 	public function analytics_menu_items( array $report_pages ): array {
 		// Find the position of the 'Orders' item.
@@ -136,19 +138,19 @@ class Menu {
 
 		$this->settings_screen_id = add_submenu_page(
 			PLUGIN_NAME,
-			// translators: wordpress
-			__( 'Settings' ),
-			// translators: wordpress
-			__( 'Settings' ),
+			// translators: wordpress.
+			__( 'Settings', 'woocommerce-pos' ),
+			// translators: wordpress.
+			__( 'Settings', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			PLUGIN_NAME . '-settings',
 			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
 		);
 
 		// Note: Templates submenu is automatically added by the custom post type registration
-		// with 'show_in_menu' => PLUGIN_NAME
+		// with 'show_in_menu' => PLUGIN_NAME.
 
-		// adjust submenu
+		// adjust submenu.
 		global $submenu;
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
 		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
@@ -181,13 +183,15 @@ class Menu {
 
 	/**
 	 * Enqueue landing page scripts and styles.
+	 *
+	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
 	public function enqueue_landing_scripts_and_styles( $hook_suffix ): void {
 		if ( $hook_suffix === $this->toplevel_screen_id ) {
-			$is_development = isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'];
+			$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( $_ENV['DEVELOPMENT'] );
 			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing/assets/';
 
-			// Enqueue the landing page CSS from CDN
+			// Enqueue the landing page CSS from CDN.
 			wp_enqueue_style(
 				'wcpos-landing',
 				$url . 'css/landing.css',
@@ -195,11 +199,11 @@ class Menu {
 				PLUGIN_VERSION
 			);
 
-			// Ensure WordPress bundled React and lodash are loaded as dependencies
+			// Ensure WordPress bundled React and lodash are loaded as dependencies.
 			wp_enqueue_script( 'react' );
 			wp_enqueue_script( 'lodash' );
 
-			// Enqueue the landing page JS from CDN, with React and lodash as dependencies
+			// Enqueue the landing page JS from CDN, with React and lodash as dependencies.
 			wp_enqueue_script(
 				'wcpos-landing',
 				$url . 'js/landing.js',

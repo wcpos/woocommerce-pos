@@ -1,4 +1,9 @@
 <?php
+/**
+ * Product_Brands_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -74,10 +79,10 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	public function wcpos_product_brands_response( WP_REST_Response $response, object $item, WP_REST_Request $request ): WP_REST_Response {
 		$data = $response->get_data();
 
-		// Make sure the term has a uuid
+		// Make sure the term has a uuid.
 		$data['uuid'] = $this->get_term_uuid( $item );
 
-		// Reset the new response data
+		// Reset the new response data.
 		$response->set_data( $data );
 
 		return $response;
@@ -122,18 +127,18 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	public function wcpos_terms_clauses_include_exclude( array $clauses, array $taxonomies, array $args ) {
 		global $wpdb;
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$clauses['where'] .= $wpdb->prepare( " AND t.term_id IN ($ids_format) ", $include_ids );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$clauses['where'] .= $wpdb->prepare( " AND t.term_id NOT IN ($ids_format) ", $exclude_ids );
+			$clauses['where'] .= $wpdb->prepare( " AND t.term_id NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $ids_format is a safe placeholder string.
 		}
 
 		return $clauses;
@@ -159,6 +164,8 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 
 		try {
 			/**
+			 * Get all term IDs for the taxonomy.
+			 *
 			 * @TODO - terms don't have a modified date, it would be good to add a term_meta for last_update
 			 * - ideally WooCommerce would provide a modified_after filter for terms
 			 * - for now we'll just return empty for modified terms

@@ -1,15 +1,21 @@
 <?php
+/**
+ * Settings.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
-use const WCPOS\WooCommercePOS\SHORT_NAME;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
+
+use const WCPOS\WooCommercePOS\SHORT_NAME;
 
 /**
  * Class Settings REST API.
@@ -40,6 +46,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Register routes.
+	 *
 	 * @return void
 	 */
 	public function register_routes(): void {
@@ -71,7 +79,7 @@ class Settings extends WP_REST_Controller {
 		// 'callback' => array( $this, 'get_barcodes' ),
 		// 'permission_callback' => array( $this, 'read_permission_check' ),
 		// )
-		// );
+		// );.
 
 		register_rest_route(
 			$this->namespace,
@@ -188,6 +196,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Get general endpoint arguments.
+	 *
 	 * @return Closure[][]
 	 */
 	public function get_general_endpoint_args(): array {
@@ -231,6 +241,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Get checkout endpoint arguments.
+	 *
 	 * @return Closure[][]
 	 */
 	public function get_checkout_endpoint_args(): array {
@@ -269,7 +281,9 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get general settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -280,17 +294,19 @@ class Settings extends WP_REST_Controller {
 			return $general_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $general_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get checkout settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -301,17 +317,19 @@ class Settings extends WP_REST_Controller {
 			return $checkout_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $checkout_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get payment gateways settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -322,17 +340,19 @@ class Settings extends WP_REST_Controller {
 			return $payment_gateways_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $payment_gateways_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get access settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -343,17 +363,19 @@ class Settings extends WP_REST_Controller {
 			return $access_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $access_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get tools settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -364,17 +386,19 @@ class Settings extends WP_REST_Controller {
 			return $tools_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $tools_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
 	}
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Get license settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_REST_Response
 	 */
@@ -385,10 +409,10 @@ class Settings extends WP_REST_Controller {
 			return $license_settings;
 		}
 
-		// Create the response object
+		// Create the response object.
 		$response = new WP_REST_Response( $license_settings );
 
-		// Set the status code of the response
+		// Set the status code of the response.
 		$response->set_status( 200 );
 
 		return $response;
@@ -396,7 +420,9 @@ class Settings extends WP_REST_Controller {
 
 
 	/**
-	 * @param WP_REST_Request $request
+	 * Update payment gateways settings.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_Error
 	 */
@@ -414,7 +440,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @TODO - shouldn't the update return a WP_REST_Response?
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_Error
 	 */
@@ -430,9 +456,11 @@ class Settings extends WP_REST_Controller {
 
 
 	/**
+	 * Update checkout settings.
+	 *
 	 * @TODO - shouldn't the update return a WP_REST_Response?
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_Error
 	 */
@@ -448,9 +476,11 @@ class Settings extends WP_REST_Controller {
 
 
 	/**
+	 * Update access settings.
+	 *
 	 * @TODO - shouldn't the update return a WP_REST_Response?
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array
 	 */
@@ -458,27 +488,27 @@ class Settings extends WP_REST_Controller {
 		global $wp_roles;
 		$data = $request->get_json_params();
 
-		// get all role slugs
+		// get all role slugs.
 		$roles = array_keys( $wp_roles->roles );
 
-		// get property from $data where key is in $roles
+		// get property from $data where key is in $roles.
 		$update = array_intersect_key( $data, array_flip( $roles ) );
 
-		// if $role is array with one property, update the capabilities
+		// if $role is array with one property, update the capabilities.
 		if ( 1 === \count( $update ) ) {
 			$slugs = array_keys( $update );
 			$slug  = $slugs[0];
 			$role  = get_role( $slug );
 
-			// flatten capabilities array from 'wc', 'wp', 'wcpos' grouping
+			// flatten capabilities array from 'wc', 'wp', 'wcpos' grouping.
 			$flattened_caps = array();
 			foreach ( $update[ $slug ]['capabilities'] as $capabilities ) {
 				$flattened_caps = array_merge( $flattened_caps, $capabilities );
 			}
 
-			// update capabilities for each $flattened_cap (should only be one)
+			// update capabilities for each $flattened_cap (should only be one).
 			foreach ( $flattened_caps as $cap => $grant ) {
-				// sanity check for admin role, read capability
+				// sanity check for admin role, read capability.
 				if ( 'administrator' === $slug && 'read' === $cap ) {
 					continue;
 				}
@@ -498,7 +528,7 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @TODO - shouldn't the update return a WP_REST_Response?
 	 *
-	 * @param WP_REST_Request $request
+	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array|WP_Error
 	 */
@@ -512,6 +542,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Check read permissions.
+	 *
 	 * @TODO - who can read settings?
 	 *
 	 * @return bool
@@ -521,6 +553,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Check update permissions.
+	 *
 	 * @return bool
 	 */
 	public function update_permission_check(): bool {
@@ -528,6 +562,8 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
+	 * Check access update permissions.
+	 *
 	 * @return bool
 	 */
 	public function update_access_permission_check(): bool {
@@ -535,7 +571,9 @@ class Settings extends WP_REST_Controller {
 	}
 
 	/**
-	 * @param mixed $options
+	 * Filter payment gateways settings.
+	 *
+	 * @param mixed $options The gateway options.
 	 */
 	public function payment_gateways_settings( $options ) {
 		foreach ( $options['gateways'] as $gateway_id => &$gateway_data ) {
@@ -553,7 +591,7 @@ class Settings extends WP_REST_Controller {
 	/**
 	 * Temporary fix for stale license status transient. Remove when possible.
 	 *
-	 * @param mixed $value
+	 * @param mixed $value The option value.
 	 */
 	public function remove_license_transient( $value ) {
 		delete_transient( 'woocommerce_pos_pro_license_status' );

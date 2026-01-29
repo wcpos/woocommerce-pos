@@ -91,7 +91,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WordPress settings.
 	 */
 	public function set_wordpress_settings() {
 		$this->set_prop( 'name', \get_bloginfo( 'name' ) );
@@ -99,7 +99,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce general settings.
 	 */
 	public function set_woocommerce_general_settings() {
 		$default_country = \WC_Admin_Settings::get_option( 'woocommerce_default_country' );
@@ -124,7 +124,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce tax settings.
 	 */
 	public function set_woocommerce_tax_settings() {
 		$this->set_prop( 'prices_include_tax', \WC_Admin_Settings::get_option( 'woocommerce_prices_include_tax' ) );
@@ -151,7 +151,7 @@ class Store extends \WC_Data implements StoreInterface {
 	}
 
 	/**
-	 *
+	 * Set WooCommerce POS settings.
 	 */
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', woocommerce_pos_get_settings( 'general', 'default_customer' ) );
@@ -226,8 +226,8 @@ class Store extends \WC_Data implements StoreInterface {
 	 * @return string
 	 */
 	// public function get_default_country( $context = 'view' ) {
-	// 	return $this->get_prop( 'default_country', $context );
-	// }
+	// return $this->get_prop( 'default_country', $context );
+	// }.
 
 	/**
 	 * Get Store state code.

@@ -7,12 +7,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
+/**
+ * Single_Template class.
+ */
 class Single_Template {
 	/**
 	 * Constructor.
@@ -418,7 +422,7 @@ class Single_Template {
 
 		// Save language.
 		if ( isset( $_POST['wcpos_template_language'] ) ) {
-			$language = sanitize_text_field( $_POST['wcpos_template_language'] );
+			$language = sanitize_text_field( wp_unslash( $_POST['wcpos_template_language'] ) );
 			if ( \in_array( $language, array( 'php', 'javascript' ), true ) ) {
 				update_post_meta( $post_id, '_template_language', $language );
 			}

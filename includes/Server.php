@@ -5,6 +5,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     https://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
@@ -13,13 +14,21 @@ use WCPOS\WooCommercePOS\Services\Auth;
 use WP_REST_Request;
 use WP_REST_Server;
 
+/**
+ * Server class.
+ */
 class Server {
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ) );
 		add_filter( 'rest_pre_dispatch', array( $this, 'track_session_activity' ), 10, 3 );
 	}
 
 	/**
+	 * Check permissions for WooCommerce REST API requests.
+	 *
 	 * @TODO - add authentication check
 	 *
 	 * @return bool
@@ -29,9 +38,11 @@ class Server {
 	}
 
 	/**
-	 * @param string $route
-	 * @param string $method
-	 * @param array  $attributes
+	 * Make a WP REST API request.
+	 *
+	 * @param string $route      The REST route.
+	 * @param string $method     The HTTP method.
+	 * @param array  $attributes The request attributes.
 	 *
 	 * @return false|string
 	 */
@@ -87,24 +98,24 @@ class Server {
 	 * @return mixed
 	 */
 	public function track_session_activity( $result, $server, $request ) {
-		// Only track for WCPOS API requests
+		// Only track for WCPOS API requests.
 		$route = $request->get_route();
 		if ( ! str_starts_with( $route, '/wcpos/' ) ) {
 			return $result;
 		}
 
-		// Skip for auth endpoints (they handle their own tracking)
+		// Skip for auth endpoints (they handle their own tracking).
 		if ( str_starts_with( $route, '/wcpos/v1/auth/' ) ) {
 			return $result;
 		}
 
-		// Get authorization token
+		// Get authorization token.
 		$token = $this->extract_token_from_request( $request );
 		if ( empty( $token ) ) {
 			return $result;
 		}
 
-		// Validate and extract refresh_jti from access token
+		// Validate and extract refresh_jti from access token.
 		$auth_service = Auth::instance();
 		$decoded      = $auth_service->validate_token( $token, 'access' );
 
@@ -112,7 +123,7 @@ class Server {
 			return $result;
 		}
 
-		// Update session activity if we have refresh_jti
+		// Update session activity if we have refresh_jti.
 		if ( ! empty( $decoded->refresh_jti ) && ! empty( $decoded->data->user->id ) ) {
 			$this->update_session_activity_throttled(
 				$decoded->data->user->id,
@@ -131,11 +142,11 @@ class Server {
 	 * @return string
 	 */
 	private function extract_token_from_request( WP_REST_Request $request ): string {
-		// Try Authorization header
+		// Try Authorization header.
 		$auth_header = $request->get_header( 'authorization' );
 
 		if ( empty( $auth_header ) ) {
-			// Try query parameter
+			// Try query parameter.
 			$auth_header = $request->get_param( 'authorization' );
 		}
 
@@ -143,7 +154,7 @@ class Server {
 			return '';
 		}
 
-		// Extract token from "Bearer TOKEN"
+		// Extract token from "Bearer TOKEN".
 		return str_replace( 'Bearer ', '', $auth_header );
 	}
 
@@ -154,11 +165,11 @@ class Server {
 	 * @param string $jti Refresh token JTI.
 	 */
 	private function update_session_activity_throttled( int $user_id, string $jti ): void {
-		// Rate limit: only update once per minute per session
+		// Rate limit: only update once per minute per session.
 		$cache_key   = "wcpos_session_activity_{$user_id}_{$jti}";
 		$last_update = wp_cache_get( $cache_key, 'wcpos' );
 
-		// If never updated or last update was more than 60 seconds ago
+		// If never updated or last update was more than 60 seconds ago.
 		if ( false === $last_update || ( time() - $last_update ) > 60 ) {
 			Auth::instance()->update_session_activity( $user_id, $jti );
 			wp_cache_set( $cache_key, time(), 'wcpos', 60 );

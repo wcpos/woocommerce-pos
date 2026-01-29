@@ -1,5 +1,4 @@
 <?php
-
 /**
  * POS Product Admin Class
  * - pos only products.
@@ -8,38 +7,50 @@
  * @author   Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see     http://www.wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
-use const DOING_AUTOSAVE;
 use WCPOS\WooCommercePOS\Registry;
-
 use WCPOS\WooCommercePOS\Services\Settings;
+use const DOING_AUTOSAVE;
 
+/**
+ * Single_Product class for POS product admin functionality.
+ */
 class Single_Product {
 	/**
+	 * The barcode field key.
+	 *
 	 * @var string
 	 */
 	private $barcode_field;
 
 	/**
+	 * Visibility options for POS products.
+	 *
 	 * @var array
 	 */
 	private $options;
 
 	/**
+	 * Link to upgrade to Pro.
+	 *
 	 * @var string
 	 */
 	private $pro_link = '';
 
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
-		Registry::get_instance()->set( static::class  , $this );
+		Registry::get_instance()->set( static::class, $this );
 
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
 		$this->pro_link      = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 
-		// visibility options
+		// visibility options.
 		$this->options = array(
 			''            => __( 'POS & Online', 'woocommerce-pos' ),
 			'pos_only'    => __( 'POS Only', 'woocommerce-pos' ),
@@ -82,8 +93,6 @@ class Single_Product {
 
 	/**
 	 * Add store price fields to the product edit page.
-	 *
-	 * @param mixed $post_id
 	 */
 	public function add_store_price_fields(): void {
 		woocommerce_wp_checkbox(
@@ -100,8 +109,6 @@ class Single_Product {
 
 	/**
 	 * Add store tax fields to the product edit page.
-	 *
-	 * @param mixed $post_id
 	 */
 	public function add_store_tax_fields(): void {
 		$link = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
@@ -119,18 +126,22 @@ class Single_Product {
 	}
 
 	/**
-	 * @param $post_id
+	 * Save barcode field on product meta.
+	 *
+	 * @param int $post_id The post ID.
 	 */
 	public function woocommerce_process_product_meta( $post_id ): void {
-		if ( isset( $_POST[ $this->barcode_field ] ) ) {
-			update_post_meta( $post_id, $this->barcode_field, sanitize_text_field( $_POST[ $this->barcode_field ] ) );
+		if ( isset( $_POST[ $this->barcode_field ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
+			update_post_meta( $post_id, $this->barcode_field, sanitize_text_field( wp_unslash( $_POST[ $this->barcode_field ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 		}
 	}
 
 	/**
-	 * @param $loop
-	 * @param $variation_data
-	 * @param $variation
+	 * Add barcode field to variable product attributes.
+	 *
+	 * @param int     $loop           Position in the loop.
+	 * @param array   $variation_data Variation data.
+	 * @param WP_Post $variation      Post data.
 	 */
 	public function after_variable_attributes_barcode_field( $loop, $variation_data, $variation ): void {
 		$value = get_post_meta( $variation->ID, $this->barcode_field, true );
@@ -141,11 +152,13 @@ class Single_Product {
 	}
 
 	/**
-	 * @param $variation_id
+	 * Save barcode field for a product variation.
+	 *
+	 * @param int $variation_id The variation ID.
 	 */
 	public function save_product_variation_barcode_field( $variation_id ): void {
-		if ( isset( $_POST['variable_pos_barcode'][ $variation_id ] ) ) {
-			update_post_meta( $variation_id, $this->barcode_field, $_POST['variable_pos_barcode'][ $variation_id ] );
+		if ( isset( $_POST['variable_pos_barcode'][ $variation_id ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
+			update_post_meta( $variation_id, $this->barcode_field, sanitize_text_field( wp_unslash( $_POST['variable_pos_barcode'][ $variation_id ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 		}
 	}
 
@@ -158,7 +171,7 @@ class Single_Product {
 	 */
 	public function add_variations_store_price_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
+		echo esc_html__( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->pro_link );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
@@ -172,14 +185,16 @@ class Single_Product {
 	 */
 	public function add_variations_store_tax_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->pro_link;
+		echo esc_html__( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->pro_link );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
 
 	/**
-	 * @param $post_id
-	 * @param $post
+	 * Save POS visibility on post save.
+	 *
+	 * @param int      $post_id The post ID.
+	 * @param \WP_Post $post    The post object.
 	 */
 	public function save_post( $post_id, $post ): void {
 		// If this is an autosave, our form has not been submitted, so we don't want to do anything.
@@ -200,11 +215,11 @@ class Single_Product {
 		// Get the product and save.
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_POST['_pos_visibility'] ) && \in_array( $_POST['_pos_visibility'], $valid_options, true ) ) {
+		if ( isset( $_POST['_pos_visibility'] ) && \in_array( $_POST['_pos_visibility'], $valid_options, true ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress save_post.
 			$settings_instance = Settings::instance();
 			$args              = array(
 				'post_type'  => 'products',
-				'visibility' => $_POST['_pos_visibility'],
+				'visibility' => sanitize_text_field( wp_unslash( $_POST['_pos_visibility'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WordPress save_post.
 				'ids'        => array( $post_id ),
 			);
 			$settings_instance->update_visibility_settings( $args );
@@ -244,9 +259,11 @@ class Single_Product {
 	}
 
 	/**
-	 * @param $loop
-	 * @param $variation_data
-	 * @param $variation
+	 * Add POS visibility select to variable product attributes.
+	 *
+	 * @param int     $loop           Position in the loop.
+	 * @param array   $variation_data Variation data.
+	 * @param WP_Post $variation      Post data.
 	 */
 	public function after_variable_attributes_pos_only_products( $loop, $variation_data, $variation ): void {
 		$selected          = '';
@@ -265,16 +282,18 @@ class Single_Product {
 	}
 
 	/**
-	 * @param $variation_id
+	 * Save POS visibility for a product variation.
+	 *
+	 * @param int $variation_id The variation ID.
 	 */
 	public function save_product_variation_pos_only_products( $variation_id ): void {
 		$valid_options = array( 'pos_only', 'online_only', '' );
 
-		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) && \in_array( $_POST['variable_pos_visibility'][ $variation_id ], $valid_options, true ) ) {
+		if ( isset( $_POST['variable_pos_visibility'][ $variation_id ] ) && \in_array( $_POST['variable_pos_visibility'][ $variation_id ], $valid_options, true ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 			$settings_instance = Settings::instance();
 			$args              = array(
 				'post_type'  => 'variations',
-				'visibility' => $_POST['variable_pos_visibility'][ $variation_id ],
+				'visibility' => sanitize_text_field( wp_unslash( $_POST['variable_pos_visibility'][ $variation_id ] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce verified by WooCommerce.
 				'ids'        => array( $variation_id ),
 			);
 			$settings_instance->update_visibility_settings( $args );
@@ -290,9 +309,9 @@ class Single_Product {
 	 */
 	private function get_excluded_barcode_fields(): array {
 		$excluded_fields = array(
-			'_sku',					// default WooCommerce SKU field
-			'_global_unique_id',	// default WooCommerce GTIN, UPC, EAN, or ISBN
-			'_alg_ean', 			// https://wpfactory.com/item/ean-barcodes-woocommerce/
+			'_sku',                 // default WooCommerce SKU field.
+			'_global_unique_id',    // default WooCommerce GTIN, UPC, EAN, or ISBN.
+			'_alg_ean',             // https://wpfactory.com/item/ean-barcodes-woocommerce/.
 		);
 
 		/*

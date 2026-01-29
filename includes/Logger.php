@@ -1,4 +1,9 @@
 <?php
+/**
+ * Logger.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS;
 
@@ -11,9 +16,25 @@ use function is_string;
  */
 class Logger {
 	public const WC_LOG_FILENAME = 'woocommerce-pos';
+	/**
+	 * Logger instance.
+	 *
+	 * @var \WC_Logger
+	 */
 	public static $logger;
+
+	/**
+	 * Log level.
+	 *
+	 * @var string|null
+	 */
 	public static $log_level;
 
+	/**
+	 * Set the log level.
+	 *
+	 * @param string $level The log level.
+	 */
 	public static function set_log_level( $level ): void {
 		self::$log_level = $level;
 	}
@@ -21,7 +42,7 @@ class Logger {
 	/**
 	 * Utilize WC logger class.
 	 *
-	 * @param mixed $message
+	 * @param mixed $message The message to log.
 	 */
 	public static function log( $message ): void {
 		if ( ! class_exists( 'WC_Logger' ) ) {

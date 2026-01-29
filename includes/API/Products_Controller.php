@@ -1,4 +1,9 @@
 <?php
+/**
+ * Products_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -105,8 +110,8 @@ class Products_Controller extends WC_REST_Products_Controller {
 		}
 
 		// Check for 'stock_quantity' and allow decimal.
-		// Note: 'number' is the valid JSON schema type for decimals (not 'float')
-		if ( $this->wcpos_allow_decimal_quantities()      &&
+		// Note: 'number' is the valid JSON schema type for decimals (not 'float').
+		if ( $this->wcpos_allow_decimal_quantities() &&
 			isset( $schema['properties']['stock_quantity'] ) &&
 			\is_array( $schema['properties']['stock_quantity'] ) ) {
 			$schema['properties']['stock_quantity']['type'] = 'number';
@@ -135,7 +140,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
-			// Define new sorting options
+			// Define new sorting options.
 			$new_sort_options = array(
 				'sku',
 				'barcode',
@@ -293,14 +298,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 		foreach ( $search_terms as $term ) {
 			$term = $n . $wpdb->esc_like( $term ) . $n;
 
-			// Search in post fields
+			// Search in post fields.
 			foreach ( $post_fields as $field ) {
 				if ( ! empty( $field ) ) {
-					$search_conditions[] = $wpdb->prepare( "($wpdb->posts.$field LIKE %s)", $term );
+					$search_conditions[] = $wpdb->prepare( "({$wpdb->posts}.$field LIKE %s)", $term ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is safe.
 				}
 			}
 
-			// Search in meta fields
+			// Search in meta fields.
 			foreach ( $meta_fields as $field ) {
 				$search_conditions[] = $wpdb->prepare( '(pm1.meta_value LIKE %s AND pm1.meta_key = %s)', $term, $field );
 			}
@@ -341,7 +346,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		// Handle NULL values in stock_quantity sorting
 		// By default, MySQL sorts NULLs first in ASC and last in DESC
-		// We want NULLs to always be last regardless of sort direction
+		// We want NULLs to always be last regardless of sort direction.
 		if ( isset( $this->wcpos_request ) ) {
 			$orderby = $this->wcpos_request->get_param( 'orderby' );
 			$order   = strtoupper( $this->wcpos_request->get_param( 'order' ) ?? 'ASC' );
@@ -349,7 +354,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			if ( 'stock_quantity' === $orderby ) {
 				// Modify ORDER BY to put NULLs last
 				// Use CASE to assign a sort priority: non-NULL = 0, NULL = 1
-				// Then sort by the actual value
+				// Then sort by the actual value.
 				$clauses['orderby'] = "{$wpdb->postmeta}.meta_value IS NULL ASC, {$wpdb->postmeta}.meta_value + 0 {$order}";
 			}
 		}
@@ -372,7 +377,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			add_filter( 'posts_groupby', array( $this, 'wcpos_posts_groupby_product_search' ), 10, 2 );
 		}
 
-		// if POS only products are enabled, exclude online-only products
+		// if POS only products are enabled, exclude online-only products.
 		if ( $this->wcpos_pos_only_products_enabled() ) {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_exclude_online_only' ), 10, 2 );
 		}
@@ -436,11 +441,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$online_only       = $settings_instance->get_online_only_product_visibility_settings();
 		$online_only_ids   = isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) ? $online_only['ids'] : array();
 
-		// Exclude online-only product IDs if POS only products are enabled
+		// Exclude online-only product IDs if POS only products are enabled.
 		if ( ! empty( $online_only_ids ) ) {
 			$online_only_ids = array_map( 'intval', (array) $online_only_ids );
 			$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
 		return $where;
@@ -457,18 +462,18 @@ class Products_Controller extends WC_REST_Products_Controller {
 	public function wcpos_posts_where_product_include_exclude( string $where, WP_Query $query ) {
 		global $wpdb;
 
-		// Handle 'wcpos_include'
+		// Handle 'wcpos_include'.
 		if ( ! empty( $this->wcpos_request['wcpos_include'] ) ) {
 			$include_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_include'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $include_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID IN ($ids_format) ", $include_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
-		// Handle 'wcpos_exclude'
+		// Handle 'wcpos_exclude'.
 		if ( ! empty( $this->wcpos_request['wcpos_exclude'] ) ) {
 			$exclude_ids = array_map( 'intval', (array) $this->wcpos_request['wcpos_exclude'] );
 			$ids_format  = implode( ',', array_fill( 0, \count( $exclude_ids ), '%d' ) );
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID NOT IN ($ids_format) ", $exclude_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name and format are safe.
 		}
 
 		return $where;
@@ -505,13 +510,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 			if ( isset( $online_only['ids'] ) && \is_array( $online_only['ids'] ) && ! empty( $online_only['ids'] ) ) {
 				$online_only_ids = array_map( 'intval', (array) $online_only['ids'] );
 				$ids_format      = implode( ',', array_fill( 0, \count( $online_only_ids ), '%d' ) );
-				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids );
+				$sql .= $wpdb->prepare( " AND ID NOT IN ($ids_format) ", $online_only_ids ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- format string is safe.
 			}
 		}
 
 		// Add modified_after condition if provided.
 		if ( $modified_after ) {
-			$modified_after_date = date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$modified_after_date = wp_date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
 			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
 		}
 
@@ -519,7 +524,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 
 		try {
-			$results           = $wpdb->get_results( $sql, ARRAY_A );
+			$results           = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built with prepare() above.
 			$formatted_results = $this->wcpos_format_all_posts_response( $results );
 
 			// Get the total number of orders for the given criteria.
@@ -558,7 +563,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$args          = parent::prepare_objects_query( $request );
 		$barcode_field = $this->wcpos_get_barcode_field();
 
-		// Add custom 'orderby' options
+		// Add custom 'orderby' options.
 		if ( isset( $request['orderby'] ) ) {
 			switch ( $request['orderby'] ) {
 				case 'sku':

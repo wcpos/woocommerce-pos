@@ -1,17 +1,17 @@
 <?php
-
 /**
  * Global helper functions for WCPOS.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
  * @see      http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 use WCPOS\WooCommercePOS\Admin\Permalink;
 use WCPOS\WooCommercePOS\Logger;
-use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use WCPOS\WooCommercePOS\Services\Settings;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -28,7 +28,12 @@ use const WCPOS\WooCommercePOS\VERSION;
  * This function provides compatibility for nginx servers
  */
 if ( ! \function_exists( 'getallheaders' ) ) {
-	function getallheaders(): array {
+	/**
+	 * Polyfill for getallheaders() on nginx servers.
+	 *
+	 * @return array The request headers.
+	 */
+	function getallheaders(): array { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- polyfill for missing PHP function.
 		$headers = array();
 		foreach ( $_SERVER as $name => $value ) {
 			// RFC2616 (HTTP/1.1) defines header fields as case-insensitive entities.
@@ -48,7 +53,14 @@ if ( ! \function_exists( 'getallheaders' ) ) {
  * @return string POS URL.
  */
 if ( ! \function_exists( 'wcpos_url' ) ) {
-	function wcpos_url( $page = '' ): string {
+	/**
+	 * Construct the POS permalink.
+	 *
+	 * @param string $page Page slug.
+	 *
+	 * @return string POS URL.
+	 */
+	function wcpos_url( $page = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$slug   = Permalink::get_slug();
 		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
 
@@ -63,8 +75,15 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
  * @return bool Whether this is a POS request.
  */
 if ( ! \function_exists( 'wcpos_request' ) ) {
-	function wcpos_request( $type = 'all' ): bool {
-		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule
+	/**
+	 * Test for POS requests to the server.
+	 *
+	 * @param string $type Request type: 'query_var', 'header', or 'all'.
+	 *
+	 * @return bool Whether this is a POS request.
+	 */
+	function wcpos_request( $type = 'all' ): bool { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		// check query_vars, eg: ?wcpos=1 or /pos rewrite rule.
 		if ( 'all' == $type || 'query_var' == $type ) {
 			global $wp;
 			if ( 1 == isset( $wp->query_vars[ SHORT_NAME ] ) && $wp->query_vars[ SHORT_NAME ] ) {
@@ -72,9 +91,9 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
 			}
 		}
 
-		// check headers, eg: from ajax request
+		// check headers, eg: from ajax request.
 		if ( 'all' == $type || 'header' == $type ) {
-			$headers = array_change_key_case( getallheaders() ); // convert headers to lowercase
+			$headers = array_change_key_case( getallheaders() ); // convert headers to lowercase.
 			if ( 1 == isset( $headers[ 'x-' . SHORT_NAME ] ) && $headers[ 'x-' . SHORT_NAME ] ) {
 				return true;
 			}
@@ -90,15 +109,20 @@ if ( ! \function_exists( 'wcpos_request' ) ) {
  * @return mixed Admin request header value or false.
  */
 if ( ! \function_exists( 'wcpos_admin_request' ) ) {
-	function wcpos_admin_request() {
-		if ( \function_exists( 'getallheaders' )
-						   && $headers = getallheaders()
-						   && isset( $headers['X-WC-POS-ADMIN'] )
-		) {
-			return $headers['X-WC-POS-ADMIN'];
+	/**
+	 * Check for POS admin requests.
+	 *
+	 * @return mixed Admin request header value or false.
+	 */
+	function wcpos_admin_request() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		if ( \function_exists( 'getallheaders' ) ) {
+			$headers = getallheaders();
+			if ( $headers && isset( $headers['X-WC-POS-ADMIN'] ) ) {
+				return $headers['X-WC-POS-ADMIN'];
+			}
 		}
 		if ( isset( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) ) {
-			return $_SERVER['HTTP_X_woocommerce_pos_ADMIN'];
+			return sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_woocommerce_pos_ADMIN'] ) );
 		}
 
 		return false;
@@ -113,7 +137,15 @@ if ( ! \function_exists( 'wcpos_admin_request' ) ) {
  * @return mixed Settings value.
  */
 if ( ! \function_exists( 'wcpos_get_settings' ) ) {
-	function wcpos_get_settings( $id, $key = null ) {
+	/**
+	 * Helper function to get WCPOS settings.
+	 *
+	 * @param string $id  Settings ID.
+	 * @param string $key Optional settings key.
+	 *
+	 * @return mixed Settings value.
+	 */
+	function wcpos_get_settings( $id, $key = null ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$settings_service = Settings::instance();
 
 		return $settings_service->get_settings( $id, $key );
@@ -130,7 +162,14 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
  * @return string|false JSON string or false on failure.
  */
 if ( ! \function_exists( 'wcpos_json_encode' ) ) {
-	function wcpos_json_encode( $data ) {
+	/**
+	 * Simple wrapper for json_encode with JSON_FORCE_OBJECT.
+	 *
+	 * @param mixed $data Data to encode.
+	 *
+	 * @return string|false JSON string or false on failure.
+	 */
+	function wcpos_json_encode( $data ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$args = array( $data, JSON_FORCE_OBJECT );
 
 		return \call_user_func_array( 'json_encode', $args );
@@ -144,15 +183,22 @@ if ( ! \function_exists( 'wcpos_json_encode' ) ) {
  * @return string|null Template path or null if not found.
  */
 if ( ! \function_exists( 'wcpos_locate_template' ) ) {
-	function wcpos_locate_template( $template = '' ) {
-		// check theme directory first
+	/**
+	 * Return template path for a given template.
+	 *
+	 * @param string $template Template name.
+	 *
+	 * @return string|null Template path or null if not found.
+	 */
+	function wcpos_locate_template( $template = '' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		// check theme directory first.
 		$path = locate_template(
 			array(
 				'woocommerce-pos/' . $template,
 			)
 		);
 
-		// if not, use plugin template
+		// if not, use plugin template.
 		if ( ! $path ) {
 			$path = PLUGIN_PATH . 'templates/' . $template;
 		}
@@ -169,14 +215,14 @@ if ( ! \function_exists( 'wcpos_locate_template' ) ) {
 		 *
 		 * @return string $path The full path to the template.
 		 */
-		$filtered_path = apply_filters( 'woocommerce_pos_locate_template', $path, $template );
+		$filtered_path = apply_filters( 'woocommerce_pos_locate_template', $path, $template ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- legacy hook name.
 
-		// Check if the filtered template file exists
+		// Check if the filtered template file exists.
 		if ( file_exists( $filtered_path ) ) {
 			return $filtered_path;
 		}
 
-		// Echo a message or handle the error as needed if the file path does not exist
+		// Echo a message or handle the error as needed if the file path does not exist.
 		echo "The template file '" . esc_html( $filtered_path ) . "' does not exist.";
 
 		return null;
@@ -190,7 +236,14 @@ if ( ! \function_exists( 'wcpos_locate_template' ) ) {
  * @return string Trimmed string.
  */
 if ( ! \function_exists( 'wcpos_trim_html_string' ) ) {
-	function wcpos_trim_html_string( $str ): string {
+	/**
+	 * Remove newlines and code spacing from an HTML string.
+	 *
+	 * @param string $str HTML string to trim.
+	 *
+	 * @return string Trimmed string.
+	 */
+	function wcpos_trim_html_string( $str ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		return preg_replace( '/^\s+|\n|\r|\s+$/m', '', $str );
 	}
 }
@@ -202,7 +255,14 @@ if ( ! \function_exists( 'wcpos_trim_html_string' ) ) {
  * @return string Documentation URL.
  */
 if ( ! \function_exists( 'wcpos_doc_url' ) ) {
-	function wcpos_doc_url( $page ): string {
+	/**
+	 * Get documentation URL.
+	 *
+	 * @param string $page Documentation page.
+	 *
+	 * @return string Documentation URL.
+	 */
+	function wcpos_doc_url( $page ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		return 'http://docs.wcpos.com/v/' . VERSION . '/en/' . $page;
 	}
 }
@@ -214,7 +274,14 @@ if ( ! \function_exists( 'wcpos_doc_url' ) ) {
  * @return string FAQ URL.
  */
 if ( ! \function_exists( 'wcpos_faq_url' ) ) {
-	function wcpos_faq_url( $page ): string {
+	/**
+	 * Get FAQ URL.
+	 *
+	 * @param string $page FAQ page.
+	 *
+	 * @return string FAQ URL.
+	 */
+	function wcpos_faq_url( $page ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		return 'http://faq.wcpos.com/v/' . VERSION . '/en/' . $page;
 	}
 }
@@ -226,15 +293,22 @@ if ( ! \function_exists( 'wcpos_faq_url' ) ) {
  * @return bool Whether the order is a POS order.
  */
 if ( ! \function_exists( 'wcpos_is_pos_order' ) ) {
-	function wcpos_is_pos_order( $order ): bool {
-		// Handle various input types and edge cases
+	/**
+	 * Helper function to check whether an order is a POS order.
+	 *
+	 * @param \WC_Order|int $order Order object or ID.
+	 *
+	 * @return bool Whether the order is a POS order.
+	 */
+	function wcpos_is_pos_order( $order ): bool { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		// Handle various input types and edge cases.
 		if ( ! $order instanceof WC_Order ) {
-			// Sometimes the order is passed as an ID
+			// Sometimes the order is passed as an ID.
 			if ( is_numeric( $order ) ) {
 				$order = wc_get_order( $order );
 			}
 
-			// If we still don't have a valid order, return false
+			// If we still don't have a valid order, return false.
 			if ( ! $order instanceof WC_Order ) {
 				return false;
 			}
@@ -254,7 +328,13 @@ if ( ! \function_exists( 'wcpos_is_pos_order' ) ) {
  * @param array  $args          Arguments.
  */
 if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
-	function wcpos_get_woocommerce_template( $template_name, $args = array() ): void {
+	/**
+	 * Get a default WooCommerce template.
+	 *
+	 * @param string $template_name Template name.
+	 * @param array  $args          Arguments.
+	 */
+	function wcpos_get_woocommerce_template( $template_name, $args = array() ): void { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$plugin_path = WC()->plugin_path();
 		$template    = trailingslashit( $plugin_path . '/templates' ) . $template_name;
 
@@ -265,7 +345,7 @@ if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
 		 * @param string $template_name Template name.
 		 * @param array  $args          Arguments.
 		 */
-		$template = apply_filters( 'wcpos_locate_woocommerce_template', $template, $template_name, $args );
+		$template = apply_filters( 'wcpos_locate_woocommerce_template', $template, $template_name, $args ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- uses wcpos_ prefix.
 
 		if ( ! file_exists( $template ) ) {
 			Logger::log( \sprintf( 'WooCommerce default template not found: %s', $template ) );
@@ -294,9 +374,11 @@ if ( ! \function_exists( 'wcpos_get_woocommerce_template' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_url' ) ) {
 	/**
+	 * Legacy alias for wcpos_url().
+	 *
 	 * @deprecated Use wcpos_url() instead.
 	 *
-	 * @param mixed $page
+	 * @param mixed $page The page slug.
 	 */
 	function woocommerce_pos_url( $page = '' ): string {
 		return wcpos_url( $page );
@@ -305,9 +387,11 @@ if ( ! \function_exists( 'woocommerce_pos_url' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
 	/**
+	 * Legacy alias for wcpos_request().
+	 *
 	 * @deprecated Use wcpos_request() instead.
 	 *
-	 * @param mixed $type
+	 * @param mixed $type The request type.
 	 */
 	function woocommerce_pos_request( $type = 'all' ): bool {
 		return wcpos_request( $type );
@@ -316,6 +400,8 @@ if ( ! \function_exists( 'woocommerce_pos_request' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
 	/**
+	 * Legacy alias for wcpos_admin_request().
+	 *
 	 * @deprecated Use wcpos_admin_request() instead.
 	 */
 	function woocommerce_pos_admin_request() {
@@ -325,10 +411,12 @@ if ( ! \function_exists( 'woocommerce_pos_admin_request' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	/**
+	 * Legacy alias for wcpos_get_settings().
+	 *
 	 * @deprecated Use wcpos_get_settings() instead.
 	 *
-	 * @param mixed      $id
-	 * @param null|mixed $key
+	 * @param mixed      $id  The settings ID.
+	 * @param null|mixed $key The settings key.
 	 */
 	function woocommerce_pos_get_settings( $id, $key = null ) {
 		return wcpos_get_settings( $id, $key );
@@ -337,9 +425,11 @@ if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
 	/**
+	 * Legacy alias for wcpos_json_encode().
+	 *
 	 * @deprecated Use wcpos_json_encode() instead.
 	 *
-	 * @param mixed $data
+	 * @param mixed $data The data to encode.
 	 */
 	function woocommerce_pos_json_encode( $data ) {
 		return wcpos_json_encode( $data );
@@ -348,9 +438,11 @@ if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 	/**
+	 * Legacy alias for wcpos_locate_template().
+	 *
 	 * @deprecated Use wcpos_locate_template() instead.
 	 *
-	 * @param mixed $template
+	 * @param mixed $template The template name.
 	 */
 	function woocommerce_pos_locate_template( $template = '' ) {
 		return wcpos_locate_template( $template );
@@ -359,9 +451,11 @@ if ( ! \function_exists( 'woocommerce_pos_locate_template' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_trim_html_string' ) ) {
 	/**
+	 * Legacy alias for wcpos_trim_html_string().
+	 *
 	 * @deprecated Use wcpos_trim_html_string() instead.
 	 *
-	 * @param mixed $str
+	 * @param mixed $str The HTML string.
 	 */
 	function woocommerce_pos_trim_html_string( $str ): string {
 		return wcpos_trim_html_string( $str );
@@ -370,9 +464,11 @@ if ( ! \function_exists( 'woocommerce_pos_trim_html_string' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_doc_url' ) ) {
 	/**
+	 * Legacy alias for wcpos_doc_url().
+	 *
 	 * @deprecated Use wcpos_doc_url() instead.
 	 *
-	 * @param mixed $page
+	 * @param mixed $page The documentation page.
 	 */
 	function woocommerce_pos_doc_url( $page ): string {
 		return wcpos_doc_url( $page );
@@ -381,9 +477,11 @@ if ( ! \function_exists( 'woocommerce_pos_doc_url' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
 	/**
+	 * Legacy alias for wcpos_faq_url().
+	 *
 	 * @deprecated Use wcpos_faq_url() instead.
 	 *
-	 * @param mixed $page
+	 * @param mixed $page The FAQ page.
 	 */
 	function woocommerce_pos_faq_url( $page ): string {
 		return wcpos_faq_url( $page );
@@ -392,9 +490,11 @@ if ( ! \function_exists( 'woocommerce_pos_faq_url' ) ) {
 
 if ( ! \function_exists( 'woocommerce_pos_is_pos_order' ) ) {
 	/**
+	 * Legacy alias for wcpos_is_pos_order().
+	 *
 	 * @deprecated Use wcpos_is_pos_order() instead.
 	 *
-	 * @param mixed $order
+	 * @param mixed $order The order object or ID.
 	 */
 	function woocommerce_pos_is_pos_order( $order ): bool {
 		return wcpos_is_pos_order( $order );

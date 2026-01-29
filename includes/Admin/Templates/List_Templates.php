@@ -8,12 +8,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
+/**
+ * List_Templates class.
+ */
 class List_Templates {
 	/**
 	 * Constructor.

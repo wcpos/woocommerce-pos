@@ -1,6 +1,8 @@
 <?php
 /**
  * Stores API.
+ *
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
@@ -160,11 +162,10 @@ class Stores extends WP_REST_Controller {
 	/**
 	 * Prepare links for the request.
 	 *
-	 * @param WC_Product      $product Product object.
+	 * @param Store           $store   Store object.
 	 * @param WP_REST_Request $request Request object.
-	 * @param mixed           $store
 	 *
-	 * @return array Links for the given product.
+	 * @return array Links for the given store.
 	 */
 	protected function prepare_links( $store, $request ) {
 		return array(

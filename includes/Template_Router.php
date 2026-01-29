@@ -7,12 +7,16 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
 
+/**
+ * Template_Router class.
+ */
 class Template_Router {
 	/**
 	 * Auth path slug for POS authorization endpoint.
@@ -20,22 +24,30 @@ class Template_Router {
 	public const AUTH_PATH = 'wcpos-auth';
 
 	/**
-	 * @var string POS frontend slug
+	 * POS frontend slug.
+	 *
+	 * @var string
 	 */
 	private $pos_regex;
 
 	/**
-	 * @var string POS login slug
+	 * POS login slug.
+	 *
+	 * @var string
 	 */
 	private $pos_login_regex;
 
 	/**
-	 * @var string POS auth slug
+	 * POS auth slug.
+	 *
+	 * @var string
 	 */
 	private $pos_auth_regex;
 
 	/**
-	 * @var string POS checkout slug
+	 * POS checkout slug.
+	 *
+	 * @var string
 	 *
 	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
 	 * eg: x-frame-options: SAMEORIGIN
@@ -43,6 +55,9 @@ class Template_Router {
 	private $pos_checkout_regex;
 
 
+	/**
+	 * Constructor.
+	 */
 	public function __construct() {
 		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
 		$this->pos_login_regex    = '^wcpos-login/?';
@@ -54,7 +69,7 @@ class Template_Router {
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
 
-		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url
+		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url.
 		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
 	}
 
@@ -70,7 +85,7 @@ class Template_Router {
 	/**
 	 * Make sure cache contains POS rewrite rules.
 	 *
-	 * @param $rules
+	 * @param array|bool $rules Rewrite rules.
 	 *
 	 * @return array|bool
 	 */
@@ -112,15 +127,15 @@ class Template_Router {
 	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
 	 * version of the receipt.
 	 *
-	 * @param string            $order_received_url
-	 * @param WC_Abstract_Order $order
+	 * @param string            $order_received_url The order received URL.
+	 * @param WC_Abstract_Order $order              The order object.
 	 *
 	 * @return string
 	 */
 	public function order_received_url( string $order_received_url, WC_Abstract_Order $order ): string {
 		global $wp;
 
-		// check is pos
+		// check is pos.
 		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
 			return $order_received_url;
 		}
@@ -136,6 +151,8 @@ class Template_Router {
 	}
 
 	/**
+	 * Add rewrite rules for POS endpoints.
+	 *
 	 * @NOTE: 'order-pay' and 'order-received' rewrite tags are added by WC
 	 *
 	 * @return void
@@ -154,7 +171,7 @@ class Template_Router {
 	/**
 	 * Loads order templates, additionally checks query var is a valid order id.
 	 *
-	 * @param array $classnames
+	 * @param array $classnames Template class names keyed by query var.
 	 *
 	 * @return void
 	 */
@@ -180,7 +197,7 @@ class Template_Router {
 	/**
 	 * Loads all other templates.
 	 *
-	 * @param string $classname
+	 * @param string $classname The template class name.
 	 *
 	 * @return void
 	 */

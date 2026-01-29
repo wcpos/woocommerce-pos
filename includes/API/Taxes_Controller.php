@@ -1,4 +1,9 @@
 <?php
+/**
+ * Taxes_Controller.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API;
 
@@ -111,7 +116,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		 */
 		$data['uuid'] = (string) $tax->tax_rate_id;
 
-		// Reset the new response data
+		// Reset the new response data.
 		$response->set_data( $data );
 
 		return $response;
@@ -154,7 +159,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		global $wpdb;
 
 		if ( strpos( $query, "{$wpdb->prefix}woocommerce_tax_rates" ) !== false ) {
-			// remove the filter so it doesn't run again
+			// remove the filter so it doesn't run again.
 			remove_filter( 'query', array( $this, 'wcpos_tax_add_include_exclude_to_sql' ), 10, 1 );
 
 			// Handle include IDs.
@@ -191,12 +196,12 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		global $wpdb;
 
 		if ( strpos( $query, 'WHERE' ) !== false ) {
-			// Insert condition in existing WHERE clause
+			// Insert condition in existing WHERE clause.
 			$query = str_replace( 'WHERE', "WHERE $condition AND", $query );
 		} else {
-			// Insert WHERE clause before ORDER BY or at the end of the query
+			// Insert WHERE clause before ORDER BY or at the end of the query.
 			$pos = strpos( $query, 'ORDER BY' );
-			if ( $pos !== false ) {
+			if ( false !== $pos ) {
 				$query = substr_replace( $query, " WHERE $condition ", $pos, 0 );
 			} else {
 				$query .= " WHERE $condition";
@@ -222,9 +227,12 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 
 		try {
 			/**
-			 * @TODO - taxes doen't have a modified date, so we can't filter by modified_after
-			 * - ideally WooCommerce would provide a modified_after filter for terms
-			 * - for now we'll just return empty for modified terms
+			 * Taxes don't have a modified date, so we can't filter by modified_after.
+			 *
+			 * Ideally WooCommerce would provide a modified_after filter for terms.
+			 * For now we'll just return empty for modified terms.
+			 *
+			 * @TODO Add modified_after support for taxes.
 			 */
 			$results = $modified_after ? array() : $wpdb->get_results(
 				'

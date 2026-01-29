@@ -1,4 +1,9 @@
 <?php
+/**
+ * Uuid_Handler.
+ *
+ * @package WCPOS\WooCommercePOS
+ */
 
 namespace WCPOS\WooCommercePOS\API\Traits;
 
@@ -64,7 +69,7 @@ trait Uuid_Handler {
 	/**
 	 * Make sure the WC Data Object has a UUID.
 	 *
-	 * @param WC_Data $object
+	 * @param WC_Data $object The WooCommerce data object.
 	 * @return void
 	 */
 	private function maybe_add_post_uuid( WC_Data $object ): void {
@@ -120,21 +125,22 @@ trait Uuid_Handler {
 	/**
 	 * Ensure the WP_User has a valid UUID.
 	 *
-	 * @param WP_User $user
+	 * @param WP_User $user The WordPress user object.
 	 * @return void
 	 */
 	private function maybe_add_user_uuid( WP_User $user ): void {
 		$lock_key = 'wc_pos_uuid_user_' . $user->ID;
 		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
-			Logger::log( "Unable to acquire lock for user UUID update for user id " . $user->ID );
+			Logger::log( 'Unable to acquire lock for user UUID update for user id ' . $user->ID );
 			return;
 		}
 		try {
 			$uuids = get_user_meta( $user->ID, '_woocommerce_pos_uuid', false );
 
 			// If more than one UUID exists, keep the first and remove the rest.
-			if ( count( $uuids ) > 1 ) {
-				for ( $i = 1; $i < count( $uuids ); $i++ ) {
+			$uuids_count = count( $uuids );
+			if ( $uuids_count > 1 ) {
+				for ( $i = 1; $i < $uuids_count; $i++ ) {
 					delete_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuids[ $i ] );
 				}
 				$uuids = array( $uuids[0] );
@@ -155,13 +161,13 @@ trait Uuid_Handler {
 	/**
 	 * Ensure the WC_Order_Item has a valid UUID.
 	 *
-	 * @param WC_Order_Item $item
+	 * @param WC_Order_Item $item The order item object.
 	 * @return void
 	 */
 	private function maybe_add_order_item_uuid( WC_Order_Item $item ): void {
 		$lock_key = 'wc_pos_uuid_order_item_' . $item->get_id();
 		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
-			Logger::log( "Unable to acquire lock for order item UUID update for order item id " . $item->get_id() );
+			Logger::log( 'Unable to acquire lock for order item UUID update for order item id ' . $item->get_id() );
 			return;
 		}
 		try {
@@ -179,21 +185,22 @@ trait Uuid_Handler {
 	/**
 	 * Ensure the term has a valid UUID and return it.
 	 *
-	 * @param object $term
+	 * @param object $term The term object.
 	 * @return string
 	 */
 	private function get_term_uuid( $term ): string {
 		$lock_key = 'wc_pos_uuid_term_' . $term->term_id;
 		if ( ! $this->acquire_lock( $lock_key, 10 ) ) {
-			Logger::log( "Unable to acquire lock for term UUID update for term id " . $term->term_id );
+			Logger::log( 'Unable to acquire lock for term UUID update for term id ' . $term->term_id );
 			$uuids = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', false );
 			return ( ! empty( $uuids ) && Uuid::isValid( $uuids[0] ) ) ? $uuids[0] : $this->create_uuid();
 		}
 		try {
 			$uuids = get_term_meta( $term->term_id, '_woocommerce_pos_uuid', false );
 
-			if ( count( $uuids ) > 1 ) {
-				for ( $i = 1; $i < count( $uuids ); $i++ ) {
+			$uuids_count = count( $uuids );
+			if ( $uuids_count > 1 ) {
+				for ( $i = 1; $i < $uuids_count; $i++ ) {
 					delete_term_meta( $term->term_id, '_woocommerce_pos_uuid', $uuids[ $i ] );
 				}
 				$uuids = array( $uuids[0] );
@@ -263,7 +270,7 @@ trait Uuid_Handler {
 	/**
 	 * Retrieve order IDs by UUID.
 	 *
-	 * @param string $uuid
+	 * @param string $uuid The UUID to search for.
 	 * @return array
 	 */
 	private function get_order_ids_by_uuid( string $uuid ) {
