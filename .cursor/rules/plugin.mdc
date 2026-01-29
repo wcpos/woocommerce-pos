@@ -50,24 +50,6 @@ npm install             # JS deps (if any)
 - **WordPress.org**: Auto-deployed via GitHub Actions
 - **WP Engine (dev)**: Auto-deployed for testing
 
-## Git Workflow
-
-**All code changes must be done on feature branches.** Direct commits to `main` are not allowed.
-
-```bash
-# Create feature branch
-git checkout -b feature/my-change
-
-# Make changes, then commit
-git add .
-git commit -m "feat: description of change"
-
-# Push and create PR
-git push -u origin feature/my-change
-```
-
-**Why**: Commits to `main` trigger automatic deployments to WordPress.org and dev sites. Feature branches allow for code review and CI checks before merging.
-
 ## Related Projects
 
 - `woocommerce-pos-pro` - Pro version with additional features
