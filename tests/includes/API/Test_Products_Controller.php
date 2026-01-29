@@ -585,7 +585,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 				'manage_stock'   => true,
 			)
 		);
-		$product2  = ProductHelper::create_simple_product(
+		$product3  = ProductHelper::create_simple_product(
 			array(
 				'stock_quantity' => '20.7',
 				'manage_stock'   => true,
@@ -600,9 +600,9 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$response  = $this->server->dispatch( $request );
 		$data      = $response->get_data();
-		$skus      = wp_list_pluck( $data, 'stock_quantity' );
+		$quantities = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 3.5, 11.2, 20.7 ) );
+		$this->assertEquals( $quantities, array( 3.5, 11.2, 20.7 ) );
 
 		// reverse order
 		$request->set_query_params(
@@ -611,11 +611,11 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 				'order'   => 'desc',
 			)
 		);
-		$response  = $this->server->dispatch( $request );
-		$data      = $response->get_data();
-		$skus      = wp_list_pluck( $data, 'stock_quantity' );
+		$response   = $this->server->dispatch( $request );
+		$data       = $response->get_data();
+		$quantities = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 20.7, 11.2, 3.5 ) );
+		$this->assertEquals( $quantities, array( 20.7, 11.2, 3.5 ) );
 	}
 
 	public function test_product_search(): void {
