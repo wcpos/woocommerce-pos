@@ -491,9 +491,10 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+		$stock_qtys   = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( -1, 0, 1, 2, null, null ) );
+		// Products without stock management (null) should come last when sorting ASC
+		$this->assertEquals( array( -1, 0, 1, 2, null, null ), $stock_qtys );
 
 		// reverse order
 		$request->set_query_params(
@@ -504,9 +505,10 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 		$response     = $this->server->dispatch( $request );
 		$data         = $response->get_data();
-		$skus         = wp_list_pluck( $data, 'stock_quantity' );
+		$stock_qtys   = wp_list_pluck( $data, 'stock_quantity' );
 
-		$this->assertEquals( $skus, array( 2, 1, 0, -1, null, null ) );
+		// Products without stock management (null) should come last when sorting DESC
+		$this->assertEquals( array( 2, 1, 0, -1, null, null ), $stock_qtys );
 	}
 
 	/**

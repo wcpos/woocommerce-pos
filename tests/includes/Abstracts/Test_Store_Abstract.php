@@ -59,6 +59,14 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'price_display_suffix',
 			'tax_total_display',
 			'meta_data',
+			// Pro plugin fields (also present in free with default values)
+			'url',
+			'phone',
+			'email',
+			'opening_hours',
+			'personal_notes',
+			'policies_and_conditions',
+			'footer_imprint',
 		);
 	}
 
@@ -163,7 +171,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 
 	public function test_get_price_number_of_decimals(): void {
 		$decimals = $this->store->get_price_number_of_decimals();
-		$this->assertIsString( $decimals );
+		$this->assertIsInt( $decimals );
 		$this->assertEquals( 2, $decimals ); // Default value
 	}
 

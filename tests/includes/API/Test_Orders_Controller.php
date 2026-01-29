@@ -208,7 +208,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'completed', 'on-hold', 'pending', 'processing' ) );
+		$this->assertEquals( array( 'completed', 'on-hold', 'pending', 'processing' ), $statuses );
 
 		// reverse order
 		$request->set_query_params(
@@ -221,7 +221,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$statuses = wp_list_pluck( $data, 'status' );
 
-		$this->assertEquals( $statuses, array( 'processing', 'pending', 'on-hold', 'completed' ) );
+		$this->assertEquals( array( 'processing', 'pending', 'on-hold', 'completed' ), $statuses );
 	}
 
 	public function test_orderby_customer(): void {
