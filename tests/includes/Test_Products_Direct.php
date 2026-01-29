@@ -224,6 +224,7 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		// Mock the Settings service to return this product as POS only
 		$filter_callback = function ( $settings ) use ( $product ) {
 			$settings['ids'][] = $product->get_id();
+
 			return $settings;
 		};
 		add_filter( 'woocommerce_pos_pos_only_product_visibility_settings', $filter_callback );

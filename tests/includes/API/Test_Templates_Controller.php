@@ -135,15 +135,15 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test get_items with invalid type filter returns empty or valid result.
+	 * Test get_items with invalid type filter returns error.
 	 */
 	public function test_get_items_with_invalid_type(): void {
 		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
 		$request->set_param( 'type', 'invalid-type-xyz' );
 		$response = $this->server->dispatch( $request );
 
-		// Should return 200 with empty array or valid result (type filtering is permissive)
-		$this->assertEquals( 200, $response->get_status() );
+		// Invalid type should return 400 (bad request)
+		$this->assertEquals( 400, $response->get_status() );
 	}
 
 	/**

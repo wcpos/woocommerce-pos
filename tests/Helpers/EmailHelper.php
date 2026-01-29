@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Helpers;
 
 use ReflectionClass;
+use WC_Email;
 
 /**
  * EmailHelper class.
@@ -70,9 +71,9 @@ class EmailHelper {
 	/**
 	 * Hook into WooCommerce email sent action.
 	 *
-	 * @param bool        $return   Whether the email was sent successfully.
-	 * @param string      $email_id The email ID.
-	 * @param \WC_Email   $email    The email object.
+	 * @param bool     $return   Whether the email was sent successfully.
+	 * @param string   $email_id The email ID.
+	 * @param WC_Email $email    The email object.
 	 */
 	public static function on_email_sent( bool $return, string $email_id, $email = null ): void {
 		// Find the last captured email and add WC email info

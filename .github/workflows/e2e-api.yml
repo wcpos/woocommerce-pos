@@ -104,13 +104,8 @@ jobs:
 
       - name: Generate JWT token for API tests
         run: |
-          # Generate JWT tokens using wp eval (escape backslashes for shell)
-          TOKENS=$(pnpm run wp-env run cli -- wp eval '
-            $auth = \\WCPOS\\WooCommercePOS\\Services\\Auth::instance();
-            $user = get_user_by("login", "admin");
-            $tokens = $auth->generate_token_pair($user);
-            echo json_encode($tokens);
-          ')
+          # Generate JWT tokens using PHP file (avoids shell escaping issues)
+          TOKENS=$(pnpm run wp-env run cli -- wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/generate-jwt.php)
           # Extract tokens from JSON output (skip pnpm output lines)
           TOKENS_JSON=$(echo "$TOKENS" | grep -o '{.*}')
           JWT_TOKEN=$(echo "$TOKENS_JSON" | jq -r '.access_token')

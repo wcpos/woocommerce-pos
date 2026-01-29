@@ -20,8 +20,9 @@ test.describe('Plugin Activation', () => {
 	test('WCPOS admin menu is visible', async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/');
 		
-		// Check that POS menu item exists in admin menu
-		const posMenu = adminPage.locator('#adminmenu a[href*="admin.php?page=woocommerce-pos"]');
+		// Check that POS top-level menu item exists in admin menu
+		// Use the specific top-level menu item class to avoid matching submenu items
+		const posMenu = adminPage.locator('#toplevel_page_woocommerce-pos > a');
 		await expect(posMenu).toBeVisible();
 	});
 });
