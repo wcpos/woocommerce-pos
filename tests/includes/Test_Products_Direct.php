@@ -25,13 +25,6 @@ use WP_Query;
  */
 class Test_Products_Direct extends WC_Unit_Test_Case {
 	/**
-	 * The Products instance.
-	 *
-	 * @var Products
-	 */
-	private $products;
-
-	/**
 	 * Original settings.
 	 *
 	 * @var array|false

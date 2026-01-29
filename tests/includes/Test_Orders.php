@@ -41,6 +41,13 @@ class Test_Orders extends WC_Unit_Test_Case {
 	private $original_checkout_settings;
 
 	/**
+	 * Original default country.
+	 *
+	 * @var string|false
+	 */
+	private $original_default_country;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -48,6 +55,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		// Store original settings
 		$this->original_checkout_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		$this->original_default_country   = get_option( 'woocommerce_default_country' );
 
 		// Instantiate the Orders class
 		$this->orders = new Orders();
@@ -63,6 +71,14 @@ class Test_Orders extends WC_Unit_Test_Case {
 		} else {
 			delete_option( 'woocommerce_pos_settings_checkout' );
 		}
+
+		// Restore original default country
+		if ( false !== $this->original_default_country ) {
+			update_option( 'woocommerce_default_country', $this->original_default_country );
+		}
+
+		// Clean up any POS request state
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
 		parent::tearDown();
 	}

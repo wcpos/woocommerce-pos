@@ -580,14 +580,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * TODO: Consider adding email format validation to the endpoint.
 	 */
 	public function test_manual_email_accepts_string_email(): void {
-		$order      = OrderHelper::create_order();
-		$email_sent = false;
-
-		$email_sent_callback = function () use ( &$email_sent ): void {
-			$email_sent = true;
-		};
-
-		add_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
+		$order = OrderHelper::create_order();
 
 		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
 		$request->set_body_params(
@@ -599,8 +592,6 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Currently accepts any string - WooCommerce handles validation during send
 		$this->assertEquals( 200, $response->get_status(), 'Endpoint accepts any string as email' );
-
-		remove_action( 'woocommerce_before_resend_order_emails', $email_sent_callback );
 	}
 
 	/**

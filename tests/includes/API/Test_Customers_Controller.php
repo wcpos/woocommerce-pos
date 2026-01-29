@@ -465,7 +465,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test customer search with includes.
+	 * Test customer search with excludes.
 	 */
 	public function test_customer_search_with_excludes(): void {
 		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'John' ) );

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "wcpos-api-tests",
 		"name": "WCPOS API Tests",
-		"description": "End-to-end API tests for WCPOS REST endpoints",
+		"description": "End-to-end API tests for WCPOS REST endpoints. JWT tokens are pre-generated via WP-CLI.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -10,7 +10,7 @@
 			"name": "Authentication",
 			"item": [
 				{
-					"name": "Login - Valid Credentials",
+					"name": "Test Auth Endpoint",
 					"event": [
 						{
 							"listen": "test",
@@ -20,24 +20,10 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains JWT token', function() {",
+									"pm.test('Response indicates token was received', function() {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('jwt');",
-									"    pm.expect(jsonData.jwt).to.be.a('string');",
-									"    pm.environment.set('jwt_token', jsonData.jwt);",
-									"});",
-									"",
-									"pm.test('Response contains refresh token', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('refresh_token');",
-									"    pm.environment.set('refresh_token', jsonData.refresh_token);",
-									"});",
-									"",
-									"pm.test('Response contains user data', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('user');",
-									"    pm.expect(jsonData.user).to.have.property('id');",
-									"    pm.expect(jsonData.user).to.have.property('username');",
+									"    pm.expect(jsonData).to.have.property('status');",
+									"    pm.expect(jsonData.received_header_auth).to.equal(true);",
 									"});"
 								],
 								"type": "text/javascript"
@@ -45,60 +31,17 @@
 						}
 					],
 					"request": {
-						"method": "POST",
+						"method": "GET",
 						"header": [
 							{
-								"key": "Content-Type",
-								"value": "application/json"
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
 							}
 						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}"
-						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
+							"raw": "{{base_url}}/wp-json/wcpos/v1/auth/test",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
-						}
-					}
-				},
-				{
-					"name": "Login - Invalid Credentials",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 401 or 403', function() {",
-									"    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
-									"});",
-									"",
-									"pm.test('Response contains error', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('code');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"invalid_user\",\n    \"password\": \"wrong_password\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
-							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
+							"path": ["wp-json", "wcpos", "v1", "auth", "test"]
 						}
 					}
 				},
@@ -113,10 +56,10 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains new JWT token', function() {",
+									"pm.test('Response contains new access token', function() {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('jwt');",
-									"    pm.environment.set('jwt_token', jsonData.jwt);",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.environment.set('jwt_token', jsonData.access_token);",
 									"});"
 								],
 								"type": "text/javascript"
@@ -136,9 +79,9 @@
 							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/refresh",
+							"raw": "{{base_url}}/wp-json/wcpos/v1/auth/refresh",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "refresh"]
+							"path": ["wp-json", "wcpos", "v1", "auth", "refresh"]
 						}
 					}
 				}

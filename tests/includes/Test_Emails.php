@@ -26,13 +26,6 @@ use WCPOS\WooCommercePOS\Tests\Helpers\EmailHelper;
  */
 class Test_Emails extends WC_Unit_Test_Case {
 	/**
-	 * The Emails instance.
-	 *
-	 * @var Emails
-	 */
-	private $emails;
-
-	/**
 	 * Original checkout settings.
 	 *
 	 * @var array|false
