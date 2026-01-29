@@ -437,7 +437,7 @@ class Auth extends WP_REST_Controller {
 				'username'      => $user->user_login,
 				'display_name'  => $user->display_name,
 				'avatar_url'    => get_avatar_url( $user_id, array( 'size' => 96 ) ),
-				'session_count' => count( $sessions ),
+				'session_count' => \count( $sessions ),
 				'last_active'   => $last_active,
 				'sessions'      => $sessions,
 			);
@@ -450,7 +450,7 @@ class Auth extends WP_REST_Controller {
 
 		return rest_ensure_response( array(
 			'users' => $users_data,
-			'total' => count( $users_data ),
+			'total' => \count( $users_data ),
 		) );
 	}
 
@@ -496,7 +496,7 @@ class Auth extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request The REST request object.
 	 *
-	 * @return string|null
+	 * @return null|string
 	 */
 	private function get_current_jti_from_request( WP_REST_Request $request ): ?string {
 		// Try to get the token from Authorization header
@@ -530,5 +530,4 @@ class Auth extends WP_REST_Controller {
 
 		return $decoded->jti ?? null;
 	}
-
 }

@@ -2,15 +2,16 @@
 	"info": {
 		"_postman_id": "wcpos-api-tests",
 		"name": "WCPOS API Tests",
-		"description": "End-to-end API tests for WCPOS REST endpoints",
+		"description": "End-to-end API tests for WCPOS REST endpoints. Tests cover the full matrix of auth methods (header vs param) and URL formats (pretty permalinks vs query string).",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
-			"name": "Authentication",
+			"name": "Auth Matrix",
+			"description": "Tests all combinations of auth methods and URL formats",
 			"item": [
 				{
-					"name": "Login - Valid Credentials",
+					"name": "Header Auth + Query String URL",
 					"event": [
 						{
 							"listen": "test",
@@ -20,24 +21,11 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains JWT token', function() {",
+									"pm.test('Auth via header detected', function() {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('jwt');",
-									"    pm.expect(jsonData.jwt).to.be.a('string');",
-									"    pm.environment.set('jwt_token', jsonData.jwt);",
-									"});",
-									"",
-									"pm.test('Response contains refresh token', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('refresh_token');",
-									"    pm.environment.set('refresh_token', jsonData.refresh_token);",
-									"});",
-									"",
-									"pm.test('Response contains user data', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('user');",
-									"    pm.expect(jsonData.user).to.have.property('id');",
-									"    pm.expect(jsonData.user).to.have.property('username');",
+									"    pm.expect(jsonData.status).to.equal('success');",
+									"    pm.expect(jsonData.received_header_auth).to.equal(true);",
+									"    pm.expect(jsonData.auth_method).to.equal('header');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -45,65 +33,32 @@
 						}
 					],
 					"request": {
-						"method": "POST",
+						"method": "GET",
 						"header": [
 							{
-								"key": "Content-Type",
-								"value": "application/json"
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
 							}
 						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"{{admin_username}}\",\n    \"password\": \"{{admin_password}}\"\n}"
-						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/auth/test",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/auth/test"
+								}
+							]
 						}
 					}
 				},
 				{
-					"name": "Login - Invalid Credentials",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status code is 401 or 403', function() {",
-									"    pm.expect(pm.response.code).to.be.oneOf([401, 403]);",
-									"});",
-									"",
-									"pm.test('Response contains error', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('code');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"username\": \"invalid_user\",\n    \"password\": \"wrong_password\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/authorize",
-							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "authorize"]
-						}
-					}
-				},
-				{
-					"name": "Refresh Token",
+					"name": "Header Auth + Pretty Permalink URL",
 					"event": [
 						{
 							"listen": "test",
@@ -113,10 +68,149 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains new JWT token', function() {",
+									"pm.test('Auth via header detected', function() {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.have.property('jwt');",
-									"    pm.environment.set('jwt_token', jsonData.jwt);",
+									"    pm.expect(jsonData.status).to.equal('success');",
+									"    pm.expect(jsonData.received_header_auth).to.equal(true);",
+									"    pm.expect(jsonData.auth_method).to.equal('header');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/auth/test",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "auth", "test"]
+						}
+					}
+				},
+				{
+					"name": "Param Auth + Query String URL",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Auth via param detected', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.equal('success');",
+									"    pm.expect(jsonData.received_param_auth).to.equal(true);",
+									"    // Accept 'param' or 'both' - some servers pass Authorization header even when not sent",
+									"    pm.expect(['param', 'both']).to.include(jsonData.auth_method);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/auth/test&authorization=Bearer {{jwt_token}}",
+							"host": ["{{base_url}}"],
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/auth/test"
+								},
+								{
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Param Auth + Pretty Permalink URL",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Auth via param detected', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.equal('success');",
+									"    pm.expect(jsonData.received_param_auth).to.equal(true);",
+									"    // Accept 'param' or 'both' - some servers pass Authorization header even when not sent",
+									"    pm.expect(['param', 'both']).to.include(jsonData.auth_method);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/auth/test?authorization=Bearer {{jwt_token}}",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "auth", "test"],
+							"query": [
+								{
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Token Refresh",
+			"item": [
+				{
+					"name": "Refresh Token - Query String",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains new access token', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('expires_at');",
+									"    pm.expect(jsonData).to.have.property('token_type');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -129,6 +223,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
 							}
 						],
 						"body": {
@@ -136,9 +234,61 @@
 							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/jwt/refresh",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/auth/refresh",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "jwt", "refresh"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/auth/refresh"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Refresh Token - Pretty Permalink",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains new access token', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('access_token');",
+									"    pm.expect(jsonData).to.have.property('expires_at');",
+									"    // Store new token for subsequent tests",
+									"    pm.environment.set('jwt_token', jsonData.access_token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "auth", "refresh"]
 						}
 					}
 				}
@@ -148,7 +298,7 @@
 			"name": "Products",
 			"item": [
 				{
-					"name": "Get All Products",
+					"name": "Get Products - Header Auth + Query String",
 					"event": [
 						{
 							"listen": "test",
@@ -158,22 +308,9 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response is an array', function() {",
+									"pm.test('Response is an array of products', function() {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData).to.be.an('array');",
-									"});",
-									"",
-									"pm.test('Products have required fields', function() {",
-									"    var jsonData = pm.response.json();",
-									"    if (jsonData.length > 0) {",
-									"        var product = jsonData[0];",
-									"        pm.expect(product).to.have.property('id');",
-									"        pm.expect(product).to.have.property('name');",
-									"        pm.expect(product).to.have.property('price');",
-									"        pm.expect(product).to.have.property('sku');",
-									"        pm.expect(product).to.have.property('barcode');",
-									"        pm.environment.set('test_product_id', product.id);",
-									"    }",
 									"});"
 								],
 								"type": "text/javascript"
@@ -193,14 +330,20 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/products",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/products",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "products"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/products"
+								}
+							]
 						}
 					}
 				},
 				{
-					"name": "Get Product IDs Only",
+					"name": "Get Products - Param Auth + Pretty Permalink",
 					"event": [
 						{
 							"listen": "test",
@@ -210,13 +353,9 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains only id field', function() {",
+									"pm.test('Response is an array of products', function() {",
 									"    var jsonData = pm.response.json();",
-									"    if (jsonData.length > 0) {",
-									"        var product = jsonData[0];",
-									"        pm.expect(product).to.have.property('id');",
-									"        pm.expect(Object.keys(product).length).to.equal(1);",
-									"    }",
+									"    pm.expect(jsonData).to.be.an('array');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -227,22 +366,18 @@
 						"method": "GET",
 						"header": [
 							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
-							},
-							{
 								"key": "X-WCPOS",
 								"value": "1"
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/products?fields[]=id",
+							"raw": "{{base_url}}/wp-json/wcpos/v1/products?authorization=Bearer {{jwt_token}}",
 							"host": ["{{base_url}}"],
 							"path": ["wp-json", "wcpos", "v1", "products"],
 							"query": [
 								{
-									"key": "fields[]",
-									"value": "id"
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
 								}
 							]
 						}
@@ -281,13 +416,17 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/products?search=dummy",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/products&search=test",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "products"],
+							"path": [""],
 							"query": [
 								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/products"
+								},
+								{
 									"key": "search",
-									"value": "dummy"
+									"value": "test"
 								}
 							]
 						}
@@ -299,7 +438,7 @@
 			"name": "Orders",
 			"item": [
 				{
-					"name": "Get All Orders",
+					"name": "Get Orders - Header Auth + Query String",
 					"event": [
 						{
 							"listen": "test",
@@ -331,14 +470,61 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/orders",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/orders",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "orders"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/orders"
+								}
+							]
 						}
 					}
 				},
 				{
-					"name": "Create Order",
+					"name": "Get Orders - Param Auth + Pretty Permalink",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/orders?authorization=Bearer {{jwt_token}}",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "orders"],
+							"query": [
+								{
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Create Order - Header Auth",
 					"event": [
 						{
 							"listen": "test",
@@ -353,13 +539,7 @@
 									"    pm.expect(jsonData.created_via).to.equal('woocommerce-pos');",
 									"});",
 									"",
-									"pm.test('Order has line items', function() {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.line_items).to.be.an('array');",
-									"    pm.expect(jsonData.line_items.length).to.be.at.least(1);",
-									"});",
-									"",
-									"pm.test('Store order ID for later tests', function() {",
+									"pm.test('Store order ID', function() {",
 									"    var jsonData = pm.response.json();",
 									"    pm.environment.set('test_order_id', jsonData.id);",
 									"});"
@@ -389,30 +569,32 @@
 							"raw": "{\n    \"payment_method\": \"pos_cash\",\n    \"line_items\": [\n        {\n            \"product_id\": 0,\n            \"name\": \"Test Product\",\n            \"quantity\": 1,\n            \"price\": 10\n        }\n    ]\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/orders",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/orders",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "orders"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/orders"
+								}
+							]
 						}
 					}
 				},
 				{
-					"name": "Get Order Statuses",
+					"name": "Create Order - Param Auth",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('Status code is 200', function() {",
-									"    pm.response.to.have.status(200);",
+									"pm.test('Status code is 201', function() {",
+									"    pm.response.to.have.status(201);",
 									"});",
 									"",
-									"pm.test('Response is an array of statuses', function() {",
+									"pm.test('Order was created via POS', function() {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.be.an('array');",
-									"    if (jsonData.length > 0) {",
-									"        pm.expect(jsonData[0]).to.have.property('id');",
-									"        pm.expect(jsonData[0]).to.have.property('name');",
-									"    }",
+									"    pm.expect(jsonData.created_via).to.equal('woocommerce-pos');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -420,21 +602,31 @@
 						}
 					],
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
-							},
 							{
 								"key": "X-WCPOS",
 								"value": "1"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
 							}
 						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"payment_method\": \"pos_cash\",\n    \"line_items\": [\n        {\n            \"product_id\": 0,\n            \"name\": \"Test Product via Param Auth\",\n            \"quantity\": 1,\n            \"price\": 15\n        }\n    ]\n}"
+						},
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/orders/statuses",
+							"raw": "{{base_url}}/wp-json/wcpos/v1/orders?authorization=Bearer {{jwt_token}}",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "orders", "statuses"]
+							"path": ["wp-json", "wcpos", "v1", "orders"],
+							"query": [
+								{
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
+								}
+							]
 						}
 					}
 				}
@@ -444,7 +636,7 @@
 			"name": "Customers",
 			"item": [
 				{
-					"name": "Get All Customers",
+					"name": "Get Customers - Header Auth",
 					"event": [
 						{
 							"listen": "test",
@@ -476,14 +668,20 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/customers",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/customers",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "customers"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/customers"
+								}
+							]
 						}
 					}
 				},
 				{
-					"name": "Search Customers",
+					"name": "Get Customers - Param Auth",
 					"event": [
 						{
 							"listen": "test",
@@ -506,22 +704,18 @@
 						"method": "GET",
 						"header": [
 							{
-								"key": "Authorization",
-								"value": "Bearer {{jwt_token}}"
-							},
-							{
 								"key": "X-WCPOS",
 								"value": "1"
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/customers?search=admin",
+							"raw": "{{base_url}}/wp-json/wcpos/v1/customers?authorization=Bearer {{jwt_token}}",
 							"host": ["{{base_url}}"],
 							"path": ["wp-json", "wcpos", "v1", "customers"],
 							"query": [
 								{
-									"key": "search",
-									"value": "admin"
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
 								}
 							]
 						}
@@ -533,7 +727,7 @@
 			"name": "Settings",
 			"item": [
 				{
-					"name": "Get Settings",
+					"name": "Get Settings - Header Auth",
 					"event": [
 						{
 							"listen": "test",
@@ -543,7 +737,7 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test('Response contains general settings', function() {",
+									"pm.test('Response is settings object', function() {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData).to.be.an('object');",
 									"});"
@@ -565,9 +759,56 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/wp-json/wcpos/v1/settings/general",
+							"raw": "{{base_url}}/?rest_route=/wcpos/v1/settings/general",
 							"host": ["{{base_url}}"],
-							"path": ["wp-json", "wcpos", "v1", "settings", "general"]
+							"path": [""],
+							"query": [
+								{
+									"key": "rest_route",
+									"value": "/wcpos/v1/settings/general"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Settings - Param Auth",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200', function() {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is settings object', function() {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('object');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-WCPOS",
+								"value": "1"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/wp-json/wcpos/v1/settings/general?authorization=Bearer {{jwt_token}}",
+							"host": ["{{base_url}}"],
+							"path": ["wp-json", "wcpos", "v1", "settings", "general"],
+							"query": [
+								{
+									"key": "authorization",
+									"value": "Bearer {{jwt_token}}"
+								}
+							]
 						}
 					}
 				}

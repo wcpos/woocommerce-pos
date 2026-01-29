@@ -11,7 +11,7 @@ coverage:
       default:
         # Don't fail the build if coverage drops
         informational: true
-        # Target coverage threshold (start low, increase over time)
+        # Target coverage threshold (realistic for integration-style tests)
         target: 50%
         # Allow coverage to drop by up to 5%
         threshold: 5%

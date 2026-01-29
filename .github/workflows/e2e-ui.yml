@@ -60,9 +60,18 @@ jobs:
           composer prefix-dependencies
           composer install --prefer-dist --no-progress
 
+      - name: Disable development mode for CI
+        run: rm -f .env
+
+      - name: Build JS assets
+        run: |
+          # Build settings page React app
+          pnpm --filter=@wcpos/settings build
+          # Verify the built file exists
+          ls -la assets/js/settings.js || echo "Warning: settings.js not found in assets/"
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-        working-directory: tests/e2e/ui
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Start WordPress Environment
         run: pnpm run wp-env start
@@ -70,22 +79,38 @@ jobs:
       - name: Wait for WordPress to be ready
         run: |
           ready=0
-          for i in {1..30}; do
-            if curl -sf http://localhost:8888/wp-json/ > /dev/null; then
-              echo "WordPress is ready"
-              ready=1
-              break
+          for i in {1..60}; do
+            # Check if Docker containers are running
+            if docker ps | grep -q wordpress; then
+              # Try to access WP CLI first (more reliable)
+              if pnpm run wp-env run cli -- wp core is-installed 2>/dev/null; then
+                echo "WordPress is ready"
+                ready=1
+                break
+              fi
             fi
-            echo "Waiting for WordPress... ($i/30)"
+            echo "Waiting for WordPress... ($i/60)"
             sleep 2
           done
           if [ "$ready" -ne 1 ]; then
             echo "WordPress did not become ready in time"
+            docker ps
+            pnpm run wp-env logs || true
             exit 1
           fi
 
+      - name: Configure WordPress for UI tests
+        run: |
+          # Set permalinks
+          pnpm run wp-env run cli -- wp rewrite structure '/%postname%/' --hard
+          pnpm run wp-env run cli -- wp rewrite flush --hard
+          # Ensure plugins are active
+          pnpm run wp-env run cli -- wp plugin activate woocommerce woocommerce-pos
+          # Verify site is accessible
+          curl -sf http://localhost:8888/ | head -c 200
+
       - name: Run Playwright tests
-        run: npx playwright test --config=tests/e2e/ui/playwright.config.ts
+        run: pnpm exec playwright test --config=tests/e2e/ui/playwright.config.ts
         env:
           WP_BASE_URL: http://localhost:8888
 

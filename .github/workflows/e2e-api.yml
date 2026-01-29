@@ -64,19 +64,43 @@ jobs:
       - name: Wait for WordPress to be ready
         run: |
           ready=0
-          for i in {1..30}; do
-            if curl -sf http://localhost:8888/wp-json/ > /dev/null; then
-              echo "WordPress is ready"
-              ready=1
-              break
+          for i in {1..60}; do
+            # Check if Docker containers are running
+            if docker ps | grep -q wordpress; then
+              # Try to access WP CLI first (more reliable)
+              if pnpm run wp-env run cli -- wp core is-installed 2>/dev/null; then
+                echo "WordPress is ready"
+                ready=1
+                break
+              fi
             fi
-            echo "Waiting for WordPress... ($i/30)"
+            echo "Waiting for WordPress... ($i/60)"
             sleep 2
           done
           if [ "$ready" -ne 1 ]; then
             echo "WordPress did not become ready in time"
+            docker ps
+            pnpm run wp-env logs || true
             exit 1
           fi
+
+      - name: Configure WordPress for API tests
+        run: |
+          # Ensure plugins are active
+          pnpm run wp-env run cli -- wp plugin activate woocommerce woocommerce-pos
+          
+          # Set permalinks structure
+          pnpm run wp-env run cli -- wp rewrite structure '/%postname%/' --hard
+          pnpm run wp-env run cli -- wp rewrite flush --hard
+
+          # Add Authorization header passthrough to .htaccess AFTER rewrite flush
+          # Apache strips the Authorization header by default; SetEnvIf passes it to PHP
+          # We use a PHP script to avoid shell escaping issues with $1 backreference
+          pnpm run wp-env run cli -- wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/fix-htaccess.php
+          
+          # Verify REST API is accessible with X-WCPOS header
+          curl -sf -H "X-WCPOS: 1" "http://localhost:8888/?rest_route=/" | jq '.namespaces | map(select(. == "wcpos/v1"))' || echo "Checking alternative..."
+          curl -sf -H "X-WCPOS: 1" http://localhost:8888/wp-json/wcpos/v1/ | head -c 200 || true
 
       - name: Create test product
         run: |
@@ -86,10 +110,59 @@ jobs:
             --sku="TEST-001" \
             --user=admin
 
+      - name: Generate JWT token for API tests
+        run: |
+          # Generate JWT tokens using PHP file and write to a shared file
+          TOKEN_FILE="tests/e2e/api/jwt-tokens.json"
+          pnpm run wp-env run cli -- bash -c "wp eval-file wp-content/plugins/woocommerce-pos/tests/e2e/api/generate-jwt.php > wp-content/plugins/woocommerce-pos/${TOKEN_FILE}"
+
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "Token file not created: $TOKEN_FILE"
+            exit 1
+          fi
+
+          if jq -e '.error' "$TOKEN_FILE" >/dev/null; then
+            echo "Token generation error:"
+            cat "$TOKEN_FILE"
+            exit 1
+          fi
+
+          JWT_TOKEN=$(jq -r '.access_token // empty' "$TOKEN_FILE")
+          REFRESH_TOKEN=$(jq -r '.refresh_token // empty' "$TOKEN_FILE")
+
+          if [ -z "$JWT_TOKEN" ] || [ -z "$REFRESH_TOKEN" ]; then
+            echo "Failed to parse tokens from $TOKEN_FILE"
+            cat "$TOKEN_FILE"
+            exit 1
+          fi
+
+          echo "JWT_TOKEN=$JWT_TOKEN" >> $GITHUB_ENV
+          echo "REFRESH_TOKEN=$REFRESH_TOKEN" >> $GITHUB_ENV
+
+          rm -f "$TOKEN_FILE"
+
+      - name: Verify API setup
+        run: |
+          echo "=== .htaccess content ==="
+          pnpm run wp-env run wordpress -- cat /var/www/html/.htaccess
+
+          echo ""
+          echo "=== Verify pretty permalinks ==="
+          curl -s -o /dev/null -w "HTTP %{http_code}" -H "X-WCPOS: 1" http://localhost:8888/wp-json/wcpos/v1/auth/test
+          echo ""
+
+          echo ""
+          echo "=== Verify query string auth ==="
+          curl -s -o /dev/null -w "HTTP %{http_code}" -H "Authorization: Bearer $JWT_TOKEN" -H "X-WCPOS: 1" \
+            "http://localhost:8888/?rest_route=/wcpos/v1/products"
+          echo ""
+
       - name: Run Newman API tests
         run: |
-          npx newman run tests/e2e/api/wcpos-api.postman_collection.json \
+          pnpm exec newman run tests/e2e/api/wcpos-api.postman_collection.json \
             --environment tests/e2e/api/environment.json \
+            --env-var "jwt_token=$JWT_TOKEN" \
+            --env-var "refresh_token=$REFRESH_TOKEN" \
             --reporters cli,junit \
             --reporter-junit-export newman-results.xml
 
