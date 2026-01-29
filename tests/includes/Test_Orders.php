@@ -606,7 +606,6 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 */
 	public function test_direct_order_item_product_misc_item(): void {
 		$orders = new Orders();
-		$order  = $this->create_pos_order();
 
 		$item = new WC_Order_Item_Product();
 		$item->set_name( 'Direct Test Item' );

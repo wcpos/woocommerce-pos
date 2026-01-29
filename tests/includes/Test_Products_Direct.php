@@ -105,11 +105,15 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$products = new Products();
 		$product  = ProductHelper::create_simple_product();
 
-		// Get original modified date
-		$original_modified = get_post_field( 'post_modified', $product->get_id() );
-
-		// Wait a second to ensure time difference
-		sleep( 1 );
+		// Backdate the post to ensure detectable change
+		wp_update_post(
+			array(
+				'ID'                => $product->get_id(),
+				'post_modified'     => '2020-01-01 00:00:00',
+				'post_modified_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		$original_modified = '2020-01-01 00:00:00';
 
 		// Call method directly
 		$products->product_set_stock( $product );
@@ -218,21 +222,18 @@ class Test_Products_Direct extends WC_Unit_Test_Case {
 		$product  = ProductHelper::create_simple_product();
 
 		// Mock the Settings service to return this product as POS only
-		add_filter(
-			'woocommerce_pos_pos_only_product_visibility_settings',
-			function ( $settings ) use ( $product ) {
-				$settings['ids'][] = $product->get_id();
-
-				return $settings;
-			}
-		);
+		$filter_callback = function ( $settings ) use ( $product ) {
+			$settings['ids'][] = $product->get_id();
+			return $settings;
+		};
+		add_filter( 'woocommerce_pos_pos_only_product_visibility_settings', $filter_callback );
 
 		// POS only product should fail validation
 		$result = $products->prevent_pos_only_add_to_cart( true, $product->get_id() );
 
 		$this->assertFalse( $result );
 
-		remove_all_filters( 'woocommerce_pos_pos_only_product_visibility_settings' );
+		remove_filter( 'woocommerce_pos_pos_only_product_visibility_settings', $filter_callback );
 	}
 
 	/**

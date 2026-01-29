@@ -489,7 +489,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertIsArray( $result['gateways'] );
 
 		// Check gateway structure
-		foreach ( $result['gateways'] as $gateway_id => $gateway ) {
+		foreach ( $result['gateways'] as $gateway ) {
 			$this->assertArrayHasKey( 'enabled', $gateway );
 			$this->assertArrayHasKey( 'order', $gateway );
 		}

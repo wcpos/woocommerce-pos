@@ -136,6 +136,28 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test get_cashier endpoint with user ID of 0.
+	 */
+	public function test_get_cashier_with_zero_id(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/0' );
+		$response = $this->server->dispatch( $request );
+
+		// ID 0 should return 404 (no user with ID 0)
+		$this->assertEquals( 404, $response->get_status() );
+	}
+
+	/**
+	 * Test get_cashier endpoint with negative user ID.
+	 */
+	public function test_get_cashier_with_negative_id(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/-1' );
+		$response = $this->server->dispatch( $request );
+
+		// Negative IDs should fail - either 400 (bad request) or 404 (not found)
+		$this->assertContains( $response->get_status(), array( 400, 404 ) );
+	}
+
+	/**
 	 * Test get_cashier endpoint prevents access to other user's data for non-managers.
 	 *
 	 * Note: Users with 'manage_woocommerce' capability (like shop_manager) CAN access

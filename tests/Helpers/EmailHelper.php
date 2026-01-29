@@ -21,13 +21,6 @@ class EmailHelper {
 	private static $captured_emails = array();
 
 	/**
-	 * Original phpmailer mock state.
-	 *
-	 * @var bool
-	 */
-	private static $original_mock_state = false;
-
-	/**
 	 * Initialize email capturing.
 	 *
 	 * Call this in setUp() to start capturing emails.
@@ -77,14 +70,14 @@ class EmailHelper {
 	/**
 	 * Hook into WooCommerce email sent action.
 	 *
-	 * @param bool     $return   Whether the email was sent successfully.
-	 * @param string   $email_id The email ID.
-	 * @param WC_Email $email    The email object.
+	 * @param bool        $return   Whether the email was sent successfully.
+	 * @param string      $email_id The email ID.
+	 * @param \WC_Email   $email    The email object.
 	 */
-	public static function on_email_sent( $return, $email_id, $email ): void {
+	public static function on_email_sent( bool $return, string $email_id, $email = null ): void {
 		// Find the last captured email and add WC email info
 		$count = \count( self::$captured_emails );
-		if ( $count > 0 ) {
+		if ( $count > 0 && null !== $email ) {
 			self::$captured_emails[ $count - 1 ]['wc_email_id']   = $email_id;
 			self::$captured_emails[ $count - 1 ]['wc_email_type'] = \get_class( $email );
 			self::$captured_emails[ $count - 1 ]['wc_success']    = $return;

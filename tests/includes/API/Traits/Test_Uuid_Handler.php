@@ -92,8 +92,6 @@ class Test_Uuid_Handler_Class {
  * Test_Uuid_Handler class.
  *
  * @internal
- *
- * @coversNothing
  */
 class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
@@ -326,6 +324,28 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 		$this->assertFalse( $exists, 'Unique UUID should not exist' );
 
 		wp_delete_user( $user->ID );
+	}
+
+	/**
+	 * Test uuid_usermeta_exists returns true for duplicate UUID.
+	 *
+	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_usermeta_exists
+	 */
+	public function test_uuid_usermeta_exists_duplicate(): void {
+		$user1 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+		$user2 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
+
+		$duplicate_uuid = Uuid::uuid4()->toString();
+
+		update_user_meta( $user1->ID, '_woocommerce_pos_uuid', $duplicate_uuid );
+
+		// Check if duplicate exists from perspective of user2
+		$exists = $this->handler->test_uuid_usermeta_exists( $duplicate_uuid, $user2->ID );
+
+		$this->assertTrue( $exists, 'Duplicate UUID should be detected' );
+
+		wp_delete_user( $user1->ID );
+		wp_delete_user( $user2->ID );
 	}
 
 	/**

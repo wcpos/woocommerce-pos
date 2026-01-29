@@ -623,6 +623,27 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that manual email endpoint requires authentication.
+	 */
+	public function test_manual_email_requires_authentication(): void {
+		$order = OrderHelper::create_order();
+
+		// Set no current user (unauthenticated)
+		wp_set_current_user( 0 );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/email' );
+		$request->set_body_params(
+			array(
+				'email' => 'test@example.com',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		// Should return 401 or 403 for unauthenticated requests
+		$this->assertContains( $response->get_status(), array( 401, 403 ), 'Unauthenticated request should be rejected' );
+	}
+
+	/**
 	 * Saving variation attributes.
 	 *
 	 * GOTCHA: saving a variation attributes will cause duplication, eg:

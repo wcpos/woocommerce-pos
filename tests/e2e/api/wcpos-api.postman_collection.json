@@ -36,6 +36,10 @@
 							{
 								"key": "Authorization",
 								"value": "Bearer {{jwt_token}}"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
 							}
 						],
 						"url": {
@@ -72,6 +76,10 @@
 							{
 								"key": "Content-Type",
 								"value": "application/json"
+							},
+							{
+								"key": "X-WCPOS",
+								"value": "1"
 							}
 						],
 						"body": {
