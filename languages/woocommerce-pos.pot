@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.8.6\n"
+"Project-Id-Version: WCPOS 1.8.7\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-01-13T16:51:26+00:00\n"
+"POT-Creation-Date: 2026-01-30T09:24:34+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -34,10 +34,12 @@ msgstr ""
 msgid "http://wcpos.com"
 msgstr ""
 
+#. translators: 1: Minimum PHP version, 2: Update URL.
 #, php-format
 msgid "<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href=\"%2$s\">how you can update</a>"
 msgstr ""
 
+#. translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WooCommerce %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WooCommerce</a>"
 msgstr ""
@@ -51,6 +53,7 @@ msgstr ""
 msgid "Cashier"
 msgstr ""
 
+#. translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
 #, php-format
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
@@ -59,6 +62,10 @@ msgid "POS"
 msgstr ""
 
 msgid "View POS"
+msgstr ""
+
+#. translators: wordpress.
+msgid "Settings"
 msgstr ""
 
 msgid "Upgrade to Pro"
@@ -73,13 +80,21 @@ msgstr ""
 msgid "Search for a cashier&hellip;"
 msgstr ""
 
-#. translators: 1: old POS cashier, 2: new POS cashier
+#. translators: 1: old POS cashier, 2: new POS cashier.
 #, php-format
 msgid "POS cashier changed from %1$s to %2$s."
 msgstr ""
 
-#. translators: 1: old POS cashier, 2: new POS cashier
+#. translators: 1: old POS cashier, 2: new POS cashier.
 msgid "Unknown"
+msgstr ""
+
+msgctxt "Permalink setting, eg: /pos"
+msgid "POS base"
+msgstr ""
+
+#. translators: wordpress.
+msgid "Important:"
 msgstr ""
 
 msgid "Major Update"
@@ -118,6 +133,18 @@ msgid "Enable POS specific taxes."
 msgstr ""
 
 msgid "POS visibility"
+msgstr ""
+
+#. translators: wordpress.
+msgid "Edit"
+msgstr ""
+
+#. translators: wordpress.
+msgid "OK"
+msgstr ""
+
+#. translators: wordpress.
+msgid "Cancel"
 msgstr ""
 
 msgid "Error"
@@ -323,6 +350,10 @@ msgstr ""
 msgid "Filter customers by roles."
 msgstr ""
 
+#. translators: Use default WordPress translation.
+msgid "Invalid email address."
+msgstr ""
+
 msgid "Order Status."
 msgstr ""
 
@@ -344,12 +375,20 @@ msgstr ""
 msgid "Filter orders by POS store."
 msgstr ""
 
+#. translators: %s: email address.
 #, php-format
 msgid "Email address %s added to billing details from WCPOS."
 msgstr ""
 
+#. translators: %s: email address.
 #, php-format
 msgid "Order details manually sent to %s from WCPOS."
+msgstr ""
+
+msgid "Unique identifier for the order status."
+msgstr ""
+
+msgid "Display name of the order status."
 msgstr ""
 
 msgid "Failed to retrieve store data"
@@ -436,14 +475,14 @@ msgctxt "Order status"
 msgid "POS - Partial Payment"
 msgstr ""
 
-#. translators: %s is the number of orders with POS - Open status
+#. translators: %s is the number of orders with POS - Open status.
 #, php-format
 msgid "POS - Open <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Open <span class=\"count\">(%s)</span>"
 msgstr[0] ""
 msgstr[1] ""
 
-#. translators: %s is the number of orders with POS - Partial Payment status
+#. translators: %s is the number of orders with POS - Partial Payment status.
 #, php-format
 msgid "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
@@ -453,17 +492,17 @@ msgstr[1] ""
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
-#. translators: 1. %s: Settings group id, 2. %s: Settings key
+#. translators: 1. %s: Settings group id, 2. %s: Settings key.
 #, php-format
 msgid "Settings with id %1$s and key %2$s not found"
 msgstr ""
 
-#. translators: %s: Settings group id, ie: 'general' or 'checkout'
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'.
 #, php-format
 msgid "Settings with id %s not found"
 msgstr ""
 
-#. translators: %s: Settings group id, ie: 'general' or 'checkout'
+#. translators: %s: Settings group id, ie: 'general' or 'checkout'.
 #, php-format
 msgid "Can not save settings with id %s"
 msgstr ""
@@ -667,6 +706,10 @@ msgstr ""
 msgid "Invalid username or password."
 msgstr ""
 
+#. translators: wordpress.
+msgid "You do not have sufficient permissions to access this page."
+msgstr ""
+
 msgid "This order cannot be paid for. Please contact us if you need assistance."
 msgstr ""
 
@@ -751,12 +794,12 @@ msgstr ""
 msgid "Invalid template language."
 msgstr ""
 
-#. translators: %s: pattern that was found
+#. translators: %s: pattern that was found.
 #, php-format
 msgid "Template contains potentially dangerous JavaScript code: %s"
 msgstr ""
 
-#. translators: %s: error message
+#. translators: %s: error message.
 #, php-format
 msgid "PHP syntax error: %s"
 msgstr ""
@@ -764,7 +807,7 @@ msgstr ""
 msgid "PHP syntax error: Mismatched PHP tags."
 msgstr ""
 
-#. translators: %s: function name
+#. translators: %s: function name.
 #, php-format
 msgid "Template contains dangerous function: %s(). This function is not allowed for security reasons."
 msgstr ""
