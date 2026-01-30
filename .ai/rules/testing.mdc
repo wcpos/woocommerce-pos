@@ -1,0 +1,240 @@
+# Unit Testing & Quality Assurance Rules for WCPOS
+
+## Critical: WCPOS API Test Setup
+
+### The X-WCPOS Header
+All WCPOS REST API requests must include the `X-WCPOS: 1` header. The base test class `WCPOS_REST_Unit_Test_Case` handles this automatically via `wp_rest_get_request()`, `wp_rest_post_request()`, and `wp_rest_patch_request()` helper methods.
+
+```php
+// ✅ Good - Use the helper methods
+$request = $this->wp_rest_get_request('/wcpos/v1/products');
+
+// ❌ Bad - Missing header
+$request = new WP_REST_Request('GET', '/wcpos/v1/products');
+```
+
+### Settings Must Be Applied BEFORE API Initialization
+WordPress REST routes are registered during `rest_api_init`. Route arguments (including schema validation) are captured at registration time. If you need to test with custom settings that affect schema or route behavior:
+
+```php
+// ✅ Good - Add filter in setUp() or before rest_api_init fires
+public function setUp(): void {
+    add_filter('woocommerce_pos_general_settings', function ($settings) {
+        $settings['decimal_qty'] = true;
+        return $settings;
+    });
+    parent::setUp(); // This triggers rest_api_init
+}
+
+// ❌ Bad - Adding filter after setUp() won't affect route schema validation
+public function test_something(): void {
+    $this->setup_decimal_quantity_tests(); // Too late for schema changes!
+    // ...
+}
+```
+
+**Known Limitation**: Some tests (like decimal quantity updates) pass in production but fail in tests because the schema is already registered before the test filter runs. To properly test settings-dependent features, use a separate test class with the setting pre-configured in `setUp()`.
+
+## 1. The "Reproduction First" Protocol (Bug Fixing)
+
+- **Mandatory Step**: Before applying a fix for a reported bug, create a new test case that fails in the current environment
+- **Validation**: Run the test, confirm it fails (Red), then apply the fix, and confirm it passes (Green)
+- **Goal**: Prevents regressions and proves the fix addresses the root cause
+
+```php
+/**
+ * Regression test for GitHub issue #123.
+ * @see https://github.com/wcpos/woocommerce-pos/issues/123
+ */
+public function test_issue_123_decimal_quantities_saved_correctly(): void {
+    // This test should fail before the fix is applied
+}
+```
+
+## 2. Test Structure & Naming
+
+### Pattern: AAA (Arrange, Act, Assert)
+```php
+public function test_create_order_with_decimal_quantity(): void {
+    // Arrange
+    $this->setup_decimal_quantity_tests();
+    $product = ProductHelper::create_simple_product();
+
+    // Act
+    $request = $this->wp_rest_post_request('/wcpos/v1/orders');
+    $request->set_body_params([
+        'line_items' => [['product_id' => $product->get_id(), 'quantity' => '1.5']],
+    ]);
+    $response = $this->server->dispatch($request);
+
+    // Assert
+    $this->assertEquals(201, $response->get_status());
+}
+```
+
+### Naming Convention
+`test_[feature]_[scenario]_[expected_result]` or `test_[action]_[condition]`
+
+Examples:
+- `test_create_order_with_decimal_quantity`
+- `test_filter_order_by_cashier`
+- `test_pos_only_products_hidden_from_store_api`
+
+### Test Isolation
+- Each test should be independent - don't rely on state from other tests
+- Use `setUp()` and `tearDown()` for common setup/cleanup
+- Clean up created data with `delete_option()`, product deletion, etc.
+
+### WordPress Global State: `$wp_filter` Persists Within a Test Method
+Multiple `$this->server->dispatch()` calls within a single test method share the same PHP process and global `$wp_filter`. Hooks added via `add_filter`/`add_action` during one dispatch persist into subsequent dispatches. This does NOT simulate separate HTTP requests.
+
+```php
+// ❌ Bad - Hooks from first dispatch bleed into second dispatch
+public function test_hooks_dont_bleed(): void {
+    $this->server->dispatch($wcpos_request);  // adds hooks via add_filter()
+    $this->server->dispatch($wc_v3_request);  // those hooks STILL FIRE here
+    // Assertion fails because hooks persisted — but this is a test design flaw,
+    // not a real bug. Real HTTP requests get separate PHP processes.
+}
+
+// ✅ Good - Test each namespace independently
+public function test_wc_v3_not_modified_by_plugin(): void {
+    // Only dispatch the wc/v3 request — don't prime with wcpos/v1 first
+    $response = $this->server->dispatch($wc_v3_request);
+    $this->assertArrayNotHasKey('barcode', $response->get_data());
+}
+```
+
+**Key rule**: When testing that wcpos hooks don't affect wc/v3, dispatch ONLY the wc/v3 request. Do not dispatch wcpos/v1 first in the same test — that creates false positives from shared global state, not real hook bleed.
+
+## 3. Mandatory Test Coverage Checklist
+
+When generating tests for new API endpoints, include:
+
+### Happy Path
+Standard successful execution with valid inputs.
+
+### Negative Tests
+- Invalid product IDs (`product_id => 99999`)
+- Missing required fields
+- Invalid data types
+
+### Boundary Tests
+- Empty arrays for `line_items`
+- Zero quantities
+- Maximum/minimum values
+
+### Permission Tests
+```php
+public function test_unauthorized_user_cannot_access(): void {
+    wp_set_current_user(0); // Log out
+    $request = $this->wp_rest_get_request('/wcpos/v1/products');
+    $response = $this->server->dispatch($request);
+    $this->assertEquals(401, $response->get_status());
+}
+```
+
+## 4. WordPress/WooCommerce Test Patterns
+
+### Use Test Helpers
+```php
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
+
+// ✅ Good - Use helpers to create test data
+$product = ProductHelper::create_simple_product();
+$order = OrderHelper::create_order();
+
+// ❌ Bad - Hardcoded IDs that may not exist
+$request->set_body_params(['product_id' => 1]);
+```
+
+### Use Factory Methods for Users
+```php
+// ✅ Good
+$cashier_id = $this->factory->user->create(['role' => 'administrator']);
+
+// ❌ Bad - Hardcoded user ID
+$order->add_meta_data('_pos_user', 4, true);
+```
+
+### Settings Filter Pattern
+Always merge settings instead of replacing:
+```php
+// ✅ Good - Merge with existing settings
+add_filter('woocommerce_pos_general_settings', function ($settings) {
+    $settings['pos_only_products'] = true;
+    return $settings;
+});
+
+// ❌ Bad - Overwrites ALL settings
+add_filter('woocommerce_pos_general_settings', function () {
+    return ['pos_only_products' => true];
+});
+```
+
+### Clean Up Options in Tests
+```php
+public function tearDown(): void {
+    delete_option('woocommerce_pos_settings_visibility');
+    parent::tearDown();
+}
+```
+
+## 5. Debugging Failed Tests
+
+### Add Debug Output
+```php
+// Debug: Output error details
+if (200 !== $response->get_status()) {
+    fwrite(STDERR, "\n[DEBUG] Status: " . $response->get_status() . "\n");
+    fwrite(STDERR, "[DEBUG] Response: " . print_r($response->get_data(), true) . "\n");
+}
+```
+
+### Run Single Test
+```bash
+pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- \
+  vendor/bin/phpunit -c .phpunit.xml.dist --filter=test_name_here
+```
+
+### Run All Tests
+```bash
+pnpm test
+```
+
+## 6. Maintenance Rules
+
+### Before Modifying Existing Logic
+1. Run existing tests to establish baseline
+2. If you break a test, either:
+   - Fix the regression in your code, OR
+   - Update the test with justification (if behavior intentionally changed)
+
+### Assert Argument Order
+PHPUnit uses `assertEquals(expected, actual)`:
+```php
+// ✅ Good
+$this->assertEquals(['pending', 'completed'], $statuses);
+
+// ❌ Bad - Arguments reversed
+$this->assertEquals($statuses, ['pending', 'completed']);
+```
+
+## 7. Test File Organization
+
+```
+tests/
+├── bootstrap.php              # Test bootstrap
+├── includes/
+│   ├── API/                   # REST API controller tests
+│   │   ├── WCPOS_REST_Unit_Test_Case.php  # Base test class
+│   │   ├── Test_Products_Controller.php
+│   │   ├── Test_Orders_Controller.php
+│   │   └── Test_HPOS_Orders_Controller.php  # HPOS-specific tests
+│   ├── Abstracts/             # Abstract class tests
+│   ├── Services/              # Service class tests
+│   └── Test_*.php             # Other unit tests
+└── Helpers/                   # Test helper classes
+```

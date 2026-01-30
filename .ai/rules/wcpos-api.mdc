@@ -1,0 +1,121 @@
+# WCPOS REST API - Critical Information
+
+## IMPORTANT: X-WCPOS Header Required
+
+The WCPOS REST API routes (`/wcpos/v1/`) are **ONLY registered when the `X-WCPOS: 1` header is present**.
+
+This is a security/performance feature - the routes don't load unless the request is from the POS app.
+
+```bash
+# WITHOUT header - wcpos/v1 NOT in namespaces
+curl http://localhost:8888/wp-json/
+
+# WITH header - wcpos/v1 IS in namespaces
+curl -H "X-WCPOS: 1" http://localhost:8888/wp-json/
+```
+
+## Authentication
+
+WCPOS uses JWT tokens for authentication, not WordPress cookies or application passwords.
+
+### Generating Tokens
+
+```bash
+# Via WP-CLI
+npx wp-env run cli -- wp eval '
+$auth = WCPOS\WooCommercePOS\Services\Auth::instance();
+$user = get_user_by("ID", 1);
+echo json_encode($auth->generate_token_pair($user));
+'
+```
+
+### Token Types
+
+1. **Access Token**: Short-lived (30 min), used for API requests
+2. **Refresh Token**: Long-lived (30 days), used to get new access tokens
+
+### Sending Tokens
+
+The API accepts authorization via:
+
+1. **Header** (preferred): `Authorization: Bearer <token>`
+2. **Query param** (fallback): `?authorization=Bearer%20<token>`
+
+Both methods work with both URL formats (pretty permalinks and query string).
+
+### Apache Authorization Header Issue
+
+Apache CGI/FastCGI strips the `Authorization` header by default. Add to `.htaccess`:
+
+```apache
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+```
+
+**IMPORTANT**: The `.htaccess` SetEnvIf rule sets `HTTP_AUTHORIZATION` to empty string `""` when no Authorization header is sent. The code must use `!empty()` instead of `isset()` to check for auth headers.
+
+## URL Formats
+
+Both work, but query string is more reliable without pretty permalinks:
+
+```bash
+# Pretty permalinks (needs .htaccess rewrite rules)
+/wp-json/wcpos/v1/products
+
+# Query string (always works)
+/?rest_route=/wcpos/v1/products
+```
+
+## Testing API Endpoints
+
+```bash
+# Full example with all requirements
+curl -s \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "X-WCPOS: 1" \
+  "http://localhost:8888/?rest_route=/wcpos/v1/products"
+
+# Alternative with param auth (for servers that strip headers)
+curl -s \
+  -H "X-WCPOS: 1" \
+  "http://localhost:8888/?rest_route=/wcpos/v1/products&authorization=Bearer%20$JWT_TOKEN"
+```
+
+## Auth Matrix (2x2)
+
+The E2E tests cover all 4 combinations:
+
+| URL Format | Header Auth | Param Auth |
+|------------|-------------|------------|
+| Query String (`?rest_route=`) | ✓ | ✓ |
+| Pretty Permalink (`/wp-json/`) | ✓ | ✓ |
+
+## Common Mistakes
+
+1. Forgetting `X-WCPOS: 1` header → 404 or empty namespace
+2. Using `/wp-json/` without working Apache rewrite → 404
+3. Missing `.htaccess` SetEnvIf → Authorization header stripped → 401
+4. Using `isset()` instead of `!empty()` for `$_SERVER['HTTP_AUTHORIZATION']` → param auth fails
+
+## Architecture Note
+
+### WordPress Hook Order
+
+```
+plugins_loaded → init (determine_current_user) → rest_api_init
+```
+
+- `Init` class loads on `plugins_loaded`
+- `determine_current_user` filter fires during `init` (when `wp_get_current_user()` is called)
+- `rest_api_init` fires AFTER `init`
+
+### JWT Authentication Location
+
+1. **Primary** (in `Init.php`): `determine_current_user` filter at priority 20
+   - Registered in `Init` constructor (during `plugins_loaded`)
+   - Runs during `init`, BEFORE `rest_api_init`
+   - Handles both header and param auth
+   - Must be here because WP REST permission callbacks need the user ID
+
+2. **API routes** (in `API.php`): Registered on `rest_api_init`
+   - Routes require X-WCPOS header to be registered
+   - By this point, user is already authenticated via the Init filter
