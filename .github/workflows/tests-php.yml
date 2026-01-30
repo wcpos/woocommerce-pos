@@ -1,4 +1,4 @@
-name: Tests
+name: PHP Tests
 
 on:
   push:
@@ -6,21 +6,17 @@ on:
       - main
     paths:
       - "**.php"
-      - "**.tsx"
-      - "**.ts"
       - "composer.json"
-      - "package.json"
-      - ".github/workflows/tests.yml"
+      - "composer.lock"
+      - ".github/workflows/tests-php.yml"
   pull_request:
     branches:
       - main
     paths:
       - "**.php"
-      - "**.tsx"
-      - "**.ts"
       - "composer.json"
-      - "package.json"
-      - ".github/workflows/tests.yml"
+      - "composer.lock"
+      - ".github/workflows/tests-php.yml"
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
@@ -115,7 +111,7 @@ jobs:
           WP_VERSION=$(curl -s https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version')
           echo "wp=$WP_VERSION" >> $GITHUB_OUTPUT
           echo "Latest WordPress: $WP_VERSION"
-          
+
           # Get latest stable WooCommerce version + URL
           PLUGIN_INFO=$(curl -sg "https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=woocommerce&request[fields][versions]=1")
           STABLE_VERSIONS=$(echo "$PLUGIN_INFO" | jq -r '.versions | keys[] | select(. != "trunk") | select(test("^[0-9]+(\\.[0-9]+)*$"))')
@@ -224,7 +220,7 @@ jobs:
 
       - name: Run PHPUnit tests
         id: test
-        run: pnpm run test
+        run: pnpm run test:unit:php
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -396,7 +392,7 @@ jobs:
           pnpm run wp-env run cli -- wp plugin list
 
       - name: Run PHPUnit tests
-        run: pnpm run test
+        run: pnpm run test:unit:php
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -482,7 +478,7 @@ jobs:
         run: pnpm run wp-env start --xdebug=coverage
 
       - name: Run PHPUnit with coverage
-        run: pnpm run test
+        run: pnpm run test:unit:php
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

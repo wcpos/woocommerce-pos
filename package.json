@@ -15,6 +15,7 @@
     "test": "pnpm run test:unit:php",
     "pretest": "wp-env start --xdebug=coverage && wp-env run cli --env-cwd='wp-content/plugins/woocommerce-pos' composer install",
     "test:unit:php": "wp-env run cli -- wp plugin activate woocommerce && wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist --verbose --log-junit phpunit.xml",
+    "test:unit:js": "turbo run test",
     "build:docs": "jsdoc -c hookdoc-conf.json",
     "settings": "pnpm --filter=@wcpos/settings",
     "analytics": "pnpm --filter=@wcpos/analytics"
