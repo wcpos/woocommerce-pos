@@ -29,6 +29,14 @@ class API {
 	protected $controllers = array();
 
 	/**
+	 * Map of route patterns to controller keys.
+	 * Built during register_routes() for use in rest_dispatch_request().
+	 *
+	 * @var array<string, string>
+	 */
+	protected $route_map = array();
+
+	/**
 	 * Flag to check if authentication has been checked.
 	 *
 	 * @var bool
@@ -119,6 +127,39 @@ class API {
 			if ( class_exists( $class ) ) {
 				$this->controllers[ $key ] = new $class();
 				$this->controllers[ $key ]->register_routes();
+			}
+		}
+
+		// Build route map for use in rest_dispatch_request().
+		$rest_server = rest_get_server();
+		$all_routes  = $rest_server->get_routes( 'wcpos/v1' );
+
+		foreach ( $all_routes as $route_pattern => $route_handlers ) {
+			foreach ( $route_handlers as $route_handler ) {
+				$callback = $route_handler['callback'] ?? null;
+
+				// Extract the controller object from the callback.
+				$controller_obj = null;
+				if ( \is_array( $callback ) && isset( $callback[0] ) && \is_object( $callback[0] ) ) {
+					$controller_obj = $callback[0];
+				} elseif ( $callback instanceof \Closure ) {
+					// WC 10.5+ RestApiCache wraps callbacks in closures.
+					// Use reflection to extract the bound $this.
+					$ref            = new \ReflectionFunction( $callback );
+					$controller_obj = $ref->getClosureThis();
+				}
+
+				if ( ! $controller_obj ) {
+					continue;
+				}
+
+				// Find which controller key this object belongs to.
+				foreach ( $this->controllers as $key => $registered_controller ) {
+					if ( $controller_obj === $registered_controller ) {
+						$this->route_map[ $route_pattern ] = $key;
+						break;
+					}
+				}
 			}
 		}
 	}
@@ -282,6 +323,10 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
+		if ( strpos( $request->get_route(), '/wcpos/v1/' ) !== 0 ) {
+			return $result;
+		}
+
 		$max_length = 10000;
 
 		// Process 'include' parameter.
@@ -314,37 +359,33 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		if ( isset( $handler['callback'] ) && \is_array( $handler['callback'] ) && isset( $handler['callback'][0] ) ) {
-			$controller = $handler['callback'][0];
+		// Only process wcpos/v1 routes.
+		if ( ! isset( $this->route_map[ $route ] ) ) {
+			return $dispatch_result;
+		}
 
-			// Check if the controller object is one of our registered controllers.
-			foreach ( $this->controllers as $key => $wcpos_controller ) {
-				if ( $controller === $wcpos_controller ) {
-					/*
-					 * I'm adding some additional PHP settings before the response. Placing them here so they only apply to the POS API.
-					 *
-					 * - error_reporting(0) - Turn off error reporting
-					 * - ini_set('display_errors', 0) - Turn off error display
-					 * - ini_set('precision', 10) - Set the precision of floating point numbers
-					 * - ini_set('serialize_precision', 10) - Set the precision of floating point numbers for serialization
-					 *
-					 * This is to prevent any PHP errors from being displayed in the response.
-					 *
-					 * The precision settings are to prevent floating point weirdness, eg: stock_quantity 3.6 becomes 3.6000000000000001
-					 */
-					error_reporting( 0 );
-					@ini_set( 'display_errors', '0' ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed -- intentionally disabling error display for POS API responses.
-					@ini_set( 'precision', '10' );
-					@ini_set( 'serialize_precision', '10' );
+		/*
+		 * POS-specific PHP settings to prevent errors in JSON and float weirdness.
+		 *
+		 * - error_reporting(0) - Turn off error reporting
+		 * - ini_set('display_errors', 0) - Turn off error display
+		 * - ini_set('precision', 10) - Set the precision of floating point numbers
+		 * - ini_set('serialize_precision', 10) - Set the precision of floating point numbers for serialization
+		 *
+		 * This is to prevent any PHP errors from being displayed in the response.
+		 *
+		 * The precision settings are to prevent floating point weirdness, eg: stock_quantity 3.6 becomes 3.6000000000000001
+		 */
+		error_reporting( 0 );
+		@ini_set( 'display_errors', '0' ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Disallowed -- intentionally disabling error display for POS API responses.
+		@ini_set( 'precision', '10' );
+		@ini_set( 'serialize_precision', '10' );
 
-					// Check if the controller has a 'wcpos_dispatch_request' method.
-					if ( method_exists( $controller, 'wcpos_dispatch_request' ) ) {
-						return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
-					}
+		$key        = $this->route_map[ $route ];
+		$controller = $this->controllers[ $key ] ?? null;
 
-					break;
-				}
-			}
+		if ( $controller && method_exists( $controller, 'wcpos_dispatch_request' ) ) {
+			return $controller->wcpos_dispatch_request( $dispatch_result, $request, $route, $handler );
 		}
 
 		return $dispatch_result;
