@@ -115,17 +115,22 @@ class FunctionsMockerHack extends CodeHack {
 		$tokens                                          = $this->tokenize( $code );
 		$code                                            = '';
 		$previous_token_is_non_global_function_qualifier = false;
+		$previous_token_is_ns_separator                  = false;
 
 		foreach ( $tokens as $token ) {
 			$token_type = $this->token_type_of( $token );
 			if ( T_WHITESPACE === $token_type ) {
 				$code .= $this->token_to_string( $token );
 			} elseif ( T_STRING === $token_type && ! $previous_token_is_non_global_function_qualifier && \in_array( $token[1], $this->mockable_functions, true ) ) {
-				$code .= __CLASS__ . "::{$token[1]}";
+				// Only add leading backslash if the original code didn't already have one.
+				$prefix = $previous_token_is_ns_separator ? '' : '\\';
+				$code .= $prefix . __CLASS__ . "::{$token[1]}";
 				$previous_token_is_non_global_function_qualifier = false;
+				$previous_token_is_ns_separator                  = false;
 			} else {
 				$code .= $this->token_to_string( $token );
 				$previous_token_is_non_global_function_qualifier = \in_array( $token_type, self::$non_global_function_tokens, true );
+				$previous_token_is_ns_separator                  = T_NS_SEPARATOR === $token_type;
 			}
 		}
 

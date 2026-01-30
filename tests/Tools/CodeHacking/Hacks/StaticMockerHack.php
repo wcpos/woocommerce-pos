@@ -113,9 +113,10 @@ final class StaticMockerHack extends CodeHack {
 	public function hack( $code, $path ) {
 		$last_item = null;
 
-		$tokens        = $this->tokenize( $code );
-		$code          = '';
-		$current_token = null;
+		$tokens                        = $this->tokenize( $code );
+		$code                          = '';
+		$current_token                 = null;
+		$previous_token_is_ns_separator = false;
 
 		// phpcs:ignore WordPress.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
 		while ( $current_token = current( $tokens ) ) {
@@ -124,14 +125,18 @@ final class StaticMockerHack extends CodeHack {
 				$next_token = next( $tokens );
 				if ( $this->is_token_of_type( $next_token, T_DOUBLE_COLON ) ) {
 					$called_member = next( $tokens )[1];
-					$code         .= __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
+					// Only add leading backslash if the original code didn't already have one.
+					$prefix        = $previous_token_is_ns_separator ? '' : '\\';
+					$code         .= $prefix . __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
 				} else {
 					// Reference to source class, but not followed by '::'.
 					$code .= $this->token_to_string( $current_token ) . $this->token_to_string( $next_token );
 				}
+				$previous_token_is_ns_separator = false;
 			} else {
 				// Not a reference to source class.
 				$code .= $this->token_to_string( $current_token );
+				$previous_token_is_ns_separator = $this->is_token_of_type( $current_token, T_NS_SEPARATOR );
 			}
 			next( $tokens );
 		}

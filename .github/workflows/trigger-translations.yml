@@ -1,0 +1,33 @@
+name: Trigger translations
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+    paths:
+      - 'languages/woocommerce-pos.pot'
+
+jobs:
+  trigger-translations:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TRANSLATION_APP_ID }}
+          private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: translations
+
+      - name: Trigger translations repo
+        run: |
+          gh workflow run extract-php.yml \
+            --repo wcpos/translations \
+            --field free_ref="${{ github.sha }}"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
