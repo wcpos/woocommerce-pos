@@ -42,6 +42,7 @@
     "@wordpress/env": "10.23.0",
     "jsdoc": "^4.0.3",
     "newman": "^6.2.1",
+    "taffydb": "^2.7.3",
     "turbo": "2.4.4",
     "wp-hookdoc": "0.2.0"
   },
