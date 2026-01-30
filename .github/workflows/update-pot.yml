@@ -52,7 +52,9 @@ jobs:
       - name: Create PR with updated POT file
         if: steps.git-diff.outputs.changes == 'true'
         run: |
-          git checkout -b chore/update-pot-file
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/update-pot-file
           git add '*.pot'
           git commit -m 'chore(i18n): update languages/woocommerce-pos.pot'
           git push -f origin chore/update-pot-file
