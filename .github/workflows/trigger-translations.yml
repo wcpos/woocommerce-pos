@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -24,10 +27,11 @@ jobs:
           owner: wcpos
           repositories: translations
 
-      - name: Trigger translations repo
+      - name: Send POT to translations repo
         run: |
-          gh workflow run extract-php.yml \
-            --repo wcpos/translations \
-            --field free_ref="${{ github.sha }}"
+          POT_BASE64=$(base64 -w 0 languages/woocommerce-pos.pot)
+          gh api repos/wcpos/translations/dispatches \
+            -f event_type=update-free-pot \
+            -f "client_payload[pot_content]=$POT_BASE64"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
