@@ -32,6 +32,18 @@ jobs:
       - name: Extract translation strings
         run: node scripts/extract-js-strings.js
 
+      - name: Push to translations-source branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan translations-source
+          git rm -rf .
+          cp -r .translations/* .
+          git add *.json
+          git commit -m "translation source strings from ${{ github.sha }}"
+          git push -f origin translations-source
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -41,21 +53,11 @@ jobs:
           owner: wcpos
           repositories: translations
 
-      - name: Send extracted strings to translations repo
+      - name: Notify translations repo
         run: |
-          jq -n \
-            --arg event_type "update-js-strings" \
-            --arg ref "${{ github.sha }}" \
-            '{event_type: $event_type, client_payload: {ref: $ref, files: {}}}' > payload.json
-
-          for file in .translations/*.json; do
-            [ -f "$file" ] || continue
-            NAME=$(basename "$file")
-            CONTENT=$(base64 -w 0 "$file")
-            jq --arg name "$NAME" --arg content "$CONTENT" \
-              '.client_payload.files[$name] = $content' payload.json > tmp.json && mv tmp.json payload.json
-          done
-
-          gh api repos/wcpos/translations/dispatches --input payload.json
+          gh api repos/wcpos/translations/dispatches \
+            -f event_type=update-js-strings \
+            -f "client_payload[repo_name]=woocommerce-pos" \
+            -f "client_payload[ref]=translations-source"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
