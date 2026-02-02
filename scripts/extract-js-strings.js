@@ -98,7 +98,9 @@ async function main() {
       byTag[entry.tag] = {};
     }
 
-    const key = entry.context ? `${entry.string}_${entry.context}` : entry.string;
+    const key = entry.context
+      ? `${entry.string}\u0004${entry.context}`
+      : entry.string;
 
     if (!byTag[entry.tag][key]) {
       byTag[entry.tag][key] = {
