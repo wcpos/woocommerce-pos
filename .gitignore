@@ -38,4 +38,4 @@ test-results/
 tests/e2e/ui/playwright-results.xml
 # Ignore .cursor except rules (needed for AI agents)
 .cursor
-!.cursor/rules
+!.cursor/rulespnpm-lock.yaml

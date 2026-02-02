@@ -1,17 +1,21 @@
-name: Trigger translations
+name: Push PHP Strings to Translations
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - main
     paths:
       - 'languages/woocommerce-pos.pot'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Push even if strings have not changed'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   trigger-translations:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
@@ -32,6 +36,7 @@ jobs:
           POT_BASE64=$(base64 -w 0 languages/woocommerce-pos.pot)
           gh api repos/wcpos/translations/dispatches \
             -f event_type=update-free-pot \
-            -f "client_payload[pot_content]=$POT_BASE64"
+            -f "client_payload[pot_content]=$POT_BASE64" \
+            -f "client_payload[force]=${{ inputs.force || 'false' }}"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
