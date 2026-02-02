@@ -1,4 +1,4 @@
-name: Update JS Translation Strings
+name: Push JS Strings to Translations
 
 on:
   push:

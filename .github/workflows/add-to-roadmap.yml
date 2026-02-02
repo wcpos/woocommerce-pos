@@ -1,0 +1,16 @@
+name: Add to Roadmap
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  add-to-project:
+    name: Add issue to Roadmap
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'enhancement')
+    steps:
+      - uses: actions/add-to-project@v1
+        with:
+          project-url: https://github.com/orgs/wcpos/projects/4
+          github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}

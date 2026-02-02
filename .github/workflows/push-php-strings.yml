@@ -1,4 +1,4 @@
-name: Trigger translations
+name: Push PHP Strings to Translations
 
 on:
   pull_request:
