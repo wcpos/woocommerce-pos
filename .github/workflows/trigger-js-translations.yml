@@ -1,5 +1,8 @@
 name: Update JS Translation Strings
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -37,10 +40,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          if [ -z "$(ls -A .translations)" ]; then
+            echo "No translation files to publish."
+            exit 0
+          fi
+
           git checkout --orphan translations-source
           git rm -rf .
-          cp -r .translations/* .
-          git add *.json
+          cp -r .translations/. .
+          git add -A
           git commit -m "translation source strings from ${{ github.sha }}"
           git push -f origin translations-source
 
