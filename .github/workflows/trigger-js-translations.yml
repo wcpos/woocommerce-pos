@@ -40,7 +40,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ -z "$(ls -A .translations)" ]; then
+          if [ ! -d .translations ] || [ -z "$(ls -A .translations 2>/dev/null)" ]; then
             echo "No translation files to publish."
             exit 0
           fi
