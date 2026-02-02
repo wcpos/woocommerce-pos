@@ -28,8 +28,14 @@ async function extractFromFile(filePath) {
 
   T_CALL_REGEX.lastIndex = 0;
   while ((match = T_CALL_REGEX.exec(content)) !== null) {
+    const quote = match[1];
     const sourceString = match[2];
     const options = match[3] || '';
+ 
+    if (quote === '`' && sourceString.includes('${')) {
+      console.warn(`  Warning: interpolated template literal in ${filePath}: "${sourceString.substring(0, 50)}..."`);
+      continue;
+    }
 
     const tagsMatch = options.match(TAGS_REGEX);
     const contextMatch = options.match(CONTEXT_REGEX);
