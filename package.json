@@ -18,7 +18,8 @@
     "test:unit:js": "turbo run test",
     "build:docs": "jsdoc -c hookdoc-conf.json",
     "settings": "pnpm --filter=@wcpos/settings",
-    "analytics": "pnpm --filter=@wcpos/analytics"
+    "analytics": "pnpm --filter=@wcpos/analytics",
+    "extract:translations": "node scripts/extract-js-strings.js"
   },
   "repository": {
     "type": "git",
@@ -43,6 +44,7 @@
     "jsdoc": "^4.0.3",
     "newman": "^6.2.1",
     "taffydb": "^2.7.3",
+    "glob": "^11.0.0",
     "turbo": "2.4.4",
     "wp-hookdoc": "0.2.0"
   },
