@@ -6,7 +6,7 @@ import { map, get } from 'lodash';
 
 import Notice from '../../components/notice';
 import useSettingsApi from '../../hooks/use-settings-api';
-import { UT, T } from '../../translations';
+import { Trans } from '../../translations';
 
 export type AccessSettingsProps = Record<
 	string,
@@ -25,24 +25,18 @@ const Access = () => {
 		<>
 			<div className="wcpos:p-4">
 				<Notice status="info" isDismissible={false}>
-					<UT
-						_str="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles.
-					It is recommended that you <strong>do not change</strong> the default settings unless you
-					are fully aware of the consequences."
-						_tags="wp-admin-settings"
-						_inline
+					<Trans
+						i18nKey="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles. It is recommended that you <1>do not change</1> the default settings unless you are fully aware of the consequences."
+						components={[, <strong />]}
 					/>
 					&nbsp;
-					<T
-						_str="For more information please visit the {link}"
-						_tags="wp-admin-settings"
-						link={
-							<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer">
-								<T _str="documentation" _tags="wp-admin-settings" />
-							</a>
-						}
+					<Trans
+						i18nKey="For more information please visit the <1>documentation</1>."
+						components={[
+							,
+							<a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" />,
+						]}
 					/>
-					.
 				</Notice>
 			</div>
 			<div className="wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:p-4 wcpos:pt-0">
@@ -89,7 +83,6 @@ const Access = () => {
 													checked={checked}
 													disabled={disabled}
 													onChange={(value) => {
-														// mutate({ cap: label, value, group, role: selected });
 														mutate({
 															[selected]: {
 																capabilities: {

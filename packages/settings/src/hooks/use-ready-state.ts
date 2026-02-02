@@ -4,37 +4,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
 import useNotices from '../hooks/use-notices';
-import { tx } from '../translations';
-import localesData from '../translations/locales.json';
-
-interface Locale {
-	name: string;
-	nativeName?: string;
-	code: string;
-	locale: string;
-}
-
-interface Locales {
-	[key: string]: Locale;
-}
+import { i18nPromise } from '../translations';
 
 interface Props {
 	initialScreen: string;
 }
 
-const locales: Locales = localesData;
-const htmlElement = document.documentElement;
-const lang = htmlElement.getAttribute('lang') || 'en';
-const { locale } = locales[lang.toLowerCase()] || locales[lang.split('-')[0]] || locales['en'];
-
 const useReadyState = ({ initialScreen }: Props) => {
 	const [isReady, setIsReady] = React.useState(false);
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
-
-	const fetchLanguage = React.useCallback(() => {
-		return tx.setCurrentLocale(locale).catch(console.error);
-	}, []);
 
 	const prefetchSettings = React.useCallback(() => {
 		// Skip prefetch for sessions tab as it uses different API endpoints
@@ -64,10 +43,10 @@ const useReadyState = ({ initialScreen }: Props) => {
 	}, [initialScreen, queryClient, setNotice]);
 
 	React.useEffect(() => {
-		Promise.allSettled([fetchLanguage(), prefetchSettings()]).then(() => {
+		Promise.allSettled([i18nPromise, prefetchSettings()]).then(() => {
 			setIsReady(true);
 		});
-	}, [fetchLanguage, prefetchSettings]);
+	}, [prefetchSettings]);
 
 	return { isReady };
 };
