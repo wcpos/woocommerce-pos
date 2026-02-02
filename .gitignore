@@ -32,6 +32,7 @@ hookdocs
 phpunit.xml
 tests/logs/junit.xml
 .turbo
+.translations
 playwright-report/
 test-results/
 tests/e2e/ui/playwright-results.xml

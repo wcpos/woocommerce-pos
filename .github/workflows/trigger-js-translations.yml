@@ -1,0 +1,61 @@
+name: Update JS Translation Strings
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**/*.ts'
+      - 'packages/**/*.tsx'
+      - 'packages/**/*.js'
+      - 'packages/**/*.jsx'
+  workflow_dispatch:
+
+jobs:
+  extract-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install --filter . --frozen-lockfile=false
+
+      - name: Extract translation strings
+        run: node scripts/extract-js-strings.js
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TRANSLATION_APP_ID }}
+          private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: translations
+
+      - name: Send extracted strings to translations repo
+        run: |
+          jq -n \
+            --arg event_type "update-js-strings" \
+            --arg ref "${{ github.sha }}" \
+            '{event_type: $event_type, client_payload: {ref: $ref, files: {}}}' > payload.json
+
+          for file in .translations/*.json; do
+            [ -f "$file" ] || continue
+            NAME=$(basename "$file")
+            CONTENT=$(base64 -w 0 "$file")
+            jq --arg name "$NAME" --arg content "$CONTENT" \
+              '.client_payload.files[$name] = $content' payload.json > tmp.json && mv tmp.json payload.json
+          done
+
+          gh api repos/wcpos/translations/dispatches --input payload.json
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
