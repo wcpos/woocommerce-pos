@@ -16,7 +16,7 @@ jobs:
           private-key: ${{ secrets.PROJECT_BOT_PRIVATE_KEY }}
           owner: wcpos
 
-      - uses: actions/add-to-project@v1
+      - uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/orgs/wcpos/projects/4
           github-token: ${{ steps.app-token.outputs.token }}
