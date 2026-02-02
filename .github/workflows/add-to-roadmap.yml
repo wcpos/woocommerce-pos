@@ -2,13 +2,12 @@ name: Add to Roadmap
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
 
 jobs:
   add-to-project:
     name: Add issue to Roadmap
     runs-on: ubuntu-latest
-    if: contains(github.event.issue.labels.*.name, 'enhancement')
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token
