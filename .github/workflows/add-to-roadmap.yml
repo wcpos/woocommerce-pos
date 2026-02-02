@@ -17,6 +17,23 @@ jobs:
           owner: wcpos
 
       - uses: actions/add-to-project@v1.0.2
+        id: add
         with:
           project-url: https://github.com/orgs/wcpos/projects/4
           github-token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set status to Triage
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh api graphql -f query='
+            mutation {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: "PVT_kwDOAuNIQc4ADana"
+                itemId: "${{ steps.add.outputs.itemId }}"
+                fieldId: "PVTSSF_lADOAuNIQc4ADanazgB9yM4"
+                value: { singleSelectOptionId: "809e15bf" }
+              }) {
+                projectV2Item { id }
+              }
+            }'
