@@ -10,7 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     if: contains(github.event.issue.labels.*.name, 'enhancement')
     steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.PROJECT_BOT_APP_ID }}
+          private-key: ${{ secrets.PROJECT_BOT_PRIVATE_KEY }}
+          owner: wcpos
+
       - uses: actions/add-to-project@v1
         with:
           project-url: https://github.com/orgs/wcpos/projects/4
-          github-token: ${{ secrets.ADD_TO_PROJECT_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
