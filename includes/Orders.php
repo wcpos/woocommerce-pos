@@ -142,30 +142,35 @@ class Orders {
 	 * @return bool|WC_Product
 	 */
 	public function order_item_product( $product, $item ) {
-		if ( ! $product && 0 === $item->get_product_id() ) {
-			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
-			$product = new WC_Product_Simple();
+		if ( 0 !== $item->get_product_id() ) {
+			return $product;
+		}
 
-			// set name & sku.
-			$product->set_name( $item->get_name() );
-			$sku = $item->get_meta( '_sku', true );
-			$product->set_sku( $sku ? $sku : '' );
+		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
+		if ( ! $pos_data_json ) {
+			return $product;
+		}
 
-			// set price and regular_price.
-			$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-			$pos_data      = json_decode( $pos_data_json, true );
+		$product = new WC_Product_Simple();
 
-			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
-				if ( isset( $pos_data['price'] ) ) {
-					$product->set_price( $pos_data['price'] );
-					$product->set_sale_price( $pos_data['price'] );
-				}
-				if ( isset( $pos_data['regular_price'] ) ) {
-					$product->set_regular_price( $pos_data['regular_price'] );
-				}
-				if ( isset( $pos_data['tax_status'] ) ) {
-					$product->set_tax_status( $pos_data['tax_status'] );
-				}
+		// set name & sku.
+		$product->set_name( $item->get_name() );
+		$sku = $item->get_meta( '_sku', true );
+		$product->set_sku( $sku ? $sku : '' );
+
+		// set price and regular_price.
+		$pos_data = json_decode( $pos_data_json, true );
+
+		if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+			if ( isset( $pos_data['price'] ) ) {
+				$product->set_price( $pos_data['price'] );
+				$product->set_sale_price( $pos_data['price'] );
+			}
+			if ( isset( $pos_data['regular_price'] ) ) {
+				$product->set_regular_price( $pos_data['regular_price'] );
+			}
+			if ( isset( $pos_data['tax_status'] ) ) {
+				$product->set_tax_status( $pos_data['tax_status'] );
 			}
 		}
 

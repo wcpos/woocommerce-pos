@@ -388,6 +388,47 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * BUG: Miscellaneous product shows $0 price on order receipts and emails.
+	 *
+	 * When wc_get_product(0) returns a WC_Product object instead of false,
+	 * the filter condition `! $product` fails and the price from
+	 * _woocommerce_pos_data is never applied.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/432
+	 */
+	public function test_order_item_product_overrides_truthy_product_for_misc_item(): void {
+		$order = $this->create_pos_order();
+
+		// Create a line item with product_id = 0 (misc product)
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			json_encode(
+				array(
+					'price'         => '4.99',
+					'regular_price' => '8.00',
+					'tax_status'    => 'taxable',
+				)
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		// Simulate wc_get_product(0) returning a WC_Product_Simple with price 0
+		// instead of false — this happens in some WC versions/configurations.
+		$empty_product = new WC_Product_Simple();
+		$product       = apply_filters( 'woocommerce_order_item_product', $empty_product, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertEquals( '4.99', $product->get_price(), 'Misc product price should come from POS data, not the empty product' );
+		$this->assertEquals( '8.00', $product->get_regular_price(), 'Misc product regular_price should come from POS data' );
+	}
+
+	/**
 	 * Test order_item_product returns existing product unchanged.
 	 */
 	public function test_order_item_product_returns_existing_product(): void {
