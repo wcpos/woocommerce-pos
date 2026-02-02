@@ -13,6 +13,8 @@ on:
 
 jobs:
   extract-and-dispatch:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -37,10 +39,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          if [ -z "$(ls -A .translations/*.json 2>/dev/null)" ]; then
+            echo "No translation files found, skipping."
+            exit 0
+          fi
+
           git checkout --orphan translations-source
           git rm -rf .
-          cp -r .translations/* .
-          git add *.json
+          cp .translations/*.json .
+          git add .
           git commit -m "translation source strings from ${{ github.sha }}"
           git push -f origin translations-source
 
