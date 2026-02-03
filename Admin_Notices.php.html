@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Admin/Notices.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Admin/Notices.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * Admin Notices
+ * - add notices via static method or filter.
+ *
+ * @author   Paul Kilmurray &lt;paul@kilbot.com>
+ *
+ * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS\Admin;
+
+/**
+ * Notices class.
+ */
+class Notices {
+	/**
+	 * Stored notices.
+	 *
+	 * @var array
+	 */
+	private static $notices = array();
+
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
+	}
+
+	/**
+	 * Add a message for display.
+	 *
+	 * @param string $message     The notice message.
+	 * @param string $type        The notice type.
+	 * @param bool   $dismissable Whether the notice is dismissable.
+	 */
+	public static function add( $message = '', $type = 'error', $dismissable = true ): void {
+		self::$notices[] = array(
+			'type'        => $type,
+			'message'     => $message,
+			'dismissable' => $dismissable,
+		);
+	}
+
+	/**
+	 * Display the admin notices.
+	 */
+	public function admin_notices(): void {
+		/**
+		 * Filters the POS admin notices.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $notices
+		 *
+		 * @return array $notices
+		 *
+		 * @hook woocommerce_pos_admin_notices
+		 */
+		$notices = apply_filters( 'woocommerce_pos_admin_notices', self::$notices );
+		if ( empty( $notices ) ) {
+			return;
+		}
+
+		foreach ( $notices as $notice ) {
+			$classes = 'notice notice-' . $notice['type'];
+			if ( $notice['dismissable'] ) {
+				$classes .= ' is-dismissable';
+			}
+			if ( $notice['message'] ) {
+				echo '&lt;div class="' . esc_attr( $classes ) . '">&lt;p>' .
+					 wp_kses( $notice['message'], wp_kses_allowed_html( 'post' ) ) .
+					 '&lt;/p>&lt;/div>';
+			}
+		}
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

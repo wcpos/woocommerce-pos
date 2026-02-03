@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Admin.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Admin.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * WP Admin Class
+ * conditionally loads classes for WP Admin.
+ *
+ * @author   Paul Kilmurray &lt;paul@kilbot.com.au>
+ *
+ * @see     http://www.wcpos.com
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS;
+
+use Automattic\WooCommerce\Admin\PageController;
+use WCPOS\WooCommercePOS\Admin\Analytics;
+use WCPOS\WooCommercePOS\Admin\Notices;
+use WCPOS\WooCommercePOS\Admin\Orders\HPOS_List_Orders;
+use WCPOS\WooCommercePOS\Admin\Orders\HPOS_Single_Order;
+use WCPOS\WooCommercePOS\Admin\Orders\List_Orders;
+use WCPOS\WooCommercePOS\Admin\Orders\Single_Order;
+use WCPOS\WooCommercePOS\Admin\Permalink;
+use WCPOS\WooCommercePOS\Admin\Plugins;
+use WCPOS\WooCommercePOS\Admin\Products\List_Products;
+use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
+use WCPOS\WooCommercePOS\Admin\Settings;
+use WCPOS\WooCommercePOS\Admin\Templates\List_Templates;
+use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
+use WP_Screen;
+
+/**
+ * Admin class.
+ */
+class Admin {
+	/**
+	 * POS Menu IDs.
+	 *
+	 * @var string[] Unique menu identifier.
+	 */
+	private $menu_ids = array();
+
+	/**
+	 * Registered screen handlers.
+	 *
+	 * @var array
+	 */
+	private $screen_handlers = array();
+
+	/**
+	 * Constructor.
+	 *
+	 * NOTE: WordPress fires the admin_menu hook before the admin_init.
+	 * 1. admin_menu
+	 * 2. admin_init
+	 * 3. current_screen
+	 *
+	 * We need admin_menu at priority 5 so that we can hook the Analytics menu before WooCommerce.
+	 */
+	public function __construct() {
+		add_action( 'admin_menu', array( $this, 'admin_menu' ), 5 );
+		add_action( 'admin_init', array( $this, 'init' ) );
+		add_action( 'current_screen', array( $this, 'current_screen' ) );
+
+		// register the screen handlers.
+		$this->screen_handlers = array(
+			'options-permalink'          => Permalink::class,
+			'product'                    => Single_Product::class,
+			'edit-product'               => List_Products::class,
+			'shop_order'                 => Single_Order::class,
+			'edit-shop_order'            => List_Orders::class,
+			'plugins'                    => Plugins::class,
+			'wcpos_template'             => Single_Template::class,
+			'edit-wcpos_template'        => List_Templates::class,
+			'woocommerce_page_wc-orders' => array( $this, 'handle_wc_hpos_orders_screen' ),
+			'woocommerce_page_wc-admin'  => array( $this, 'handle_wc_analytics_screen' ),
+		);
+	}
+
+	/**
+	 * Load admin subclasses.
+	 */
+	public function init(): void {
+		new Notices();
+
+		// Register admin-post.php handlers only when our specific actions are requested.
+		// This keeps the footprint minimal and avoids conflicts with other plugins.
+		$action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( \in_array( $action, array( 'wcpos_activate_template', 'wcpos_copy_template' ), true ) ) {
+			add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
+			add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
+		}
+	}
+
+	/**
+	 * Handle template activation via admin-post.php.
+	 * Delegates to List_Templates class.
+	 *
+	 * @return void
+	 */
+	public function handle_activate_template(): void {
+		$handler = new List_Templates();
+		$handler->activate_template();
+	}
+
+	/**
+	 * Handle template copy via admin-post.php.
+	 * Delegates to List_Templates class.
+	 *
+	 * @return void
+	 */
+	public function handle_copy_template(): void {
+		$handler = new List_Templates();
+		$handler->copy_template();
+	}
+
+	/**
+	 * Fires before the administration menu loads in the admin.
+	 */
+	public function admin_menu(): void {
+		$menu           = new Admin\Menu();
+		$this->menu_ids = array(
+			'toplevel' => $menu->toplevel_screen_id,
+			'settings' => $menu->settings_screen_id,
+		);
+
+		// Add the settings screen using the WCPOS menu ID.
+		$this->screen_handlers[ $this->menu_ids['settings'] ] = Settings::class;
+	}
+
+	/**
+	 * Conditionally load subclasses based on admin screen.
+	 *
+	 * @TODO - I need to register the instances to allow remove_action/remove_filter.
+	 *
+	 * @param WP_Screen $current_screen Current screen object.
+	 */
+	public function current_screen( $current_screen ): void {
+		/*
+		 * Backwards compatibility for WCPOS Pro 1.4.2 and below.
+		 * DO NOT USE THIS!
+		 *
+		 * @TODO: Remove in WCPOS 2.0.0.
+		 */
+		$this->screen_handlers['product'] = apply_filters( 'woocommerce_pos_single_product_admin_class', Single_Product::class );
+
+		/**
+		 * Filters the screen handlers for WCPOS admin screens.
+		 *
+		 * @hook woocommerce_pos_admin_screen_handlers
+		 *
+		 * @since 1.4.10
+		 *
+		 * @param array     $handlers       Associative array of screen IDs and their corresponding handlers.
+		 *                                  Handler can be a class name or a callback array.
+		 * @param WP_Screen $current_screen The current WP_Screen object being loaded in the admin.
+		 */
+		$handlers = apply_filters( 'woocommerce_pos_admin_screen_handlers', $this->screen_handlers, $current_screen );
+
+		// Check if the current screen has a handler.
+		if ( isset( $handlers[ $current_screen->id ] ) ) {
+			$handler = $handlers[ $current_screen->id ];
+
+			if ( \is_array( $handler ) &amp;&amp; method_exists( $handler[0], $handler[1] ) ) {
+				\call_user_func( $handler );
+			} elseif ( class_exists( $handler ) ) {
+				new $handler();
+			}
+		}
+	}
+
+	/**
+	 * Handle WooCommerce HPOS orders screen.
+	 */
+	public function handle_wc_hpos_orders_screen(): void {
+		if ( isset( $_GET['action'] ) &amp;&amp; 'edit' === $_GET['action'] ) {
+			new HPOS_Single_Order();
+		} else {
+			new HPOS_List_Orders();
+		}
+	}
+
+	/**
+	 * Handle WooCommerce analytics screen.
+	 */
+	public function handle_wc_analytics_screen(): void {
+		if ( class_exists( '\Automattic\WooCommerce\Admin\PageController' ) ) {
+			$wc_admin_page_controller = PageController::get_instance();
+			if ( $wc_admin_page_controller ) {
+				$wc_admin_current_page    = $wc_admin_page_controller->get_current_page();
+				$id                       = $wc_admin_current_page['id'] ?? null;
+				$parent                   = $wc_admin_current_page['parent'] ?? null;
+
+				if ( 'woocommerce-analytics' === $id || 'woocommerce-analytics' === $parent ) {
+					new Analytics();
+				}
+			}
+		}
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Templates/Frontend.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Templates/Frontend.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * Frontend template.
+ *
+ * @author   Paul Kilmurray &lt;paul@kilbot.com>
+ *
+ * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS\Templates;
+
+use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Template_Router;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\SHORT_NAME;
+use const WCPOS\WooCommercePOS\VERSION;
+
+/**
+ * Frontend class.
+ */
+class Frontend {
+	/**
+	 * Stores user credentials data for use in footer().
+	 *
+	 * @var array
+	 */
+	/** Stores user credentials data for use in footer.
+	 *
+	 * @var array
+	 */
+	private $wp_credentials = array();
+
+	/**
+	 * Render the frontend template.
+	 *
+	 * @return void
+	 */
+	public function get_template(): void {
+		// force ssl.
+		if ( ! is_ssl() &amp;&amp; woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
+			wp_safe_redirect( woocommerce_pos_url() );
+			exit;
+		}
+
+		// check auth.
+		if ( ! is_user_logged_in() ) {
+			add_filter( 'login_url', array( $this, 'login_url' ) );
+			auth_redirect();
+		}
+
+		// check privileges.
+		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
+			// translators: wordpress.
+			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'woocommerce-pos' ) );
+		}
+
+		// disable cache plugins.
+		$this->no_cache();
+
+		// last chance before frontend template is rendered.
+		do_action( 'woocommerce_pos_frontend_template_redirect' );
+
+		/*
+		 * Deprecated action.
+		 *
+		 * @TODO remove in 1.5.0
+		 */
+		if ( has_action( 'woocommerce_pos_template_redirect' ) ) {
+			do_action_deprecated( 'woocommerce_pos_template_redirect', array(), 'Version_1.4.0', 'woocommerce_pos_frontend_template_redirect' );
+		}
+
+		// add head &amp; footer actions.
+		add_action( 'woocommerce_pos_head', array( $this, 'head' ) );
+		add_action( 'woocommerce_pos_footer', array( $this, 'footer' ) );
+
+		// Generate user credentials BEFORE including template to ensure cookies can be set.
+		// The set_web_session_cookie() call in Auth::get_user_data() requires headers not yet sent.
+		$user                 = wp_get_current_user();
+		$auth_service         = Auth::instance();
+		$this->wp_credentials = $auth_service->get_user_data( $user, true );
+
+		include woocommerce_pos_locate_template( 'pos.php' );
+		exit;
+	}
+
+	/**
+	 * Add variable to login url to signify POS login.
+	 *
+	 * @param string $login_url The login URL.
+	 *
+	 * @return mixed
+	 */
+	public function login_url( $login_url ) {
+		return add_query_arg( SHORT_NAME, '1', $login_url );
+	}
+
+	/**
+	 * Output the head scripts.
+	 */
+	public function head(): void {
+	}
+
+	/**
+	 * Output the footer scripts.
+	 */
+	public function footer(): void {
+		/**
+		 * Filters whether the POS is in development mode.
+		 *
+		 * When true, loads the web bundle from localhost instead of CDN.
+		 * Useful for local development of the web application.
+		 *
+		 * @since 1.8.0
+		 *
+		 * @param bool $development Whether development mode is enabled.
+		 *                          Defaults to checking WCPOS_DEVELOPMENT constant,
+		 *                          then $_ENV['DEVELOPMENT'].
+		 *
+		 * @hook woocommerce_pos_development_mode
+		 */
+		$development = apply_filters(
+			'woocommerce_pos_development_mode',
+			( \defined( 'WCPOS_DEVELOPMENT' ) &amp;&amp; WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) &amp;&amp; $_ENV['DEVELOPMENT'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		);
+
+		$user                 = wp_get_current_user();
+		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
+		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
+		$stores               = array_map(
+			function ( $store ) {
+				return $store->get_data();
+			},
+			wcpos_get_stores()
+		);
+
+		$site_uuid = get_option( 'woocommerce_pos_uuid' );
+		if ( ! $site_uuid ) {
+			$site_uuid = Uuid::uuid4()->toString();
+			update_option( 'woocommerce_pos_uuid', $site_uuid );
+		}
+
+		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( ! $user_uuid ) {
+			$user_uuid = Uuid::uuid4()->toString();
+			update_user_meta( $user->ID, '_woocommerce_pos_uuid', $user_uuid );
+		}
+
+		$vars = array(
+			'version'        => VERSION,
+			'manifest'       => $cdn_base_url . 'metadata.json?v=' . VERSION,
+			'homepage'       => woocommerce_pos_url(),
+			'logout_url'     => $this->pos_logout_url(),
+			'site'           => array(
+				'uuid'               => $site_uuid,
+				'url'                => get_option( 'siteurl' ),
+				'name'               => get_option( 'blogname' ),
+				'description'        => get_option( 'blogdescription' ),
+				'home'               => home_url(),
+				'gmt_offset'         => get_option( 'gmt_offset' ),
+				'timezone_string'    => get_option( 'timezone_string' ),
+				'wp_version'         => get_bloginfo( 'version' ),
+				'wc_version'         => WC()->version,
+				'wcpos_version'      => VERSION,
+				'wp_api_url'         => get_rest_url(),
+				'wc_api_url'         => trailingslashit( get_rest_url( null, 'wc/v3' ) ),
+				'wcpos_api_url'      => trailingslashit( get_rest_url( null, 'wcpos/v1' ) ),
+				'wcpos_login_url'    => Template_Router::get_auth_url(),
+				'locale'             => get_locale(),
+			),
+			'wp_credentials' => $this->wp_credentials,
+			'stores'         => $stores,
+		);
+
+		/**
+		 * Filters the javascript variables passed to the POS.
+		 *
+		 * @param array $vars
+		 *
+		 * @returns array $vars
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook woocommerce_pos_inline_vars
+		 */
+		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
+		$initial_props = wp_json_encode( $vars );
+
+		/**
+		 * Add path to worker scripts.
+		 */
+		$idb_worker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
+
+		// getScript helper and initialProps.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
+		echo "&lt;script>
+    function getScript(source, callback) {
+        var script = document.createElement('script');
+        script.async = true;
+        script.onload = script.onreadystatechange = function(_, isAbort) {
+            if (isAbort || !script.readyState || /loaded|complete/.test(script.readyState)) {
+                script.onload = script.onreadystatechange = null;
+                script = undefined;
+                if (!isAbort &amp;&amp; callback) setTimeout(callback, 0);
+            }
+        };
+        script.src = source;
+        document.head.appendChild(script);
+    }
+
+    function loadCSS(source, callback) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = source;
+        link.onload = function() {
+            if (callback) callback();
+        };
+        link.onerror = function() {
+            console.error('Failed to load CSS file:', source);
+        };
+        document.head.appendChild(link);
+    }
+
+    var idbWorker = '{$idb_worker}';
+    var initialProps = {$initial_props};
+    var cdnBaseUrl = '{$cdn_base_url}';
+	var baseUrl = '{$wcpos_base_path}';
+    &lt;/script>" . "\n";
+
+		echo "&lt;script>
+		var request = new Request(initialProps.manifest);
+
+		window.fetch(request)
+				.then(function(response) { return response.json(); })
+				.then(function(data) {
+						var bundle = data.fileMetadata.web.bundle;
+						var bundleUrl = cdnBaseUrl + bundle;
+
+						// Check if CSS file is specified in the manifest
+						if (data.fileMetadata.web.css) {
+								var cssFile = data.fileMetadata.web.css;
+								var cssUrl = cdnBaseUrl + cssFile;
+
+								// Load CSS first
+								loadCSS(cssUrl, function() {
+										console.log('CSS loaded');
+										// Load JavaScript after CSS is loaded
+										getScript(bundleUrl, function() {
+												console.log('JavaScript bundle loaded');
+										});
+								});
+						} else {
+								// If no CSS file, load JavaScript immediately
+								getScript(bundleUrl, function() {
+										console.log('JavaScript bundle loaded');
+								});
+						}
+				})
+				.catch(function(error) {
+						console.error('Error fetching manifest:', error);
+				});
+		&lt;/script>" . "\n";
+	}
+
+	/**
+	 * Get the POS logout URL.
+	 *
+	 * @return string
+	 */
+	private function pos_logout_url() {
+		/**
+		 * Get the login URL, allow other plugins to customise the URL. eg: WPS Hide Login.
+		 */
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook
+		$login_url = apply_filters( 'login_url', site_url( '/wp-login.php' ), 'logout', false );
+
+		$redirect_to  = urlencode( woocommerce_pos_url() );
+		$reauth       = 1;
+		$wcpos        = 1;
+		$logout_nonce = wp_create_nonce( 'log-out' );
+
+		return "{$login_url}?action=logout&amp;_wpnonce={$logout_nonce}&amp;redirect_to={$redirect_to}&amp;reauth={$reauth}&amp;wcpos={$wcpos}";
+	}
+
+
+
+
+	/**
+	 * Disable caching conflicts.
+	 */
+	private function no_cache(): void {
+		// disable W3 Total Cache minify.
+		if ( ! \defined( 'DONOTMINIFY' ) ) {
+			\define( 'DONOTMINIFY', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Third-party constant
+		}
+
+		// disable WP Super Cache.
+		if ( ! \defined( 'DONOTCACHEPAGE' ) ) {
+			\define( 'DONOTCACHEPAGE', 'true' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- Third-party constant
+		}
+
+		// disable Lite Speed Cache.
+		do_action( 'litespeed_control_set_nocache', 'nocache WoCommerce POS web application' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Third-party hook
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
