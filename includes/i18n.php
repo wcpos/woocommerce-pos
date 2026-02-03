@@ -42,12 +42,12 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return $file;
 		}
 
-		// Only handle .l10n.php files
+		// Only handle .l10n.php files.
 		if ( '.l10n.php' !== substr( $file, -9 ) ) {
 			return $file;
 		}
 
-		// If the file already exists, check if it needs updating
+		// If the file already exists, check if it needs updating.
 		if ( file_exists( $file ) ) {
 			$cached_version = get_transient( self::TRANSIENT_KEY );
 			if ( VERSION === $cached_version ) {
@@ -55,7 +55,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			}
 		}
 
-		// Extract locale from filename (e.g., woocommerce-pos-de_DE.l10n.php -> de_DE)
+		// Extract locale from filename (e.g., woocommerce-pos-de_DE.l10n.php -> de_DE).
 		$basename = basename( $file, '.l10n.php' );
 		$locale   = str_replace( 'woocommerce-pos-', '', $basename );
 
@@ -102,13 +102,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return false;
 		}
 
-		// Ensure the directory exists
+		// Ensure the directory exists.
 		$dir = dirname( $file );
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
 		}
 
-		// Use WP_Filesystem for writing
+		// Use WP_Filesystem for writing.
 		global $wp_filesystem;
 		if ( empty( $wp_filesystem ) ) {
 			require_once ABSPATH . '/wp-admin/includes/file.php';
