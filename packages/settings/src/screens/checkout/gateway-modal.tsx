@@ -57,8 +57,8 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				<Trans
 					i18nKey="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the <1>WooCommerce Settings</1>."
 					components={[
-						,
-						<a href="admin.php?page=wc-settings&amp;tab=checkout" target="_blank" />,
+						null,
+						<a key="wc-settings" href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />,
 					]}
 				/>
 			</Notice>
