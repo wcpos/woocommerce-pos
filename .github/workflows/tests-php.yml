@@ -152,7 +152,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -313,7 +312,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -429,7 +427,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'pnpm'
 
       - name: Get Composer cache directory
         id: composer-cache
