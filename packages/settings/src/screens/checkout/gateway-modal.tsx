@@ -3,7 +3,7 @@ import * as React from 'react';
 import { Button, Modal } from '@wordpress/components';
 
 import Notice from '../../components/notice';
-import { t, T } from '../../translations';
+import { t, Trans } from '../../translations';
 
 interface GatewayModalProps {
 	gateway: import('./gateways').GatewayProps;
@@ -54,19 +54,17 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			className="wcpos:max-w-md"
 		>
 			<Notice status="info" isDismissible={false}>
-				<T
-					_str="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the {link}."
-					_tags="wp-admin-settings"
-					link={
-						<a href="admin.php?page=wc-settings&amp;tab=checkout" target="_blank">
-							<T _str="WooCommerce Settings" _tags="wp-admin-settings" />
-						</a>
-					}
+				<Trans
+					i18nKey="This will change the settings for the POS only. If you would like to change gateway settings for online and POS, please visit the <1>WooCommerce Settings</1>."
+					components={[
+						null,
+						<a key="wc-settings" href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />,
+					]}
 				/>
 			</Notice>
 			<div className="wcpos:py-2">
 				<label htmlFor="title" className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm">
-					{t('Title', { _tags: 'wp-admin-settings' })}
+					{t('Title')}
 				</label>
 				<input
 					// @ts-ignore
@@ -81,7 +79,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			</div>
 			<div className="wcpos:py-2">
 				<label htmlFor="description" className="wcpos:block mb-1 wcpos:font-medium wcpos:text-sm">
-					{t('Description', { _tags: 'wp-admin-settings' })}
+					{t('Description')}
 				</label>
 				<textarea
 					id="description"
@@ -92,9 +90,9 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				/>
 			</div>
 			<div className="wcpos:text-right wcpos:pt-4">
-				<Button onClick={closeModal}>{t('Cancel', { _tags: 'wp-admin-settings' })}</Button>
+				<Button onClick={closeModal}>{t('Cancel')}</Button>
 				<Button variant="primary" onClick={handleSave}>
-					{t('Save', { _tags: 'wp-admin-settings' })}
+					{t('Save')}
 				</Button>
 			</div>
 		</Modal>

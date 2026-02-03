@@ -93,13 +93,9 @@ const Gateways = () => {
 			) : (
 				<div className="wcpos:pb-5">
 					<Notice status="info" isDismissible={false}>
-						{t('To enable all WooCommerce gateways please enable the Pro plugin.', {
-							_tags: 'wp-admin-settings',
-						})}{' '}
+						{t('To enable all WooCommerce gateways please enable the Pro plugin.')}{' '}
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WCPOS Pro', {
-								_tags: 'wp-admin-settings',
-							})}
+							{t('Upgrade to WCPOS Pro')}
 						</a>
 						.
 					</Notice>
@@ -115,25 +111,25 @@ const Gateways = () => {
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 								>
-									{t('Default', { _tags: 'wp-admin-settings' })}
+									{t('Default')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 								>
-									{t('Gateway', { _tags: 'wp-admin-settings' })}
+									{t('Gateway')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 								>
-									{t('Gateway ID', { _tags: 'wp-admin-settings' })}
+									{t('Gateway ID')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 								>
-									{t('Enabled', { _tags: 'wp-admin-settings' })}
+									{t('Enabled')}
 								</th>
 								<th scope="col"></th>
 							</tr>
@@ -205,7 +201,7 @@ const Gateways = () => {
 															}}
 															disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 														>
-															{t('Settings', { _tags: 'wp-admin-settings' })}
+															{t('Settings')}
 														</Button>
 													</td>
 												</tr>

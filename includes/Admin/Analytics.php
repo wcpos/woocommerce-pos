@@ -38,6 +38,13 @@ class Analytics {
 		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( $_ENV['DEVELOPMENT'] );
 		$dir = $is_development ? 'build' : 'assets';
 
+		// Inject translation version for i18next.
+		wp_add_inline_script(
+			'wp-hooks',
+			'window.wcpos = window.wcpos || {}; window.wcpos.translationVersion = "' . esc_js( VERSION ) . '";',
+			'before'
+		);
+
 		wp_enqueue_script(
 			PLUGIN_NAME . '-analytics',
 			PLUGIN_URL . $dir . '/js/analytics.js',

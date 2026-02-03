@@ -7,7 +7,7 @@ import { get, throttle, isString } from 'lodash';
 import Label from '../../components/label';
 import useNotices from '../../hooks/use-notices';
 import useSettingsApi from '../../hooks/use-settings-api';
-import { t, T } from '../../translations';
+import { t, Trans } from '../../translations';
 
 export interface LicenseSettingsProps {
 	key: string;
@@ -92,17 +92,12 @@ const License = () => {
 				<div className="wcpos:col-span-2">
 					<p>
 						{t(
-							'If you would like to support the development of WCPOS, please consider purchasing a Pro license.',
-							{
-								_tags: 'wp-admin-settings',
-							}
+							'If you would like to support the development of WCPOS, please consider purchasing a Pro license.'
 						)}
 					</p>
 					<p>
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WCPOS Pro', {
-								_tags: 'wp-admin-settings',
-							})}
+							{t('Upgrade to WCPOS Pro')}
 						</a>
 					</p>
 				</div>
@@ -115,18 +110,16 @@ const License = () => {
 			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
 				<div className="wcpos:sm:text-right wcpos:text-8xl">🎉</div>
 				<div className="wcpos:col-span-2">
-					<h3>{t('Thank You!', { _tags: 'wp-admin-settings' })}</h3>
+					<h3>{t('Thank You!')}</h3>
 					<p>
-						<T
-							_str="License {number} has been activated."
-							_tags="wp-admin-settings"
-							number={<code>{truncate(isString(data?.key) ? data?.key : '')}</code>}
+						<Trans
+							i18nKey="License <1>{number}</1> has been activated."
+							components={[null, <code key="license" />]}
+							values={{ number: truncate(isString(data?.key) ? data?.key : '') }}
 						/>
 					</p>
 					<p>
-						{t('Your support helps fund the ongoing development of WCPOS.', {
-							_tags: 'wp-admin-settings',
-						})}
+						{t('Your support helps fund the ongoing development of WCPOS.')}
 					</p>
 					<Button variant="primary" onClick={() => handleActivation(true)}>
 						Deactivate
@@ -139,7 +132,7 @@ const License = () => {
 	return (
 		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 			<div className="wcpos:flex wcpos:sm:justify-end">
-				<Label>{t('License Key', { _tags: 'wp-admin-settings' })}</Label>
+				<Label>{t('License Key')}</Label>
 			</div>
 			<div>
 				<input
@@ -152,7 +145,7 @@ const License = () => {
 			</div>
 			<div>
 				<Button variant="primary" disabled={!key} onClick={() => handleActivation()}>
-					{t('Activate', { _tags: 'wp-admin-settings' })}
+					{t('Activate')}
 				</Button>
 			</div>
 		</div>

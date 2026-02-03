@@ -10,7 +10,7 @@ const Header = () => {
 				<PosIcon />
 			</div>
 			<h2 className="wcpos:text-2xl wcpos:font-bold wcpos:text-gray-900 wcpos:sm:text-3xl wcpos:sm:truncate">
-				{t('Settings', { _tags: 'wp-admin-settings' })}
+				{t('Settings')}
 			</h2>
 		</header>
 	);
