@@ -110,6 +110,11 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			WP_Filesystem();
 		}
 
+		// Verify WP_Filesystem initialized successfully.
+		if ( ! $wp_filesystem || ! is_object( $wp_filesystem ) ) {
+			return false;
+		}
+
 		return $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
 	}
 }
