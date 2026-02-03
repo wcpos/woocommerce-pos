@@ -57,7 +57,7 @@ const i18nPromise = i18n
 					defaultVersion: translationVersion,
 				},
 				{
-					loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@v${translationVersion}/translations/js/{{lng}}/{{ns}}.json`,
+					loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@v${translationVersion}/translations/js/{{lng}}/woocommerce-pos/{{ns}}.json`,
 				},
 			],
 		},
