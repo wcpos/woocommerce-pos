@@ -35,7 +35,8 @@ const PACKAGE_NS_MAP = {
 };
 
 function getDefaultNS(filePath) {
-  const relative = path.relative(ROOT_PATH, filePath);
+  // Normalize path separators for Windows compatibility.
+  const relative = path.relative(ROOT_PATH, filePath).split(path.sep).join('/');
   for (const [prefix, ns] of Object.entries(PACKAGE_NS_MAP)) {
     if (relative.startsWith(prefix)) {
       return ns;

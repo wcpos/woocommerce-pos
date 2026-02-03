@@ -1,5 +1,7 @@
 import i18n from 'i18next';
+import ChainedBackend from 'i18next-chained-backend';
 import HttpBackend from 'i18next-http-backend';
+import LocalStorageBackend from 'i18next-localstorage-backend';
 import { initReactI18next, Trans } from 'react-i18next';
 
 import localesData from './locales.json';
@@ -32,7 +34,7 @@ declare global {
 const translationVersion = window.wcpos?.translationVersion || '0.1.0';
 
 const i18nPromise = i18n
-	.use(HttpBackend)
+	.use(ChainedBackend)
 	.use(initReactI18next)
 	.init({
 		lng: locale,
@@ -47,7 +49,17 @@ const i18nPromise = i18n
 			suffix: '}',
 		},
 		backend: {
-			loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@v${translationVersion}/translations/js/{{lng}}/{{ns}}.json`,
+			backends: [LocalStorageBackend, HttpBackend],
+			backendOptions: [
+				{
+					prefix: 'wcpos_i18n_',
+					expirationTime: 7 * 24 * 60 * 60 * 1000, // 7 days
+					defaultVersion: translationVersion,
+				},
+				{
+					loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@v${translationVersion}/translations/js/{{lng}}/{{ns}}.json`,
+				},
+			],
 		},
 	});
 

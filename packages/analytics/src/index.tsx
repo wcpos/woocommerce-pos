@@ -17,7 +17,7 @@ const WrappedReport = ({ Component, ...props }) => {
 		<>
 			<Notice isDismissible={false} className="woocommerce-pos-upgrade-notice">
 				{t('Do you want analytics for your POS orders?')}{' '}
-				<a target="_blank" href="https://wcpos.com/pro">
+				<a target="_blank" rel="noopener noreferrer" href="https://wcpos.com/pro">
 					{t('Upgrade to WCPOS Pro')}
 				</a>
 				.
