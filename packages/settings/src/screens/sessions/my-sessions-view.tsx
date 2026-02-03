@@ -61,13 +61,13 @@ const MySessionsView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Session terminated successfully', { _tags: 'wp-admin-settings' }),
+				message: t('Session terminated successfully'),
 			});
 		},
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message: error?.message || t('Failed to terminate session', { _tags: 'wp-admin-settings' }),
+				message: error?.message || t('Failed to terminate session'),
 			});
 		},
 	});
@@ -97,7 +97,7 @@ const MySessionsView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Sessions terminated successfully', { _tags: 'wp-admin-settings' }),
+				message: t('Sessions terminated successfully'),
 			});
 		},
 		onError: (error: any) => {
@@ -105,7 +105,7 @@ const MySessionsView: React.FC = () => {
 				type: 'error',
 				message:
 					error?.message ||
-					t('Failed to terminate sessions', { _tags: 'wp-admin-settings' }),
+					t('Failed to terminate sessions'),
 			});
 		},
 	});
@@ -113,7 +113,7 @@ const MySessionsView: React.FC = () => {
 	const handleDeleteSession = (userId: number, jti: string) => {
 		if (
 			confirm(
-				t('Are you sure you want to terminate this session?', { _tags: 'wp-admin-settings' })
+				t('Are you sure you want to terminate this session?')
 			)
 		) {
 			deleteSessionMutation.mutate({ userId, jti });
@@ -122,12 +122,8 @@ const MySessionsView: React.FC = () => {
 
 	const handleDeleteAllSessions = (userId: number, exceptCurrent: boolean = false) => {
 		const message = exceptCurrent
-			? t('Are you sure you want to logout from all other devices?', {
-					_tags: 'wp-admin-settings',
-			  })
-			: t('Are you sure you want to logout from all devices?', {
-					_tags: 'wp-admin-settings',
-			  });
+			? t('Are you sure you want to logout from all other devices?')
+			: t('Are you sure you want to logout from all devices?');
 
 		if (confirm(message)) {
 			deleteAllSessionsMutation.mutate({ userId, exceptCurrent });
@@ -138,7 +134,7 @@ const MySessionsView: React.FC = () => {
 		<div>
 			<div className="wcpos:flex wcpos:justify-between wcpos:items-center wcpos:mb-3">
 				<h2 className="wcpos:text-base wcpos:font-medium">
-					{t('Active Sessions', { _tags: 'wp-admin-settings' })} (
+					{t('Active Sessions')} (
 					{mySessions?.sessions?.length || 0})
 				</h2>
 				{mySessions?.sessions && mySessions.sessions.length > 1 && (
@@ -149,7 +145,7 @@ const MySessionsView: React.FC = () => {
 						onClick={() => handleDeleteAllSessions(mySessions.user_id, true)}
 						disabled={deleteAllSessionsMutation.isPending}
 					>
-						{t('Logout Other Devices', { _tags: 'wp-admin-settings' })}
+						{t('Logout Other Devices')}
 					</Button>
 				)}
 			</div>
@@ -167,7 +163,7 @@ const MySessionsView: React.FC = () => {
 				</div>
 			) : (
 				<Notice status="info">
-					{t('No active sessions found', { _tags: 'wp-admin-settings' })}
+					{t('No active sessions found')}
 				</Notice>
 			)}
 		</div>

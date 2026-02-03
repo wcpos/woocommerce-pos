@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { Notice } from '@wordpress/components';
 
-import { t, txPromise } from './translations';
+import { t, i18nPromise } from './translations';
 
 const globalHooks = window.wp && window.wp.hooks;
 
@@ -10,15 +10,15 @@ const WrappedReport = ({ Component, ...props }) => {
 	const [isReady, setIsReady] = React.useState(false);
 
 	React.useEffect(() => {
-		txPromise.then(() => setIsReady(true));
+		i18nPromise.then(() => setIsReady(true));
 	}, []);
 
 	return (
 		<>
 			<Notice isDismissible={false} className="woocommerce-pos-upgrade-notice">
-				{t('Do you want analytics for your POS orders?', { _tags: 'wp-admin-analytics' })}{' '}
-				<a target="_blank" href="https://wcpos.com/pro">
-					{t('Upgrade to WCPOS Pro', { _tags: 'wp-admin-analytics' })}
+				{t('Do you want analytics for your POS orders?')}{' '}
+				<a target="_blank" rel="noopener noreferrer" href="https://wcpos.com/pro">
+					{t('Upgrade to WCPOS Pro')}
 				</a>
 				.
 			</Notice>

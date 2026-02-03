@@ -29,11 +29,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Force POS to send server requests over HTTPS (recommended)', {
-								_tags: 'wp-admin-settings',
-							})}
+							tip={t('Force POS to send server requests over HTTPS (recommended)')}
 						>
-							{t('Force SSL', { _tags: 'wp-admin-settings' })}
+							{t('Force SSL')}
 						</Label>
 					}
 					checked={!!data?.force_ssl}
@@ -47,11 +45,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Adds online and POS visibility settings to product admin', {
-								_tags: 'wp-admin-settings',
-							})}
+							tip={t('Adds online and POS visibility settings to product admin')}
 						>
-							{t('Enable POS only products', { _tags: 'wp-admin-settings' })}
+							{t('Enable POS only products')}
 						</Label>
 					}
 					checked={!!data?.pos_only_products}
@@ -65,11 +61,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Allows items to have decimal values in the quantity field, eg: 0.25', {
-								_tags: 'wp-admin-settings',
-							})}
+							tip={t('Allows items to have decimal values in the quantity field, eg: 0.25')}
 						>
-							{t('Enable decimal quantities', { _tags: 'wp-admin-settings' })}
+							{t('Enable decimal quantities')}
 						</Label>
 					}
 					checked={!!data?.decimal_qty}
@@ -83,9 +77,7 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label>
-							{t('Automatically generate username from customer email', {
-								_tags: 'wp-admin-settings',
-							})}
+							{t('Automatically generate username from customer email')}
 						</Label>
 					}
 					checked={!!data?.generate_username}
@@ -96,9 +88,9 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
-					tip={t('The default customer for POS orders, eg: Guest', { _tags: 'wp-admin-settings' })}
+					tip={t('The default customer for POS orders, eg: Guest')}
 				>
-					{t('Default POS customer', { _tags: 'wp-admin-settings' })}
+					{t('Default POS customer')}
 				</Label>
 			</div>
 			<div>
@@ -114,7 +106,7 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:items-center">
 				<CheckboxControl
-					label={t('Use cashier account', { _tags: 'wp-admin-settings' })}
+					label={t('Use cashier account')}
 					checked={!!data?.default_customer_is_cashier}
 					onChange={(default_customer_is_cashier) => {
 						mutate({ default_customer_is_cashier });
@@ -123,11 +115,9 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
-					tip={t('Product meta field to be used as barcode, eg: _sku or _barcode', {
-						_tags: 'wp-admin-settings',
-					})}
+					tip={t('Product meta field to be used as barcode, eg: _sku or _barcode')}
 				>
-					{t('Barcode Field', { _tags: 'wp-admin-settings' })}
+					{t('Barcode Field')}
 				</Label>
 			</div>
 			<div>

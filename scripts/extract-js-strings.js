@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Extract translatable strings from WCPOS settings package.
+ * Extract translatable strings from WCPOS packages.
  *
- * Parses t('...', { _tags: '...' }) calls and groups them by tag.
- * Outputs one JSON file per tag into .translations/.
+ * Extracts strings from:
+ * - t('...') and t('...', { ns: '...' }) calls
+ * - <Trans i18nKey="..." ...> components
+ *
+ * Groups them by namespace (determined by package directory or explicit ns option).
+ * Outputs one JSON file per namespace into .translations/.
  *
  * Usage:
  *   node scripts/extract-js-strings.js [path-to-root]
@@ -17,28 +21,56 @@ const { glob } = require('glob');
 const ROOT_PATH = process.argv[2] || path.resolve(__dirname, '..');
 const OUTPUT_DIR = path.resolve(ROOT_PATH, '.translations');
 
+// Match t('string') or t("string") with optional second argument
 const T_CALL_REGEX = /\bt\(\s*(['"`])((?:(?!\1)[^\\]|\\.)*?)\1\s*(?:,\s*\{([^}]*)\})?\s*\)/g;
-const TAGS_REGEX = /_tags:\s*['"`]([^'"`]+)['"`]/;
+// Match <Trans i18nKey="string"
+const TRANS_REGEX = /<Trans\s+[^>]*i18nKey\s*=\s*(['"`])((?:(?!\1)[^\\]|\\.)*?)\1/g;
+const NS_REGEX = /(?:_tags|ns):\s*['"`]([^'"`]+)['"`]/;
 const CONTEXT_REGEX = /_context:\s*['"`]([^'"`]+)['"`]/;
+
+// Map package directories to default namespaces
+const PACKAGE_NS_MAP = {
+  'packages/settings': 'wp-admin-settings',
+  'packages/analytics': 'wp-admin-analytics',
+};
+
+function getDefaultNS(filePath) {
+  // Normalize path separators for Windows compatibility.
+  const relative = path.relative(ROOT_PATH, filePath).split(path.sep).join('/');
+  for (const [prefix, ns] of Object.entries(PACKAGE_NS_MAP)) {
+    if (relative.startsWith(prefix)) {
+      return ns;
+    }
+  }
+  return null;
+}
 
 async function extractFromFile(filePath) {
   const content = await fs.readFile(filePath, 'utf8');
   const strings = [];
+  const defaultNS = getDefaultNS(filePath);
   let match;
 
+  // Extract t() calls
   T_CALL_REGEX.lastIndex = 0;
   while ((match = T_CALL_REGEX.exec(content)) !== null) {
+    const quote = match[1];
     const sourceString = match[2];
     const options = match[3] || '';
 
-    const tagsMatch = options.match(TAGS_REGEX);
+    if (quote === '`' && sourceString.includes('${')) {
+      console.warn(`  Warning: interpolated template literal in ${filePath}: "${sourceString.substring(0, 50)}..."`);
+      continue;
+    }
+
+    const nsMatch = options.match(NS_REGEX);
     const contextMatch = options.match(CONTEXT_REGEX);
 
-    const tag = tagsMatch ? tagsMatch[1].trim() : null;
+    const tag = nsMatch ? nsMatch[1].trim() : defaultNS;
     const context = contextMatch ? contextMatch[1] : undefined;
 
     if (!tag) {
-      console.warn(`  Warning: t() call without _tags in ${filePath}: "${sourceString.substring(0, 50)}..."`);
+      console.warn(`  Warning: t() call without ns in ${filePath}: "${sourceString.substring(0, 50)}..."`);
       continue;
     }
 
@@ -46,6 +78,24 @@ async function extractFromFile(filePath) {
       string: sourceString,
       tag,
       context,
+      file: path.relative(ROOT_PATH, filePath),
+    });
+  }
+
+  // Extract <Trans i18nKey="..."> components
+  TRANS_REGEX.lastIndex = 0;
+  while ((match = TRANS_REGEX.exec(content)) !== null) {
+    const sourceString = match[2];
+    const tag = defaultNS;
+
+    if (!tag) {
+      console.warn(`  Warning: <Trans> without determinable ns in ${filePath}: "${sourceString.substring(0, 50)}..."`);
+      continue;
+    }
+
+    strings.push({
+      string: sourceString,
+      tag,
       file: path.relative(ROOT_PATH, filePath),
     });
   }

@@ -68,13 +68,13 @@ const AllUsersView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Session terminated successfully', { _tags: 'wp-admin-settings' }),
+				message: t('Session terminated successfully'),
 			});
 		},
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message: error?.message || t('Failed to terminate session', { _tags: 'wp-admin-settings' }),
+				message: error?.message || t('Failed to terminate session'),
 			});
 		},
 	});
@@ -104,7 +104,7 @@ const AllUsersView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Sessions terminated successfully', { _tags: 'wp-admin-settings' }),
+				message: t('Sessions terminated successfully'),
 			});
 		},
 		onError: (error: any) => {
@@ -112,7 +112,7 @@ const AllUsersView: React.FC = () => {
 				type: 'error',
 				message:
 					error?.message ||
-					t('Failed to terminate sessions', { _tags: 'wp-admin-settings' }),
+					t('Failed to terminate sessions'),
 			});
 		},
 	});
@@ -120,7 +120,7 @@ const AllUsersView: React.FC = () => {
 	const handleDeleteSession = (userId: number, jti: string) => {
 		if (
 			confirm(
-				t('Are you sure you want to terminate this session?', { _tags: 'wp-admin-settings' })
+				t('Are you sure you want to terminate this session?')
 			)
 		) {
 			deleteSessionMutation.mutate({ userId, jti });
@@ -129,12 +129,8 @@ const AllUsersView: React.FC = () => {
 
 	const handleDeleteAllSessions = (userId: number, exceptCurrent: boolean = false) => {
 		const message = exceptCurrent
-			? t('Are you sure you want to logout from all other devices?', {
-					_tags: 'wp-admin-settings',
-			  })
-			: t('Are you sure you want to logout from all devices?', {
-					_tags: 'wp-admin-settings',
-			  });
+			? t('Are you sure you want to logout from all other devices?')
+			: t('Are you sure you want to logout from all devices?');
 
 		if (confirm(message)) {
 			deleteAllSessionsMutation.mutate({ userId, exceptCurrent });
