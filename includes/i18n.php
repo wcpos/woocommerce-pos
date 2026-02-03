@@ -2,8 +2,8 @@
 /**
  * Define the internationalization functionality.
  *
- * Loads and defines the internationalization files for this plugin
- * so that its ready for translation.
+ * Loads translations from jsDelivr CDN, downloading on-demand to the plugin's
+ * languages folder. This bypasses WordPress.org translations entirely.
  *
  * @author    Paul Kilmurray <paul@kilbot.com>
  *
@@ -22,53 +22,48 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	private const TRANSIENT_KEY = 'wcpos_translation_version';
 
 	/**
-	 * Load the plugin text domain for translation.
+	 * Load translations from jsDelivr.
 	 */
-	public function construct() {
-		load_plugin_textdomain( 'woocommerce-pos', false, PLUGIN_PATH . '/languages/' );
-		add_filter( 'load_translation_file', array( $this, 'load_translation_file' ), 10, 2 );
+	public function __construct() {
+		$this->load_translations();
 	}
 
 	/**
-	 * Intercept translation file loading to provide on-demand downloads from jsDelivr.
-	 *
-	 * @param string $file   Path to the translation file.
-	 * @param string $domain The text domain.
-	 *
-	 * @return string
+	 * Load translations directly from plugin's languages folder.
+	 * Downloads from jsDelivr if not cached or version changed.
 	 */
-	public function load_translation_file( string $file, string $domain ): string {
-		if ( 'woocommerce-pos' !== $domain ) {
-			return $file;
+	private function load_translations(): void {
+		$locale = determine_locale();
+
+		// Skip English.
+		if ( 'en_US' === $locale || empty( $locale ) ) {
+			return;
 		}
 
-		// Only handle .l10n.php files.
-		if ( '.l10n.php' !== substr( $file, -9 ) ) {
-			return $file;
-		}
+		$file = PLUGIN_PATH . 'languages/woocommerce-pos-' . $locale . '.l10n.php';
 
-		// If the file already exists, check if it needs updating.
-		if ( file_exists( $file ) ) {
-			$cached_version = get_transient( self::TRANSIENT_KEY );
-			if ( VERSION === $cached_version ) {
-				return $file;
+		// Check if we need to download/update.
+		$needs_download = false;
+		if ( ! file_exists( $file ) ) {
+			$needs_download = true;
+		} else {
+			$cached_version = get_transient( self::TRANSIENT_KEY . '_' . $locale );
+			if ( VERSION !== $cached_version ) {
+				$needs_download = true;
 			}
 		}
 
-		// Extract locale from filename (e.g., woocommerce-pos-de_DE.l10n.php -> de_DE).
-		$basename = basename( $file, '.l10n.php' );
-		$locale   = str_replace( 'woocommerce-pos-', '', $basename );
-
-		if ( empty( $locale ) || 'en_US' === $locale ) {
-			return $file;
+		if ( $needs_download ) {
+			$downloaded = $this->download_translation( $locale, $file );
+			if ( $downloaded ) {
+				set_transient( self::TRANSIENT_KEY . '_' . $locale, VERSION, WEEK_IN_SECONDS );
+			}
 		}
 
-		$downloaded = $this->download_translation( $locale, $file );
-		if ( $downloaded ) {
-			set_transient( self::TRANSIENT_KEY, VERSION, WEEK_IN_SECONDS );
+		// Load the translation file if it exists.
+		if ( file_exists( $file ) ) {
+			load_textdomain( 'woocommerce-pos', $file );
 		}
-
-		return $file;
 	}
 
 	/**
