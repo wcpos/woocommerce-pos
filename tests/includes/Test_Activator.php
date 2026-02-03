@@ -7,7 +7,6 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
-use Mockery;
 use ReflectionClass;
 use WP_UnitTestCase;
 use WCPOS\WooCommercePOS\Activator;
@@ -19,18 +18,12 @@ use WCPOS\WooCommercePOS\Activator;
  */
 class Test_Activator extends WP_UnitTestCase {
 
-	/**
-	 * @var Activator
-	 */
-	private $activator;
-
 	public function setUp(): void {
 		parent::setUp();
 	}
 
 	public function tearDown(): void {
 		parent::tearDown();
-		Mockery::close();
 	}
 
 	/**
@@ -64,9 +57,8 @@ class Test_Activator extends WP_UnitTestCase {
 		// Use reflection to access the private version_check method.
 		$reflection = new ReflectionClass( $activator );
 
-		// Mock get_db_version to return an old version to trigger upgrade path.
-		$old_version = '1.0.0';
-		update_option( 'woocommerce_pos_db_version', $old_version );
+		// Set an old version to trigger the upgrade path.
+		update_option( 'woocommerce_pos_db_version', '1.0.0' );
 
 		// Call version_check which should defer db_upgrade to woocommerce_init.
 		$version_check = $reflection->getMethod( 'version_check' );
@@ -89,17 +81,6 @@ class Test_Activator extends WP_UnitTestCase {
 	 * @covers ::version_check
 	 */
 	public function test_db_upgrade_does_not_run_immediately(): void {
-		// Track if any update files are included.
-		$update_ran = false;
-
-		// Create a test update file that sets a flag when run.
-		$test_version    = '99.99.99';
-		$test_update_dir = WCPOS_PLUGIN_PATH . 'includes/updates/';
-
-		// We can't easily test this without modifying the actual update array,
-		// but we CAN verify that after version_check, no posts have been deleted
-		// (which would indicate the migration ran inline).
-
 		// Create a test template post.
 		$post_id = wp_insert_post(
 			array(
@@ -160,12 +141,7 @@ class Test_Activator extends WP_UnitTestCase {
 		$version_check->setAccessible( true );
 		$version_check->invoke( $activator );
 
-		// No callback should be added to woocommerce_init for db_upgrade.
-		// Note: There might be other hooks, so we check the specific callback isn't there.
-		// Since we're using an anonymous function, we can only check if ANY action exists.
-		// For a thorough test, we'd need to refactor to use a named method.
-
-		// For now, we verify the priority count is 0 (no hooks added).
+		// Verify no hooks were added to woocommerce_init.
 		global $wp_filter;
 		$hook_count = isset( $wp_filter['woocommerce_init'] ) ? count( $wp_filter['woocommerce_init']->callbacks ) : 0;
 
