@@ -15,16 +15,54 @@ namespace WCPOS\WooCommercePOS;
 
 /**
  * I18n class.
+ *
+ * Can be extended by pro plugin with different configuration.
  */
 class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapital, Generic.Classes.OpeningBraceSameLine.ContentAfterBrace
 
-	private const CDN_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@v%s/translations/php/%s/woocommerce-pos-%s.l10n.php';
-	private const TRANSIENT_KEY = 'wcpos_translation_version';
+	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@v%s/translations/php/%s/%s-%s.l10n.php';
+
+	/**
+	 * Text domain for the plugin.
+	 *
+	 * @var string
+	 */
+	protected string $text_domain = 'woocommerce-pos';
+
+	/**
+	 * Plugin version.
+	 *
+	 * @var string
+	 */
+	protected string $version;
+
+	/**
+	 * Path to the plugin's languages folder.
+	 *
+	 * @var string
+	 */
+	protected string $languages_path;
+
+	/**
+	 * Transient key prefix for caching.
+	 *
+	 * @var string
+	 */
+	protected string $transient_key = 'wcpos_i18n_version';
 
 	/**
 	 * Load translations from jsDelivr.
+	 *
+	 * @param string|null $text_domain    Optional text domain override.
+	 * @param string|null $version        Optional version override.
+	 * @param string|null $languages_path Optional languages path override.
 	 */
-	public function __construct() {
+	public function __construct( ?string $text_domain = null, ?string $version = null, ?string $languages_path = null ) {
+		$this->text_domain    = $text_domain ?? 'woocommerce-pos';
+		$this->version        = $version ?? VERSION;
+		$this->languages_path = $languages_path ?? PLUGIN_PATH . 'languages/';
+		$this->transient_key  = 'wcpos_i18n_' . $this->text_domain;
+
 		$this->load_translations();
 	}
 
@@ -32,7 +70,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * Load translations directly from plugin's languages folder.
 	 * Downloads from jsDelivr if not cached or version changed.
 	 */
-	private function load_translations(): void {
+	protected function load_translations(): void {
 		$locale = determine_locale();
 
 		// Skip English.
@@ -40,15 +78,15 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return;
 		}
 
-		$file = PLUGIN_PATH . 'languages/woocommerce-pos-' . $locale . '.l10n.php';
+		$file = $this->languages_path . $this->text_domain . '-' . $locale . '.l10n.php';
 
 		// Check if we need to download/update.
 		$needs_download = false;
 		if ( ! file_exists( $file ) ) {
 			$needs_download = true;
 		} else {
-			$cached_version = get_transient( self::TRANSIENT_KEY . '_' . $locale );
-			if ( VERSION !== $cached_version ) {
+			$cached_version = get_transient( $this->transient_key . '_' . $locale );
+			if ( $this->version !== $cached_version ) {
 				$needs_download = true;
 			}
 		}
@@ -56,13 +94,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		if ( $needs_download ) {
 			$downloaded = $this->download_translation( $locale, $file );
 			if ( $downloaded ) {
-				set_transient( self::TRANSIENT_KEY . '_' . $locale, VERSION, WEEK_IN_SECONDS );
+				set_transient( $this->transient_key . '_' . $locale, $this->version, WEEK_IN_SECONDS );
 			}
 		}
 
 		// Load the translation file if it exists.
 		if ( file_exists( $file ) ) {
-			load_textdomain( 'woocommerce-pos', $file );
+			load_textdomain( $this->text_domain, $file );
 		}
 	}
 
@@ -74,8 +112,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 *
 	 * @return bool Whether the download was successful.
 	 */
-	private function download_translation( string $locale, string $file ): bool {
-		$url = sprintf( self::CDN_URL, VERSION, $locale, $locale );
+	protected function download_translation( string $locale, string $file ): bool {
+		$url = sprintf( self::CDN_BASE_URL, $this->version, $locale, $this->text_domain, $locale );
 
 		$response = wp_remote_get(
 			$url,
