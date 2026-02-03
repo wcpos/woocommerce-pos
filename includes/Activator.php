@@ -184,7 +184,15 @@ class Activator {
 		$old = Services\Settings::get_db_version();
 		if ( version_compare( $old, VERSION, '<' ) ) {
 			Services\Settings::bump_versions();
-			$this->db_upgrade( $old, VERSION );
+			// Defer db_upgrade to woocommerce_init when WC is fully loaded.
+			// This prevents conflicts with plugins like WC Subscriptions that hook
+			// into before_delete_post and assume WC()->order_factory is available.
+			add_action(
+				'woocommerce_init',
+				function () use ( $old ) {
+					$this->db_upgrade( $old, VERSION );
+				}
+			);
 		}
 	}
 
