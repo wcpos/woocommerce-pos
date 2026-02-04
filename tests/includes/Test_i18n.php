@@ -122,7 +122,7 @@ class Test_i18n extends WC_Unit_Test_Case {
 
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
-		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@v1.8.7/translations/php/de_DE/woocommerce-pos-de_DE.l10n.php';
+		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@1.8.7/translations/php/de_DE/woocommerce-pos-de_DE.l10n.php';
 		$this->assertEquals( $expected_url, $this->http_requests[0]['url'] );
 	}
 
@@ -328,7 +328,7 @@ class Test_i18n extends WC_Unit_Test_Case {
 
 		$i18n = new i18n( 'woocommerce-pos-pro', '2.0.0', $this->temp_lang_dir );
 
-		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@v2.0.0/translations/php/de_DE/woocommerce-pos-pro-de_DE.l10n.php';
+		$expected_url = 'https://cdn.jsdelivr.net/gh/wcpos/translations@2.0.0/translations/php/de_DE/woocommerce-pos-pro-de_DE.l10n.php';
 		$this->assertEquals( $expected_url, $this->http_requests[0]['url'] );
 	}
 

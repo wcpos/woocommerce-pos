@@ -1,0 +1,34 @@
+name: Update Translation Version
+
+on:
+  repository_dispatch:
+    types: [translation-release]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update translation version
+        run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          # Validate CalVer format (YYYY.M.N)
+          if ! [[ "$VERSION" =~ ^[0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+          echo "Updating translation version to $VERSION"
+          sed -i "s/TRANSLATION_VERSION', '[^']*'/TRANSLATION_VERSION', '${VERSION}'/" woocommerce-pos.php
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add woocommerce-pos.php
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update translation version to ${{ github.event.client_payload.version }}"
+            git push origin HEAD
+          fi

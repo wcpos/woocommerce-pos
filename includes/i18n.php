@@ -13,6 +13,9 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
+
 /**
  * I18n class.
  *
@@ -20,7 +23,7 @@ namespace WCPOS\WooCommercePOS;
  */
 class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapital, Generic.Classes.OpeningBraceSameLine.ContentAfterBrace
 
-	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@v%s/translations/php/%s/%s-%s.l10n.php';
+	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@%s/translations/php/%s/%s-%s.l10n.php';
 
 	/**
 	 * Text domain for the plugin.
@@ -59,7 +62,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 */
 	public function __construct( ?string $text_domain = null, ?string $version = null, ?string $languages_path = null ) {
 		$this->text_domain    = $text_domain ?? 'woocommerce-pos';
-		$this->version        = $version ?? VERSION;
+		$this->version        = $version ?? TRANSLATION_VERSION;
 		$this->languages_path = $languages_path ?? PLUGIN_PATH . 'languages/';
 		$this->transient_key  = 'wcpos_i18n_' . $this->text_domain;
 
