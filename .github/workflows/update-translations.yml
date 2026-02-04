@@ -21,7 +21,7 @@ jobs:
             exit 1
           fi
           echo "Updating translation version to $VERSION"
-          sed -i "s/TRANSLATION_VERSION', '.*'/TRANSLATION_VERSION', '${VERSION}'/" woocommerce-pos.php
+          sed -i "s/TRANSLATION_VERSION', '[^']*'/TRANSLATION_VERSION', '${VERSION}'/" woocommerce-pos.php
 
       - name: Commit and push
         run: |
