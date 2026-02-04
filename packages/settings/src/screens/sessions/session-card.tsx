@@ -73,14 +73,14 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 	const getAppTypeLabel = (appType?: string) => {
 		switch (appType) {
 			case 'ios_app':
-				return t('iOS Application', { _tags: 'wp-admin-settings' });
+				return t('iOS Application');
 			case 'android_app':
-				return t('Android Application', { _tags: 'wp-admin-settings' });
+				return t('Android Application');
 			case 'electron_app':
-				return t('Desktop Application', { _tags: 'wp-admin-settings' });
+				return t('Desktop Application');
 			case 'web':
 			default:
-				return t('Web Application', { _tags: 'wp-admin-settings' });
+				return t('Web Application');
 		}
 	};
 
@@ -88,10 +88,10 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 		const now = Math.floor(Date.now() / 1000);
 		const diff = now - timestamp;
 
-		if (diff < 60) return t('Just now', { _tags: 'wp-admin-settings' });
-		if (diff < 3600) return t('{minutes} minutes ago', { _tags: 'wp-admin-settings', minutes: Math.floor(diff / 60) });
-		if (diff < 86400) return t('{hours} hours ago', { _tags: 'wp-admin-settings', hours: Math.floor(diff / 3600) });
-		return t('{days} days ago', { _tags: 'wp-admin-settings', days: Math.floor(diff / 86400) });
+		if (diff < 60) return t('Just now');
+		if (diff < 3600) return t('{minutes} minutes ago', { minutes: Math.floor(diff / 60) });
+		if (diff < 86400) return t('{hours} hours ago', { hours: Math.floor(diff / 3600) });
+		return t('{days} days ago', { days: Math.floor(diff / 86400) });
 	};
 
 	return (
@@ -107,7 +107,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 			{session.is_current && (
 				<div className="wcpos:bg-linear-to-r wcpos:from-wp-admin-theme-color wcpos:to-wp-admin-theme-color-darker wcpos:px-3 wcpos:py-1">
 					<span className="wcpos:text-xs wcpos:font-medium wcpos:text-white wcpos:flex wcpos:items-center wcpos:gap-1">
-						<span className="wcpos:text-[10px]">●</span> {t('Current Session', { _tags: 'wp-admin-settings' })}
+						<span className="wcpos:text-[10px]">●</span> {t('Current Session')}
 					</span>
 				</div>
 			)}
@@ -155,7 +155,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 									disabled={isDeleting}
 									className="wcpos:shrink-0"
 								>
-									{t('Terminate', { _tags: 'wp-admin-settings' })}
+									{t('Terminate')}
 								</Button>
 							)}
 						</div>
@@ -170,15 +170,15 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						{/* Compact details section */}
 						<div className="wcpos:bg-gray-50 wcpos:rounded wcpos:px-2 wcpos:py-1.5 wcpos:space-y-1">
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center">
-								<span className="wcpos:text-gray-500">{t('IP', { _tags: 'wp-admin-settings' })}</span>
+								<span className="wcpos:text-gray-500">{t('IP')}</span>
 								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{session.ip_address || 'N/A'}</span>
 							</div>
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center wcpos:border-t wcpos:border-gray-200 wcpos:pt-1">
-								<span className="wcpos:text-gray-500">{t('Created', { _tags: 'wp-admin-settings' })}</span>
+								<span className="wcpos:text-gray-500">{t('Created')}</span>
 								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{formatTimestamp(session.created)}</span>
 							</div>
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center wcpos:border-t wcpos:border-gray-200 wcpos:pt-1">
-								<span className="wcpos:text-gray-500">{t('Expires', { _tags: 'wp-admin-settings' })}</span>
+								<span className="wcpos:text-gray-500">{t('Expires')}</span>
 								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{formatTimestamp(session.expires)}</span>
 							</div>
 						</div>
@@ -188,7 +188,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 							<details className="wcpos:mt-2 wcpos:group">
 								<summary className="wcpos:text-[11px] wcpos:text-gray-500 wcpos:cursor-pointer hover:wcpos:text-gray-700 wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:select-none">
 									<span className="wcpos:transition-transform group-open:wcpos:rotate-90 wcpos:text-[8px]">▶</span>
-									{t('User Agent', { _tags: 'wp-admin-settings' })}
+									{t('User Agent')}
 								</summary>
 								<div className="wcpos:mt-1 wcpos:p-1.5 wcpos:bg-gray-50 wcpos:rounded wcpos:border wcpos:border-gray-200">
 									<p className="wcpos:text-[10px] wcpos:text-gray-700 wcpos:font-mono wcpos:break-all wcpos:leading-tight">

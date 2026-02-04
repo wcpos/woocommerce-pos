@@ -41,11 +41,11 @@ const Main = ({ initialScreen }: Props) => {
 	const { notice, setNotice } = useNotices();
 
 	const routes: Route[] = [
-		{ key: 'general', title: t('General', { _tags: 'wp-admin-settings ' }) },
-		{ key: 'checkout', title: t('Checkout', { _tags: 'wp-admin-settings' }) },
-		{ key: 'access', title: t('Access', { _tags: 'wp-admin-settings' }) },
-		{ key: 'sessions', title: t('Sessions', { _tags: 'wp-admin-settings' }) },
-		{ key: 'license', title: t('License', { _tags: 'wp-admin-settings' }) },
+		{ key: 'general', title: t('General') },
+		{ key: 'checkout', title: t('Checkout') },
+		{ key: 'access', title: t('Access') },
+		{ key: 'sessions', title: t('Sessions') },
+		{ key: 'license', title: t('License') },
 	];
 
 	const [index, setIndex] = React.useState(

@@ -1,31 +1,8 @@
-import * as Transifex from '@transifex/native';
+import { createI18nInstance } from '@wcpos/i18n';
 
-import localesData from './locales.json';
-
-const tx = Transifex.tx;
-const t = Transifex.t;
-
-tx.init({
-	token: '1/09853773ef9cda3be96c8c451857172f26927c0f',
-	filterTags: 'wp-admin-analytics',
+const { i18n, i18nPromise, t } = createI18nInstance({
+	namespace: 'wp-admin-analytics',
+	project: 'woocommerce-pos-pro',
 });
 
-interface Locale {
-	name: string;
-	nativeName?: string;
-	code: string;
-	locale: string;
-}
-
-interface Locales {
-	[key: string]: Locale;
-}
-
-const locales: Locales = localesData;
-const htmlElement = document.documentElement;
-const lang = htmlElement.getAttribute('lang') || 'en';
-const { locale } = locales[lang.toLowerCase()] || locales[lang.split('-')[0]] || locales['en'];
-
-const txPromise = tx.setCurrentLocale(locale).catch(console.error);
-
-export { tx, t, txPromise };
+export { t, i18nPromise, i18n };

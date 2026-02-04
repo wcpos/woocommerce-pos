@@ -28,9 +28,9 @@ const Checkout = () => {
 			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 				<div className="wcpos:flex wcpos:sm:justify-end">
 					<Label
-						tip={t('Change the default order status for POS sales', { _tags: 'wp-admin-settings' })}
+						tip={t('Change the default order status for POS sales')}
 					>
-						{t('Completed order status', { _tags: 'wp-admin-settings' })}
+						{t('Completed order status')}
 					</Label>
 				</div>
 				<div>
@@ -49,11 +49,9 @@ const Checkout = () => {
 					<ToggleControl
 						label={
 							<Label
-								tip={t('Send WooCommerce notification emails for POS orders', {
-									_tags: 'wp-admin-settings',
-								})}
+								tip={t('Send WooCommerce notification emails for POS orders')}
 							>
-								{t('Send admin emails', { _tags: 'wp-admin-settings' })}
+								{t('Send admin emails')}
 							</Label>
 						}
 						checked={!!data?.admin_emails}
@@ -67,11 +65,9 @@ const Checkout = () => {
 					<ToggleControl
 						label={
 							<Label
-								tip={t('Send WooCommerce notification emails for POS orders', {
-									_tags: 'wp-admin-settings',
-								})}
+								tip={t('Send WooCommerce notification emails for POS orders')}
 							>
-								{t('Send customer emails', { _tags: 'wp-admin-settings' })}
+								{t('Send customer emails')}
 							</Label>
 						}
 						checked={!!data?.customer_emails}
@@ -83,11 +79,10 @@ const Checkout = () => {
 			</div>
 
 			<div className="wcpos:px-4 wcpos:pb-5">
-				<h2 className="wcpos:text-base">{t('Gateways', { _tags: 'wp-admin-settings' })}</h2>
+				<h2 className="wcpos:text-base">{t('Gateways')}</h2>
 				<p>
 					{t(
-						'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.',
-						{ _tags: 'wp-admin-settings' }
+						'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.'
 					)}
 				</p>
 				<ErrorBoundary FallbackComponent={Error}>

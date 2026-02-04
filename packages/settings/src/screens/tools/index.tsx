@@ -19,11 +19,9 @@ const Tools = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Some servers disable the Authorization header, this will use a URL param instead', {
-								_tags: 'wp-admin-settings',
-							})}
+							tip={t('Some servers disable the Authorization header, this will use a URL param instead')}
 						>
-							{t('Authorize via URL param', { _tags: 'wp-admin-settings' })}
+							{t('Authorize via URL param')}
 						</Label>
 					}
 					checked={!!data?.use_jwt_as_param}

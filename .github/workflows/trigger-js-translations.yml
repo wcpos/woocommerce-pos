@@ -1,0 +1,71 @@
+name: Update JS Translation Strings
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**/*.ts'
+      - 'packages/**/*.tsx'
+      - 'packages/**/*.js'
+      - 'packages/**/*.jsx'
+  workflow_dispatch:
+
+jobs:
+  extract-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: pnpm install --filter . --frozen-lockfile=false
+
+      - name: Extract translation strings
+        run: node scripts/extract-js-strings.js
+
+      - name: Push to translations-source branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ ! -d .translations ] || [ -z "$(ls -A .translations 2>/dev/null)" ]; then
+            echo "No translation files to publish."
+            exit 0
+          fi
+
+          git checkout --orphan translations-source
+          git rm -rf .
+          cp -r .translations/. .
+          git add -A
+          git commit -m "translation source strings from ${{ github.sha }}"
+          git push -f origin translations-source
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TRANSLATION_APP_ID }}
+          private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: translations
+
+      - name: Notify translations repo
+        run: |
+          gh api repos/wcpos/translations/dispatches \
+            -f event_type=update-js-strings \
+            -f "client_payload[repo_name]=woocommerce-pos" \
+            -f "client_payload[ref]=translations-source"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}

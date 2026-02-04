@@ -6,8 +6,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.45.0",
-    "@transifex/native": "^7.1.1",
-    "@transifex/react": "^7.1.1",
+    "@wcpos/i18n": "workspace:*",
     "@woocommerce/components": "^12.3.0",
     "@wordpress/api-fetch": "7.0.0",
     "@wordpress/components": "^28.0.0",
@@ -29,7 +28,6 @@
     "@babel/runtime": "7.24.7",
     "@svgr/webpack": "8.1.0",
     "@tanstack/react-query-devtools": "^5.45.0",
-    "@transifex/cli": "^7.1.1",
     "@types/jest": "29.5.12",
     "@types/lodash": "4.17.5",
     "@types/react": "18.3.3",

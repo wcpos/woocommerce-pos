@@ -65,18 +65,18 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 		const now = Math.floor(Date.now() / 1000);
 		const diff = now - timestamp;
 
-		if (diff < 60) return t('Just now', { _tags: 'wp-admin-settings' });
+		if (diff < 60) return t('Just now');
 		if (diff < 3600)
-			return t('{minutes} minutes ago', { _tags: 'wp-admin-settings', minutes: Math.floor(diff / 60) });
+			return t('{minutes} minutes ago', { minutes: Math.floor(diff / 60) });
 		if (diff < 86400)
-			return t('{hours} hours ago', { _tags: 'wp-admin-settings', hours: Math.floor(diff / 3600) });
-		return t('{days} days ago', { _tags: 'wp-admin-settings', days: Math.floor(diff / 86400) });
+			return t('{hours} hours ago', { hours: Math.floor(diff / 3600) });
+		return t('{days} days ago', { days: Math.floor(diff / 86400) });
 	};
 
 	if (!users || users.length === 0) {
 		return (
 			<div className="wcpos:text-center wcpos:py-8 wcpos:text-gray-500">
-				{t('No active sessions found', { _tags: 'wp-admin-settings' })}
+				{t('No active sessions found')}
 			</div>
 		);
 	}
@@ -84,7 +84,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 	return (
 		<div className="wcpos:space-y-2">
 			<h2 className="wcpos:text-base wcpos:font-medium wcpos:mb-3">
-				{t('Active Users', { _tags: 'wp-admin-settings' })} ({users.length})
+				{t('Active Users')} ({users.length})
 			</h2>
 
 			{map(users, (user) => {
@@ -120,8 +120,8 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 											<span className="wcpos:shrink-0">
 												{user.session_count}{' '}
 												{user.session_count === 1
-													? t('session', { _tags: 'wp-admin-settings' })
-													: t('sessions', { _tags: 'wp-admin-settings' })}
+													? t('session')
+													: t('sessions')}
 											</span>
 											<span className="wcpos:text-gray-400">•</span>
 											<span className="wcpos:shrink-0">{getTimeAgo(user.last_active)}</span>
@@ -141,7 +141,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 											}}
 											disabled={isDeleting}
 										>
-											{t('Logout All', { _tags: 'wp-admin-settings' })}
+											{t('Logout All')}
 										</Button>
 									)}
 									<span

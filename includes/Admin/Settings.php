@@ -75,13 +75,6 @@ class Settings {
 		);
 
 		wp_enqueue_script(
-			PLUGIN_NAME . '-transifex',
-			'https://cdn.jsdelivr.net/npm/@transifex/native/dist/browser.native.min.js',
-			array(),
-			VERSION
-		);
-
-		wp_enqueue_script(
 			PLUGIN_NAME . '-settings',
 			PLUGIN_URL . $dir . '/js/settings.js',
 			array(
@@ -92,7 +85,6 @@ class Settings {
 				'wp-i18n',
 				'wp-api-fetch',
 				'lodash',
-				PLUGIN_NAME . '-transifex',
 			),
 			VERSION,
 			true
@@ -126,9 +118,10 @@ class Settings {
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s
-        }',
+        }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
-			json_encode( $order_statuses )
+			json_encode( $order_statuses ),
+			json_encode( VERSION )
 		);
 	}
 }
