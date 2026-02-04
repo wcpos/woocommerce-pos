@@ -13,6 +13,9 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
+
 /**
  * I18n class.
  *
