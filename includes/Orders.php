@@ -39,6 +39,7 @@ class Orders {
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
+		add_action( 'woocommerce_order_applied_coupon', array( $this, 'before_coupon_recalculation' ), 10, 2 );
 	}
 
 	/**
@@ -142,35 +143,66 @@ class Orders {
 	 * @return bool|WC_Product
 	 */
 	public function order_item_product( $product, $item ) {
-		if ( 0 !== $item->get_product_id() ) {
-			return $product;
-		}
-
 		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-		if ( ! $pos_data_json ) {
-			return $product;
+
+		// For misc products (product_id=0), create a synthetic WC_Product_Simple.
+		// Requires _woocommerce_pos_data to distinguish POS items from other plugins.
+		if ( 0 === $item->get_product_id() ) {
+			if ( ! $pos_data_json ) {
+				return $product;
+			}
+
+			$product = new WC_Product_Simple();
+			$product->set_name( $item->get_name() );
+			$sku = $item->get_meta( '_sku', true );
+			$product->set_sku( $sku ? $sku : '' );
 		}
 
-		$product = new WC_Product_Simple();
+		// Apply POS price data to the product (for both misc and real products).
+		// This sets sale_price so WC_Product::is_on_sale() returns true, causing
+		// coupons with exclude_sale_items to skip POS-discounted items.
+		// Clone to avoid mutating shared instances (WC 10.5+ caches product objects).
+		if ( $product && ! empty( $pos_data_json ) ) {
+			$product = clone $product;
+			$pos_data = json_decode( $pos_data_json, true );
 
-		// set name & sku.
-		$product->set_name( $item->get_name() );
-		$sku = $item->get_meta( '_sku', true );
-		$product->set_sku( $sku ? $sku : '' );
+			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+				if ( isset( $pos_data['price'] ) ) {
+					$product->set_price( $pos_data['price'] );
 
-		// set price and regular_price.
-		$pos_data = json_decode( $pos_data_json, true );
+					/**
+					 * Filter whether a POS-discounted item should be treated as "on sale."
+					 *
+					 * When true, the product's sale_price is set to the POS price, making
+					 * is_on_sale() return true. Coupons with exclude_sale_items will skip
+					 * this item.
+					 *
+					 * @param bool                  $is_on_sale Whether the item is on sale.
+					 * @param WC_Product            $product    The product object.
+					 * @param WC_Order_Item_Product $item       The order line item.
+					 * @param array                 $pos_data   The decoded POS data.
+					 */
+					$is_on_sale = isset( $pos_data['regular_price'] )
+						&& (float) $pos_data['price'] < (float) $pos_data['regular_price'];
 
-		if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
-			if ( isset( $pos_data['price'] ) ) {
-				$product->set_price( $pos_data['price'] );
-				$product->set_sale_price( $pos_data['price'] );
-			}
-			if ( isset( $pos_data['regular_price'] ) ) {
-				$product->set_regular_price( $pos_data['regular_price'] );
-			}
-			if ( isset( $pos_data['tax_status'] ) ) {
-				$product->set_tax_status( $pos_data['tax_status'] );
+					$is_on_sale = apply_filters(
+						'woocommerce_pos_item_is_on_sale',
+						$is_on_sale,
+						$product,
+						$item,
+						$pos_data
+					);
+
+					if ( $is_on_sale ) {
+						$product->set_sale_price( $pos_data['price'] );
+					}
+				}
+				if ( isset( $pos_data['regular_price'] ) ) {
+					$product->set_regular_price( $pos_data['regular_price'] );
+				}
+				if ( isset( $pos_data['tax_status'] ) ) {
+					$product->set_tax_status( $pos_data['tax_status'] );
+				}
 			}
 		}
 
@@ -239,6 +271,124 @@ class Orders {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Activate the POS subtotal filter before coupon recalculation.
+	 *
+	 * WooCommerce's recalculate_coupons() uses get_subtotal() as the base price for
+	 * coupon calculations. The POS stores the original price in subtotal and the
+	 * discounted price in _woocommerce_pos_data meta.
+	 *
+	 * This hook fires from apply_coupon() BEFORE recalculate_coupons() runs, so we
+	 * add a filter to temporarily return the POS price as the subtotal.
+	 *
+	 * For remove_coupon(), there is no "before" hook in WooCommerce core. The filter
+	 * is activated manually in Form_Handler::coupon_action() before calling
+	 * $order->remove_coupon().
+	 *
+	 * @see WC_Abstract_Order::apply_coupon()
+	 * @see WC_Abstract_Order::recalculate_coupons()
+	 *
+	 * @param \WC_Coupon        $coupon The coupon object.
+	 * @param WC_Abstract_Order $order  The order object.
+	 */
+	public function before_coupon_recalculation( $coupon, $order ): void {
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+			return;
+		}
+
+		self::activate_pos_subtotal_filter();
+	}
+
+	/**
+	 * Add the subtotal filter if not already active, and schedule its removal.
+	 *
+	 * The filter is removed on the next calculate_totals() call via
+	 * woocommerce_order_after_calculate_totals, which fires at the end of
+	 * recalculate_coupons().
+	 */
+	public static function activate_pos_subtotal_filter(): void {
+		if ( has_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ) ) ) {
+			return;
+		}
+
+		add_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10, 2 );
+		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10, 2 );
+		add_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
+	}
+
+	/**
+	 * Filter the line item subtotal to return the POS-discounted price.
+	 *
+	 * Only affects items with _woocommerce_pos_data meta containing a 'price' field.
+	 * Items without POS data are returned unchanged.
+	 *
+	 * @param string                $subtotal The original subtotal.
+	 * @param WC_Order_Item_Product $item     The order item.
+	 *
+	 * @return string The POS price if available, otherwise the original subtotal.
+	 */
+	public static function filter_pos_item_subtotal( $subtotal, $item ) {
+		if ( ! $item instanceof WC_Order_Item_Product ) {
+			return $subtotal;
+		}
+
+		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
+		if ( empty( $pos_data_json ) ) {
+			return $subtotal;
+		}
+
+		$pos_data = json_decode( $pos_data_json, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) || ! isset( $pos_data['price'] ) ) {
+			return $subtotal;
+		}
+
+		return (string) ( (float) $pos_data['price'] * $item->get_quantity() );
+	}
+
+	/**
+	 * Filter the line item subtotal tax during POS coupon recalculation.
+	 *
+	 * When the POS sets tax_status to 'none', subtotal tax should be 0.
+	 *
+	 * @param string                $subtotal_tax The original subtotal tax.
+	 * @param WC_Order_Item_Product $item         The order item.
+	 *
+	 * @return string
+	 */
+	public static function filter_pos_item_subtotal_tax( $subtotal_tax, $item ) {
+		if ( ! $item instanceof WC_Order_Item_Product ) {
+			return $subtotal_tax;
+		}
+
+		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
+		if ( empty( $pos_data_json ) ) {
+			return $subtotal_tax;
+		}
+
+		$pos_data = json_decode( $pos_data_json, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
+			return $subtotal_tax;
+		}
+
+		if ( isset( $pos_data['tax_status'] ) && 'none' === $pos_data['tax_status'] ) {
+			return '0';
+		}
+
+		return $subtotal_tax;
+	}
+
+	/**
+	 * Remove the temporary subtotal filter after coupon recalculation completes.
+	 *
+	 * @param bool              $and_taxes Whether taxes were calculated.
+	 * @param WC_Abstract_Order $order     The order object.
+	 */
+	public static function deactivate_pos_subtotal_filter( $and_taxes, $order ): void {
+		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
+		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
+		remove_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
 	}
 
 	/**
