@@ -8,6 +8,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
  * @internal
@@ -959,24 +960,11 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			array(
 				'payment_method' => 'pos_cash',
 				'line_items'     => array(
-					array(
-						'product_id' => 0,
-						'name'       => 'Miscellaneous',
-						'quantity'   => 1,
-						'sku'        => 'SKU-123',
-						'price'      => 100,
-						'meta_data'  => array(
-							array(
-								'key'   => '_woocommerce_pos_data',
-								'value' => json_encode(
-									array(
-										'price'         => '100',
-										'regular_price' => '100',
-										'tax_status'    => 'taxable',
-									)
-								),
-							),
-						),
+					POSLineItemHelper::misc_line_item(
+						array(
+							'price' => '100',
+							'sku'   => 'SKU-123',
+						)
 					),
 				),
 			)

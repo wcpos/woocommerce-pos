@@ -18,6 +18,7 @@ use WC_Order_Item_Product;
 use WC_Product_Simple;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
  * Test_Orders class.
@@ -364,14 +365,11 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$item->set_quantity( 1 );
 		$item->set_product_id( 0 );
 		$item->add_meta_data( '_sku', 'MISC-001' );
-		$item->add_meta_data(
-			'_woocommerce_pos_data',
-			json_encode(
-				array(
-					'price'         => '10.00',
-					'regular_price' => '15.00',
-					'tax_status'    => 'taxable',
-				)
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '10.00',
+				'regular_price' => '15.00',
 			)
 		);
 		$item->save();
@@ -405,14 +403,11 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$item->set_name( 'Misc Item' );
 		$item->set_quantity( 1 );
 		$item->set_product_id( 0 );
-		$item->add_meta_data(
-			'_woocommerce_pos_data',
-			json_encode(
-				array(
-					'price'         => '4.99',
-					'regular_price' => '8.00',
-					'tax_status'    => 'taxable',
-				)
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '4.99',
+				'regular_price' => '8.00',
 			)
 		);
 		$item->save();
@@ -654,14 +649,11 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$item->set_quantity( 1 );
 		$item->set_product_id( 0 );
 		$item->add_meta_data( '_sku', 'DIRECT-001' );
-		$item->add_meta_data(
-			'_woocommerce_pos_data',
-			json_encode(
-				array(
-					'price'         => '25.00',
-					'regular_price' => '30.00',
-					'tax_status'    => 'taxable',
-				)
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '25.00',
+				'regular_price' => '30.00',
 			)
 		);
 		$item->save();
