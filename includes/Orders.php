@@ -147,25 +147,56 @@ class Orders {
 			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
 			$product = new WC_Product_Simple();
 
-			// set name & sku.
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
 			$product->set_sku( $sku ? $sku : '' );
+		}
 
-			// set price and regular_price.
+		// Apply POS price data to the product (for both misc and real products).
+		// This sets sale_price so WC_Product::is_on_sale() returns true, causing
+		// coupons with exclude_sale_items to skip POS-discounted items.
+		if ( $product ) {
 			$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-			$pos_data      = json_decode( $pos_data_json, true );
+			if ( ! empty( $pos_data_json ) ) {
+				$pos_data = json_decode( $pos_data_json, true );
 
-			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
-				if ( isset( $pos_data['price'] ) ) {
-					$product->set_price( $pos_data['price'] );
-					$product->set_sale_price( $pos_data['price'] );
-				}
-				if ( isset( $pos_data['regular_price'] ) ) {
-					$product->set_regular_price( $pos_data['regular_price'] );
-				}
-				if ( isset( $pos_data['tax_status'] ) ) {
-					$product->set_tax_status( $pos_data['tax_status'] );
+				if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+					if ( isset( $pos_data['price'] ) ) {
+						$product->set_price( $pos_data['price'] );
+
+						/**
+						 * Filter whether a POS-discounted item should be treated as "on sale."
+						 *
+						 * When true, the product's sale_price is set to the POS price, making
+						 * is_on_sale() return true. Coupons with exclude_sale_items will skip
+						 * this item.
+						 *
+						 * @param bool                 $is_on_sale Whether the item is on sale.
+						 * @param WC_Product           $product    The product object.
+						 * @param WC_Order_Item_Product $item      The order line item.
+						 * @param array                $pos_data   The decoded POS data.
+						 */
+						$is_on_sale = isset( $pos_data['regular_price'] )
+							&& (float) $pos_data['price'] < (float) $pos_data['regular_price'];
+
+						$is_on_sale = apply_filters(
+							'woocommerce_pos_item_is_on_sale',
+							$is_on_sale,
+							$product,
+							$item,
+							$pos_data
+						);
+
+						if ( $is_on_sale ) {
+							$product->set_sale_price( $pos_data['price'] );
+						}
+					}
+					if ( isset( $pos_data['regular_price'] ) ) {
+						$product->set_regular_price( $pos_data['regular_price'] );
+					}
+					if ( isset( $pos_data['tax_status'] ) ) {
+						$product->set_tax_status( $pos_data['tax_status'] );
+					}
 				}
 			}
 		}
