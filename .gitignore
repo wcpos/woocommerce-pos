@@ -40,3 +40,4 @@ tests/e2e/ui/playwright-results.xml
 .cursor
 !.cursor/rulespnpm-lock.yaml
 pnpm-lock.yaml
+docs/
