@@ -237,6 +237,136 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	}
 
 	// ======================================================================
+	// Isolation tests: verify POS hooks don't leak into normal orders
+	// ======================================================================
+
+	/**
+	 * After applying a coupon to a POS order, the temporary subtotal filters
+	 * must be removed. If they linger, every subsequent order operation in the
+	 * same request would use POS subtotals.
+	 */
+	public function test_subtotal_filters_removed_after_pos_coupon(): void {
+		$order = $this->create_pos_order_with_discount();
+		CouponHelper::create_coupon( 'cleanup10', 'publish', array(
+			'discount_type' => 'percent',
+			'coupon_amount' => '10',
+		) );
+
+		$order->apply_coupon( 'cleanup10' );
+
+		// After apply_coupon completes, the temporary filters should be gone.
+		$this->assertFalse(
+			has_filter( 'woocommerce_order_item_get_subtotal', array( $this->orders, 'filter_pos_item_subtotal' ) ),
+			'Subtotal filter should be removed after coupon recalculation'
+		);
+		$this->assertFalse(
+			has_filter( 'woocommerce_order_item_get_subtotal_tax', array( $this->orders, 'filter_pos_item_subtotal_tax' ) ),
+			'Subtotal tax filter should be removed after coupon recalculation'
+		);
+	}
+
+	/**
+	 * Process a POS order coupon, then immediately process a non-POS order
+	 * coupon in the same request lifecycle. The non-POS order must produce
+	 * standard WooCommerce results with no POS interference.
+	 */
+	public function test_non_pos_order_clean_after_pos_coupon(): void {
+		// First: POS order gets a coupon.
+		$pos_order = $this->create_pos_order_with_discount();
+		CouponHelper::create_coupon( 'seq10', 'publish', array(
+			'discount_type' => 'percent',
+			'coupon_amount' => '10',
+		) );
+		$pos_order->apply_coupon( 'seq10' );
+
+		// Second: non-POS order gets a coupon — must be completely standard.
+		$product = ProductHelper::create_simple_product( array( 'regular_price' => 50, 'price' => 50 ) );
+		$regular_order = wc_create_order();
+		$regular_order->add_product( $product, 1 );
+		$regular_order->calculate_totals();
+		$regular_order->save();
+
+		CouponHelper::create_coupon( 'seq10reg', 'publish', array(
+			'discount_type' => 'percent',
+			'coupon_amount' => '10',
+		) );
+		$regular_order->apply_coupon( 'seq10reg' );
+
+		$items = $regular_order->get_items();
+		$item  = reset( $items );
+
+		// Standard: 10% off $50 = $5 discount, total = $45.
+		$this->assertEquals( 50, (float) $item->get_subtotal(), 'Sequential non-POS subtotal should be $50' );
+		$this->assertEquals( 45, (float) $item->get_total(), 'Sequential non-POS total should be $45' );
+	}
+
+	/**
+	 * The order_item_product filter modifies an in-memory product object.
+	 * Verify it does NOT write those changes back to the database, which
+	 * would corrupt the product catalog.
+	 */
+	public function test_product_db_not_mutated_by_order_item_filter(): void {
+		$order = $this->create_pos_order_with_discount();
+
+		// Trigger the order_item_product filter by reading items.
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->get_product(); // Fires woocommerce_order_item_product filter.
+
+		// Reload the product fresh from the database.
+		$db_product = wc_get_product( $item->get_product_id() );
+
+		$this->assertEquals( '18', $db_product->get_regular_price(), 'DB regular_price should be unchanged' );
+		$this->assertEquals( '18', $db_product->get_price(), 'DB price should be unchanged' );
+		$this->assertEquals( '', $db_product->get_sale_price(), 'DB sale_price should remain empty' );
+	}
+
+	/**
+	 * With all POS Orders hooks active, calculate_totals() on a regular
+	 * (non-POS) order should produce standard WooCommerce results.
+	 */
+	public function test_non_pos_calculate_totals_unaffected(): void {
+		$product = ProductHelper::create_simple_product( array( 'regular_price' => 25, 'price' => 25 ) );
+		$order   = wc_create_order();
+		$order->add_product( $product, 2 );
+		$order->calculate_totals( false );
+		$order->save();
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// Standard: 2 x $25 = $50 subtotal and $50 total (no tax).
+		$this->assertEquals( 50, (float) $item->get_subtotal(), 'Non-POS subtotal should be 2 x $25' );
+		$this->assertEquals( 50, (float) $item->get_total(), 'Non-POS total should be 2 x $25' );
+		$this->assertEquals( 50, (float) $order->get_total(), 'Non-POS order total should be $50' );
+	}
+
+	/**
+	 * The order_item_product filter should pass through products unchanged
+	 * when the line item has no _woocommerce_pos_data meta.
+	 */
+	public function test_order_item_product_passthrough_without_pos_data(): void {
+		$product = ProductHelper::create_simple_product( array(
+			'regular_price' => 30,
+			'price'         => 30,
+		) );
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->save();
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// Get the product via the filter chain.
+		$filtered_product = $item->get_product();
+
+		// Should match the original product exactly.
+		$this->assertEquals( '30', $filtered_product->get_price(), 'Price should be unchanged without POS data' );
+		$this->assertEquals( '30', $filtered_product->get_regular_price(), 'Regular price should be unchanged without POS data' );
+		$this->assertFalse( $filtered_product->is_on_sale(), 'Product should not be on sale without POS data' );
+	}
+
+	// ======================================================================
 	// Helper methods
 	// ======================================================================
 
