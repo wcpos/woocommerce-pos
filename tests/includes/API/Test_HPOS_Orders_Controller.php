@@ -893,6 +893,18 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 						'quantity'   => 1,
 						'sku'        => 'SKU-123',
 						'price'      => 100,
+						'meta_data'  => array(
+							array(
+								'key'   => '_woocommerce_pos_data',
+								'value' => json_encode(
+									array(
+										'price'         => '100',
+										'regular_price' => '100',
+										'tax_status'    => 'taxable',
+									)
+								),
+							),
+						),
 					),
 				),
 			)
