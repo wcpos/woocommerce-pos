@@ -53,6 +53,8 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		'edit_shop_orders',
 		'edit_others_shop_orders',
 		'list_users',
+		'create_customers',
+		'edit_users',
 		'read_private_shop_coupons',
 		'manage_product_terms',
 		'access_woocommerce_pos',
@@ -610,16 +612,16 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that a cashier without publish_shop_orders cannot create customers.
+	 * Test that a cashier without create_customers cannot create customers.
 	 */
-	public function test_cashier_without_publish_shop_orders_cannot_create_customers(): void {
-		$user_id = $this->create_cashier_without( array( 'publish_shop_orders' ) );
+	public function test_cashier_without_create_customers_cannot_create_customers(): void {
+		$user_id = $this->create_cashier_without( array( 'create_customers' ) );
 		wp_set_current_user( $user_id );
 
 		$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
 		$request->set_body_params(
 			array(
-				'email'      => 'no-publish-create@example.com',
+				'email'      => 'no-create-test@example.com',
 				'first_name' => 'Test',
 				'last_name'  => 'Customer',
 			)
@@ -632,13 +634,13 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that a cashier without publish_shop_orders cannot update customers.
+	 * Test that a cashier without edit_users cannot update customers.
 	 */
-	public function test_cashier_without_publish_shop_orders_cannot_update_customers(): void {
+	public function test_cashier_without_edit_users_cannot_update_customers(): void {
 		wp_set_current_user( $this->user );
 		$customer = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper::create_customer();
 
-		$user_id = $this->create_cashier_without( array( 'publish_shop_orders' ) );
+		$user_id = $this->create_cashier_without( array( 'edit_users' ) );
 		wp_set_current_user( $user_id );
 
 		$request = $this->wp_rest_patch_request( '/wcpos/v1/customers/' . $customer->get_id() );
@@ -651,10 +653,10 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that a cashier without read_private_products cannot read taxes.
+	 * Test that a cashier without access_woocommerce_pos cannot read taxes.
 	 */
-	public function test_cashier_without_read_private_products_cannot_read_taxes(): void {
-		$user_id = $this->create_cashier_without( array( 'read_private_products' ) );
+	public function test_cashier_without_access_pos_cannot_read_taxes(): void {
+		$user_id = $this->create_cashier_without( array( 'access_woocommerce_pos' ) );
 		wp_set_current_user( $user_id );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/taxes' );

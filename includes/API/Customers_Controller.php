@@ -97,8 +97,9 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Check if a given request has access to create a customer.
 	 *
-	 * Allow POS users with publish_shop_orders capability to create customers,
-	 * even without create_users or create_customers WP/WC capabilities.
+	 * WC checks promote_users (< 9.9) or create_customers (9.9+). The POS
+	 * fallback checks create_customers OR create_users so the Access settings
+	 * page toggles actually control this behaviour.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
@@ -107,8 +108,10 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function create_item_permissions_check( $request ) {
 		$permission = parent::create_item_permissions_check( $request );
 
-		if ( is_wp_error( $permission ) && current_user_can( 'publish_shop_orders' ) ) {
-			return true;
+		if ( is_wp_error( $permission ) ) {
+			if ( current_user_can( 'create_customers' ) || current_user_can( 'create_users' ) ) {
+				return true;
+			}
 		}
 
 		return $permission;
@@ -117,8 +120,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	/**
 	 * Check if a given request has access to update a customer.
 	 *
-	 * Allow POS users with publish_shop_orders capability to update customers,
-	 * even without edit_users WP capability.
+	 * WC checks edit_users. The POS fallback also checks edit_users so the
+	 * Access settings page toggle controls this behaviour.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
@@ -127,7 +130,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function update_item_permissions_check( $request ) {
 		$permission = parent::update_item_permissions_check( $request );
 
-		if ( is_wp_error( $permission ) && current_user_can( 'publish_shop_orders' ) ) {
+		if ( is_wp_error( $permission ) && current_user_can( 'edit_users' ) ) {
 			return true;
 		}
 

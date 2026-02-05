@@ -238,6 +238,8 @@ class Activator {
 			'edit_shop_orders'          => true,
 			'edit_others_shop_orders'   => true,
 			'list_users'                => true,
+			'create_customers'          => true,
+			'edit_users'                => true,
 			'read_private_shop_coupons' => true,
 			'manage_product_terms'      => true,
 		);

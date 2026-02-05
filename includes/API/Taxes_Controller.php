@@ -75,13 +75,10 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 * @return WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
-		$permission = parent::get_items_permissions_check( $request );
-
-		if ( is_wp_error( $permission ) && current_user_can( 'read_private_products' ) ) {
+		if ( current_user_can( 'access_woocommerce_pos' ) ) {
 			return true;
 		}
-
-		return $permission;
+		return parent::get_items_permissions_check( $request );
 	}
 
 	/**
@@ -91,13 +88,10 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	 * @return WP_Error|boolean
 	 */
 	public function get_item_permissions_check( $request ) {
-		$permission = parent::get_items_permissions_check( $request );
-
-		if ( is_wp_error( $permission ) && current_user_can( 'read_private_products' ) ) {
+		if ( current_user_can( 'access_woocommerce_pos' ) ) {
 			return true;
 		}
-
-		return $permission;
+		return parent::get_item_permissions_check( $request );
 	}
 
 	/**
