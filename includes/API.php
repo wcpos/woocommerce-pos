@@ -327,6 +327,19 @@ class API {
 			return $result;
 		}
 
+		// Baseline permission gate: all POS endpoints require access_woocommerce_pos.
+		// Exempt: auth/test and auth/refresh which must be public.
+		$route = $request->get_route();
+		if ( '/wcpos/v1/auth/test' !== $route && '/wcpos/v1/auth/refresh' !== $route ) {
+			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
+				return new \WP_Error(
+					'woocommerce_pos_rest_forbidden',
+					__( 'You do not have permission to access the POS.', 'woocommerce-pos' ),
+					array( 'status' => 403 )
+				);
+			}
+		}
+
 		$max_length = 10000;
 
 		// Process 'include' parameter.

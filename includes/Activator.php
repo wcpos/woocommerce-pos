@@ -235,6 +235,8 @@ class Activator {
 			'read_private_products'     => true,
 			'read_private_shop_orders'  => true,
 			'publish_shop_orders'       => true,
+			'edit_shop_orders'          => true,
+			'edit_others_shop_orders'   => true,
 			'list_users'                => true,
 			'read_private_shop_coupons' => true,
 			'manage_product_terms'      => true,

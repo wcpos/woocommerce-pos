@@ -112,18 +112,17 @@ class Settings {
 	 */
 	private static $caps = array(
 		'wcpos' => array(
-			'access_woocommerce_pos',  // pos frontend.
-			'manage_woocommerce_pos', // pos admin.
+			'access_woocommerce_pos',
+			'manage_woocommerce_pos',
 		),
 		'wc' => array(
-			// 'create_customers', // coming in WooCommerce 9.0?
+			'create_customers',
 			'read_private_products',
 			'edit_product',
 			'edit_others_products',
 			'edit_published_products',
 			'read_private_shop_orders',
 			'publish_shop_orders',
-			// 'promote_users', // for some reason Shop Manager needs this to create customers?
 			'edit_shop_orders',
 			'edit_others_shop_orders',
 			'create_users',
@@ -133,7 +132,7 @@ class Settings {
 			'read_private_shop_coupons',
 		),
 		'wp' => array(
-			'read', // wp-admin access.
+			'read',
 		),
 	);
 
