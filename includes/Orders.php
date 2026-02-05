@@ -143,10 +143,16 @@ class Orders {
 	 * @return bool|WC_Product
 	 */
 	public function order_item_product( $product, $item ) {
-		if ( ! $product && 0 === $item->get_product_id() ) {
-			// @TODO - add check for $item meta = '_woocommerce_pos_misc_product'
-			$product = new WC_Product_Simple();
+		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
 
+		// For misc products (product_id=0), create a synthetic WC_Product_Simple.
+		// Requires _woocommerce_pos_data to distinguish POS items from other plugins.
+		if ( 0 === $item->get_product_id() ) {
+			if ( ! $pos_data_json ) {
+				return $product;
+			}
+
+			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
 			$product->set_sku( $sku ? $sku : '' );
@@ -155,48 +161,45 @@ class Orders {
 		// Apply POS price data to the product (for both misc and real products).
 		// This sets sale_price so WC_Product::is_on_sale() returns true, causing
 		// coupons with exclude_sale_items to skip POS-discounted items.
-		if ( $product ) {
-			$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-			if ( ! empty( $pos_data_json ) ) {
-				$pos_data = json_decode( $pos_data_json, true );
+		if ( $product && ! empty( $pos_data_json ) ) {
+			$pos_data = json_decode( $pos_data_json, true );
 
-				if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
-					if ( isset( $pos_data['price'] ) ) {
-						$product->set_price( $pos_data['price'] );
+			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+				if ( isset( $pos_data['price'] ) ) {
+					$product->set_price( $pos_data['price'] );
 
-						/**
-						 * Filter whether a POS-discounted item should be treated as "on sale."
-						 *
-						 * When true, the product's sale_price is set to the POS price, making
-						 * is_on_sale() return true. Coupons with exclude_sale_items will skip
-						 * this item.
-						 *
-						 * @param bool                 $is_on_sale Whether the item is on sale.
-						 * @param WC_Product           $product    The product object.
-						 * @param WC_Order_Item_Product $item      The order line item.
-						 * @param array                $pos_data   The decoded POS data.
-						 */
-						$is_on_sale = isset( $pos_data['regular_price'] )
-							&& (float) $pos_data['price'] < (float) $pos_data['regular_price'];
+					/**
+					 * Filter whether a POS-discounted item should be treated as "on sale."
+					 *
+					 * When true, the product's sale_price is set to the POS price, making
+					 * is_on_sale() return true. Coupons with exclude_sale_items will skip
+					 * this item.
+					 *
+					 * @param bool                  $is_on_sale Whether the item is on sale.
+					 * @param WC_Product            $product    The product object.
+					 * @param WC_Order_Item_Product $item       The order line item.
+					 * @param array                 $pos_data   The decoded POS data.
+					 */
+					$is_on_sale = isset( $pos_data['regular_price'] )
+						&& (float) $pos_data['price'] < (float) $pos_data['regular_price'];
 
-						$is_on_sale = apply_filters(
-							'woocommerce_pos_item_is_on_sale',
-							$is_on_sale,
-							$product,
-							$item,
-							$pos_data
-						);
+					$is_on_sale = apply_filters(
+						'woocommerce_pos_item_is_on_sale',
+						$is_on_sale,
+						$product,
+						$item,
+						$pos_data
+					);
 
-						if ( $is_on_sale ) {
-							$product->set_sale_price( $pos_data['price'] );
-						}
+					if ( $is_on_sale ) {
+						$product->set_sale_price( $pos_data['price'] );
 					}
-					if ( isset( $pos_data['regular_price'] ) ) {
-						$product->set_regular_price( $pos_data['regular_price'] );
-					}
-					if ( isset( $pos_data['tax_status'] ) ) {
-						$product->set_tax_status( $pos_data['tax_status'] );
-					}
+				}
+				if ( isset( $pos_data['regular_price'] ) ) {
+					$product->set_regular_price( $pos_data['regular_price'] );
+				}
+				if ( isset( $pos_data['tax_status'] ) ) {
+					$product->set_tax_status( $pos_data['tax_status'] );
 				}
 			}
 		}
@@ -293,7 +296,7 @@ class Orders {
 			return;
 		}
 
-		$this->activate_pos_subtotal_filter();
+		self::activate_pos_subtotal_filter();
 	}
 
 	/**
@@ -303,14 +306,14 @@ class Orders {
 	 * woocommerce_order_after_calculate_totals, which fires at the end of
 	 * recalculate_coupons().
 	 */
-	public function activate_pos_subtotal_filter(): void {
-		if ( has_filter( 'woocommerce_order_item_get_subtotal', array( $this, 'filter_pos_item_subtotal' ) ) ) {
+	public static function activate_pos_subtotal_filter(): void {
+		if ( has_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ) ) ) {
 			return;
 		}
 
-		add_filter( 'woocommerce_order_item_get_subtotal', array( $this, 'filter_pos_item_subtotal' ), 10, 2 );
-		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( $this, 'filter_pos_item_subtotal_tax' ), 10, 2 );
-		add_action( 'woocommerce_order_after_calculate_totals', array( $this, 'deactivate_pos_subtotal_filter' ), 10, 2 );
+		add_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10, 2 );
+		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10, 2 );
+		add_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
 	}
 
 	/**
@@ -324,7 +327,7 @@ class Orders {
 	 *
 	 * @return string The POS price if available, otherwise the original subtotal.
 	 */
-	public function filter_pos_item_subtotal( $subtotal, $item ) {
+	public static function filter_pos_item_subtotal( $subtotal, $item ) {
 		if ( ! $item instanceof WC_Order_Item_Product ) {
 			return $subtotal;
 		}
@@ -352,7 +355,7 @@ class Orders {
 	 *
 	 * @return string
 	 */
-	public function filter_pos_item_subtotal_tax( $subtotal_tax, $item ) {
+	public static function filter_pos_item_subtotal_tax( $subtotal_tax, $item ) {
 		if ( ! $item instanceof WC_Order_Item_Product ) {
 			return $subtotal_tax;
 		}
@@ -380,10 +383,10 @@ class Orders {
 	 * @param bool              $and_taxes Whether taxes were calculated.
 	 * @param WC_Abstract_Order $order     The order object.
 	 */
-	public function deactivate_pos_subtotal_filter( $and_taxes, $order ): void {
-		remove_filter( 'woocommerce_order_item_get_subtotal', array( $this, 'filter_pos_item_subtotal' ), 10 );
-		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( $this, 'filter_pos_item_subtotal_tax' ), 10 );
-		remove_action( 'woocommerce_order_after_calculate_totals', array( $this, 'deactivate_pos_subtotal_filter' ), 10 );
+	public static function deactivate_pos_subtotal_filter( $and_taxes, $order ): void {
+		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
+		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
+		remove_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
 	}
 
 	/**

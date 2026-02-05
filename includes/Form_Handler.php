@@ -125,8 +125,7 @@ class Form_Handler {
 			// hook, so we activate the POS subtotal filter manually. It is deactivated
 			// automatically by woocommerce_order_after_calculate_totals.
 			if ( woocommerce_pos_is_pos_order( $order ) ) {
-				$orders = new Orders();
-				$orders->activate_pos_subtotal_filter();
+				Orders::activate_pos_subtotal_filter();
 			}
 
 			$remove_result = $order->remove_coupon( $coupon_code );
