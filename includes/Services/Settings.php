@@ -134,7 +134,6 @@ class Settings {
 				'publish_shop_orders',
 				'edit_shop_orders',
 				'edit_others_shop_orders',
-				'create_users',
 				'edit_users',
 				'list_users',
 				'manage_product_terms',
