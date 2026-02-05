@@ -256,11 +256,11 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		// After apply_coupon completes, the temporary filters should be gone.
 		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal', array( $this->orders, 'filter_pos_item_subtotal' ) ),
+			has_filter( 'woocommerce_order_item_get_subtotal', array( Orders::class, 'filter_pos_item_subtotal' ) ),
 			'Subtotal filter should be removed after coupon recalculation'
 		);
 		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal_tax', array( $this->orders, 'filter_pos_item_subtotal_tax' ) ),
+			has_filter( 'woocommerce_order_item_get_subtotal_tax', array( Orders::class, 'filter_pos_item_subtotal_tax' ) ),
 			'Subtotal tax filter should be removed after coupon recalculation'
 		);
 	}

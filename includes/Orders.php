@@ -161,7 +161,9 @@ class Orders {
 		// Apply POS price data to the product (for both misc and real products).
 		// This sets sale_price so WC_Product::is_on_sale() returns true, causing
 		// coupons with exclude_sale_items to skip POS-discounted items.
+		// Clone to avoid mutating shared instances (WC 10.5+ caches product objects).
 		if ( $product && ! empty( $pos_data_json ) ) {
+			$product = clone $product;
 			$pos_data = json_decode( $pos_data_json, true );
 
 			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
