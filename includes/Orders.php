@@ -285,7 +285,7 @@ class Orders {
 	 * @see WC_Abstract_Order::apply_coupon()
 	 * @see WC_Abstract_Order::recalculate_coupons()
 	 *
-	 * @param \WC_Coupon       $coupon The coupon object.
+	 * @param \WC_Coupon        $coupon The coupon object.
 	 * @param WC_Abstract_Order $order  The order object.
 	 */
 	public function before_coupon_recalculation( $coupon, $order ): void {
