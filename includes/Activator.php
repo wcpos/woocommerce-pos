@@ -230,7 +230,7 @@ class Activator {
 	 */
 	private function create_pos_roles(): void {
 		// WC 9.9 replaced promote_users with create_customers for customer creation.
-		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' )
+		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
 			? 'create_customers'
 			: 'promote_users';
 
