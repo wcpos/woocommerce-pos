@@ -120,6 +120,15 @@ class Form_Handler {
 			}
 		} elseif ( isset( $_POST['pos_remove_coupon'] ) ) {
 			$coupon_code = sanitize_text_field( wp_unslash( $_POST['pos_remove_coupon'] ) );
+
+			// WooCommerce's remove_coupon() calls recalculate_coupons() with no "before"
+			// hook, so we activate the POS subtotal filter manually. It is deactivated
+			// automatically by woocommerce_order_after_calculate_totals.
+			if ( woocommerce_pos_is_pos_order( $order ) ) {
+				$orders = new Orders();
+				$orders->activate_pos_subtotal_filter();
+			}
+
 			$remove_result = $order->remove_coupon( $coupon_code );
 			if ( ! $remove_result ) {
 				wc_add_notice( __( 'Error', 'woocommerce' ) );
