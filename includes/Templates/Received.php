@@ -11,7 +11,9 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
-use WCPOS\WooCommercePOS\Server;
+use WC_Order;
+use WC_REST_Orders_Controller;
+use WP_REST_Request;
 
 /**
  * Received class.
@@ -35,39 +37,38 @@ class Received {
 		add_filter( 'show_admin_bar', '__return_false' );
 	}
 
+	/**
+	 * Serialize an order to JSON using the WC REST API response shape.
+	 *
+	 * @param WC_Order $order The order object.
+	 *
+	 * @return string|false JSON string or false on failure.
+	 */
+	public function get_order_json( WC_Order $order ) {
+		$controller = new WC_REST_Orders_Controller();
+		$request    = new WP_REST_Request( 'GET' );
+		$request->set_param( 'id', $order->get_id() );
+		$response = $controller->prepare_object_for_response( $order, $request );
+		$data     = rest_get_server()->response_to_data( $response, false );
+
+		return wp_json_encode( $data );
+	}
 
 	/**
 	 * Get and display the received template.
 	 */
 	public function get_template(): void {
 		try {
-			// get order.
 			$order = \wc_get_order( $this->order_id );
 
-			// Order or receipt url is invalid.
 			if ( ! $order ) {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			// if ( ! $order->is_paid() ) {
-			// wp_die( esc_html__( 'Sorry, this order has not been paid.', 'woocommerce-pos' ) );
-			// }.
-
-			/**
-			 * Temporary hack for order JSON retrieval.
-			 *
-			 * @TODO - this is a hack and needs to be fixed
-			 * @NOTE - the received template will be removed once we move to session based checkout
-			 *
-			 * - hardcoding the rest endpoint is a receipe for disaster
-			 */
-			$server                   = new Server();
-			$order_json               = $server->wp_rest_request( '/wcpos/v1/orders/' . $this->order_id );
+			$order_json               = $this->get_order_json( $order );
 			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
 			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
 			$order_complete           = 'pos-open' !== $completed_status;
-
-			// @TODO - display message for errors
 
 			include woocommerce_pos_locate_template( 'received.php' );
 			exit;
