@@ -79,8 +79,8 @@ class Test_Data_Order_Statuses_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/data/order_statuses' );
 		$response = $this->server->dispatch( $request );
 
-		// Should require authentication
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**
@@ -204,8 +204,28 @@ class Test_Data_Order_Statuses_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Test any logged-in user can view order statuses.
 	 */
-	public function test_any_logged_in_user_can_view(): void {
-		// Create a subscriber (minimal role)
+	public function test_pos_user_can_view(): void {
+		// Create a cashier (has access_woocommerce_pos)
+		$cashier = $this->factory->user->create(
+			array(
+				'role' => 'cashier',
+			)
+		);
+		wp_set_current_user( $cashier );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/data/order_statuses' );
+		$response = $this->server->dispatch( $request );
+
+		// POS users should be able to view
+		$this->assertEquals( 200, $response->get_status() );
+
+		wp_delete_user( $cashier );
+	}
+
+	/**
+	 * Test subscriber (no POS access) cannot view order statuses.
+	 */
+	public function test_subscriber_cannot_view(): void {
 		$subscriber = $this->factory->user->create(
 			array(
 				'role' => 'subscriber',
@@ -216,8 +236,8 @@ class Test_Data_Order_Statuses_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/data/order_statuses' );
 		$response = $this->server->dispatch( $request );
 
-		// Logged-in users should be able to view
-		$this->assertEquals( 200, $response->get_status() );
+		// Subscribers lack access_woocommerce_pos
+		$this->assertEquals( 403, $response->get_status() );
 
 		wp_delete_user( $subscriber );
 	}

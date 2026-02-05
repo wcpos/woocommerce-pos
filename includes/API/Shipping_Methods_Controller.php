@@ -34,7 +34,7 @@ class Shipping_Methods_Controller extends WC_REST_Shipping_Methods_Controller {
 	 * @return \WP_Error|boolean
 	 */
 	public function get_items_permissions_check( $request ) {
-		if ( is_user_logged_in() ) {
+		if ( current_user_can( 'access_woocommerce_pos' ) ) {
 			return true;
 		}
 		return parent::get_items_permissions_check( $request );

@@ -106,36 +106,44 @@ class Settings {
 	private static $instance = null;
 
 	/**
-	 * Capabilities grouped by type.
+	 * Get capabilities grouped by type.
 	 *
-	 * @var array
+	 * WooCommerce 9.9 replaced promote_users with create_customers for
+	 * customer creation via the REST API. We show the correct capability
+	 * on the Access settings page based on the installed WC version.
+	 *
+	 * @return array
 	 */
-	private static $caps = array(
-		'wcpos' => array(
-			'access_woocommerce_pos',  // pos frontend.
-			'manage_woocommerce_pos', // pos admin.
-		),
-		'wc' => array(
-			// 'create_customers', // coming in WooCommerce 9.0?
-			'read_private_products',
-			'edit_product',
-			'edit_others_products',
-			'edit_published_products',
-			'read_private_shop_orders',
-			'publish_shop_orders',
-			// 'promote_users', // for some reason Shop Manager needs this to create customers?
-			'edit_shop_orders',
-			'edit_others_shop_orders',
-			'create_users',
-			'edit_users',
-			'list_users',
-			'manage_product_terms',
-			'read_private_shop_coupons',
-		),
-		'wp' => array(
-			'read', // wp-admin access.
-		),
-	);
+	private static function get_caps(): array {
+		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
+			? 'create_customers'
+			: 'promote_users';
+
+		return array(
+			'wcpos' => array(
+				'access_woocommerce_pos',
+				'manage_woocommerce_pos',
+			),
+			'wc' => array(
+				$customer_create_cap,
+				'read_private_products',
+				'edit_product',
+				'edit_others_products',
+				'edit_published_products',
+				'read_private_shop_orders',
+				'publish_shop_orders',
+				'edit_shop_orders',
+				'edit_others_shop_orders',
+				'edit_users',
+				'list_users',
+				'manage_product_terms',
+				'read_private_shop_coupons',
+			),
+			'wp' => array(
+				'read',
+			),
+		);
+	}
 
 	/**
 	 * Constructor is private to prevent direct instantiation.
@@ -316,6 +324,7 @@ class Settings {
 	public function get_access_settings(): array {
 		global $wp_roles;
 		$role_caps = array();
+		$caps      = self::get_caps();
 
 		$roles = $wp_roles->roles;
 		if ( $roles ) {
@@ -324,16 +333,16 @@ class Settings {
 					'name'         => $role['name'],
 					'capabilities' => array(
 						'wcpos' => array_intersect_key(
-							array_merge( array_fill_keys( self::$caps['wcpos'], false ), $role['capabilities'] ),
-							array_flip( self::$caps['wcpos'] )
+							array_merge( array_fill_keys( $caps['wcpos'], false ), $role['capabilities'] ),
+							array_flip( $caps['wcpos'] )
 						),
 						'wc' => array_intersect_key(
-							array_merge( array_fill_keys( self::$caps['wc'], false ), $role['capabilities'] ),
-							array_flip( self::$caps['wc'] )
+							array_merge( array_fill_keys( $caps['wc'], false ), $role['capabilities'] ),
+							array_flip( $caps['wc'] )
 						),
 						'wp' => array_intersect_key(
-							array_merge( array_fill_keys( self::$caps['wp'], false ), $role['capabilities'] ),
-							array_flip( self::$caps['wp'] )
+							array_merge( array_fill_keys( $caps['wp'], false ), $role['capabilities'] ),
+							array_flip( $caps['wp'] )
 						),
 					),
 				);

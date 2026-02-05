@@ -122,7 +122,8 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/' . $this->user );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**
@@ -226,7 +227,8 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/' . $this->user . '/stores' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**

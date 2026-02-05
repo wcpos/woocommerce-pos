@@ -82,7 +82,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**
@@ -179,7 +180,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/default-receipt' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**
@@ -201,7 +203,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/active' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 401, $response->get_status() );
+		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
 	}
 
 	/**

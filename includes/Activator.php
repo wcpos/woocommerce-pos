@@ -229,13 +229,22 @@ class Activator {
 	 * Add POS specific roles.
 	 */
 	private function create_pos_roles(): void {
+		// WC 9.9 replaced promote_users with create_customers for customer creation.
+		$customer_create_cap = \defined( 'WC_VERSION' ) && version_compare( WC_VERSION, '9.9', '>=' ) // @phpstan-ignore-line
+			? 'create_customers'
+			: 'promote_users';
+
 		// Cashier role.
 		$cashier_capabilities = array(
 			'read'                      => true,
 			'read_private_products'     => true,
 			'read_private_shop_orders'  => true,
 			'publish_shop_orders'       => true,
+			'edit_shop_orders'          => true,
+			'edit_others_shop_orders'   => true,
 			'list_users'                => true,
+			$customer_create_cap        => true,
+			'edit_users'                => true,
 			'read_private_shop_coupons' => true,
 			'manage_product_terms'      => true,
 		);
