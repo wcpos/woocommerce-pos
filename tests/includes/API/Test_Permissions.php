@@ -41,6 +41,13 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 	protected $subscriber;
 
 	/**
+	 * Original cashier role capabilities, saved before setUp mutations.
+	 *
+	 * @var array
+	 */
+	private $original_cashier_caps_snapshot = array();
+
+	/**
 	 * Capabilities that should be present on the cashier role.
 	 *
 	 * @var array
@@ -96,6 +103,7 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 		// Ensure the cashier role has every capability we need for testing.
 		$role = get_role( 'cashier' );
 		if ( $role ) {
+			$this->original_cashier_caps_snapshot = $role->capabilities;
 			foreach ( $this->cashier_caps as $cap ) {
 				$role->add_cap( $cap );
 			}
@@ -120,8 +128,23 @@ class Test_Permissions extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Tear down test fixtures.
+	 *
+	 * Restores the cashier role to its original capabilities so that
+	 * add_cap() calls in setUp do not leak across test runs via the
+	 * in-memory $wp_roles cache.
 	 */
 	public function tearDown(): void {
+		// Restore the cashier role to its pre-setUp state.
+		$role = get_role( 'cashier' );
+		if ( $role && ! empty( $this->original_cashier_caps_snapshot ) ) {
+			// Remove caps that were added by setUp but weren't in the original.
+			foreach ( $role->capabilities as $cap => $granted ) {
+				if ( ! array_key_exists( $cap, $this->original_cashier_caps_snapshot ) ) {
+					$role->remove_cap( $cap );
+				}
+			}
+		}
+
 		wp_delete_user( $this->shop_manager );
 		wp_delete_user( $this->cashier );
 		wp_delete_user( $this->subscriber );
