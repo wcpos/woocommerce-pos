@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 \define( 'WCPOS\WooCommercePOS\VERSION', '1.8.7' );
+\define( 'WCPOS\WooCommercePOS\TRANSLATION_VERSION', '2026.2.0' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_NAME', 'woocommerce-pos' );
 \define( 'WCPOS\WooCommercePOS\SHORT_NAME', 'wcpos' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_FILE', 'woocommerce-pos/woocommerce-pos.php' );

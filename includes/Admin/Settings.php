@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS\Admin;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -121,7 +122,7 @@ class Settings {
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
-			json_encode( VERSION )
+			json_encode( TRANSLATION_VERSION )
 		);
 	}
 }
