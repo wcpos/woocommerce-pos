@@ -98,8 +98,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	 * Check if a given request has access to create a customer.
 	 *
 	 * WC checks promote_users (< 9.9) or create_customers (9.9+). The POS
-	 * fallback checks create_customers OR create_users so the Access settings
-	 * page toggles actually control this behaviour.
+	 * fallback checks all three so the Access settings page toggles control
+	 * this behaviour regardless of WC version.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
@@ -109,7 +109,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$permission = parent::create_item_permissions_check( $request );
 
 		if ( is_wp_error( $permission ) ) {
-			if ( current_user_can( 'create_customers' ) || current_user_can( 'create_users' ) ) {
+			if ( current_user_can( 'create_customers' ) || current_user_can( 'create_users' ) || current_user_can( 'promote_users' ) ) {
 				return true;
 			}
 		}
