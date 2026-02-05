@@ -113,7 +113,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				? 'create_customers'
 				: 'promote_users';
 
-			if ( current_user_can( $customer_create_cap ) || current_user_can( 'create_users' ) ) {
+			if ( current_user_can( $customer_create_cap ) ) {
 				return true;
 			}
 		}
