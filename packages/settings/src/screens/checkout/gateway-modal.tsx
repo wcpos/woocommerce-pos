@@ -56,10 +56,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			<Notice status="info" isDismissible={false}>
 				<Trans
 					i18nKey="checkout.gateway_settings_pos_only"
-					components={[
-						null,
-						<a key="wc-settings" href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />,
-					]}
+					components={{ link: <a href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" /> }}
 				/>
 			</Notice>
 			<div className="wcpos:py-2">

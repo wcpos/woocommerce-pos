@@ -27,15 +27,12 @@ const Access = () => {
 				<Notice status="info" isDismissible={false}>
 					<Trans
 						i18nKey="access.default_roles_warning"
-						components={[null, <strong key="strong" />]}
+						components={{ strong: <strong /> }}
 					/>
 					&nbsp;
 					<Trans
 						i18nKey="access.visit_documentation"
-						components={[
-							null,
-							<a key="docs" href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" />,
-						]}
+						components={{ link: <a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" /> }}
 					/>
 				</Notice>
 			</div>
