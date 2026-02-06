@@ -10,7 +10,7 @@ const Footer = () => {
 	return (
 		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 			<div>
-				<h3 className="wcpos:mt-0">{t('Need help?')}</h3>
+				<h3 className="wcpos:mt-0">{t('settings.need_help')}</h3>
 			</div>
 			<div className="wcpos:mt-1 wcpos:sm:mt-0 wcpos:space-y-2">
 				<p className="wcpos:flex wcpos:items-center wcpos:mt-0">
@@ -18,7 +18,7 @@ const Footer = () => {
 						<Book fill="#3c434a" />
 					</span>
 					<a href="https://docs.wcpos.com" target="_blank" rel="noreferrer">
-						{t('Documentation')}
+						{t('common.documentation')}
 					</a>
 				</p>
 				<p className="wcpos:flex wcpos:items-center">
@@ -26,7 +26,7 @@ const Footer = () => {
 						<Question fill="#3c434a" />
 					</span>
 					<a href="https://faq.wcpos.com" target="_blank" rel="noreferrer">
-						{t('Frequently Asked Questions')}
+						{t('common.faq')}
 					</a>
 				</p>
 				<p className="wcpos:flex wcpos:items-center">

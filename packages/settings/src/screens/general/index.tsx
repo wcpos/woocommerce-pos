@@ -29,9 +29,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Force POS to send server requests over HTTPS (recommended)')}
+							tip={t('settings.force_ssl_tip')}
 						>
-							{t('Force SSL')}
+							{t('settings.force_ssl')}
 						</Label>
 					}
 					checked={!!data?.force_ssl}
@@ -45,9 +45,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Adds online and POS visibility settings to product admin')}
+							tip={t('settings.pos_only_products_tip')}
 						>
-							{t('Enable POS only products')}
+							{t('settings.pos_only_products')}
 						</Label>
 					}
 					checked={!!data?.pos_only_products}
@@ -61,9 +61,9 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Allows items to have decimal values in the quantity field, eg: 0.25')}
+							tip={t('settings.decimal_quantities_tip')}
 						>
-							{t('Enable decimal quantities')}
+							{t('settings.decimal_quantities')}
 						</Label>
 					}
 					checked={!!data?.decimal_qty}
@@ -77,7 +77,7 @@ const General = () => {
 				<ToggleControl
 					label={
 						<Label>
-							{t('Automatically generate username from customer email')}
+							{t('settings.generate_username')}
 						</Label>
 					}
 					checked={!!data?.generate_username}
@@ -88,9 +88,9 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
-					tip={t('The default customer for POS orders, eg: Guest')}
+					tip={t('settings.default_customer_tip')}
 				>
-					{t('Default POS customer')}
+					{t('settings.default_customer')}
 				</Label>
 			</div>
 			<div>
@@ -106,7 +106,7 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:items-center">
 				<CheckboxControl
-					label={t('Use cashier account')}
+					label={t('settings.use_cashier_account')}
 					checked={!!data?.default_customer_is_cashier}
 					onChange={(default_customer_is_cashier) => {
 						mutate({ default_customer_is_cashier });
@@ -115,9 +115,9 @@ const General = () => {
 			</div>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Label
-					tip={t('Product meta field to be used as barcode, eg: _sku or _barcode')}
+					tip={t('settings.barcode_field_tip')}
 				>
-					{t('Barcode Field')}
+					{t('settings.barcode_field')}
 				</Label>
 			</div>
 			<div>

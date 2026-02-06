@@ -22,7 +22,7 @@ interface User {
 }
 
 const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
-	const guestUser: User = { id: 0, name: t('Guest') };
+	const guestUser: User = { id: 0, name: t('common.guest') };
 	const { setNotice } = useNotices();
 	const [query, setQuery] = React.useState('');
 

@@ -41,11 +41,11 @@ const Main = ({ initialScreen }: Props) => {
 	const { notice, setNotice } = useNotices();
 
 	const routes: Route[] = [
-		{ key: 'general', title: t('General') },
-		{ key: 'checkout', title: t('Checkout') },
-		{ key: 'access', title: t('Access') },
-		{ key: 'sessions', title: t('Sessions') },
-		{ key: 'license', title: t('License') },
+		{ key: 'general', title: t('common.general') },
+		{ key: 'checkout', title: t('common.checkout') },
+		{ key: 'access', title: t('common.access') },
+		{ key: 'sessions', title: t('sessions.sessions') },
+		{ key: 'license', title: t('common.license') },
 	];
 
 	const [index, setIndex] = React.useState(

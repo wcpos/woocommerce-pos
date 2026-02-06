@@ -28,9 +28,9 @@ const Checkout = () => {
 			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 				<div className="wcpos:flex wcpos:sm:justify-end">
 					<Label
-						tip={t('Change the default order status for POS sales')}
+						tip={t('checkout.completed_order_status_tip')}
 					>
-						{t('Completed order status')}
+						{t('checkout.completed_order_status')}
 					</Label>
 				</div>
 				<div>
@@ -49,9 +49,9 @@ const Checkout = () => {
 					<ToggleControl
 						label={
 							<Label
-								tip={t('Send WooCommerce notification emails for POS orders')}
+								tip={t('checkout.notification_emails_tip')}
 							>
-								{t('Send admin emails')}
+								{t('checkout.send_admin_emails')}
 							</Label>
 						}
 						checked={!!data?.admin_emails}
@@ -65,9 +65,9 @@ const Checkout = () => {
 					<ToggleControl
 						label={
 							<Label
-								tip={t('Send WooCommerce notification emails for POS orders')}
+								tip={t('checkout.notification_emails_tip')}
 							>
-								{t('Send customer emails')}
+								{t('checkout.send_customer_emails')}
 							</Label>
 						}
 						checked={!!data?.customer_emails}
@@ -79,10 +79,10 @@ const Checkout = () => {
 			</div>
 
 			<div className="wcpos:px-4 wcpos:pb-5">
-				<h2 className="wcpos:text-base">{t('Gateways')}</h2>
+				<h2 className="wcpos:text-base">{t('checkout.gateways')}</h2>
 				<p>
 					{t(
-						'Installed gateways are listed below. Drag and drop gateways to control their display order at the Point of Sale. Payment Gateways enabled here will be available at the Point of Sale.'
+						'checkout.gateways_description'
 					)}
 				</p>
 				<ErrorBoundary FallbackComponent={Error}>

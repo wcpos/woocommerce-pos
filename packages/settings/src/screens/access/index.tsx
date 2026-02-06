@@ -26,12 +26,12 @@ const Access = () => {
 			<div className="wcpos:p-4">
 				<Notice status="info" isDismissible={false}>
 					<Trans
-						i18nKey="By default, access to the POS is limited to Administrator, Shop Manager and Cashier roles. It is recommended that you <1>do not change</1> the default settings unless you are fully aware of the consequences."
+						i18nKey="access.default_roles_warning"
 						components={[null, <strong key="strong" />]}
 					/>
 					&nbsp;
 					<Trans
-						i18nKey="For more information please visit the <1>documentation</1>."
+						i18nKey="access.visit_documentation"
 						components={[
 							null,
 							<a key="docs" href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" />,
