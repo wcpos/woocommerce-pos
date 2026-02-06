@@ -11,8 +11,6 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
-use WC_Order;
-use WC_REST_Orders_Controller;
 use WP_REST_Request;
 
 /**
@@ -38,18 +36,29 @@ class Received {
 	}
 
 	/**
-	 * Serialize an order to JSON using the WC REST API response shape.
+	 * Fetch the order JSON via an internal REST request to the WCPOS endpoint.
 	 *
-	 * @param WC_Order $order The order object.
+	 * @param int $order_id The order ID.
 	 *
 	 * @return string|false JSON string or false on failure.
 	 */
-	public function get_order_json( WC_Order $order ) {
-		$controller = new WC_REST_Orders_Controller();
-		$request    = new WP_REST_Request( 'GET' );
-		$request->set_param( 'id', $order->get_id() );
-		$response = $controller->prepare_object_for_response( $order, $request );
-		$data     = rest_get_server()->response_to_data( $response, false );
+	public function get_order_json( int $order_id ) {
+		// Grant POS access for this internal request so it passes both the
+		// WC REST permission check and the POS access_woocommerce_pos gate.
+		$grant_caps = function ( $allcaps ) {
+			$allcaps['access_woocommerce_pos'] = true;
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $grant_caps );
+		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
+
+		$request  = new WP_REST_Request( 'GET', '/wcpos/v1/orders/' . $order_id );
+		$server   = rest_get_server();
+		$response = $server->dispatch( $request );
+		$data     = $server->response_to_data( $response, true );
+
+		remove_filter( 'user_has_cap', $grant_caps );
+		remove_filter( 'woocommerce_rest_check_permissions', '__return_true' );
 
 		return wp_json_encode( $data );
 	}
@@ -65,7 +74,7 @@ class Received {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			$order_json               = $this->get_order_json( $order );
+			$order_json               = $this->get_order_json( $order->get_id() );
 			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
 			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
 			$order_complete           = 'pos-open' !== $completed_status;
