@@ -52,13 +52,15 @@ class Received {
 		add_filter( 'user_has_cap', $grant_caps );
 		add_filter( 'woocommerce_rest_check_permissions', '__return_true' );
 
-		$request  = new WP_REST_Request( 'GET', '/wcpos/v1/orders/' . $order_id );
-		$server   = rest_get_server();
-		$response = $server->dispatch( $request );
-		$data     = $server->response_to_data( $response, true );
-
-		remove_filter( 'user_has_cap', $grant_caps );
-		remove_filter( 'woocommerce_rest_check_permissions', '__return_true' );
+		try {
+			$request  = new WP_REST_Request( 'GET', '/wcpos/v1/orders/' . $order_id );
+			$server   = rest_get_server();
+			$response = $server->dispatch( $request );
+			$data     = $server->response_to_data( $response, true );
+		} finally {
+			remove_filter( 'user_has_cap', $grant_caps );
+			remove_filter( 'woocommerce_rest_check_permissions', '__return_true' );
+		}
 
 		return wp_json_encode( $data );
 	}
