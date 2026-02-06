@@ -91,13 +91,11 @@ const License = () => {
 				</div>
 				<div className="wcpos:col-span-2">
 					<p>
-						{t(
-							'If you would like to support the development of WCPOS, please consider purchasing a Pro license.'
-						)}
+						{t('license.support_development')}
 					</p>
 					<p>
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WCPOS Pro')}
+							{t('common.upgrade_to_pro')}
 						</a>
 					</p>
 				</div>
@@ -110,19 +108,19 @@ const License = () => {
 			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
 				<div className="wcpos:sm:text-right wcpos:text-8xl">🎉</div>
 				<div className="wcpos:col-span-2">
-					<h3>{t('Thank You!')}</h3>
+					<h3>{t('license.thank_you')}</h3>
 					<p>
 						<Trans
-							i18nKey="License <1>{number}</1> has been activated."
+							i18nKey="license.activated"
 							components={[null, <code key="license" />]}
 							values={{ number: truncate(isString(data?.key) ? data?.key : '') }}
 						/>
 					</p>
 					<p>
-						{t('Your support helps fund the ongoing development of WCPOS.')}
+						{t('license.ongoing_support')}
 					</p>
 					<Button variant="primary" onClick={() => handleActivation(true)}>
-						Deactivate
+						{t('license.deactivate')}
 					</Button>
 				</div>
 			</div>
@@ -132,7 +130,7 @@ const License = () => {
 	return (
 		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
 			<div className="wcpos:flex wcpos:sm:justify-end">
-				<Label>{t('License Key')}</Label>
+				<Label>{t('license.license_key')}</Label>
 			</div>
 			<div>
 				<input
@@ -145,7 +143,7 @@ const License = () => {
 			</div>
 			<div>
 				<Button variant="primary" disabled={!key} onClick={() => handleActivation()}>
-					{t('Activate')}
+					{t('license.activate')}
 				</Button>
 			</div>
 		</div>

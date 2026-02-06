@@ -68,13 +68,13 @@ const AllUsersView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Session terminated successfully'),
+				message: t('sessions.session_terminated'),
 			});
 		},
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message: error?.message || t('Failed to terminate session'),
+				message: error?.message || t('sessions.failed_terminate_session'),
 			});
 		},
 	});
@@ -104,7 +104,7 @@ const AllUsersView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Sessions terminated successfully'),
+				message: t('sessions.sessions_terminated'),
 			});
 		},
 		onError: (error: any) => {
@@ -112,7 +112,7 @@ const AllUsersView: React.FC = () => {
 				type: 'error',
 				message:
 					error?.message ||
-					t('Failed to terminate sessions'),
+					t('sessions.failed_terminate_sessions'),
 			});
 		},
 	});
@@ -120,7 +120,7 @@ const AllUsersView: React.FC = () => {
 	const handleDeleteSession = (userId: number, jti: string) => {
 		if (
 			confirm(
-				t('Are you sure you want to terminate this session?')
+				t('sessions.confirm_terminate_session')
 			)
 		) {
 			deleteSessionMutation.mutate({ userId, jti });
@@ -129,8 +129,8 @@ const AllUsersView: React.FC = () => {
 
 	const handleDeleteAllSessions = (userId: number, exceptCurrent: boolean = false) => {
 		const message = exceptCurrent
-			? t('Are you sure you want to logout from all other devices?')
-			: t('Are you sure you want to logout from all devices?');
+			? t('sessions.confirm_logout_other_devices')
+			: t('sessions.confirm_logout_all_devices');
 
 		if (confirm(message)) {
 			deleteAllSessionsMutation.mutate({ userId, exceptCurrent });

@@ -14,9 +14,7 @@ const Sessions = () => {
 		<div className="wcpos:p-4">
 			<div className="wcpos:mb-3">
 				<Notice status="info" isDismissible={false}>
-					{t(
-						'Manage active user sessions. You can view all logged-in users, see their devices, and terminate sessions if needed.'
-					)}
+					{t('sessions.manage_description')}
 				</Notice>
 			</div>
 
@@ -26,13 +24,13 @@ const Sessions = () => {
 					variant={viewMode === 'all' ? 'primary' : 'secondary'}
 					onClick={() => setViewMode('all')}
 				>
-					{t('All Users')}
+					{t('sessions.all_users')}
 				</Button>
 				<Button
 					variant={viewMode === 'my' ? 'primary' : 'secondary'}
 					onClick={() => setViewMode('my')}
 				>
-					{t('My Sessions')}
+					{t('sessions.my_sessions')}
 				</Button>
 			</div>
 
@@ -43,7 +41,7 @@ const Sessions = () => {
 						<div className="wcpos:text-center">
 							<div className="wcpos:inline-block wcpos:animate-spin wcpos:rounded-full wcpos:h-8 wcpos:w-8 wcpos:border-4 wcpos:border-gray-200 wcpos:border-t-wp-admin-theme-color" />
 							<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-600">
-								{t('Loading sessions...')}
+								{t('sessions.loading')}
 							</p>
 						</div>
 					</div>

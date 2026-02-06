@@ -61,13 +61,13 @@ const MySessionsView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Session terminated successfully'),
+				message: t('sessions.session_terminated'),
 			});
 		},
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message: error?.message || t('Failed to terminate session'),
+				message: error?.message || t('sessions.failed_terminate_session'),
 			});
 		},
 	});
@@ -97,7 +97,7 @@ const MySessionsView: React.FC = () => {
 			queryClient.invalidateQueries({ queryKey: ['sessions'] });
 			setNotice({
 				type: 'success',
-				message: t('Sessions terminated successfully'),
+				message: t('sessions.sessions_terminated'),
 			});
 		},
 		onError: (error: any) => {
@@ -105,7 +105,7 @@ const MySessionsView: React.FC = () => {
 				type: 'error',
 				message:
 					error?.message ||
-					t('Failed to terminate sessions'),
+					t('sessions.failed_terminate_sessions'),
 			});
 		},
 	});
@@ -113,7 +113,7 @@ const MySessionsView: React.FC = () => {
 	const handleDeleteSession = (userId: number, jti: string) => {
 		if (
 			confirm(
-				t('Are you sure you want to terminate this session?')
+				t('sessions.confirm_terminate_session')
 			)
 		) {
 			deleteSessionMutation.mutate({ userId, jti });
@@ -122,8 +122,8 @@ const MySessionsView: React.FC = () => {
 
 	const handleDeleteAllSessions = (userId: number, exceptCurrent: boolean = false) => {
 		const message = exceptCurrent
-			? t('Are you sure you want to logout from all other devices?')
-			: t('Are you sure you want to logout from all devices?');
+			? t('sessions.confirm_logout_other_devices')
+			: t('sessions.confirm_logout_all_devices');
 
 		if (confirm(message)) {
 			deleteAllSessionsMutation.mutate({ userId, exceptCurrent });
@@ -134,7 +134,7 @@ const MySessionsView: React.FC = () => {
 		<div>
 			<div className="wcpos:flex wcpos:justify-between wcpos:items-center wcpos:mb-3">
 				<h2 className="wcpos:text-base wcpos:font-medium">
-					{t('Active Sessions')} (
+					{t('sessions.active_sessions')} (
 					{mySessions?.sessions?.length || 0})
 				</h2>
 				{mySessions?.sessions && mySessions.sessions.length > 1 && (
@@ -145,7 +145,7 @@ const MySessionsView: React.FC = () => {
 						onClick={() => handleDeleteAllSessions(mySessions.user_id, true)}
 						disabled={deleteAllSessionsMutation.isPending}
 					>
-						{t('Logout Other Devices')}
+						{t('sessions.logout_other_devices')}
 					</Button>
 				)}
 			</div>
@@ -163,7 +163,7 @@ const MySessionsView: React.FC = () => {
 				</div>
 			) : (
 				<Notice status="info">
-					{t('No active sessions found')}
+					{t('sessions.no_active_sessions')}
 				</Notice>
 			)}
 		</div>

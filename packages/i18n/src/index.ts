@@ -20,6 +20,7 @@ export interface Locales {
 export interface CreateI18nOptions {
 	namespace: string;
 	project: string;
+	resources?: Record<string, Record<string, Record<string, string>>>;
 }
 
 declare global {
@@ -53,7 +54,7 @@ export function getTranslationVersion(): string {
 /**
  * Create a configured i18next instance for WCPOS.
  */
-export function createI18nInstance({ namespace, project }: CreateI18nOptions): {
+export function createI18nInstance({ namespace, project, resources }: CreateI18nOptions): {
 	i18n: I18nInstance;
 	i18nPromise: Promise<I18nInstance>;
 	t: I18nInstance['t'];
@@ -62,35 +63,42 @@ export function createI18nInstance({ namespace, project }: CreateI18nOptions): {
 	const locale = detectLocale();
 	const translationVersion = getTranslationVersion();
 
+	const initOptions: Record<string, unknown> = {
+		lng: locale,
+		fallbackLng: 'en',
+		ns: [namespace],
+		defaultNS: namespace,
+		keySeparator: false,
+		nsSeparator: false,
+		interpolation: {
+			escapeValue: false,
+			prefix: '{',
+			suffix: '}',
+		},
+		backend: {
+			backends: [LocalStorageBackend, HttpBackend],
+			backendOptions: [
+				{
+					prefix: 'wcpos_i18n_',
+					expirationTime: 7 * 24 * 60 * 60 * 1000, // 7 days
+					defaultVersion: translationVersion,
+				},
+				{
+					loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@${translationVersion}/translations/js/{{lng}}/${project}/{{ns}}.json`,
+				},
+			],
+		},
+	};
+
+	if (resources) {
+		initOptions.resources = resources;
+		initOptions.partialBundledLanguages = true;
+	}
+
 	const i18nPromise = instance
 		.use(ChainedBackend)
 		.use(initReactI18next)
-		.init({
-			lng: locale,
-			fallbackLng: false,
-			ns: [namespace],
-			defaultNS: namespace,
-			keySeparator: false,
-			nsSeparator: false,
-			interpolation: {
-				escapeValue: false,
-				prefix: '{',
-				suffix: '}',
-			},
-			backend: {
-				backends: [LocalStorageBackend, HttpBackend],
-				backendOptions: [
-					{
-						prefix: 'wcpos_i18n_',
-						expirationTime: 7 * 24 * 60 * 60 * 1000, // 7 days
-						defaultVersion: translationVersion,
-					},
-					{
-						loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@${translationVersion}/translations/js/{{lng}}/${project}/{{ns}}.json`,
-					},
-				],
-			},
-		});
+		.init(initOptions);
 
 	return {
 		i18n: instance,

@@ -19,9 +19,9 @@ const Tools = () => {
 				<ToggleControl
 					label={
 						<Label
-							tip={t('Some servers disable the Authorization header, this will use a URL param instead')}
+							tip={t('settings.authorize_via_url_param_tip')}
 						>
-							{t('Authorize via URL param')}
+							{t('settings.authorize_via_url_param')}
 						</Label>
 					}
 					checked={!!data?.use_jwt_as_param}

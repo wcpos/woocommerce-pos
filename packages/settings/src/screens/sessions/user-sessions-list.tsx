@@ -65,18 +65,18 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 		const now = Math.floor(Date.now() / 1000);
 		const diff = now - timestamp;
 
-		if (diff < 60) return t('Just now');
+		if (diff < 60) return t('sessions.just_now');
 		if (diff < 3600)
-			return t('{minutes} minutes ago', { minutes: Math.floor(diff / 60) });
+			return t('sessions.minutes_ago', { minutes: Math.floor(diff / 60) });
 		if (diff < 86400)
-			return t('{hours} hours ago', { hours: Math.floor(diff / 3600) });
-		return t('{days} days ago', { days: Math.floor(diff / 86400) });
+			return t('sessions.hours_ago', { hours: Math.floor(diff / 3600) });
+		return t('sessions.days_ago', { days: Math.floor(diff / 86400) });
 	};
 
 	if (!users || users.length === 0) {
 		return (
 			<div className="wcpos:text-center wcpos:py-8 wcpos:text-gray-500">
-				{t('No active sessions found')}
+				{t('sessions.no_active_sessions')}
 			</div>
 		);
 	}
@@ -84,7 +84,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 	return (
 		<div className="wcpos:space-y-2">
 			<h2 className="wcpos:text-base wcpos:font-medium wcpos:mb-3">
-				{t('Active Users')} ({users.length})
+				{t('sessions.active_users')} ({users.length})
 			</h2>
 
 			{map(users, (user) => {
@@ -118,10 +118,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 											<span className="wcpos:truncate">@{user.username}</span>
 											<span className="wcpos:text-gray-400">•</span>
 											<span className="wcpos:shrink-0">
-												{user.session_count}{' '}
-												{user.session_count === 1
-													? t('session')
-													: t('sessions')}
+												{t('sessions.session_count', { count: user.session_count })}
 											</span>
 											<span className="wcpos:text-gray-400">•</span>
 											<span className="wcpos:shrink-0">{getTimeAgo(user.last_active)}</span>
@@ -141,7 +138,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 											}}
 											disabled={isDeleting}
 										>
-											{t('Logout All')}
+											{t('sessions.logout_all')}
 										</Button>
 									)}
 									<span

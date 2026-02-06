@@ -13,7 +13,7 @@ const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
 		<div className="wcpos:p-4">
 			<Notice status="error" onRemove={resetErrorBoundary}>
 				<p>
-					{t('Something went wrong')}: <code>{message}</code>
+					{t('common.something_went_wrong')}: <code>{message}</code>
 				</p>
 			</Notice>
 		</div>

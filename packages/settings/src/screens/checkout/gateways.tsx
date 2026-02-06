@@ -93,9 +93,9 @@ const Gateways = () => {
 			) : (
 				<div className="wcpos:pb-5">
 					<Notice status="info" isDismissible={false}>
-						{t('To enable all WooCommerce gateways please enable the Pro plugin.')}{' '}
+						{t('checkout.enable_pro_gateways')}{' '}
 						<a href="https://wcpos.com/pro">
-							{t('Upgrade to WCPOS Pro')}
+							{t('common.upgrade_to_pro')}
 						</a>
 						.
 					</Notice>
@@ -111,25 +111,25 @@ const Gateways = () => {
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 								>
-									{t('Default')}
+									{t('common.default')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 								>
-									{t('Gateway')}
+									{t('common.gateway')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 								>
-									{t('Gateway ID')}
+									{t('checkout.gateway_id')}
 								</th>
 								<th
 									scope="col"
 									className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 								>
-									{t('Enabled')}
+									{t('common.enabled')}
 								</th>
 								<th scope="col"></th>
 							</tr>
@@ -201,7 +201,7 @@ const Gateways = () => {
 															}}
 															disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 														>
-															{t('Settings')}
+															{t('common.settings')}
 														</Button>
 													</td>
 												</tr>
