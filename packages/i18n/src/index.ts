@@ -65,7 +65,7 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 
 	const initOptions: Record<string, unknown> = {
 		lng: locale,
-		fallbackLng: resources ? 'en' : false,
+		fallbackLng: 'en',
 		ns: [namespace],
 		defaultNS: namespace,
 		keySeparator: false,
