@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'packages/settings/src/translations/locales/en/wp-admin-settings.json'
+      - 'packages/analytics/src/translations/locales/en/wp-admin-analytics.json'
   workflow_dispatch:
     inputs:
       force:
@@ -30,6 +31,7 @@ jobs:
 
           mkdir -p /tmp/translations-out
           cp packages/settings/src/translations/locales/en/wp-admin-settings.json /tmp/translations-out/
+          cp packages/analytics/src/translations/locales/en/wp-admin-analytics.json /tmp/translations-out/
 
           git checkout --orphan translations-source
           git rm -rf .
