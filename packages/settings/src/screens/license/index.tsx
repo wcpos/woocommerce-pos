@@ -112,7 +112,7 @@ const License = () => {
 					<p>
 						<Trans
 							i18nKey="license.activated"
-							components={[null, <code key="license" />]}
+							components={{ code: <code /> }}
 							values={{ number: truncate(isString(data?.key) ? data?.key : '') }}
 						/>
 					</p>
