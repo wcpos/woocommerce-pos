@@ -48,6 +48,8 @@ class Test_Received extends WC_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		wp_set_current_user( 0 );
+		remove_action( 'rest_api_init', array( $this, 'rest_api_init' ) );
 		parent::tearDown();
 	}
 
