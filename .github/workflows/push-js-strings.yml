@@ -5,10 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'packages/**/*.ts'
-      - 'packages/**/*.tsx'
-      - 'packages/**/*.js'
-      - 'packages/**/*.jsx'
+      - 'packages/settings/src/translations/locales/en/wp-admin-settings.json'
   workflow_dispatch:
     inputs:
       force:
@@ -18,7 +15,7 @@ on:
         type: boolean
 
 jobs:
-  extract-and-dispatch:
+  push-and-dispatch:
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -26,36 +23,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: pnpm install --filter . --frozen-lockfile=false
-
-      - name: Extract translation strings
-        run: node scripts/extract-js-strings.js
-
       - name: Push to translations-source branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ -z "$(ls -A .translations/*.json 2>/dev/null)" ]; then
-            echo "No translation files found, skipping."
-            exit 0
-          fi
+          mkdir -p /tmp/translations-out
+          cp packages/settings/src/translations/locales/en/wp-admin-settings.json /tmp/translations-out/
 
           git checkout --orphan translations-source
           git rm -rf .
-          cp .translations/*.json .
+          cp /tmp/translations-out/*.json .
           git add .
           git commit -m "translation source strings from ${{ github.sha }}"
           git push -f origin translations-source
+
+          git checkout ${{ github.sha }} -- .github
 
       - name: Generate GitHub App token
         id: app-token
@@ -70,7 +53,7 @@ jobs:
         run: |
           gh api repos/wcpos/translations/dispatches \
             -f event_type=update-js-strings \
-            -f "client_payload[repo_name]=woocommerce-pos" \
+            -f "client_payload[repo_name]=${{ github.event.repository.name }}" \
             -f "client_payload[ref]=translations-source" \
             -f "client_payload[force]=${{ inputs.force || 'false' }}"
         env:
