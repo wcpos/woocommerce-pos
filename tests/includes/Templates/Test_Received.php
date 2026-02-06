@@ -1,4 +1,9 @@
 <?php
+/**
+ * Tests for the Received order template.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\Templates
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\Templates;
 
@@ -8,12 +13,23 @@ use WCPOS\WooCommercePOS\Templates\Received;
 use WC_REST_Unit_Test_Case;
 
 /**
+ * Received template tests.
+ *
  * @internal
  *
  * @coversNothing
  */
 class Test_Received extends WC_REST_Unit_Test_Case {
+	/**
+	 * Admin user ID.
+	 *
+	 * @var int
+	 */
+	private $user;
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function setUp(): void {
 		add_action( 'rest_api_init', array( $this, 'rest_api_init' ) );
 		parent::setUp();
@@ -21,10 +37,16 @@ class Test_Received extends WC_REST_Unit_Test_Case {
 		wp_set_current_user( $this->user );
 	}
 
+	/**
+	 * Register the WCPOS REST API routes.
+	 */
 	public function rest_api_init(): void {
 		new API();
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tearDown(): void {
 		parent::tearDown();
 	}
