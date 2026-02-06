@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -23,12 +24,22 @@ jobs:
           echo "Updating translation version to $VERSION"
           sed -i "s/TRANSLATION_VERSION', '[^']*'/TRANSLATION_VERSION', '${VERSION}'/" woocommerce-pos.php
 
-      - name: Commit and push
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          BRANCH="chore/update-translation-version-${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add woocommerce-pos.php
           if ! git diff --staged --quiet; then
-            git commit -m "chore: update translation version to ${{ github.event.client_payload.version }}"
-            git push origin HEAD
+            git checkout -b "$BRANCH"
+            git commit -m "chore: update translation version to ${VERSION}"
+            git push origin "$BRANCH"
+            gh pr create \
+              --title "chore: update translation version to ${VERSION}" \
+              --body "Automated PR to update translation version to ${VERSION}." \
+              --base main \
+              --head "$BRANCH"
           fi
