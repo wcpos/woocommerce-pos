@@ -28,7 +28,7 @@ if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
 	\define( __NAMESPACE__ . '\VERSION', '1.8.8' );
 }
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
-	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.2.2' );
+	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.2.3' );
 }
 if ( ! \defined( __NAMESPACE__ . '\PLUGIN_NAME' ) ) {
 	\define( __NAMESPACE__ . '\PLUGIN_NAME', 'woocommerce-pos' );
