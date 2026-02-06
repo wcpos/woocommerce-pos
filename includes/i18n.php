@@ -13,6 +13,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Logger;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
@@ -101,9 +102,44 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			}
 		}
 
-		// Load the translation file if it exists.
+		// Ensure file uses WordPress 6.5+ format (messages key) before loading.
 		if ( file_exists( $file ) ) {
-			load_textdomain( $this->text_domain, $file );
+			$this->maybe_convert_file_format( $file );
+
+			// Pass the .mo path — WordPress internally looks for .l10n.php first.
+			$mofile = $this->languages_path . $this->text_domain . '-' . $locale . '.mo';
+			load_textdomain( $this->text_domain, $mofile );
+		} else {
+			Logger::log( sprintf( 'i18n: No translation file available for %s (%s)', $this->text_domain, $locale ) );
+		}
+	}
+
+	/**
+	 * Ensure .l10n.php file uses WordPress 6.5+ format with 'messages' key.
+	 *
+	 * CDN files use a flat array format, but WordPress expects:
+	 *   array( 'messages' => array( 'key' => 'translation', ... ) )
+	 *
+	 * @param string $file The .l10n.php file path.
+	 */
+	protected function maybe_convert_file_format( string $file ): void {
+		$data = include $file;
+
+		if ( ! is_array( $data ) || isset( $data['messages'] ) ) {
+			return;
+		}
+
+		// Wrap flat translations array in WordPress expected format.
+		$wrapped = "<?php\nreturn array(\n\t'messages' => " . var_export( $data, true ) . ",\n);\n"; // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Generating a PHP translation file.
+
+		global $wp_filesystem;
+		if ( empty( $wp_filesystem ) ) {
+			require_once ABSPATH . '/wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		if ( $wp_filesystem && is_object( $wp_filesystem ) ) {
+			$wp_filesystem->put_contents( $file, $wrapped, FS_CHMOD_FILE );
 		}
 	}
 
@@ -126,15 +162,22 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		);
 
 		if ( is_wp_error( $response ) ) {
+			Logger::log( sprintf( 'i18n: Failed to download %s translation - HTTP error: %s', $locale, $response->get_error_message() ) );
+
 			return false;
 		}
 
-		if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+		$status_code = wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $status_code ) {
+			Logger::log( sprintf( 'i18n: Failed to download %s translation - HTTP %d from %s', $locale, $status_code, $url ) );
+
 			return false;
 		}
 
 		$body = wp_remote_retrieve_body( $response );
 		if ( empty( $body ) ) {
+			Logger::log( sprintf( 'i18n: Failed to download %s translation - empty response body from %s', $locale, $url ) );
+
 			return false;
 		}
 
@@ -153,9 +196,16 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 
 		// Verify WP_Filesystem initialized successfully.
 		if ( ! $wp_filesystem || ! is_object( $wp_filesystem ) ) {
+			Logger::log( sprintf( 'i18n: Failed to write %s translation - WP_Filesystem not available', $locale ) );
+
 			return false;
 		}
 
-		return $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
+		$written = $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
+		if ( ! $written ) {
+			Logger::log( sprintf( 'i18n: Failed to write %s translation to %s', $locale, $file ) );
+		}
+
+		return $written;
 	}
 }
