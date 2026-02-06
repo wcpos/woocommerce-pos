@@ -231,7 +231,7 @@ class API {
 		if ( ! $this->is_auth_checked ) {
 			// Authentication hasn't occurred during `determine_current_user`, so check auth.
 			$user_id = $this->authenticate( false );
-			if ( $user_id ) {
+			if ( $user_id && ! is_wp_error( $user_id ) ) {
 				wp_set_current_user( $user_id );
 
 				return true;
