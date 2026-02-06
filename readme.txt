@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.7
+Stable tag: 1.8.8
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,20 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.8 - 2026/02/06 =
+- **Completely rebuilt translation system** — switched to i18next with proper plural handling and regional locale fallback, loaded on-demand from jsDelivr and decoupled from plugin version updates ([#37](https://github.com/wcpos/monorepo/pull/37), [#75](https://github.com/wcpos/monorepo/pull/75), [#76](https://github.com/wcpos/monorepo/pull/76), [#438](https://github.com/wcpos/woocommerce-pos/pull/438), [#439](https://github.com/wcpos/woocommerce-pos/pull/439), [#474](https://github.com/wcpos/woocommerce-pos/pull/474))
+- **Fixed conflict with REST API caching plugins** — POS requests could break entirely when a REST API caching plugin was active, this is now resolved ([#421](https://github.com/wcpos/woocommerce-pos/pull/421))
+- **Fixed expired JWT overriding valid authentication** — an expired token could silently override a valid cookie session, locking users out unnecessarily ([#472](https://github.com/wcpos/woocommerce-pos/pull/472))
+- **POS discounts no longer wiped by coupons** — applying a coupon to an order with POS-discounted items no longer resets those discounts back to the original price ([#464](https://github.com/wcpos/woocommerce-pos/pull/464))
+- **Fixed misc products showing $0 on receipts** — miscellaneous products now display the correct price on receipts and order emails ([#436](https://github.com/wcpos/woocommerce-pos/pull/436))
+- **Fixed checkout-to-receipt navigation** — no more crashes or lost order links when completing a sale ([#77](https://github.com/wcpos/monorepo/pull/77))
+- **Fixed token refresh on 403 errors** — sessions that appeared "stuck" requiring a re-login should now refresh automatically ([#74](https://github.com/wcpos/monorepo/pull/74))
+- **Fixed store switching issues** — switching between stores no longer causes errors or blank screens ([da8c05d](https://github.com/wcpos/monorepo/commit/da8c05d))
+- **Fixed missing data in received template** — the order received page was missing link data, now restored ([#476](https://github.com/wcpos/woocommerce-pos/pull/476))
+- **Tightened permission checks** — capability checks now properly match what's configured on the Access settings page ([#467](https://github.com/wcpos/woocommerce-pos/pull/467))
+- **Improved performance during large syncs** — the UI stays responsive while syncing large product catalogs ([8657e1f](https://github.com/wcpos/monorepo/commit/8657e1f))
+- **Fixed web hydration in standalone mode** — the web app loads correctly when accessed directly without the desktop wrapper ([#19](https://github.com/wcpos/monorepo/pull/19))
 
 = 1.8.7 - 2026/01/13 =
 * New: Template management system for customizing receipts
