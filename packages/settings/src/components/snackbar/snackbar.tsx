@@ -1,7 +1,5 @@
 import * as React from 'react';
 
-import { Snackbar as WPSnackbar } from '@wordpress/components';
-
 export interface SnackbarProps {
 	id: string;
 	message: string;
@@ -17,5 +15,11 @@ export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) =
 		return () => clearTimeout(timer);
 	}, [message, onRemove, timeout]);
 
-	return message ? <WPSnackbar>{message}</WPSnackbar> : null;
+	if (!message) return null;
+
+	return (
+		<div className="wcpos:fixed wcpos:bottom-4 wcpos:left-1/2 wcpos:-translate-x-1/2 wcpos:z-50 wcpos:bg-gray-800 wcpos:text-white wcpos:px-4 wcpos:py-2 wcpos:rounded-md wcpos:shadow-lg wcpos:text-sm wcpos:max-w-md wcpos:text-center">
+			{message}
+		</div>
+	);
 };

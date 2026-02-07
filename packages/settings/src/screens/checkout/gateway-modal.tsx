@@ -1,8 +1,7 @@
 import * as React from 'react';
 
-import { Button, Modal } from '@wordpress/components';
-
 import Notice from '../../components/notice';
+import { Button, Modal } from '../../components/ui';
 import { t, Trans } from '../../translations';
 
 interface GatewayModalProps {
@@ -45,12 +44,9 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 
 	return (
 		<Modal
-			focusOnMount
-			shouldCloseOnEsc
-			shouldCloseOnClickOutside
-			overlayClassName="my-extra-modal-overlay-class"
+			open={true}
+			onClose={() => closeModal()}
 			title={gateway.title}
-			onRequestClose={closeModal}
 			className="wcpos:max-w-md"
 		>
 			<Notice status="info" isDismissible={false}>
@@ -75,7 +71,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				/>
 			</div>
 			<div className="wcpos:py-2">
-				<label htmlFor="description" className="wcpos:block mb-1 wcpos:font-medium wcpos:text-sm">
+				<label htmlFor="description" className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm">
 					{t('common.description')}
 				</label>
 				<textarea
@@ -86,7 +82,7 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 					className="wcpos:w-full wcpos:h-20 wcpos:p-2 wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:focus:border-wp-admin-theme-color"
 				/>
 			</div>
-			<div className="wcpos:text-right wcpos:pt-4">
+			<div className="wcpos:text-right wcpos:pt-4 wcpos:flex wcpos:justify-end wcpos:gap-2">
 				<Button onClick={closeModal}>{t('common.cancel')}</Button>
 				<Button variant="primary" onClick={handleSave}>
 					{t('common.save')}

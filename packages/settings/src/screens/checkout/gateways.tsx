@@ -1,12 +1,12 @@
 import * as React from 'react';
 
-import { Button, FormToggle } from '@wordpress/components';
 import { map, sortBy, keyBy } from 'lodash';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 import GatewayModal from './gateway-modal';
 import DragIcon from '../../../assets/drag-icon.svg';
 import Notice from '../../components/notice';
+import { Button, Toggle } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -176,8 +176,7 @@ const Gateways = () => {
 														{item.id}
 													</td>
 													<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-center">
-														<FormToggle
-															label=""
+														<Toggle
 															checked={item.enabled}
 															onChange={() => {
 																mutate({
