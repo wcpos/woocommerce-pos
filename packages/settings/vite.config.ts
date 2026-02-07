@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir,
       emptyOutDir: false,
+      target: 'es2022',
       lib: {
         entry: path.resolve(__dirname, 'src/index.tsx'),
         name: 'WCPOSSettings',
