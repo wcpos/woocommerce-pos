@@ -6,7 +6,7 @@ import { useSnackbar } from '../use-snackbar';
 import { SnackbarProvider } from '../provider';
 
 // Mock the SnackbarList to avoid pulling in deeper dependencies
-jest.mock('../snackbar-list', () => ({
+vi.mock('../snackbar-list', () => ({
 	SnackbarList: () => null,
 }));
 

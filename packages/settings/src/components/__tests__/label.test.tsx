@@ -4,16 +4,18 @@ import { render, screen } from '@testing-library/react';
 
 import Label from '../label';
 
-// Mock @wordpress/components
-jest.mock('@wordpress/components', () => ({
+// Mock the Tooltip component (now from ./ui/tooltip)
+vi.mock('../ui/tooltip', () => ({
 	Tooltip: ({ text, children }: { text: string; children: React.ReactNode }) => (
 		<div data-testid="tooltip" data-tip={text}>
 			{children}
 		</div>
 	),
-	Icon: ({ icon, className }: { icon: string; className?: string }) => (
-		<span data-testid="icon" data-icon={icon} className={className} />
-	),
+}));
+
+// Mock SVG import
+vi.mock('../../../assets/comment-question.svg', () => ({
+	default: (props: any) => <span data-testid="icon" {...props} />,
 }));
 
 describe('Label', () => {
