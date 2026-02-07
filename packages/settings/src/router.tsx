@@ -4,10 +4,10 @@ import {
 	createRoute,
 	redirect,
 	createHashHistory,
-	Outlet,
 } from '@tanstack/react-router';
 import apiFetch from '@wordpress/api-fetch';
 
+import { RootLayout } from './layouts/root-layout';
 import { queryClient } from './query-client';
 
 // Import page components — these are the existing screen components
@@ -17,10 +17,9 @@ import AccessPage from './screens/access';
 import SessionsPage from './screens/sessions';
 import LicensePage from './screens/license';
 
-// Root route — renders Outlet so child routes display.
-// The full RootLayout component gets added in Task 5.
+// Root route — renders the full-page layout with sidebar navigation.
 const rootRoute = createRootRoute({
-	component: () => <Outlet />,
+	component: RootLayout,
 });
 
 const indexRoute = createRoute({
