@@ -1,10 +1,10 @@
 import * as React from 'react';
 
-import { CheckboxControl } from '@wordpress/components';
 import classNames from 'classnames';
 import { map, get } from 'lodash';
 
 import Notice from '../../components/notice';
+import { Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { Trans } from '../../translations';
 
@@ -74,17 +74,17 @@ const Access = () => {
 										{map(caps, (checked, label) => {
 											const disabled = selected === 'administrator' && label === 'read';
 											return (
-												<CheckboxControl
+												<Checkbox
 													key={label}
 													label={label}
 													checked={checked}
 													disabled={disabled}
-													onChange={(value) => {
+													onChange={(e) => {
 														mutate({
 															[selected]: {
 																capabilities: {
 																	[group]: {
-																		[label]: value,
+																		[label]: e.target.checked,
 																	},
 																},
 															},

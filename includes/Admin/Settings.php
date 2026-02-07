@@ -69,9 +69,7 @@ class Settings {
 		wp_enqueue_style(
 			PLUGIN_NAME . '-settings-styles',
 			PLUGIN_URL . $dir . '/css/settings.css',
-			array(
-				'wp-components',
-			),
+			array(),
 			VERSION
 		);
 
@@ -81,10 +79,8 @@ class Settings {
 			array(
 				'react',
 				'react-dom',
-				'wp-components',
-				'wp-element',
-				'wp-i18n',
 				'wp-api-fetch',
+				'wp-url',
 				'lodash',
 			),
 			VERSION,
@@ -93,16 +89,6 @@ class Settings {
 
 		// Add inline script.
 		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
-
-		if ( $is_development ) {
-			wp_enqueue_script(
-				'webpack-live-reload',
-				'http://localhost:35729/livereload.js',
-				array(),
-				null,
-				true
-			);
-		}
 	}
 
 	/**

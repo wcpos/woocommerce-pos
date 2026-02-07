@@ -1,10 +1,9 @@
 import * as React from 'react';
 
-import { Button } from '@wordpress/components';
-
 import AllUsersView from './all-users-view';
 import MySessionsView from './my-sessions-view';
 import Notice from '../../components/notice';
+import { Button } from '../../components/ui';
 import { t } from '../../translations';
 
 const Sessions = () => {
@@ -54,4 +53,3 @@ const Sessions = () => {
 };
 
 export default Sessions;
-

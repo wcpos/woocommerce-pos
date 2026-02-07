@@ -1,10 +1,10 @@
 import * as React from 'react';
 
-import { Button } from '@wordpress/components';
 import { addQueryArgs } from '@wordpress/url';
 import { get, throttle, isString } from 'lodash';
 
 import Label from '../../components/label';
+import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t, Trans } from '../../translations';

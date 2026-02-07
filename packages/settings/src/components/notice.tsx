@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import { Icon } from '@wordpress/components';
 import classNames from 'classnames';
 
 import CloseIcon from '../../assets/close-icon.svg';
@@ -24,7 +23,9 @@ const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProp
 		>
 			<div className="wcpos:flex-1">{children}</div>
 			{isDismissible && (
-				<Icon name={<CloseIcon />} onClick={onRemove} className="wcpos:h-5 wcpos:w-5" />
+				<button onClick={onRemove} className="wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1">
+					<CloseIcon className="wcpos:h-5 wcpos:w-5" fill="currentColor" />
+				</button>
 			)}
 		</div>
 	);

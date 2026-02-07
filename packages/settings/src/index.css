@@ -50,6 +50,13 @@
 	display: none !important;
 } */
 
+/* Full-page takeover: remove WP admin default wrapping */
+#woocommerce-pos-settings {
+	margin-left: -20px;
+	margin-right: 0;
+	margin-top: 0;
+}
+
 /**
  * Give JS 10 seconds to load before showing the error
  * @TODO - there must be a better way to do this

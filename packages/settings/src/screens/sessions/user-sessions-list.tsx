@@ -1,10 +1,10 @@
 import * as React from 'react';
 
-import { Button } from '@wordpress/components';
 import { map } from 'lodash';
 import classNames from 'classnames';
 
 import SessionCard from './session-card';
+import { Button } from '../../components/ui';
 import { t } from '../../translations';
 
 interface Session {
@@ -129,14 +129,13 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 								<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:shrink-0">
 									{user.session_count > 0 && (
 										<Button
-											variant="secondary"
-											isDestructive
-											size="small"
-											onClick={(e: React.MouseEvent) => {
+											variant="destructive"
+											onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
 												e.stopPropagation();
 												onDeleteAllSessions(user.user_id);
 											}}
 											disabled={isDeleting}
+											className="wcpos:text-xs wcpos:px-2 wcpos:py-1"
 										>
 											{t('sessions.logout_all')}
 										</Button>
@@ -174,4 +173,3 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 };
 
 export default UserSessionsList;
-
