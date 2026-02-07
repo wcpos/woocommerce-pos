@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { createRoot, render } from '@wordpress/element';
+import { createRoot } from 'react-dom/client';
 import { getFragment, isValidFragment } from '@wordpress/url';
 import { ErrorBoundary } from 'react-error-boundary';
 
@@ -58,9 +58,4 @@ const Root = () => {
 };
 
 const el = document.getElementById('woocommerce-pos-settings');
-
-if (createRoot) {
-	createRoot(el).render(<Root />);
-} else {
-	render(<Root />, el);
-}
+createRoot(el!).render(<Root />);
