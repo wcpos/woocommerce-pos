@@ -4,15 +4,17 @@ import classNames from 'classnames';
 interface NavItemProps {
 	to: string;
 	label: string;
+	onClick?: () => void;
 }
 
-export function NavItem({ to, label }: NavItemProps) {
+export function NavItem({ to, label, onClick }: NavItemProps) {
 	const matchRoute = useMatchRoute();
 	const isActive = matchRoute({ to });
 
 	return (
 		<Link
 			to={to}
+			onClick={onClick}
 			className={classNames(
 				'wcpos:block wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:no-underline wcpos:border-l-3 wcpos:transition-colors',
 				isActive
