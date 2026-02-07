@@ -1,6 +1,8 @@
 import * as React from 'react';
 
-import { Tooltip, Icon } from '@wordpress/components';
+import { Tooltip } from './ui/tooltip';
+
+import HelpIcon from '../../assets/comment-question.svg';
 
 interface LabelProps {
 	children: React.ReactNode;
@@ -13,8 +15,8 @@ const Label = ({ children, tip }: LabelProps) => {
 			{children}
 			{tip && (
 				<Tooltip text={tip}>
-					<span>
-						<Icon icon="editor-help" className="wcpos:text-gray-300" />
+					<span className="wcpos:inline-flex wcpos:text-gray-300">
+						<HelpIcon className="wcpos:h-5 wcpos:w-5" fill="currentColor" />
 					</span>
 				</Tooltip>
 			)}
