@@ -7,7 +7,8 @@ interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
 }
 
 export function Checkbox({ label, className, id, ...props }: CheckboxProps) {
-	const inputId = id || React.useId();
+	const generatedId = React.useId();
+	const inputId = id || generatedId;
 
 	return (
 		<div className={classNames('wcpos:flex wcpos:items-center wcpos:gap-2', className)}>

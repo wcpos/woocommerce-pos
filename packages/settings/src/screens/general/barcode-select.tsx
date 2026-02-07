@@ -12,14 +12,25 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 	const barcodes = window?.wcpos?.settings?.barcodes;
 
 	const options = React.useMemo(() => {
-		return (barcodes || [])
+		const filtered = (barcodes || [])
 			.filter((barcode) => barcode.toLowerCase().includes(query.toLowerCase()))
-			.map((option) => {
-				return {
-					value: option,
-					label: option,
-				};
+			.map((option) => ({
+				value: option,
+				label: option,
+			}));
+
+		const exactMatch = (barcodes || []).some(
+			(barcode) => barcode.toLowerCase() === query.toLowerCase()
+		);
+
+		if (query && !exactMatch) {
+			filtered.push({
+				value: query,
+				label: `Create "${query}"`,
 			});
+		}
+
+		return filtered;
 	}, [barcodes, query]);
 
 	return (

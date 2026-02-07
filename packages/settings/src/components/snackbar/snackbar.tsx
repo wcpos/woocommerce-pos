@@ -9,6 +9,7 @@ export interface SnackbarProps {
 
 export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) => {
 	React.useEffect(() => {
+		if (!message) return;
 		const timer = setTimeout(() => {
 			timeout && onRemove && onRemove();
 		}, 3000);
@@ -18,7 +19,7 @@ export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) =
 	if (!message) return null;
 
 	return (
-		<div className="wcpos:fixed wcpos:bottom-4 wcpos:left-1/2 wcpos:-translate-x-1/2 wcpos:z-50 wcpos:bg-gray-800 wcpos:text-white wcpos:px-4 wcpos:py-2 wcpos:rounded-md wcpos:shadow-lg wcpos:text-sm wcpos:max-w-md wcpos:text-center">
+		<div className="wcpos:bg-gray-800 wcpos:text-white wcpos:px-4 wcpos:py-2 wcpos:rounded-md wcpos:shadow-lg wcpos:text-sm wcpos:max-w-md wcpos:text-center">
 			{message}
 		</div>
 	);

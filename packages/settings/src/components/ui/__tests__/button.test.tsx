@@ -53,12 +53,12 @@ describe('Button', () => {
 	it('applies primary variant class', () => {
 		render(<Button variant="primary">Primary</Button>);
 		const button = screen.getByRole('button');
-		expect(button.className).toContain('bg-wp-admin-theme-color');
+		expect(button.className).toContain('wcpos:bg-wp-admin-theme-color');
 	});
 
 	it('applies destructive variant class', () => {
 		render(<Button variant="destructive">Delete</Button>);
 		const button = screen.getByRole('button');
-		expect(button.className).toContain('bg-red-600');
+		expect(button.className).toContain('wcpos:bg-red-600');
 	});
 });
