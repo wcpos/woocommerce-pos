@@ -89,7 +89,6 @@ class Settings {
 
 		// Add inline script.
 		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
-
 	}
 
 	/**
