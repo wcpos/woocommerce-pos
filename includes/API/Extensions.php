@@ -82,7 +82,7 @@ class Extensions extends WP_REST_Controller {
 			return new \WP_Error(
 				'rest_forbidden',
 				__( 'You do not have permission to view extensions.', 'woocommerce-pos' ),
-				array( 'status' => 401 )
+				array( 'status' => rest_authorization_required_code() )
 			);
 		}
 

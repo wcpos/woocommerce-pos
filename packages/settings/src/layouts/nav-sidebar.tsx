@@ -36,6 +36,7 @@ function NavContent({ onNavItemClick }: { onNavItemClick?: () => void }) {
 					<NavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
 					<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
 					<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
+					<NavItem to="/plugins" label={t('common.plugins', 'Plugins')} onClick={onNavItemClick} />
 					<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
 				</NavGroup>
 
