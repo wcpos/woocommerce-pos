@@ -1,8 +1,8 @@
 import * as React from 'react';
 
-import { Button } from '@wordpress/components';
 import classNames from 'classnames';
 
+import { Button } from '../../components/ui';
 import { t } from '../../translations';
 
 interface Session {
@@ -148,12 +148,10 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 							{/* Terminate button */}
 							{!session.is_current && (
 								<Button
-									variant="secondary"
-									isDestructive
-									size="small"
+									variant="destructive"
 									onClick={onDelete}
 									disabled={isDeleting}
-									className="wcpos:shrink-0"
+									className="wcpos:shrink-0 wcpos:text-xs wcpos:px-2 wcpos:py-1"
 								>
 									{t('sessions.terminate')}
 								</Button>
@@ -205,4 +203,3 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 };
 
 export default SessionCard;
-

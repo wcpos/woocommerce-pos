@@ -1,12 +1,12 @@
 import * as React from 'react';
 
-import { Button } from '@wordpress/components';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import { map } from 'lodash';
 
 import SessionCard from './session-card';
 import Notice from '../../components/notice';
+import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
 import { t } from '../../translations';
 
@@ -139,11 +139,10 @@ const MySessionsView: React.FC = () => {
 				</h2>
 				{mySessions?.sessions && mySessions.sessions.length > 1 && (
 					<Button
-						variant="secondary"
-						isDestructive
-						size="small"
+						variant="destructive"
 						onClick={() => handleDeleteAllSessions(mySessions.user_id, true)}
 						disabled={deleteAllSessionsMutation.isPending}
+						className="wcpos:text-xs wcpos:px-2 wcpos:py-1"
 					>
 						{t('sessions.logout_other_devices')}
 					</Button>
@@ -171,4 +170,3 @@ const MySessionsView: React.FC = () => {
 };
 
 export default MySessionsView;
-

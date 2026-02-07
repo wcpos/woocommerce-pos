@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import Select from '../../components/select';
+import { Select } from '../../components/ui';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
@@ -19,7 +19,7 @@ const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) =
 			options={options ? options : []}
 			value={selectedStatus}
 			onChange={({ value }) => {
-				mutate({ order_status: value });
+				mutate({ order_status: String(value) });
 			}}
 		/>
 	);
