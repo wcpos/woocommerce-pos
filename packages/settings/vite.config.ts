@@ -35,8 +35,6 @@ export default defineConfig(({ mode }) => {
           'lodash',
           '@wordpress/api-fetch',
           '@wordpress/url',
-          '@wordpress/element',
-          '@wordpress/components',
         ],
         output: {
           globals: {
@@ -46,8 +44,6 @@ export default defineConfig(({ mode }) => {
             'lodash': 'lodash',
             '@wordpress/api-fetch': 'wp.apiFetch',
             '@wordpress/url': 'wp.url',
-            '@wordpress/element': 'wp.element',
-            '@wordpress/components': 'wp.components',
           },
         },
       },
