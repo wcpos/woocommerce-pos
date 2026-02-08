@@ -43,7 +43,7 @@ function ProBanner() {
 	);
 }
 
-const Plugins = () => {
+const Extensions = () => {
 	const [search, setSearch] = React.useState('');
 	const [category, setCategory] = React.useState('all');
 
@@ -122,4 +122,4 @@ const Plugins = () => {
 	);
 };
 
-export default Plugins;
+export default Extensions;
