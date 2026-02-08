@@ -23,6 +23,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $service;
 
 	/**
+	 * Dynamic catalog data for parameterized status tests.
+	 *
+	 * @var array
+	 */
+	private $mock_catalog_data = array();
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -104,6 +111,143 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		}
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ) );
+	}
+
+	/**
+	 * Test not_installed status for plugins not present locally.
+	 */
+	public function test_status_not_installed_for_absent_plugin(): void {
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'nonexistent-plugin-xyz',
+				'name'           => 'Nonexistent',
+				'latest_version' => '1.0.0',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'not_installed', $extensions[0]['status'] );
+		$this->assertArrayNotHasKey( 'installed_version', $extensions[0] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test active status for installed, active, up-to-date plugin.
+	 */
+	public function test_status_active_for_current_plugin(): void {
+		// PHPUnit bootstrap loads plugins directly; active_plugins option may be empty.
+		update_option( 'active_plugins', array( 'woocommerce/woocommerce.php' ) );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '0.0.1',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'active', $extensions[0]['status'] );
+		$this->assertArrayHasKey( 'installed_version', $extensions[0] );
+		$this->assertArrayHasKey( 'plugin_file', $extensions[0] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test update_available status for active plugin with newer remote version.
+	 */
+	public function test_status_update_available_for_active_outdated_plugin(): void {
+		update_option( 'active_plugins', array( 'woocommerce/woocommerce.php' ) );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '999.0.0',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'update_available', $extensions[0]['status'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test update_available status for inactive plugin with newer remote version.
+	 */
+	public function test_status_update_available_for_inactive_outdated_plugin(): void {
+		update_option( 'active_plugins', array() );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '999.0.0',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'update_available', $extensions[0]['status'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test inactive status for installed but deactivated plugin.
+	 */
+	public function test_status_inactive_for_deactivated_plugin(): void {
+		update_option( 'active_plugins', array() );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '0.0.1',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertEquals( 'inactive', $extensions[0]['status'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Mock catalog response using dynamic data from $this->mock_catalog_data.
+	 *
+	 * @param false|array $response    Response.
+	 * @param array       $parsed_args Args.
+	 * @param string      $url         URL.
+	 *
+	 * @return array|false
+	 */
+	public function mock_dynamic_response( $response, $parsed_args, $url ) {
+		if ( false === strpos( $url, 'catalog.json' ) ) {
+			return $response;
+		}
+
+		return array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode( $this->mock_catalog_data ),
+		);
 	}
 
 	/**
