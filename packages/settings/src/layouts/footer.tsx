@@ -1,46 +1,49 @@
 import Book from '../../assets/book.svg';
 import Question from '../../assets/comment-question.svg';
-import Discord from '../../assets/discord.svg';
 import Email from '../../assets/email.svg';
 import { t } from '../translations';
 
 export function Footer() {
 	return (
-		<footer className="wcpos:border-t wcpos:border-gray-200 wcpos:mt-8 wcpos:py-6">
-			<h4 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-700 wcpos:mb-3">
+		<footer className="wcpos:border-t wcpos:border-gray-200 wcpos:shrink-0 wcpos:px-6 wcpos:py-2 wcpos:grid wcpos:grid-cols-3 wcpos:lg:flex wcpos:items-center wcpos:gap-x-4 wcpos:gap-y-2 wcpos:text-xs">
+			<span className="wcpos:font-semibold wcpos:text-gray-500">
 				{t('settings.need_help')}
-			</h4>
-			<div className="wcpos:flex wcpos:flex-wrap wcpos:gap-4 wcpos:text-sm">
+			</span>
+			<div className="wcpos:flex wcpos:flex-col wcpos:lg:flex-row wcpos:gap-1 wcpos:lg:gap-4">
 				<a
 					href="https://docs.wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:text-gray-600 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
 				>
-					<span className="wcpos:h-4 wcpos:w-4">
-						<Book fill="#3c434a" />
+					<span className="wcpos:h-3.5 wcpos:w-3.5">
+						<Book fill="#6b7280" />
 					</span>
 					{t('common.documentation')}
+					<span className="wcpos:sr-only"> (opens in new tab)</span>
 				</a>
 				<a
 					href="https://faq.wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:text-gray-600 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
 				>
-					<span className="wcpos:h-4 wcpos:w-4">
-						<Question fill="#3c434a" />
+					<span className="wcpos:h-3.5 wcpos:w-3.5">
+						<Question fill="#6b7280" />
 					</span>
 					{t('common.faq')}
+					<span className="wcpos:sr-only"> (opens in new tab)</span>
 				</a>
+			</div>
+			<div className="wcpos:flex wcpos:flex-col wcpos:lg:flex-row wcpos:gap-1 wcpos:lg:gap-4">
 				<a
 					href="mailto:support@wcpos.com"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:text-gray-600 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:text-gray-500 hover:wcpos:text-gray-900 wcpos:no-underline"
 				>
-					<span className="wcpos:h-4 wcpos:w-4">
-						<Email fill="#3c434a" />
+					<span className="wcpos:h-3.5 wcpos:w-3.5">
+						<Email fill="#6b7280" />
 					</span>
 					support@wcpos.com
 				</a>
@@ -48,12 +51,16 @@ export function Footer() {
 					href="https://wcpos.com/discord"
 					target="_blank"
 					rel="noreferrer"
-					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:text-gray-600 hover:wcpos:text-gray-900 wcpos:no-underline"
+					className="wcpos:no-underline"
 				>
-					<span className="wcpos:h-4 wcpos:w-4">
-						<Discord fill="#3c434a" />
-					</span>
-					Discord
+					<img
+						src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FGCEeEVpEvX%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&logo=discord&logoColor=white&label=users%20online&color=7c3aed&style=flat-square"
+						alt="Discord"
+						className="wcpos:h-4"
+						loading="lazy"
+						width="100"
+						height="16"
+					/>
 				</a>
 			</div>
 		</footer>

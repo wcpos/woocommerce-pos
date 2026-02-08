@@ -78,15 +78,15 @@ const General = () => {
 						/>
 					</React.Suspense>
 				</Label>
-			</FormRow>
-			<FormRow>
-				<Checkbox
-					label={t('settings.use_cashier_account')}
-					checked={!!data?.default_customer_is_cashier}
-					onChange={(e) => {
-						mutate({ default_customer_is_cashier: e.target.checked });
-					}}
-				/>
+				<div className="wcpos:mt-2">
+					<Checkbox
+						label={t('settings.use_cashier_account')}
+						checked={!!data?.default_customer_is_cashier}
+						onChange={(e) => {
+							mutate({ default_customer_is_cashier: e.target.checked });
+						}}
+					/>
+				</div>
 			</FormRow>
 			<FormRow label={t('settings.barcode_field')}>
 				<Label tip={t('settings.barcode_field_tip')}>

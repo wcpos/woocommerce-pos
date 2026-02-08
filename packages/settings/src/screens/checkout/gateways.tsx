@@ -123,7 +123,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 					}}
 				/>
 			</td>
-			<td className="wcpos:px-4 wcpos:py-2 text-ellipsis overflow-hidden">
+			<td className="wcpos:px-4 wcpos:py-2 wcpos:text-ellipsis wcpos:overflow-hidden wcpos:whitespace-nowrap">
 				<strong>{item.title}</strong>
 			</td>
 			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap">{item.id}</td>
@@ -225,25 +225,25 @@ const Gateways = () => {
 							<th scope="col"></th>
 							<th
 								scope="col"
-								className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 							>
 								{t('common.default')}
 							</th>
 							<th
 								scope="col"
-								className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 							>
 								{t('common.gateway')}
 							</th>
 							<th
 								scope="col"
-								className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
 							>
 								{t('checkout.gateway_id')}
 							</th>
 							<th
 								scope="col"
-								className="wcpos:px-4 wcpos:py-2 text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 							>
 								{t('common.enabled')}
 							</th>

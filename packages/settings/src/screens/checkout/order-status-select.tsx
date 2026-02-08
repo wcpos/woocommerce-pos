@@ -8,7 +8,7 @@ interface OrderStatusSelectProps {
 }
 
 const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) => {
-	const order_statuses = window?.wcpos?.settings?.order_statuses;
+	const order_statuses = window?.wcpos?.settings?.order_statuses ?? {};
 
 	const options = React.useMemo(() => {
 		return Object.entries(order_statuses).map(([value, label]) => ({ value, label }));

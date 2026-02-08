@@ -10,7 +10,7 @@ export function useSettingsRegistry<T>(selector: (state: SettingsRegistryState) 
 export function useRegisteredPages(group?: string) {
 	const pages = useStore(settingsRegistry, (state) => state.pages);
 	return useMemo(() => {
-		const filtered = group ? pages.filter((p) => p.group === group) : pages;
+		const filtered = group ? pages.filter((p) => p.group === group) : [...pages];
 		return filtered.sort((a, b) => (a.priority ?? 10) - (b.priority ?? 10));
 	}, [pages, group]);
 }
