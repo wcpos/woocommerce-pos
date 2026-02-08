@@ -31,9 +31,15 @@ class Activator {
 	public function init(): void {
 		// Check for min requirements to run.
 		if ( $this->php_check() && $this->woocommerce_check() ) {
-			// check permalinks.
+			// Defer permalink check to admin_init so __() calls happen after
+			// after_setup_theme (WordPress 6.7+ triggers a notice otherwise).
 			if ( is_admin() && ( ! \defined( '\DOING_AJAX' ) || ! DOING_AJAX ) ) { // @phpstan-ignore-line
-				$this->permalink_check();
+				add_action(
+					'admin_init',
+					function () {
+						$this->permalink_check();
+					}
+				);
 			}
 
 			// Init update script if required.
@@ -131,14 +137,20 @@ class Activator {
 			return true;
 		}
 
-		$message = \sprintf(
-			// translators: 1: Minimum PHP version, 2: Update URL.
-			__( '<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
-			PHP_MIN_VERSION,
-			'http://www.wpupdatephp.com/update/'
-		) . ' &raquo;';
+		// Defer __() call to avoid "too early" warning in WordPress 6.7+.
+		add_action(
+			'admin_init',
+			function () {
+				$message = \sprintf(
+					// translators: 1: Minimum PHP version, 2: Update URL.
+					__( '<strong>WCPOS</strong> requires PHP %1$s or higher. Read more information about <a href="%2$s">how you can update</a>', 'woocommerce-pos' ),
+					PHP_MIN_VERSION,
+					'http://www.wpupdatephp.com/update/'
+				) . ' &raquo;';
 
-		Admin\Notices::add( $message );
+				Admin\Notices::add( $message );
+			}
+		);
 	}
 
 	/**
@@ -149,15 +161,21 @@ class Activator {
 			return true;
 		}
 
-		$message = \sprintf(
-			// translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
-			__( '<strong>WCPOS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
-			'http://wordpress.org/plugins/woocommerce/',
-			WC_MIN_VERSION,
-			admin_url( 'plugins.php' )
-		) . ' &raquo;';
+		// Defer __() call to avoid "too early" warning in WordPress 6.7+.
+		add_action(
+			'admin_init',
+			function () {
+				$message = \sprintf(
+					// translators: 1: WooCommerce URL, 2: Minimum WC version, 3: Plugins URL.
+					__( '<strong>WCPOS</strong> requires <a href="%1$s">WooCommerce %2$s or higher</a>. Please <a href="%3$s">install and activate WooCommerce</a>', 'woocommerce-pos' ),
+					'http://wordpress.org/plugins/woocommerce/',
+					WC_MIN_VERSION,
+					admin_url( 'plugins.php' )
+				) . ' &raquo;';
 
-		Admin\Notices::add( $message );
+				Admin\Notices::add( $message );
+			}
+		);
 	}
 
 	/**
@@ -319,15 +337,21 @@ class Activator {
 				// WCPOS Pro is activated, but the version is too low - use the constant for dynamic folder name.
 				deactivate_plugins( \WCPOS\WooCommercePOSPro\PLUGIN_FILE ); // @phpstan-ignore-line
 
-				$message = \sprintf(
-					// translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
-					__( '<strong>WCPOS</strong> requires <a href="%1$s">WCPOS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WCPOS Pro</a>', 'woocommerce-pos' ),
-					'https://wcpos.com/my-account',
-					MIN_PRO_VERSION,
-					admin_url( 'plugins.php' )
-				) . ' &raquo;';
+				// Defer __() call to avoid "too early" warning in WordPress 6.7+.
+				add_action(
+					'admin_init',
+					function () {
+						$message = \sprintf(
+							// translators: 1: WCPOS Pro URL, 2: Minimum Pro version, 3: Plugins URL.
+							__( '<strong>WCPOS</strong> requires <a href="%1$s">WCPOS Pro %2$s or higher</a>. Please <a href="%3$s">install and activate WCPOS Pro</a>', 'woocommerce-pos' ),
+							'https://wcpos.com/my-account',
+							MIN_PRO_VERSION,
+							admin_url( 'plugins.php' )
+						) . ' &raquo;';
 
-				Admin\Notices::add( $message );
+						Admin\Notices::add( $message );
+					}
+				);
 			}
 		}
 	}

@@ -11,6 +11,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
+use WCPOS\WooCommercePOS\Services\Extensions;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
@@ -238,6 +239,7 @@ class Init {
 		// init the Services.
 		SettingsService::instance();
 		AuthService::instance();
+		Extensions::instance();
 
 		// init other functionality needed by both frontend and admin.
 		new i18n();

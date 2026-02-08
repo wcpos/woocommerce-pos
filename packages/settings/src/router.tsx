@@ -16,6 +16,7 @@ import CheckoutPage from './screens/checkout';
 import AccessPage from './screens/access';
 import SessionsPage from './screens/sessions';
 import LicensePage from './screens/license';
+import ExtensionsPage from './screens/extensions';
 
 // Root route — renders the full-page layout with sidebar navigation.
 const rootRoute = createRootRoute({
@@ -66,6 +67,19 @@ const sessionsRoute = createRoute({
 	// No loader — sessions uses different API endpoints
 });
 
+const extensionsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/extensions',
+	loader: async () => {
+		await queryClient.ensureQueryData({
+			queryKey: ['extensions'],
+			queryFn: () =>
+				apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+		});
+	},
+	component: ExtensionsPage,
+});
+
 const licenseRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/license',
@@ -79,6 +93,7 @@ const routeTree = rootRoute.addChildren([
 	checkoutRoute,
 	accessRoute,
 	sessionsRoute,
+	extensionsRoute,
 	licenseRoute,
 ]);
 

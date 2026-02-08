@@ -40,6 +40,7 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 					<NavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
 					<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
 					<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
+					<NavItem to="/extensions" label={t('common.extensions', 'Extensions')} onClick={onNavItemClick} />
 					<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
 				</NavGroup>
 
