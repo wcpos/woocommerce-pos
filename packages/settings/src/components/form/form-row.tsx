@@ -14,12 +14,12 @@ export function FormRow({ label, htmlFor, description, children, className }: Fo
 	return (
 		<div
 			className={classNames(
-				'wcpos:flex wcpos:items-start wcpos:gap-4 wcpos:py-3',
+				'wcpos:flex wcpos:flex-col wcpos:sm:flex-row wcpos:sm:items-start wcpos:gap-1 wcpos:sm:gap-4 wcpos:py-3',
 				className
 			)}
 		>
 			{label && (
-				<div className="wcpos:w-[200px] wcpos:shrink-0 wcpos:pt-1">
+				<div className="wcpos:sm:w-[30%] wcpos:sm:max-w-[200px] wcpos:shrink-0 wcpos:sm:pt-1">
 					<label
 						htmlFor={htmlFor}
 						className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-700"

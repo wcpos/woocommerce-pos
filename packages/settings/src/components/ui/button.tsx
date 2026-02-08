@@ -24,10 +24,12 @@ export function Button({
 	disabled,
 	className,
 	children,
+	type = 'button',
 	...props
 }: ButtonProps) {
 	return (
 		<button
+			type={type}
 			disabled={disabled || loading}
 			className={classNames(
 				'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',

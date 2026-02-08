@@ -50,12 +50,17 @@
 	display: none !important;
 } */
 
-/* Full-page takeover: remove WP admin default wrapping */
+/* Full-page takeover: fill the admin content area */
 #woocommerce-pos-settings {
+	position: relative;
 	margin-left: -20px;
 	margin-right: 0;
-	margin-top: 0;
+	margin-top: -10px;
+	z-index: 10;
+	height: calc(100vh - var(--wp-admin--admin-bar--height, 32px));
+	overflow: hidden;
 }
+
 
 /**
  * Give JS 10 seconds to load before showing the error

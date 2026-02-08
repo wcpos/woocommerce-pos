@@ -25,6 +25,7 @@ class Settings {
 	 */
 	public function __construct() {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'in_admin_header', array( $this, 'remove_admin_notices' ) );
 
 		/*
 		 * Initializes the settings for WCPOS in the admin panel.
@@ -53,6 +54,16 @@ class Settings {
 			esc_html__( 'Error', 'woocommerce-pos' ),
 			esc_html__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
 		);
+	}
+
+	/**
+	 * Remove all admin notices on our settings page.
+	 *
+	 * @return void
+	 */
+	public function remove_admin_notices(): void {
+		remove_all_actions( 'admin_notices' );
+		remove_all_actions( 'all_admin_notices' );
 	}
 
 	/**

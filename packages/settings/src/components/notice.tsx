@@ -23,7 +23,7 @@ const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProp
 		>
 			<div className="wcpos:flex-1">{children}</div>
 			{isDismissible && (
-				<button onClick={onRemove} className="wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1">
+				<button type="button" aria-label="Dismiss notice" onClick={onRemove} className="wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1">
 					<CloseIcon className="wcpos:h-5 wcpos:w-5" fill="currentColor" />
 				</button>
 			)}

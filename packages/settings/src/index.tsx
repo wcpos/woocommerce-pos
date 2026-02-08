@@ -6,14 +6,14 @@ import { ErrorBoundary } from 'react-error-boundary';
 
 import { queryClient } from './query-client';
 import { router } from './router';
-import Error from './components/error';
+import ErrorFallback from './components/error';
 import { SnackbarProvider } from './components/snackbar';
 import { NoticesProvider } from './hooks/use-notices';
 
 import './index.css';
 
 const Root = () => (
-	<ErrorBoundary FallbackComponent={Error}>
+	<ErrorBoundary FallbackComponent={ErrorFallback}>
 		<QueryClientProvider client={queryClient}>
 			<NoticesProvider>
 				<SnackbarProvider>

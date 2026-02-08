@@ -1,47 +1,59 @@
 import * as React from 'react';
 
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useLocation } from '@tanstack/react-router';
 import { ErrorBoundary } from 'react-error-boundary';
 
-import Error from '../components/error';
+import ErrorFallback from '../components/error';
 import Notice from '../components/notice';
 import useNotices from '../hooks/use-notices';
+import { t } from '../translations';
 
 import { Footer } from './footer';
 import { NavSidebar } from './nav-sidebar';
 
+const pageTitles: Record<string, string> = {
+	'/general': 'common.general',
+	'/checkout': 'common.checkout',
+	'/access': 'common.access',
+	'/sessions': 'sessions.sessions',
+	'/license': 'common.license',
+};
+
 export function RootLayout() {
 	const { notice, setNotice } = useNotices();
 	const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
+	const location = useLocation();
+
+	const titleKey = pageTitles[location.pathname] || 'common.settings';
+	const pageTitle = t(titleKey);
 
 	return (
-		<div className="wcpos:flex wcpos:min-h-screen wcpos:bg-white">
-			{/* Desktop sidebar (hidden on small screens via internal classes) */}
-			<NavSidebar />
-
-			{/* Mobile sidebar overlay */}
+		<div className="wcpos:flex wcpos:h-full wcpos:bg-white wcpos:overflow-hidden">
 			<NavSidebar
-				mobile
 				isOpen={isMobileNavOpen}
-				onClose={() => setIsMobileNavOpen(false)}
+				onNavItemClick={() => setIsMobileNavOpen(false)}
 			/>
 
-			<div className="wcpos:flex-1 wcpos:flex wcpos:flex-col wcpos:min-w-0">
-				{/* Mobile menu button - only visible on small screens */}
-				<div className="wcpos:lg:hidden wcpos:flex wcpos:items-center wcpos:p-4 wcpos:border-b wcpos:border-gray-200">
+			<div className="wcpos:flex-1 wcpos:flex wcpos:flex-col wcpos:min-w-0 wcpos:h-full">
+				{/* Title bar */}
+				<div className="wcpos:flex wcpos:items-center wcpos:px-6 wcpos:py-3 wcpos:border-b wcpos:border-gray-200 wcpos:shrink-0">
 					<button
 						type="button"
-						onClick={() => setIsMobileNavOpen(true)}
-						className="wcpos:p-2 wcpos:rounded-md wcpos:text-gray-600 hover:wcpos:bg-gray-100"
+						aria-label="Open main menu"
+						aria-expanded={isMobileNavOpen}
+						onClick={() => setIsMobileNavOpen((open) => !open)}
+						className="wcpos:lg:hidden wcpos:p-2 wcpos:mr-2 wcpos:rounded-md wcpos:text-gray-600 hover:wcpos:bg-gray-100"
 					>
-						<svg className="wcpos:h-6 wcpos:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg className="wcpos:h-5 wcpos:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
 						</svg>
 					</button>
-					<span className="wcpos:ml-2 wcpos:font-semibold wcpos:text-gray-900">WooCommerce POS</span>
+					<h1 className="wcpos:text-lg wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
+						{pageTitle}
+					</h1>
 				</div>
 
-				<main className="wcpos:flex-1 wcpos:max-w-3xl wcpos:w-full wcpos:mx-auto wcpos:px-6 wcpos:py-6">
+				<main className="wcpos:flex-1 wcpos:overflow-y-auto wcpos:px-6 wcpos:py-6">
 					{notice && (
 						<div className="wcpos:mb-4">
 							<Notice status={notice.type} onRemove={() => setNotice(null)}>
@@ -50,14 +62,14 @@ export function RootLayout() {
 						</div>
 					)}
 
-					<ErrorBoundary FallbackComponent={Error}>
+					<ErrorBoundary FallbackComponent={ErrorFallback}>
 						<React.Suspense fallback={null}>
 							<Outlet />
 						</React.Suspense>
 					</ErrorBoundary>
-
-					<Footer />
 				</main>
+
+				<Footer />
 			</div>
 		</div>
 	);

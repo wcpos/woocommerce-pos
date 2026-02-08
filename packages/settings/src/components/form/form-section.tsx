@@ -13,7 +13,7 @@ export function FormSection({ title, description, children, className }: FormSec
 	return (
 		<div
 			className={classNames(
-				'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6 wcpos:mb-6 last:wcpos:border-b-0 last:wcpos:pb-0 last:wcpos:mb-0',
+				'wcpos:pb-6 wcpos:mb-6',
 				className
 			)}
 		>
@@ -27,7 +27,7 @@ export function FormSection({ title, description, children, className }: FormSec
 					)}
 				</div>
 			)}
-			<div className="wcpos:space-y-1">{children}</div>
+			<div>{children}</div>
 		</div>
 	);
 }
