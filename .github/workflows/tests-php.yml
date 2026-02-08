@@ -245,49 +245,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Explicit matrix — all versions pinned, no "latest".
+        # Trimmed matrix: focus on PHP 7.4 (floor) + 8.2 (mainstream) + 8.4 (edge).
+        # Middle PHP versions (8.0, 8.1, 8.3) add little signal — the real breakpoints
+        # are 7.4→8.0 (strict typing) and 8.2→8.4 (implicit nullable deprecations).
+        # CI budget is better spent varying WP/WC combos.
         # See .github/test-matrix.json for version policy and compatibility.
         # WC 9.5.x requires WP >= 6.6 | WC 10.4.x requires WP >= 6.8
         include:
-          # Minimum PHP + oldest supported combo
+          # Hard floor — oldest supported stack
           - php: '7.4'
             wp: '6.7'
             wc: '9.5.2'
-          # Minimum PHP + current stable
+          # Legacy PHP + current WC (old host, auto-updated WP/WC)
           - php: '7.4'
             wp: '6.9'
             wc: '10.4.3'
-          # Mid PHP + older WP/WC
-          - php: '8.1'
+          # Mainstream PHP + previous WP/WC (managed host slow to update plugins)
+          - php: '8.2'
             wp: '6.7'
             wc: '9.5.2'
-          # Mid PHP + minimum WP for WC 10.4
-          - php: '8.1'
+          # Mainstream PHP + minimum WP for WC 10.4
+          - php: '8.2'
             wp: '6.8'
             wc: '10.4.3'
-          # Mid PHP + current stable
-          - php: '8.1'
-            wp: '6.9'
-            wc: '10.4.3'
-          # Stable PHP + current stable
+          # Current WP + previous WC (updated WP but not WC yet)
           - php: '8.2'
             wp: '6.9'
-            wc: '10.4.3'
-          # Bleeding PHP + older combo
-          - php: '8.3'
-            wp: '6.7'
             wc: '9.5.2'
-          # Bleeding PHP + current stable
-          - php: '8.3'
-            wp: '6.9'
-            wc: '10.4.3'
-          # Experimental: next PHP (allowed to fail)
+          # Future proof: strict deprecation checks (allowed to fail)
           - php: '8.4'
             wp: '6.9'
             wc: '10.4.3'
             experimental: true
-          # Bleeding edge: latest WP + WC (incl. betas/RCs, allowed to fail)
-          - php: '8.3'
+          # Bleeding edge: latest everything (allowed to fail)
+          - php: '8.4'
             wp: 'latest'
             wc: 'latest'
             experimental: true

@@ -5,9 +5,8 @@
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
-    "bleeding": "8.3",
     "experimental": "8.4",
-    "comment": "Plugin requires PHP >= 7.4 per composer.json. WooCommerce recommends 8.3+."
+    "comment": "Trimmed to floor (7.4) + mainstream (8.2) + edge (8.4). Middle versions add little signal — breakpoints are 7.4→8.0 and 8.2→8.4."
   },
   "wordpress": {
     "previous": "6.7",
