@@ -7,3 +7,9 @@ export const queryClient = new QueryClient({
 		},
 	},
 });
+
+// Expose for Pro plugin to invalidate queries after extension actions.
+if (typeof window !== 'undefined') {
+	(window as any).wcpos = (window as any).wcpos || {};
+	(window as any).wcpos.queryClient = queryClient;
+}
