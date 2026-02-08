@@ -61,4 +61,14 @@ describe('Button', () => {
 		const button = screen.getByRole('button');
 		expect(button.className).toContain('wcpos:bg-red-600');
 	});
+
+	it('has type="button" by default', () => {
+		render(<Button>Click</Button>);
+		expect(screen.getByRole('button')).toHaveAttribute('type', 'button');
+	});
+
+	it('accepts custom type prop', () => {
+		render(<Button type="submit">Submit</Button>);
+		expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
+	});
 });

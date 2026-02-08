@@ -20,6 +20,7 @@ export function Footer() {
 						<Book fill="#6b7280" />
 					</span>
 					{t('common.documentation')}
+					<span className="wcpos:sr-only"> (opens in new tab)</span>
 				</a>
 				<a
 					href="https://faq.wcpos.com"
@@ -31,6 +32,7 @@ export function Footer() {
 						<Question fill="#6b7280" />
 					</span>
 					{t('common.faq')}
+					<span className="wcpos:sr-only"> (opens in new tab)</span>
 				</a>
 			</div>
 			<div className="wcpos:flex wcpos:flex-col wcpos:lg:flex-row wcpos:gap-1 wcpos:lg:gap-4">
@@ -55,6 +57,9 @@ export function Footer() {
 						src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FGCEeEVpEvX%3Fwith_counts%3Dtrue&query=%24.approximate_presence_count&logo=discord&logoColor=white&label=users%20online&color=7c3aed&style=flat-square"
 						alt="Discord"
 						className="wcpos:h-4"
+						loading="lazy"
+						width="100"
+						height="16"
 					/>
 				</a>
 			</div>
