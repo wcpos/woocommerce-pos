@@ -65,7 +65,7 @@ class Extensions extends WP_REST_Controller {
 		$extensions = $service->get_extensions();
 
 		$response = new WP_REST_Response( $extensions );
-		$response->header( 'X-WP-Total', \count( $extensions ) );
+		$response->header( 'X-WP-Total', (string) \count( $extensions ) );
 
 		return $response;
 	}
