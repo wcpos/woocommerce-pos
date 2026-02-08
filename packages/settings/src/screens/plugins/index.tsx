@@ -56,18 +56,20 @@ const Plugins = () => {
 	const isPro = !!(window as any)?.wcpos?.pro;
 
 	const categories = React.useMemo(() => {
-		const cats = new Set(extensions.map((ext) => ext.category));
+		const cats = new Set(extensions.map((ext) => ext.category || 'other'));
 		return ['all', ...Array.from(cats).sort()];
 	}, [extensions]);
 
 	const filtered = React.useMemo(() => {
 		return extensions.filter((ext) => {
-			const matchesCategory = category === 'all' || ext.category === category;
+			const matchesCategory =
+				category === 'all' || (ext.category || 'other') === category;
+			const q = search.toLowerCase();
 			const matchesSearch =
 				!search ||
-				ext.name.toLowerCase().includes(search.toLowerCase()) ||
-				ext.description.toLowerCase().includes(search.toLowerCase()) ||
-				ext.tags.some((tag) => tag.toLowerCase().includes(search.toLowerCase()));
+				ext.name.toLowerCase().includes(q) ||
+				(ext.description || '').toLowerCase().includes(q) ||
+				(ext.tags || []).some((tag) => tag.toLowerCase().includes(q));
 			return matchesCategory && matchesSearch;
 		});
 	}, [extensions, category, search]);

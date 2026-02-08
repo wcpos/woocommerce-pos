@@ -140,10 +140,12 @@ class Extensions {
 				$is_active      = \in_array( $plugin_file, $active_plugins, true )
 					|| \in_array( $plugin_file, $network_plugins, true );
 
-				if ( $is_active ) {
-					$status = version_compare( $local_version, $remote_version, '<' )
-						? 'update_available'
-						: 'active';
+				$has_update = $remote_version && version_compare( $local_version, $remote_version, '<' );
+
+				if ( $has_update ) {
+					$status = 'update_available';
+				} elseif ( $is_active ) {
+					$status = 'active';
 				} else {
 					$status = 'inactive';
 				}
