@@ -254,12 +254,17 @@ class Settings extends WP_REST_Controller {
 			),
 			'admin_emails' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
+					return \is_array( $param );
 				},
 			),
 			'customer_emails' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
+					return \is_array( $param );
+				},
+			),
+			'cashier_emails' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_array( $param );
 				},
 			),
 			'auto_print_receipt' => array(

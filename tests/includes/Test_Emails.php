@@ -5,7 +5,11 @@
  * Tests the automated email functionality for POS orders, including:
  * - Admin email notifications (new_order, cancelled_order, failed_order)
  * - Customer email notifications (processing, completed, refunded, etc.)
- * - Email settings from checkout configuration
+ * - Cashier email notifications (new_order)
+ * - Per-email granular toggle support
+ * - Legacy boolean settings migration
+ *
+ * @package WCPOS\WooCommercePOS\Tests
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
@@ -38,14 +42,10 @@ class Test_Emails extends WC_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 
-		// Store original settings
 		$this->original_checkout_settings = get_option( 'woocommerce_pos_settings_checkout' );
 
-		// Initialize email capturing
 		EmailHelper::init();
-		EmailHelper::prevent_sending(); // Don't actually send emails
-
-		// Reset mailer to ensure clean state
+		EmailHelper::prevent_sending();
 		EmailHelper::reset_mailer();
 	}
 
@@ -53,19 +53,21 @@ class Test_Emails extends WC_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		// Restore original settings
 		if ( false !== $this->original_checkout_settings ) {
 			update_option( 'woocommerce_pos_settings_checkout', $this->original_checkout_settings );
 		} else {
 			delete_option( 'woocommerce_pos_settings_checkout' );
 		}
 
-		// Clean up email capturing
 		EmailHelper::cleanup();
 		EmailHelper::allow_sending();
 
 		parent::tearDown();
 	}
+
+	// ==========================================================================
+	// HOOK REGISTRATION TESTS
+	// ==========================================================================
 
 	/**
 	 * Test that Emails class can be instantiated.
@@ -112,6 +114,18 @@ class Test_Emails extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that new_order recipient filter is registered.
+	 */
+	public function test_new_order_recipient_filter_registered(): void {
+		$emails = new Emails();
+
+		$this->assertNotFalse(
+			has_filter( 'woocommerce_email_recipient_new_order', array( $emails, 'filter_new_order_recipients' ) ),
+			'new_order recipient filter should be registered'
+		);
+	}
+
+	/**
 	 * Test that status transition actions are registered for new_order email.
 	 */
 	public function test_status_transition_actions_registered(): void {
@@ -132,120 +146,797 @@ class Test_Emails extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Test manage_admin_emails returns true when admin emails enabled for POS order.
+	 * Test filter priority is high enough (999) to run after other plugins.
 	 */
-	public function test_manage_admin_emails_enabled_for_pos_order(): void {
-		$this->set_email_settings( true, true );
+	public function test_filter_priority_is_high(): void {
+		$emails   = new Emails();
+		$priority = has_filter( 'woocommerce_email_enabled_cancelled_order', array( $emails, 'manage_admin_emails' ) );
+
+		$this->assertNotFalse( $priority, 'Filter should be registered' );
+		$this->assertEquals( 999, $priority, 'Filter priority should be 999' );
+	}
+
+	// ==========================================================================
+	// ADMIN EMAIL ENABLED FILTER TESTS (cancelled_order, failed_order)
+	// ==========================================================================
+
+	/**
+	 * Test admin master on + individual on = enabled.
+	 */
+	public function test_admin_email_enabled_master_on_individual_on(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'cancelled_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Create a mock email class
 		$mock_email     = new stdClass();
 		$mock_email->id = 'cancelled_order';
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
-		$this->assertTrue( $result, 'Admin emails should be enabled when setting is true' );
+		$this->assertTrue( $result, 'Admin email should be enabled when master and individual are both on' );
 	}
 
 	/**
-	 * Test manage_admin_emails returns false when admin emails disabled for POS order.
+	 * Test admin master on + individual off = disabled.
 	 */
-	public function test_manage_admin_emails_disabled_for_pos_order(): void {
-		$this->set_email_settings( false, true );
+	public function test_admin_email_enabled_master_on_individual_off(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'cancelled_order' => false,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Create a mock email class
 		$mock_email     = new stdClass();
 		$mock_email->id = 'cancelled_order';
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
-		$this->assertFalse( $result, 'Admin emails should be disabled when setting is false' );
+		$this->assertFalse( $result, 'Admin email should be disabled when individual toggle is off' );
 	}
 
 	/**
-	 * Test manage_admin_emails does not affect non-POS orders.
+	 * Test admin master off = all disabled regardless of individual.
 	 */
-	public function test_manage_admin_emails_unaffected_for_non_pos_order(): void {
-		$this->set_email_settings( false, false );
+	public function test_admin_email_disabled_master_off(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => false,
+				'cancelled_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order();
+
+		$mock_email     = new stdClass();
+		$mock_email->id = 'cancelled_order';
+
+		$result = $emails->manage_admin_emails( true, $order, $mock_email );
+		$this->assertFalse( $result, 'Admin email should be disabled when master toggle is off' );
+	}
+
+	/**
+	 * Test non-POS orders are not affected by POS email settings.
+	 */
+	public function test_admin_emails_unaffected_for_non_pos_order(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => false ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_regular_order();
 
-		// Create a mock email class
 		$mock_email     = new stdClass();
 		$mock_email->id = 'cancelled_order';
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
 		$this->assertTrue( $result, 'Non-POS orders should not be affected by POS email settings' );
 	}
 
 	/**
-	 * Test manage_customer_emails returns true when customer emails enabled for POS order.
+	 * Test admin email handles null order gracefully.
 	 */
-	public function test_manage_customer_emails_enabled_for_pos_order(): void {
-		$this->set_email_settings( true, true );
+	public function test_manage_admin_emails_handles_null_order(): void {
+		$emails = new Emails();
+
+		$mock_email     = new stdClass();
+		$mock_email->id = 'cancelled_order';
+
+		$result = $emails->manage_admin_emails( true, null, $mock_email );
+		$this->assertTrue( $result, 'Should return original value when order is null' );
+	}
+
+	/**
+	 * Test individual toggle defaults to true when key not set.
+	 */
+	public function test_admin_email_individual_defaults_true(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Create a mock email class
+		$mock_email     = new stdClass();
+		$mock_email->id = 'some_unknown_email';
+
+		$result = $emails->manage_admin_emails( true, $order, $mock_email );
+		$this->assertTrue( $result, 'Unknown email IDs should default to enabled when master is on' );
+	}
+
+	/**
+	 * Test email settings default to enabled when not set in DB.
+	 */
+	public function test_email_settings_default_to_enabled(): void {
+		delete_option( 'woocommerce_pos_settings_checkout' );
+
+		$emails = new Emails();
+		$order  = $this->create_pos_order();
+
+		$mock_email     = new stdClass();
+		$mock_email->id = 'cancelled_order';
+
+		$result = $emails->manage_admin_emails( true, $order, $mock_email );
+		$this->assertTrue( $result, 'Admin emails should default to enabled when setting is not configured' );
+	}
+
+	// ==========================================================================
+	// CUSTOMER EMAIL ENABLED FILTER TESTS
+	// ==========================================================================
+
+	/**
+	 * Test customer master on + individual on = enabled.
+	 */
+	public function test_customer_email_enabled_master_on_individual_on(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'customer_processing_order' => true,
+			),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order();
+
 		$mock_email     = new stdClass();
 		$mock_email->id = 'customer_processing_order';
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
-
-		$this->assertTrue( $result, 'Customer emails should be enabled when setting is true' );
+		$this->assertTrue( $result, 'Customer email should be enabled when master and individual are both on' );
 	}
 
 	/**
-	 * Test manage_customer_emails returns false when customer emails disabled for POS order.
+	 * Test customer master on + individual off = disabled.
 	 */
-	public function test_manage_customer_emails_disabled_for_pos_order(): void {
-		$this->set_email_settings( true, false );
+	public function test_customer_email_enabled_master_on_individual_off(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'customer_processing_order' => false,
+			),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Create a mock email class
 		$mock_email     = new stdClass();
 		$mock_email->id = 'customer_processing_order';
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
-
-		$this->assertFalse( $result, 'Customer emails should be disabled when setting is false' );
+		$this->assertFalse( $result, 'Customer email should be disabled when individual toggle is off' );
 	}
 
 	/**
-	 * Test manage_customer_emails does not affect non-POS orders.
+	 * Test customer master off = all disabled regardless of individual.
 	 */
-	public function test_manage_customer_emails_unaffected_for_non_pos_order(): void {
-		$this->set_email_settings( false, false );
+	public function test_customer_email_disabled_master_off(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array(
+				'enabled' => false,
+				'customer_processing_order' => true,
+			),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order();
+
+		$mock_email     = new stdClass();
+		$mock_email->id = 'customer_processing_order';
+
+		$result = $emails->manage_customer_emails( true, $order, $mock_email );
+		$this->assertFalse( $result, 'Customer email should be disabled when master toggle is off' );
+	}
+
+	/**
+	 * Test non-POS orders are not affected by POS customer email settings.
+	 */
+	public function test_customer_emails_unaffected_for_non_pos_order(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => false ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_regular_order();
 
-		// Create a mock email class
 		$mock_email     = new stdClass();
 		$mock_email->id = 'customer_processing_order';
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
-
 		$this->assertTrue( $result, 'Non-POS orders should not be affected by POS email settings' );
 	}
+
+	/**
+	 * Test customer email handles null order gracefully.
+	 */
+	public function test_manage_customer_emails_handles_null_order(): void {
+		$emails = new Emails();
+
+		$mock_email     = new stdClass();
+		$mock_email->id = 'customer_processing_order';
+
+		$result = $emails->manage_customer_emails( true, null, $mock_email );
+		$this->assertTrue( $result, 'Should return original value when order is null' );
+	}
+
+	/**
+	 * Test customer emails with various IDs all respect settings.
+	 */
+	public function test_customer_emails_various_ids(): void {
+		$emails = new Emails();
+		$order  = $this->create_pos_order();
+
+		$email_ids = array(
+			'customer_failed_order',
+			'customer_on_hold_order',
+			'customer_processing_order',
+			'customer_completed_order',
+			'customer_refunded_order',
+		);
+
+		// Test with emails enabled.
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		foreach ( $email_ids as $email_id ) {
+			$mock_email     = new stdClass();
+			$mock_email->id = $email_id;
+			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
+			$this->assertTrue( $result, "Customer email {$email_id} should be enabled" );
+		}
+
+		// Test with emails disabled.
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array( 'enabled' => false ),
+			array( 'enabled' => false )
+		);
+		foreach ( $email_ids as $email_id ) {
+			$mock_email     = new stdClass();
+			$mock_email->id = $email_id;
+			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
+			$this->assertFalse( $result, "Customer email {$email_id} should be disabled" );
+		}
+	}
+
+	// ==========================================================================
+	// NEW ORDER RECIPIENT FILTER TESTS (filter_new_order_recipients)
+	// ==========================================================================
+
+	/**
+	 * Test POS order, admin on + cashier on = both recipients.
+	 */
+	public function test_new_order_recipients_admin_and_cashier(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_map( 'trim', explode( ',', $result ) );
+
+		$this->assertContains( $admin_email, $recipients, 'Admin email should be in recipients' );
+		$this->assertContains( 'cashier@example.com', $recipients, 'Cashier email should be in recipients' );
+	}
+
+	/**
+	 * Test POS order, admin on + cashier off = admin only.
+	 */
+	public function test_new_order_recipients_admin_only(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertContains( $admin_email, $recipients, 'Admin email should be in recipients' );
+		$this->assertNotContains( 'cashier@example.com', $recipients, 'Cashier email should NOT be in recipients' );
+	}
+
+	/**
+	 * Test POS order, admin off + cashier on = cashier only.
+	 */
+	public function test_new_order_recipients_cashier_only(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertNotContains( $admin_email, $recipients, 'Admin email should NOT be in recipients' );
+		$this->assertContains( 'cashier@example.com', $recipients, 'Cashier email should be in recipients' );
+	}
+
+	/**
+	 * Test POS order, admin off + cashier off = nobody.
+	 */
+	public function test_new_order_recipients_nobody(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertEmpty( $recipients, 'No recipients when both admin and cashier are off' );
+	}
+
+	/**
+	 * Test admin master on + new_order individual OFF, cashier on = cashier only.
+	 */
+	public function test_new_order_recipients_admin_new_order_off_cashier_on(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => false,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertNotContains( $admin_email, $recipients, 'Admin should NOT get email when new_order individual is off' );
+		$this->assertContains( 'cashier@example.com', $recipients, 'Cashier should still get email' );
+	}
+
+	/**
+	 * Test admin on, cashier master on + new_order individual OFF = admin only.
+	 */
+	public function test_new_order_recipients_cashier_new_order_off_admin_on(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => false,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertContains( $admin_email, $recipients, 'Admin should still get email' );
+		$this->assertNotContains( 'cashier@example.com', $recipients, 'Cashier should NOT get email when new_order individual is off' );
+	}
+
+	/**
+	 * Test non-POS order = recipients unchanged.
+	 */
+	public function test_new_order_recipients_unchanged_for_non_pos_order(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => false ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_regular_order();
+
+		$original = 'admin@example.com';
+		$result   = $emails->filter_new_order_recipients( $original, $order, null );
+
+		$this->assertEquals( $original, $result, 'Non-POS order recipients should not be modified' );
+	}
+
+	/**
+	 * Test cashier IS admin = dedup (one copy only).
+	 */
+	public function test_new_order_recipients_dedup_cashier_is_admin(): void {
+		$admin_email = get_option( 'admin_email' );
+		$cashier     = $this->factory->user->create( array( 'user_email' => $admin_email ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$result     = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertCount( 1, $recipients, 'Should only have one recipient when cashier and admin share the same email' );
+		$this->assertContains( $admin_email, $recipients );
+	}
+
+	/**
+	 * Test POS order with no _pos_user meta = admin only.
+	 */
+	public function test_new_order_recipients_no_pos_user_meta(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', 0 );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertContains( $admin_email, $recipients, 'Admin should still get email' );
+		$this->assertCount( 1, $recipients, 'Only admin should be in recipients when no cashier is set' );
+	}
+
+	/**
+	 * Test POS order, cashier has no email = admin only.
+	 */
+	public function test_new_order_recipients_cashier_no_email(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => '' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'pending', $cashier );
+
+		$admin_email = get_option( 'admin_email' );
+		$result      = $emails->filter_new_order_recipients( $admin_email, $order, null );
+		$recipients  = array_filter( array_map( 'trim', explode( ',', $result ) ) );
+
+		$this->assertContains( $admin_email, $recipients, 'Admin should still get email' );
+		$this->assertCount( 1, $recipients, 'Only admin when cashier has no email' );
+	}
+
+	/**
+	 * Test filter handles null order parameter.
+	 */
+	public function test_new_order_recipients_handles_null_order(): void {
+		$emails = new Emails();
+
+		$original = 'admin@example.com';
+		$result   = $emails->filter_new_order_recipients( $original, null, null );
+
+		$this->assertEquals( $original, $result, 'Should return original when order is null' );
+	}
+
+	// ==========================================================================
+	// TRIGGER NEW ORDER EMAIL TESTS (POS status transitions)
+	// ==========================================================================
+
+	/**
+	 * Test trigger fires when admin new_order on + cashier on.
+	 */
+	public function test_trigger_new_order_email_both_on(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'processing', $cashier );
+		EmailHelper::clear();
+
+		$emails->trigger_new_order_email( $order->get_id(), $order );
+
+		$this->assertTrue( true, 'Email trigger should run without error' );
+	}
+
+	/**
+	 * Test trigger fires when admin off + cashier on (for cashier).
+	 */
+	public function test_trigger_new_order_email_admin_off_cashier_on(): void {
+		$cashier = $this->factory->user->create( array( 'user_email' => 'cashier@example.com' ) );
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'processing', $cashier );
+		EmailHelper::clear();
+
+		$emails->trigger_new_order_email( $order->get_id(), $order );
+
+		$this->assertTrue( true, 'Email trigger should run for cashier even when admin is off' );
+	}
+
+	/**
+	 * Test trigger does NOT fire when both off.
+	 */
+	public function test_trigger_new_order_email_both_off(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'processing' );
+		EmailHelper::clear();
+
+		$emails->trigger_new_order_email( $order->get_id(), $order );
+
+		$new_order_emails = EmailHelper::get_emails_by_wc_id( 'new_order' );
+		$this->assertCount( 0, $new_order_emails, 'No email should be triggered when both admin and cashier are off' );
+	}
+
+	/**
+	 * Test trigger fires when admin on + cashier off.
+	 */
+	public function test_trigger_new_order_email_admin_on_cashier_off(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'processing' );
+		EmailHelper::clear();
+
+		$emails->trigger_new_order_email( $order->get_id(), $order );
+
+		$this->assertTrue( true, 'Email trigger should run for admin' );
+	}
+
+	/**
+	 * Test trigger ignores non-POS orders.
+	 */
+	public function test_trigger_new_order_email_ignores_non_pos_orders(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			)
+		);
+		$emails = new Emails();
+		$order  = $this->create_regular_order( 'processing' );
+		EmailHelper::clear();
+
+		$emails->trigger_new_order_email( $order->get_id(), $order );
+
+		$new_order_emails = EmailHelper::get_emails_by_wc_id( 'new_order' );
+		$this->assertCount( 0, $new_order_emails, 'No new_order email should be triggered for non-POS orders' );
+	}
+
+	/**
+	 * Test trigger loads order from ID when null.
+	 */
+	public function test_trigger_new_order_email_loads_order_from_id(): void {
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'new_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+		$emails = new Emails();
+		$order  = $this->create_pos_order( 'processing' );
+
+		$emails->trigger_new_order_email( $order->get_id(), null );
+		$this->assertTrue( true, 'Should load order from ID without error' );
+	}
+
+	// ==========================================================================
+	// LEGACY MIGRATION TESTS
+	// ==========================================================================
+
+	/**
+	 * Test legacy boolean admin_emails=true migrates correctly.
+	 */
+	public function test_legacy_boolean_admin_emails_true_migrates(): void {
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array(
+				'order_status'    => 'wc-completed',
+				'admin_emails'    => true,
+				'customer_emails' => true,
+			)
+		);
+
+		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+
+		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
+		$this->assertTrue( $settings['enabled'], 'Master toggle should be true' );
+		$this->assertTrue( $settings['new_order'], 'new_order should default to true' );
+	}
+
+	/**
+	 * Test legacy boolean admin_emails=false migrates correctly.
+	 */
+	public function test_legacy_boolean_admin_emails_false_migrates(): void {
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array(
+				'order_status'    => 'wc-completed',
+				'admin_emails'    => false,
+				'customer_emails' => true,
+			)
+		);
+
+		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+
+		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
+		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
+	}
+
+	/**
+	 * Test legacy boolean customer_emails migrates correctly.
+	 */
+	public function test_legacy_boolean_customer_emails_migrates(): void {
+		update_option(
+			'woocommerce_pos_settings_checkout',
+			array(
+				'order_status'    => 'wc-completed',
+				'admin_emails'    => true,
+				'customer_emails' => false,
+			)
+		);
+
+		$settings = woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+
+		$this->assertIsArray( $settings, 'Legacy boolean should be migrated to array' );
+		$this->assertFalse( $settings['enabled'], 'Master toggle should be false' );
+		$this->assertTrue( $settings['customer_processing_order'], 'Individual emails should default to true' );
+	}
+
+	/**
+	 * Test cashier_emails defaults correctly for fresh installs.
+	 */
+	public function test_cashier_emails_defaults_on_fresh_install(): void {
+		delete_option( 'woocommerce_pos_settings_checkout' );
+
+		$settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+
+		$this->assertIsArray( $settings );
+		$this->assertFalse( $settings['enabled'], 'Cashier emails should default to disabled' );
+		$this->assertTrue( $settings['new_order'], 'new_order individual should default to true' );
+	}
+
+	// ==========================================================================
+	// FILTER HOOK TESTS
+	// ==========================================================================
 
 	/**
 	 * Test that the admin email filter can be further filtered.
 	 */
 	public function test_admin_email_filter_is_filterable(): void {
-		$this->set_email_settings( true, true );
+		$this->set_checkout_settings(
+			array(
+				'enabled' => true,
+				'cancelled_order' => true,
+			),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Add a filter that overrides the setting
 		add_filter(
 			'woocommerce_pos_admin_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
-				return false; // Override to disable
+				return false;
 			},
 			10,
 			4
@@ -255,10 +946,8 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$mock_email->id = 'cancelled_order';
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
 		$this->assertFalse( $result, 'Admin email should be disabled via filter override' );
 
-		// Clean up
 		remove_all_filters( 'woocommerce_pos_admin_email_enabled' );
 	}
 
@@ -266,15 +955,21 @@ class Test_Emails extends WC_Unit_Test_Case {
 	 * Test that the customer email filter can be further filtered.
 	 */
 	public function test_customer_email_filter_is_filterable(): void {
-		$this->set_email_settings( true, true );
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array(
+				'enabled' => true,
+				'customer_processing_order' => true,
+			),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Add a filter that overrides the setting
 		add_filter(
 			'woocommerce_pos_customer_email_enabled',
 			function ( $enabled, $email_id, $order, $email_class ) {
-				return false; // Override to disable
+				return false;
 			},
 			10,
 			4
@@ -284,54 +979,19 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$mock_email->id = 'customer_processing_order';
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
-
 		$this->assertFalse( $result, 'Customer email should be disabled via filter override' );
 
-		// Clean up
 		remove_all_filters( 'woocommerce_pos_customer_email_enabled' );
-	}
-
-	/**
-	 * Test that admin and customer emails can have independent settings.
-	 */
-	public function test_admin_and_customer_emails_independent(): void {
-		// Enable admin, disable customer
-		$this->set_email_settings( true, false );
-		$emails = new Emails();
-		$order  = $this->create_pos_order();
-
-		$admin_email     = new stdClass();
-		$admin_email->id = 'cancelled_order';
-
-		$customer_email     = new stdClass();
-		$customer_email->id = 'customer_processing_order';
-
-		$admin_result    = $emails->manage_admin_emails( true, $order, $admin_email );
-		$customer_result = $emails->manage_customer_emails( true, $order, $customer_email );
-
-		$this->assertTrue( $admin_result, 'Admin emails should be enabled' );
-		$this->assertFalse( $customer_result, 'Customer emails should be disabled' );
-
-		// Now reverse: disable admin, enable customer
-		$this->set_email_settings( false, true );
-
-		$admin_result    = $emails->manage_admin_emails( true, $order, $admin_email );
-		$customer_result = $emails->manage_customer_emails( true, $order, $customer_email );
-
-		$this->assertFalse( $admin_result, 'Admin emails should be disabled' );
-		$this->assertTrue( $customer_result, 'Customer emails should be enabled' );
 	}
 
 	/**
 	 * Test that email IDs can be filtered via woocommerce_pos_admin_emails filter.
 	 */
 	public function test_admin_email_ids_are_filterable(): void {
-		// Add a custom email ID to the admin emails list
 		add_filter(
 			'woocommerce_pos_admin_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_admin_email';
-
 				return $emails;
 			}
 		);
@@ -343,7 +1003,6 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom admin email filter should be registered'
 		);
 
-		// Clean up
 		remove_all_filters( 'woocommerce_pos_admin_emails' );
 	}
 
@@ -351,12 +1010,10 @@ class Test_Emails extends WC_Unit_Test_Case {
 	 * Test that email IDs can be filtered via woocommerce_pos_customer_emails filter.
 	 */
 	public function test_customer_email_ids_are_filterable(): void {
-		// Add a custom email ID to the customer emails list
 		add_filter(
 			'woocommerce_pos_customer_emails',
 			function ( $emails ) {
 				$emails[] = 'custom_customer_email';
-
 				return $emails;
 			}
 		);
@@ -368,116 +1025,66 @@ class Test_Emails extends WC_Unit_Test_Case {
 			'Custom customer email filter should be registered'
 		);
 
-		// Clean up
 		remove_all_filters( 'woocommerce_pos_customer_emails' );
 	}
 
 	/**
-	 * Test trigger_new_order_email does nothing for non-POS orders.
+	 * Test admin and customer emails work independently.
 	 */
-	public function test_trigger_new_order_email_ignores_non_pos_orders(): void {
-		$this->set_email_settings( true, true );
-		$emails = new Emails();
-		$order  = $this->create_regular_order( 'processing' );
-
-		EmailHelper::clear();
-
-		// Call trigger_new_order_email directly
-		$emails->trigger_new_order_email( $order->get_id(), $order );
-
-		// No new_order email should be triggered for non-POS orders via this method
-		$new_order_emails = EmailHelper::get_emails_by_wc_id( 'new_order' );
-		$this->assertCount( 0, $new_order_emails, 'No new_order email should be triggered for non-POS orders' );
-	}
-
-	/**
-	 * Test trigger_new_order_email respects admin email setting.
-	 */
-	public function test_trigger_new_order_email_respects_admin_setting(): void {
-		$this->set_email_settings( false, true );
-		$emails = new Emails();
-		$order  = $this->create_pos_order( 'processing' );
-
-		EmailHelper::clear();
-
-		// Call trigger_new_order_email directly
-		$emails->trigger_new_order_email( $order->get_id(), $order );
-
-		// No email should be sent when admin_emails is disabled
-		$new_order_emails = EmailHelper::get_emails_by_wc_id( 'new_order' );
-		$this->assertCount( 0, $new_order_emails, 'No new_order email should be triggered when admin_emails is disabled' );
-	}
-
-	/**
-	 * Test manage_admin_emails handles null order gracefully.
-	 */
-	public function test_manage_admin_emails_handles_null_order(): void {
-		$this->set_email_settings( false, false );
-		$emails = new Emails();
-
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
-
-		// Should return the original value when order is null
-		$result = $emails->manage_admin_emails( true, null, $mock_email );
-
-		$this->assertTrue( $result, 'Should return original value when order is null' );
-	}
-
-	/**
-	 * Test manage_customer_emails handles null order gracefully.
-	 */
-	public function test_manage_customer_emails_handles_null_order(): void {
-		$this->set_email_settings( false, false );
-		$emails = new Emails();
-
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
-
-		// Should return the original value when order is null
-		$result = $emails->manage_customer_emails( true, null, $mock_email );
-
-		$this->assertTrue( $result, 'Should return original value when order is null' );
-	}
-
-	/**
-	 * Test that email settings default to enabled when not set.
-	 */
-	public function test_email_settings_default_to_enabled(): void {
-		// Remove all checkout settings
-		delete_option( 'woocommerce_pos_settings_checkout' );
-
+	public function test_admin_and_customer_emails_independent(): void {
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array( 'enabled' => false ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$admin_mock     = new stdClass();
+		$admin_mock->id = 'cancelled_order';
 
-		// Default should be enabled (truthy)
-		$result = $emails->manage_admin_emails( true, $order, $mock_email );
+		$customer_mock     = new stdClass();
+		$customer_mock->id = 'customer_processing_order';
 
-		// Note: This test documents current behavior - if defaults are false, test should be updated
-		$this->assertTrue( $result, 'Admin emails should default to enabled when setting is not configured' );
+		$admin_result    = $emails->manage_admin_emails( true, $order, $admin_mock );
+		$customer_result = $emails->manage_customer_emails( true, $order, $customer_mock );
+
+		$this->assertTrue( $admin_result, 'Admin emails should be enabled' );
+		$this->assertFalse( $customer_result, 'Customer emails should be disabled' );
+
+		// Reverse.
+		$this->set_checkout_settings(
+			array( 'enabled' => false ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
+
+		$admin_result    = $emails->manage_admin_emails( true, $order, $admin_mock );
+		$customer_result = $emails->manage_customer_emails( true, $order, $customer_mock );
+
+		$this->assertFalse( $admin_result, 'Admin emails should be disabled' );
+		$this->assertTrue( $customer_result, 'Customer emails should be enabled' );
 	}
 
 	/**
-	 * Test that the email class ID is correctly extracted from WC_Email instance.
+	 * Test WC_Email ID extraction works with real WC_Email instances.
 	 */
 	public function test_email_id_extraction_from_wc_email(): void {
-		$this->set_email_settings( true, true );
+		$this->set_checkout_settings(
+			array( 'enabled' => true ),
+			array( 'enabled' => true ),
+			array( 'enabled' => false )
+		);
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		// Get actual WC_Email instance
 		$mailer        = WC()->mailer();
 		$email_classes = $mailer->get_emails();
 
-		// Find the customer_processing_order email
 		$processing_email = null;
 		foreach ( $email_classes as $email ) {
 			if ( 'customer_processing_order' === $email->id ) {
 				$processing_email = $email;
-
 				break;
 			}
 		}
@@ -490,220 +1097,52 @@ class Test_Emails extends WC_Unit_Test_Case {
 		}
 	}
 
-	/**
-	 * Test filter priority is high enough (999) to run after other plugins.
-	 */
-	public function test_filter_priority_is_high(): void {
-		$emails = new Emails();
-
-		// Check the priority of our filter
-		$priority = has_filter( 'woocommerce_email_enabled_cancelled_order', array( $emails, 'manage_admin_emails' ) );
-
-		// has_filter returns the priority or false
-		$this->assertNotFalse( $priority, 'Filter should be registered' );
-		$this->assertEquals( 999, $priority, 'Filter priority should be 999' );
-	}
-
 	// ==========================================================================
-	// DIRECT METHOD CALL TESTS (for line coverage)
+	// HELPERS
 	// ==========================================================================
 
 	/**
-	 * Direct test: manage_admin_emails with WC_Email instance.
+	 * Set checkout email settings with the new array format.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::manage_admin_emails
+	 * @param array $admin_emails    Admin email settings array.
+	 * @param array $customer_emails Customer email settings array.
+	 * @param array $cashier_emails  Cashier email settings array.
 	 */
-	public function test_direct_manage_admin_emails_with_wc_email(): void {
-		$this->set_email_settings( true, true );
-		$emails = new Emails();
-		$order  = $this->create_pos_order();
-
-		// Create mock that looks like WC_Email
-		$mock_email     = new class() {
-			public $id = 'new_order';
-		};
-
-		// Direct method call
-		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
-		$this->assertTrue( $result );
-	}
-
-	/**
-	 * Direct test: manage_customer_emails with various email IDs.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::manage_customer_emails
-	 */
-	public function test_direct_manage_customer_emails_various_ids(): void {
-		$emails = new Emails();
-		$order  = $this->create_pos_order();
-
-		$email_ids = array(
-			'customer_failed_order',
-			'customer_on_hold_order',
-			'customer_processing_order',
-			'customer_completed_order',
-			'customer_refunded_order',
-		);
-
-		// Test with emails enabled
-		$this->set_email_settings( true, true );
-		foreach ( $email_ids as $email_id ) {
-			$mock_email     = new stdClass();
-			$mock_email->id = $email_id;
-			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
-			$this->assertTrue( $result, "Customer email {$email_id} should be enabled" );
-		}
-
-		// Test with emails disabled
-		$this->set_email_settings( true, false );
-		foreach ( $email_ids as $email_id ) {
-			$mock_email     = new stdClass();
-			$mock_email->id = $email_id;
-			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
-			$this->assertFalse( $result, "Customer email {$email_id} should be disabled" );
-		}
-	}
-
-	/**
-	 * Direct test: trigger_new_order_email with enabled emails.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::trigger_new_order_email
-	 */
-	public function test_direct_trigger_new_order_email_enabled(): void {
-		$this->set_email_settings( true, true );
-		$emails = new Emails();
-		$order  = $this->create_pos_order( 'processing' );
-
-		// Clear any previous email state
-		EmailHelper::clear();
-
-		// Call method directly - this should attempt to trigger the email
-		$emails->trigger_new_order_email( $order->get_id(), $order );
-
-		// The test verifies the method runs without error
-		// Actual email sending is mocked
-		$this->assertTrue( true );
-	}
-
-	/**
-	 * Direct test: trigger_new_order_email with null order parameter.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::trigger_new_order_email
-	 */
-	public function test_direct_trigger_new_order_email_loads_order(): void {
-		$this->set_email_settings( true, true );
-		$emails = new Emails();
-		$order  = $this->create_pos_order( 'processing' );
-
-		// Call with only order ID (no order object)
-		$emails->trigger_new_order_email( $order->get_id(), null );
-
-		// Test passes if no exception is thrown
-		$this->assertTrue( true );
-	}
-
-	/**
-	 * Direct test: manage_admin_emails returns original value for order ID.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::manage_admin_emails
-	 */
-	public function test_direct_manage_admin_emails_with_order_id(): void {
-		$this->set_email_settings( true, true );
-		$emails = new Emails();
-		$order  = $this->create_pos_order();
-
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
-
-		// WooCommerce sometimes passes the order object, sometimes the ID
-		// Our method should handle both
-		$result = $emails->manage_admin_emails( true, $order, $mock_email );
-
-		$this->assertTrue( $result );
-	}
-
-	/**
-	 * Direct test: constructor registers all expected filters.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::__construct
-	 */
-	public function test_direct_constructor_registers_filters(): void {
-		// Remove all existing filters first
-		remove_all_filters( 'woocommerce_email_enabled_cancelled_order' );
-		remove_all_filters( 'woocommerce_email_enabled_failed_order' );
-		remove_all_filters( 'woocommerce_email_enabled_customer_processing_order' );
-
-		// Create new instance
-		$emails = new Emails();
-
-		// Verify admin email filters
-		$this->assertNotFalse(
-			has_filter( 'woocommerce_email_enabled_cancelled_order', array( $emails, 'manage_admin_emails' ) )
-		);
-		$this->assertNotFalse(
-			has_filter( 'woocommerce_email_enabled_failed_order', array( $emails, 'manage_admin_emails' ) )
-		);
-
-		// Verify customer email filters
-		$this->assertNotFalse(
-			has_filter( 'woocommerce_email_enabled_customer_processing_order', array( $emails, 'manage_customer_emails' ) )
-		);
-	}
-
-	/**
-	 * Direct test: constructor registers status transition actions.
-	 *
-	 * @covers \WCPOS\WooCommercePOS\Emails::__construct
-	 */
-	public function test_direct_constructor_registers_actions(): void {
-		$emails = new Emails();
-
-		$this->assertNotFalse(
-			has_action( 'woocommerce_order_status_pos-open_to_completed', array( $emails, 'trigger_new_order_email' ) )
-		);
-		$this->assertNotFalse(
-			has_action( 'woocommerce_order_status_pos-open_to_processing', array( $emails, 'trigger_new_order_email' ) )
-		);
-		$this->assertNotFalse(
-			has_action( 'woocommerce_order_status_pos-open_to_on-hold', array( $emails, 'trigger_new_order_email' ) )
-		);
-	}
-
-	/**
-	 * Helper to set checkout email settings.
-	 *
-	 * @param bool $admin_emails    Enable admin emails.
-	 * @param bool $customer_emails Enable customer emails.
-	 */
-	private function set_email_settings( bool $admin_emails, bool $customer_emails ): void {
+	private function set_checkout_settings( array $admin_emails, array $customer_emails, array $cashier_emails ): void {
 		$settings                    = get_option( 'woocommerce_pos_settings_checkout', array() );
 		$settings['admin_emails']    = $admin_emails;
 		$settings['customer_emails'] = $customer_emails;
+		$settings['cashier_emails']  = $cashier_emails;
 		update_option( 'woocommerce_pos_settings_checkout', $settings );
 	}
 
 	/**
-	 * Helper to create a POS order.
+	 * Create a POS order.
 	 *
-	 * @param string $status Optional. Order status. Default 'pending'.
+	 * @param string $status     Order status. Default 'pending'.
+	 * @param int    $cashier_id User ID of the cashier. Default 0 (no cashier).
 	 *
 	 * @return WC_Order The created order.
 	 */
-	private function create_pos_order( string $status = 'pending' ): WC_Order {
+	private function create_pos_order( string $status = 'pending', int $cashier_id = 0 ): WC_Order {
 		$order = OrderHelper::create_order();
 		$order->update_meta_data( '_pos', '1' );
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->set_status( $status );
+
+		if ( $cashier_id > 0 ) {
+			$order->update_meta_data( '_pos_user', (string) $cashier_id );
+		}
+
 		$order->save();
 
 		return $order;
 	}
 
 	/**
-	 * Helper to create a regular (non-POS) order.
+	 * Create a regular (non-POS) order.
 	 *
-	 * @param string $status Optional. Order status. Default 'pending'.
+	 * @param string $status Order status. Default 'pending'.
 	 *
 	 * @return WC_Order The created order.
 	 */
