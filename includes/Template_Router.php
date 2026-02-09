@@ -112,6 +112,8 @@ class Template_Router {
 
 		foreach ( $rewrite_rules_to_templates as $rule => $classname ) {
 			if ( $wp->matched_rule === $rule ) {
+				$this->clean_response_headers();
+
 				if ( \is_array( $classname ) ) {
 					$this->load_checkout_template( $classname );
 				} else {
@@ -210,5 +212,43 @@ class Template_Router {
 		}
 
 		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+	}
+
+	/**
+	 * Remove Content-Security-Policy headers set by security plugins.
+	 *
+	 * Security plugins like LiteSpeed Cache and Wordfence can set restrictive CSP headers
+	 * that block the POS from loading JavaScript and CSS bundles from cdn.jsdelivr.net.
+	 * Since POS pages use custom templates (not the regular WordPress frontend), we strip
+	 * these headers to prevent interference.
+	 *
+	 * @return void
+	 */
+	private function clean_response_headers(): void {
+		if ( headers_sent() || ! \function_exists( 'header_remove' ) ) {
+			return;
+		}
+
+		header_remove( 'Content-Security-Policy' );
+		header_remove( 'Content-Security-Policy-Report-Only' );
+
+		/**
+		 * Filters the Content-Security-Policy header value for POS pages.
+		 *
+		 * By default no CSP header is set, which avoids breaking payment gateway scripts
+		 * that load from unpredictable domains. Return a non-empty policy string to set
+		 * a custom CSP header.
+		 *
+		 * @since 1.9.0
+		 *
+		 * @param string $policy The CSP policy string. Default empty (no CSP set).
+		 *
+		 * @hook woocommerce_pos_content_security_policy
+		 */
+		$policy = apply_filters( 'woocommerce_pos_content_security_policy', '' );
+
+		if ( ! empty( $policy ) ) {
+			header( 'Content-Security-Policy: ' . $policy );
+		}
 	}
 }
