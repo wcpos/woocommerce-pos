@@ -602,7 +602,8 @@ class Test_Emails extends WC_Unit_Test_Case {
 	 */
 	public function test_new_order_recipients_dedup_cashier_is_admin(): void {
 		$admin_email = get_option( 'admin_email' );
-		$cashier     = $this->factory->user->create( array( 'user_email' => $admin_email ) );
+		$admin_user  = get_user_by( 'email', $admin_email );
+		$cashier     = $admin_user->ID;
 		$this->set_checkout_settings(
 			array(
 				'enabled' => true,
@@ -654,15 +655,22 @@ class Test_Emails extends WC_Unit_Test_Case {
 	 * Test POS order, cashier has no email = admin only.
 	 */
 	public function test_new_order_recipients_cashier_no_email(): void {
-		$cashier = $this->factory->user->create( array( 'user_email' => '' ) );
+		global $wpdb;
+
+		// Create user with a valid email first (WP rejects empty emails),
+		// then wipe it directly in the DB to simulate a user with no email.
+		$cashier = $this->factory->user->create( array( 'user_email' => 'temp@example.com' ) );
+		$wpdb->update( $wpdb->users, array( 'user_email' => '' ), array( 'ID' => $cashier ) );
+		clean_user_cache( $cashier );
+
 		$this->set_checkout_settings(
 			array(
-				'enabled' => true,
+				'enabled'   => true,
 				'new_order' => true,
 			),
 			array( 'enabled' => true ),
 			array(
-				'enabled' => true,
+				'enabled'   => true,
 				'new_order' => true,
 			)
 		);
@@ -1059,23 +1067,14 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mailer        = WC()->mailer();
-		$email_classes = $mailer->get_emails();
+		// Instantiate the real WC email class directly rather than relying
+		// on the mailer (which is reset in setUp via EmailHelper::reset_mailer).
+		$processing_email = new \WC_Email_Customer_Processing_Order();
 
-		$processing_email = null;
-		foreach ( $email_classes as $email ) {
-			if ( 'customer_processing_order' === $email->id ) {
-				$processing_email = $email;
-				break;
-			}
-		}
+		$this->assertSame( 'customer_processing_order', $processing_email->id, 'Sanity check: WC email ID should match' );
 
-		if ( $processing_email ) {
-			$result = $emails->manage_customer_emails( true, $order, $processing_email );
-			$this->assertTrue( $result, 'Should correctly handle WC_Email instance' );
-		} else {
-			$this->markTestSkipped( 'customer_processing_order email class not found' );
-		}
+		$result = $emails->manage_customer_emails( true, $order, $processing_email );
+		$this->assertTrue( $result, 'Should correctly handle real WC_Email instance' );
 	}
 
 	// ==========================================================================
