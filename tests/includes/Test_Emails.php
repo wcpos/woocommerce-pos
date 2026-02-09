@@ -15,7 +15,7 @@
 namespace WCPOS\WooCommercePOS\Tests;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use stdClass;
+use WC_Email;
 use WC_Order;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Emails;
@@ -175,8 +175,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Admin email should be enabled when master and individual are both on' );
@@ -197,8 +196,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Admin email should be disabled when individual toggle is off' );
@@ -219,8 +217,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Admin email should be disabled when master toggle is off' );
@@ -238,8 +235,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_regular_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Non-POS orders should not be affected by POS email settings' );
@@ -251,8 +247,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 	public function test_manage_admin_emails_handles_null_order(): void {
 		$emails = new Emails();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, null, $mock_email );
 		$this->assertTrue( $result, 'Should return original value when order is null' );
@@ -270,8 +265,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'some_unknown_email';
+		$mock_email = $this->create_email_mock( 'some_unknown_email' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Unknown email IDs should default to enabled when master is on' );
@@ -286,8 +280,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Admin emails should default to enabled when setting is not configured' );
@@ -312,8 +305,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Customer email should be enabled when master and individual are both on' );
@@ -334,8 +326,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Customer email should be disabled when individual toggle is off' );
@@ -356,8 +347,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Customer email should be disabled when master toggle is off' );
@@ -375,8 +365,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_regular_order();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertTrue( $result, 'Non-POS orders should not be affected by POS email settings' );
@@ -388,8 +377,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 	public function test_manage_customer_emails_handles_null_order(): void {
 		$emails = new Emails();
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, null, $mock_email );
 		$this->assertTrue( $result, 'Should return original value when order is null' );
@@ -417,8 +405,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			array( 'enabled' => false )
 		);
 		foreach ( $email_ids as $email_id ) {
-			$mock_email     = new stdClass();
-			$mock_email->id = $email_id;
+			$mock_email = $this->create_email_mock( $email_id );
 			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
 			$this->assertTrue( $result, "Customer email {$email_id} should be enabled" );
 		}
@@ -430,8 +417,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			array( 'enabled' => false )
 		);
 		foreach ( $email_ids as $email_id ) {
-			$mock_email     = new stdClass();
-			$mock_email->id = $email_id;
+			$mock_email = $this->create_email_mock( $email_id );
 			$result         = $emails->manage_customer_emails( true, $order, $mock_email );
 			$this->assertFalse( $result, "Customer email {$email_id} should be disabled" );
 		}
@@ -942,8 +928,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			4
 		);
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'cancelled_order';
+		$mock_email = $this->create_email_mock( 'cancelled_order' );
 
 		$result = $emails->manage_admin_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Admin email should be disabled via filter override' );
@@ -975,8 +960,7 @@ class Test_Emails extends WC_Unit_Test_Case {
 			4
 		);
 
-		$mock_email     = new stdClass();
-		$mock_email->id = 'customer_processing_order';
+		$mock_email = $this->create_email_mock( 'customer_processing_order' );
 
 		$result = $emails->manage_customer_emails( true, $order, $mock_email );
 		$this->assertFalse( $result, 'Customer email should be disabled via filter override' );
@@ -1040,11 +1024,8 @@ class Test_Emails extends WC_Unit_Test_Case {
 		$emails = new Emails();
 		$order  = $this->create_pos_order();
 
-		$admin_mock     = new stdClass();
-		$admin_mock->id = 'cancelled_order';
-
-		$customer_mock     = new stdClass();
-		$customer_mock->id = 'customer_processing_order';
+		$admin_mock    = $this->create_email_mock( 'cancelled_order' );
+		$customer_mock = $this->create_email_mock( 'customer_processing_order' );
 
 		$admin_result    = $emails->manage_admin_emails( true, $order, $admin_mock );
 		$customer_result = $emails->manage_customer_emails( true, $order, $customer_mock );
@@ -1100,6 +1081,25 @@ class Test_Emails extends WC_Unit_Test_Case {
 	// ==========================================================================
 	// HELPERS
 	// ==========================================================================
+
+	/**
+	 * Create a mock WC_Email with the given ID.
+	 *
+	 * Uses PHPUnit's mock builder to create a WC_Email instance without
+	 * calling the constructor, then sets the public $id property.
+	 *
+	 * @param string $id The email ID (e.g. 'cancelled_order').
+	 *
+	 * @return WC_Email The mock email instance.
+	 */
+	private function create_email_mock( string $id ): WC_Email {
+		$mock     = $this->getMockBuilder( WC_Email::class )
+			->disableOriginalConstructor()
+			->getMock();
+		$mock->id = $id;
+
+		return $mock;
+	}
 
 	/**
 	 * Set checkout email settings with the new array format.
