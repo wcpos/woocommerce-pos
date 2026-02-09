@@ -1,4 +1,9 @@
 <?php
+/**
+ * Tests for the Settings Service.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\Services
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
@@ -7,11 +12,18 @@ use WP_Error;
 use WP_UnitTestCase;
 
 /**
+ * Test_Settings_Service class.
+ *
  * @internal
  *
  * @coversNothing
  */
 class Test_Settings_Service extends WP_UnitTestCase {
+	/**
+	 * Settings service instance.
+	 *
+	 * @var Settings
+	 */
 	private $settings;
 
 	/**
@@ -37,18 +49,24 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		'woocommerce_pos_visibility_variations',
 	);
 
+	/**
+	 * Set up test fixtures.
+	 */
 	public function setUp(): void {
 		parent::setUp();
 		$this->settings = Settings::instance();
 
-		// Store original option values
+		// Store original option values.
 		foreach ( self::$option_keys as $key ) {
 			$this->original_options[ $key ] = get_option( $key );
 		}
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tearDown(): void {
-		// Restore original option values
+		// Restore original option values.
 		foreach ( self::$option_keys as $key ) {
 			if ( false !== $this->original_options[ $key ] ) {
 				update_option( $key, $this->original_options[ $key ] );
@@ -75,6 +93,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertEquals( '_sku', $settings['barcode_field'] );
 	}
 
+	/**
+	 * Test saving general settings.
+	 */
 	public function test_save_general_settings(): void {
 		$new_settings = array(
 			'pos_only_products' => true,
@@ -94,8 +115,12 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$settings = $this->settings->get_checkout_settings();
 		$this->assertIsArray( $settings );
 		$this->assertEquals( 'wc-completed', $settings['order_status'] );
-		$this->assertTrue( $settings['admin_emails'] );
-		$this->assertTrue( $settings['customer_emails'] );
+		$this->assertIsArray( $settings['admin_emails'] );
+		$this->assertTrue( $settings['admin_emails']['enabled'] );
+		$this->assertIsArray( $settings['customer_emails'] );
+		$this->assertTrue( $settings['customer_emails']['enabled'] );
+		$this->assertIsArray( $settings['cashier_emails'] );
+		$this->assertFalse( $settings['cashier_emails']['enabled'] );
 	}
 
 	/**
@@ -155,6 +180,9 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 
+	/**
+	 * Test saving invalid settings.
+	 */
 	public function test_save_invalid_settings(): void {
 		$result = $this->settings->save_settings( 'invalid', array() );
 		$this->assertInstanceOf( WP_Error::class, $result );
@@ -197,8 +225,8 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$result = $this->settings->get_barcodes();
 
 		$this->assertIsArray( $result );
-		// Result contains meta keys as strings
-		// Should contain at least the default barcode field
+		// Result contains meta keys as strings.
+		// Should contain at least the default barcode field.
 		$this->assertContains( '_sku', $result );
 	}
 
@@ -377,7 +405,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_direct_update_visibility_settings(): void {
 		$args = array(
-			'post_type'  => 'products',  // Must be 'products' or 'variations'
+			'post_type'  => 'products',
 			'ids'        => array( 100, 200 ),
 			'visibility' => 'pos_only',
 		);
@@ -452,16 +480,18 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	public function test_direct_save_checkout_settings(): void {
 		$new_settings = array(
 			'order_status'    => 'wc-processing',
-			'admin_emails'    => false,
-			'customer_emails' => false,
+			'admin_emails'    => array( 'enabled' => false ),
+			'customer_emails' => array( 'enabled' => false ),
 		);
 
 		$result = $this->settings->save_settings( 'checkout', $new_settings );
 
 		$this->assertIsArray( $result );
 		$this->assertEquals( 'wc-processing', $result['order_status'] );
-		$this->assertFalse( $result['admin_emails'] );
-		$this->assertFalse( $result['customer_emails'] );
+		$this->assertIsArray( $result['admin_emails'] );
+		$this->assertFalse( $result['admin_emails']['enabled'] );
+		$this->assertIsArray( $result['customer_emails'] );
+		$this->assertFalse( $result['customer_emails']['enabled'] );
 	}
 
 	/**
@@ -488,7 +518,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'gateways', $result );
 		$this->assertIsArray( $result['gateways'] );
 
-		// Check gateway structure
+		// Check gateway structure.
 		foreach ( $result['gateways'] as $gateway ) {
 			$this->assertArrayHasKey( 'enabled', $gateway );
 			$this->assertArrayHasKey( 'order', $gateway );

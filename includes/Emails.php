@@ -51,7 +51,10 @@ class Emails {
 			add_filter( "woocommerce_email_enabled_{$email_id}", array( $this, 'manage_customer_emails' ), 999, 3 );
 		}
 
-		// Manually trigger new_order email for POS status changes
+		// Control new_order recipients (admin + cashier) via the recipient filter.
+		add_filter( 'woocommerce_email_recipient_new_order', array( $this, 'filter_new_order_recipients' ), 10, 3 );
+
+		// Manually trigger new_order email for POS status changes.
 		// WooCommerce doesn't automatically trigger new_order for pos-open/pos-partial transitions.
 		add_action( 'woocommerce_order_status_pos-open_to_completed', array( $this, 'trigger_new_order_email' ), 10, 2 );
 		add_action( 'woocommerce_order_status_pos-open_to_processing', array( $this, 'trigger_new_order_email' ), 10, 2 );
@@ -63,7 +66,8 @@ class Emails {
 
 	/**
 	 * Manage admin email sending for POS orders.
-	 * Only affects orders created via WCPOS.
+	 * Handles cancelled_order and failed_order via the enabled filter.
+	 * Note: new_order is handled separately via filter_new_order_recipients.
 	 *
 	 * @param bool           $enabled     Whether the email is enabled.
 	 * @param null|WC_Order  $order       The order object.
@@ -72,24 +76,36 @@ class Emails {
 	 * @return bool Whether the email should be sent.
 	 */
 	public function manage_admin_emails( $enabled, $order, $email_class ) {
-		// Only control emails for POS orders.
 		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
 			return $enabled;
 		}
 
-		// Get email ID for filtering.
 		$email_id = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
+		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
 
-		// Get POS admin email setting.
-		$admin_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		// Master toggle off = all disabled.
+		if ( empty( $settings['enabled'] ) ) {
+			$is_enabled = false;
+		} else {
+			// Individual toggle (default true if key not set).
+			$is_enabled = $settings[ $email_id ] ?? true;
+		}
 
-		// Allow final filtering of the email enabled status.
-		return apply_filters( 'woocommerce_pos_admin_email_enabled', $admin_emails_enabled, $email_id, $order, $email_class );
+		/**
+		 * Filters whether a specific admin email is enabled for a POS order.
+		 *
+		 * @since 1.4.12
+		 *
+		 * @param bool     $is_enabled  Whether the email is enabled.
+		 * @param string   $email_id    The WooCommerce email ID.
+		 * @param WC_Order $order       The order object.
+		 * @param WC_Email $email_class The email class instance.
+		 */
+		return apply_filters( 'woocommerce_pos_admin_email_enabled', $is_enabled, $email_id, $order, $email_class );
 	}
 
 	/**
 	 * Manage customer email sending for POS orders.
-	 * Only affects orders created via WCPOS.
 	 *
 	 * @param bool           $enabled     Whether the email is enabled.
 	 * @param null|WC_Order  $order       The order object.
@@ -98,23 +114,89 @@ class Emails {
 	 * @return bool Whether the email should be sent.
 	 */
 	public function manage_customer_emails( $enabled, $order, $email_class ) {
-		// Only control emails for POS orders.
 		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
 			return $enabled;
 		}
 
-		// Get email ID for filtering.
 		$email_id = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
+		$settings = woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
 
-		// Get POS customer email setting.
-		$customer_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		// Master toggle off = all disabled.
+		if ( empty( $settings['enabled'] ) ) {
+			$is_enabled = false;
+		} else {
+			// Individual toggle (default true if key not set).
+			$is_enabled = $settings[ $email_id ] ?? true;
+		}
 
-		// Allow final filtering of the email enabled status.
-		return apply_filters( 'woocommerce_pos_customer_email_enabled', $customer_emails_enabled, $email_id, $order, $email_class );
+		/**
+		 * Filters whether a specific customer email is enabled for a POS order.
+		 *
+		 * @since 1.4.12
+		 *
+		 * @param bool     $is_enabled  Whether the email is enabled.
+		 * @param string   $email_id    The WooCommerce email ID.
+		 * @param WC_Order $order       The order object.
+		 * @param WC_Email $email_class The email class instance.
+		 */
+		return apply_filters( 'woocommerce_pos_customer_email_enabled', $is_enabled, $email_id, $order, $email_class );
+	}
+
+	/**
+	 * Filter new_order email recipients for POS orders.
+	 *
+	 * Builds the recipient list based on admin and cashier email settings.
+	 * Uses the recipient filter (not the enabled filter) so that admin and
+	 * cashier toggles can work independently.
+	 *
+	 * @param string        $recipient Comma-separated recipient emails.
+	 * @param null|WC_Order $order     The order object.
+	 * @param null|WC_Email $email     The email class instance.
+	 *
+	 * @return string Filtered comma-separated recipient emails.
+	 */
+	public function filter_new_order_recipients( $recipient, $order = null, $email = null ) {
+		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $recipient;
+		}
+
+		$admin_settings   = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$cashier_settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+
+		$admin_wants_new_order = ! empty( $admin_settings['enabled'] )
+			&& ( $admin_settings['new_order'] ?? true );
+
+		// If admin doesn't want new_order, clear the default recipient list.
+		if ( ! $admin_wants_new_order ) {
+			$recipient = '';
+		}
+
+		// Check if cashier should receive the email.
+		$cashier_wants_new_order = ! empty( $cashier_settings['enabled'] )
+			&& ( $cashier_settings['new_order'] ?? true );
+
+		if ( $cashier_wants_new_order ) {
+			$cashier_email = $this->get_cashier_email( $order );
+
+			if ( $cashier_email ) {
+				// Dedup: don't add if already in the recipient list.
+				$existing = array_map( 'trim', explode( ',', $recipient ) );
+				$existing = array_filter( $existing );
+
+				if ( ! \in_array( $cashier_email, $existing, true ) ) {
+					$existing[] = $cashier_email;
+				}
+
+				$recipient = implode( ', ', $existing );
+			}
+		}
+
+		return $recipient;
 	}
 
 	/**
 	 * Manually trigger new_order admin email for POS orders.
+	 *
 	 * This is needed because WooCommerce doesn't automatically trigger new_order
 	 * for pos-open/pos-partial status transitions.
 	 *
@@ -130,9 +212,16 @@ class Emails {
 			return;
 		}
 
-		// Check if admin emails are enabled.
-		$admin_emails_enabled = (bool) woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
-		if ( ! $admin_emails_enabled ) {
+		// Check if anyone wants the new_order email.
+		$admin_settings   = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$cashier_settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+
+		$admin_wants = ! empty( $admin_settings['enabled'] )
+			&& ( $admin_settings['new_order'] ?? true );
+		$cashier_wants = ! empty( $cashier_settings['enabled'] )
+			&& ( $cashier_settings['new_order'] ?? true );
+
+		if ( ! $admin_wants && ! $cashier_wants ) {
 			return;
 		}
 
@@ -156,5 +245,28 @@ class Emails {
 				break;
 			}
 		}
+	}
+
+	/**
+	 * Get the cashier's email address from the order.
+	 *
+	 * @param WC_Order $order The order object.
+	 *
+	 * @return string The cashier email address, or empty string if not found.
+	 */
+	private function get_cashier_email( WC_Order $order ): string {
+		$cashier_id = $order->get_meta( '_pos_user' );
+
+		if ( empty( $cashier_id ) ) {
+			return '';
+		}
+
+		$user = get_user_by( 'id', $cashier_id );
+
+		if ( ! $user || empty( $user->user_email ) ) {
+			return '';
+		}
+
+		return $user->user_email;
 	}
 }

@@ -39,8 +39,24 @@ class Settings {
 		),
 		'checkout' => array(
 			'order_status'    => 'wc-completed',
-			'admin_emails'    => true,
-			'customer_emails' => true,
+			'admin_emails'    => array(
+				'enabled'         => true,
+				'new_order'       => true,
+				'cancelled_order' => true,
+				'failed_order'    => true,
+			),
+			'customer_emails' => array(
+				'enabled'                   => true,
+				'customer_on_hold_order'    => true,
+				'customer_processing_order' => true,
+				'customer_completed_order'  => true,
+				'customer_refunded_order'   => true,
+				'customer_failed_order'     => true,
+			),
+			'cashier_emails'  => array(
+				'enabled'   => false,
+				'new_order' => true,
+			),
 			// this is used in the POS, not in WP Admin (at the moment).
 			'dequeue_script_handles' => array(
 				'admin-bar',
@@ -302,6 +318,15 @@ class Settings {
 		foreach ( $default_settings as $key => $value ) {
 			if ( ! \array_key_exists( $key, $settings ) ) {
 				$settings[ $key ] = $value;
+			}
+		}
+
+		// Migrate legacy boolean email settings to array format.
+		foreach ( array( 'admin_emails', 'customer_emails' ) as $key ) {
+			if ( isset( $settings[ $key ] ) && \is_bool( $settings[ $key ] ) ) {
+				$defaults            = $default_settings[ $key ];
+				$defaults['enabled'] = $settings[ $key ];
+				$settings[ $key ]    = $defaults;
 			}
 		}
 
