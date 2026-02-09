@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Filter: woocommerce_pos_jwt_access_token_expire - 10up Distributor Hook Docs</title>
+    <title>Action: woocommerce_pos_content_security_policy - 10up Distributor Hook Docs</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -21,7 +21,7 @@
 <div id="main">
 
 	
-    <h1 class="page-title">Filter: woocommerce_pos_jwt_access_token_expire</h1>
+    <h1 class="page-title">Action: woocommerce_pos_content_security_policy</h1>
 	
 
     
@@ -43,15 +43,17 @@
 
     
 
-    <h4 class="name" id="woocommerce_pos_jwt_access_token_expire">apply_filters( 'woocommerce_pos_jwt_access_token_expire', <span class="signature">int, int )</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="woocommerce_pos_content_security_policy">do_action( 'woocommerce_pos_content_security_policy', <span class="signature">string )</span><span class="type-signature"></span></h4>
 
     
 
 
 
 <div class="description">
-    <p>Filters the JWT access token expire time.
-Default: 30 minutes for access tokens.</p>
+    <p>Filters the Content-Security-Policy header value for POS pages.</p>
+<p>By default no CSP header is set, which avoids breaking payment gateway scripts
+that load from unpredictable domains. Return a non-empty policy string to set
+a custom CSP header.</p>
 </div>
 
 
@@ -85,7 +87,7 @@ Default: 30 minutes for access tokens.</p>
 
         <tr>
             
-                <td class="name"><code>int</code></td>
+                <td class="name"><code>string</code></td>
             
 
             <td class="type">
@@ -96,25 +98,7 @@ Default: 30 minutes for access tokens.</p>
 
             
 
-            <td class="description last"><p>$expire_time</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>int</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>$issued_at</p></td>
+            <td class="description last"><p>$policy The CSP policy string. Default empty (no CSP set).</p></td>
         </tr>
 
     
@@ -132,7 +116,7 @@ Default: 30 minutes for access tokens.</p>
 
     
     <dt class="tag-since">Since:</dt>
-    <dd class="tag-since"><ul class="dummy"><li>1.8.0</li></ul></dd>
+    <dd class="tag-since"><ul class="dummy"><li>1.9.0</li></ul></dd>
     
 
     
@@ -158,7 +142,7 @@ Default: 30 minutes for access tokens.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="Services_Auth.php.html">Services/Auth.php</a>, <a href="Services_Auth.php.html#line183">line 183</a>
+        <a href="Template_Router.php.html">Template_Router.php</a>, <a href="Template_Router.php.html#line235">line 235</a>
     </li></ul></dd>
     
 
@@ -181,16 +165,6 @@ Default: 30 minutes for access tokens.</p>
 
 
 
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    <p>int Expire time</p>
-</div>
-
-
-
-    
 
 
 

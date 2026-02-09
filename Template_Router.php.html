@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Source: Template_Router.php - 10up Distributor Hook Docs</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+
+	<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Mono|IBM+Plex+Sans:300,400|Playfair+Display:900&display=swap" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="styles-10up.css">
+</head>
+
+<body>
+
+<div id="main">
+
+	
+    <h1 class="page-title">Source: Template_Router.php</h1>
+	
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;?php
+/**
+ * Template Router Class.
+ *
+ * Handles routing for POS frontend templates.
+ *
+ * @author   Paul Kilmurray &lt;paul@kilbot.com>
+ *
+ * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS
+ */
+
+namespace WCPOS\WooCommercePOS;
+
+use WC_Abstract_Order;
+
+/**
+ * Template_Router class.
+ */
+class Template_Router {
+	/**
+	 * Auth path slug for POS authorization endpoint.
+	 */
+	public const AUTH_PATH = 'wcpos-auth';
+
+	/**
+	 * POS frontend slug.
+	 *
+	 * @var string
+	 */
+	private $pos_regex;
+
+	/**
+	 * POS login slug.
+	 *
+	 * @var string
+	 */
+	private $pos_login_regex;
+
+	/**
+	 * POS auth slug.
+	 *
+	 * @var string
+	 */
+	private $pos_auth_regex;
+
+	/**
+	 * POS checkout slug.
+	 *
+	 * @var string
+	 *
+	 * @note 'wcpos-checkout' slug is used instead 'checkout' to avoid conflicts with WC checkout
+	 * eg: x-frame-options: SAMEORIGIN
+	 */
+	private $pos_checkout_regex;
+
+
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		$this->pos_regex          = '^' . Admin\Permalink::get_slug() . '(/(.*))?/?$';
+		$this->pos_login_regex    = '^wcpos-login/?';
+		$this->pos_auth_regex     = '^' . self::AUTH_PATH . '/?';
+		$this->pos_checkout_regex = '^wcpos-checkout/([a-z-]+)/([0-9]+)[/]?$';
+
+		$this->add_rewrite_rules();
+
+		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
+		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
+
+		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url.
+		add_filter( 'woocommerce_get_checkout_order_received_url', array( $this, 'order_received_url' ), 999, 2 );
+	}
+
+	/**
+	 * Get the full URL for the POS authorization endpoint.
+	 *
+	 * @return string
+	 */
+	public static function get_auth_url(): string {
+		return home_url( self::AUTH_PATH . '/' );
+	}
+
+	/**
+	 * Make sure cache contains POS rewrite rules.
+	 *
+	 * @param array|bool $rules Rewrite rules.
+	 *
+	 * @return array|bool
+	 */
+	public function rewrite_rules( $rules ) {
+		return isset( $rules[ $this->pos_regex ], $rules[ $this->pos_login_regex ], $rules[ $this->pos_auth_regex ], $rules[ $this->pos_checkout_regex ] ) ? $rules : false;
+	}
+
+	/**
+	 * Output the matched template.
+	 */
+	public function template_redirect(): void {
+		global $wp;
+
+		$rewrite_rules_to_templates = array(
+			$this->pos_regex          => __NAMESPACE__ . '\\Templates\\Frontend',
+			$this->pos_login_regex    => __NAMESPACE__ . '\\Templates\\Login',
+			$this->pos_auth_regex     => __NAMESPACE__ . '\\Templates\\Auth',
+			$this->pos_checkout_regex => array(
+				'order-pay'      => __NAMESPACE__ . '\\Templates\\Payment',
+				'order-received' => __NAMESPACE__ . '\\Templates\\Received',
+				'wcpos-receipt'  => __NAMESPACE__ . '\\Templates\\Receipt',
+			),
+		);
+
+		foreach ( $rewrite_rules_to_templates as $rule => $classname ) {
+			if ( $wp->matched_rule === $rule ) {
+				$this->clean_response_headers();
+
+				if ( \is_array( $classname ) ) {
+					$this->load_checkout_template( $classname );
+				} else {
+					$this->load_template( $classname );
+				}
+				exit;
+			}
+		}
+	}
+
+
+	/**
+	 * Just like the checkout/payment.php template, we hijack the order received url so we can display a stripped down
+	 * version of the receipt.
+	 *
+	 * @param string            $order_received_url The order received URL.
+	 * @param WC_Abstract_Order $order              The order object.
+	 *
+	 * @return string
+	 */
+	public function order_received_url( string $order_received_url, WC_Abstract_Order $order ): string {
+		global $wp;
+
+		// check is pos.
+		if ( ! woocommerce_pos_request() || ! isset( $wp->query_vars['order-pay'] ) ) {
+			return $order_received_url;
+		}
+
+		$redirect = add_query_arg(
+			array(
+				'key' => $order->get_order_key(),
+			),
+			get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() )
+		);
+
+		return $redirect;
+	}
+
+	/**
+	 * Add rewrite rules for POS endpoints.
+	 *
+	 * @NOTE: 'order-pay' and 'order-received' rewrite tags are added by WC
+	 *
+	 * @return void
+	 */
+	private function add_rewrite_rules(): void {
+		add_rewrite_tag( '%wcpos%', '([^&amp;]+)' );
+		add_rewrite_tag( '%wcpos-receipt%', '([^&amp;]+)' );
+		add_rewrite_tag( '%wcpos-login%', '([^&amp;]+)' );
+		add_rewrite_tag( '%wcpos-auth%', '([^&amp;]+)' );
+		add_rewrite_rule( $this->pos_regex, 'index.php?wcpos=1', 'top' );
+		add_rewrite_rule( $this->pos_login_regex, 'index.php?wcpos-login=1', 'top' );
+		add_rewrite_rule( $this->pos_auth_regex, 'index.php?wcpos-auth=1', 'top' );
+		add_rewrite_rule( $this->pos_checkout_regex, 'index.php?$matches[1]=$matches[2]&amp;wcpos=1', 'top' );
+	}
+
+	/**
+	 * Loads order templates, additionally checks query var is a valid order id.
+	 *
+	 * @param array $classnames Template class names keyed by query var.
+	 *
+	 * @return void
+	 */
+	private function load_checkout_template( array $classnames ): void {
+		global $wp;
+
+		foreach ( $classnames as $query_var => $classname ) {
+			if ( isset( $wp->query_vars[ $query_var ] ) ) {
+				$order_id = absint( $wp->query_vars[ $query_var ] );
+
+				if ( class_exists( $classname ) &amp;&amp; $order_id ) {
+					$template = new $classname( $order_id );
+					$template->get_template();
+
+					return;
+				}
+			}
+		}
+
+		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+	}
+
+	/**
+	 * Loads all other templates.
+	 *
+	 * @param string $classname The template class name.
+	 *
+	 * @return void
+	 */
+	private function load_template( string $classname ): void {
+		if ( class_exists( $classname ) ) {
+			$template = new $classname();
+			$template->get_template();
+
+			return;
+		}
+
+		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+	}
+
+	/**
+	 * Remove Content-Security-Policy headers set by security plugins.
+	 *
+	 * Security plugins like LiteSpeed Cache and Wordfence can set restrictive CSP headers
+	 * that block the POS from loading JavaScript and CSS bundles from cdn.jsdelivr.net.
+	 * Since POS pages use custom templates (not the regular WordPress frontend), we strip
+	 * these headers to prevent interference.
+	 *
+	 * @return void
+	 */
+	private function clean_response_headers(): void {
+		if ( headers_sent() || ! \function_exists( 'header_remove' ) ) {
+			return;
+		}
+
+		header_remove( 'Content-Security-Policy' );
+		header_remove( 'Content-Security-Policy-Report-Only' );
+
+		/**
+		 * Filters the Content-Security-Policy header value for POS pages.
+		 *
+		 * By default no CSP header is set, which avoids breaking payment gateway scripts
+		 * that load from unpredictable domains. Return a non-empty policy string to set
+		 * a custom CSP header.
+		 *
+		 * @since 1.9.0
+		 *
+		 * @param string $policy The CSP policy string. Default empty (no CSP set).
+		 *
+		 * @hook woocommerce_pos_content_security_policy
+		 */
+		$policy = apply_filters( 'woocommerce_pos_content_security_policy', '' );
+
+		if ( ! empty( $policy ) ) {
+			header( 'Content-Security-Policy: ' . $policy );
+		}
+	}
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+
+    <footer>
+		<a href="https://wcpos.com/">WCPOS</a> &bull;
+		<a href="https://github.com/wcpos/woocommerce-pos/">GitHub</a> &bull;
+		<a href="https://github.com/wcpos/discord">Discord Chat</a>
+	</footer>
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Actions</h3><ul><li><a href="woocommerce_pos_admin_screen_handlers.html">woocommerce_pos_admin_screen_handlers</a></li><li><a href="woocommerce_pos_content_security_policy.html">woocommerce_pos_content_security_policy</a></li><li><a href="woocommerce_pos_development_mode.html">woocommerce_pos_development_mode</a></li><li><a href="woocommerce_pos_template_allow_dangerous_function.html">woocommerce_pos_template_allow_dangerous_function</a></li><li><a href="woocommerce_pos_template_dangerous_functions.html">woocommerce_pos_template_dangerous_functions</a></li></ul><h3>Filters</h3><ul><li><a href="woocommerce_pos_active_receipt_template.html">woocommerce_pos_active_receipt_template</a></li><li><a href="woocommerce_pos_admin_notices.html">woocommerce_pos_admin_notices</a></li><li><a href="woocommerce_pos_inline_vars.html">woocommerce_pos_inline_vars</a></li><li><a href="woocommerce_pos_jwt_access_token_expire.html">woocommerce_pos_jwt_access_token_expire</a></li><li><a href="woocommerce_pos_jwt_refresh_token_before_sign.html">woocommerce_pos_jwt_refresh_token_before_sign</a></li><li><a href="woocommerce_pos_jwt_refresh_token_expire.html">woocommerce_pos_jwt_refresh_token_expire</a></li><li><a href="woocommerce_pos_locate_template.html">woocommerce_pos_locate_template</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
