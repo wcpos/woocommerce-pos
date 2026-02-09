@@ -46,6 +46,8 @@ class Extensions {
 	 * Constructor is private to prevent direct instantiation.
 	 */
 	private function __construct() {
+		add_action( 'activated_plugin', array( $this, 'clear_cache' ) );
+		add_action( 'deactivated_plugin', array( $this, 'clear_cache' ) );
 	}
 
 	/**

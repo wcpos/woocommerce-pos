@@ -231,6 +231,30 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that activating a plugin clears the extensions catalog cache.
+	 */
+	public function test_clear_cache_on_plugin_activation(): void {
+		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
+		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
+
+		do_action( 'activated_plugin', 'some-plugin/some-plugin.php', false );
+
+		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
+	}
+
+	/**
+	 * Test that deactivating a plugin clears the extensions catalog cache.
+	 */
+	public function test_clear_cache_on_plugin_deactivation(): void {
+		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
+		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
+
+		do_action( 'deactivated_plugin', 'some-plugin/some-plugin.php', false );
+
+		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
+	}
+
+	/**
 	 * Mock catalog response using dynamic data from $this->mock_catalog_data.
 	 *
 	 * @param false|array $response    Response.

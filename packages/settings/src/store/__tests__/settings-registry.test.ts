@@ -3,7 +3,7 @@ import { settingsRegistry } from '../settings-registry';
 
 describe('settingsRegistry', () => {
 	beforeEach(() => {
-		settingsRegistry.setState({ pages: [], fields: [], modifications: [] });
+		settingsRegistry.setState({ pages: [], fields: [], modifications: [], components: {} });
 	});
 
 	describe('registerPage', () => {
@@ -107,6 +107,26 @@ describe('settingsRegistry', () => {
 		it('returns empty object when no modifications exist', () => {
 			const mods = settingsRegistry.getState().getModifications('general', 'nonexistent');
 			expect(mods).toEqual({});
+		});
+	});
+
+	describe('registerComponent / getComponent', () => {
+		it('registers and retrieves a component by key', () => {
+			const DummyComponent = () => null;
+			settingsRegistry.getState().registerComponent('extensions.action', DummyComponent);
+			expect(settingsRegistry.getState().getComponent('extensions.action')).toBe(DummyComponent);
+		});
+
+		it('returns undefined for unregistered key', () => {
+			expect(settingsRegistry.getState().getComponent('nonexistent')).toBeUndefined();
+		});
+
+		it('overwrites a previously registered component', () => {
+			const First = () => null;
+			const Second = () => null;
+			settingsRegistry.getState().registerComponent('slot', First);
+			settingsRegistry.getState().registerComponent('slot', Second);
+			expect(settingsRegistry.getState().getComponent('slot')).toBe(Second);
 		});
 	});
 });

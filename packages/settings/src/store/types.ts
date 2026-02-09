@@ -35,9 +35,12 @@ export interface SettingsRegistryState {
 	pages: PageRegistration[];
 	fields: FieldRegistration[];
 	modifications: FieldModification[];
+	components: Record<string, ComponentType<any>>;
 	registerPage: (page: PageRegistration) => void;
 	registerField: (field: FieldRegistration) => void;
 	modifyField: (mod: FieldModification) => void;
+	registerComponent: (key: string, component: ComponentType<any>) => void;
+	getComponent: (key: string) => ComponentType<any> | undefined;
 	getPages: (group?: string) => PageRegistration[];
 	getFields: (page: string, section?: string) => FieldRegistration[];
 	getModifications: (page: string, id: string) => Record<string, unknown>;

@@ -73,6 +73,17 @@ function StatusAction({ extension }: { extension: Extension }) {
 	}
 }
 
+/**
+ * Checks for a registered action component before falling back to the static status badge.
+ */
+function ActionSlotOrFallback({ extension }: { extension: Extension }) {
+	const ActionSlot = (window as any).wcpos?.settings?.getComponent?.('extensions.action');
+	if (ActionSlot) {
+		return <ActionSlot extension={extension} />;
+	}
+	return <StatusAction extension={extension} />;
+}
+
 const ExtensionCard = ({ extension }: ExtensionCardProps) => {
 	return (
 		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-4 wcpos:flex wcpos:gap-4">
@@ -100,7 +111,7 @@ const ExtensionCard = ({ extension }: ExtensionCardProps) => {
 							v{extension.latest_version}
 						</span>
 					</div>
-					<StatusAction extension={extension} />
+					<ActionSlotOrFallback extension={extension} />
 				</div>
 
 				<p className="wcpos:mt-1 wcpos:text-sm wcpos:text-gray-500 wcpos:line-clamp-2">
