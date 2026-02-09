@@ -237,7 +237,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
 		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
 
-		do_action( 'activated_plugin', 'some-plugin/some-plugin.php' );
+		do_action( 'activated_plugin', 'some-plugin/some-plugin.php', false );
 
 		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
 	}
@@ -249,7 +249,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
 		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
 
-		do_action( 'deactivated_plugin', 'some-plugin/some-plugin.php' );
+		do_action( 'deactivated_plugin', 'some-plugin/some-plugin.php', false );
 
 		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
 	}
