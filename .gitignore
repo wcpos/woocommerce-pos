@@ -42,3 +42,4 @@ pnpm-lock.yaml
 .worktrees/
 languages/*.l10n.php
 languages/*.mo
+docs/
