@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import { createStore } from 'zustand/vanilla';
 import type {
 	SettingsRegistryState,
@@ -10,6 +11,7 @@ export const settingsRegistry = createStore<SettingsRegistryState>((set, get) =>
 	pages: [],
 	fields: [],
 	modifications: [],
+	components: {},
 
 	registerPage: (page: PageRegistration) => {
 		set((state) => {
@@ -57,6 +59,16 @@ export const settingsRegistry = createStore<SettingsRegistryState>((set, get) =>
 			.filter((m) => m.page === page && m.id === id)
 			.reduce((acc, m) => ({ ...acc, ...m.props }), {});
 	},
+
+	registerComponent: (key: string, component: ComponentType<any>) => {
+		set((state) => ({
+			components: { ...state.components, [key]: component },
+		}));
+	},
+
+	getComponent: (key: string) => {
+		return get().components[key];
+	},
 }));
 
 // Expose globally for pro plugin
@@ -67,5 +79,7 @@ if (typeof window !== 'undefined') {
 		registerPage: settingsRegistry.getState().registerPage,
 		registerField: settingsRegistry.getState().registerField,
 		modifyField: settingsRegistry.getState().modifyField,
+		registerComponent: settingsRegistry.getState().registerComponent,
+		getComponent: settingsRegistry.getState().getComponent,
 	};
 }
