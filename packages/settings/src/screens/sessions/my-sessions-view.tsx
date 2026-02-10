@@ -32,7 +32,7 @@ interface MySessionsResponse {
 	sessions: Session[];
 }
 
-const MySessionsView: React.FC = () => {
+function MySessionsView() {
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
 
@@ -74,13 +74,7 @@ const MySessionsView: React.FC = () => {
 
 	// Delete all sessions mutation
 	const deleteAllSessionsMutation = useMutation({
-		mutationFn: async ({
-			userId,
-			exceptCurrent,
-		}: {
-			userId: number;
-			exceptCurrent?: boolean;
-		}) => {
+		mutationFn: async ({ userId, exceptCurrent }: { userId: number; exceptCurrent?: boolean }) => {
 			const params = new URLSearchParams({
 				user_id: userId.toString(),
 				wcpos: '1',
@@ -103,19 +97,13 @@ const MySessionsView: React.FC = () => {
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message:
-					error?.message ||
-					t('sessions.failed_terminate_sessions'),
+				message: error?.message || t('sessions.failed_terminate_sessions'),
 			});
 		},
 	});
 
 	const handleDeleteSession = (userId: number, jti: string) => {
-		if (
-			confirm(
-				t('sessions.confirm_terminate_session')
-			)
-		) {
+		if (confirm(t('sessions.confirm_terminate_session'))) {
 			deleteSessionMutation.mutate({ userId, jti });
 		}
 	};
@@ -134,8 +122,7 @@ const MySessionsView: React.FC = () => {
 		<div>
 			<div className="wcpos:flex wcpos:justify-between wcpos:items-center wcpos:mb-3">
 				<h2 className="wcpos:text-base wcpos:font-medium">
-					{t('sessions.active_sessions')} (
-					{mySessions?.sessions?.length || 0})
+					{t('sessions.active_sessions')} ({mySessions?.sessions?.length || 0})
 				</h2>
 				{mySessions?.sessions && mySessions.sessions.length > 1 && (
 					<Button
@@ -161,12 +148,10 @@ const MySessionsView: React.FC = () => {
 					))}
 				</div>
 			) : (
-				<Notice status="info">
-					{t('sessions.no_active_sessions')}
-				</Notice>
+				<Notice status="info">{t('sessions.no_active_sessions')}</Notice>
 			)}
 		</div>
 	);
-};
+}
 
 export default MySessionsView;

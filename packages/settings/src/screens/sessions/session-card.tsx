@@ -22,13 +22,15 @@ interface Session {
 	is_current?: boolean;
 }
 
-interface SessionCardProps {
+function SessionCard({
+	session,
+	onDelete,
+	isDeleting,
+}: {
 	session: Session;
 	onDelete: () => void;
 	isDeleting: boolean;
-}
-
-const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting }) => {
+}) {
 	const formatTimestamp = (timestamp: number) => {
 		try {
 			const date = new Date(timestamp * 1000);
@@ -118,9 +120,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 					<div
 						className={classNames(
 							'wcpos:shrink-0 wcpos:w-10 wcpos:h-10 wcpos:rounded-md wcpos:flex wcpos:items-center wcpos:justify-center wcpos:text-xl',
-							session.is_current
-								? 'wcpos:bg-wp-admin-theme-color-lightest'
-								: 'wcpos:bg-gray-100'
+							session.is_current ? 'wcpos:bg-wp-admin-theme-color-lightest' : 'wcpos:bg-gray-100'
 						)}
 					>
 						{getDeviceIcon(session.device_info)}
@@ -169,15 +169,21 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						<div className="wcpos:bg-gray-50 wcpos:rounded wcpos:px-2 wcpos:py-1.5 wcpos:space-y-1">
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center">
 								<span className="wcpos:text-gray-500">{t('sessions.ip')}</span>
-								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{session.ip_address || 'N/A'}</span>
+								<span className="wcpos:text-gray-900 wcpos:text-[11px]">
+									{session.ip_address || 'N/A'}
+								</span>
 							</div>
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center wcpos:border-t wcpos:border-gray-200 wcpos:pt-1">
 								<span className="wcpos:text-gray-500">{t('common.created')}</span>
-								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{formatTimestamp(session.created)}</span>
+								<span className="wcpos:text-gray-900 wcpos:text-[11px]">
+									{formatTimestamp(session.created)}
+								</span>
 							</div>
 							<div className="wcpos:flex wcpos:justify-between wcpos:text-xs wcpos:items-center wcpos:border-t wcpos:border-gray-200 wcpos:pt-1">
 								<span className="wcpos:text-gray-500">{t('common.expires')}</span>
-								<span className="wcpos:text-gray-900 wcpos:text-[11px]">{formatTimestamp(session.expires)}</span>
+								<span className="wcpos:text-gray-900 wcpos:text-[11px]">
+									{formatTimestamp(session.expires)}
+								</span>
 							</div>
 						</div>
 
@@ -185,7 +191,9 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 						{session.user_agent && (
 							<details className="wcpos:mt-2 wcpos:group">
 								<summary className="wcpos:text-[11px] wcpos:text-gray-500 wcpos:cursor-pointer hover:wcpos:text-gray-700 wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:select-none">
-									<span className="wcpos:transition-transform group-open:wcpos:rotate-90 wcpos:text-[8px]">▶</span>
+									<span className="wcpos:transition-transform group-open:wcpos:rotate-90 wcpos:text-[8px]">
+										▶
+									</span>
 									{t('sessions.user_agent')}
 								</summary>
 								<div className="wcpos:mt-1 wcpos:p-1.5 wcpos:bg-gray-50 wcpos:rounded wcpos:border wcpos:border-gray-200">
@@ -200,6 +208,6 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, onDelete, isDeleting
 			</div>
 		</div>
 	);
-};
+}
 
 export default SessionCard;

@@ -9,14 +9,12 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { RootLayout } from './layouts/root-layout';
 import { queryClient } from './query-client';
-
-// Import page components — these are the existing screen components
-import GeneralPage from './screens/general';
-import CheckoutPage from './screens/checkout';
 import AccessPage from './screens/access';
-import SessionsPage from './screens/sessions';
-import LicensePage from './screens/license';
+import CheckoutPage from './screens/checkout';
 import ExtensionsPage from './screens/extensions';
+import GeneralPage from './screens/general';
+import LicensePage from './screens/license';
+import SessionsPage from './screens/sessions';
 
 // Root route — renders the full-page layout with sidebar navigation.
 const rootRoute = createRootRoute({
@@ -34,8 +32,7 @@ const indexRoute = createRoute({
 const settingsLoader = (id: string) => async () => {
 	await queryClient.ensureQueryData({
 		queryKey: [id],
-		queryFn: () =>
-			apiFetch({ path: `wcpos/v1/settings/${id}?wcpos=1`, method: 'GET' }),
+		queryFn: () => apiFetch({ path: `wcpos/v1/settings/${id}?wcpos=1`, method: 'GET' }),
 	});
 };
 
@@ -73,8 +70,7 @@ const extensionsRoute = createRoute({
 	loader: async () => {
 		await queryClient.ensureQueryData({
 			queryKey: ['extensions'],
-			queryFn: () =>
-				apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+			queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
 		});
 	},
 	component: ExtensionsPage,

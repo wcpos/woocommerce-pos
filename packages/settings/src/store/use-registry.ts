@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
+
 import { useStore } from 'zustand';
+
 import { settingsRegistry } from './settings-registry';
+
 import type { SettingsRegistryState } from './types';
 
 export function useSettingsRegistry<T>(selector: (state: SettingsRegistryState) => T): T {

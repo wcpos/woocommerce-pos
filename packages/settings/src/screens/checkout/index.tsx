@@ -3,14 +3,14 @@ import * as React from 'react';
 import { isString } from 'lodash';
 import { ErrorBoundary } from 'react-error-boundary';
 
-import Error from '../../components/error';
-import Label from '../../components/label';
-import { Toggle } from '../../components/ui';
-import { FormRow, FormSection } from '../../components/form';
-import useSettingsApi from '../../hooks/use-settings-api';
-import { t } from '../../translations';
 import Gateways from './gateways';
 import OrderStatusSelect from './order-status-select';
+import Error from '../../components/error';
+import { FormRow, FormSection } from '../../components/form';
+import Label from '../../components/label';
+import { Toggle } from '../../components/ui';
+import useSettingsApi from '../../hooks/use-settings-api';
+import { t } from '../../translations';
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
@@ -21,7 +21,7 @@ export interface CheckoutSettingsProps {
 	gateways: any[];
 }
 
-const Checkout = () => {
+function Checkout() {
 	const { data, mutate } = useSettingsApi('checkout');
 
 	return (
@@ -65,11 +65,7 @@ const Checkout = () => {
 
 			<div className="wcpos:px-4 wcpos:pb-5">
 				<h2 className="wcpos:text-base">{t('checkout.gateways')}</h2>
-				<p>
-					{t(
-						'checkout.gateways_description'
-					)}
-				</p>
+				<p>{t('checkout.gateways_description')}</p>
 				<ErrorBoundary FallbackComponent={Error}>
 					<React.Suspense fallback={null}>
 						<Gateways />
@@ -78,6 +74,6 @@ const Checkout = () => {
 			</div>
 		</>
 	);
-};
+}
 
 export default Checkout;

@@ -1,12 +1,19 @@
 import * as React from 'react';
 
-import { Combobox as CB, ComboboxButton as CBButton, ComboboxInput as CBInput, ComboboxOptions as CBOptions, ComboboxOption as CBOption, Transition } from '@headlessui/react';
+import {
+	Combobox as CB,
+	ComboboxButton as CBButton,
+	ComboboxInput as CBInput,
+	ComboboxOptions as CBOptions,
+	ComboboxOption as CBOption,
+	Transition,
+} from '@headlessui/react';
 import classNames from 'classnames';
 
 import Check from '../../assets/check.svg';
 import ChevronDown from '../../assets/chevron-down.svg';
 
-export interface OptionProps extends Record<string, unknown> {
+export interface OptionProps extends Record {
 	value: string | number;
 	label: string;
 }
@@ -20,7 +27,7 @@ export interface ComboboxProps {
 	loading?: boolean;
 }
 
-const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: ComboboxProps) => {
+function Combobox({ options, onSearch, onChange, value, placeholder, loading }: ComboboxProps) {
 	const [query, setQuery] = React.useState('');
 	const inputRef = React.useRef(null);
 
@@ -220,6 +227,6 @@ const Combobox = ({ options, onSearch, onChange, value, placeholder, loading }: 
 			</div>
 		</CB>
 	);
-};
+}
 
 export default Combobox;

@@ -21,7 +21,7 @@ interface User {
 	name: string;
 }
 
-const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) => {
+function UserSelect({ disabled = false, selected, onSelect }: UserSelectProps) {
 	const guestUser: User = { id: 0, name: t('common.guest') };
 	const { setNotice } = useNotices();
 	const [query, setQuery] = React.useState('');
@@ -29,7 +29,7 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 	const { data, isFetching } = useQuery<User[]>({
 		queryKey: ['users', query],
 		queryFn: async () => {
-			const response = await apiFetch<Record<string, unknown>>({
+			const response = await apiFetch<Record>({
 				path: `wp/v2/users?search=${encodeURIComponent(query)}`,
 				method: 'GET',
 			}).catch((err) => {
@@ -73,6 +73,6 @@ const UserSelect = ({ disabled = false, selected, onSelect }: UserSelectProps) =
 			loading={isFetching}
 		/>
 	);
-};
+}
 
 export default UserSelect;

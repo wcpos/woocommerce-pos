@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import { map } from 'lodash';
 import classNames from 'classnames';
+import { map } from 'lodash';
 
 import SessionCard from './session-card';
 import { Button } from '../../components/ui';
@@ -34,20 +34,18 @@ interface UserSessionData {
 	sessions: Session[];
 }
 
-interface UserSessionsListProps {
-	users: UserSessionData[];
-	onDeleteSession: (userId: number, jti: string) => void;
-	onDeleteAllSessions: (userId: number, exceptCurrent?: boolean) => void;
-	isDeleting: boolean;
-}
-
-const UserSessionsList: React.FC<UserSessionsListProps> = ({
+function UserSessionsList({
 	users,
 	onDeleteSession,
 	onDeleteAllSessions,
 	isDeleting,
-}) => {
-	const [expandedUsers, setExpandedUsers] = React.useState<Set<number>>(new Set());
+}: {
+	users: UserSessionData[];
+	onDeleteSession: (userId: number, jti: string) => void;
+	onDeleteAllSessions: (userId: number, exceptCurrent?: boolean) => void;
+	isDeleting: boolean;
+}) {
+	const [expandedUsers, setExpandedUsers] = React.useState<Set>(new Set());
 
 	const toggleUser = (userId: number) => {
 		setExpandedUsers((prev) => {
@@ -66,10 +64,8 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 		const diff = now - timestamp;
 
 		if (diff < 60) return t('sessions.just_now');
-		if (diff < 3600)
-			return t('sessions.minutes_ago', { minutes: Math.floor(diff / 60) });
-		if (diff < 86400)
-			return t('sessions.hours_ago', { hours: Math.floor(diff / 3600) });
+		if (diff < 3600) return t('sessions.minutes_ago', { minutes: Math.floor(diff / 60) });
+		if (diff < 86400) return t('sessions.hours_ago', { hours: Math.floor(diff / 3600) });
 		return t('sessions.days_ago', { days: Math.floor(diff / 86400) });
 	};
 
@@ -130,7 +126,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 									{user.session_count > 0 && (
 										<Button
 											variant="destructive"
-											onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+											onClick={(e: React.MouseEvent) => {
 												e.stopPropagation();
 												onDeleteAllSessions(user.user_id);
 											}}
@@ -170,6 +166,6 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 			})}
 		</div>
 	);
-};
+}
 
 export default UserSessionsList;

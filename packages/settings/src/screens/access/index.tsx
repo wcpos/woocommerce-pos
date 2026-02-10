@@ -8,15 +8,9 @@ import { Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { Trans } from '../../translations';
 
-export type AccessSettingsProps = Record<
-	string,
-	{
-		name: string;
-		capabilities: Record<string, { wc: Record<string, boolean>; wcpos: Record<string, boolean> }>;
-	}
->;
+export type AccessSettingsProps = Record;
 
-const Access = () => {
+function Access() {
 	const { data, mutate } = useSettingsApi('access');
 	const [selected, setSelected] = React.useState('administrator');
 	const capabilities = get(data, [selected, 'capabilities'], null);
@@ -25,14 +19,13 @@ const Access = () => {
 		<>
 			<div className="wcpos:p-4">
 				<Notice status="info" isDismissible={false}>
-					<Trans
-						i18nKey="access.default_roles_warning"
-						components={{ strong: <strong /> }}
-					/>
+					<Trans i18nKey="access.default_roles_warning" components={{ strong: <strong /> }} />
 					&nbsp;
 					<Trans
 						i18nKey="access.visit_documentation"
-						components={{ link: <a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" /> }}
+						components={{
+							link: <a href="https://docs.wcpos.com/pos-access" target="_blank" rel="noreferrer" />,
+						}}
 					/>
 				</Notice>
 			</div>
@@ -101,6 +94,6 @@ const Access = () => {
 			</div>
 		</>
 	);
-};
+}
 
 export default Access;

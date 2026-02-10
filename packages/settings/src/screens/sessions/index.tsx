@@ -6,7 +6,7 @@ import Notice from '../../components/notice';
 import { Button } from '../../components/ui';
 import { t } from '../../translations';
 
-const Sessions = () => {
+function Sessions() {
 	const [viewMode, setViewMode] = React.useState<'my' | 'all'>('all');
 
 	return (
@@ -50,6 +50,6 @@ const Sessions = () => {
 			</React.Suspense>
 		</div>
 	);
-};
+}
 
 export default Sessions;

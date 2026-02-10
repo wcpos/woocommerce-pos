@@ -1,8 +1,8 @@
 import * as React from 'react';
 
+import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { Toggle } from '../../components/ui';
-import { FormRow, FormSection } from '../../components/form';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -10,7 +10,7 @@ export interface ToolsSettingsProps {
 	use_jwt_as_param: boolean;
 }
 
-const Tools = () => {
+function Tools() {
 	const { data, mutate } = useSettingsApi('tools');
 
 	return (
@@ -28,6 +28,6 @@ const Tools = () => {
 			</FormRow>
 		</FormSection>
 	);
-};
+}
 
 export default Tools;

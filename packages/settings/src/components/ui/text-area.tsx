@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface TextAreaProps extends React.TextareaHTMLAttributes {
 	error?: boolean;
 }
 
@@ -12,7 +12,7 @@ export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaProps>(
 			<textarea
 				ref={ref}
 				className={classNames(
-					'wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:shadow-xs',
+					'wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
 					'wcpos:transition-colors wcpos:duration-150',
 					'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-offset-0',
 					error

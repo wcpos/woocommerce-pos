@@ -7,7 +7,7 @@ export interface SnackbarListProps {
 	removeSnackbar: (id: string) => void;
 }
 
-export const SnackbarList = ({ snackbars, removeSnackbar }: SnackbarListProps) => {
+export function SnackbarList({ snackbars, removeSnackbar }: SnackbarListProps) {
 	return (
 		<>
 			{snackbars.map((snackbar) => (
@@ -15,4 +15,4 @@ export const SnackbarList = ({ snackbars, removeSnackbar }: SnackbarListProps) =
 			))}
 		</>
 	);
-};
+}

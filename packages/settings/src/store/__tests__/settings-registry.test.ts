@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { settingsRegistry } from '../settings-registry';
 
 describe('settingsRegistry', () => {
@@ -112,9 +113,13 @@ describe('settingsRegistry', () => {
 
 	describe('registerComponent / getComponent', () => {
 		it('registers and retrieves a component by key', () => {
-			const DummyComponent = () => null;
+			function DummyComponent() {
+				return null;
+			}
 			settingsRegistry.getState().registerComponent('extensions.action', DummyComponent);
-			expect(settingsRegistry.getState().getComponent('extensions.action')).toBe(DummyComponent);
+			expect(settingsRegistry.getState().getComponent('extensions.action')).toBe(
+				DummyComponent
+			);
 		});
 
 		it('returns undefined for unregistered key', () => {
@@ -122,8 +127,12 @@ describe('settingsRegistry', () => {
 		});
 
 		it('overwrites a previously registered component', () => {
-			const First = () => null;
-			const Second = () => null;
+			function First() {
+				return null;
+			}
+			function Second() {
+				return null;
+			}
 			settingsRegistry.getState().registerComponent('slot', First);
 			settingsRegistry.getState().registerComponent('slot', Second);
 			expect(settingsRegistry.getState().getComponent('slot')).toBe(Second);

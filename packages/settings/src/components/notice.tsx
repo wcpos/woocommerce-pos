@@ -4,31 +4,52 @@ import classNames from 'classnames';
 
 import CloseIcon from '../../assets/close-icon.svg';
 
+type NoticeStatus = 'info' | 'warning' | 'error' | 'success';
+
 interface NoticeProps {
-	status?: 'error' | 'info' | 'success';
+	status?: NoticeStatus;
 	onRemove?: () => void;
 	children: React.ReactNode;
 	isDismissible?: boolean;
+	className?: string;
 }
 
-const Notice = ({ status, children, onRemove, isDismissible = true }: NoticeProps) => {
+const statusClasses: Record = {
+	info: 'wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800 wcpos:border-l-blue-500',
+	warning:
+		'wcpos:bg-yellow-50 wcpos:border-yellow-200 wcpos:text-yellow-800 wcpos:border-l-yellow-500',
+	error: 'wcpos:bg-red-50 wcpos:border-red-200 wcpos:text-red-800 wcpos:border-l-red-500',
+	success: 'wcpos:bg-green-50 wcpos:border-green-200 wcpos:text-green-800 wcpos:border-l-green-500',
+};
+
+function Notice({
+	status = 'info',
+	children,
+	onRemove,
+	isDismissible = true,
+	className,
+}: NoticeProps) {
 	return (
 		<div
 			className={classNames(
-				'wcpos:flex wcpos:px-4 wcpos:py-2 wcpos:items-center',
-				status === 'error' && 'wcpos:bg-red-300 wcpos:border-l-4 wcpos:border-red-600',
-				status === 'info' && 'wcpos:bg-yellow-100 wcpos:border-l-4 wcpos:border-yellow-300',
-				status === 'success' && 'wcpos:bg-green-100 wcpos:border-l-4 wcpos:border-green-600'
+				'wcpos:flex wcpos:items-start wcpos:gap-2 wcpos:rounded-md wcpos:border wcpos:border-l-4 wcpos:px-3 wcpos:py-2.5 wcpos:text-sm',
+				statusClasses[status],
+				className
 			)}
 		>
 			<div className="wcpos:flex-1">{children}</div>
 			{isDismissible && (
-				<button type="button" aria-label="Dismiss notice" onClick={onRemove} className="wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1">
-					<CloseIcon className="wcpos:h-5 wcpos:w-5" fill="currentColor" />
+				<button
+					type="button"
+					aria-label="Dismiss notice"
+					onClick={onRemove}
+					className="wcpos:shrink-0 wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-0.5 wcpos:rounded hover:wcpos:bg-black/5"
+				>
+					<CloseIcon className="wcpos:h-4 wcpos:w-4" fill="currentColor" />
 				</button>
 			)}
 		</div>
 	);
-};
+}
 
 export default Notice;

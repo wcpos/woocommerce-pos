@@ -18,7 +18,7 @@ interface Props {
 	children: React.ReactNode;
 }
 
-export const SnackbarProvider = ({ children }: Props) => {
+export function SnackbarProvider({ children }: Props) {
 	const [snackbars, setSnackbars] = React.useState<Snackbar[]>([]);
 
 	/**
@@ -41,4 +41,4 @@ export const SnackbarProvider = ({ children }: Props) => {
 			</div>
 		</SnackbarContext.Provider>
 	);
-};
+}

@@ -4,18 +4,17 @@ import classNames from 'classnames';
 
 type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends React.ButtonHTMLAttributes {
 	variant?: ButtonVariant;
 	loading?: boolean;
 }
 
-const variantClasses: Record<ButtonVariant, string> = {
+const variantClasses: Record = {
 	primary:
 		'wcpos:bg-wp-admin-theme-color wcpos:text-white hover:wcpos:bg-wp-admin-theme-color-darker-10 focus:wcpos:ring-wp-admin-theme-color',
 	secondary:
 		'wcpos:bg-white wcpos:text-gray-700 wcpos:border wcpos:border-gray-300 hover:wcpos:bg-gray-50 focus:wcpos:ring-wp-admin-theme-color',
-	destructive:
-		'wcpos:bg-red-600 wcpos:text-white hover:wcpos:bg-red-700 focus:wcpos:ring-red-500',
+	destructive: 'wcpos:bg-red-600 wcpos:text-white hover:wcpos:bg-red-700 focus:wcpos:ring-red-500',
 };
 
 export function Button({

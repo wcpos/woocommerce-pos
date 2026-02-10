@@ -4,9 +4,9 @@ import { isString, isNumber } from 'lodash';
 
 import BarcodeSelect from './barcode-select';
 import UserSelect from './user-select';
+import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { Toggle, Checkbox } from '../../components/ui';
-import { FormRow, FormSection } from '../../components/form';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -20,7 +20,7 @@ export interface GeneralSettingsProps {
 	barcode_field: string;
 }
 
-const General = () => {
+function General() {
 	const { data, mutate } = useSettingsApi('general');
 
 	return (
@@ -102,6 +102,6 @@ const General = () => {
 			</FormRow>
 		</FormSection>
 	);
-};
+}
 
 export default General;

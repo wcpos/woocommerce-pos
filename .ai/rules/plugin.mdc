@@ -50,9 +50,14 @@ npm install             # JS deps (if any)
 - **WordPress.org**: Auto-deployed via GitHub Actions
 - **WP Engine (dev)**: Auto-deployed for testing
 
+## Extensions
+
+WCPOS supports installable extensions (e.g. payment terminal integrations). The extension catalog lives in a separate repo: https://github.com/wcpos/extensions — a single `catalog.json` that the plugin fetches and caches. The free plugin provides `GET /wcpos/v1/extensions` to browse the catalog; the pro plugin adds `POST /wcpos/v1/extensions/action` for install/activate/update.
+
 ## Related Projects
 
 - `woocommerce-pos-pro` - Pro version with additional features
+- `wcpos/extensions` - Extension catalog (`catalog.json`, icons)
 - `monorepo-v2` - The WCPOS app that connects to this plugin
 
 ## WordPress Hooks

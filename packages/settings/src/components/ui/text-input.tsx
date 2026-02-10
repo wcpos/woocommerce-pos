@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface TextInputProps extends React.InputHTMLAttributes {
 	error?: boolean;
 }
 
@@ -13,7 +13,7 @@ export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
 				ref={ref}
 				type="text"
 				className={classNames(
-					'wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:shadow-xs',
+					'wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
 					'wcpos:transition-colors wcpos:duration-150',
 					'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-offset-0',
 					error
