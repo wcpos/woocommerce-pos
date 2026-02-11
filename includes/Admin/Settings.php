@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use WCPOS\WooCommercePOS\API\Logs;
 use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
@@ -113,16 +114,19 @@ class Settings {
 		$barcodes         = array_values( $settings_service->get_barcodes() );
 		$order_statuses   = $settings_service->get_order_statuses();
 		$new_ext_count    = $this->get_new_extensions_count();
+		$unread_logs      = Logs::get_unread_counts( get_current_user_id() );
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s,
-            newExtensionsCount: %s
+            newExtensionsCount: %s,
+            unreadLogCounts: %s
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
 			json_encode( $new_ext_count ),
+			json_encode( $unread_logs ),
 			json_encode( TRANSLATION_VERSION )
 		);
 	}
