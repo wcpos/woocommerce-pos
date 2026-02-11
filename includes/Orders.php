@@ -18,6 +18,7 @@ use WC_Order_Item_Product;
 use WC_Order_Item_Shipping;
 use WC_Product;
 use WC_Product_Simple;
+use WC_Tax;
 
 /**
  * Orders Class
@@ -319,38 +320,31 @@ class Orders {
 	}
 
 	/**
-	 * Filter the line item subtotal to return the POS-discounted price.
+	 * Filter the line item subtotal to return the POS price (tax-exclusive).
 	 *
-	 * Only affects items with _woocommerce_pos_data meta containing a 'price' field.
-	 * Items without POS data are returned unchanged.
+	 * The POS stores the customer-facing price in _woocommerce_pos_data, which is
+	 * tax-inclusive when the order has prices_include_tax. WooCommerce's get_subtotal()
+	 * must always return a tax-exclusive value, so we extract tax when needed.
 	 *
 	 * @param string                $subtotal The original subtotal.
 	 * @param WC_Order_Item_Product $item     The order item.
 	 *
-	 * @return string The POS price if available, otherwise the original subtotal.
+	 * @return string The tax-exclusive POS price, or the original subtotal.
 	 */
 	public static function filter_pos_item_subtotal( $subtotal, $item ) {
-		if ( ! $item instanceof WC_Order_Item_Product ) {
+		$components = self::get_pos_price_components( $item );
+		if ( null === $components ) {
 			return $subtotal;
 		}
 
-		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-		if ( empty( $pos_data_json ) ) {
-			return $subtotal;
-		}
-
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) || ! isset( $pos_data['price'] ) ) {
-			return $subtotal;
-		}
-
-		return (string) ( (float) $pos_data['price'] * $item->get_quantity() );
+		return (string) $components['subtotal'];
 	}
 
 	/**
 	 * Filter the line item subtotal tax during POS coupon recalculation.
 	 *
-	 * When the POS sets tax_status to 'none', subtotal tax should be 0.
+	 * Returns the tax portion of the POS price for taxable items, or '0' for
+	 * tax-exempt items. This keeps subtotal and subtotal_tax consistent.
 	 *
 	 * @param string                $subtotal_tax The original subtotal tax.
 	 * @param WC_Order_Item_Product $item         The order item.
@@ -358,25 +352,126 @@ class Orders {
 	 * @return string
 	 */
 	public static function filter_pos_item_subtotal_tax( $subtotal_tax, $item ) {
-		if ( ! $item instanceof WC_Order_Item_Product ) {
+		$components = self::get_pos_price_components( $item );
+		if ( null === $components ) {
 			return $subtotal_tax;
+		}
+
+		return (string) $components['subtotal_tax'];
+	}
+
+	/**
+	 * Split the POS price into tax-exclusive subtotal and tax components.
+	 *
+	 * When the order has prices_include_tax and the item is taxable, extracts
+	 * the tax from the inclusive POS price using WC_Tax::find_rates() and
+	 * WC_Tax::calc_tax() for accuracy. This avoids deriving rates from stored
+	 * values which can become inconsistent after calculate_taxes() runs.
+	 *
+	 * @param WC_Order_Item_Product|mixed $item The order item.
+	 *
+	 * @return array{subtotal: float, subtotal_tax: float}|null Components or null if not a POS item.
+	 */
+	private static function get_pos_price_components( $item ): ?array {
+		if ( ! $item instanceof WC_Order_Item_Product ) {
+			return null;
 		}
 
 		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
 		if ( empty( $pos_data_json ) ) {
-			return $subtotal_tax;
+			return null;
 		}
 
 		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
-			return $subtotal_tax;
+		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) || ! isset( $pos_data['price'] ) ) {
+			return null;
 		}
 
-		if ( isset( $pos_data['tax_status'] ) && 'none' === $pos_data['tax_status'] ) {
-			return '0';
+		$pos_price  = (float) $pos_data['price'] * $item->get_quantity();
+		$tax_status = $pos_data['tax_status'] ?? 'taxable';
+
+		// Tax-exempt items: no tax to extract.
+		if ( 'none' === $tax_status ) {
+			return array(
+				'subtotal'     => $pos_price,
+				'subtotal_tax' => 0.0,
+			);
 		}
 
-		return $subtotal_tax;
+		// Check if the order uses tax-inclusive pricing.
+		$order = $item->get_order();
+		if ( $order && $order->get_prices_include_tax() ) {
+			$tax_rates = self::get_tax_rates_for_item( $item, $order );
+
+			if ( ! empty( $tax_rates ) ) {
+				$taxes      = WC_Tax::calc_tax( $pos_price, $tax_rates, true );
+				$tax_amount = array_sum( $taxes );
+				$ex_tax     = $pos_price - $tax_amount;
+
+				return array(
+					'subtotal'     => $ex_tax,
+					'subtotal_tax' => $tax_amount,
+				);
+			}
+
+			// No tax rates found: treat as untaxed.
+			return array(
+				'subtotal'     => $pos_price,
+				'subtotal_tax' => 0.0,
+			);
+		}
+
+		// Prices exclude tax: POS price is already tax-exclusive.
+		return array(
+			'subtotal'     => $pos_price,
+			'subtotal_tax' => (float) $item->get_subtotal_tax( 'edit' ),
+		);
+	}
+
+	/**
+	 * Get the applicable tax rates for an order item.
+	 *
+	 * Determines the tax location from the order's POS tax-based-on meta
+	 * (matching the logic in get_tax_location filter) and finds the rates
+	 * for the item's tax class.
+	 *
+	 * @param WC_Order_Item_Product $item  The order item.
+	 * @param WC_Order              $order The order.
+	 *
+	 * @return array Tax rates array from WC_Tax::find_rates().
+	 */
+	private static function get_tax_rates_for_item( $item, $order ): array {
+		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
+		if ( empty( $tax_based_on ) ) {
+			$tax_based_on = get_option( 'woocommerce_tax_based_on' );
+		}
+
+		if ( 'billing' === $tax_based_on ) {
+			$country  = $order->get_billing_country();
+			$state    = $order->get_billing_state();
+			$postcode = $order->get_billing_postcode();
+			$city     = $order->get_billing_city();
+		} elseif ( 'shipping' === $tax_based_on ) {
+			$country  = $order->get_shipping_country();
+			$state    = $order->get_shipping_state();
+			$postcode = $order->get_shipping_postcode();
+			$city     = $order->get_shipping_city();
+		} else {
+			$country  = WC()->countries->get_base_country();
+			$state    = WC()->countries->get_base_state();
+			$postcode = WC()->countries->get_base_postcode();
+			$city     = WC()->countries->get_base_city();
+		}
+
+		return WC_Tax::find_rates(
+			array(
+				'country'   => $country,
+				'state'     => $state,
+				'postcode'  => $postcode,
+				'city'      => $city,
+				'tax_class' => $item->get_tax_class(),
+			)
+		);
 	}
 
 	/**

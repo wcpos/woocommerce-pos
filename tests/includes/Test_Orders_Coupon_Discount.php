@@ -3,6 +3,8 @@
  * Tests for POS discount preservation during coupon application.
  *
  * @see docs/plans/2026-02-05-pos-discount-coupon-preservation-design.md
+ *
+ * @package WCPOS\WooCommercePOS\Tests
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
@@ -13,6 +15,7 @@ use WC_Order;
 use WC_Order_Item_Product;
 use WC_Unit_Test_Case;
 use WCPOS\WooCommercePOS\Orders;
+use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**
  * Test_Orders_Coupon_Discount class.
@@ -60,10 +63,14 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_pos_discount_preserved_when_coupon_applied(): void {
 		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon( 'test10pct', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'test10pct',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 
 		$order->apply_coupon( 'test10pct' );
 
@@ -87,10 +94,14 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_coupon_removal_restores_pos_discount(): void {
 		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon( 'test10remove', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'test10remove',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 
 		$order->apply_coupon( 'test10remove' );
 
@@ -122,11 +133,15 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_exclude_sale_items_respects_pos_discount(): void {
 		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon( 'nosale', 'publish', array(
-			'discount_type'      => 'percent',
-			'coupon_amount'      => '10',
-			'exclude_sale_items' => 'yes',
-		) );
+		CouponHelper::create_coupon(
+			'nosale',
+			'publish',
+			array(
+				'discount_type'      => 'percent',
+				'coupon_amount'      => '10',
+				'exclude_sale_items' => 'yes',
+			)
+		);
 
 		$order->apply_coupon( 'nosale' );
 
@@ -147,16 +162,25 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_non_pos_order_coupon_unaffected(): void {
 		// Create a regular WooCommerce product and order (not POS).
-		$product = ProductHelper::create_simple_product( array( 'regular_price' => 18, 'price' => 18 ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
+		);
 		$order   = wc_create_order();
 		$order->add_product( $product, 1 );
 		$order->calculate_totals();
 		$order->save();
 
-		CouponHelper::create_coupon( 'regular10', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'regular10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 
 		$order->apply_coupon( 'regular10' );
 
@@ -179,10 +203,20 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_mixed_items_coupon_calculates_correctly(): void {
 		// Product A: $18, POS discounted to $16.
-		$product_a = ProductHelper::create_simple_product( array( 'regular_price' => 18, 'price' => 18 ) );
+		$product_a = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
+		);
 
 		// Product B: $20, no POS discount.
-		$product_b = ProductHelper::create_simple_product( array( 'regular_price' => 20, 'price' => 20 ) );
+		$product_b = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 20,
+				'price' => 20,
+			)
+		);
 
 		$order = wc_create_order();
 		$order->update_meta_data( '_pos', '1' );
@@ -218,10 +252,14 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$order->calculate_totals( false );
 		$order->save();
 
-		CouponHelper::create_coupon( 'mixed10', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'mixed10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 
 		$order->apply_coupon( 'mixed10' );
 
@@ -247,10 +285,14 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 */
 	public function test_subtotal_filters_removed_after_pos_coupon(): void {
 		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon( 'cleanup10', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'cleanup10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 
 		$order->apply_coupon( 'cleanup10' );
 
@@ -273,23 +315,36 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	public function test_non_pos_order_clean_after_pos_coupon(): void {
 		// First: POS order gets a coupon.
 		$pos_order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon( 'seq10', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'seq10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 		$pos_order->apply_coupon( 'seq10' );
 
 		// Second: non-POS order gets a coupon — must be completely standard.
-		$product = ProductHelper::create_simple_product( array( 'regular_price' => 50, 'price' => 50 ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
 		$regular_order = wc_create_order();
 		$regular_order->add_product( $product, 1 );
 		$regular_order->calculate_totals();
 		$regular_order->save();
 
-		CouponHelper::create_coupon( 'seq10reg', 'publish', array(
-			'discount_type' => 'percent',
-			'coupon_amount' => '10',
-		) );
+		CouponHelper::create_coupon(
+			'seq10reg',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
 		$regular_order->apply_coupon( 'seq10reg' );
 
 		$items = $regular_order->get_items();
@@ -326,7 +381,12 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 * (non-POS) order should produce standard WooCommerce results.
 	 */
 	public function test_non_pos_calculate_totals_unaffected(): void {
-		$product = ProductHelper::create_simple_product( array( 'regular_price' => 25, 'price' => 25 ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 25,
+				'price' => 25,
+			)
+		);
 		$order   = wc_create_order();
 		$order->add_product( $product, 2 );
 		$order->calculate_totals( false );
@@ -346,10 +406,12 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 * when the line item has no _woocommerce_pos_data meta.
 	 */
 	public function test_order_item_product_passthrough_without_pos_data(): void {
-		$product = ProductHelper::create_simple_product( array(
-			'regular_price' => 30,
-			'price'         => 30,
-		) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 30,
+				'price'         => 30,
+			)
+		);
 		$order = wc_create_order();
 		$order->add_product( $product, 1 );
 		$order->save();
@@ -367,6 +429,426 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	}
 
 	// ======================================================================
+	// Bug reproduction: Issue #506
+	// ======================================================================
+
+	/**
+	 * Reproduce the exact bug from issue #506.
+	 *
+	 * Setup: €447.00 product with 21% VAT (prices entered including tax).
+	 * The POS stores the tax-inclusive price (447) in _woocommerce_pos_data.
+	 * WooCommerce stores the tax-exclusive subtotal (369.42) internally.
+	 *
+	 * Bug: Applying a 10% coupon inflates the line item instead of discounting it.
+	 * Expected: 10% off €447 incl-tax = €402.30 order total.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/506
+	 */
+	public function test_issue_506_coupon_with_tax_inclusive_pricing(): void {
+		// Set up 21% VAT with prices including tax.
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'NL' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'NL',
+				'rate'     => '21.0000',
+				'name'     => 'BTW',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		$order = $this->create_pos_order_tax_inclusive( '447', '447', 'taxable' );
+
+		CouponHelper::create_coupon(
+			'issue506',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'issue506' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// The stored subtotal should be the tax-exclusive original price.
+		$this->assertEquals( 369.42, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should be tax-exclusive (€369.42)' );
+
+		// 10% off €447.00 incl-tax: discount = €44.70 incl-tax = €36.94 ex-tax.
+		// Line total = €369.42 - €36.94 = €332.48 ex-tax.
+		$this->assertEquals( 332.48, round( (float) $item->get_total(), 2 ), 'Line total should be €332.48 ex-tax after 10% coupon' );
+
+		// Tax on €332.48 = €69.82.
+		$this->assertEquals( 69.82, round( (float) $item->get_total_tax(), 2 ), 'Line total tax should be €69.82' );
+
+		// Order total = €332.48 + €69.82 = €402.30.
+		$this->assertEquals( 402.30, round( (float) $order->get_total(), 2 ), 'Order total should be €402.30' );
+	}
+
+	// ======================================================================
+	// Tax-aware coupon tests: prices include tax + taxable
+	// ======================================================================
+
+	/**
+	 * Apply coupon to a POS order with tax-inclusive pricing and a POS discount.
+	 *
+	 * Product: €100 incl 20% VAT (ex-tax €83.33), POS discounted to €80 incl
+	 * (ex-tax €66.67). 10% coupon should discount from €80 incl.
+	 */
+	public function test_coupon_with_tax_inclusive_and_pos_discount(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		// POS price €80 incl, regular €100 incl.
+		$order = $this->create_pos_order_tax_inclusive( '80', '100', 'taxable' );
+
+		CouponHelper::create_coupon(
+			'taxincl10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'taxincl10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// €80 incl 20% VAT → ex-tax = €66.67. 10% coupon = €8.00 incl = €6.67 ex-tax.
+		// Line total = €66.67 - €6.67 = €60.00.
+		$this->assertEquals( 60.00, round( (float) $item->get_total(), 2 ), 'Line total should be €60.00 ex-tax' );
+
+		// Tax on €60 = €12.00.
+		$this->assertEquals( 12.00, round( (float) $item->get_total_tax(), 2 ), 'Line total tax should be €12.00' );
+
+		// Order total = €60 + €12 = €72.00.
+		$this->assertEquals( 72.00, round( (float) $order->get_total(), 2 ), 'Order total should be €72.00' );
+	}
+
+	/**
+	 * Apply coupon to a POS order with tax-inclusive pricing, no POS discount.
+	 *
+	 * Product: €100 incl 20% VAT, no discount. The filter should still work
+	 * correctly when price == regular_price.
+	 */
+	public function test_coupon_with_tax_inclusive_no_pos_discount(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		// POS price €100 incl, no discount.
+		$order = $this->create_pos_order_tax_inclusive( '100', '100', 'taxable' );
+
+		CouponHelper::create_coupon(
+			'taxnodiscount',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'taxnodiscount' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// €100 incl 20% → ex-tax = €83.33. 10% coupon = €10 incl = €8.33 ex-tax.
+		// Line total = €83.33 - €8.33 = €75.00.
+		$this->assertEquals( 75.00, round( (float) $item->get_total(), 2 ), 'Line total should be €75.00 ex-tax' );
+
+		// Tax on €75 = €15.
+		$this->assertEquals( 15.00, round( (float) $item->get_total_tax(), 2 ), 'Line total tax should be €15.00' );
+
+		// Order total = €75 + €15 = €90.
+		$this->assertEquals( 90.00, round( (float) $order->get_total(), 2 ), 'Order total should be €90.00' );
+	}
+
+	/**
+	 * Remove coupon from a POS order with tax-inclusive pricing and POS discount.
+	 */
+	public function test_coupon_removal_with_tax_inclusive_pricing(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		$order = $this->create_pos_order_tax_inclusive( '80', '100', 'taxable' );
+
+		CouponHelper::create_coupon(
+			'taxremove10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'taxremove10' );
+
+		// Manually activate filter before remove (simulates Form_Handler).
+		Orders::activate_pos_subtotal_filter();
+		$order->remove_coupon( 'taxremove10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// After removal, total should return to POS price (€80 incl = €66.67 ex-tax).
+		$this->assertEquals( 66.67, round( (float) $item->get_total(), 2 ), 'After removal, total should be POS price ex-tax (€66.67)' );
+
+		// Tax on €66.67 = €13.33.
+		$this->assertEquals( 13.33, round( (float) $item->get_total_tax(), 2 ), 'After removal, tax should be €13.33' );
+
+		// Order total = €66.67 + €13.33 = €80.00.
+		$this->assertEquals( 80.00, round( (float) $order->get_total(), 2 ), 'After removal, order total should be €80.00' );
+	}
+
+	// ======================================================================
+	// Tax-aware coupon tests: prices include tax + tax-exempt item
+	// ======================================================================
+
+	/**
+	 * Apply coupon to a POS order with tax-inclusive pricing but tax-exempt item.
+	 *
+	 * Product: €100, tax_status = 'none'. Should work like the existing no-tax tests.
+	 */
+	public function test_coupon_with_tax_inclusive_but_exempt_item(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		// POS price €80, regular €100, but tax_status = 'none'.
+		$order = $this->create_pos_order_tax_inclusive( '80', '100', 'none' );
+
+		CouponHelper::create_coupon(
+			'taxexempt10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'taxexempt10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// Tax-exempt: no VAT. 10% off €80 = €8, total = €72.
+		$this->assertEquals( 72.00, round( (float) $item->get_total(), 2 ), 'Tax-exempt total should be €72.00' );
+		$this->assertEquals( 0.00, round( (float) $item->get_total_tax(), 2 ), 'Tax-exempt item should have no tax' );
+		$this->assertEquals( 72.00, round( (float) $order->get_total(), 2 ), 'Order total should be €72.00' );
+	}
+
+	// ======================================================================
+	// Tax-aware coupon tests: prices exclude tax + taxable
+	// ======================================================================
+
+	/**
+	 * Apply coupon to a POS order with tax-exclusive pricing and a POS discount.
+	 *
+	 * When prices_include_tax is false, the POS price IS tax-exclusive already.
+	 */
+	public function test_coupon_with_tax_exclusive_and_pos_discount(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'no' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		// POS price is tax-exclusive when prices_include_tax = false.
+		// Product €100 ex-tax, POS discounted to €80 ex-tax.
+		$order = $this->create_pos_order_tax_exclusive( '80', '100', 'taxable' );
+
+		CouponHelper::create_coupon(
+			'taxexcl10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'taxexcl10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// 10% off €80 ex-tax = €8, total = €72 ex-tax.
+		$this->assertEquals( 72.00, round( (float) $item->get_total(), 2 ), 'Line total should be €72.00 ex-tax' );
+
+		// Tax on €72 = €14.40.
+		$this->assertEquals( 14.40, round( (float) $item->get_total_tax(), 2 ), 'Line total tax should be €14.40' );
+
+		// Order total = €72 + €14.40 = €86.40.
+		$this->assertEquals( 86.40, round( (float) $order->get_total(), 2 ), 'Order total should be €86.40' );
+	}
+
+	// ======================================================================
+	// Mixed items with tax
+	// ======================================================================
+
+	/**
+	 * POS order with one taxable item and one tax-exempt item, tax-inclusive pricing.
+	 */
+	public function test_mixed_taxable_and_exempt_items_tax_inclusive(): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_prices_include_tax', 'yes' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'GB',
+				'rate'     => '20.0000',
+				'name'     => 'VAT',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+
+		$product_a = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 100,
+				'price' => 100,
+			)
+		);
+		$product_b = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 50,
+				'price' => 50,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'base' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_prices_include_tax( true );
+
+		// Item A: €120 incl VAT, taxable. Ex-tax = €100.
+		$item_a = new WC_Order_Item_Product();
+		$item_a->set_product( $product_a );
+		$item_a->set_quantity( 1 );
+		$item_a->set_subtotal( 100 );      // ex-tax.
+		$item_a->set_subtotal_tax( 20 );   // 20% of 100.
+		$item_a->set_total( 100 );
+		$item_a->set_total_tax( 20 );
+		$item_a->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '120',   // Tax-inclusive POS price.
+					'regular_price' => '120',
+					'tax_status'    => 'taxable',
+				)
+			)
+		);
+		$order->add_item( $item_a );
+
+		// Item B: €50, tax-exempt.
+		$item_b = new WC_Order_Item_Product();
+		$item_b->set_product( $product_b );
+		$item_b->set_quantity( 1 );
+		$item_b->set_subtotal( 50 );
+		$item_b->set_total( 50 );
+		$item_b->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '50',
+					'regular_price' => '50',
+					'tax_status'    => 'none',
+				)
+			)
+		);
+		$order->add_item( $item_b );
+
+		$order->calculate_totals( true );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'mixed_tax10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'mixed_tax10' );
+
+		$items = array_values( $order->get_items() );
+
+		// Item A: 10% off €120 incl = €12 incl = €10 ex-tax discount.
+		// Total = €100 - €10 = €90 ex-tax. Tax = €18.
+		$this->assertEquals( 90.00, round( (float) $items[0]->get_total(), 2 ), 'Taxable item total should be €90.00 ex-tax' );
+		$this->assertEquals( 18.00, round( (float) $items[0]->get_total_tax(), 2 ), 'Taxable item tax should be €18.00' );
+
+		// Item B: 10% off €50 = €5, total = €45. No tax.
+		$this->assertEquals( 45.00, round( (float) $items[1]->get_total(), 2 ), 'Tax-exempt item total should be €45.00' );
+		$this->assertEquals( 0.00, round( (float) $items[1]->get_total_tax(), 2 ), 'Tax-exempt item should have no tax' );
+
+		// Order total = (90 + 18) + 45 = €153.
+		$this->assertEquals( 153.00, round( (float) $order->get_total(), 2 ), 'Order total should be €153.00' );
+	}
+
+	// ======================================================================
 	// Helper methods
 	// ======================================================================
 
@@ -380,7 +862,12 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 * @return WC_Order
 	 */
 	private function create_pos_order_with_discount(): WC_Order {
-		$product = ProductHelper::create_simple_product( array( 'regular_price' => 18, 'price' => 18 ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 18,
+				'price' => 18,
+			)
+		);
 
 		$order = wc_create_order();
 		$order->update_meta_data( '_pos', '1' );
@@ -404,6 +891,110 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		);
 		$order->add_item( $item );
 		$order->calculate_totals( false );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Create a POS order with tax-inclusive pricing.
+	 *
+	 * The POS stores the tax-INCLUSIVE price in _woocommerce_pos_data.
+	 * WooCommerce stores the tax-EXCLUSIVE subtotal/total internally.
+	 * This helper uses wc_get_price_excluding_tax() to derive the correct ex-tax values.
+	 *
+	 * @param string $pos_price         Tax-inclusive POS price.
+	 * @param string $pos_regular_price Tax-inclusive POS regular price.
+	 * @param string $tax_status        'taxable' or 'none'.
+	 *
+	 * @return WC_Order
+	 */
+	private function create_pos_order_tax_inclusive( string $pos_price, string $pos_regular_price, string $tax_status ): WC_Order {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => $pos_regular_price,
+				'price'         => $pos_price,
+				'tax_status'    => $tax_status,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'base' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_prices_include_tax( true );
+
+		// WC stores the tax-exclusive amount as subtotal.
+		$subtotal_ex_tax = wc_get_price_excluding_tax( $product, array( 'price' => (float) $pos_regular_price ) );
+		$total_ex_tax    = wc_get_price_excluding_tax( $product, array( 'price' => (float) $pos_price ) );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( $subtotal_ex_tax );
+		$item->set_total( $total_ex_tax );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => $pos_price,
+					'regular_price' => $pos_regular_price,
+					'tax_status'    => $tax_status,
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( true );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Create a POS order with tax-exclusive pricing.
+	 *
+	 * When prices_include_tax is false, the POS price IS the tax-exclusive price.
+	 *
+	 * @param string $pos_price         Tax-exclusive POS price.
+	 * @param string $pos_regular_price Tax-exclusive POS regular price.
+	 * @param string $tax_status        'taxable' or 'none'.
+	 *
+	 * @return WC_Order
+	 */
+	private function create_pos_order_tax_exclusive( string $pos_price, string $pos_regular_price, string $tax_status ): WC_Order {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => $pos_regular_price,
+				'price'         => $pos_price,
+				'tax_status'    => $tax_status,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->update_meta_data( '_woocommerce_pos_tax_based_on', 'base' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+		$order->set_prices_include_tax( false );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( (float) $pos_regular_price );
+		$item->set_total( (float) $pos_price );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => $pos_price,
+					'regular_price' => $pos_regular_price,
+					'tax_status'    => $tax_status,
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( true );
 		$order->save();
 
 		return $order;
