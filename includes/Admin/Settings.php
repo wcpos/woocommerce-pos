@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
@@ -111,15 +112,45 @@ class Settings {
 		$settings_service = SettingsService::instance();
 		$barcodes         = array_values( $settings_service->get_barcodes() );
 		$order_statuses   = $settings_service->get_order_statuses();
+		$new_ext_count    = $this->get_new_extensions_count();
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
-            order_statuses: %s
+            order_statuses: %s,
+            newExtensionsCount: %s
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
+			json_encode( $new_ext_count ),
 			json_encode( TRANSLATION_VERSION )
 		);
+	}
+
+	/**
+	 * Get the count of extensions the current user hasn't seen yet.
+	 *
+	 * Uses the cached catalog transient to avoid remote fetches on every page load.
+	 * Returns null if the catalog hasn't been fetched yet.
+	 *
+	 * @return int|null
+	 */
+	private function get_new_extensions_count(): ?int {
+		$cached = get_transient( ExtensionsService::TRANSIENT_KEY );
+
+		if ( false === $cached || ! \is_array( $cached ) ) {
+			return null;
+		}
+
+		$catalog_slugs = array_column( $cached, 'slug' );
+		$seen_slugs    = get_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', true );
+
+		if ( ! \is_array( $seen_slugs ) ) {
+			$seen_slugs = array();
+		}
+
+		$new_slugs = array_diff( $catalog_slugs, $seen_slugs );
+
+		return \count( $new_slugs );
 	}
 }

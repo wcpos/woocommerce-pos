@@ -51,6 +51,35 @@ class Extensions extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'check_permissions' ),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/seen',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'mark_seen' ),
+				'permission_callback' => array( $this, 'check_permissions' ),
+			)
+		);
+	}
+
+	/**
+	 * Mark all current catalog extensions as seen by the current user.
+	 *
+	 * Stores the catalog slugs in user meta so the "new" badge can be computed.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function mark_seen( WP_REST_Request $request ): WP_REST_Response {
+		$service = ExtensionsService::instance();
+		$catalog = $service->get_catalog();
+		$slugs   = array_column( $catalog, 'slug' );
+
+		update_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', $slugs );
+
+		return new WP_REST_Response( array( 'success' => true ) );
 	}
 
 	/**

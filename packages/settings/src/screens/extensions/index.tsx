@@ -4,6 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
+import { markExtensionsSeen, setNewExtensionsCount } from './use-new-extensions-count';
 import Notice from '../../components/notice';
 import { t } from '../../translations';
 
@@ -24,6 +25,7 @@ export interface Extension {
 	requires_pro: boolean;
 	icon: string;
 	homepage: string;
+	repository: string;
 	download_url: string;
 	latest_version: string;
 	released_at: string;
@@ -42,6 +44,13 @@ function Extensions() {
 	});
 
 	const isPro = !!(window as any)?.wcpos?.pro;
+
+	React.useEffect(() => {
+		if (extensions.length > 0) {
+			setNewExtensionsCount(0);
+			markExtensionsSeen();
+		}
+	}, [extensions]);
 
 	const categories = React.useMemo(() => {
 		const cats = new Set(extensions.map((ext) => ext.category || 'other'));
