@@ -32,11 +32,12 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that the route is registered.
+	 * Test that the routes are registered.
 	 */
 	public function test_register_routes(): void {
 		$routes = $this->server->get_routes();
 		$this->assertArrayHasKey( '/wcpos/v1/extensions', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/extensions/seen', $routes );
 	}
 
 	/**
@@ -108,6 +109,40 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		// Baseline gate returns 403 for unauthenticated users (no access_woocommerce_pos).
+		$this->assertEquals( 403, $response->get_status() );
+	}
+
+	/**
+	 * Test POST mark_seen stores catalog slugs in user meta.
+	 */
+	public function test_mark_seen_stores_slugs_in_user_meta(): void {
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ), 10, 3 );
+
+		$request  = $this->wp_rest_post_request( '/wcpos/v1/extensions/seen' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['success'] );
+
+		$seen = get_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', true );
+		$this->assertIsArray( $seen );
+		$this->assertContains( 'wcpos-stripe-terminal', $seen );
+		$this->assertContains( 'wcpos-bookings', $seen );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ) );
+	}
+
+	/**
+	 * Test POST mark_seen requires auth.
+	 */
+	public function test_mark_seen_requires_auth(): void {
+		wp_set_current_user( 0 );
+
+		$request  = $this->wp_rest_post_request( '/wcpos/v1/extensions/seen' );
+		$response = $this->server->dispatch( $request );
+
 		$this->assertEquals( 403, $response->get_status() );
 	}
 
