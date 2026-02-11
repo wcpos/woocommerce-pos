@@ -74,21 +74,25 @@ class Logs extends WP_REST_Controller {
 	 */
 	public function get_items( $request ): WP_REST_Response {
 		$level    = $request->get_param( 'level' );
-		$per_page = $request->get_param( 'per_page' ) ? (int) $request->get_param( 'per_page' ) : 50;
-		$page     = $request->get_param( 'page' ) ? (int) $request->get_param( 'page' ) : 1;
+		$per_page = (int) ( $request->get_param( 'per_page' ) ? $request->get_param( 'per_page' ) : 50 );
+		$page     = (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 );
 
-		$entries = $this->get_file_entries();
+		if ( 'database' === $this->get_handler_type() ) {
+			$entries = $this->get_db_entries( $level );
+		} else {
+			$entries = $this->get_file_entries();
 
-		// Filter by level if specified.
-		if ( $level ) {
-			$entries = array_values(
-				array_filter(
-					$entries,
-					function ( $entry ) use ( $level ) {
-						return strtolower( $level ) === $entry['level'];
-					}
-				)
-			);
+			// Filter by level if specified (DB does this in SQL).
+			if ( $level ) {
+				$entries = array_values(
+					array_filter(
+						$entries,
+						function ( $entry ) use ( $level ) {
+							return strtolower( $level ) === $entry['level'];
+						}
+					)
+				);
+			}
 		}
 
 		$total       = count( $entries );
@@ -151,6 +155,100 @@ class Logs extends WP_REST_Controller {
 		);
 
 		return $entries;
+	}
+
+	/**
+	 * Detect which log handler type is active.
+	 *
+	 * @return string 'file' or 'database'
+	 */
+	private function get_handler_type(): string {
+		/**
+		 * Filter the detected log handler type.
+		 *
+		 * @param string|null $type 'file' or 'database', or null for auto-detection.
+		 */
+		$type = apply_filters( 'woocommerce_pos_log_handler_type', null );
+		if ( $type ) {
+			return $type;
+		}
+
+		$handler = get_option( 'woocommerce_default_log_handler', '' );
+
+		if ( false !== strpos( $handler, 'DB' ) || false !== strpos( $handler, 'Database' ) ) {
+			return 'database';
+		}
+
+		return 'file';
+	}
+
+	/**
+	 * Get log entries from the database handler.
+	 *
+	 * @param string|null $level Optional level filter.
+	 *
+	 * @return array
+	 */
+	private function get_db_entries( ?string $level = null ): array {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'woocommerce_log';
+
+		// Check table exists.
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $table_exists ) {
+			return array();
+		}
+
+		$where = $wpdb->prepare( 'WHERE source = %s', 'woocommerce-pos' );
+
+		if ( $level ) {
+			$severity = \WC_Log_Levels::get_level_severity( $level );
+			$where   .= $wpdb->prepare( ' AND level = %d', $severity );
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is safe prefix, $where is prepared above.
+		$sql = "SELECT timestamp, level, message FROM {$table} {$where} ORDER BY timestamp DESC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is safely constructed above with $wpdb->prepare().
+		$results = $wpdb->get_results( $sql, ARRAY_A );
+
+		if ( empty( $results ) ) {
+			return array();
+		}
+
+		$level_map = array_flip(
+			array(
+				'emergency' => 800,
+				'alert'     => 700,
+				'critical'  => 600,
+				'error'     => 500,
+				'warning'   => 400,
+				'notice'    => 300,
+				'info'      => 200,
+				'debug'     => 100,
+			)
+		);
+
+		return array_map(
+			function ( $row ) use ( $level_map ) {
+				$message = $row['message'];
+				$context = '';
+
+				$context_pos = strpos( $message, ' | Context: ' );
+				if ( false !== $context_pos ) {
+					$context = substr( $message, $context_pos + 12 );
+					$message = substr( $message, 0, $context_pos );
+				}
+
+				return array(
+					'timestamp' => $row['timestamp'],
+					'level'     => $level_map[ (int) $row['level'] ] ?? 'debug',
+					'message'   => $message,
+					'context'   => $context,
+				);
+			},
+			$results
+		);
 	}
 
 	/**

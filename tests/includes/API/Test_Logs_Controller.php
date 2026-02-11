@@ -27,6 +27,8 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		global $wpdb;
+		$wpdb->query( "DELETE FROM {$wpdb->prefix}woocommerce_log WHERE source = 'woocommerce-pos'" );
 		$this->clean_log_files();
 		parent::tearDown();
 	}
@@ -198,5 +200,94 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 10, $data['entries'] );
 		$this->assertEquals( '30', $response->get_headers()['X-WP-Total'] );
 		$this->assertEquals( '3', $response->get_headers()['X-WP-TotalPages'] );
+	}
+
+	/**
+	 * Test GET logs reads from database when DB handler is active.
+	 */
+	public function test_get_logs_reads_from_database(): void {
+		if ( ! $this->ensure_log_table_exists() ) {
+			$this->markTestSkipped( 'woocommerce_log table does not exist.' );
+		}
+
+		$this->insert_db_log_entry( 'error', 'DB error message', 'woocommerce-pos' );
+		$this->insert_db_log_entry( 'warning', 'DB warning message', 'woocommerce-pos' );
+		$this->insert_db_log_entry( 'info', 'Other source message', 'other-plugin' );
+
+		// Force DB handler detection.
+		add_filter(
+			'woocommerce_pos_log_handler_type',
+			function () {
+				return 'database';
+			}
+		);
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/logs' );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+		$this->assertCount( 2, $data['entries'] );
+		$this->assertEquals( 'error', $data['entries'][0]['level'] );
+		$this->assertEquals( 'DB error message', $data['entries'][0]['message'] );
+
+		remove_all_filters( 'woocommerce_pos_log_handler_type' );
+	}
+
+	/**
+	 * Insert a log entry into the WC log database table.
+	 *
+	 * @param string $level   Log level.
+	 * @param string $message Log message.
+	 * @param string $source  Log source.
+	 */
+	private function insert_db_log_entry( string $level, string $message, string $source ): void {
+		global $wpdb;
+
+		$wpdb->insert(
+			$wpdb->prefix . 'woocommerce_log',
+			array(
+				'timestamp' => current_time( 'mysql', true ),
+				'level'     => \WC_Log_Levels::get_level_severity( $level ),
+				'message'   => $message,
+				'source'    => $source,
+			),
+			array( '%s', '%d', '%s', '%s' )
+		);
+	}
+
+	/**
+	 * Ensure the woocommerce_log table exists.
+	 *
+	 * Creates the table if it does not exist in the test environment.
+	 *
+	 * @return bool True if the table exists or was created.
+	 */
+	private function ensure_log_table_exists(): bool {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'woocommerce_log';
+
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $table_exists ) {
+			return true;
+		}
+
+		$charset_collate = $wpdb->get_charset_collate();
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- DDL with safe prefix values.
+		$sql = "CREATE TABLE {$table} (
+			log_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			timestamp datetime NOT NULL,
+			level smallint(4) NOT NULL,
+			source varchar(200) NOT NULL,
+			message longtext NOT NULL,
+			context longtext NULL,
+			PRIMARY KEY (log_id),
+			KEY level (level),
+			KEY source (source(191))
+		) {$charset_collate}";
+		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- DDL statement.
+
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	}
 }
