@@ -2,6 +2,7 @@ import { NavGroup } from './nav-group';
 import { NavItem } from './nav-item';
 import PosIcon from '../../assets/wcpos-icon.svg';
 import { useNewExtensionsCount } from '../screens/extensions/use-new-extensions-count';
+import { useUnreadLogCounts } from '../screens/logs/use-unread-log-counts';
 import { useRegisteredPages } from '../store/use-registry';
 import { t } from '../translations';
 
@@ -14,6 +15,7 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 	const toolsPages = useRegisteredPages('tools');
 	const accountPages = useRegisteredPages('account');
 	const newExtensionsCount = useNewExtensionsCount();
+	const unreadLogCounts = useUnreadLogCounts();
 
 	return (
 		<aside
@@ -47,34 +49,36 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 						badge={newExtensionsCount ?? undefined}
 						onClick={onNavItemClick}
 					/>
-					<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
 				</NavGroup>
 
-				{toolsPages.length > 0 && (
-					<NavGroup heading="Tools">
-						{toolsPages.map((page) => (
-							<NavItem
-								key={page.id}
-								to={`/${page.id}`}
-								label={page.label}
-								onClick={onNavItemClick}
-							/>
-						))}
-					</NavGroup>
-				)}
+				<NavGroup heading={t('common.tools', 'Tools')}>
+					<NavItem
+						to="/logs"
+						label={t('common.logs', 'Logs')}
+						badge={unreadLogCounts}
+						onClick={onNavItemClick}
+					/>
+					{toolsPages.map((page) => (
+						<NavItem
+							key={page.id}
+							to={`/${page.id}`}
+							label={page.label}
+							onClick={onNavItemClick}
+						/>
+					))}
+				</NavGroup>
 
-				{accountPages.length > 0 && (
-					<NavGroup heading="Account">
-						{accountPages.map((page) => (
-							<NavItem
-								key={page.id}
-								to={`/${page.id}`}
-								label={page.label}
-								onClick={onNavItemClick}
-							/>
-						))}
-					</NavGroup>
-				)}
+				<NavGroup heading={t('common.account', 'Account')}>
+					<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
+					{accountPages.map((page) => (
+						<NavItem
+							key={page.id}
+							to={`/${page.id}`}
+							label={page.label}
+							onClick={onNavItemClick}
+						/>
+					))}
+				</NavGroup>
 			</div>
 		</aside>
 	);
