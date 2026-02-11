@@ -1,8 +1,10 @@
 import * as React from 'react';
+
 import { useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
+import Notice from '../../components/notice';
 import { t } from '../../translations';
 
 /**
@@ -30,27 +32,13 @@ export interface Extension {
 	plugin_file?: string;
 }
 
-function ProBanner() {
-	return (
-		<div className="wcpos:mb-4 wcpos:rounded-md wcpos:bg-blue-50 wcpos:border wcpos:border-blue-200 wcpos:px-4 wcpos:py-3">
-			<p className="wcpos:text-sm wcpos:text-blue-700">
-				{t(
-					'extensions.upgrade_to_pro',
-					'Upgrade to Pro to install and manage extensions.'
-				)}
-			</p>
-		</div>
-	);
-}
-
-const Extensions = () => {
+function Extensions() {
 	const [search, setSearch] = React.useState('');
 	const [category, setCategory] = React.useState('all');
 
 	const { data: extensions = [] } = useSuspenseQuery<Extension[]>({
 		queryKey: ['extensions'],
-		queryFn: () =>
-			apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+		queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
 	});
 
 	const isPro = !!(window as any)?.wcpos?.pro;
@@ -62,8 +50,7 @@ const Extensions = () => {
 
 	const filtered = React.useMemo(() => {
 		return extensions.filter((ext) => {
-			const matchesCategory =
-				category === 'all' || (ext.category || 'other') === category;
+			const matchesCategory = category === 'all' || (ext.category || 'other') === category;
 			const q = search.toLowerCase();
 			const matchesSearch =
 				!search ||
@@ -76,7 +63,11 @@ const Extensions = () => {
 
 	return (
 		<div>
-			{!isPro && <ProBanner />}
+			{!isPro && (
+				<Notice status="info" isDismissible={false} className="wcpos:mb-4">
+					{t('extensions.upgrade_to_pro', 'Upgrade to Pro to install and manage extensions.')}
+				</Notice>
+			)}
 
 			{/* Search */}
 			<div className="wcpos:mb-4">
@@ -120,6 +111,6 @@ const Extensions = () => {
 			)}
 		</div>
 	);
-};
+}
 
 export default Extensions;

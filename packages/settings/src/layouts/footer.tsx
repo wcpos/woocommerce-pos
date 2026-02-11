@@ -5,11 +5,9 @@ import { t } from '../translations';
 
 export function Footer() {
 	return (
-		<footer className="wcpos:border-t wcpos:border-gray-200 wcpos:shrink-0 wcpos:px-6 wcpos:py-2 wcpos:grid wcpos:grid-cols-3 wcpos:lg:flex wcpos:items-center wcpos:gap-x-4 wcpos:gap-y-2 wcpos:text-xs">
-			<span className="wcpos:font-semibold wcpos:text-gray-500">
-				{t('settings.need_help')}
-			</span>
-			<div className="wcpos:flex wcpos:flex-col wcpos:lg:flex-row wcpos:gap-1 wcpos:lg:gap-4">
+		<footer className="wcpos:border-t wcpos:border-gray-200 wcpos:shrink-0 wcpos:px-6 wcpos:py-2 wcpos:flex wcpos:flex-col wcpos:sm:flex-row wcpos:flex-wrap wcpos:items-start wcpos:gap-x-4 wcpos:gap-y-2 wcpos:text-xs">
+			<span className="wcpos:font-semibold wcpos:text-gray-500">{t('settings.need_help')}</span>
+			<div className="wcpos:flex wcpos:flex-col wcpos:md:flex-row wcpos:gap-1 wcpos:lg:gap-4">
 				<a
 					href="https://docs.wcpos.com"
 					target="_blank"
@@ -35,7 +33,7 @@ export function Footer() {
 					<span className="wcpos:sr-only"> (opens in new tab)</span>
 				</a>
 			</div>
-			<div className="wcpos:flex wcpos:flex-col wcpos:lg:flex-row wcpos:gap-1 wcpos:lg:gap-4">
+			<div className="wcpos:flex wcpos:flex-col wcpos:md:flex-row wcpos:gap-1 wcpos:lg:gap-4">
 				<a
 					href="mailto:support@wcpos.com"
 					target="_blank"

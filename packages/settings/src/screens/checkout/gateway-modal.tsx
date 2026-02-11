@@ -10,7 +10,7 @@ interface GatewayModalProps {
 	closeModal: () => void;
 }
 
-const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
+function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 	const [title, setTitle] = React.useState(gateway.title);
 	const [description, setDescription] = React.useState(gateway.description);
 	const inputRef = React.useRef();
@@ -27,32 +27,28 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 		closeModal();
 	};
 
-	const handleChange = React.useCallback(
-		(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-			const value = event.target.value;
-			const field = event.target.id;
+	const handleChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+		const value = event.target.value;
+		const field = event.target.id;
 
-			if (field === 'title') {
-				setTitle(value);
-			}
-			if (field === 'description') {
-				setDescription(value);
-			}
-		},
-		[]
-	);
+		if (field === 'title') {
+			setTitle(value);
+		}
+		if (field === 'description') {
+			setDescription(value);
+		}
+	}, []);
 
 	return (
-		<Modal
-			open={true}
-			onClose={() => closeModal()}
-			title={gateway.title}
-			className="wcpos:max-w-md"
-		>
+		<Modal open onClose={() => closeModal()} title={gateway.title} className="wcpos:max-w-md">
 			<Notice status="info" isDismissible={false}>
 				<Trans
 					i18nKey="checkout.gateway_settings_pos_only"
-					components={{ link: <a href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" /> }}
+					components={{
+						link: (
+							<a href="admin.php?page=wc-settings&tab=checkout" target="_blank" rel="noreferrer" />
+						),
+					}}
 				/>
 			</Notice>
 			<div className="wcpos:py-2">
@@ -71,7 +67,10 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 				/>
 			</div>
 			<div className="wcpos:py-2">
-				<label htmlFor="description" className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm">
+				<label
+					htmlFor="description"
+					className="wcpos:block wcpos:mb-1 wcpos:font-medium wcpos:text-sm"
+				>
 					{t('common.description')}
 				</label>
 				<textarea
@@ -90,6 +89,6 @@ const GatewayModal = ({ gateway, mutate, closeModal }: GatewayModalProps) => {
 			</div>
 		</Modal>
 	);
-};
+}
 
 export default GatewayModal;

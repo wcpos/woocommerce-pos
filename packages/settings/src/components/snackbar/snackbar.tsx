@@ -7,7 +7,7 @@ export interface SnackbarProps {
 	timeout?: boolean;
 }
 
-export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) => {
+export function Snackbar({ message, onRemove, timeout = true }: SnackbarProps) {
 	React.useEffect(() => {
 		if (!message) return;
 		const timer = setTimeout(() => {
@@ -23,4 +23,4 @@ export const Snackbar = ({ message, onRemove, timeout = true }: SnackbarProps) =
 			{message}
 		</div>
 	);
-};
+}

@@ -16,7 +16,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	const { data } = useSuspenseQuery({
 		queryKey: [id],
 		queryFn: async () => {
-			const response = await apiFetch<Record<string, unknown>>({
+			const response = await apiFetch<Record>({
 				path: endpoint,
 				method: 'GET',
 			}).catch((err) => {
@@ -34,8 +34,8 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 	});
 
 	const mutation = useMutation({
-		mutationFn: async (data: Record<string, unknown>) => {
-			const response = await apiFetch<Record<string, unknown>>({
+		mutationFn: async (data: Record) => {
+			const response = await apiFetch<Record>({
 				path: endpoint,
 				method: 'POST',
 				data,

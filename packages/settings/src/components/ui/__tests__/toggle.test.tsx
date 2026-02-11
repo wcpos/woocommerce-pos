@@ -18,7 +18,7 @@ describe('Toggle', () => {
 	});
 
 	it('reflects checked state', () => {
-		render(<Toggle checked={true} onChange={() => {}} />);
+		render(<Toggle checked onChange={() => {}} />);
 		const switchEl = screen.getByRole('switch');
 		expect(switchEl).toHaveAttribute('aria-checked', 'true');
 	});

@@ -6,7 +6,7 @@ import { FallbackProps } from 'react-error-boundary';
 import Notice from './notice';
 import { t } from '../translations';
 
-const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
 	const message = get(error, 'message', 'Unknown error');
 
 	return (
@@ -18,6 +18,6 @@ const ErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
 			</Notice>
 		</div>
 	);
-};
+}
 
 export default ErrorFallback;

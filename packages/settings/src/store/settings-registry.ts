@@ -1,5 +1,7 @@
 import type { ComponentType } from 'react';
+
 import { createStore } from 'zustand/vanilla';
+
 import type {
 	SettingsRegistryState,
 	PageRegistration,
@@ -60,7 +62,7 @@ export const settingsRegistry = createStore<SettingsRegistryState>((set, get) =>
 			.reduce((acc, m) => ({ ...acc, ...m.props }), {});
 	},
 
-	registerComponent: (key: string, component: ComponentType<any>) => {
+	registerComponent: (key: string, component: ComponentType) => {
 		set((state) => ({
 			components: { ...state.components, [key]: component },
 		}));

@@ -50,15 +50,22 @@
 	display: none !important;
 } */
 
+/* Override WordPress admin focus styles inside POS settings */
+#woocommerce-pos-settings a:focus,
+#woocommerce-pos-settings a:active {
+	box-shadow: none;
+	outline: none;
+}
+
 /* Full-page takeover: fill the admin content area */
 #woocommerce-pos-settings {
 	position: relative;
 	margin-left: -20px;
 	margin-right: 0;
-	margin-top: -10px;
 	z-index: 10;
-	height: calc(100vh - var(--wp-admin--admin-bar--height, 32px));
-	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	min-height: calc(100vh - var(--wp-admin--admin-bar--height, 32px));
 }
 
 

@@ -2,6 +2,7 @@
   "name": "@wcpos/analytics",
   "scripts": {
     "build": "NODE_ENV=production node_modules/.bin/webpack",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx,.js,.jsx",
     "start": "node_modules/.bin/webpack --watch"
   },
   "dependencies": {
@@ -34,8 +35,7 @@
     "@types/react-beautiful-dnd": "13.1.8",
     "@types/react-dom": "18.3.0",
     "@types/wordpress__components": "^23.8.0",
-    "@typescript-eslint/eslint-plugin": "7.13.0",
-    "@typescript-eslint/parser": "7.13.0",
+    "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
     "@wordpress/env": "10.23.0",
     "autoprefixer": "10.4.19",
     "babel-loader": "9.1.3",

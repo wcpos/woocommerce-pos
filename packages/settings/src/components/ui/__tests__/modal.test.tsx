@@ -7,7 +7,7 @@ import { Modal } from '../modal';
 describe('Modal', () => {
 	it('renders content when open', () => {
 		render(
-			<Modal open={true} onClose={() => {}} title="Test Modal">
+			<Modal open onClose={() => {}} title="Test Modal">
 				<p>Modal content</p>
 			</Modal>
 		);
@@ -26,7 +26,7 @@ describe('Modal', () => {
 
 	it('renders description when provided', () => {
 		render(
-			<Modal open={true} onClose={() => {}} title="Title" description="Some description">
+			<Modal open onClose={() => {}} title="Title" description="Some description">
 				<p>Body</p>
 			</Modal>
 		);
@@ -35,7 +35,7 @@ describe('Modal', () => {
 
 	it('renders without a title', () => {
 		render(
-			<Modal open={true} onClose={() => {}}>
+			<Modal open onClose={() => {}}>
 				<p>Just content</p>
 			</Modal>
 		);

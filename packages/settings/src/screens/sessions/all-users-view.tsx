@@ -39,7 +39,7 @@ interface AllUsersSessionsResponse {
 	total: number;
 }
 
-const AllUsersView: React.FC = () => {
+function AllUsersView() {
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
 
@@ -81,13 +81,7 @@ const AllUsersView: React.FC = () => {
 
 	// Delete all sessions mutation
 	const deleteAllSessionsMutation = useMutation({
-		mutationFn: async ({
-			userId,
-			exceptCurrent,
-		}: {
-			userId: number;
-			exceptCurrent?: boolean;
-		}) => {
+		mutationFn: async ({ userId, exceptCurrent }: { userId: number; exceptCurrent?: boolean }) => {
 			const params = new URLSearchParams({
 				user_id: userId.toString(),
 				wcpos: '1',
@@ -110,19 +104,13 @@ const AllUsersView: React.FC = () => {
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message:
-					error?.message ||
-					t('sessions.failed_terminate_sessions'),
+				message: error?.message || t('sessions.failed_terminate_sessions'),
 			});
 		},
 	});
 
 	const handleDeleteSession = (userId: number, jti: string) => {
-		if (
-			confirm(
-				t('sessions.confirm_terminate_session')
-			)
-		) {
+		if (confirm(t('sessions.confirm_terminate_session'))) {
 			deleteSessionMutation.mutate({ userId, jti });
 		}
 	};
@@ -145,7 +133,6 @@ const AllUsersView: React.FC = () => {
 			isDeleting={deleteSessionMutation.isPending || deleteAllSessionsMutation.isPending}
 		/>
 	);
-};
+}
 
 export default AllUsersView;
-

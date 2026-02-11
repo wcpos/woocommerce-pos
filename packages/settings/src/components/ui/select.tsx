@@ -30,7 +30,7 @@ export function Select({ value, options, onChange, disabled, className }: Select
 			<div className={classNames('wcpos:relative', className)}>
 				<ListboxButton
 					className={classNames(
-						'wcpos:relative wcpos:w-full wcpos:cursor-default wcpos:rounded-md wcpos:bg-white wcpos:border wcpos:border-gray-300 wcpos:py-1 wcpos:pl-3 wcpos:pr-10 wcpos:text-left wcpos:shadow-xs wcpos:sm:text-sm',
+						'wcpos:relative wcpos:w-full wcpos:cursor-default wcpos:rounded-md wcpos:bg-white wcpos:border wcpos:border-gray-300 wcpos:py-1.5 wcpos:pl-2.5 wcpos:pr-8 wcpos:text-left wcpos:shadow-xs wcpos:sm:text-sm',
 						'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color focus:wcpos:border-wp-admin-theme-color',
 						disabled && 'wcpos:opacity-50 wcpos:cursor-not-allowed'
 					)}
@@ -70,11 +70,7 @@ export function Select({ value, options, onChange, disabled, className }: Select
 									</span>
 									{selected && (
 										<span className="wcpos:absolute wcpos:inset-y-0 wcpos:left-0 wcpos:flex wcpos:items-center wcpos:pl-3 wcpos:text-wp-admin-theme-color-darker-10">
-											<Check
-												className="wcpos:h-5 wcpos:w-5"
-												fill="#006ba1"
-												aria-hidden="true"
-											/>
+											<Check className="wcpos:h-5 wcpos:w-5" fill="#006ba1" aria-hidden="true" />
 										</span>
 									)}
 								</>

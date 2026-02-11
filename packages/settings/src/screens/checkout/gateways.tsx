@@ -107,7 +107,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 			)}
 			<td
 				ref={dragHandleRef}
-				className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:cursor-grab"
+				className="wcpos:pl-3 wcpos:pr-1 wcpos:py-2 wcpos:whitespace-nowrap wcpos:cursor-grab wcpos:w-8"
 			>
 				<DragIcon className="wcpos:w-5 wcpos:h-5 wcpos:text-gray-400 wcpos:fill-current" />
 			</td>
@@ -158,7 +158,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 /**
  * Payment gateways table with drag-and-drop reordering.
  */
-const Gateways = () => {
+function Gateways() {
 	const { data, mutate } = useSettingsApi('payment-gateways');
 	const [isOpen, setOpen] = React.useState(false);
 	const modalGateway = React.useRef<GatewayProps>(null);
@@ -168,10 +168,7 @@ const Gateways = () => {
 	 * Sort gateways by order.
 	 * NOTE: This will convert associative array to indexed array, we will need to keyBy when saving.
 	 */
-	const gateways = sortBy(
-		data?.gateways as Record<string, GatewayItem>,
-		['order', 'id']
-	);
+	const gateways = sortBy(data?.gateways as Record, ['order', 'id']);
 
 	React.useEffect(() => {
 		return monitorForElements({
@@ -211,18 +208,15 @@ const Gateways = () => {
 				<div className="wcpos:pb-5">
 					<Notice status="info" isDismissible={false}>
 						{t('checkout.enable_pro_gateways')}{' '}
-						<a href="https://wcpos.com/pro">
-							{t('common.upgrade_to_pro')}
-						</a>
-						.
+						<a href="https://wcpos.com/pro">{t('common.upgrade_to_pro')}</a>.
 					</Notice>
 				</div>
 			)}
-			<div className="wcpos:overflow-hidden wcpos:border wcpos:border-gray-200 wcpos:sm:rounded-lg">
+			<div className="wcpos:overflow-x-auto wcpos:border wcpos:border-gray-200 wcpos:sm:rounded-lg">
 				<table className="wcpos:min-w-full wcpos:divide-y wcpos:divide-gray-200">
 					<thead className="wcpos:bg-gray-50">
 						<tr>
-							<th scope="col"></th>
+							<th scope="col" />
 							<th
 								scope="col"
 								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
@@ -247,7 +241,7 @@ const Gateways = () => {
 							>
 								{t('common.enabled')}
 							</th>
-							<th scope="col"></th>
+							<th scope="col" />
 						</tr>
 					</thead>
 					<tbody className="wcpos:bg-white wcpos:divide-y wcpos:divide-gray-200">
@@ -274,6 +268,6 @@ const Gateways = () => {
 			</div>
 		</>
 	);
-};
+}
 
 export default Gateways;

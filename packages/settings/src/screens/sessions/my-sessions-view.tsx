@@ -1,8 +1,7 @@
 import * as React from 'react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { map } from 'lodash';
 
 import SessionCard from './session-card';
 import Notice from '../../components/notice';
@@ -32,12 +31,12 @@ interface MySessionsResponse {
 	sessions: Session[];
 }
 
-const MySessionsView: React.FC = () => {
+function MySessionsView() {
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
 
 	// Fetch current user's sessions with suspense
-	const { data: mySessions } = useQuery<MySessionsResponse>({
+	const { data: mySessions } = useSuspenseQuery<MySessionsResponse>({
 		queryKey: ['sessions', 'my'],
 		queryFn: async () => {
 			const response = await apiFetch({
@@ -46,7 +45,6 @@ const MySessionsView: React.FC = () => {
 			});
 			return response as MySessionsResponse;
 		},
-		suspense: true,
 	});
 
 	// Delete session mutation
@@ -74,13 +72,7 @@ const MySessionsView: React.FC = () => {
 
 	// Delete all sessions mutation
 	const deleteAllSessionsMutation = useMutation({
-		mutationFn: async ({
-			userId,
-			exceptCurrent,
-		}: {
-			userId: number;
-			exceptCurrent?: boolean;
-		}) => {
+		mutationFn: async ({ userId, exceptCurrent }: { userId: number; exceptCurrent?: boolean }) => {
 			const params = new URLSearchParams({
 				user_id: userId.toString(),
 				wcpos: '1',
@@ -103,19 +95,13 @@ const MySessionsView: React.FC = () => {
 		onError: (error: any) => {
 			setNotice({
 				type: 'error',
-				message:
-					error?.message ||
-					t('sessions.failed_terminate_sessions'),
+				message: error?.message || t('sessions.failed_terminate_sessions'),
 			});
 		},
 	});
 
 	const handleDeleteSession = (userId: number, jti: string) => {
-		if (
-			confirm(
-				t('sessions.confirm_terminate_session')
-			)
-		) {
+		if (confirm(t('sessions.confirm_terminate_session'))) {
 			deleteSessionMutation.mutate({ userId, jti });
 		}
 	};
@@ -134,8 +120,7 @@ const MySessionsView: React.FC = () => {
 		<div>
 			<div className="wcpos:flex wcpos:justify-between wcpos:items-center wcpos:mb-3">
 				<h2 className="wcpos:text-base wcpos:font-medium">
-					{t('sessions.active_sessions')} (
-					{mySessions?.sessions?.length || 0})
+					{t('sessions.active_sessions')} ({mySessions?.sessions?.length || 0})
 				</h2>
 				{mySessions?.sessions && mySessions.sessions.length > 1 && (
 					<Button
@@ -151,7 +136,7 @@ const MySessionsView: React.FC = () => {
 
 			{mySessions?.sessions && mySessions.sessions.length > 0 ? (
 				<div className="wcpos:space-y-2">
-					{map(mySessions.sessions, (session) => (
+					{mySessions.sessions.map((session) => (
 						<SessionCard
 							key={session.jti}
 							session={session}
@@ -161,12 +146,10 @@ const MySessionsView: React.FC = () => {
 					))}
 				</div>
 			) : (
-				<Notice status="info">
-					{t('sessions.no_active_sessions')}
-				</Notice>
+				<Notice status="info">{t('sessions.no_active_sessions')}</Notice>
 			)}
 		</div>
 	);
-};
+}
 
 export default MySessionsView;
