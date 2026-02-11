@@ -77,7 +77,9 @@ class Extensions extends WP_REST_Controller {
 		$catalog = $service->get_catalog();
 		$slugs   = array_column( $catalog, 'slug' );
 
-		update_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', $slugs );
+		if ( ! empty( $slugs ) ) {
+			update_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', $slugs );
+		}
 
 		return new WP_REST_Response( array( 'success' => true ) );
 	}
