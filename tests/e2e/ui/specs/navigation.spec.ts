@@ -38,7 +38,8 @@ test.describe('Settings Navigation', () => {
 	test('active nav item is highlighted', async ({ adminPage }) => {
 		// General should be active by default after redirect
 		await adminPage.waitForTimeout(2000);
-		const generalLink = adminPage.locator('aside a[href="#/general"]');
+		// TanStack Router hash history generates full-path hrefs, use ends-with selector
+		const generalLink = adminPage.locator('aside a[href$="#/general"]');
 		await expect(generalLink).toBeVisible({ timeout: 15000 });
 		// Active items get the wcpos:font-semibold class
 		await expect(generalLink).toHaveClass(/font-semibold/);
@@ -49,8 +50,7 @@ test.describe('Settings Navigation', () => {
 		await adminPage.waitForLoadState('networkidle');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 
-		// Checkout link should be active
-		const checkoutLink = adminPage.locator('aside a[href="#/checkout"]');
+		const checkoutLink = adminPage.locator('aside a[href$="#/checkout"]');
 		await expect(checkoutLink).toHaveClass(/font-semibold/);
 	});
 
@@ -59,7 +59,7 @@ test.describe('Settings Navigation', () => {
 		await adminPage.waitForLoadState('networkidle');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 
-		const accessLink = adminPage.locator('aside a[href="#/access"]');
+		const accessLink = adminPage.locator('aside a[href$="#/access"]');
 		await expect(accessLink).toHaveClass(/font-semibold/);
 	});
 });
