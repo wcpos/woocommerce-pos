@@ -61,6 +61,11 @@ function Logs() {
 		markLogsRead();
 	}, []);
 
+	// Reset expanded row when entries change (page change, refetch, filter).
+	React.useEffect(() => {
+		setExpandedIndex(null);
+	}, [entries]);
+
 	const filters = [
 		{ key: 'all', label: t('common.all', 'All') },
 		{ key: 'error', label: t('logs.errors', 'Errors') },
