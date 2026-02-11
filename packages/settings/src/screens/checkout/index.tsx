@@ -55,7 +55,7 @@ function EmailGroup({
 	label: string;
 	tip: string;
 	emailTypes: ReadonlyArray<{ key: string; label: string }>;
-	data: any;
+	data: Partial<CheckoutSettingsProps> | undefined;
 	mutate: (data: Record<string, any>) => void;
 }) {
 	const settings: EmailSettings | undefined = data?.[settingsKey];
