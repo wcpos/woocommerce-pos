@@ -400,7 +400,7 @@ class Orders {
 
 		// Check if the order uses tax-inclusive pricing.
 		$order = $item->get_order();
-		if ( $order && $order->get_prices_include_tax() ) {
+		if ( $order->get_prices_include_tax() ) {
 			$tax_rates = self::get_tax_rates_for_item( $item, $order );
 
 			if ( ! empty( $tax_rates ) ) {
