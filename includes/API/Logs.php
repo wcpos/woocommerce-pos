@@ -22,6 +22,11 @@ use const WCPOS\WooCommercePOS\SHORT_NAME;
 class Logs extends WP_REST_Controller {
 
 	/**
+	 * User meta key for last-viewed timestamp.
+	 */
+	const LAST_VIEWED_META_KEY = '_wcpos_logs_last_viewed';
+
+	/**
 	 * Route namespace.
 	 *
 	 * @var string
@@ -314,12 +319,65 @@ class Logs extends WP_REST_Controller {
 	/**
 	 * Mark logs as read for the current user.
 	 *
+	 * Stores the current timestamp in user meta.
+	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
 	 * @return WP_REST_Response
 	 */
 	public function mark_read( WP_REST_Request $request ): WP_REST_Response {
-		return new WP_REST_Response( array( 'success' => true ) );
+		$timestamp = gmdate( 'c' );
+		update_user_meta( get_current_user_id(), self::LAST_VIEWED_META_KEY, $timestamp );
+
+		return new WP_REST_Response(
+			array(
+				'success'   => true,
+				'timestamp' => $timestamp,
+			)
+		);
+	}
+
+	/**
+	 * Get unread error/warning counts for a user.
+	 *
+	 * This is a static method so it can be called from the Settings page
+	 * to inject initial counts into the inline script.
+	 *
+	 * @param int $user_id User ID.
+	 *
+	 * @return array{error: int, warning: int}
+	 */
+	public static function get_unread_counts( int $user_id ): array {
+		$last_viewed = get_user_meta( $user_id, self::LAST_VIEWED_META_KEY, true );
+
+		$instance = new self();
+		$entries  = ( 'database' === $instance->get_handler_type() )
+			? $instance->get_db_entries()
+			: $instance->get_file_entries();
+
+		$counts = array(
+			'error'   => 0,
+			'warning' => 0,
+		);
+
+		foreach ( $entries as $entry ) {
+			if ( ! in_array( $entry['level'], array( 'error', 'warning', 'critical', 'emergency', 'alert' ), true ) ) {
+				continue;
+			}
+
+			// If no last_viewed, all entries are "unread".
+			if ( $last_viewed && $entry['timestamp'] <= $last_viewed ) {
+				continue;
+			}
+
+			$level_key = in_array( $entry['level'], array( 'error', 'critical', 'emergency', 'alert' ), true )
+				? 'error'
+				: 'warning';
+
+			++$counts[ $level_key ];
+		}
+
+		return $counts;
 	}
 
 	/**

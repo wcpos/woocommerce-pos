@@ -29,6 +29,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function tearDown(): void {
 		global $wpdb;
 		$wpdb->query( "DELETE FROM {$wpdb->prefix}woocommerce_log WHERE source = 'woocommerce-pos'" );
+		delete_user_meta( get_current_user_id(), '_wcpos_logs_last_viewed' );
 		$this->clean_log_files();
 		parent::tearDown();
 	}
@@ -231,6 +232,58 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'DB error message', $data['entries'][0]['message'] );
 
 		remove_all_filters( 'woocommerce_pos_log_handler_type' );
+	}
+
+	/**
+	 * Test POST mark-read stores timestamp in user meta.
+	 */
+	public function test_mark_read_stores_timestamp(): void {
+		$request  = $this->wp_rest_post_request( '/wcpos/v1/logs/mark-read' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertTrue( $data['success'] );
+
+		$timestamp = get_user_meta( get_current_user_id(), '_wcpos_logs_last_viewed', true );
+		$this->assertNotEmpty( $timestamp );
+	}
+
+	/**
+	 * Test unread counts returns error and warning counts since last viewed.
+	 */
+	public function test_get_unread_counts_since_last_viewed(): void {
+		$this->create_test_log_file(
+			"2026-02-11T10:00:00+00:00 ERROR New error\n" .
+			"2026-02-11T09:00:00+00:00 WARNING New warning\n" .
+			"2026-02-11T08:00:00+00:00 WARNING Another warning\n" .
+			"2026-02-10T08:00:00+00:00 ERROR Old error\n"
+		);
+
+		// Set last viewed to between old and new entries.
+		update_user_meta(
+			get_current_user_id(),
+			'_wcpos_logs_last_viewed',
+			'2026-02-11T00:00:00+00:00'
+		);
+
+		$counts = \WCPOS\WooCommercePOS\API\Logs::get_unread_counts( get_current_user_id() );
+		$this->assertEquals( 1, $counts['error'] );
+		$this->assertEquals( 2, $counts['warning'] );
+	}
+
+	/**
+	 * Test unread counts with no last-viewed returns all errors and warnings.
+	 */
+	public function test_get_unread_counts_no_last_viewed(): void {
+		$this->create_test_log_file(
+			"2026-02-11T10:00:00+00:00 ERROR An error\n" .
+			"2026-02-11T09:00:00+00:00 INFO Just info\n"
+		);
+
+		$counts = \WCPOS\WooCommercePOS\API\Logs::get_unread_counts( get_current_user_id() );
+		$this->assertEquals( 1, $counts['error'] );
+		$this->assertEquals( 0, $counts['warning'] );
 	}
 
 	/**
