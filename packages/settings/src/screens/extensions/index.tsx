@@ -25,7 +25,6 @@ export interface Extension {
 	requires_pro: boolean;
 	icon: string;
 	homepage: string;
-	repository: string;
 	download_url: string;
 	latest_version: string;
 	released_at: string;

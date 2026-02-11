@@ -109,9 +109,9 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						</h3>
 						<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5">
 							<span className="wcpos:text-xs wcpos:text-gray-400">v{extension.latest_version}</span>
-							{extension.repository && (
+							{extension.homepage && (
 								<a
-									href={extension.repository}
+									href={extension.homepage}
 									target="_blank"
 									rel="noopener noreferrer"
 									className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:transition-colors"
