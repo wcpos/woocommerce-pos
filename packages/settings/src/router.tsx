@@ -14,6 +14,7 @@ import CheckoutPage from './screens/checkout';
 import ExtensionsPage from './screens/extensions';
 import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
+import LogsPage from './screens/logs';
 import SessionsPage from './screens/sessions';
 
 // Root route — renders the full-page layout with sidebar navigation.
@@ -76,6 +77,12 @@ const extensionsRoute = createRoute({
 	component: ExtensionsPage,
 });
 
+const logsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/logs',
+	component: LogsPage,
+});
+
 const licenseRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/license',
@@ -90,6 +97,7 @@ const routeTree = rootRoute.addChildren([
 	accessRoute,
 	sessionsRoute,
 	extensionsRoute,
+	logsRoute,
 	licenseRoute,
 ]);
 
