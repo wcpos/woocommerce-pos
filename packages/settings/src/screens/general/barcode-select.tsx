@@ -7,7 +7,7 @@ interface BarcodeSelectProps {
 	onSelect: (value: string | null) => void;
 }
 
-const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
+function BarcodeSelect({ selected, onSelect }: BarcodeSelectProps) {
 	const [query, setQuery] = React.useState('');
 	const barcodes = window?.wcpos?.settings?.barcodes;
 
@@ -46,6 +46,6 @@ const BarcodeSelect = ({ selected, onSelect }: BarcodeSelectProps) => {
 			onSearch={(value) => setQuery(value)}
 		/>
 	);
-};
+}
 
 export default BarcodeSelect;

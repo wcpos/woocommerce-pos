@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-import { map } from 'lodash';
 import classNames from 'classnames';
 
 import SessionCard from './session-card';
@@ -34,19 +33,17 @@ interface UserSessionData {
 	sessions: Session[];
 }
 
-interface UserSessionsListProps {
-	users: UserSessionData[];
-	onDeleteSession: (userId: number, jti: string) => void;
-	onDeleteAllSessions: (userId: number, exceptCurrent?: boolean) => void;
-	isDeleting: boolean;
-}
-
-const UserSessionsList: React.FC<UserSessionsListProps> = ({
+function UserSessionsList({
 	users,
 	onDeleteSession,
 	onDeleteAllSessions,
 	isDeleting,
-}) => {
+}: {
+	users: UserSessionData[];
+	onDeleteSession: (userId: number, jti: string) => void;
+	onDeleteAllSessions: (userId: number, exceptCurrent?: boolean) => void;
+	isDeleting: boolean;
+}) {
 	const [expandedUsers, setExpandedUsers] = React.useState<Set<number>>(new Set());
 
 	const toggleUser = (userId: number) => {
@@ -66,10 +63,8 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 		const diff = now - timestamp;
 
 		if (diff < 60) return t('sessions.just_now');
-		if (diff < 3600)
-			return t('sessions.minutes_ago', { minutes: Math.floor(diff / 60) });
-		if (diff < 86400)
-			return t('sessions.hours_ago', { hours: Math.floor(diff / 3600) });
+		if (diff < 3600) return t('sessions.minutes_ago', { minutes: Math.floor(diff / 60) });
+		if (diff < 86400) return t('sessions.hours_ago', { hours: Math.floor(diff / 3600) });
 		return t('sessions.days_ago', { days: Math.floor(diff / 86400) });
 	};
 
@@ -87,7 +82,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 				{t('sessions.active_users')} ({users.length})
 			</h2>
 
-			{map(users, (user) => {
+			{users.map((user) => {
 				const isExpanded = expandedUsers.has(user.user_id);
 
 				return (
@@ -130,7 +125,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 									{user.session_count > 0 && (
 										<Button
 											variant="destructive"
-											onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+											onClick={(e: React.MouseEvent) => {
 												e.stopPropagation();
 												onDeleteAllSessions(user.user_id);
 											}}
@@ -155,7 +150,7 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 						{/* User Sessions (Expanded) */}
 						{isExpanded && (
 							<div className="wcpos:px-3 wcpos:pb-3 wcpos:space-y-2 wcpos:bg-gray-50">
-								{map(user.sessions, (session) => (
+								{user.sessions.map((session) => (
 									<SessionCard
 										key={session.jti}
 										session={session}
@@ -170,6 +165,6 @@ const UserSessionsList: React.FC<UserSessionsListProps> = ({
 			})}
 		</div>
 	);
-};
+}
 
 export default UserSessionsList;

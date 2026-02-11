@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 interface NoticeProps {
-	type?: 'error' | 'info' | 'success';
+	type?: 'error' | 'info' | 'warning' | 'success';
 	message: string;
 }
 
@@ -19,7 +19,7 @@ interface NoticesProviderProps {
 	children: React.ReactNode;
 }
 
-export const NoticesProvider = ({ children }: NoticesProviderProps) => {
+export function NoticesProvider({ children }: NoticesProviderProps) {
 	const [notice, setNotice] = React.useState<NoticeProps | null>(null);
 
 	return (
@@ -32,7 +32,7 @@ export const NoticesProvider = ({ children }: NoticesProviderProps) => {
 			{children}
 		</NoticesContext.Provider>
 	);
-};
+}
 
 const useNotices = () => {
 	return React.useContext(NoticesContext);

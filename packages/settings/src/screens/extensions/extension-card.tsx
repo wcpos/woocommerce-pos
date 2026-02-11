@@ -1,8 +1,8 @@
 import * as React from 'react';
 
-import { Button } from '../../components/ui';
-import { Tooltip } from '../../components/ui';
+import { Button, Tooltip } from '../../components/ui';
 import { t } from '../../translations';
+
 import type { Extension } from './index';
 
 interface ExtensionCardProps {
@@ -84,7 +84,7 @@ function ActionSlotOrFallback({ extension }: { extension: Extension }) {
 	return <StatusAction extension={extension} />;
 }
 
-const ExtensionCard = ({ extension }: ExtensionCardProps) => {
+function ExtensionCard({ extension }: ExtensionCardProps) {
 	return (
 		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-4 wcpos:flex wcpos:gap-4">
 			{/* Icon */}
@@ -107,9 +107,7 @@ const ExtensionCard = ({ extension }: ExtensionCardProps) => {
 						<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
 							{extension.name}
 						</h3>
-						<span className="wcpos:text-xs wcpos:text-gray-400">
-							v{extension.latest_version}
-						</span>
+						<span className="wcpos:text-xs wcpos:text-gray-400">v{extension.latest_version}</span>
 					</div>
 					<ActionSlotOrFallback extension={extension} />
 				</div>
@@ -124,6 +122,6 @@ const ExtensionCard = ({ extension }: ExtensionCardProps) => {
 			</div>
 		</div>
 	);
-};
+}
 
 export default ExtensionCard;

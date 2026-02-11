@@ -4,10 +4,10 @@ import { Select } from '../../components/ui';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
-	mutate: (data: Record<string, string>) => void;
+	mutate: (data: Record<string, unknown>) => void;
 }
 
-const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) => {
+function OrderStatusSelect({ selectedStatus, mutate }: OrderStatusSelectProps) {
 	const order_statuses = window?.wcpos?.settings?.order_statuses ?? {};
 
 	const options = React.useMemo(() => {
@@ -23,6 +23,6 @@ const OrderStatusSelect = ({ selectedStatus, mutate }: OrderStatusSelectProps) =
 			}}
 		/>
 	);
-};
+}
 
 export default OrderStatusSelect;

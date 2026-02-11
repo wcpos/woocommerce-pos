@@ -29,7 +29,7 @@ const truncate = (fullStr: string, strLen = 20, separator = '...') => {
 	return fullStr.substr(0, frontChars) + separator + fullStr.substr(fullStr.length - backChars);
 };
 
-const License = () => {
+function License() {
 	const { data, mutate } = useSettingsApi('license');
 	const { setNotice } = useNotices();
 	const [key, setKey] = React.useState(data?.key);
@@ -83,20 +83,16 @@ const License = () => {
 					<a href="https://wcpos.com/pro">
 						<img
 							src="https://wcpos.com/wp-content/themes/woocommerce-pos/img/woopos-pro-logo-600.png"
-							alt-="WCPOS Pro"
+							alt="WCPOS Pro"
 							width={100}
 							height={100}
 						/>
 					</a>
 				</div>
 				<div className="wcpos:col-span-2">
+					<p>{t('license.support_development')}</p>
 					<p>
-						{t('license.support_development')}
-					</p>
-					<p>
-						<a href="https://wcpos.com/pro">
-							{t('common.upgrade_to_pro')}
-						</a>
+						<a href="https://wcpos.com/pro">{t('common.upgrade_to_pro')}</a>
 					</p>
 				</div>
 			</div>
@@ -116,9 +112,7 @@ const License = () => {
 							values={{ number: truncate(isString(data?.key) ? data?.key : '') }}
 						/>
 					</p>
-					<p>
-						{t('license.ongoing_support')}
-					</p>
+					<p>{t('license.ongoing_support')}</p>
 					<Button variant="primary" onClick={() => handleActivation(true)}>
 						{t('license.deactivate')}
 					</Button>
@@ -148,6 +142,6 @@ const License = () => {
 			</div>
 		</div>
 	);
-};
+}
 
 export default License;

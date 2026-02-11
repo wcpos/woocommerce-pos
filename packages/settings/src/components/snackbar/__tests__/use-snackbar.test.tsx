@@ -2,8 +2,8 @@ import * as React from 'react';
 
 import { renderHook } from '@testing-library/react';
 
-import { useSnackbar } from '../use-snackbar';
 import { SnackbarProvider } from '../provider';
+import { useSnackbar } from '../use-snackbar';
 
 // Mock the SnackbarList to avoid pulling in deeper dependencies
 vi.mock('../snackbar-list', () => ({

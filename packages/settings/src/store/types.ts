@@ -4,7 +4,7 @@ export interface PageRegistration {
 	id: string;
 	label: string;
 	group: 'settings' | 'tools' | 'account' | string;
-	component: ComponentType<any> | (() => Promise<{ default: ComponentType<any> }>);
+	component: ComponentType | (() => Promise<{ default: ComponentType }>);
 	priority?: number;
 }
 
@@ -12,9 +12,7 @@ export interface FieldRegistration {
 	page: string;
 	section?: string;
 	id: string;
-	component:
-		| ComponentType<FieldComponentProps>
-		| (() => Promise<{ default: ComponentType<FieldComponentProps> }>);
+	component: ComponentType | (() => Promise<{ default: ComponentType }>);
 	priority?: number;
 	after?: string;
 	before?: string;
@@ -35,12 +33,12 @@ export interface SettingsRegistryState {
 	pages: PageRegistration[];
 	fields: FieldRegistration[];
 	modifications: FieldModification[];
-	components: Record<string, ComponentType<any>>;
+	components: Record<string, ComponentType>;
 	registerPage: (page: PageRegistration) => void;
 	registerField: (field: FieldRegistration) => void;
 	modifyField: (mod: FieldModification) => void;
-	registerComponent: (key: string, component: ComponentType<any>) => void;
-	getComponent: (key: string) => ComponentType<any> | undefined;
+	registerComponent: (key: string, component: ComponentType) => void;
+	getComponent: (key: string) => ComponentType | undefined;
 	getPages: (group?: string) => PageRegistration[];
 	getFields: (page: string, section?: string) => FieldRegistration[];
 	getModifications: (page: string, id: string) => Record<string, unknown>;
