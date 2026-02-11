@@ -118,8 +118,13 @@ function Logs() {
 								key={`${entry.timestamp}-${index}`}
 								className="wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:rounded-md wcpos:px-3 wcpos:py-2"
 							>
-								<div
-									className={`wcpos:flex wcpos:items-start wcpos:gap-3 ${isLong ? 'wcpos:cursor-pointer' : ''}`}
+								<button
+									type="button"
+									disabled={!isLong}
+									aria-expanded={isLong ? isExpanded : undefined}
+									className={`wcpos:flex wcpos:items-start wcpos:gap-3 wcpos:text-left wcpos:bg-transparent wcpos:border-0 wcpos:p-0 ${
+										isLong ? 'wcpos:cursor-pointer' : 'wcpos:cursor-default'
+									}`}
 									onClick={() => isLong && setExpandedIndex(isExpanded ? null : index)}
 								>
 									<span
@@ -135,7 +140,7 @@ function Logs() {
 									<span className="wcpos:text-sm wcpos:text-gray-700 wcpos:break-all">
 										{displayMessage}
 									</span>
-								</div>
+								</button>
 								{isExpanded && entry.context && (
 									<div className="wcpos:mt-2 wcpos:ml-16 wcpos:p-2 wcpos:bg-gray-50 wcpos:rounded wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:whitespace-pre-wrap">
 										{entry.context}
