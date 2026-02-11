@@ -1,8 +1,7 @@
 import * as React from 'react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
-import { map } from 'lodash';
 
 import SessionCard from './session-card';
 import Notice from '../../components/notice';
@@ -37,7 +36,7 @@ function MySessionsView() {
 	const { setNotice } = useNotices();
 
 	// Fetch current user's sessions with suspense
-	const { data: mySessions } = useQuery<MySessionsResponse>({
+	const { data: mySessions } = useSuspenseQuery<MySessionsResponse>({
 		queryKey: ['sessions', 'my'],
 		queryFn: async () => {
 			const response = await apiFetch({
@@ -46,7 +45,6 @@ function MySessionsView() {
 			});
 			return response as MySessionsResponse;
 		},
-		suspense: true,
 	});
 
 	// Delete session mutation
@@ -138,7 +136,7 @@ function MySessionsView() {
 
 			{mySessions?.sessions && mySessions.sessions.length > 0 ? (
 				<div className="wcpos:space-y-2">
-					{map(mySessions.sessions, (session) => (
+					{mySessions.sessions.map((session) => (
 						<SessionCard
 							key={session.jti}
 							session={session}

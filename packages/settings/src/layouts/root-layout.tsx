@@ -10,7 +10,7 @@ import Notice from '../components/notice';
 import useNotices from '../hooks/use-notices';
 import { t } from '../translations';
 
-const pageTitles: Record = {
+const pageTitles: Record<string, string> = {
 	'/general': 'common.general',
 	'/checkout': 'common.checkout',
 	'/access': 'common.access',

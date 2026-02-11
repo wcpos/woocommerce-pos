@@ -1,7 +1,6 @@
 import * as React from 'react';
 
 import classNames from 'classnames';
-import { map } from 'lodash';
 
 import SessionCard from './session-card';
 import { Button } from '../../components/ui';
@@ -45,7 +44,7 @@ function UserSessionsList({
 	onDeleteAllSessions: (userId: number, exceptCurrent?: boolean) => void;
 	isDeleting: boolean;
 }) {
-	const [expandedUsers, setExpandedUsers] = React.useState<Set>(new Set());
+	const [expandedUsers, setExpandedUsers] = React.useState<Set<number>>(new Set());
 
 	const toggleUser = (userId: number) => {
 		setExpandedUsers((prev) => {
@@ -83,7 +82,7 @@ function UserSessionsList({
 				{t('sessions.active_users')} ({users.length})
 			</h2>
 
-			{map(users, (user) => {
+			{users.map((user) => {
 				const isExpanded = expandedUsers.has(user.user_id);
 
 				return (
@@ -151,7 +150,7 @@ function UserSessionsList({
 						{/* User Sessions (Expanded) */}
 						{isExpanded && (
 							<div className="wcpos:px-3 wcpos:pb-3 wcpos:space-y-2 wcpos:bg-gray-50">
-								{map(user.sessions, (session) => (
+								{user.sessions.map((session) => (
 									<SessionCard
 										key={session.jti}
 										session={session}

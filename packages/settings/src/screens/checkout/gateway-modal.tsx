@@ -27,7 +27,7 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 		closeModal();
 	};
 
-	const handleChange = React.useCallback((event: React.ChangeEvent) => {
+	const handleChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
 		const value = event.target.value;
 		const field = event.target.id;
 

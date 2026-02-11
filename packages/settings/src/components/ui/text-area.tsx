@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-interface TextAreaProps extends React.TextareaHTMLAttributes {
+interface TextAreaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
 	error?: boolean;
 }
 

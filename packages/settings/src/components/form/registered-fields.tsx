@@ -7,8 +7,8 @@ import type { FieldRegistration } from '../../store/types';
 interface RegisteredFieldsProps {
 	page: string;
 	section?: string;
-	data: Record;
-	mutate: (data: Record) => void;
+	data: Record<string, unknown>;
+	mutate: (data: Record<string, unknown>) => void;
 }
 
 /**
@@ -20,8 +20,8 @@ function FieldRenderer({
 	mutate,
 }: {
 	field: FieldRegistration;
-	data: Record;
-	mutate: (data: Record) => void;
+	data: Record<string, unknown>;
+	mutate: (data: Record<string, unknown>) => void;
 }) {
 	const modifications = useFieldModifications(field.page, field.id);
 	const [LazyComponent, setLazyComponent] = React.useState<React.ComponentType | null>(null);
@@ -30,7 +30,7 @@ function FieldRenderer({
 
 	React.useEffect(() => {
 		if (isLazy) {
-			const loader = field.component as () => Promise;
+			const loader = field.component as () => Promise<{ default: React.ComponentType }>;
 			loader().then((mod) => setLazyComponent(() => mod.default));
 		}
 	}, [field.component, isLazy]);

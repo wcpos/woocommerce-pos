@@ -8,8 +8,6 @@ import { Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { Trans } from '../../translations';
 
-export type AccessSettingsProps = Record;
-
 function Access() {
 	const { data, mutate } = useSettingsApi('access');
 	const [selected, setSelected] = React.useState('administrator');

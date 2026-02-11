@@ -4,12 +4,12 @@ import classNames from 'classnames';
 
 type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 
-interface ButtonProps extends React.ButtonHTMLAttributes {
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	variant?: ButtonVariant;
 	loading?: boolean;
 }
 
-const variantClasses: Record = {
+const variantClasses: Record<ButtonVariant, string> = {
 	primary:
 		'wcpos:bg-wp-admin-theme-color wcpos:text-white hover:wcpos:bg-wp-admin-theme-color-darker-10 focus:wcpos:ring-wp-admin-theme-color',
 	secondary:

@@ -3,6 +3,7 @@ import * as React from 'react';
 import classNames from 'classnames';
 
 import CloseIcon from '../../assets/close-icon.svg';
+import { t } from '../../translations';
 
 type NoticeStatus = 'info' | 'warning' | 'error' | 'success';
 
@@ -14,7 +15,7 @@ interface NoticeProps {
 	className?: string;
 }
 
-const statusClasses: Record = {
+const statusClasses: Record<NoticeStatus, string> = {
 	info: 'wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800 wcpos:border-l-blue-500',
 	warning:
 		'wcpos:bg-yellow-50 wcpos:border-yellow-200 wcpos:text-yellow-800 wcpos:border-l-yellow-500',
@@ -41,7 +42,7 @@ function Notice({
 			{isDismissible && (
 				<button
 					type="button"
-					aria-label="Dismiss notice"
+					aria-label={t('common.dismiss')}
 					onClick={onRemove}
 					className="wcpos:shrink-0 wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-0.5 wcpos:rounded hover:wcpos:bg-black/5"
 				>

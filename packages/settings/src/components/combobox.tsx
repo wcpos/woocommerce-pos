@@ -13,7 +13,7 @@ import classNames from 'classnames';
 import Check from '../../assets/check.svg';
 import ChevronDown from '../../assets/chevron-down.svg';
 
-export interface OptionProps extends Record {
+export interface OptionProps extends Record<string, unknown> {
 	value: string | number;
 	label: string;
 }

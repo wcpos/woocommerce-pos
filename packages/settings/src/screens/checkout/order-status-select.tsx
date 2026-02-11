@@ -4,7 +4,7 @@ import { Select } from '../../components/ui';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
-	mutate: (data: Record) => void;
+	mutate: (data: Record<string, unknown>) => void;
 }
 
 function OrderStatusSelect({ selectedStatus, mutate }: OrderStatusSelectProps) {

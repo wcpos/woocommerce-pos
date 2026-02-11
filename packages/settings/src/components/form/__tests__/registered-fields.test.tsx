@@ -8,7 +8,7 @@ import type { FieldRegistration } from '../../../store/types';
 
 // Mock the store hooks to avoid useSyncExternalStore infinite loop in tests
 const mockUseRegisteredFields = vi.fn<(page: string, section?: string) => FieldRegistration[]>();
-const mockUseFieldModifications = vi.fn<(page: string, id: string) => Record>();
+const mockUseFieldModifications = vi.fn<(page: string, id: string) => Record<string, unknown>>();
 
 vi.mock('../../../store/use-registry', () => ({
 	useRegisteredFields: (...args: [string, string?]) => mockUseRegisteredFields(...args),

@@ -34,7 +34,7 @@ function License() {
 	const { setNotice } = useNotices();
 	const [key, setKey] = React.useState(data?.key);
 
-	const handleChange = (event: React.ChangeEvent) => setKey(event.target.value);
+	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setKey(event.target.value);
 
 	const handleActivation = async (deactivate = false) => {
 		const url = addQueryArgs('https://wcpos.com', {

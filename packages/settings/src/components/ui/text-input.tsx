@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-interface TextInputProps extends React.InputHTMLAttributes {
+interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 	error?: boolean;
 }
 
