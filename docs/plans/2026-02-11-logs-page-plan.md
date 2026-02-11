@@ -8,9 +8,7 @@
 
 **Tech Stack:** PHP (WP REST API, WC Logger internals), React, TanStack Query, TanStack Router, Tailwind CSS (prefixed `wcpos:`)
 
-**Worktree:** `/Users/kilbot/Projects/woocommerce-pos/.worktrees/feature-logs-page`
-
-**Test command:** `npx wp-env run --env-cwd='wp-content/plugins/feature-logs-page' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist --verbose`
+**Test command:** `npx wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli -- vendor/bin/phpunit -c .phpunit.xml.dist --verbose`
 
 **Lint command:** `composer run lint`
 

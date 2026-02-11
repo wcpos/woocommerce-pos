@@ -79,8 +79,8 @@ class Logs extends WP_REST_Controller {
 	 */
 	public function get_items( $request ): WP_REST_Response {
 		$level    = $request->get_param( 'level' );
-		$per_page = (int) ( $request->get_param( 'per_page' ) ? $request->get_param( 'per_page' ) : 50 );
-		$page     = (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 );
+		$per_page = max( 1, (int) ( $request->get_param( 'per_page' ) ? $request->get_param( 'per_page' ) : 50 ) );
+		$page     = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
 
 		if ( 'database' === $this->get_handler_type() ) {
 			$entries = $this->get_db_entries( $level );
@@ -348,7 +348,8 @@ class Logs extends WP_REST_Controller {
 	 * @return array{error: int, warning: int}
 	 */
 	public static function get_unread_counts( int $user_id ): array {
-		$last_viewed = get_user_meta( $user_id, self::LAST_VIEWED_META_KEY, true );
+		$last_viewed    = get_user_meta( $user_id, self::LAST_VIEWED_META_KEY, true );
+		$last_viewed_ts = $last_viewed ? strtotime( $last_viewed ) : null;
 
 		$instance = new self();
 		$entries  = ( 'database' === $instance->get_handler_type() )
@@ -366,7 +367,9 @@ class Logs extends WP_REST_Controller {
 			}
 
 			// If no last_viewed, all entries are "unread".
-			if ( $last_viewed && $entry['timestamp'] <= $last_viewed ) {
+			// Use strtotime() to normalize ISO 8601 and MySQL datetime formats.
+			$entry_ts = strtotime( $entry['timestamp'] );
+			if ( $last_viewed_ts && $entry_ts && $entry_ts <= $last_viewed_ts ) {
 				continue;
 			}
 

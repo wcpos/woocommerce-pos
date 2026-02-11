@@ -42,11 +42,17 @@ export function useUnreadLogCounts(): UnreadLogCounts {
  * POST to the REST endpoint to mark logs as read, then reset counts to zero.
  */
 export async function markLogsRead() {
+	const prev = { ...counts };
 	counts = { error: 0, warning: 0 };
 	emitChange();
 
-	await apiFetch({
-		path: 'wcpos/v1/logs/mark-read?wcpos=1',
-		method: 'POST',
-	});
+	try {
+		await apiFetch({
+			path: 'wcpos/v1/logs/mark-read?wcpos=1',
+			method: 'POST',
+		});
+	} catch (err) {
+		counts = prev;
+		emitChange();
+	}
 }
