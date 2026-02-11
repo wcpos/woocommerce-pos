@@ -8,17 +8,86 @@ import OrderStatusSelect from './order-status-select';
 import Error from '../../components/error';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
-import { Toggle } from '../../components/ui';
+import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
+
+interface EmailSettings {
+	enabled: boolean;
+	[key: string]: boolean;
+}
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
 	order_status: string;
-	admin_emails: boolean;
-	customer_emails: boolean;
+	admin_emails: EmailSettings;
+	customer_emails: EmailSettings;
+	cashier_emails: EmailSettings;
 	default_gateway: string;
 	gateways: any[];
+}
+
+const adminEmailTypes = [
+	{ key: 'new_order', label: 'checkout.email_new_order' },
+	{ key: 'cancelled_order', label: 'checkout.email_cancelled_order' },
+	{ key: 'failed_order', label: 'checkout.email_failed_order' },
+] as const;
+
+const customerEmailTypes = [
+	{ key: 'customer_on_hold_order', label: 'checkout.email_on_hold_order' },
+	{ key: 'customer_processing_order', label: 'checkout.email_processing_order' },
+	{ key: 'customer_completed_order', label: 'checkout.email_completed_order' },
+	{ key: 'customer_refunded_order', label: 'checkout.email_refunded_order' },
+	{ key: 'customer_failed_order', label: 'checkout.email_failed_order' },
+] as const;
+
+const cashierEmailTypes = [{ key: 'new_order', label: 'checkout.email_new_order' }] as const;
+
+function EmailGroup({
+	settingsKey,
+	label,
+	tip,
+	emailTypes,
+	data,
+	mutate,
+}: {
+	settingsKey: 'admin_emails' | 'customer_emails' | 'cashier_emails';
+	label: string;
+	tip: string;
+	emailTypes: ReadonlyArray<{ key: string; label: string }>;
+	data: Partial<CheckoutSettingsProps> | undefined;
+	mutate: (data: Record<string, any>) => void;
+}) {
+	const settings: EmailSettings | undefined = data?.[settingsKey];
+	const enabled = settings?.enabled ?? false;
+
+	return (
+		<FormRow>
+			<Label tip={tip}>
+				<Toggle
+					checked={enabled}
+					onChange={(checked: boolean) => {
+						mutate({ [settingsKey]: { enabled: checked } });
+					}}
+					label={label}
+				/>
+			</Label>
+			{enabled && (
+				<div className="wcpos:ml-12 wcpos:mt-2 wcpos:flex wcpos:flex-col wcpos:gap-2">
+					{emailTypes.map(({ key, label: labelKey }) => (
+						<Checkbox
+							key={key}
+							checked={settings?.[key] ?? true}
+							onChange={(e) => {
+								mutate({ [settingsKey]: { [key]: e.target.checked } });
+							}}
+							label={t(labelKey)}
+						/>
+					))}
+				</div>
+			)}
+		</FormRow>
+	);
 }
 
 function Checkout() {
@@ -39,28 +108,30 @@ function Checkout() {
 						</ErrorBoundary>
 					</Label>
 				</FormRow>
-				<FormRow>
-					<Label tip={t('checkout.notification_emails_tip')}>
-						<Toggle
-							checked={!!data?.admin_emails}
-							onChange={(admin_emails: boolean) => {
-								mutate({ admin_emails });
-							}}
-							label={t('checkout.send_admin_emails')}
-						/>
-					</Label>
-				</FormRow>
-				<FormRow>
-					<Label tip={t('checkout.notification_emails_tip')}>
-						<Toggle
-							checked={!!data?.customer_emails}
-							onChange={(customer_emails: boolean) => {
-								mutate({ customer_emails });
-							}}
-							label={t('checkout.send_customer_emails')}
-						/>
-					</Label>
-				</FormRow>
+				<EmailGroup
+					settingsKey="admin_emails"
+					label={t('checkout.admin_emails')}
+					tip={t('checkout.admin_emails_tip')}
+					emailTypes={adminEmailTypes}
+					data={data}
+					mutate={mutate}
+				/>
+				<EmailGroup
+					settingsKey="customer_emails"
+					label={t('checkout.customer_emails')}
+					tip={t('checkout.customer_emails_tip')}
+					emailTypes={customerEmailTypes}
+					data={data}
+					mutate={mutate}
+				/>
+				<EmailGroup
+					settingsKey="cashier_emails"
+					label={t('checkout.cashier_emails')}
+					tip={t('checkout.cashier_emails_tip')}
+					emailTypes={cashierEmailTypes}
+					data={data}
+					mutate={mutate}
+				/>
 			</FormSection>
 
 			<div className="wcpos:px-4 wcpos:pb-5">
