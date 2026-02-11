@@ -795,6 +795,68 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Saving the filtered product must NOT persist POS prices to the database.
+	 *
+	 * WC stock functions (wc_reduce_stock_levels, wc_increase_stock_levels) call
+	 * $item->get_product() and then $product->save(). The clone keeps the same
+	 * ID and data store, so we rely on apply_changes() to clear the $changes
+	 * array and a update_post_metadata filter to block the !metadata_exists()
+	 * fallback in get_props_to_update().
+	 */
+	public function test_order_item_product_save_does_not_persist_sale_price(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 25,
+				'price'         => 25,
+			)
+		);
+		$original_id = $product->get_id();
+
+		// Verify no sale_price initially.
+		$this->assertEquals( '', $product->get_sale_price(), 'Product should have no sale_price initially' );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( 25 );
+		$item->set_total( 20 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '20.00',
+				'regular_price' => '25.00',
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		// Get the filtered product (simulates what wc_reduce_stock_levels does).
+		$items           = $order->get_items();
+		$first_item      = reset( $items );
+		$filtered_product = $first_item->get_product();
+
+		// The filtered clone should have sale_price set (for is_on_sale).
+		$this->assertEquals( '20.00', $filtered_product->get_sale_price(), 'Filtered product should have sale_price from POS data' );
+
+		// The clone keeps its real ID (needed by WC stock functions).
+		$this->assertEquals( $original_id, $filtered_product->get_id(), 'Filtered product should keep its original ID' );
+
+		// Simulate what wc_update_product_stock() does: save the filtered product.
+		$filtered_product->save();
+
+		// Reload from DB and verify sale_price was NOT persisted.
+		$db_product = wc_get_product( $original_id );
+		$this->assertEquals( '', $db_product->get_sale_price(), 'DB sale_price must not be set after saving filtered product' );
+		$this->assertEquals( '25', $db_product->get_price(), 'DB price must remain at original value' );
+	}
+
+	/**
 	 * Direct test: order_item_product with invalid JSON data.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Orders::order_item_product
@@ -832,6 +894,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertNotFalse( has_filter( 'woocommerce_hidden_order_itemmeta', array( $orders, 'hidden_order_itemmeta' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_item_product', array( $orders, 'order_item_product' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_get_tax_location', array( $orders, 'get_tax_location' ) ) );
+		$this->assertNotFalse( has_filter( 'update_post_metadata', array( $orders, 'protect_product_price_meta' ) ) );
 	}
 
 	/**
