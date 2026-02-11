@@ -4,6 +4,7 @@ import { addQueryArgs } from '@wordpress/url';
 import { get, throttle, isString } from 'lodash';
 
 import Label from '../../components/label';
+import Notice from '../../components/notice';
 import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
 import useSettingsApi from '../../hooks/use-settings-api';
@@ -78,23 +79,36 @@ function License() {
 
 	if (!data?.instance) {
 		return (
-			<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4 wcpos:sm:px-6 wcpos:items-center">
-				<div className="wcpos:sm:text-right wcpos:text-8xl">
-					<a href="https://wcpos.com/pro">
-						<img
-							src="https://wcpos.com/wp-content/themes/woocommerce-pos/img/woopos-pro-logo-600.png"
-							alt="WCPOS Pro"
-							width={100}
-							height={100}
-						/>
+			<div className="wcpos:flex wcpos:flex-col wcpos:items-center wcpos:gap-6 wcpos:px-4 wcpos:py-8 wcpos:max-w-md wcpos:mx-auto">
+				<a href="https://wcpos.com/pro">
+					<img
+						src="https://wcpos.com/wp-content/uploads/2025/07/wcpos-pro-icon.png"
+						alt="WCPOS Pro"
+						width={80}
+						height={80}
+					/>
+				</a>
+				<div className="wcpos:text-center">
+					<p className="wcpos:text-gray-600 wcpos:mb-3">{t('license.support_development')}</p>
+					<a
+						href="https://wcpos.com/pro"
+						className="wcpos:inline-block wcpos:font-medium wcpos:text-[color:var(--wp-admin-theme-color)] hover:wcpos:underline"
+					>
+						{t('common.upgrade_to_pro')} &rarr;
 					</a>
 				</div>
-				<div className="wcpos:col-span-2">
-					<p>{t('license.support_development')}</p>
-					<p>
-						<a href="https://wcpos.com/pro">{t('common.upgrade_to_pro')}</a>
-					</p>
-				</div>
+				<Notice status="info" isDismissible={false} className="wcpos:w-full">
+					{t('license.existing_license_prefix')}{' '}
+					<a
+						href="https://docs.wcpos.com/getting-started/pro-license#installation"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="wcpos:font-medium wcpos:underline"
+					>
+						{t('license.existing_license_link')}
+					</a>{' '}
+					{t('license.existing_license_suffix')}
+				</Notice>
 			</div>
 		);
 	}

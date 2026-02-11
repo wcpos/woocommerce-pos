@@ -11,7 +11,6 @@ interface NavItemProps {
 export function NavItem({ to, label, badge, onClick }: NavItemProps) {
 	const matchRoute = useMatchRoute();
 	const isActive = matchRoute({ to });
-
 	return (
 		<Link
 			to={to}
