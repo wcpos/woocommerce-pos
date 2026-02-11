@@ -2,9 +2,16 @@ import { test, expect } from '../fixtures/admin';
 
 test.describe('General Settings', () => {
 	test.beforeEach(async ({ adminPage }) => {
+		// Set up response listener BEFORE navigation to avoid race conditions.
+		// networkidle can fire before React mounts and starts its API calls,
+		// so we explicitly wait for the settings response.
+		const settingsLoaded = adminPage.waitForResponse(
+			(resp) => resp.url().includes('wcpos/v1/settings/general') && resp.status() === 200,
+			{ timeout: 30000 }
+		);
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings#/general');
-		await adminPage.waitForLoadState('networkidle');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
+		await settingsLoaded;
 	});
 
 	test('General page renders toggle fields', async ({ adminPage }) => {
