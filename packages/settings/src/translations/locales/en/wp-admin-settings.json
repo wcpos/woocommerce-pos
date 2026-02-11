@@ -1,5 +1,7 @@
 {
 	"common.access": "Access",
+	"common.account": "Account",
+	"common.all": "All",
 	"common.cancel": "Cancel",
 	"common.checkout": "Checkout",
 	"common.created": "Created",
@@ -8,15 +10,18 @@
 	"common.documentation": "Documentation",
 	"common.enabled": "Enabled",
 	"common.expires": "Expires",
+	"common.extensions": "Extensions",
 	"common.faq": "Frequently Asked Questions",
 	"common.gateway": "Gateway",
 	"common.general": "General",
 	"common.guest": "Guest",
 	"common.license": "License",
+	"common.logs": "Logs",
 	"common.save": "Save",
 	"common.settings": "Settings",
 	"common.something_went_wrong": "Something went wrong",
 	"common.title": "Title",
+	"common.tools": "Tools",
 	"common.upgrade_to_pro": "Upgrade to WCPOS Pro",
 	"settings.force_ssl": "Force SSL",
 	"settings.force_ssl_tip": "Force POS to send server requests over HTTPS (recommended)",
@@ -95,5 +100,10 @@
 	"license.ongoing_support": "Your support helps fund the ongoing development of WCPOS.",
 	"license.deactivate": "Deactivate",
 	"license.license_key": "License Key",
-	"license.activate": "Activate"
+	"license.activate": "Activate",
+	"logs.errors": "Errors",
+	"logs.fatal_errors_detected": "Fatal errors detected",
+	"logs.no_entries": "No log entries found.",
+	"logs.view_in_wc": "view in WooCommerce logs",
+	"logs.warnings": "Warnings"
 }
