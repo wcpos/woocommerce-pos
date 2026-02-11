@@ -26,6 +26,28 @@ use WC_Tax;
  */
 class Orders {
 	/**
+	 * Product IDs whose price meta should not be persisted.
+	 *
+	 * Populated by order_item_product() when a clone is modified with POS prices.
+	 * Checked by protect_product_price_meta() to block DB writes.
+	 *
+	 * @var array<int>
+	 */
+	private $price_protected_ids = array();
+
+	/**
+	 * Meta keys that should not be persisted for POS-modified product clones.
+	 *
+	 * @var array<string>
+	 */
+	private const PROTECTED_META_KEYS = array(
+		'_price',
+		'_sale_price',
+		'_regular_price',
+		'_tax_status',
+	);
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -41,6 +63,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_applied_coupon', array( $this, 'before_coupon_recalculation' ), 10, 2 );
+		add_filter( 'update_post_metadata', array( $this, 'protect_product_price_meta' ), 10, 4 );
 	}
 
 	/**
@@ -204,10 +227,46 @@ class Orders {
 				if ( isset( $pos_data['tax_status'] ) ) {
 					$product->set_tax_status( $pos_data['tax_status'] );
 				}
+
+				// Clear pending changes so WC's get_props_to_update() won't
+				// include price fields in its $changes check. The values stay
+				// in $data for in-memory reads (get_price, is_on_sale, etc.).
+				$product->apply_changes();
+
+				// Mark this product ID so protect_product_price_meta() blocks
+				// the !metadata_exists() fallback in get_props_to_update().
+				if ( $product->get_id() ) {
+					$this->price_protected_ids[] = $product->get_id();
+				}
 			}
 		}
 
 		return $product;
+	}
+
+	/**
+	 * Prevent POS price modifications from being persisted to the database.
+	 *
+	 * When order_item_product() clones a product and sets POS prices on it,
+	 * those changes should only exist in memory. If WC stock functions later
+	 * call save() on the clone, this filter blocks the write for price-related
+	 * meta keys.
+	 *
+	 * @param null|bool $check     Return non-null to short-circuit update_metadata().
+	 * @param int       $object_id The post (product) ID.
+	 * @param string    $meta_key  The meta key being written.
+	 * @param mixed     $meta_value The meta value.
+	 *
+	 * @return null|bool Null to allow the write, true to block it.
+	 */
+	public function protect_product_price_meta( $check, $object_id, $meta_key, $meta_value ) {
+		if ( \in_array( $object_id, $this->price_protected_ids, true )
+			&& \in_array( $meta_key, self::PROTECTED_META_KEYS, true )
+		) {
+			return true;
+		}
+
+		return $check;
 	}
 
 	/**
