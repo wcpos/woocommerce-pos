@@ -151,7 +151,10 @@ function Logs() {
 			{totalPages > 1 && (
 				<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:gap-2 wcpos:mt-4">
 					<button
-						onClick={() => setPage((p) => Math.max(1, p - 1))}
+						onClick={() => {
+							setPage((p) => Math.max(1, p - 1));
+							setExpandedIndex(null);
+						}}
 						disabled={page <= 1}
 						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
 					>
@@ -161,7 +164,10 @@ function Logs() {
 						{page} / {totalPages}
 					</span>
 					<button
-						onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+						onClick={() => {
+							setPage((p) => Math.min(totalPages, p + 1));
+							setExpandedIndex(null);
+						}}
 						disabled={page >= totalPages}
 						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
 					>
