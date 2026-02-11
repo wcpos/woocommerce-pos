@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.8
+Stable tag: 1.8.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,16 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.9 - 2026/02/11 =
+- **Completely rebuilt settings page** — new modern architecture with Vite, TanStack Router, headless UI components, zustand state management, and responsive layout with grouped sidebar navigation ([#495](https://github.com/wcpos/woocommerce-pos/pull/495), [#498](https://github.com/wcpos/woocommerce-pos/pull/498), [#505](https://github.com/wcpos/woocommerce-pos/pull/505))
+- **New Extensions directory** — browse, discover, and manage extensions directly from POS settings, with Pro integration hooks, GitHub links, and new-extension badges ([#497](https://github.com/wcpos/woocommerce-pos/pull/497), [#500](https://github.com/wcpos/woocommerce-pos/pull/500), [#510](https://github.com/wcpos/woocommerce-pos/pull/510))
+- **New Logs page** — view, filter, and paginate log entries from file and database sources with expandable details and unread counts ([#504](https://github.com/wcpos/woocommerce-pos/pull/504), [#511](https://github.com/wcpos/woocommerce-pos/pull/511))
+- **Redesigned email settings** — granular per-email toggles replace the old on/off switch, with new cashier notification options ([#502](https://github.com/wcpos/woocommerce-pos/pull/502), [#508](https://github.com/wcpos/woocommerce-pos/pull/508))
+- **Fixed POS prices persisting to product database** — price modifications made at the POS no longer overwrite the stored product price ([#509](https://github.com/wcpos/woocommerce-pos/pull/509))
+- **Fixed coupon calculations ignoring tax** — coupon subtotal filters are now tax-aware, preventing incorrect discount amounts ([#507](https://github.com/wcpos/woocommerce-pos/pull/507))
+- **Fixed security plugin conflicts** — CSP headers are now stripped on POS pages so Content-Security-Policy rules from security plugins no longer break the interface ([#503](https://github.com/wcpos/woocommerce-pos/pull/503))
+- **Fixed WordPress 6.7+ compatibility** — deferred translation calls in the Activator to avoid the "too early" notice ([#498](https://github.com/wcpos/woocommerce-pos/pull/498))
 
 = 1.8.8 - 2026/02/06 =
 - **Completely rebuilt translation system** — switched to i18next with proper plural handling and regional locale fallback, loaded on-demand from jsDelivr and decoupled from plugin version updates ([#37](https://github.com/wcpos/monorepo/pull/37), [#75](https://github.com/wcpos/monorepo/pull/75), [#76](https://github.com/wcpos/monorepo/pull/76), [#438](https://github.com/wcpos/woocommerce-pos/pull/438), [#439](https://github.com/wcpos/woocommerce-pos/pull/439), [#474](https://github.com/wcpos/woocommerce-pos/pull/474))
