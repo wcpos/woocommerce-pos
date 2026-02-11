@@ -390,8 +390,8 @@ class Orders {
 		$pos_price  = (float) $pos_data['price'] * $item->get_quantity();
 		$tax_status = $pos_data['tax_status'] ?? 'taxable';
 
-		// Tax-exempt items: no tax to extract.
-		if ( 'none' === $tax_status ) {
+		// Non-taxable items (none or shipping-only): no product tax to extract.
+		if ( 'none' === $tax_status || 'shipping' === $tax_status ) {
 			return array(
 				'subtotal'     => $pos_price,
 				'subtotal_tax' => 0.0,
@@ -400,6 +400,9 @@ class Orders {
 
 		// Check if the order uses tax-inclusive pricing.
 		$order = $item->get_order();
+		if ( ! $order instanceof WC_Order ) {
+			return null;
+		}
 		if ( $order->get_prices_include_tax() ) {
 			$tax_rates = self::get_tax_rates_for_item( $item, $order );
 
@@ -443,7 +446,7 @@ class Orders {
 	private static function get_tax_rates_for_item( $item, $order ): array {
 		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
 		if ( empty( $tax_based_on ) ) {
-			$tax_based_on = get_option( 'woocommerce_tax_based_on' );
+			$tax_based_on = 'base';
 		}
 
 		if ( 'billing' === $tax_based_on ) {
