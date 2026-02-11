@@ -53,7 +53,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 		},
 		onMutate: async (newData) => {
 			setNotice(null);
-			addSnackbar({ message: 'Saving', id });
+			addSnackbar({ message: 'Saving', id, status: 'saving' });
 			await queryClient.cancelQueries({ queryKey: [id] });
 			const previousSettings = queryClient.getQueryData([id]);
 			queryClient.setQueryData([id], (oldData) => {
@@ -65,10 +65,11 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 			const errorMessage = get(error, 'message');
 			if (errorMessage) {
 				setNotice({ type: 'error', message: errorMessage });
+				addSnackbar({ message: errorMessage, id, status: 'error' });
 				// rollback data
 				return queryClient.setQueryData([id], context?.previousSettings);
 			}
-			addSnackbar({ message: 'Saved', id });
+			addSnackbar({ message: 'Saved', id, status: 'success' });
 			return queryClient.setQueryData([id], data);
 		},
 	});

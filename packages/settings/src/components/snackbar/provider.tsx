@@ -6,12 +6,10 @@ type Snackbar = import('./snackbar').SnackbarProps;
 
 interface SnackbarContextProps {
 	addSnackbar: (snackbar: Snackbar) => void;
-	// removeSnackbar: (id: string) => void;
 }
 
 export const SnackbarContext = React.createContext<SnackbarContextProps>({
 	addSnackbar: () => {},
-	// removeSnackbar: () => {},
 });
 
 interface Props {
@@ -25,7 +23,6 @@ export function SnackbarProvider({ children }: Props) {
 	 * Note: snackbars is an array of objects, but for now we only support one snackbar at a time.
 	 */
 	const addSnackbar = (snackbar: Snackbar) => {
-		// setSnackbars((prev) => [...prev, snackbar]);
 		setSnackbars([snackbar]);
 	};
 
@@ -35,9 +32,11 @@ export function SnackbarProvider({ children }: Props) {
 
 	return (
 		<SnackbarContext.Provider value={{ addSnackbar }}>
-			{children}
-			<div className="wcpos:fixed wcpos:bottom-8 wcpos:left-1/2 wcpos:-translate-x-1/2 wcpos:z-50 wcpos:pointer-events-none wcpos:flex wcpos:flex-col wcpos:items-center">
-				<SnackbarList snackbars={snackbars} removeSnackbar={removeSnackbar} />
+			<div className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
+				<div className="wcpos:absolute wcpos:top-0 wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden">
+					<SnackbarList snackbars={snackbars} removeSnackbar={removeSnackbar} />
+				</div>
+				{children}
 			</div>
 		</SnackbarContext.Provider>
 	);
