@@ -226,11 +226,20 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					 * Or return an error, which would be a bad user experience.
 					 */
 					if ( 1 === \count( $ids ) ) {
-						Logger::log( 'UUID already in use, return existing order.', $ids[0] );
+						$order_id = (int) $ids[0];
+						Logger::log( 'UUID already in use, return existing order.', $order_id );
+
+						// Pre-flight: check meta count before WC loads the full order.
+						$meta_count      = $this->wcpos_preflight_meta_count( $order_id, 'order' );
+						$error_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
+
+						if ( $meta_count >= $error_threshold ) {
+							return $this->wcpos_build_safe_order_response( $order_id, $meta_count );
+						}
 
 						// Create a new WP_REST_Request object for the GET request.
-						$get_request = new WP_REST_Request( 'GET', $this->namespace . '/' . $this->rest_base . '/' . $ids[0] );
-						$get_request->set_param( 'id', $ids[0] );
+						$get_request = new WP_REST_Request( 'GET', $this->namespace . '/' . $this->rest_base . '/' . $order_id );
+						$get_request->set_param( 'id', $order_id );
 
 						return $this->get_item( $get_request );
 					}
@@ -673,10 +682,61 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
 
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $order->get_id(), 'Order' );
+
 		$response->set_data( $data );
-		// $this->log_large_rest_response( $response, $order->get_id() );
 
 		return $response;
+	}
+
+	/**
+	 * Build a safe order response when meta count exceeds the error threshold.
+	 *
+	 * Loads the order but suppresses the full meta serialization by filtering
+	 * get_meta_data to return empty, then substitutes only essential POS meta keys
+	 * queried directly from the database.
+	 *
+	 * @param int $order_id   The order ID.
+	 * @param int $meta_count The total meta count (for logging).
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function wcpos_build_safe_order_response( int $order_id, int $meta_count ) {
+		Logger::error(
+			"Order #{$order_id} has {$meta_count} meta_data entries. Returning response with essential meta only to prevent out-of-memory."
+		);
+
+		// Suppress meta loading during WC's response preparation.
+		add_filter( 'woocommerce_order_get_meta_data', array( $this, 'wcpos_return_empty_meta' ), 999 );
+
+		$get_request = new WP_REST_Request( 'GET', $this->namespace . '/' . $this->rest_base . '/' . $order_id );
+		$get_request->set_param( 'id', $order_id );
+		$response = $this->get_item( $get_request );
+
+		remove_filter( 'woocommerce_order_get_meta_data', array( $this, 'wcpos_return_empty_meta' ), 999 );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		// Replace the empty meta_data with our essential subset.
+		$data              = $response->get_data();
+		$data['meta_data'] = $this->wcpos_get_essential_meta( $order_id, 'order' );
+		$response->set_data( $data );
+
+		return $response;
+	}
+
+	/**
+	 * Filter callback to return empty meta data array.
+	 *
+	 * Used to suppress meta loading when we know it would cause OOM.
+	 *
+	 * @return array Empty array.
+	 */
+	public function wcpos_return_empty_meta(): array {
+		return array();
 	}
 
 	/**
