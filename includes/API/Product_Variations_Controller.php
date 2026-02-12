@@ -192,8 +192,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			$data['name'] = \function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $variation, true, false, false ) : ''; // @phpstan-ignore-line
 		}
 
-		// Make sure we parse the meta data before returning the response.
-		$variation->save_meta_data(); // make sure the meta data is saved.
+		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $variation );
 
 		$response->set_data( $data );
