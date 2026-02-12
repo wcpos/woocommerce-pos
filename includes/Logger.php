@@ -19,7 +19,7 @@ class Logger {
 	/**
 	 * Logger instance.
 	 *
-	 * @var \WC_Logger|null
+	 * @var \WC_Logger_Interface|null
 	 */
 	public static $logger;
 
