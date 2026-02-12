@@ -317,18 +317,18 @@ class Orders {
 		$meta_data = $item->get_meta_data();
 
 		foreach ( $meta_data as $meta ) {
-			foreach ( $meta_data as $meta ) {
-				if ( '_woocommerce_pos_data' === $meta->key ) {
-					$pos_data = json_decode( $meta->value, true );
+			if ( '_woocommerce_pos_data' === $meta->key ) {
+				$pos_data = json_decode( $meta->value, true );
 
-					if ( JSON_ERROR_NONE === json_last_error() ) {
-						if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
-							$item->set_taxes( false );
-						}
-					} else {
-						Logger::log( 'JSON parse error: ' . json_last_error_msg() );
+				if ( JSON_ERROR_NONE === json_last_error() ) {
+					if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
+						$item->set_taxes( false );
 					}
+				} else {
+					Logger::log( 'JSON parse error: ' . json_last_error_msg() );
 				}
+
+				break;
 			}
 		}
 	}
