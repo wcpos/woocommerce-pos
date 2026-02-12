@@ -39,7 +39,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@wordpress/babel-plugin-makepot": "6.23.0",
-    "@wordpress/env": "10.23.0",
+    "@wordpress/env": "10.38.0",
     "jsdoc": "^4.0.3",
     "newman": "^6.2.1",
     "taffydb": "^2.7.3",
