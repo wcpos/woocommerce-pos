@@ -276,8 +276,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		 * @TODO - add filter settings to block/allow meta_data keys
 		 */
 		try {
-			$customer           = new WC_Customer( $user_data->ID );
-			$raw_meta_data      = $customer->get_meta_data();
+			$customer      = new WC_Customer( $user_data->ID );
+			$raw_meta_data = $customer->get_meta_data();
+
+			// Monitor meta count.
+			$this->wcpos_monitor_meta_count( $customer, $raw_meta_data );
 
 			$filtered_meta_data = array_filter(
 				$raw_meta_data,
@@ -301,9 +304,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
 		}
 
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $user_data->ID, 'Customer' );
+
 		// Set any changes to the response data.
 		$response->set_data( $data );
-		// $this->log_large_rest_response( $response, $user_data->ID );
 
 		return $response;
 	}

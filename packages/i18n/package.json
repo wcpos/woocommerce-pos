@@ -5,19 +5,19 @@
 	"main": "src/index.ts",
 	"types": "src/index.ts",
 	"dependencies": {
-		"i18next": "^24.2.3",
-		"i18next-chained-backend": "^4.6.2",
+		"i18next": "^25.8.6",
+		"i18next-chained-backend": "^5.0.2",
 		"i18next-http-backend": "^3.0.2",
-		"i18next-localstorage-backend": "^4.2.0",
-		"react-i18next": "^15.4.1"
+		"i18next-localstorage-backend": "^4.3.1",
+		"react-i18next": "^16.5.4"
 	},
 	"peerDependencies": {
 		"react": "^18.0.0"
 	},
 	"devDependencies": {
-		"@babel/core": "^7.28.5",
-		"@babel/plugin-transform-runtime": "^7.28.5",
-		"@babel/preset-env": "^7.28.5",
+		"@babel/core": "^7.29.0",
+		"@babel/plugin-transform-runtime": "^7.29.0",
+		"@babel/preset-env": "^7.29.0",
 		"@babel/preset-react": "^7.28.5",
 		"@babel/preset-typescript": "^7.28.5",
 		"@types/jest": "^29.5.14",
