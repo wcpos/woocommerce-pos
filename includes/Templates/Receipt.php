@@ -400,10 +400,17 @@ class Receipt {
 		// Create directory if it doesn't exist.
 		if ( ! file_exists( $temp_dir ) ) {
 			wp_mkdir_p( $temp_dir );
+		}
 
-			// Protect directory from direct access.
-			file_put_contents( trailingslashit( $temp_dir ) . '.htaccess', "deny from all\n" );
-			file_put_contents( trailingslashit( $temp_dir ) . 'index.php', "<?php\n// Silence is golden.\n" );
+		// Protect directory from direct access (check every time, not just on creation).
+		$htaccess_file = trailingslashit( $temp_dir ) . '.htaccess';
+		$index_file    = trailingslashit( $temp_dir ) . 'index.php';
+
+		if ( ! file_exists( $htaccess_file ) ) {
+			file_put_contents( $htaccess_file, "deny from all\n" );
+		}
+		if ( ! file_exists( $index_file ) ) {
+			file_put_contents( $index_file, "<?php\n// Silence is golden.\n" );
 		}
 
 		// Create temporary file.
