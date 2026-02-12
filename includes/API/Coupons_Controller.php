@@ -214,7 +214,6 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		$start_time = microtime( true );
 
 		$modified_after        = $request->get_param( 'modified_after' );
-		$dates_are_gmt         = true; // Dates are always in GMT.
 		$fields                = $request->get_param( 'fields' );
 		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
 		$select_fields         = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
@@ -224,7 +223,15 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 
 		// Add modified_after condition if provided.
 		if ( $modified_after ) {
-			$modified_after_date = wp_date( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$timestamp = strtotime( $modified_after );
+			if ( false === $timestamp ) {
+				return new \WP_Error(
+					'woocommerce_pos_rest_invalid_modified_after',
+					'Invalid modified_after parameter.',
+					array( 'status' => 400 )
+				);
+			}
+			$modified_after_date = gmdate( 'Y-m-d H:i:s', $timestamp );
 			$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
 		}
 
