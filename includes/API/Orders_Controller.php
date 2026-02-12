@@ -670,8 +670,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
-		// Make sure we parse the meta data before returning the response.
-		$order->save_meta_data(); // make sure the meta data is saved.
+		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
 
 		$response->set_data( $data );

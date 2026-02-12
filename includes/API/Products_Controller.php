@@ -221,8 +221,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			}
 		}
 
-		// Make sure we parse the meta data before returning the response.
-		$product->save_meta_data(); // make sure the meta data is saved.
+		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $product );
 
 		// Set any changes to the response data.
@@ -286,11 +285,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$barcode_field = $this->wcpos_get_barcode_field();
 		if ( '_sku' !== $barcode_field ) {
 			$meta_fields[] = $barcode_field;
-		}
-
-		$barcode_field = $this->wcpos_get_barcode_field();
-		if ( '_sku' !== $barcode_field ) {
-			$fields_to_search[] = $barcode_field;
 		}
 
 		$search_conditions = array();
