@@ -38,13 +38,13 @@
   "homepage": "https://wcpos.com",
   "devDependencies": {
     "@playwright/test": "^1.58.0",
-    "@wordpress/babel-plugin-makepot": "6.23.0",
+    "@wordpress/babel-plugin-makepot": "^6.39.0",
     "@wordpress/env": "10.38.0",
     "jsdoc": "^4.0.3",
     "newman": "^6.2.1",
     "taffydb": "^2.7.3",
     "glob": "^11.0.0",
-    "turbo": "2.4.4",
+    "turbo": "^2.8.7",
     "wp-hookdoc": "0.2.0"
   },
   "packageManager": "pnpm@10.8.0"
