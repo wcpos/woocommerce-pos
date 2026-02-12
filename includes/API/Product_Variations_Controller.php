@@ -195,6 +195,9 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $variation );
 
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $variation->get_id(), 'Variation' );
+
 		$response->set_data( $data );
 
 		return $response;

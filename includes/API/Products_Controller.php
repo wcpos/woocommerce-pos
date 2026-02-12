@@ -224,9 +224,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $product );
 
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $product->get_id(), 'Product' );
+
 		// Set any changes to the response data.
 		$response->set_data( $data );
-		// $this->log_large_rest_response( $response, $product->get_id() );
 
 		return $response;
 	}

@@ -70,4 +70,30 @@ class Logger {
 			self::$logger->log( self::$log_level, $message, array( 'source' => self::WC_LOG_FILENAME ) );
 		}
 	}
+
+	/**
+	 * Log a warning message.
+	 *
+	 * @param mixed $message The message to log.
+	 * @param mixed $context Optional additional context data.
+	 */
+	public static function warning( $message, $context = null ): void {
+		$previous_level  = self::$log_level;
+		self::$log_level = 'warning';
+		self::log( $message, $context );
+		self::$log_level = $previous_level;
+	}
+
+	/**
+	 * Log an error message.
+	 *
+	 * @param mixed $message The message to log.
+	 * @param mixed $context Optional additional context data.
+	 */
+	public static function error( $message, $context = null ): void {
+		$previous_level  = self::$log_level;
+		self::$log_level = 'error';
+		self::log( $message, $context );
+		self::$log_level = $previous_level;
+	}
 }
