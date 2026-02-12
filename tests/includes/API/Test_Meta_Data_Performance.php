@@ -42,6 +42,7 @@ class Test_Meta_Data_Performance extends WCPOS_REST_Unit_Test_Case {
 		add_filter(
 			'woocommerce_pos_logging',
 			function ( $should_log, $message ) {
+				unset( $should_log ); // Intentionally unused.
 				$this->captured_logs[] = $message;
 				return false; // Prevent actual logging.
 			},
@@ -57,6 +58,8 @@ class Test_Meta_Data_Performance extends WCPOS_REST_Unit_Test_Case {
 		remove_all_filters( 'woocommerce_pos_logging' );
 		remove_all_filters( 'woocommerce_pos_meta_data_warning_threshold' );
 		remove_all_filters( 'woocommerce_pos_meta_data_error_threshold' );
+		remove_all_filters( 'woocommerce_pos_response_size_warning_threshold' );
+		remove_all_filters( 'woocommerce_pos_response_size_error_threshold' );
 		parent::tearDown();
 	}
 
