@@ -46,10 +46,17 @@ $wcpos_deleted = $wpdb->query(
 
 if ( \function_exists( 'wc_get_logger' ) ) {
 	$wcpos_logger = wc_get_logger();
-	$wcpos_logger->info(
-		sprintf( 'WCPOS 1.8.12 migration: removed %d duplicate meta rows from POS-touched posts.', $wcpos_deleted ),
-		array( 'source' => 'woocommerce-pos' )
-	);
+	if ( false === $wcpos_deleted ) {
+		$wcpos_logger->error(
+			'WCPOS 1.8.12 migration: database query failed when removing duplicate meta rows.',
+			array( 'source' => 'woocommerce-pos' )
+		);
+	} else {
+		$wcpos_logger->info(
+			sprintf( 'WCPOS 1.8.12 migration: removed %d duplicate meta rows from POS-touched posts.', (int) $wcpos_deleted ),
+			array( 'source' => 'woocommerce-pos' )
+		);
+	}
 }
 
 // phpcs:enable
