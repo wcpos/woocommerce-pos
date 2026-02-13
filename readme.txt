@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.10
+Stable tag: 1.8.11
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -93,8 +93,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.8.10 - 2026/02/11 =
-- Performance improvements
+= 1.8.11 - 2026/02/13 =
+- **Fixed critical memory exhaustion on large stores** — API responses were re-reading all metadata from the database on every request, causing extreme memory usage on stores with large catalogs ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- **Fixed O(n²) loop in order tax calculation** — variable shadowing caused quadratic iteration over line item meta ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- **New meta data monitoring** — REST API responses now detect resources with excessive metadata and fall back to a safe response mode, preventing out-of-memory crashes ([#521](https://github.com/wcpos/woocommerce-pos/pull/521))
+- **Security hardening** — masked auth tokens in test endpoint, added directory protection for temp receipt templates ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- Updated all JS and PHP dependencies to latest stable versions ([#521](https://github.com/wcpos/woocommerce-pos/pull/521), [#526](https://github.com/wcpos/woocommerce-pos/pull/526))
+- Pro: Redesigned Edit Store page with modern React/Tailwind UI
+- Pro: Fixed SQL injection vulnerability in analytics and store authorization bypass
 
 = 1.8.9 - 2026/02/11 =
 - **Completely rebuilt settings page** — new modern architecture with Vite, TanStack Router, headless UI components, zustand state management, and responsive layout with grouped sidebar navigation ([#495](https://github.com/wcpos/woocommerce-pos/pull/495), [#498](https://github.com/wcpos/woocommerce-pos/pull/498), [#505](https://github.com/wcpos/woocommerce-pos/pull/505))
