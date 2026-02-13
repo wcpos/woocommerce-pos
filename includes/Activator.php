@@ -310,6 +310,7 @@ class Activator {
 			'1.6.1'        => 'updates/update-1.6.1.php',
 			'1.8.0'        => 'updates/update-1.8.0.php',
 			'1.8.7'        => 'updates/update-1.8.7.php',
+			'1.8.12'       => 'updates/update-1.8.12.php',
 		);
 		foreach ( $db_updates as $version => $updater ) {
 			if ( version_compare( $version, $old, '>' ) &&

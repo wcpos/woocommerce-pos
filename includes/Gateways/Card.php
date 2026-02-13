@@ -118,10 +118,9 @@ class Card extends WC_Payment_Gateway {
 
 			// update the order total to include fee.
 			$order->set_total( wc_format_decimal( \floatval( $order->get_total() ) + \floatval( $cashback ) ) );
-			$order->save();
 		}
 
-		// payment complete.
+		// payment complete (saves the order internally).
 		$order->payment_complete();
 
 		// success.
