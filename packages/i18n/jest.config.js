@@ -1,10 +1,9 @@
-import type { Config } from 'jest';
-
-const config: Config = {
+/** @type {import('jest').Config} */
+const config = {
 	testEnvironment: 'jsdom',
 	transform: {
 		'^.+\\.(ts|tsx|js|jsx)$': 'babel-jest',
 	},
 };
 
-export default config;
+module.exports = config;
