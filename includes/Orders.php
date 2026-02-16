@@ -16,6 +16,7 @@ use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Product;
 use WC_Order_Item_Shipping;
+use WC_Discounts;
 use WC_Product;
 use WC_Product_Simple;
 use WC_Tax;
@@ -26,26 +27,11 @@ use WC_Tax;
  */
 class Orders {
 	/**
-	 * Product IDs whose price meta should not be persisted.
+	 * Whether POS coupon recalculation context is currently active.
 	 *
-	 * Populated by order_item_product() when a clone is modified with POS prices.
-	 * Checked by protect_product_price_meta() to block DB writes.
-	 *
-	 * @var array<int>
+	 * @var bool
 	 */
-	private $price_protected_ids = array();
-
-	/**
-	 * Meta keys that should not be persisted for POS-modified product clones.
-	 *
-	 * @var array<string>
-	 */
-	private const PROTECTED_META_KEYS = array(
-		'_price',
-		'_sale_price',
-		'_regular_price',
-		'_tax_status',
-	);
+	private static $coupon_recalculation_active = false;
 
 	/**
 	 * Constructor.
@@ -63,7 +49,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_applied_coupon', array( $this, 'before_coupon_recalculation' ), 10, 2 );
-		add_filter( 'update_post_metadata', array( $this, 'protect_product_price_meta' ), 10, 4 );
+		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 	}
 
 	/**
@@ -180,46 +166,13 @@ class Orders {
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
 			$product->set_sku( $sku ? $sku : '' );
-		}
 
-		// Apply POS price data to the product (for both misc and real products).
-		// This sets sale_price so WC_Product::is_on_sale() returns true, causing
-		// coupons with exclude_sale_items to skip POS-discounted items.
-		// Clone to avoid mutating shared instances (WC 10.5+ caches product objects).
-		if ( $product && ! empty( $pos_data_json ) ) {
-			$product = clone $product;
+			// Misc products are synthetic and never persisted to DB, so we can
+			// safely apply POS price context directly.
 			$pos_data = json_decode( $pos_data_json, true );
-
 			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
 				if ( isset( $pos_data['price'] ) ) {
 					$product->set_price( $pos_data['price'] );
-
-					/**
-					 * Filter whether a POS-discounted item should be treated as "on sale."
-					 *
-					 * When true, the product's sale_price is set to the POS price, making
-					 * is_on_sale() return true. Coupons with exclude_sale_items will skip
-					 * this item.
-					 *
-					 * @param bool                  $is_on_sale Whether the item is on sale.
-					 * @param WC_Product            $product    The product object.
-					 * @param WC_Order_Item_Product $item       The order line item.
-					 * @param array                 $pos_data   The decoded POS data.
-					 */
-					$is_on_sale = isset( $pos_data['regular_price'] )
-						&& (float) $pos_data['price'] < (float) $pos_data['regular_price'];
-
-					$is_on_sale = apply_filters(
-						'woocommerce_pos_item_is_on_sale',
-						$is_on_sale,
-						$product,
-						$item,
-						$pos_data
-					);
-
-					if ( $is_on_sale ) {
-						$product->set_sale_price( $pos_data['price'] );
-					}
 				}
 				if ( isset( $pos_data['regular_price'] ) ) {
 					$product->set_regular_price( $pos_data['regular_price'] );
@@ -227,46 +180,160 @@ class Orders {
 				if ( isset( $pos_data['tax_status'] ) ) {
 					$product->set_tax_status( $pos_data['tax_status'] );
 				}
-
-				// Clear pending changes so WC's get_props_to_update() won't
-				// include price fields in its $changes check. The values stay
-				// in $data for in-memory reads (get_price, is_on_sale, etc.).
-				$product->apply_changes();
-
-				// Mark this product ID so protect_product_price_meta() blocks
-				// the !metadata_exists() fallback in get_props_to_update().
-				if ( $product->get_id() ) {
-					$this->price_protected_ids[] = $product->get_id();
+				if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
+					$product->set_sale_price( $pos_data['price'] );
 				}
 			}
+
+			return $product;
+		}
+
+		// For real products, only apply POS overrides during coupon recalculation.
+		if ( ! self::$coupon_recalculation_active || ! $product || empty( $pos_data_json ) ) {
+			return $product;
+		}
+
+		$pos_data = json_decode( $pos_data_json, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
+			return $product;
+		}
+
+		// Use an isolated product instance for coupon-specific context.
+		if ( $product->get_id() ) {
+			$product = wc_get_product_object( $product->get_type(), $product->get_id() );
+		}
+
+		if ( isset( $pos_data['tax_status'] ) ) {
+			$product->set_tax_status( $pos_data['tax_status'] );
 		}
 
 		return $product;
 	}
 
 	/**
-	 * Prevent POS price modifications from being persisted to the database.
+	 * Provide coupon-validation products with POS context (sale state, tax status).
 	 *
-	 * When order_item_product() clones a product and sets POS prices on it,
-	 * those changes should only exist in memory. If WC stock functions later
-	 * call save() on the clone, this filter blocks the write for price-related
-	 * meta keys.
+	 * This runs only inside WC_Discounts. We return per-line-item product objects
+	 * so coupon rules (exclude_sale_items, tax-aware discount amounts) use POS data
+	 * without mutating products used by stock update routines.
 	 *
-	 * @param null|bool $check     Return non-null to short-circuit update_metadata().
-	 * @param int       $object_id The post (product) ID.
-	 * @param string    $meta_key  The meta key being written.
-	 * @param mixed     $meta_value The meta value.
+	 * @param array        $items     Discount items (stdClass objects).
+	 * @param WC_Discounts $discounts Discounts context.
 	 *
-	 * @return null|bool Null to allow the write, true to block it.
+	 * @return array
 	 */
-	public function protect_product_price_meta( $check, $object_id, $meta_key, $meta_value ) {
-		if ( \in_array( $object_id, $this->price_protected_ids, true )
-			&& \in_array( $meta_key, self::PROTECTED_META_KEYS, true )
-		) {
-			return true;
+	public function coupon_get_items_to_validate( array $items, WC_Discounts $discounts ): array {
+		$object = $discounts->get_object();
+		if ( ! $object instanceof WC_Order || ! woocommerce_pos_is_pos_order( $object ) ) {
+			return $items;
 		}
 
-		return $check;
+		foreach ( $items as $index => $discount_item ) {
+			if ( ! isset( $discount_item->object ) || ! $discount_item->object instanceof WC_Order_Item_Product ) {
+				continue;
+			}
+
+			$original_product = isset( $discount_item->product ) && $discount_item->product instanceof WC_Product
+				? $discount_item->product
+				: null;
+			$coupon_product   = $this->build_coupon_product_context( $discount_item->object, $original_product );
+
+			if ( $coupon_product instanceof WC_Product ) {
+				$items[ $index ]->product = $coupon_product;
+			}
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Build a product object used only for coupon validation/calculation.
+	 *
+	 * @param WC_Order_Item_Product $item    Order item.
+	 * @param WC_Product|null       $product Current product object.
+	 *
+	 * @return WC_Product|null
+	 */
+	private function build_coupon_product_context( WC_Order_Item_Product $item, ?WC_Product $product = null ): ?WC_Product {
+		$pos_data = $this->get_pos_item_data( $item );
+		if ( null === $pos_data ) {
+			return $product;
+		}
+
+		if ( $product && $product->get_id() ) {
+			$product = wc_get_product_object( $product->get_type(), $product->get_id() );
+		} elseif ( 0 === $item->get_product_id() ) {
+			$product = new WC_Product_Simple();
+			$product->set_name( $item->get_name() );
+			$sku = $item->get_meta( '_sku', true );
+			$product->set_sku( $sku ? $sku : '' );
+		}
+
+		if ( ! $product ) {
+			return null;
+		}
+
+		if ( isset( $pos_data['price'] ) ) {
+			$product->set_price( $pos_data['price'] );
+		}
+		if ( isset( $pos_data['regular_price'] ) ) {
+			$product->set_regular_price( $pos_data['regular_price'] );
+		}
+		if ( isset( $pos_data['tax_status'] ) ) {
+			$product->set_tax_status( $pos_data['tax_status'] );
+		}
+		if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
+			$product->set_sale_price( $pos_data['price'] );
+		}
+
+		return $product;
+	}
+
+	/**
+	 * Determine whether an order item should be treated as "on sale" in coupon checks.
+	 *
+	 * @param WC_Order_Item_Product $item    Order item.
+	 * @param WC_Product|null       $product Product context (optional).
+	 *
+	 * @return bool
+	 */
+	private function is_pos_discounted_item_on_sale( WC_Order_Item_Product $item, ?WC_Product $product = null ): bool {
+		$pos_data = $this->get_pos_item_data( $item );
+		if ( null === $pos_data || ! isset( $pos_data['price'], $pos_data['regular_price'] ) ) {
+			return false;
+		}
+
+		$is_on_sale = (float) $pos_data['price'] < (float) $pos_data['regular_price'];
+		$product    = $product ? $product : $item->get_product();
+
+		return (bool) apply_filters(
+			'woocommerce_pos_item_is_on_sale',
+			$is_on_sale,
+			$product,
+			$item,
+			$pos_data
+		);
+	}
+
+	/**
+	 * Decode _woocommerce_pos_data from an order item.
+	 *
+	 * @param WC_Order_Item_Product $item Order item.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	private function get_pos_item_data( WC_Order_Item_Product $item ): ?array {
+		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
+		if ( empty( $pos_data_json ) ) {
+			return null;
+		}
+
+		$pos_data = json_decode( $pos_data_json, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
+			return null;
+		}
+
+		return $pos_data;
 	}
 
 	/**
@@ -373,6 +440,7 @@ class Orders {
 			return;
 		}
 
+		self::$coupon_recalculation_active = true;
 		add_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10, 2 );
 		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10, 2 );
 		add_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
@@ -543,6 +611,7 @@ class Orders {
 	 * @param WC_Abstract_Order $order     The order object.
 	 */
 	public static function deactivate_pos_subtotal_filter( $and_taxes, $order ): void {
+		self::$coupon_recalculation_active = false;
 		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
 		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
 		remove_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );

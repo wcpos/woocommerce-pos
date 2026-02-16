@@ -795,15 +795,14 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Saving the filtered product must NOT persist POS prices to the database.
+	 * Saving an order-item product object must not mutate DB price meta or duplicate postmeta.
 	 *
-	 * WC stock functions (wc_reduce_stock_levels, wc_increase_stock_levels) call
-	 * $item->get_product() and then $product->save(). The clone keeps the same
-	 * ID and data store, so we rely on apply_changes() to clear the $changes
-	 * array and a update_post_metadata filter to block the !metadata_exists()
-	 * fallback in get_props_to_update().
+	 * This simulates stock update paths that call $item->get_product() and then
+	 * save the returned product object.
 	 */
 	public function test_order_item_product_save_does_not_persist_sale_price(): void {
+		global $wpdb;
+
 		$product = ProductHelper::create_simple_product(
 			array(
 				'regular_price' => 25,
@@ -811,9 +810,17 @@ class Test_Orders extends WC_Unit_Test_Case {
 			)
 		);
 		$original_id = $product->get_id();
+		add_post_meta( $original_id, '_wpcom_is_markdown', '1', true );
 
 		// Verify no sale_price initially.
 		$this->assertEquals( '', $product->get_sale_price(), 'Product should have no sale_price initially' );
+		$meta_rows_before = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$original_id,
+				'_wpcom_is_markdown'
+			)
+		);
 
 		$order = wc_create_order();
 		$order->update_meta_data( '_pos', '1' );
@@ -841,19 +848,27 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$first_item      = reset( $items );
 		$filtered_product = $first_item->get_product();
 
-		// The filtered clone should have sale_price set (for is_on_sale).
-		$this->assertEquals( '20.00', $filtered_product->get_sale_price(), 'Filtered product should have sale_price from POS data' );
+		// Returned product should keep catalog sale state untouched.
+		$this->assertEquals( '', $filtered_product->get_sale_price(), 'Returned product should not be mutated with POS sale_price' );
 
-		// The clone keeps its real ID (needed by WC stock functions).
+		// The product keeps its real ID (needed by WC stock functions).
 		$this->assertEquals( $original_id, $filtered_product->get_id(), 'Filtered product should keep its original ID' );
 
 		// Simulate what wc_update_product_stock() does: save the filtered product.
 		$filtered_product->save();
+		$meta_rows_after = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$original_id,
+				'_wpcom_is_markdown'
+			)
+		);
 
 		// Reload from DB and verify sale_price was NOT persisted.
 		$db_product = wc_get_product( $original_id );
 		$this->assertEquals( '', $db_product->get_sale_price(), 'DB sale_price must not be set after saving filtered product' );
 		$this->assertEquals( '25', $db_product->get_price(), 'DB price must remain at original value' );
+		$this->assertEquals( $meta_rows_before, $meta_rows_after, 'Saving returned product must not duplicate unrelated postmeta rows' );
 	}
 
 	/**
@@ -894,7 +909,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertNotFalse( has_filter( 'woocommerce_hidden_order_itemmeta', array( $orders, 'hidden_order_itemmeta' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_item_product', array( $orders, 'order_item_product' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_get_tax_location', array( $orders, 'get_tax_location' ) ) );
-		$this->assertNotFalse( has_filter( 'update_post_metadata', array( $orders, 'protect_product_price_meta' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_coupon_get_items_to_validate', array( $orders, 'coupon_get_items_to_validate' ) ) );
 	}
 
 	/**
