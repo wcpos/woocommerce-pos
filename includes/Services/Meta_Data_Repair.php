@@ -50,7 +50,9 @@ class Meta_Data_Repair {
 		$post_types  = array_values(
 			array_filter(
 				(array) $args['post_types'],
-				'strlen'
+				static function ( $post_type ): bool {
+					return \is_string( $post_type ) && '' !== $post_type;
+				}
 			)
 		);
 
