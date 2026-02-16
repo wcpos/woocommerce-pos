@@ -97,22 +97,22 @@ trait WCPOS_REST_API {
 
 		$warning_threshold = (int) apply_filters( 'woocommerce_pos_meta_data_warning_threshold', 50 );
 		$error_threshold   = (int) apply_filters( 'woocommerce_pos_meta_data_error_threshold', 500 );
+		$include_top_keys  = (bool) apply_filters( 'woocommerce_pos_meta_data_log_top_keys', false, $object, $count );
+		$context           = $include_top_keys ? 'Top meta keys: ' . $this->wcpos_get_top_meta_keys( $raw_meta ) : null;
 
 		if ( $count >= $error_threshold ) {
 			$logged_ids[ $key ] = true;
 			$type               = $this->wcpos_get_object_type_label( $object );
-			$top_keys           = $this->wcpos_get_top_meta_keys( $raw_meta );
 			Logger::error(
 				"{$type} #{$id} has {$count} meta_data entries (threshold: {$error_threshold}). This is likely causing performance issues.",
-				"Top meta keys: {$top_keys}"
+				$context
 			);
 		} elseif ( $count >= $warning_threshold ) {
 			$logged_ids[ $key ] = true;
 			$type               = $this->wcpos_get_object_type_label( $object );
-			$top_keys           = $this->wcpos_get_top_meta_keys( $raw_meta );
 			Logger::warning(
 				"{$type} #{$id} has {$count} meta_data entries (threshold: {$warning_threshold}). This may indicate plugin meta bloat.",
-				"Top meta keys: {$top_keys}"
+				$context
 			);
 		}
 	}

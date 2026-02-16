@@ -872,6 +872,83 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Stock-reduction lifecycle must not duplicate unrelated product postmeta.
+	 *
+	 * Simulates WooCommerce stock handling paths that call get_product() on order
+	 * items and then save product objects while reducing stock.
+	 */
+	public function test_stock_reduction_lifecycle_does_not_duplicate_postmeta(): void {
+		global $wpdb;
+
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 25,
+				'price'         => 25,
+				'manage_stock'  => true,
+				'stock_quantity' => 20,
+			)
+		);
+		$product_id = $product->get_id();
+		add_post_meta( $product_id, '_wpcom_is_markdown', '1', true );
+
+		$meta_rows_before = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$product_id,
+				'_wpcom_is_markdown'
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pending' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( 25 );
+		$item->set_total( 20 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'         => '20.00',
+				'regular_price' => '25.00',
+				'tax_status'    => 'none',
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		// Trigger stock reduction via normal status transition path.
+		$order->set_status( 'processing' );
+		$order->save();
+
+		$meta_rows_after_processing = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$product_id,
+				'_wpcom_is_markdown'
+			)
+		);
+		$this->assertEquals( $meta_rows_before, $meta_rows_after_processing, 'Processing transition must not duplicate product meta.' );
+
+		// A second transition should remain safe as well.
+		$order->set_status( 'completed' );
+		$order->save();
+
+		$meta_rows_after_completed = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s",
+				$product_id,
+				'_wpcom_is_markdown'
+			)
+		);
+		$this->assertEquals( $meta_rows_before, $meta_rows_after_completed, 'Completed transition must not duplicate product meta.' );
+	}
+
+	/**
 	 * Direct test: order_item_product with invalid JSON data.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\Orders::order_item_product
