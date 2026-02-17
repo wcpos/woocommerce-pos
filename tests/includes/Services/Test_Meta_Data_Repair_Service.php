@@ -121,6 +121,38 @@ class Test_Meta_Data_Repair_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Dry-run should not loop and overcount when a full batch is returned.
+	 */
+	public function test_dry_run_stops_after_first_batch_and_flags_limit(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 18,
+				'price'         => 18,
+			)
+		);
+		$post_id = $product->get_id();
+		$this->mark_pos_touched( $post_id );
+
+		// Three duplicate groups with predictable delete counts:
+		// _a => 3 rows (2 deletions), _b => 4 rows (3 deletions), _c => 5 rows (4 deletions).
+		$this->insert_duplicates( $post_id, '_a', '1', 3 );
+		$this->insert_duplicates( $post_id, '_b', '1', 4 );
+		$this->insert_duplicates( $post_id, '_c', '1', 5 );
+
+		$result = Meta_Data_Repair::remove_exact_duplicate_postmeta_rows(
+			array(
+				'dry_run'     => true,
+				'batch_size'  => 2,
+				'max_batches' => 10,
+			)
+		);
+
+		$this->assertTrue( (bool) $result['hit_batch_limit'], 'Dry-run should flag that the estimate was truncated by batch size.' );
+		$this->assertEquals( 2, (int) $result['groups_processed'], 'Dry-run should process only the first batch.' );
+		$this->assertEquals( 5, (int) $result['rows_would_delete'], 'Dry-run should not overcount rows across repeated batches.' );
+	}
+
+	/**
 	 * Safe repair should remove exact duplicates on POS-touched products.
 	 */
 	public function test_removes_exact_duplicates_on_pos_product(): void {
@@ -213,4 +245,3 @@ class Test_Meta_Data_Repair_Service extends WP_UnitTestCase {
 		$this->assertEquals( 1, $this->count_meta_rows( $variation_id, '_wpcom_is_markdown' ) );
 	}
 }
-

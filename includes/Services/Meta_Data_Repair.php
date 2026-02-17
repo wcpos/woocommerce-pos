@@ -112,6 +112,14 @@ class Meta_Data_Repair {
 				}
 			}
 
+			if ( $args['dry_run'] ) {
+				if ( \count( $groups ) >= $batch_size ) {
+					$summary['hit_batch_limit'] = true;
+				}
+
+				return $summary;
+			}
+
 			if ( \count( $groups ) < $batch_size ) {
 				return $summary;
 			}
