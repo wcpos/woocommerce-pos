@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.12
+Stable tag: 1.8.13
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,12 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.13 - 2026/02/17 =
+- **Fixed root cause of duplicate product metadata** — POS order processing no longer clones product objects in the stock/coupon path, preventing repeated meta rows from being re-saved on each stock update ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Added a safer duplicate-meta repair migration** — a new one-time cleanup removes only exact duplicate `(post_id, meta_key, meta_value)` rows for POS-touched products/variations, reducing API payload size and memory pressure without deleting distinct meta values ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Expanded regression coverage for discount and stock edge cases** — added tests for coupon recalculation behavior, variation pricing paths, and stock-reduction lifecycle to prevent regressions ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Reduced diagnostic log noise** — high-volume top-meta-key context is now opt-in so normal logs stay readable while deep diagnostics remain available when needed ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
 
 = 1.8.12 - 2026/02/13 =
 - **One-time cleanup of duplicate metadata** — a migration automatically removes thousands of junk meta rows that accumulated on POS-touched products and orders, resolving memory exhaustion and slow API responses on affected stores ([#532](https://github.com/wcpos/woocommerce-pos/pull/532))
