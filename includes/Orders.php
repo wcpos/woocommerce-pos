@@ -261,7 +261,14 @@ class Orders {
 		}
 
 		if ( $product && $product->get_id() ) {
-			$product = wc_get_product_object( $product->get_type(), $product->get_id() );
+			/*
+			 * During coupon recalculation, order_item_product() already returns an
+			 * isolated product instance for real products. Reuse it here to avoid
+			 * a redundant second wc_get_product_object() call.
+			 */
+			if ( ! self::$coupon_recalculation_active ) {
+				$product = wc_get_product_object( $product->get_type(), $product->get_id() );
+			}
 		} elseif ( 0 === $item->get_product_id() ) {
 			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
