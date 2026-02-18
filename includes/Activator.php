@@ -17,6 +17,16 @@ use const DOING_AJAX;
  */
 class Activator {
 	/**
+	 * Option key used as a short-lived migration lock.
+	 */
+	private const DB_UPGRADE_LOCK_OPTION = 'woocommerce_pos_db_upgrade_lock';
+
+	/**
+	 * Lock TTL in seconds.
+	 */
+	private const DB_UPGRADE_LOCK_TTL = 600;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -199,19 +209,32 @@ class Activator {
 	 * Check version number, runs every admin page load.
 	 */
 	private function version_check(): void {
-		$old = Services\Settings::get_db_version();
-		if ( version_compare( $old, VERSION, '<' ) ) {
-			Services\Settings::bump_versions();
-			// Defer db_upgrade to woocommerce_init when WC is fully loaded.
-			// This prevents conflicts with plugins like WC Subscriptions that hook
-			// into before_delete_post and assume WC()->order_factory is available.
-			add_action(
-				'woocommerce_init',
-				function () use ( $old ) {
-					$this->db_upgrade( $old, VERSION );
-				}
-			);
+		$old = (string) Services\Settings::get_db_version();
+		if ( ! version_compare( $old, VERSION, '<' ) ) {
+			return;
 		}
+
+		$lock_started = (int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 );
+		if ( $lock_started > 0 && ( time() - $lock_started ) < self::DB_UPGRADE_LOCK_TTL ) {
+			return;
+		}
+
+		update_option( self::DB_UPGRADE_LOCK_OPTION, time(), false );
+		Services\Settings::bump_versions();
+
+		// Defer db_upgrade to woocommerce_init when WC is fully loaded.
+		// This prevents conflicts with plugins like WC Subscriptions that hook
+		// into before_delete_post and assume WC()->order_factory is available.
+		add_action(
+			'woocommerce_init',
+			function () use ( $old ) {
+				try {
+					$this->db_upgrade( $old, VERSION );
+				} finally {
+					delete_option( self::DB_UPGRADE_LOCK_OPTION );
+				}
+			}
+		);
 	}
 
 	/**
