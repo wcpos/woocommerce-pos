@@ -198,6 +198,27 @@ class Test_Activator extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test: migration is queued when upgrade lock has expired.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_migration_queued_when_upgrade_lock_has_expired(): void {
+		update_option( self::DB_VERSION_OPTION, '1.8.6' );
+		update_option( self::DB_UPGRADE_LOCK_OPTION, time() - 601, false );
+
+		$activator     = new Activator();
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$version_check->invoke( $activator );
+
+		$this->assertTrue(
+			has_action( 'woocommerce_init' ) !== false,
+			'Migration should be queued when upgrade lock has expired'
+		);
+	}
+
+	/**
 	 * Test: an upgrade lock is set when migration is queued.
 	 *
 	 * @covers ::version_check

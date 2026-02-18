@@ -214,12 +214,16 @@ class Activator {
 			return;
 		}
 
-		$lock_started = (int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 );
-		if ( $lock_started > 0 && ( time() - $lock_started ) < self::DB_UPGRADE_LOCK_TTL ) {
+		if ( ! $this->acquire_db_upgrade_lock() ) {
 			return;
 		}
 
-		update_option( self::DB_UPGRADE_LOCK_OPTION, time(), false );
+		$locked_old = (string) Services\Settings::get_db_version();
+		if ( ! version_compare( $locked_old, VERSION, '<' ) ) {
+			delete_option( self::DB_UPGRADE_LOCK_OPTION );
+			return;
+		}
+
 		Services\Settings::bump_versions();
 
 		// Defer db_upgrade to woocommerce_init when WC is fully loaded.
@@ -227,14 +231,52 @@ class Activator {
 		// into before_delete_post and assume WC()->order_factory is available.
 		add_action(
 			'woocommerce_init',
-			function () use ( $old ) {
+			function () use ( $locked_old ) {
 				try {
-					$this->db_upgrade( $old, VERSION );
+					$this->db_upgrade( $locked_old, VERSION );
 				} finally {
 					delete_option( self::DB_UPGRADE_LOCK_OPTION );
 				}
 			}
 		);
+	}
+
+	/**
+	 * Acquire the DB upgrade lock.
+	 *
+	 * @return bool True when this request owns the lock.
+	 */
+	private function acquire_db_upgrade_lock(): bool {
+		$now = time();
+
+		// Atomic fast path for unlocked state.
+		if ( add_option( self::DB_UPGRADE_LOCK_OPTION, (string) $now, '', false ) ) {
+			return true;
+		}
+
+		$lock_started = (int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 );
+		if ( $lock_started > 0 && ( $now - $lock_started ) < self::DB_UPGRADE_LOCK_TTL ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		// Try to atomically steal a stale lock.
+		$stale_before = $now - self::DB_UPGRADE_LOCK_TTL;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name from $wpdb.
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$wpdb->options}
+				SET option_value = %s
+				WHERE option_name = %s
+					AND CAST(option_value AS UNSIGNED) < %d",
+				(string) $now,
+				self::DB_UPGRADE_LOCK_OPTION,
+				$stale_before
+			)
+		);
+
+		return 1 === (int) $updated;
 	}
 
 	/**
