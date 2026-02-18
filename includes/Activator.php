@@ -17,6 +17,16 @@ use const DOING_AJAX;
  */
 class Activator {
 	/**
+	 * Lock name used by WP_Upgrader::create_lock().
+	 */
+	private const DB_UPGRADE_LOCK_NAME = 'woocommerce_pos_db_upgrade_lock';
+
+	/**
+	 * Lock TTL in seconds.
+	 */
+	private const DB_UPGRADE_LOCK_TTL = 600;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -199,19 +209,72 @@ class Activator {
 	 * Check version number, runs every admin page load.
 	 */
 	private function version_check(): void {
-		$old = Services\Settings::get_db_version();
-		if ( version_compare( $old, VERSION, '<' ) ) {
-			Services\Settings::bump_versions();
-			// Defer db_upgrade to woocommerce_init when WC is fully loaded.
-			// This prevents conflicts with plugins like WC Subscriptions that hook
-			// into before_delete_post and assume WC()->order_factory is available.
-			add_action(
-				'woocommerce_init',
-				function () use ( $old ) {
-					$this->db_upgrade( $old, VERSION );
-				}
-			);
+		$old = (string) Services\Settings::get_db_version();
+		if ( ! version_compare( $old, VERSION, '<' ) ) {
+			return;
 		}
+
+		if ( ! $this->acquire_db_upgrade_lock() ) {
+			return;
+		}
+
+		$locked_old = (string) Services\Settings::get_db_version();
+		if ( ! version_compare( $locked_old, VERSION, '<' ) ) {
+			$this->release_db_upgrade_lock();
+			return;
+		}
+
+		Services\Settings::bump_versions();
+
+		$lock_released = false;
+		$release_lock  = function () use ( &$lock_released ): void {
+			if ( $lock_released ) {
+				return;
+			}
+
+			$lock_released = true;
+			$this->release_db_upgrade_lock();
+		};
+
+		// Safety net in case woocommerce_init does not fire for this request.
+		add_action( 'shutdown', $release_lock );
+
+		// Defer db_upgrade to woocommerce_init when WC is fully loaded.
+		// This prevents conflicts with plugins like WC Subscriptions that hook
+		// into before_delete_post and assume WC()->order_factory is available.
+		add_action(
+			'woocommerce_init',
+			function () use ( $locked_old, $release_lock ) {
+				try {
+					$this->db_upgrade( $locked_old, VERSION );
+				} finally {
+					$release_lock();
+					remove_action( 'shutdown', $release_lock );
+				}
+			}
+		);
+	}
+
+	/**
+	 * Acquire the DB upgrade lock.
+	 *
+	 * @return bool True when this request owns the lock.
+	 */
+	private function acquire_db_upgrade_lock(): bool {
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		return \WP_Upgrader::create_lock( self::DB_UPGRADE_LOCK_NAME, self::DB_UPGRADE_LOCK_TTL );
+	}
+
+	/**
+	 * Release the DB upgrade lock.
+	 */
+	private function release_db_upgrade_lock(): void {
+		if ( ! class_exists( '\WP_Upgrader', false ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		}
+
+		\WP_Upgrader::release_lock( self::DB_UPGRADE_LOCK_NAME );
 	}
 
 	/**
