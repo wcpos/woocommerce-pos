@@ -44,5 +44,10 @@
     "turbo": "^2.8.7",
     "wp-hookdoc": "0.2.0"
   },
+  "pnpm": {
+    "overrides": {
+      "@wordpress/upload-media": "0.24.0"
+    }
+  },
   "packageManager": "pnpm@10.8.0"
 }
