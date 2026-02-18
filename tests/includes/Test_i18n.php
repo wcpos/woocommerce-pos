@@ -510,4 +510,27 @@ class Test_i18n extends WC_Unit_Test_Case {
 
 		$this->assertEmpty( $this->http_requests, 'No requests should be made while missing locale is cached' );
 	}
+
+	/**
+	 * @covers ::load_translations
+	 * @covers ::download_translation
+	 */
+	public function test_non_404_failures_do_not_cache_missing_locale(): void {
+		add_filter( 'locale', function () {
+			return 'fr_FR';
+		});
+
+		$this->http_responder = function () {
+			return new \WP_Error( 'http_request_failed', 'Connection timed out' );
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertCount( 2, $this->http_requests, 'Should try exact locale and base locale on first attempt' );
+		$this->assertFalse( get_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' ), 'Transient should not cache missing locale for transport errors' );
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertCount( 4, $this->http_requests, 'Should retry downloads on subsequent attempts when failure was not 404' );
+	}
 }

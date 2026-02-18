@@ -56,6 +56,15 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	protected string $transient_key = 'wcpos_i18n_version';
 
 	/**
+	 * Most recent HTTP status code from translation download attempt.
+	 *
+	 * Null means the failure was not an HTTP status response (network/transport/write error).
+	 *
+	 * @var int|null
+	 */
+	protected ?int $last_download_status_code = null;
+
+	/**
 	 * Load translations from jsDelivr.
 	 *
 	 * @param string|null $text_domain    Optional text domain override.
@@ -115,6 +124,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		}
 
 		$last_candidate_index = count( $locale_candidates ) - 1;
+		$all_candidates_404   = true;
 		foreach ( $locale_candidates as $index => $candidate_locale ) {
 			$file       = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
 			$downloaded = $this->download_translation( $candidate_locale, $file, $index < $last_candidate_index );
@@ -126,9 +136,15 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 
 				return;
 			}
+
+			if ( 404 !== $this->last_download_status_code ) {
+				$all_candidates_404 = false;
+			}
 		}
 
-		set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
+		if ( $all_candidates_404 ) {
+			set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
+		}
 
 		if ( $stale_file && $stale_locale ) {
 			$this->load_translation_file( $stale_locale, $stale_file );
@@ -227,6 +243,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 */
 	protected function download_translation( string $locale, string $file, bool $suppress_404_logs = false ): bool {
 		$url = sprintf( self::CDN_BASE_URL, $this->version, $locale, $this->text_domain, $locale );
+		$this->last_download_status_code = null;
 
 		$response = wp_remote_get(
 			$url,
@@ -243,6 +260,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 
 		$status_code = wp_remote_retrieve_response_code( $response );
 		if ( 200 !== $status_code ) {
+			$this->last_download_status_code = $status_code;
+
 			if ( ! ( $suppress_404_logs && 404 === $status_code ) ) {
 				Logger::log( sprintf( 'i18n: Failed to download %s translation - HTTP %d from %s', $locale, $status_code, $url ) );
 			}
