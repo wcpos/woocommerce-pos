@@ -32,6 +32,12 @@ class Test_i18n extends WC_Unit_Test_Case {
 
 		// Clear any cached transients from previous tests.
 		delete_transient( 'wcpos_i18n_woocommerce-pos_de_DE' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_da' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_da_DK' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_fr' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_fr_FR' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_da_DK' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' );
 	}
 
 	public function tearDown(): void {
@@ -434,5 +440,74 @@ class Test_i18n extends WC_Unit_Test_Case {
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$this->assertEquals( 10, $captured_timeout, 'HTTP request should use a 10-second timeout' );
+	}
+
+	/**
+	 * @covers ::load_translations
+	 * @covers ::download_translation
+	 */
+	public function test_regional_locale_falls_back_to_base_language(): void {
+		add_filter( 'locale', function () {
+			return 'da_DK';
+		});
+
+		$this->http_responder = function ( $request, $url ) {
+			if ( false !== strpos( $url, '/da_DK/' ) ) {
+				return array(
+					'response' => array( 'code' => 404 ),
+					'body'     => 'Not Found',
+				);
+			}
+
+			if ( false !== strpos( $url, '/da/' ) ) {
+				return array(
+					'response' => array( 'code' => 200 ),
+					'body'     => "<?php\nreturn array('messages' => array('Hello' => 'Hej'));",
+				);
+			}
+
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertCount( 2, $this->http_requests, 'Regional locale should try exact locale then base language' );
+		$this->assertStringContainsString( '/da_DK/woocommerce-pos-da_DK.l10n.php', $this->http_requests[0]['url'] );
+		$this->assertStringContainsString( '/da/woocommerce-pos-da.l10n.php', $this->http_requests[1]['url'] );
+
+		$fallback_file = $this->temp_lang_dir . 'woocommerce-pos-da.l10n.php';
+		$this->assertFileExists( $fallback_file, 'Fallback base language file should be downloaded' );
+	}
+
+	/**
+	 * @covers ::load_translations
+	 * @covers ::download_translation
+	 */
+	public function test_missing_locale_is_cached_to_avoid_repeated_download_attempts(): void {
+		add_filter( 'locale', function () {
+			return 'fr_FR';
+		});
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => 'Not Found',
+			);
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertCount( 2, $this->http_requests, 'Missing locale should attempt exact locale then base language once' );
+		$this->assertEquals( '1.8.7', get_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' ), 'Missing locale should be cached at current version' );
+
+		$this->http_requests  = array();
+		$this->http_responder = function ( $request, $url ) {
+			$this->fail( 'No HTTP request should be made while missing locale cache is valid' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertEmpty( $this->http_requests, 'No requests should be made while missing locale is cached' );
 	}
 }
