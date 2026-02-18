@@ -15,6 +15,11 @@
       "php": "7.4"
     },
     "preferred-install": "dist",
-    "sort-packages": true
+    "sort-packages": true,
+    "audit": {
+      "ignore": {
+        "PKSA-y2cr-5h3j-g3ys": "Temporary ignore: php-jwt >=6.10.1 requires PHP >=8.0 while plugin minimum remains PHP 7.4."
+      }
+    }
   }
 }
