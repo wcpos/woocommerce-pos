@@ -37,6 +37,7 @@ class Test_Activator extends WP_UnitTestCase {
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
 		remove_all_actions( 'woocommerce_init' );
+		remove_all_actions( 'shutdown' );
 	}
 
 	/**
@@ -46,6 +47,7 @@ class Test_Activator extends WP_UnitTestCase {
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
 		remove_all_actions( 'woocommerce_init' );
+		remove_all_actions( 'shutdown' );
 		parent::tearDown();
 	}
 
@@ -236,6 +238,34 @@ class Test_Activator extends WP_UnitTestCase {
 			0,
 			(int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 ),
 			'Migration queueing should set an upgrade lock'
+		);
+	}
+
+	/**
+	 * Test: shutdown fallback releases upgrade lock when woocommerce_init does not fire.
+	 *
+	 * @covers ::version_check
+	 */
+	public function test_shutdown_fallback_releases_upgrade_lock_when_migration_does_not_run(): void {
+		update_option( self::DB_VERSION_OPTION, '1.8.6' );
+
+		$activator     = new Activator();
+		$reflection    = new ReflectionClass( $activator );
+		$version_check = $reflection->getMethod( 'version_check' );
+		$version_check->setAccessible( true );
+		$version_check->invoke( $activator );
+
+		$this->assertGreaterThan(
+			0,
+			(int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 ),
+			'Migration queueing should set an upgrade lock'
+		);
+
+		do_action( 'shutdown' );
+
+		$this->assertFalse(
+			get_option( self::DB_UPGRADE_LOCK_OPTION, false ),
+			'Shutdown fallback should release the upgrade lock if migration never runs'
 		);
 	}
 }

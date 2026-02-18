@@ -226,16 +226,30 @@ class Activator {
 
 		Services\Settings::bump_versions();
 
+		$lock_released = false;
+		$release_lock  = function () use ( &$lock_released ): void {
+			if ( $lock_released ) {
+				return;
+			}
+
+			$lock_released = true;
+			$this->release_db_upgrade_lock();
+		};
+
+		// Safety net in case woocommerce_init does not fire for this request.
+		add_action( 'shutdown', $release_lock );
+
 		// Defer db_upgrade to woocommerce_init when WC is fully loaded.
 		// This prevents conflicts with plugins like WC Subscriptions that hook
 		// into before_delete_post and assume WC()->order_factory is available.
 		add_action(
 			'woocommerce_init',
-			function () use ( $locked_old ) {
+			function () use ( $locked_old, $release_lock ) {
 				try {
 					$this->db_upgrade( $locked_old, VERSION );
 				} finally {
-					$this->release_db_upgrade_lock();
+					$release_lock();
+					remove_action( 'shutdown', $release_lock );
 				}
 			}
 		);
