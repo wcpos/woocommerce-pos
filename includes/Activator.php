@@ -17,9 +17,9 @@ use const DOING_AJAX;
  */
 class Activator {
 	/**
-	 * Option key used as a short-lived migration lock.
+	 * Lock name used by WP_Upgrader::create_lock().
 	 */
-	private const DB_UPGRADE_LOCK_OPTION = 'woocommerce_pos_db_upgrade_lock';
+	private const DB_UPGRADE_LOCK_NAME = 'woocommerce_pos_db_upgrade_lock';
 
 	/**
 	 * Lock TTL in seconds.
@@ -220,7 +220,7 @@ class Activator {
 
 		$locked_old = (string) Services\Settings::get_db_version();
 		if ( ! version_compare( $locked_old, VERSION, '<' ) ) {
-			delete_option( self::DB_UPGRADE_LOCK_OPTION );
+			$this->release_db_upgrade_lock();
 			return;
 		}
 
@@ -235,7 +235,7 @@ class Activator {
 				try {
 					$this->db_upgrade( $locked_old, VERSION );
 				} finally {
-					delete_option( self::DB_UPGRADE_LOCK_OPTION );
+					$this->release_db_upgrade_lock();
 				}
 			}
 		);
@@ -247,36 +247,20 @@ class Activator {
 	 * @return bool True when this request owns the lock.
 	 */
 	private function acquire_db_upgrade_lock(): bool {
-		$now = time();
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 
-		// Atomic fast path for unlocked state.
-		if ( add_option( self::DB_UPGRADE_LOCK_OPTION, (string) $now, '', false ) ) {
-			return true;
+		return \WP_Upgrader::create_lock( self::DB_UPGRADE_LOCK_NAME, self::DB_UPGRADE_LOCK_TTL );
+	}
+
+	/**
+	 * Release the DB upgrade lock.
+	 */
+	private function release_db_upgrade_lock(): void {
+		if ( ! class_exists( '\WP_Upgrader', false ) ) {
+			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 		}
 
-		$lock_started = (int) get_option( self::DB_UPGRADE_LOCK_OPTION, 0 );
-		if ( $lock_started > 0 && ( $now - $lock_started ) < self::DB_UPGRADE_LOCK_TTL ) {
-			return false;
-		}
-
-		global $wpdb;
-
-		// Try to atomically steal a stale lock.
-		$stale_before = $now - self::DB_UPGRADE_LOCK_TTL;
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name from $wpdb.
-		$updated = $wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->options}
-				SET option_value = %s
-				WHERE option_name = %s
-					AND CAST(option_value AS UNSIGNED) < %d",
-				(string) $now,
-				self::DB_UPGRADE_LOCK_OPTION,
-				$stale_before
-			)
-		);
-
-		return 1 === (int) $updated;
+		\WP_Upgrader::release_lock( self::DB_UPGRADE_LOCK_NAME );
 	}
 
 	/**

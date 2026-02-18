@@ -25,9 +25,9 @@ class Test_Activator extends WP_UnitTestCase {
 	private const DB_VERSION_OPTION = 'woocommerce_pos_db_version';
 
 	/**
-	 * DB upgrade lock option key.
+	 * DB upgrade lock option key (WP_Upgrader appends ".lock").
 	 */
-	private const DB_UPGRADE_LOCK_OPTION = 'woocommerce_pos_db_upgrade_lock';
+	private const DB_UPGRADE_LOCK_OPTION = 'woocommerce_pos_db_upgrade_lock.lock';
 
 	/**
 	 * Reset options and hooks before each test.
