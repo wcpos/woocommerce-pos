@@ -24,7 +24,7 @@ class Legacy_Php_Renderer implements Receipt_Renderer_Interface {
 	 * @throws \RuntimeException When the temporary template file cannot be created.
 	 */
 	public function render( array $template, WC_Abstract_Order $order, array $receipt_data ): void {
-		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) ) {
+		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) && is_readable( $template['file_path'] ) ) {
 			include $template['file_path'];
 			return;
 		}

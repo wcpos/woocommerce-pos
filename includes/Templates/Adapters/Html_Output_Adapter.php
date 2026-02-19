@@ -33,7 +33,7 @@ class Html_Output_Adapter implements Receipt_Output_Adapter_Interface {
 			'<div class="wcpos-receipt" data-order="%s"><strong>%s</strong>: %s</div>',
 			esc_attr( $order_number ),
 			esc_html__( 'Order', 'woocommerce-pos' ),
-			esc_html( wc_price( $total ) )
+			wp_kses_post( wc_price( $total ) )
 		);
 	}
 }

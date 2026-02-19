@@ -198,9 +198,22 @@ class Receipt_Snapshot_Store {
 	 * @return int
 	 */
 	private function next_sequence(): int {
+		global $wpdb;
+
+		$lock_name = 'wcpos_receipt_sequence_lock';
+		$acquired  = (int) $wpdb->get_var(
+			$wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', $lock_name, 5 )
+		);
+
 		$sequence = (int) get_option( self::OPTION_SEQUENCE, 0 );
 		$sequence++;
 		update_option( self::OPTION_SEQUENCE, $sequence, false );
+
+		if ( 1 === $acquired ) {
+			$wpdb->get_var(
+				$wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock_name )
+			);
+		}
 
 		return $sequence;
 	}

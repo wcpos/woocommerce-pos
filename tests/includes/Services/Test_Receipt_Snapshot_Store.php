@@ -80,4 +80,23 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 'fiscal', $this->store->resolve_mode( 'fiscal' ) );
 		$this->assertEquals( 'live', $this->store->resolve_mode( null ) );
 	}
+
+	/**
+	 * Test fiscal sequence increments across snapshots.
+	 */
+	public function test_sequence_increments_for_new_snapshots(): void {
+		$order_one = OrderHelper::create_order();
+		$order_two = OrderHelper::create_order();
+
+		$this->store->handle_payment_complete( $order_one->get_id() );
+		$this->store->handle_payment_complete( $order_two->get_id() );
+
+		$one = $this->store->get_snapshot( $order_one->get_id() );
+		$two = $this->store->get_snapshot( $order_two->get_id() );
+
+		$this->assertIsArray( $one );
+		$this->assertIsArray( $two );
+		$this->assertNotEquals( $one['fiscal']['sequence'], $two['fiscal']['sequence'] );
+		$this->assertGreaterThan( $one['fiscal']['sequence'], $two['fiscal']['sequence'] );
+	}
 }

@@ -56,20 +56,23 @@ class Test_Fiscal_Receipt_Service extends WC_REST_Unit_Test_Case {
 		$order    = OrderHelper::create_order();
 		$snapshot = array( 'fiscal' => array() );
 
+		$filter = function ( $payload, $order_id ) use ( $order ) {
+			if ( $order->get_id() !== $order_id ) {
+				return $payload;
+			}
+			$payload['fiscal']['tax_agency_code'] = 'TEST-CODE';
+			return $payload;
+		};
+
 		add_filter(
 			'woocommerce_pos_fiscal_snapshot_enrich',
-			function ( $payload, $order_id ) use ( $order ) {
-				if ( $order->get_id() !== $order_id ) {
-					return $payload;
-				}
-				$payload['fiscal']['tax_agency_code'] = 'TEST-CODE';
-				return $payload;
-			},
+			$filter,
 			10,
 			2
 		);
 
 		$enriched = $this->service->enrich_snapshot( $snapshot, $order->get_id() );
 		$this->assertEquals( 'TEST-CODE', $enriched['fiscal']['tax_agency_code'] );
+		remove_filter( 'woocommerce_pos_fiscal_snapshot_enrich', $filter, 10 );
 	}
 }
