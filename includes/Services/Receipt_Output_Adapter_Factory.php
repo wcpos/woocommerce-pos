@@ -9,9 +9,11 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use InvalidArgumentException;
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Output_Adapter_Interface;
+use WCPOS\WooCommercePOS\Templates\Adapters\Cpcl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Html_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Starprnt_Output_Adapter;
+use WCPOS\WooCommercePOS\Templates\Adapters\Tspl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Zpl_Output_Adapter;
 
 /**
@@ -37,6 +39,10 @@ class Receipt_Output_Adapter_Factory {
 				return new Starprnt_Output_Adapter();
 			case 'zpl':
 				return new Zpl_Output_Adapter();
+			case 'cpcl':
+				return new Cpcl_Output_Adapter();
+			case 'tspl':
+				return new Tspl_Output_Adapter();
 			default:
 				throw new InvalidArgumentException( 'Unsupported receipt output type: ' . esc_html( $output_type ) );
 		}
