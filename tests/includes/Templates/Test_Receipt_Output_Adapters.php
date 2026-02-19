@@ -10,9 +10,11 @@ namespace WCPOS\WooCommercePOS\Tests\Templates;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Output_Adapter_Factory;
+use WCPOS\WooCommercePOS\Templates\Adapters\Cpcl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Html_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Starprnt_Output_Adapter;
+use WCPOS\WooCommercePOS\Templates\Adapters\Tspl_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Zpl_Output_Adapter;
 use WC_REST_Unit_Test_Case;
 
@@ -111,6 +113,34 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test CPCL adapter output scaffold.
+	 */
+	public function test_cpcl_output_adapter_transforms_payload(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$adapter      = new Cpcl_Output_Adapter();
+
+		$output = $adapter->transform( $receipt_data );
+		$this->assertStringStartsWith( '! 0 200 200 500 1', $output );
+		$this->assertStringContainsString( 'Order #' . $order->get_order_number(), $output );
+		$this->assertStringEndsWith( "PRINT\n", $output );
+	}
+
+	/**
+	 * Test TSPL adapter output scaffold.
+	 */
+	public function test_tspl_output_adapter_transforms_payload(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$adapter      = new Tspl_Output_Adapter();
+
+		$output = $adapter->transform( $receipt_data );
+		$this->assertStringStartsWith( 'SIZE 72 mm,120 mm', $output );
+		$this->assertStringContainsString( 'Order #' . $order->get_order_number(), $output );
+		$this->assertStringEndsWith( "PRINT 1,1\n", $output );
+	}
+
+	/**
 	 * Test output adapter factory resolves supported output types.
 	 */
 	public function test_output_adapter_factory_resolves_adapters(): void {
@@ -120,6 +150,8 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 		$this->assertInstanceOf( Escpos_Output_Adapter::class, $factory->create( 'escpos' ) );
 		$this->assertInstanceOf( Starprnt_Output_Adapter::class, $factory->create( 'starprnt' ) );
 		$this->assertInstanceOf( Zpl_Output_Adapter::class, $factory->create( 'zpl' ) );
+		$this->assertInstanceOf( Cpcl_Output_Adapter::class, $factory->create( 'cpcl' ) );
+		$this->assertInstanceOf( Tspl_Output_Adapter::class, $factory->create( 'tspl' ) );
 	}
 
 	/**
@@ -127,9 +159,9 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_output_adapter_factory_rejects_unknown_adapter_type(): void {
 		$this->expectException( \InvalidArgumentException::class );
-		$this->expectExceptionMessage( 'Unsupported receipt output type: tspl' );
+		$this->expectExceptionMessage( 'Unsupported receipt output type: unknown-printer' );
 
 		$factory = new Receipt_Output_Adapter_Factory();
-		$factory->create( 'tspl' );
+		$factory->create( 'unknown-printer' );
 	}
 }
