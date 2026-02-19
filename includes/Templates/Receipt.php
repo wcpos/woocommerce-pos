@@ -11,6 +11,9 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
+use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 /**
@@ -101,6 +104,8 @@ class Receipt {
 			 * Check for custom template first.
 			 */
 			$custom_template = $this->get_custom_template();
+			$receipt_mode    = $this->resolve_receipt_mode();
+			$receipt_data    = $this->get_receipt_data( $order, $receipt_mode );
 
 			// Start output buffering and register shutdown handler for fatal errors.
 			self::$rendering = true;
@@ -108,7 +113,9 @@ class Receipt {
 			ob_start();
 
 			if ( $custom_template ) {
-				$this->render_custom_template( $custom_template, $order );
+				$template_engine = $this->get_template_engine( $custom_template );
+				$renderer        = ( new Receipt_Renderer_Factory() )->create( $template_engine );
+				$renderer->render( $custom_template, $order, $receipt_data );
 			} else {
 				/**
 				 * Put WC_Order into the global scope so that the template can access it.
@@ -141,6 +148,19 @@ class Receipt {
 			}
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Get template engine type from metadata.
+	 *
+	 * @param array $template Template metadata.
+	 *
+	 * @return string
+	 */
+	private function get_template_engine( array $template ): string {
+		$engine = isset( $template['engine'] ) ? sanitize_text_field( $template['engine'] ) : 'legacy-php';
+
+		return in_array( $engine, array( 'logicless', 'legacy-php' ), true ) ? $engine : 'legacy-php';
 	}
 
 	/**
@@ -314,6 +334,38 @@ class Receipt {
 		 * @hook woocommerce_pos_print_receipt_path
 		 */
 		return apply_filters( 'woocommerce_pos_print_receipt_path', woocommerce_pos_locate_template( $file_name ) );
+	}
+
+	/**
+	 * Resolve receipt mode from request and settings.
+	 *
+	 * @return string
+	 */
+	private function resolve_receipt_mode(): string {
+		$requested_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : null;
+
+		return Receipt_Snapshot_Store::instance()->resolve_mode( $requested_mode );
+	}
+
+	/**
+	 * Get receipt data payload for the selected mode.
+	 *
+	 * @param \WC_Abstract_Order $order Order object.
+	 * @param string             $mode  Receipt mode.
+	 *
+	 * @return array
+	 */
+	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
+		$snapshot_store = Receipt_Snapshot_Store::instance();
+
+		if ( 'fiscal' === $mode ) {
+			$snapshot = $snapshot_store->get_snapshot( $order->get_id() );
+			if ( $snapshot ) {
+				return $snapshot;
+			}
+		}
+
+		return ( new Receipt_Data_Builder() )->build( $order, $mode );
 	}
 
 	/**

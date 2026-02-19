@@ -252,6 +252,11 @@ class Settings extends WP_REST_Controller {
 					return \is_string( $param );
 				},
 			),
+			'receipt_default_mode' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param ) && \in_array( $param, array( 'fiscal', 'live' ), true );
+				},
+			),
 			'admin_emails' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_array( $param );
