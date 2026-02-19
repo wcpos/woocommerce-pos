@@ -36,11 +36,11 @@ class Extensions {
 	const TRANSIENT_KEY = 'wcpos_extensions_catalog';
 
 	/**
-	 * Cache TTL in seconds (12 hours).
+	 * Cache TTL in seconds (1 hour).
 	 *
 	 * @var int
 	 */
-	const CACHE_TTL = 12 * HOUR_IN_SECONDS;
+	const CACHE_TTL = HOUR_IN_SECONDS;
 
 	/**
 	 * Constructor is private to prevent direct instantiation.
