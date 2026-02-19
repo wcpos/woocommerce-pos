@@ -80,6 +80,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$response = $this->api->get_checkout_settings( $this->mock_rest_request() );
 		$settings = $response->get_data();
 		$this->assertEquals( 'wc-completed', $settings['order_status'] );
+		$this->assertEquals( 'fiscal', $settings['receipt_default_mode'] );
 		$this->assertIsArray( $settings['admin_emails'] );
 		$this->assertTrue( $settings['admin_emails']['enabled'] );
 		$this->assertIsArray( $settings['customer_emails'] );
@@ -194,6 +195,10 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$response       = $this->api->update_checkout_settings( $request );
 		$this->assertIsArray( $response['admin_emails'] );
 		$this->assertTrue( $response['admin_emails']['enabled'] );
+
+		$request  = $this->mock_rest_request( array( 'receipt_default_mode' => 'live' ) );
+		$response = $this->api->update_checkout_settings( $request );
+		$this->assertEquals( 'live', $response['receipt_default_mode'] );
 	}
 
 	/**

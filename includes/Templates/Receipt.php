@@ -11,6 +11,9 @@
 namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
+use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 /**
@@ -101,6 +104,8 @@ class Receipt {
 			 * Check for custom template first.
 			 */
 			$custom_template = $this->get_custom_template();
+			$receipt_mode    = $this->resolve_receipt_mode();
+			$receipt_data    = $this->get_receipt_data( $order, $receipt_mode );
 
 			// Start output buffering and register shutdown handler for fatal errors.
 			self::$rendering = true;
@@ -108,7 +113,9 @@ class Receipt {
 			ob_start();
 
 			if ( $custom_template ) {
-				$this->render_custom_template( $custom_template, $order );
+				$template_engine = $this->get_template_engine( $custom_template );
+				$renderer        = ( new Receipt_Renderer_Factory() )->create( $template_engine );
+				$renderer->render( $custom_template, $order, $receipt_data );
 			} else {
 				/**
 				 * Put WC_Order into the global scope so that the template can access it.
@@ -141,6 +148,19 @@ class Receipt {
 			}
 			wc_print_notice( $e->getMessage(), 'error' );
 		}
+	}
+
+	/**
+	 * Get template engine type from metadata.
+	 *
+	 * @param array $template Template metadata.
+	 *
+	 * @return string
+	 */
+	private function get_template_engine( array $template ): string {
+		$engine = isset( $template['engine'] ) ? sanitize_text_field( $template['engine'] ) : 'legacy-php';
+
+		return in_array( $engine, array( 'logicless', 'legacy-php' ), true ) ? $engine : 'legacy-php';
 	}
 
 	/**
@@ -317,6 +337,40 @@ class Receipt {
 	}
 
 	/**
+	 * Resolve receipt mode from request and settings.
+	 *
+	 * @return string
+	 */
+	private function resolve_receipt_mode(): string {
+		$requested_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : null;
+
+		return Receipt_Snapshot_Store::instance()->resolve_mode( $requested_mode );
+	}
+
+	/**
+	 * Get receipt data payload for the selected mode.
+	 *
+	 * @param \WC_Abstract_Order $order Order object.
+	 * @param string             $mode  Receipt mode.
+	 *
+	 * @return array
+	 */
+	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
+		$snapshot_store = Receipt_Snapshot_Store::instance();
+
+		if ( 'fiscal' === $mode ) {
+			$snapshot = $snapshot_store->get_snapshot( $order->get_id() );
+			if ( $snapshot ) {
+				return $snapshot;
+			}
+
+			$mode = 'live';
+		}
+
+		return ( new Receipt_Data_Builder() )->build( $order, $mode );
+	}
+
+	/**
 	 * Get the active custom receipt template.
 	 *
 	 * @return null|array Custom template data or null if not found.
@@ -356,72 +410,5 @@ class Receipt {
 
 		// Get active receipt template (can be virtual or from database).
 		return TemplatesManager::get_active_template( 'receipt' );
-	}
-
-	/**
-	 * Render a custom template.
-	 *
-	 * @param array              $template Custom template data.
-	 * @param \WC_Abstract_Order $order    Order object.
-	 *
-	 * @return void
-	 */
-	private function render_custom_template( array $template, \WC_Abstract_Order $order ): void {
-		// If template has a file path, use that.
-		if ( ! empty( $template['file_path'] ) && file_exists( $template['file_path'] ) ) {
-			include $template['file_path'];
-
-			return;
-		}
-
-		// Otherwise, render from content stored in database.
-		if ( ! empty( $template['content'] ) ) {
-			// Create a temporary file to execute the PHP template.
-			$temp_file = $this->create_temp_template_file( $template['content'] );
-
-			if ( $temp_file ) {
-				include $temp_file;
-				unlink( $temp_file ); // Clean up temporary file.
-			}
-		}
-	}
-
-	/**
-	 * Create a temporary file for the template content.
-	 *
-	 * @param string $content Template content.
-	 *
-	 * @return false|string Path to temporary file or false on failure.
-	 */
-	private function create_temp_template_file( string $content ) {
-		$upload_dir = wp_upload_dir();
-		$temp_dir   = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-templates';
-
-		// Create directory if it doesn't exist.
-		if ( ! file_exists( $temp_dir ) ) {
-			wp_mkdir_p( $temp_dir );
-		}
-
-		// Protect directory from direct access (check every time, not just on creation).
-		$htaccess_file = trailingslashit( $temp_dir ) . '.htaccess';
-		$index_file    = trailingslashit( $temp_dir ) . 'index.php';
-
-		if ( ! file_exists( $htaccess_file ) ) {
-			file_put_contents( $htaccess_file, "deny from all\n" );
-		}
-		if ( ! file_exists( $index_file ) ) {
-			file_put_contents( $index_file, "<?php\n// Silence is golden.\n" );
-		}
-
-		// Create temporary file.
-		$temp_file = tempnam( $temp_dir, 'receipt_' );
-
-		if ( $temp_file ) {
-			file_put_contents( $temp_file, $content );
-
-			return $temp_file;
-		}
-
-		return false;
 	}
 }

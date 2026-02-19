@@ -376,6 +376,8 @@ class Single_Template {
 
 		// Set meta.
 		update_post_meta( $post_id, '_template_language', $virtual_template['language'] );
+		update_post_meta( $post_id, '_template_engine', $virtual_template['engine'] ?? 'legacy-php' );
+		update_post_meta( $post_id, '_template_output_type', $virtual_template['output_type'] ?? 'html' );
 
 		// Redirect to edit the new template.
 		wp_safe_redirect(
@@ -427,6 +429,14 @@ class Single_Template {
 			if ( \in_array( $language, array( 'php', 'javascript' ), true ) ) {
 				update_post_meta( $post_id, '_template_language', $language );
 			}
+		}
+
+		// Missing metadata on existing templates should remain legacy-compatible by default.
+		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
+			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+		}
+		if ( ! metadata_exists( 'post', $post_id, '_template_output_type' ) ) {
+			update_post_meta( $post_id, '_template_output_type', 'html' );
 		}
 	}
 
@@ -619,4 +629,3 @@ class Single_Template {
 		);
 	}
 }
-

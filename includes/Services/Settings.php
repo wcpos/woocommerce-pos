@@ -38,7 +38,8 @@ class Settings {
 			'generate_username'           => true,
 		),
 		'checkout' => array(
-			'order_status'    => 'wc-completed',
+			'order_status'         => 'wc-completed',
+			'receipt_default_mode' => 'fiscal',
 			'admin_emails'    => array(
 				'enabled'         => true,
 				'new_order'       => true,
