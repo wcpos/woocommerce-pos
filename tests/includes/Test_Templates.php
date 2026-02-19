@@ -239,6 +239,8 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'My Custom Template', $template['title'] );
 		$this->assertEquals( 'receipt', $template['type'] );
 		$this->assertEquals( 'php', $template['language'] );
+		$this->assertEquals( 'legacy-php', $template['engine'] );
+		$this->assertEquals( 'html', $template['output_type'] );
 		$this->assertFalse( $template['is_virtual'] );
 		$this->assertEquals( 'custom', $template['source'] );
 	}
@@ -253,6 +255,8 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( Templates::TEMPLATE_PLUGIN_CORE, $template['id'] );
 		$this->assertEquals( 'receipt', $template['type'] );
 		$this->assertEquals( 'php', $template['language'] );
+		$this->assertEquals( 'legacy-php', $template['engine'] );
+		$this->assertEquals( 'html', $template['output_type'] );
 		$this->assertTrue( $template['is_virtual'] );
 		$this->assertEquals( 'plugin', $template['source'] );
 		$this->assertNotEmpty( $template['content'] );
@@ -366,4 +370,3 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertTrue( Templates::is_active_template( $post_id, 'receipt' ) );
 	}
 }
-

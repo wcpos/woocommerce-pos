@@ -376,8 +376,8 @@ class Single_Template {
 
 		// Set meta.
 		update_post_meta( $post_id, '_template_language', $virtual_template['language'] );
-		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
-		update_post_meta( $post_id, '_template_output_type', 'html' );
+		update_post_meta( $post_id, '_template_engine', $virtual_template['engine'] ?? 'legacy-php' );
+		update_post_meta( $post_id, '_template_output_type', $virtual_template['output_type'] ?? 'html' );
 
 		// Redirect to edit the new template.
 		wp_safe_redirect(
@@ -431,9 +431,9 @@ class Single_Template {
 			}
 		}
 
-		// New templates default to logicless/html. Existing templates without metadata remain legacy at read time.
+		// Missing metadata on existing templates should remain legacy-compatible by default.
 		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			update_post_meta( $post_id, '_template_engine', 'logicless' );
+			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
 		}
 		if ( ! metadata_exists( 'post', $post_id, '_template_output_type' ) ) {
 			update_post_meta( $post_id, '_template_output_type', 'html' );
