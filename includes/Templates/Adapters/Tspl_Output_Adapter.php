@@ -40,7 +40,7 @@ class Tspl_Output_Adapter implements Receipt_Output_Adapter_Interface {
 			'CLS',
 			'TEXT 30,30,"0",0,1,1,"' . $this->sanitize_text( $store_name ) . '"',
 			'TEXT 30,55,"0",0,1,1,"WCPOS RECEIPT"',
-			'TEXT 30,80,"0",0,1,1,"Order #' . $order_number . '"',
+			'TEXT 30,80,"0",0,1,1,"Order #' . $this->sanitize_text( $order_number ) . '"',
 			'TEXT 30,130,"0",0,1,1,"Total ' . wc_format_decimal( $total, wc_get_price_decimals() ) . '"',
 		);
 

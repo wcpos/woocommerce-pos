@@ -152,4 +152,47 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 			)
 		);
 	}
+
+	/**
+	 * Test persist_snapshot throws when order lock cannot be acquired.
+	 */
+	public function test_persist_snapshot_throws_when_order_lock_not_acquired(): void {
+		global $wpdb;
+
+		$order = OrderHelper::create_order();
+
+		$original_wpdb = $wpdb;
+		$wpdb          = new class() {
+			public function prepare( $query, ...$args ) {
+				return vsprintf( str_replace( array( '%s', '%d' ), array( "'%s'", '%d' ), $query ), $args );
+			}
+
+			public function get_var( $query ) {
+				if ( false !== strpos( $query, 'GET_LOCK' ) ) {
+					return 0;
+				}
+
+				return null;
+			}
+
+			public function get_row() {
+				return null;
+			}
+		};
+
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'Unable to acquire receipt snapshot lock' );
+
+		try {
+			$this->store->persist_snapshot(
+				$order->get_id(),
+				array(
+					'meta'   => array(),
+					'fiscal' => array(),
+				)
+			);
+		} finally {
+			$wpdb = $original_wpdb;
+		}
+	}
 }

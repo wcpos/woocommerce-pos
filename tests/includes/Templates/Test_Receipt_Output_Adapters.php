@@ -225,6 +225,19 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test TSPL adapter sanitizes order number in text commands.
+	 */
+	public function test_tspl_output_adapter_sanitizes_order_number_in_text(): void {
+		$receipt_data                         = $this->get_fixture_payload();
+		$receipt_data['meta']['order_number'] = '10"01';
+		$adapter                              = new Tspl_Output_Adapter();
+		$output                               = $adapter->transform( $receipt_data );
+
+		$this->assertStringContainsString( 'TEXT 30,80,"0",0,1,1,"Order #10 01"', $output );
+		$this->assertStringNotContainsString( 'TEXT 30,80,"0",0,1,1,"Order #10"01"', $output );
+	}
+
+	/**
 	 * Test output adapter factory resolves supported output types.
 	 */
 	public function test_output_adapter_factory_resolves_adapters(): void {

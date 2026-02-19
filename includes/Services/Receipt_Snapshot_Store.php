@@ -153,43 +153,60 @@ class Receipt_Snapshot_Store {
 	 * @param int   $order_id Order ID.
 	 * @param array $snapshot Snapshot payload.
 	 *
+	 * @throws RuntimeException When the order snapshot lock cannot be acquired.
 	 * @throws RuntimeException When JSON encoding fails.
 	 * @throws RuntimeException When the order does not exist.
 	 */
 	public function persist_snapshot( int $order_id, array $snapshot ): void {
-		if ( $this->has_snapshot( $order_id ) ) {
-			return;
+		global $wpdb;
+
+		$lock_name = 'wcpos_receipt_snapshot_lock_' . $order_id;
+		$acquired  = (int) $wpdb->get_var(
+			$wpdb->prepare( 'SELECT GET_LOCK( %s, %d )', $lock_name, 5 )
+		);
+		if ( 1 !== $acquired ) {
+			throw new RuntimeException( 'Unable to acquire receipt snapshot lock' );
 		}
 
-		$sequence = $this->next_sequence();
-		$created  = current_time( 'mysql', true );
+		try {
+			if ( $this->has_snapshot( $order_id ) ) {
+				return;
+			}
 
-		$snapshot['meta']['created_at_gmt']   = $created;
-		$snapshot['meta']['mode']             = 'fiscal';
-		$snapshot['fiscal']['sequence']       = $sequence;
-		$snapshot['fiscal']['receipt_number'] = (string) $sequence;
-		$snapshot['fiscal']['immutable_id']   = $order_id . ':' . $sequence;
+			$sequence = $this->next_sequence();
+			$created  = current_time( 'mysql', true );
 
-		$snapshot = $this->fiscal_service->enrich_snapshot( $snapshot, $order_id );
+			$snapshot['meta']['created_at_gmt']   = $created;
+			$snapshot['meta']['mode']             = 'fiscal';
+			$snapshot['fiscal']['sequence']       = $sequence;
+			$snapshot['fiscal']['receipt_number'] = (string) $sequence;
+			$snapshot['fiscal']['immutable_id']   = $order_id . ':' . $sequence;
 
-		$json = wp_json_encode( $snapshot );
-		if ( ! \is_string( $json ) ) {
-			Logger::log( 'Failed to encode receipt snapshot to JSON: ' . json_last_error_msg() );
-			throw new RuntimeException( 'Failed to encode receipt snapshot to JSON' );
+			$snapshot = $this->fiscal_service->enrich_snapshot( $snapshot, $order_id );
+
+			$json = wp_json_encode( $snapshot );
+			if ( ! \is_string( $json ) ) {
+				Logger::log( 'Failed to encode receipt snapshot to JSON: ' . json_last_error_msg() );
+				throw new RuntimeException( 'Failed to encode receipt snapshot to JSON' );
+			}
+
+			$checksum = hash( 'sha256', $json );
+			$order    = wc_get_order( $order_id );
+			if ( ! $order ) {
+				throw new RuntimeException( 'Order not found when persisting snapshot' );
+			}
+			$order->update_meta_data( self::META_KEY_PAYLOAD, $json );
+			$order->update_meta_data( self::META_KEY_CHECKSUM, $checksum );
+			$order->update_meta_data( self::META_KEY_SEQUENCE, (string) $sequence );
+			$order->update_meta_data( self::META_KEY_CREATED_AT, $created );
+			$order->save();
+
+			$this->fiscal_service->set_submission_status( $order_id, 'pending' );
+		} finally {
+			$wpdb->get_var(
+				$wpdb->prepare( 'SELECT RELEASE_LOCK( %s )', $lock_name )
+			);
 		}
-
-		$checksum = hash( 'sha256', $json );
-		$order    = wc_get_order( $order_id );
-		if ( ! $order ) {
-			throw new RuntimeException( 'Order not found when persisting snapshot' );
-		}
-		$order->update_meta_data( self::META_KEY_PAYLOAD, $json );
-		$order->update_meta_data( self::META_KEY_CHECKSUM, $checksum );
-		$order->update_meta_data( self::META_KEY_SEQUENCE, (string) $sequence );
-		$order->update_meta_data( self::META_KEY_CREATED_AT, $created );
-		$order->save();
-
-		$this->fiscal_service->set_submission_status( $order_id, 'pending' );
 	}
 
 	/**
