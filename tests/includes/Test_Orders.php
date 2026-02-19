@@ -228,6 +228,144 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Data provider: offline gateway process payment status filters.
+	 *
+	 * @return array[]
+	 */
+	public function offline_gateway_process_payment_status_filters_provider(): array {
+		return array(
+			'bacs'   => array(
+				'filter'         => 'woocommerce_bacs_process_payment_order_status',
+				'default_status' => 'on-hold',
+			),
+			'cheque' => array(
+				'filter'         => 'woocommerce_cheque_process_payment_order_status',
+				'default_status' => 'on-hold',
+			),
+			'cod'    => array(
+				'filter'         => 'woocommerce_cod_process_payment_order_status',
+				'default_status' => 'processing',
+			),
+		);
+	}
+
+	/**
+	 * Test offline gateways respect POS checkout order status in POS requests.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_from_settings_during_pos_request( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'wc-completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = $this->create_pos_order( 'pos-open' );
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'completed', $status );
+	}
+
+	/**
+	 * Test offline gateways support unprefixed checkout status values.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_from_unprefixed_setting( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = $this->create_pos_order( 'pos-open' );
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'completed', $status );
+	}
+
+	/**
+	 * Test offline gateways keep default status outside POS requests.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_returns_default_outside_pos_request( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'wc-completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = $this->create_pos_order( 'pos-open' );
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		$this->assertEquals( $default_status, $status );
+	}
+
+	/**
+	 * Test offline gateways keep default status for invalid checkout setting values.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_returns_default_for_invalid_setting( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'not-a-real-status';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = $this->create_pos_order( 'pos-open' );
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( $default_status, $status );
+	}
+
+	/**
+	 * Test offline gateways keep default status for non-POS orders even if request looks like POS.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_returns_default_for_non_pos_order( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'wc-completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = OrderHelper::create_order();
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( $default_status, $status );
+	}
+
+	/**
 	 * Test that UUID meta is hidden from order edit page.
 	 */
 	public function test_uuid_meta_is_hidden(): void {
@@ -983,6 +1121,9 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertNotFalse( has_filter( 'woocommerce_valid_order_statuses_for_payment', array( $orders, 'valid_order_statuses_for_payment' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $orders, 'valid_order_statuses_for_payment_complete' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_payment_complete_order_status', array( $orders, 'payment_complete_order_status' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_bacs_process_payment_order_status', array( $orders, 'offline_process_payment_order_status' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_cheque_process_payment_order_status', array( $orders, 'offline_process_payment_order_status' ) ) );
+		$this->assertNotFalse( has_filter( 'woocommerce_cod_process_payment_order_status', array( $orders, 'offline_process_payment_order_status' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_hidden_order_itemmeta', array( $orders, 'hidden_order_itemmeta' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_item_product', array( $orders, 'order_item_product' ) ) );
 		$this->assertNotFalse( has_filter( 'woocommerce_order_get_tax_location', array( $orders, 'get_tax_location' ) ) );

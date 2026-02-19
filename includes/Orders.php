@@ -43,6 +43,9 @@ class Orders {
 		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( $this, 'valid_order_statuses_for_payment' ), 10, 2 );
 		add_filter( 'woocommerce_valid_order_statuses_for_payment_complete', array( $this, 'valid_order_statuses_for_payment_complete' ), 10, 2 );
 		add_filter( 'woocommerce_payment_complete_order_status', array( $this, 'payment_complete_order_status' ), 10, 3 );
+		add_filter( 'woocommerce_bacs_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
+		add_filter( 'woocommerce_cheque_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
+		add_filter( 'woocommerce_cod_process_payment_order_status', array( $this, 'offline_process_payment_order_status' ), 10, 2 );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_order_itemmeta' ) );
 		add_filter( 'woocommerce_order_item_product', array( $this, 'order_item_product' ), 10, 2 );
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
@@ -131,6 +134,54 @@ class Orders {
 		}
 
 		return $status;
+	}
+
+	/**
+	 * Process payment order status for offline gateways (BACS, cheque, COD).
+	 *
+	 * @param string            $status Order status from gateway.
+	 * @param WC_Abstract_Order $order  The order object.
+	 *
+	 * @return string
+	 */
+	public function offline_process_payment_order_status( string $status, WC_Abstract_Order $order ): string {
+		if ( ! woocommerce_pos_request() ) {
+			return $status;
+		}
+
+		if ( ! $order->get_id() ) {
+			return $status;
+		}
+
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $status;
+		}
+
+		$checkout_order_status = woocommerce_pos_get_settings( 'checkout', 'order_status' );
+		if ( ! \is_string( $checkout_order_status ) || '' === $checkout_order_status ) {
+			return $status;
+		}
+
+		$normalized_status = 0 === strpos( $checkout_order_status, 'wc-' )
+			? substr( $checkout_order_status, 3 )
+			: $checkout_order_status;
+
+		if ( '' === $normalized_status ) {
+			return $status;
+		}
+
+		$valid_statuses = array_map(
+			function ( string $order_status ): string {
+				return 0 === strpos( $order_status, 'wc-' )
+					? substr( $order_status, 3 )
+					: $order_status;
+			},
+			array_keys( wc_get_order_statuses() )
+		);
+
+		return \in_array( $normalized_status, $valid_statuses, true )
+			? $normalized_status
+			: $status;
 	}
 
 	/**
