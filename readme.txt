@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.13
+Stable tag: 1.8.14
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.14 - 2026/02/19 =
+- **Hardened DB migration locking** — upgrade now uses the WordPress core upgrader lock (`WP_Upgrading`) with an atomic acquisition check and a shutdown fallback, preventing concurrent migrations on high-traffic sites ([#540](https://github.com/wcpos/woocommerce-pos/pull/540))
+- **Fixed offline gateway ignoring POS checkout status** — orders placed with the Cash or Card gateway while offline now respect the configured POS checkout status instead of defaulting to "processing" ([#544](https://github.com/wcpos/woocommerce-pos/pull/544))
+- **Fixed i18n locale fallback and caching** — translation lookups no longer retry locales that returned a definitive 404, reducing unnecessary network requests on every page load ([#543](https://github.com/wcpos/woocommerce-pos/pull/543))
+- **Fixed settings page clipping on some WordPress themes** — the left side of the settings panel was being cut off on sites where `#wpcontent` has extra padding ([#545](https://github.com/wcpos/woocommerce-pos/pull/545))
+- **Reduced extensions catalog cache TTL** — the extension directory now refreshes every hour instead of daily, so newly published extensions appear faster ([#546](https://github.com/wcpos/woocommerce-pos/pull/546))
+- **Allowed php-jwt advisory on PHP 7.4** — resolved a PHP Scoper install failure caused by a security advisory that only affects newer PHP versions ([#541](https://github.com/wcpos/woocommerce-pos/pull/541))
 
 = 1.8.13 - 2026/02/17 =
 - **Fixed root cause of duplicate product metadata** — POS order processing no longer clones product objects in the stock/coupon path, preventing repeated meta rows from being re-saved on each stock update ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))

@@ -2,7 +2,7 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.8.13\n"
+"Project-Id-Version: WCPOS 1.8.14\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
