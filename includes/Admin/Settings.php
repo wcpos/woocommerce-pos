@@ -27,6 +27,7 @@ class Settings {
 	 */
 	public function __construct() {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'admin_head', array( $this, 'override_wpcontent_padding' ) );
 		add_action( 'in_admin_header', array( $this, 'remove_admin_notices' ) );
 
 		/*
@@ -56,6 +57,19 @@ class Settings {
 			esc_html__( 'Error', 'woocommerce-pos' ),
 			esc_html__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
 		);
+	}
+
+	/**
+	 * Zero out #wpcontent padding so the settings page fills edge-to-edge.
+	 *
+	 * WordPress sets padding-left on #wpcontent, but the value varies across
+	 * themes, plugins, and screen sizes. Rather than guessing the value with
+	 * a negative margin hack, we remove it entirely on our settings page.
+	 *
+	 * @return void
+	 */
+	public function override_wpcontent_padding(): void {
+		echo '<style>#wpcontent { padding-left: 0 !important; }</style>';
 	}
 
 	/**
