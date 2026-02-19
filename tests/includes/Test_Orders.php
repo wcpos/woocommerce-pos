@@ -342,6 +342,30 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test offline gateways keep default status for non-POS orders even if request looks like POS.
+	 *
+	 * @dataProvider offline_gateway_process_payment_status_filters_provider
+	 *
+	 * @param string $filter         Hook name.
+	 * @param string $default_status Gateway default status.
+	 */
+	public function test_offline_gateway_process_payment_order_status_returns_default_for_non_pos_order( string $filter, string $default_status ): void {
+		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$settings['order_status'] = 'wc-completed';
+		update_option( 'woocommerce_pos_settings_checkout', $settings );
+
+		$order = OrderHelper::create_order();
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( $filter, $default_status, $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( $default_status, $status );
+	}
+
+	/**
 	 * Test that UUID meta is hidden from order edit page.
 	 */
 	public function test_uuid_meta_is_hidden(): void {

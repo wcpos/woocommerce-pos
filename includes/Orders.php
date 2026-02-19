@@ -153,6 +153,10 @@ class Orders {
 			return $status;
 		}
 
+		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
+			return $status;
+		}
+
 		$checkout_order_status = woocommerce_pos_get_settings( 'checkout', 'order_status' );
 		if ( ! \is_string( $checkout_order_status ) || '' === $checkout_order_status ) {
 			return $status;
