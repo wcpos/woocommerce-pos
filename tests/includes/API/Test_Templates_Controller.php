@@ -117,11 +117,28 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $response->get_data();
 		$this->assertIsArray( $data );
+		if ( ! empty( $data ) ) {
+			$this->assertArrayHasKey( 'engine', $data[0] );
+			$this->assertArrayHasKey( 'output_type', $data[0] );
+		}
 
 		// Check headers
 		$headers = $response->get_headers();
 		$this->assertArrayHasKey( 'X-WP-Total', $headers );
 		$this->assertArrayHasKey( 'X-WP-TotalPages', $headers );
+	}
+
+	/**
+	 * Test virtual template metadata defaults.
+	 */
+	public function test_virtual_template_includes_engine_and_output_type(): void {
+		$template = \WCPOS\WooCommercePOS\Templates::get_virtual_template( 'plugin-core', 'receipt' );
+		if ( ! $template ) {
+			$this->markTestSkipped( 'No core virtual receipt template found.' );
+		}
+
+		$this->assertEquals( 'legacy-php', $template['engine'] );
+		$this->assertEquals( 'html', $template['output_type'] );
 	}
 
 	/**

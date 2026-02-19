@@ -38,6 +38,7 @@ class Settings {
 			'generate_username'           => true,
 		),
 		'checkout' => array(
+			'receipt_default_mode' => 'fiscal',
 			'admin_emails'    => array(
 				'enabled'         => true,
 				'new_order'       => true,

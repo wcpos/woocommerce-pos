@@ -190,6 +190,8 @@ class Templates {
 			'type'          => $type,
 			'language'      => get_post_meta( $template_id, '_template_language', true ) ? get_post_meta( $template_id, '_template_language', true ) : 'php',
 			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
+			'engine'        => get_post_meta( $template_id, '_template_engine', true ) ? get_post_meta( $template_id, '_template_engine', true ) : 'legacy-php',
+			'output_type'   => get_post_meta( $template_id, '_template_output_type', true ) ? get_post_meta( $template_id, '_template_output_type', true ) : 'html',
 			'is_virtual'    => false,
 			'source'        => 'custom',
 			'date_created'  => $post->post_date,
@@ -225,6 +227,8 @@ class Templates {
 			'type'       => $type,
 			'language'   => 'php',
 			'file_path'  => $file_path,
+			'engine'     => 'legacy-php',
+			'output_type' => 'html',
 			'is_virtual' => true,
 			'source'     => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
 		);
@@ -522,4 +526,3 @@ class Templates {
 		<?php
 	}
 }
-
