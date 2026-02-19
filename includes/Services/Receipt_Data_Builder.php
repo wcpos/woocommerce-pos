@@ -83,16 +83,18 @@ class Receipt_Data_Builder {
 
 			$qty = (float) $item->get_quantity();
 			if ( $qty <= 0 ) {
-				$qty = 1;
+				$qty = 0.0;
 			}
+			$unit_price_incl = $qty > 0 ? $line_total_incl / $qty : 0.0;
+			$unit_price_excl = $qty > 0 ? $line_total_excl / $qty : 0.0;
 
 			$lines[] = array(
 				'key'               => (string) $item_id,
 				'sku'               => $item->get_product() ? $item->get_product()->get_sku() : '',
 				'name'              => $item->get_name(),
 				'qty'               => $qty,
-				'unit_price_incl'   => $line_total_incl / $qty,
-				'unit_price_excl'   => $line_total_excl / $qty,
+				'unit_price_incl'   => $unit_price_incl,
+				'unit_price_excl'   => $unit_price_excl,
 				'line_subtotal_incl' => $line_subtotal_incl,
 				'line_subtotal_excl' => $line_subtotal_excl,
 				'discounts_incl'    => max( 0, $line_subtotal_incl - $line_total_incl ),

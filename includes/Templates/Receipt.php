@@ -363,6 +363,8 @@ class Receipt {
 			if ( $snapshot ) {
 				return $snapshot;
 			}
+
+			$mode = 'live';
 		}
 
 		return ( new Receipt_Data_Builder() )->build( $order, $mode );

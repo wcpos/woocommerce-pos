@@ -166,4 +166,29 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertGreaterThan( (float) $line['line_total_excl'], (float) $line['line_total_incl'] );
 		$this->assertGreaterThan( 0, (float) $payload['totals']['tax_total'] );
 	}
+
+	/**
+	 * Test zero-quantity lines do not force quantity to one.
+	 */
+	public function test_build_keeps_zero_quantity_and_avoids_division_by_zero(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Zero Qty Product' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+		$order->save();
+		$item = array_values( $order->get_items() )[0];
+		wc_update_order_item_meta( $item->get_id(), '_qty', 0 );
+		$order = wc_get_order( $order->get_id() );
+
+		$payload = $this->builder->build( $order, 'live' );
+		$line    = $payload['lines'][0];
+
+		$this->assertEquals( 0.0, (float) $line['qty'] );
+		$this->assertEquals( 0.0, (float) $line['unit_price_incl'] );
+		$this->assertEquals( 0.0, (float) $line['unit_price_excl'] );
+	}
 }
