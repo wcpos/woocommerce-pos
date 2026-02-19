@@ -73,6 +73,22 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test HTML adapter sanitizes custom HTML context payload.
+	 */
+	public function test_html_output_adapter_sanitizes_context_html(): void {
+		$adapter = new Html_Output_Adapter();
+		$output  = $adapter->transform(
+			$this->get_fixture_payload(),
+			array(
+				'html' => '<div>safe</div><script>alert("xss")</script>',
+			)
+		);
+
+		$this->assertStringContainsString( '<div>safe</div>', $output );
+		$this->assertStringNotContainsString( '<script>', $output );
+	}
+
+	/**
 	 * Test ESC/POS adapter output.
 	 */
 	public function test_escpos_output_adapter_transforms_payload(): void {

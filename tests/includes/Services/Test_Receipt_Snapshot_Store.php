@@ -99,4 +99,57 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		$this->assertNotEquals( $one['fiscal']['sequence'], $two['fiscal']['sequence'] );
 		$this->assertGreaterThan( $one['fiscal']['sequence'], $two['fiscal']['sequence'] );
 	}
+
+	/**
+	 * Test next_sequence throws when lock acquisition fails.
+	 */
+	public function test_next_sequence_throws_when_lock_not_acquired(): void {
+		global $wpdb;
+
+		$original_wpdb = $wpdb;
+		$wpdb          = new class() {
+			public function prepare( $query, ...$args ) {
+				return vsprintf( str_replace( array( '%s', '%d' ), array( "'%s'", '%d' ), $query ), $args );
+			}
+
+			public function get_var( $query ) {
+				if ( false !== strpos( $query, 'GET_LOCK' ) ) {
+					return 0;
+				}
+
+				return null;
+			}
+		};
+
+		$method = new \ReflectionMethod( Receipt_Snapshot_Store::class, 'next_sequence' );
+		$method->setAccessible( true );
+
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'Unable to acquire receipt sequence lock' );
+
+		try {
+			$method->invoke( $this->store );
+		} finally {
+			$wpdb = $original_wpdb;
+		}
+	}
+
+	/**
+	 * Test persist_snapshot rejects non-encodable JSON payloads.
+	 */
+	public function test_persist_snapshot_throws_on_json_encode_failure(): void {
+		$order = OrderHelper::create_order();
+
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'Failed to encode receipt snapshot to JSON' );
+
+		$this->store->persist_snapshot(
+			$order->get_id(),
+			array(
+				'meta'   => array(),
+				'fiscal' => array(),
+				'bad'    => INF,
+			)
+		);
+	}
 }

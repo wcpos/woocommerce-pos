@@ -23,7 +23,7 @@ class Html_Output_Adapter implements Receipt_Output_Adapter_Interface {
 	 */
 	public function transform( array $receipt_data, array $context = array() ): string {
 		if ( isset( $context['html'] ) && \is_string( $context['html'] ) ) {
-			return $context['html'];
+			return wp_kses_post( $context['html'] );
 		}
 
 		$order_number = isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '';
