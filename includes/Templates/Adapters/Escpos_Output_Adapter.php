@@ -49,7 +49,7 @@ class Escpos_Output_Adapter implements Receipt_Output_Adapter_Interface {
 	const CODEPAGE_PREFIX = "\x1Bt";
 
 	/**
-	 * GS V A 0 full cut command.
+	 * GS V A 1 partial cut command.
 	 */
 	const CUT_PARTIAL = "\x1DV\x41\x01";
 
