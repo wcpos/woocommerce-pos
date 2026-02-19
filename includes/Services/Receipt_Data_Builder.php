@@ -69,6 +69,10 @@ class Receipt_Data_Builder {
 
 		$lines = array();
 		foreach ( $order->get_items( 'line_item' ) as $item_id => $item ) {
+			if ( ! $item instanceof \WC_Order_Item_Product ) {
+				continue;
+			}
+
 			$line_total_excl = (float) $item->get_total();
 			$line_tax_total  = (float) $item->get_total_tax();
 			$line_total_incl = $line_total_excl + $line_tax_total;
@@ -207,14 +211,23 @@ class Receipt_Data_Builder {
 	private function get_tax_summary( WC_Abstract_Order $order ): array {
 		$summary = array();
 
-		foreach ( $order->get_tax_totals() as $code => $tax ) {
+		foreach ( $order->get_items( 'tax' ) as $tax_item_id => $tax_item ) {
+			$tax_amount = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
+			$rate       = (float) $tax_item->get_rate_percent();
+			$taxable_excl = $rate > 0 ? $tax_amount / ( $rate / 100 ) : null;
+			$taxable_incl = null;
+
+			if ( null !== $taxable_excl ) {
+				$taxable_incl = $taxable_excl + $tax_amount;
+			}
+
 			$summary[] = array(
-				'code'                => $code,
-				'rate'                => null,
-				'label'               => $tax->label,
-				'taxable_amount_excl' => (float) $tax->amount,
-				'tax_amount'          => (float) $tax->amount,
-				'taxable_amount_incl' => (float) $tax->amount,
+				'code'                => (string) $tax_item->get_rate_id(),
+				'rate'                => $rate > 0 ? $rate : null,
+				'label'               => $tax_item->get_label( $order ),
+				'taxable_amount_excl' => $taxable_excl,
+				'tax_amount'          => $tax_amount,
+				'taxable_amount_incl' => $taxable_incl,
 			);
 		}
 

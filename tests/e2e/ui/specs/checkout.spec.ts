@@ -26,7 +26,7 @@ test.describe('Checkout Settings', () => {
 
 		// Verify the expected column headers
 		await expect(table.locator('th').getByText('Default')).toBeVisible();
-		await expect(table.locator('th').getByText('Gateway')).toBeVisible();
+		await expect(table.getByRole('columnheader', { name: 'Gateway', exact: true })).toBeVisible();
 		await expect(table.locator('th').getByText('Enabled')).toBeVisible();
 	});
 

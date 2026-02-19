@@ -573,8 +573,8 @@ class List_Templates {
 
 		// Set meta fields.
 		update_post_meta( $post_id, '_template_language', $template['language'] ?? 'php' );
-		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
-		update_post_meta( $post_id, '_template_output_type', 'html' );
+		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'legacy-php' );
+		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
 
 		// Redirect to edit the new template.
 		wp_safe_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&wcpos_copied=1' ) );
