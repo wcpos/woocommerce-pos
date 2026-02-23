@@ -6,60 +6,11 @@ alwaysApply: true
 
 # WooCommerce POS Plugin (Free)
 
-## What This Is
+WordPress plugin enabling Point of Sale for WooCommerce. Free version on WordPress.org.
 
-WordPress plugin that enables Point of Sale functionality for WooCommerce stores. This is the **free version** available on WordPress.org.
-
-## System Context
-
-See `wcpos-infra/ARCHITECTURE.md` for the full WCPOS ecosystem.
-
-This plugin:
 - Extends WooCommerce REST API for POS functionality
 - Provides `/pos` endpoint in WordPress
-- Handles authentication between WC store and WCPOS app
+- Handles auth between WC store and WCPOS app
+- Auto-deployed to WordPress.org via GitHub Actions
 
-## Tech Stack
-
-- **Language**: PHP
-- **Framework**: WordPress Plugin API
-- **Requires**: WooCommerce
-- **Tested with**: WordPress 6.x, WooCommerce 8.x
-
-## Structure
-
-```
-woocommerce-pos/
-├── includes/           # PHP classes
-├── templates/          # Template files
-├── assets/             # CSS, JS, images
-├── languages/          # i18n
-├── woocommerce-pos.php # Main plugin file
-└── readme.txt          # WordPress.org readme
-```
-
-## Development
-
-```bash
-composer install        # PHP deps
-npm install             # JS deps (if any)
-```
-
-## Deployment
-
-- **WordPress.org**: Auto-deployed via GitHub Actions
-- **WP Engine (dev)**: Auto-deployed for testing
-
-## Extensions
-
-WCPOS supports installable extensions (e.g. payment terminal integrations). The extension catalog lives in a separate repo: https://github.com/wcpos/extensions — a single `catalog.json` that the plugin fetches and caches. The free plugin provides `GET /wcpos/v1/extensions` to browse the catalog; the pro plugin adds `POST /wcpos/v1/extensions/action` for install/activate/update.
-
-## Related Projects
-
-- `woocommerce-pos-pro` - Pro version with additional features
-- `wcpos/extensions` - Extension catalog (`catalog.json`, icons)
-- `monorepo-v2` - The WCPOS app that connects to this plugin
-
-## WordPress Hooks
-
-Plugin hooks are documented at: https://wcpos.github.io/woocommerce-pos
+WordPress hooks documented at: https://wcpos.github.io/woocommerce-pos
