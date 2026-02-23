@@ -22,7 +22,7 @@
     "woocommerce/woocommerce-sniffs": "1.0.1",
     "wp-coding-standards/wpcs": "3.3.0",
     "wp-phpunit/wp-phpunit": "6.9.1",
-    "yoast/phpunit-polyfills": "2.0.5"
+    "yoast/phpunit-polyfills": "4.0.0"
   },
   "require": {
     "php": ">=7.4",
