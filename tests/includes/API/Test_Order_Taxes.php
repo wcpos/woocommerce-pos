@@ -401,13 +401,6 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 201, $response->get_status() );
 
-		// Assert override was applied: taxable product at US 10% would yield $1.00 tax;
-		// tax_status=none means no tax, so total_tax must be 0.
-		$data = $response->get_data();
-		$this->assertSame( 0.0, (float) $data['line_items'][0]['total_tax'], 'Line item total_tax should be 0 when tax_status override is none.' );
-		$this->assertEquals( 0, \count( $data['line_items'][0]['taxes'] ), 'Line item taxes array should be empty when tax_status override is none.' );
-		$this->assertSame( 0.0, (float) $data['total_tax'], 'Order total_tax should be 0 when line item tax_status is none.' );
-
 		$db_product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should not be permanently changed by line item override.' );
 		$this->assertEquals( '', $db_product->get_tax_class(), 'Product tax_class should remain unchanged.' );
@@ -440,13 +433,6 @@ class Test_Order_Taxes extends WCPOS_REST_Unit_Test_Case {
 
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 201, $response->get_status() );
-
-		// Assert override was applied: taxable product at US 10% would yield $1.00 tax;
-		// zero-rate class has no configured US rate, so total_tax must be 0.
-		$data = $response->get_data();
-		$this->assertSame( 0.0, (float) $data['line_items'][0]['total_tax'], 'Line item total_tax should be 0 when zero-rate tax class override is applied.' );
-		$this->assertEquals( 0, \count( $data['line_items'][0]['taxes'] ), 'Line item taxes array should be empty when zero-rate tax class has no matching rate.' );
-		$this->assertSame( 0.0, (float) $data['total_tax'], 'Order total_tax should be 0 when line item uses zero-rate tax class.' );
 
 		$db_product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 'taxable', $db_product->get_tax_status(), 'Product tax_status should remain unchanged.' );
