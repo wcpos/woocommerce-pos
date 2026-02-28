@@ -26,6 +26,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 
 	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@%s/translations/php/%s/%s-%s.l10n.php';
 	private const MISSING_LOCALE_CACHE_TTL = DAY_IN_SECONDS;
+	private const WRITE_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
 
 	/**
 	 * Text domain for the plugin.
@@ -63,6 +64,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @var int|null
 	 */
 	protected ?int $last_download_status_code = null;
+
+	/**
+	 * Whether the last download attempt failed due to filesystem write errors.
+	 *
+	 * @var bool
+	 */
+	protected bool $last_write_failed = false;
 
 	/**
 	 * Load translations from jsDelivr.
@@ -130,6 +138,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			$downloaded = $this->download_translation( $candidate_locale, $file, $index < $last_candidate_index );
 
 			if ( $downloaded ) {
+				// Recompute file path — download_translation() may have switched to fallback path.
+				$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
 				set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
 				delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
 				$this->load_translation_file( $candidate_locale, $file );
@@ -204,6 +214,29 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	}
 
 	/**
+	 * Get the fallback languages path using the uploads directory.
+	 *
+	 * Used when the primary languages path (WP_LANG_DIR/plugins/) is not writable.
+	 * The uploads directory is writable on any functioning WordPress install.
+	 *
+	 * @return string
+	 */
+	protected function get_fallback_languages_path(): string {
+		$upload_dir = wp_upload_dir();
+
+		return trailingslashit( $upload_dir['basedir'] ) . 'wcpos-languages/';
+	}
+
+	/**
+	 * Build the transient key used for write-failure caching.
+	 *
+	 * @return string
+	 */
+	protected function get_write_failed_transient_key(): string {
+		return $this->transient_key . '_write_failed';
+	}
+
+	/**
 	 * Ensure .l10n.php file uses WordPress 6.5+ format with 'messages' key.
 	 *
 	 * CDN files use a flat array format, but WordPress expects:
@@ -233,17 +266,49 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	}
 
 	/**
+	 * Write translation content to a file using WP_Filesystem.
+	 *
+	 * @param string $file The target file path.
+	 * @param string $body The file content to write.
+	 *
+	 * @return bool Whether the write was successful.
+	 */
+	protected function write_translation_file( string $file, string $body ): bool {
+		$dir = dirname( $file );
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
+
+		global $wp_filesystem;
+		if ( empty( $wp_filesystem ) ) {
+			require_once ABSPATH . '/wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		if ( ! $wp_filesystem || ! is_object( $wp_filesystem ) ) {
+			return false;
+		}
+
+		return $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
+	}
+
+	/**
 	 * Download a translation file from jsDelivr.
+	 *
+	 * Tries writing to the primary languages path first. If that fails,
+	 * falls back to the uploads directory. If both fail, sets
+	 * $last_write_failed so the caller can cache the failure.
 	 *
 	 * @param string $locale            The locale code (e.g., de_DE).
 	 * @param string $file              The target file path.
 	 * @param bool   $suppress_404_logs Suppress 404 logging for fallback attempts.
 	 *
-	 * @return bool Whether the download was successful.
+	 * @return bool Whether the download and write was successful.
 	 */
 	protected function download_translation( string $locale, string $file, bool $suppress_404_logs = false ): bool {
 		$url = sprintf( self::CDN_BASE_URL, $this->version, $locale, $this->text_domain, $locale );
 		$this->last_download_status_code = null;
+		$this->last_write_failed         = false;
 
 		$response = wp_remote_get(
 			$url,
@@ -276,31 +341,28 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return false;
 		}
 
-		// Ensure the directory exists.
-		$dir = dirname( $file );
-		if ( ! is_dir( $dir ) ) {
-			wp_mkdir_p( $dir );
+		// Try writing to primary path.
+		if ( $this->write_translation_file( $file, $body ) ) {
+			return true;
 		}
 
-		// Use WP_Filesystem for writing.
-		global $wp_filesystem;
-		if ( empty( $wp_filesystem ) ) {
-			require_once ABSPATH . '/wp-admin/includes/file.php';
-			WP_Filesystem();
+		// Primary write failed — try uploads fallback.
+		$fallback_path = $this->get_fallback_languages_path();
+		if ( $fallback_path !== $this->languages_path ) {
+			$fallback_file = $fallback_path . basename( $file );
+			if ( $this->write_translation_file( $fallback_file, $body ) ) {
+				Logger::log( sprintf( 'i18n: Primary path not writable, using fallback for %s translations: %s', $locale, $fallback_path ) );
+				$this->languages_path = $fallback_path;
+				set_transient( $this->transient_key . '_active_path', 'uploads', MONTH_IN_SECONDS );
+
+				return true;
+			}
 		}
 
-		// Verify WP_Filesystem initialized successfully.
-		if ( ! $wp_filesystem || ! is_object( $wp_filesystem ) ) {
-			Logger::log( sprintf( 'i18n: Failed to write %s translation - WP_Filesystem not available', $locale ) );
+		// Both paths failed (or already at fallback and it failed).
+		$this->last_write_failed = true;
+		Logger::log( sprintf( 'i18n: Failed to write %s translation to any writable location', $locale ) );
 
-			return false;
-		}
-
-		$written = $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
-		if ( ! $written ) {
-			Logger::log( sprintf( 'i18n: Failed to write %s translation to %s', $locale, $file ) );
-		}
-
-		return $written;
+		return false;
 	}
 }

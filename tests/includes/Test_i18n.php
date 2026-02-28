@@ -38,6 +38,10 @@ class Test_i18n extends WC_Unit_Test_Case {
 		delete_transient( 'wcpos_i18n_woocommerce-pos_fr_FR' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_da_DK' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_missing_fr_FR' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_write_failed' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_active_path' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_write_failed' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_active_path' );
 	}
 
 	public function tearDown(): void {
@@ -50,8 +54,20 @@ class Test_i18n extends WC_Unit_Test_Case {
 			rmdir( $this->temp_lang_dir );
 		}
 
-		// Remove locale filter if set.
+		// Clean up fallback languages dir if created.
+		$upload_dir    = wp_upload_dir();
+		$fallback_dir  = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-languages/';
+		$fallback_files = glob( $fallback_dir . '*' );
+		if ( $fallback_files ) {
+			array_map( 'unlink', $fallback_files );
+		}
+		if ( is_dir( $fallback_dir ) ) {
+			rmdir( $fallback_dir );
+		}
+
+		// Remove locale and upload_dir filters if set.
 		remove_all_filters( 'locale' );
+		remove_all_filters( 'upload_dir' );
 
 		parent::tearDown();
 	}
@@ -532,5 +548,100 @@ class Test_i18n extends WC_Unit_Test_Case {
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$this->assertCount( 4, $this->http_requests, 'Should retry downloads on subsequent attempts when failure was not 404' );
+	}
+
+	/**
+	 * @covers ::download_translation
+	 */
+	public function test_write_falls_back_to_uploads_dir(): void {
+		add_filter( 'locale', function () {
+			return 'de_DE';
+		} );
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array('Hello' => 'Hallo'));",
+			);
+		};
+
+		// Block primary path by placing a file where a directory is expected.
+		$blocker        = $this->temp_lang_dir . 'blocked';
+		file_put_contents( $blocker, 'x' );
+		$unwritable_dir = $blocker . '/lang/';
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $unwritable_dir );
+
+		// File should exist at the uploads fallback path.
+		$upload_dir   = wp_upload_dir();
+		$fallback_dir = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-languages/';
+		$fallback_file = $fallback_dir . 'woocommerce-pos-de_DE.l10n.php';
+		$this->assertFileExists( $fallback_file, 'Translation file should be written to uploads fallback path' );
+
+		// Primary unwritable path should not have the file.
+		$primary_file = $unwritable_dir . 'woocommerce-pos-de_DE.l10n.php';
+		$this->assertFileDoesNotExist( $primary_file, 'Translation file should not exist at unwritable primary path' );
+
+		// Clean up blocker file.
+		unlink( $blocker );
+	}
+
+	/**
+	 * @covers ::download_translation
+	 */
+	public function test_fallback_path_sets_active_path_transient(): void {
+		add_filter( 'locale', function () {
+			return 'de_DE';
+		} );
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array());",
+			);
+		};
+
+		$blocker        = $this->temp_lang_dir . 'blocked';
+		file_put_contents( $blocker, 'x' );
+		$unwritable_dir = $blocker . '/lang/';
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $unwritable_dir );
+
+		$this->assertEquals(
+			'uploads',
+			get_transient( 'wcpos_i18n_woocommerce-pos_active_path' ),
+			'Active path transient should be set to "uploads" after fallback write succeeds'
+		);
+
+		unlink( $blocker );
+	}
+
+	/**
+	 * @covers ::download_translation
+	 */
+	public function test_primary_write_success_does_not_set_fallback_transient(): void {
+		add_filter( 'locale', function () {
+			return 'de_DE';
+		} );
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array());",
+			);
+		};
+
+		// temp_lang_dir is writable — primary write should succeed.
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertFalse(
+			get_transient( 'wcpos_i18n_woocommerce-pos_active_path' ),
+			'Active path transient should not be set when primary write succeeds'
+		);
+
+		// Uploads fallback dir should not exist.
+		$upload_dir   = wp_upload_dir();
+		$fallback_dir = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-languages/';
+		$this->assertDirectoryDoesNotExist( $fallback_dir, 'Fallback directory should not be created when primary write succeeds' );
 	}
 }
