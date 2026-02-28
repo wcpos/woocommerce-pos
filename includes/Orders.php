@@ -133,9 +133,26 @@ class Orders {
 			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
 
 			// This filter expects statuses without the 'wc-' prefix.
-			return 0 === strpos( $gateway_status, 'wc-' )
+			$normalized_status = 0 === strpos( $gateway_status, 'wc-' )
 				? substr( $gateway_status, 3 )
 				: $gateway_status;
+
+			if ( '' === $normalized_status ) {
+				return $status;
+			}
+
+			$valid_statuses = array_map(
+				function ( string $order_status ): string {
+					return 0 === strpos( $order_status, 'wc-' )
+						? substr( $order_status, 3 )
+						: $order_status;
+				},
+				array_keys( wc_get_order_statuses() )
+			);
+
+			return \in_array( $normalized_status, $valid_statuses, true )
+				? $normalized_status
+				: $status;
 		}
 
 		return $status;
