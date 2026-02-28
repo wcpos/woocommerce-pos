@@ -14,7 +14,6 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Logger;
-use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 
 /**
@@ -82,8 +81,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	public function __construct( ?string $text_domain = null, ?string $version = null, ?string $languages_path = null ) {
 		$this->text_domain    = $text_domain ?? 'woocommerce-pos';
 		$this->version        = $version ?? TRANSLATION_VERSION;
-		$this->languages_path = $languages_path ?? PLUGIN_PATH . 'languages/';
 		$this->transient_key  = 'wcpos_i18n_' . $this->text_domain;
+		$this->languages_path = $languages_path ?? $this->resolve_languages_path();
 
 		$this->load_translations();
 	}
@@ -246,6 +245,24 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 */
 	protected function get_write_failed_transient_key(): string {
 		return $this->transient_key . '_write_failed';
+	}
+
+	/**
+	 * Determine the languages path to use.
+	 *
+	 * Checks if a previous session fell back to the uploads directory and
+	 * returns that path if so. Otherwise returns the standard WordPress
+	 * languages/plugins/ directory.
+	 *
+	 * @return string
+	 */
+	protected function resolve_languages_path(): string {
+		$active = get_transient( $this->transient_key . '_active_path' );
+		if ( 'uploads' === $active ) {
+			return $this->get_fallback_languages_path();
+		}
+
+		return WP_LANG_DIR . '/plugins/';
 	}
 
 	/**

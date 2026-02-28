@@ -946,4 +946,61 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 
 		unlink( $blocker );
 	}
+
+	/**
+	 * Verify constructor uses WP_LANG_DIR/plugins/ as default languages path.
+	 *
+	 * @covers ::__construct
+	 */
+	public function test_default_languages_path_is_wp_lang_dir_plugins(): void {
+		// Use en_US to skip translation loading (avoids HTTP requests).
+		add_filter(
+			'locale',
+			function () {
+				return 'en_US';
+			}
+		);
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7' );
+
+		$reflection = new \ReflectionProperty( i18n::class, 'languages_path' );
+		$reflection->setAccessible( true );
+
+		$this->assertEquals(
+			WP_LANG_DIR . '/plugins/',
+			$reflection->getValue( $i18n ),
+			'Default languages path should be WP_LANG_DIR/plugins/'
+		);
+	}
+
+	/**
+	 * Verify constructor uses uploads fallback when active_path transient is set.
+	 *
+	 * @covers ::__construct
+	 */
+	public function test_remembered_fallback_path_used_on_construction(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'en_US';
+			}
+		);
+
+		// Simulate a previous session that fell back to uploads.
+		set_transient( 'wcpos_i18n_woocommerce-pos_active_path', 'uploads' );
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7' );
+
+		$reflection = new \ReflectionProperty( i18n::class, 'languages_path' );
+		$reflection->setAccessible( true );
+
+		$upload_dir    = wp_upload_dir();
+		$expected_path = trailingslashit( $upload_dir['basedir'] ) . 'wcpos-languages/';
+
+		$this->assertEquals(
+			$expected_path,
+			$reflection->getValue( $i18n ),
+			'Constructor should use uploads fallback when active_path transient is set'
+		);
+	}
 }
