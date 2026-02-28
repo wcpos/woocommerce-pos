@@ -38,6 +38,7 @@
 	"settings.need_help": "Need help?",
 	"settings.authorize_via_url_param": "Authorize via URL param",
 	"settings.authorize_via_url_param_tip": "Some servers disable the Authorization header, this will use a URL param instead",
+	"checkout.order_status": "Order Status",
 	"checkout.completed_order_status": "Completed order status",
 	"checkout.completed_order_status_tip": "Change the default order status for POS sales",
 	"checkout.admin_emails": "Admin emails",
