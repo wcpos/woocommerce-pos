@@ -79,12 +79,14 @@ class Settings {
 			'default_gateway' => 'pos_cash',
 			'gateways'        => array(
 				'pos_cash' => array(
-					'order'   => 0,
-					'enabled' => true,
+					'order'        => 0,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
 				),
 				'pos_card' => array(
-					'order'   => 1,
-					'enabled' => true,
+					'order'        => 1,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
 				),
 			),
 		),
@@ -492,19 +494,26 @@ class Settings {
 			'gateways'        => array(),
 		);
 
+		// Gateways that represent deferred/unverified payment default to on-hold.
+		$on_hold_gateways = array( 'bacs', 'cheque' );
+
 		// loop through installed gateways and merge with saved settings.
 		foreach ( $installed_gateways as $id => $gateway ) {
 			// sanity check for gateway class.
 			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
 				continue;
 			}
+
+			$default_status = in_array( $id, $on_hold_gateways, true ) ? 'wc-on-hold' : 'wc-completed';
+
 			$response['gateways'][ $id ] = array_replace_recursive(
 				array(
-					'id'          => $gateway->id,
-					'title'       => $gateway->title,
-					'description' => $gateway->description,
-					'enabled'     => false,
-					'order'       => 999,
+					'id'           => $gateway->id,
+					'title'        => $gateway->title,
+					'description'  => $gateway->description,
+					'enabled'      => false,
+					'order'        => 999,
+					'order_status' => $default_status,
 				),
 				$gateways_settings['gateways'][ $id ] ?? array()
 			);
