@@ -43,6 +43,13 @@ class Test_Orders extends WC_Unit_Test_Case {
 	private $original_checkout_settings;
 
 	/**
+	 * Original payment gateways settings.
+	 *
+	 * @var array|false
+	 */
+	private $original_payment_gateways_settings;
+
+	/**
 	 * Original default country.
 	 *
 	 * @var false|string
@@ -56,8 +63,9 @@ class Test_Orders extends WC_Unit_Test_Case {
 		parent::setUp();
 
 		// Store original settings
-		$this->original_checkout_settings = get_option( 'woocommerce_pos_settings_checkout' );
-		$this->original_default_country   = get_option( 'woocommerce_default_country' );
+		$this->original_checkout_settings          = get_option( 'woocommerce_pos_settings_checkout' );
+		$this->original_default_country             = get_option( 'woocommerce_default_country' );
+		$this->original_payment_gateways_settings = get_option( 'woocommerce_pos_settings_payment_gateways' );
 
 		// Instantiate the Orders class
 		$this->orders = new Orders();
@@ -79,6 +87,13 @@ class Test_Orders extends WC_Unit_Test_Case {
 			update_option( 'woocommerce_default_country', $this->original_default_country );
 		} else {
 			delete_option( 'woocommerce_default_country' );
+		}
+
+		// Restore payment gateways settings
+		if ( false !== $this->original_payment_gateways_settings ) {
+			update_option( 'woocommerce_pos_settings_payment_gateways', $this->original_payment_gateways_settings );
+		} else {
+			delete_option( 'woocommerce_pos_settings_payment_gateways' );
 		}
 
 		// Clean up any POS request state
@@ -207,24 +222,32 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * Test payment_complete_order_status returns setting value during POS request.
 	 */
 	public function test_payment_complete_order_status_from_settings(): void {
-		// Set the checkout order status setting
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
 
 		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
 
-		// Simulate a POS request
 		$_REQUEST['pos']         = '1';
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
 
-		// Clean up
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		// Note: This test might need adjustment based on how woocommerce_pos_request() works
-		$this->assertContains( $status, array( 'processing', 'completed' ), 'Status should be from settings or default' );
+		$this->assertContains( $status, array( 'processing', 'wc-completed' ), 'Status should be from settings or default' );
 	}
 
 	/**
@@ -258,11 +281,26 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @param string $default_status Gateway default status.
 	 */
 	public function test_offline_gateway_process_payment_order_status_from_settings_during_pos_request( string $filter, string $default_status ): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'wc-completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		preg_match( '/woocommerce_(\w+)_process_payment/', $filter, $matches );
+		$gateway_id = $matches[1];
+
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
 
 		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
 
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
@@ -282,11 +320,26 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @param string $default_status Gateway default status.
 	 */
 	public function test_offline_gateway_process_payment_order_status_from_unprefixed_setting( string $filter, string $default_status ): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		preg_match( '/woocommerce_(\w+)_process_payment/', $filter, $matches );
+		$gateway_id = $matches[1];
+
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'completed',
+					),
+				),
+			)
+		);
 
 		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
 
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
@@ -306,11 +359,26 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @param string $default_status Gateway default status.
 	 */
 	public function test_offline_gateway_process_payment_order_status_returns_default_outside_pos_request( string $filter, string $default_status ): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'wc-completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		preg_match( '/woocommerce_(\w+)_process_payment/', $filter, $matches );
+		$gateway_id = $matches[1];
+
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
 
 		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
 
 		$status = apply_filters( $filter, $default_status, $order );
 
@@ -326,11 +394,26 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @param string $default_status Gateway default status.
 	 */
 	public function test_offline_gateway_process_payment_order_status_returns_default_for_invalid_setting( string $filter, string $default_status ): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'not-a-real-status';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		preg_match( '/woocommerce_(\w+)_process_payment/', $filter, $matches );
+		$gateway_id = $matches[1];
+
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'not-a-real-status',
+					),
+				),
+			)
+		);
 
 		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( $gateway_id );
+		$order->save();
 
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
@@ -350,11 +433,26 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @param string $default_status Gateway default status.
 	 */
 	public function test_offline_gateway_process_payment_order_status_returns_default_for_non_pos_order( string $filter, string $default_status ): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'wc-completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		preg_match( '/woocommerce_(\w+)_process_payment/', $filter, $matches );
+		$gateway_id = $matches[1];
+
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					$gateway_id => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
 
 		$order = OrderHelper::create_order();
+		$order->set_payment_method( $gateway_id );
+		$order->save();
 
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
@@ -363,6 +461,194 @@ class Test_Orders extends WC_Unit_Test_Case {
 		unset( $_SERVER['HTTP_X_WCPOS'] );
 
 		$this->assertEquals( $default_status, $status );
+	}
+
+	/**
+	 * Test per-gateway order status is applied for POS payment complete.
+	 */
+	public function test_per_gateway_order_status_for_payment_complete(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'wc-completed', $status );
+	}
+
+	/**
+	 * Test per-gateway order status returns different statuses for different gateways.
+	 */
+	public function test_per_gateway_order_status_differs_by_gateway(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+					'bacs'     => array(
+						'order'        => 1,
+						'enabled'      => true,
+						'order_status' => 'wc-on-hold',
+					),
+				),
+			)
+		);
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$bacs_order = $this->create_pos_order( 'pos-open' );
+		$bacs_order->set_payment_method( 'bacs' );
+		$bacs_order->save();
+
+		$bacs_status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $bacs_order );
+		$this->assertEquals( 'on-hold', $bacs_status );
+
+		$cash_order = $this->create_pos_order( 'pos-open' );
+		$cash_order->set_payment_method( 'pos_cash' );
+		$cash_order->save();
+
+		$_REQUEST['pos'] = '1';
+		$cash_status     = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $cash_order->get_id(), $cash_order );
+		$this->assertEquals( 'wc-completed', $cash_status );
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+	}
+
+	/**
+	 * Test per-gateway order status falls back to wc-completed when gateway has no setting.
+	 */
+	public function test_per_gateway_order_status_fallback_to_completed(): void {
+		delete_option( 'woocommerce_pos_settings_payment_gateways' );
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
+
+		$_REQUEST['pos']         = '1';
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $order->get_id(), $order );
+
+		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'wc-completed', $status );
+	}
+
+	/**
+	 * Test per-gateway order status with invalid status falls back to gateway default.
+	 */
+	public function test_per_gateway_order_status_invalid_falls_back(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'bacs' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-not-a-real-status',
+					),
+				),
+			)
+		);
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'on-hold', $status );
+	}
+
+	/**
+	 * Test non-POS orders are unaffected by per-gateway settings.
+	 */
+	public function test_per_gateway_order_status_non_pos_unaffected(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'bacs' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'on-hold', $status );
+	}
+
+	/**
+	 * Test per-gateway status normalization (accepts both wc-completed and completed).
+	 */
+	public function test_per_gateway_order_status_normalization(): void {
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'bacs' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'completed',
+					),
+				),
+			)
+		);
+
+		$order = $this->create_pos_order( 'pos-open' );
+		$order->set_payment_method( 'bacs' );
+		$order->save();
+
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
+		$status = apply_filters( 'woocommerce_bacs_process_payment_order_status', 'on-hold', $order );
+
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+
+		$this->assertEquals( 'completed', $status );
 	}
 
 	/**
@@ -736,24 +1022,33 @@ class Test_Orders extends WC_Unit_Test_Case {
 	 * @covers \WCPOS\WooCommercePOS\Orders::payment_complete_order_status
 	 */
 	public function test_direct_payment_complete_order_status_pos_request(): void {
-		$settings                 = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$settings['order_status'] = 'completed';
-		update_option( 'woocommerce_pos_settings_checkout', $settings );
+		update_option(
+			'woocommerce_pos_settings_payment_gateways',
+			array(
+				'default_gateway' => 'pos_cash',
+				'gateways'        => array(
+					'pos_cash' => array(
+						'order'        => 0,
+						'enabled'      => true,
+						'order_status' => 'wc-completed',
+					),
+				),
+			)
+		);
 
 		$orders = new Orders();
 		$order  = $this->create_pos_order();
+		$order->set_payment_method( 'pos_cash' );
+		$order->save();
 
-		// Simulate POS request
 		$_REQUEST['pos']         = '1';
 		$_SERVER['HTTP_X_WCPOS'] = '1';
 
 		$result = $orders->payment_complete_order_status( 'processing', $order->get_id(), $order );
 
-		// Clean up
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		// Should return setting value or processing if not a POS request
-		$this->assertContains( $result, array( 'processing', 'completed' ) );
+		$this->assertContains( $result, array( 'processing', 'wc-completed' ) );
 	}
 
 	/**
