@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Push assets to wporg
     steps:
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         - name: WordPress.org plugin asset/readme update
-          uses: 10up/action-wordpress-plugin-asset-update@stable
+          uses: 10up/action-wordpress-plugin-asset-update@2480306f6f693672726d08b5917ea114cb2825f7 # stable
           env:
             SLUG: woocommerce-pos
             IGNORE_OTHER_FILES: true
