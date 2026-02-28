@@ -38,7 +38,6 @@ class Settings {
 			'generate_username'           => true,
 		),
 		'checkout' => array(
-			'order_status'    => 'wc-completed',
 			'admin_emails'    => array(
 				'enabled'         => true,
 				'new_order'       => true,

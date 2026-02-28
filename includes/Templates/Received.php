@@ -76,10 +76,12 @@ class Received {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
-			$order_json               = $this->get_order_json( $order->get_id() );
-			$completed_status_setting = woocommerce_pos_get_settings( 'checkout', 'order_status' );
-			$completed_status         = 'wc-' === substr( $completed_status_setting, 0, 3 ) ? substr( $completed_status_setting, 3 ) : $completed_status_setting;
-			$order_complete           = 'pos-open' !== $completed_status;
+			$order_json       = $this->get_order_json( $order->get_id() );
+			$payment_method   = $order->get_payment_method();
+			$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
+			$status_setting   = $gateway_settings['gateways'][ $payment_method ]['order_status'] ?? 'wc-completed';
+			$completed_status = 'wc-' === substr( $status_setting, 0, 3 ) ? substr( $status_setting, 3 ) : $status_setting;
+			$order_complete   = 'pos-open' !== $completed_status;
 
 			include woocommerce_pos_locate_template( 'received.php' );
 			exit;
