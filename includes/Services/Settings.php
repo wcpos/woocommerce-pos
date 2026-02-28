@@ -487,6 +487,23 @@ class Settings {
 			get_option( self::$db_prefix . 'payment_gateways', array() )
 		);
 
+		// Migrate: if old global checkout order_status exists, apply to all gateways.
+		$checkout_settings = get_option( self::$db_prefix . 'checkout', array() );
+		if ( isset( $checkout_settings['order_status'] ) ) {
+			$global_status = $checkout_settings['order_status'];
+			if ( \is_string( $global_status ) && '' !== $global_status ) {
+				foreach ( $gateways_settings['gateways'] as $gw_id => &$gw_data ) {
+					if ( ! isset( $gw_data['order_status'] ) ) {
+						$gw_data['order_status'] = $global_status;
+					}
+				}
+				unset( $gw_data );
+			}
+			// Remove the old global setting.
+			unset( $checkout_settings['order_status'] );
+			update_option( self::$db_prefix . 'checkout', $checkout_settings );
+		}
+
 		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
 		$response = array(
 			'default_gateway' => $gateways_settings['default_gateway'],

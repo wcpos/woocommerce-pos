@@ -910,6 +910,37 @@ class Test_Orders extends WC_Unit_Test_Case {
 		$this->assertEquals( 'processing', $order->get_status(), 'Order should transition to processing' );
 	}
 
+	/**
+	 * Test migration from global checkout order_status to per-gateway settings.
+	 */
+	public function test_migration_global_order_status_to_per_gateway(): void {
+		// Set up old-style global checkout order_status.
+		update_option( 'woocommerce_pos_settings_checkout', array(
+			'order_status' => 'wc-processing',
+		) );
+
+		// No per-gateway order_status set.
+		update_option( 'woocommerce_pos_settings_payment_gateways', array(
+			'default_gateway' => 'pos_cash',
+			'gateways'        => array(
+				'pos_cash' => array(
+					'order'   => 0,
+					'enabled' => true,
+				),
+			),
+		) );
+
+		$settings_service = \WCPOS\WooCommercePOS\Services\Settings::instance();
+		$gw_settings      = $settings_service->get_payment_gateways_settings();
+
+		// The global value should have been applied to all gateways.
+		$this->assertEquals( 'wc-processing', $gw_settings['gateways']['pos_cash']['order_status'] );
+
+		// The global checkout setting should have been removed.
+		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
+		$this->assertArrayNotHasKey( 'order_status', $checkout );
+	}
+
 	// ==========================================================================
 	// DIRECT METHOD CALL TESTS (for line coverage)
 	// ==========================================================================
