@@ -131,6 +131,15 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return;
 		}
 
+		// Avoid repeated download attempts when filesystem is not writable.
+		if ( get_transient( $this->get_write_failed_transient_key() ) === $this->version ) {
+			if ( $stale_file && $stale_locale ) {
+				$this->load_translation_file( $stale_locale, $stale_file );
+			}
+
+			return;
+		}
+
 		$last_candidate_index = count( $locale_candidates ) - 1;
 		$all_candidates_404   = true;
 		foreach ( $locale_candidates as $index => $candidate_locale ) {
@@ -142,6 +151,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 				$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
 				set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
 				delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
+				delete_transient( $this->get_write_failed_transient_key() );
 				$this->load_translation_file( $candidate_locale, $file );
 
 				return;
@@ -154,6 +164,8 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 
 		if ( $all_candidates_404 ) {
 			set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
+		} elseif ( $this->last_write_failed ) {
+			set_transient( $this->get_write_failed_transient_key(), $this->version, self::WRITE_FAILED_CACHE_TTL );
 		}
 
 		if ( $stale_file && $stale_locale ) {
