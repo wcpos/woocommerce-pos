@@ -482,9 +482,10 @@ class Settings {
 		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
 		WC_Payment_Gateways::instance()->init();
 		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
-		$gateways_settings  = array_replace_recursive(
+		$raw_gw_option     = get_option( self::$db_prefix . 'payment_gateways', array() );
+		$gateways_settings = array_replace_recursive(
 			self::$default_settings['payment_gateways'],
-			get_option( self::$db_prefix . 'payment_gateways', array() )
+			$raw_gw_option
 		);
 
 		// Migrate: if old global checkout order_status exists, apply to all gateways.
@@ -493,7 +494,8 @@ class Settings {
 			$global_status = $checkout_settings['order_status'];
 			if ( \is_string( $global_status ) && '' !== $global_status ) {
 				foreach ( $gateways_settings['gateways'] as $gw_id => &$gw_data ) {
-					if ( ! isset( $gw_data['order_status'] ) ) {
+					// Check the raw DB value, not the merged value (which includes defaults).
+					if ( ! isset( $raw_gw_option['gateways'][ $gw_id ]['order_status'] ) ) {
 						$gw_data['order_status'] = $global_status;
 					}
 				}
