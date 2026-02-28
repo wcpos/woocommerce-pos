@@ -247,6 +247,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
+		// This filter expects statuses without the 'wc-' prefix.
 		$this->assertEquals( 'completed', $status, 'Status should be from per-gateway settings (without wc- prefix)' );
 	}
 
@@ -492,7 +493,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		$this->assertEquals( 'wc-completed', $status );
+		// This filter expects statuses without the 'wc-' prefix.
+		$this->assertEquals( 'completed', $status );
 	}
 
 	/**
@@ -533,7 +535,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		$_REQUEST['pos'] = '1';
 		$cash_status     = apply_filters( 'woocommerce_payment_complete_order_status', 'processing', $cash_order->get_id(), $cash_order );
-		$this->assertEquals( 'wc-completed', $cash_status );
+		// This filter expects statuses without the 'wc-' prefix.
+		$this->assertEquals( 'completed', $cash_status );
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 	}
@@ -555,7 +558,8 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		$this->assertEquals( 'wc-completed', $status );
+		// This filter expects statuses without the 'wc-' prefix.
+		$this->assertEquals( 'completed', $status );
 	}
 
 	/**

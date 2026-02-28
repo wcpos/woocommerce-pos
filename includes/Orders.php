@@ -132,6 +132,7 @@ class Orders {
 		if ( woocommerce_pos_request() ) {
 			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
 
+			// This filter expects statuses without the 'wc-' prefix.
 			return 0 === strpos( $gateway_status, 'wc-' )
 				? substr( $gateway_status, 3 )
 				: $gateway_status;
