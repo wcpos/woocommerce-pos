@@ -130,7 +130,11 @@ class Orders {
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
-			return $this->get_gateway_order_status( $order->get_payment_method() );
+			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
+
+			return 0 === strpos( $gateway_status, 'wc-' )
+				? substr( $gateway_status, 3 )
+				: $gateway_status;
 		}
 
 		return $status;

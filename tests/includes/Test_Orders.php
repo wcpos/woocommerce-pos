@@ -247,7 +247,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		$this->assertContains( $status, array( 'processing', 'wc-completed' ), 'Status should be from settings or default' );
+		$this->assertEquals( 'completed', $status, 'Status should be from per-gateway settings (without wc- prefix)' );
 	}
 
 	/**
@@ -1079,7 +1079,7 @@ class Test_Orders extends WC_Unit_Test_Case {
 
 		unset( $_REQUEST['pos'], $_SERVER['HTTP_X_WCPOS'] );
 
-		$this->assertContains( $result, array( 'processing', 'wc-completed' ) );
+		$this->assertEquals( 'completed', $result );
 	}
 
 	/**

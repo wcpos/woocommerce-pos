@@ -521,6 +521,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		foreach ( $result['gateways'] as $gateway ) {
 			$this->assertArrayHasKey( 'enabled', $gateway );
 			$this->assertArrayHasKey( 'order', $gateway );
+			$this->assertArrayHasKey( 'order_status', $gateway );
 		}
 	}
 }

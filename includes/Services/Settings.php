@@ -504,6 +504,7 @@ class Settings {
 			// Remove the old global setting.
 			unset( $checkout_settings['order_status'] );
 			update_option( self::$db_prefix . 'checkout', $checkout_settings );
+			update_option( self::$db_prefix . 'payment_gateways', $gateways_settings );
 		}
 
 		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
