@@ -43,6 +43,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		delete_transient( 'wcpos_extensions_catalog' );
+		delete_site_option( 'auto_update_plugins' );
 		parent::tearDown();
 	}
 
@@ -244,7 +245,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
 		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
 
-		do_action( 'activated_plugin', 'some-plugin/some-plugin.php', false );
+		do_action( 'activated_plugin', 'some-plugin/some-plugin.php', false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- testing WP core hook.
 
 		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
 	}
@@ -256,9 +257,78 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		set_transient( 'wcpos_extensions_catalog', array( 'dummy' ), 3600 );
 		$this->assertNotFalse( get_transient( 'wcpos_extensions_catalog' ) );
 
-		do_action( 'deactivated_plugin', 'some-plugin/some-plugin.php', false );
+		do_action( 'deactivated_plugin', 'some-plugin/some-plugin.php', false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- testing WP core hook.
 
 		$this->assertFalse( get_transient( 'wcpos_extensions_catalog' ) );
+	}
+
+	/**
+	 * Test auto_update is true when plugin is in auto_update_plugins option.
+	 */
+	public function test_auto_update_true_when_in_option(): void {
+		update_option( 'active_plugins', array( 'woocommerce/woocommerce.php' ) );
+		update_site_option( 'auto_update_plugins', array( 'woocommerce/woocommerce.php' ) );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '0.0.1',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertTrue( $extensions[0]['auto_update'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test auto_update is false when plugin is not in auto_update_plugins option.
+	 */
+	public function test_auto_update_false_when_not_in_option(): void {
+		update_option( 'active_plugins', array( 'woocommerce/woocommerce.php' ) );
+		update_site_option( 'auto_update_plugins', array() );
+
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'woocommerce',
+				'name'           => 'WooCommerce',
+				'latest_version' => '0.0.1',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertFalse( $extensions[0]['auto_update'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+	}
+
+	/**
+	 * Test auto_update is not set for uninstalled extensions.
+	 */
+	public function test_auto_update_not_set_when_not_installed(): void {
+		$this->mock_catalog_data = array(
+			array(
+				'slug'           => 'nonexistent-plugin-xyz',
+				'name'           => 'Nonexistent',
+				'latest_version' => '1.0.0',
+			),
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+		$extensions = $this->service->get_extensions();
+
+		$this->assertCount( 1, $extensions );
+		$this->assertArrayNotHasKey( 'auto_update', $extensions[0] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
 	}
 
 	/**
