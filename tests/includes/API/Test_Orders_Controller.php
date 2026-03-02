@@ -979,4 +979,36 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Check if the SKU is saved
 		$this->assertEquals( 'SKU-123', $data['line_items'][0]['sku'] );
 	}
+
+	/**
+	 * BUG: misc product with SKU matching a draft product crashes with WC_Data_Exception.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/572
+	 */
+	public function test_misc_product_with_duplicate_sku_does_not_crash(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'sku'    => 'DUPLICATE-SKU',
+				'status' => 'draft',
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'payment_method' => 'pos_cash',
+				'line_items'     => array(
+					POSLineItemHelper::misc_line_item(
+						array(
+							'price' => '25.00',
+							'sku'   => 'DUPLICATE-SKU',
+						)
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 201, $response->get_status() );
+	}
 }
