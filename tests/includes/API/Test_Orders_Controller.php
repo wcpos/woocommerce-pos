@@ -6,7 +6,9 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
+use WC_Order;
 use WC_Order_Item_Fee;
+use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
