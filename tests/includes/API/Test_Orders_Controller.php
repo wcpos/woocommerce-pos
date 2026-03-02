@@ -1011,4 +1011,37 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 201, $response->get_status() );
 	}
+
+	/**
+	 * BUG: loading an order with a misc product whose SKU now conflicts crashes persistently.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/572
+	 */
+	public function test_order_list_with_conflicting_misc_sku_does_not_crash(): void {
+		// Build an order directly with a misc line item that has _sku meta.
+		$order = new WC_Order();
+		$order->set_status( 'pos-open' );
+		$item = new WC_Order_Item_Product();
+		$item->set_product_id( 0 );
+		$item->set_name( 'Miscellaneous' );
+		$item->set_quantity( 1 );
+		$item->set_total( '25.00' );
+		$item->add_meta_data( '_sku', 'CONFLICT-SKU', true );
+		POSLineItemHelper::add_pos_data_to_item( $item, array( 'price' => '25.00' ) );
+		$order->add_item( $item );
+		$order->save();
+
+		// Now create a product with the same SKU — simulates the conflict.
+		$product = ProductHelper::create_simple_product(
+			array(
+				'sku'    => 'CONFLICT-SKU',
+				'status' => 'draft',
+			)
+		);
+
+		// Listing orders should not crash.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+	}
 }
