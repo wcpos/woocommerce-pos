@@ -12,7 +12,7 @@
 
 ---
 
-### Task 1: Backend — Add per-gateway order_status to settings defaults and getter
+## Task 1: Backend — Add per-gateway order_status to settings defaults and getter
 
 **Files:**
 - Modify: `includes/Services/Settings.php:80-89` (default settings)
@@ -71,7 +71,7 @@ git commit -m "feat: add per-gateway order_status to settings defaults"
 
 ---
 
-### Task 2: Backend — Add helper method to resolve gateway order status
+## Task 2: Backend — Add helper method to resolve gateway order status
 
 **Files:**
 - Modify: `includes/Orders.php:131-185` (payment_complete_order_status, offline_process_payment_order_status)
@@ -432,7 +432,7 @@ git commit -m "feat: resolve order status from per-gateway settings"
 
 ---
 
-### Task 3: Backend — Remove global order_status from checkout settings
+## Task 3: Backend — Remove global order_status from checkout settings
 
 **Files:**
 - Modify: `includes/Services/Settings.php:40-41` (remove order_status from checkout defaults)
@@ -473,7 +473,7 @@ git commit -m "refactor: remove global order_status from checkout settings"
 
 ---
 
-### Task 4: Backend — Migration from global to per-gateway settings
+## Task 4: Backend — Migration from global to per-gateway settings
 
 **Files:**
 - Modify: `includes/Services/Settings.php:480-522` (add migration in get_payment_gateways_settings)
@@ -557,7 +557,7 @@ git commit -m "feat: migrate global order_status to per-gateway settings"
 
 ---
 
-### Task 5: Frontend — Add order status column to gateway table
+## Task 5: Frontend — Add order status column to gateway table
 
 **Files:**
 - Modify: `packages/settings/src/screens/checkout/gateways.tsx`
@@ -693,7 +693,7 @@ git commit -m "feat: add per-gateway order status select to settings UI"
 
 ---
 
-### Task 6: Lint, full test suite, and final cleanup
+## Task 6: Lint, full test suite, and final cleanup
 
 **Step 1: Run lint**
 

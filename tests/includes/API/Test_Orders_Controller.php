@@ -986,7 +986,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * @see https://github.com/wcpos/woocommerce-pos/issues/572
 	 */
 	public function test_misc_product_with_duplicate_sku_does_not_crash(): void {
-		$product = ProductHelper::create_simple_product(
+		ProductHelper::create_simple_product(
 			array(
 				'sku'    => 'DUPLICATE-SKU',
 				'status' => 'draft',
@@ -1009,7 +1009,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
 		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'DUPLICATE-SKU', $data['line_items'][0]['sku'] );
 	}
 
 	/**
@@ -1032,7 +1034,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order->save();
 
 		// Now create a product with the same SKU — simulates the conflict.
-		$product = ProductHelper::create_simple_product(
+		ProductHelper::create_simple_product(
 			array(
 				'sku'    => 'CONFLICT-SKU',
 				'status' => 'draft',
@@ -1042,6 +1044,8 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		// Listing orders should not crash.
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
 		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'CONFLICT-SKU', $data['line_items'][0]['sku'] );
 	}
 }
