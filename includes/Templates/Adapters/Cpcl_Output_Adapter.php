@@ -37,7 +37,7 @@ class Cpcl_Output_Adapter implements Receipt_Output_Adapter_Interface {
 			'PW ' . max( 200, $width ),
 			'TEXT 4 0 30 20 ' . $this->sanitize_text( $store_name ),
 			'TEXT 4 0 30 60 WCPOS RECEIPT',
-			'TEXT 4 0 30 80 Order #' . $order_number,
+			'TEXT 4 0 30 80 Order #' . $this->sanitize_text( $order_number ),
 			'TEXT 4 0 30 130 Total ' . wc_format_decimal( $total, wc_get_price_decimals() ),
 		);
 

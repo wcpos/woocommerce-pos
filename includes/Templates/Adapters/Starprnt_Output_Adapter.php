@@ -64,15 +64,15 @@ class Starprnt_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$lines = array(
 			self::CMD_INIT,
 			self::CMD_ALIGN_CENTER,
-			$store_name,
+			$this->sanitize_text( $store_name ),
 			'RECEIPT',
 			self::CMD_ALIGN_LEFT,
-			'Order #' . $order_number,
+			'Order #' . $this->sanitize_text( $order_number ),
 			'Total ' . wc_format_decimal( $total, wc_get_price_decimals() ),
 		);
 
 		if ( $print_qr && '' !== $qr_payload ) {
-			$lines[] = '[STARPRNT:QR] ' . $qr_payload;
+			$lines[] = '[STARPRNT:QR] ' . $this->sanitize_text( $qr_payload );
 		}
 		if ( $open_drawer ) {
 			$lines[] = self::CMD_DRAWER;
@@ -81,5 +81,16 @@ class Starprnt_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$lines[] = $partial_cut ? self::CMD_CUT_PARTIAL : self::CMD_CUT_FULL;
 
 		return implode( "\n", $lines ) . "\n";
+	}
+
+	/**
+	 * Sanitize text for StarPRNT commands.
+	 *
+	 * @param string $value Text value.
+	 *
+	 * @return string
+	 */
+	private function sanitize_text( string $value ): string {
+		return trim( preg_replace( '/[\r\n]/', ' ', $value ) );
 	}
 }

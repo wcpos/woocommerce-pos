@@ -213,7 +213,7 @@ class Receipt_Data_Builder {
 	private function get_tax_summary( WC_Abstract_Order $order ): array {
 		$summary = array();
 
-		foreach ( $order->get_items( 'tax' ) as $tax_item_id => $tax_item ) {
+		foreach ( $order->get_items( 'tax' ) as $tax_item ) {
 			$tax_amount = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
 			$rate       = (float) $tax_item->get_rate_percent();
 			$taxable_excl = $rate > 0 ? $tax_amount / ( $rate / 100 ) : null;
