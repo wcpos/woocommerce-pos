@@ -114,7 +114,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	public function test_get_checkout_default_settings(): void {
 		$settings = $this->settings->get_checkout_settings();
 		$this->assertIsArray( $settings );
-		$this->assertEquals( 'wc-completed', $settings['order_status'] );
+		$this->assertArrayNotHasKey( 'order_status', $settings );
 		$this->assertIsArray( $settings['admin_emails'] );
 		$this->assertTrue( $settings['admin_emails']['enabled'] );
 		$this->assertIsArray( $settings['customer_emails'] );
@@ -453,9 +453,10 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 * @covers \WCPOS\WooCommercePOS\Services\Settings::get_settings
 	 */
 	public function test_direct_get_settings_with_key(): void {
-		$result = $this->settings->get_settings( 'checkout', 'order_status' );
+		$result = $this->settings->get_settings( 'checkout', 'admin_emails' );
 
-		$this->assertEquals( 'wc-completed', $result );
+		$this->assertIsArray( $result );
+		$this->assertTrue( $result['enabled'] );
 	}
 
 	/**
@@ -467,7 +468,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$result = $this->settings->get_settings( 'checkout' );
 
 		$this->assertIsArray( $result );
-		$this->assertArrayHasKey( 'order_status', $result );
+		$this->assertArrayNotHasKey( 'order_status', $result );
 		$this->assertArrayHasKey( 'admin_emails', $result );
 		$this->assertArrayHasKey( 'customer_emails', $result );
 	}
@@ -479,7 +480,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	 */
 	public function test_direct_save_checkout_settings(): void {
 		$new_settings = array(
-			'order_status'    => 'wc-processing',
 			'admin_emails'    => array( 'enabled' => false ),
 			'customer_emails' => array( 'enabled' => false ),
 		);
@@ -487,7 +487,6 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$result = $this->settings->save_settings( 'checkout', $new_settings );
 
 		$this->assertIsArray( $result );
-		$this->assertEquals( 'wc-processing', $result['order_status'] );
 		$this->assertIsArray( $result['admin_emails'] );
 		$this->assertFalse( $result['admin_emails']['enabled'] );
 		$this->assertIsArray( $result['customer_emails'] );
@@ -522,6 +521,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		foreach ( $result['gateways'] as $gateway ) {
 			$this->assertArrayHasKey( 'enabled', $gateway );
 			$this->assertArrayHasKey( 'order', $gateway );
+			$this->assertArrayHasKey( 'order_status', $gateway );
 		}
 	}
 }
