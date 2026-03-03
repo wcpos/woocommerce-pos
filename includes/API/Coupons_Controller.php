@@ -143,11 +143,11 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		$coupon->save_meta_data();
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $coupon );
 
+		// Estimate response size and log if excessive.
+		$this->wcpos_estimate_response_size( $data, $coupon->get_id(), 'Coupon' );
+
 		// Set changes to the response data.
 		$response->set_data( $data );
-
-		// Log large responses.
-		$this->wcpos_log_large_rest_response( $response, $coupon->get_id() );
 
 		return $response;
 	}
