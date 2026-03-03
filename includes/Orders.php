@@ -260,7 +260,15 @@ class Orders {
 			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
-			$product->set_sku( $sku ? $sku : '' );
+			if ( $sku ) {
+				try {
+					$product->set_sku( $sku );
+				} catch ( \WC_Data_Exception $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- SKU uniqueness is irrelevant for synthetic products never saved to DB.
+					// SKU conflicts with an existing product — safe to ignore.
+					// This is a synthetic product that's never saved to the database.
+					// The SKU is preserved in the order item's _sku meta.
+				}
+			}
 
 			// Misc products are synthetic and never persisted to DB, so we can
 			// safely apply POS price context directly.
@@ -368,7 +376,15 @@ class Orders {
 			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
-			$product->set_sku( $sku ? $sku : '' );
+			if ( $sku ) {
+				try {
+					$product->set_sku( $sku );
+				} catch ( \WC_Data_Exception $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- SKU uniqueness is irrelevant for synthetic products never saved to DB.
+					// SKU conflicts with an existing product — safe to ignore.
+					// This is a synthetic product that's never saved to the database.
+					// The SKU is preserved in the order item's _sku meta.
+				}
+			}
 		}
 
 		if ( ! $product ) {
