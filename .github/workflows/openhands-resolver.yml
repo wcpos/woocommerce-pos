@@ -22,10 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Call OpenHands Resolver
-        uses: All-Hands-AI/OpenHands@main
+        uses: All-Hands-AI/OpenHands@c8680caec30d92af59c2059f42be230107b3ea61 # main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           openhands-api-key: ${{ secrets.OPENHANDS_API_KEY }}

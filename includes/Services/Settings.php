@@ -38,7 +38,6 @@ class Settings {
 			'generate_username'           => true,
 		),
 		'checkout' => array(
-			'order_status'    => 'wc-completed',
 			'admin_emails'    => array(
 				'enabled'         => true,
 				'new_order'       => true,
@@ -79,12 +78,14 @@ class Settings {
 			'default_gateway' => 'pos_cash',
 			'gateways'        => array(
 				'pos_cash' => array(
-					'order'   => 0,
-					'enabled' => true,
+					'order'        => 0,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
 				),
 				'pos_card' => array(
-					'order'   => 1,
-					'enabled' => true,
+					'order'        => 1,
+					'enabled'      => true,
+					'order_status' => 'wc-completed',
 				),
 			),
 		),
@@ -481,10 +482,30 @@ class Settings {
 		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
 		WC_Payment_Gateways::instance()->init();
 		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
-		$gateways_settings  = array_replace_recursive(
+		$raw_gw_option     = get_option( self::$db_prefix . 'payment_gateways', array() );
+		$gateways_settings = array_replace_recursive(
 			self::$default_settings['payment_gateways'],
-			get_option( self::$db_prefix . 'payment_gateways', array() )
+			$raw_gw_option
 		);
+
+		// Migrate: if old global checkout order_status exists, apply to all gateways.
+		$checkout_settings = get_option( self::$db_prefix . 'checkout', array() );
+		if ( isset( $checkout_settings['order_status'] ) ) {
+			$global_status = $checkout_settings['order_status'];
+			if ( \is_string( $global_status ) && '' !== $global_status ) {
+				foreach ( $gateways_settings['gateways'] as $gw_id => &$gw_data ) {
+					// Check the raw DB value, not the merged value (which includes defaults).
+					if ( ! isset( $raw_gw_option['gateways'][ $gw_id ]['order_status'] ) ) {
+						$gw_data['order_status'] = $global_status;
+					}
+				}
+				unset( $gw_data );
+			}
+			// Remove the old global setting.
+			unset( $checkout_settings['order_status'] );
+			update_option( self::$db_prefix . 'checkout', $checkout_settings );
+			update_option( self::$db_prefix . 'payment_gateways', $gateways_settings );
+		}
 
 		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
 		$response = array(
@@ -492,19 +513,26 @@ class Settings {
 			'gateways'        => array(),
 		);
 
+		// Gateways that represent deferred/unverified payment default to on-hold.
+		$on_hold_gateways = array( 'bacs', 'cheque' );
+
 		// loop through installed gateways and merge with saved settings.
 		foreach ( $installed_gateways as $id => $gateway ) {
 			// sanity check for gateway class.
 			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
 				continue;
 			}
+
+			$default_status = in_array( $id, $on_hold_gateways, true ) ? 'wc-on-hold' : 'wc-completed';
+
 			$response['gateways'][ $id ] = array_replace_recursive(
 				array(
-					'id'          => $gateway->id,
-					'title'       => $gateway->title,
-					'description' => $gateway->description,
-					'enabled'     => false,
-					'order'       => 999,
+					'id'           => $gateway->id,
+					'title'        => $gateway->title,
+					'description'  => $gateway->description,
+					'enabled'      => false,
+					'order'        => 999,
+					'order_status' => $default_status,
 				),
 				$gateways_settings['gateways'][ $id ] ?? array()
 			);
