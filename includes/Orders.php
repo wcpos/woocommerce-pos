@@ -130,7 +130,29 @@ class Orders {
 	 */
 	public function payment_complete_order_status( string $status, int $id, WC_Abstract_Order $order ): string {
 		if ( woocommerce_pos_request() ) {
-			return woocommerce_pos_get_settings( 'checkout', 'order_status' );
+			$gateway_status = $this->get_gateway_order_status( $order->get_payment_method() );
+
+			// This filter expects statuses without the 'wc-' prefix.
+			$normalized_status = 0 === strpos( $gateway_status, 'wc-' )
+				? substr( $gateway_status, 3 )
+				: $gateway_status;
+
+			if ( '' === $normalized_status ) {
+				return $status;
+			}
+
+			$valid_statuses = array_map(
+				function ( string $order_status ): string {
+					return 0 === strpos( $order_status, 'wc-' )
+						? substr( $order_status, 3 )
+						: $order_status;
+				},
+				array_keys( wc_get_order_statuses() )
+			);
+
+			return \in_array( $normalized_status, $valid_statuses, true )
+				? $normalized_status
+				: $status;
 		}
 
 		return $status;
@@ -157,14 +179,11 @@ class Orders {
 			return $status;
 		}
 
-		$checkout_order_status = woocommerce_pos_get_settings( 'checkout', 'order_status' );
-		if ( ! \is_string( $checkout_order_status ) || '' === $checkout_order_status ) {
-			return $status;
-		}
+		$gateway_order_status = $this->get_gateway_order_status( $order->get_payment_method() );
 
-		$normalized_status = 0 === strpos( $checkout_order_status, 'wc-' )
-			? substr( $checkout_order_status, 3 )
-			: $checkout_order_status;
+		$normalized_status = 0 === strpos( $gateway_order_status, 'wc-' )
+			? substr( $gateway_order_status, 3 )
+			: $gateway_order_status;
 
 		if ( '' === $normalized_status ) {
 			return $status;
@@ -182,6 +201,31 @@ class Orders {
 		return \in_array( $normalized_status, $valid_statuses, true )
 			? $normalized_status
 			: $status;
+	}
+
+	/**
+	 * Resolve the configured POS order status for a given payment gateway.
+	 *
+	 * Looks up the per-gateway order_status from payment_gateways settings.
+	 * Falls back to 'wc-completed' if no setting is found.
+	 *
+	 * @param string $gateway_id The payment gateway ID.
+	 *
+	 * @return string The configured order status (may include wc- prefix).
+	 */
+	private function get_gateway_order_status( string $gateway_id ): string {
+		$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
+
+		if (
+			is_array( $gateway_settings )
+			&& isset( $gateway_settings['gateways'][ $gateway_id ]['order_status'] )
+			&& is_string( $gateway_settings['gateways'][ $gateway_id ]['order_status'] )
+			&& '' !== $gateway_settings['gateways'][ $gateway_id ]['order_status']
+		) {
+			return $gateway_settings['gateways'][ $gateway_id ]['order_status'];
+		}
+
+		return 'wc-completed';
 	}
 
 	/**

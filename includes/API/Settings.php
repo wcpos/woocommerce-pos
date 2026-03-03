@@ -247,11 +247,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function get_checkout_endpoint_args(): array {
 		return array(
-			'order_status' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
 			'admin_emails' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_array( $param );

@@ -14,6 +14,7 @@ import classNames from 'classnames';
 import { sortBy, keyBy } from 'lodash';
 
 import GatewayModal from './gateway-modal';
+import OrderStatusSelect from './order-status-select';
 import DragIcon from '../../../assets/drag-icon.svg';
 import Notice from '../../components/notice';
 import { Button, Toggle } from '../../components/ui';
@@ -34,6 +35,7 @@ interface GatewayItem {
 	title: string;
 	order: number;
 	enabled: boolean;
+	order_status?: string;
 }
 
 interface GatewayRowProps {
@@ -98,7 +100,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 		>
 			{closestEdge && (
 				<td
-					colSpan={6}
+					colSpan={7}
 					className={classNames(
 						'wcpos:absolute wcpos:left-0 wcpos:right-0 wcpos:h-0.5 wcpos:bg-wp-admin-theme-color wcpos:p-0',
 						closestEdge === 'top' ? 'wcpos:top-0' : 'wcpos:bottom-0'
@@ -135,6 +137,21 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 							gateways: {
 								[item.id]: {
 									enabled: !item.enabled,
+								},
+							},
+						});
+					}}
+					disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
+				/>
+			</td>
+			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap">
+				<OrderStatusSelect
+					selectedStatus={item.order_status || 'wc-completed'}
+					onChange={(value) => {
+						mutate({
+							gateways: {
+								[item.id]: {
+									order_status: value,
 								},
 							},
 						});
@@ -240,6 +257,12 @@ function Gateways() {
 								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
 							>
 								{t('common.enabled')}
+							</th>
+							<th
+								scope="col"
+								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
+							>
+								{t('checkout.order_status')}
 							</th>
 							<th scope="col" />
 						</tr>

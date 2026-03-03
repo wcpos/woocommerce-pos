@@ -1,10 +1,8 @@
 import * as React from 'react';
 
-import { isString } from 'lodash';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import Gateways from './gateways';
-import OrderStatusSelect from './order-status-select';
 import Error from '../../components/error';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
@@ -19,7 +17,6 @@ interface EmailSettings {
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
-	order_status: string;
 	admin_emails: EmailSettings;
 	customer_emails: EmailSettings;
 	cashier_emails: EmailSettings;
@@ -96,18 +93,6 @@ function Checkout() {
 	return (
 		<>
 			<FormSection>
-				<FormRow label={t('checkout.completed_order_status')}>
-					<Label tip={t('checkout.completed_order_status_tip')}>
-						<ErrorBoundary FallbackComponent={Error}>
-							<React.Suspense fallback={null}>
-								<OrderStatusSelect
-									selectedStatus={isString(data?.order_status) ? data?.order_status || '' : ''}
-									mutate={mutate}
-								/>
-							</React.Suspense>
-						</ErrorBoundary>
-					</Label>
-				</FormRow>
 				<EmailGroup
 					settingsKey="admin_emails"
 					label={t('checkout.admin_emails')}
