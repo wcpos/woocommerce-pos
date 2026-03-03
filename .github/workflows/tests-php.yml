@@ -243,7 +243,7 @@ jobs:
         run: pnpm run test:unit:php
 
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: always()
         with:
           name: phpunit-results-smoke-test
@@ -391,7 +391,7 @@ jobs:
         run: pnpm run test:unit:php
 
       - name: Upload test results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: always()
         with:
           name: phpunit-results-php${{ matrix.php }}-wp${{ matrix.wp }}-wc${{ matrix.wc }}
@@ -479,7 +479,7 @@ jobs:
         run: pnpm run test:unit:php
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-report
           path: coverage/
