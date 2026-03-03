@@ -115,6 +115,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$settings = $this->settings->get_checkout_settings();
 		$this->assertIsArray( $settings );
 		$this->assertArrayNotHasKey( 'order_status', $settings );
+		$this->assertEquals( 'fiscal', $settings['receipt_default_mode'] );
 		$this->assertIsArray( $settings['admin_emails'] );
 		$this->assertTrue( $settings['admin_emails']['enabled'] );
 		$this->assertIsArray( $settings['customer_emails'] );
