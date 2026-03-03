@@ -50,7 +50,7 @@ Short enough that if permissions get fixed (deploy, config change), it recovers 
 
 ## Write flow (updated)
 
-```
+```text
 download_translation($locale, $file)
   ├─ HTTP GET from CDN
   ├─ Success (200 + body)?

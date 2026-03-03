@@ -461,7 +461,7 @@ public function test_write_failure_at_both_locations_is_cached(): void {
 Run: `pnpm run test -- --filter=test_write_failure_at_both_locations_is_cached`
 Expected: FAIL — write-failure transient logic not yet in `load_translations()`.
 
-### Step 3: Implement write-failure transient set/check in `load_translations()`
+### Step 3: Implement write-failure transient set/check logic in `load_translations()`
 
 In `load_translations()`, add a write-failure check **after** the missing-locale check (after the `return` on line 124) and **before** the download loop:
 
