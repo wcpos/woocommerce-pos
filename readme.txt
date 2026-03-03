@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 6.8
-Stable tag: 1.8.9
+Stable tag: 1.8.14
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -93,6 +93,33 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
+= 1.8.14 - 2026/02/19 =
+- **Hardened DB migration locking** — upgrade now uses the WordPress core upgrader lock (`WP_Upgrading`) with an atomic acquisition check and a shutdown fallback, preventing concurrent migrations on high-traffic sites ([#540](https://github.com/wcpos/woocommerce-pos/pull/540))
+- **Fixed offline gateway ignoring POS checkout status** — orders placed with the Cash or Card gateway while offline now respect the configured POS checkout status instead of defaulting to "processing" ([#544](https://github.com/wcpos/woocommerce-pos/pull/544))
+- **Fixed i18n locale fallback and caching** — translation lookups no longer retry locales that returned a definitive 404, reducing unnecessary network requests on every page load ([#543](https://github.com/wcpos/woocommerce-pos/pull/543))
+- **Fixed settings page clipping on some WordPress themes** — the left side of the settings panel was being cut off on sites where `#wpcontent` has extra padding ([#545](https://github.com/wcpos/woocommerce-pos/pull/545))
+- **Reduced extensions catalog cache TTL** — the extension directory now refreshes every hour instead of daily, so newly published extensions appear faster ([#546](https://github.com/wcpos/woocommerce-pos/pull/546))
+- **Allowed php-jwt advisory on PHP 7.4** — resolved a PHP Scoper install failure caused by a security advisory that only affects newer PHP versions ([#541](https://github.com/wcpos/woocommerce-pos/pull/541))
+
+= 1.8.13 - 2026/02/17 =
+- **Fixed root cause of duplicate product metadata** — POS order processing no longer clones product objects in the stock/coupon path, preventing repeated meta rows from being re-saved on each stock update ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Added a safer duplicate-meta repair migration** — a new one-time cleanup removes only exact duplicate `(post_id, meta_key, meta_value)` rows for POS-touched products/variations, reducing API payload size and memory pressure without deleting distinct meta values ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Expanded regression coverage for discount and stock edge cases** — added tests for coupon recalculation behavior, variation pricing paths, and stock-reduction lifecycle to prevent regressions ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+- **Reduced diagnostic log noise** — high-volume top-meta-key context is now opt-in so normal logs stay readable while deep diagnostics remain available when needed ([#537](https://github.com/wcpos/woocommerce-pos/pull/537))
+
+= 1.8.12 - 2026/02/13 =
+- **One-time cleanup of duplicate metadata** — a migration automatically removes thousands of junk meta rows that accumulated on POS-touched products and orders, resolving memory exhaustion and slow API responses on affected stores ([#532](https://github.com/wcpos/woocommerce-pos/pull/532))
+- **Reduced redundant order saves in payment gateways** — Card and Cash gateways no longer call `$order->save()` before `payment_complete()` / `update_status()`, which already save internally ([#532](https://github.com/wcpos/woocommerce-pos/pull/532))
+
+= 1.8.11 - 2026/02/13 =
+- **Fixed critical memory exhaustion on large stores** — API responses were re-reading all metadata from the database on every request, causing extreme memory usage on stores with large catalogs ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- **Fixed O(n²) loop in order tax calculation** — variable shadowing caused quadratic iteration over line item meta ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- **New meta data monitoring** — REST API responses now detect resources with excessive metadata and fall back to a safe response mode, preventing out-of-memory crashes ([#521](https://github.com/wcpos/woocommerce-pos/pull/521))
+- **Security hardening** — masked auth tokens in test endpoint, added directory protection for temp receipt templates ([#519](https://github.com/wcpos/woocommerce-pos/pull/519))
+- Updated all JS and PHP dependencies to latest stable versions ([#521](https://github.com/wcpos/woocommerce-pos/pull/521), [#526](https://github.com/wcpos/woocommerce-pos/pull/526))
+- Pro: Redesigned Edit Store page with modern React/Tailwind UI
+- Pro: Fixed SQL injection vulnerability in analytics and store authorization bypass
+
 = 1.8.9 - 2026/02/11 =
 - **Completely rebuilt settings page** — new modern architecture with Vite, TanStack Router, headless UI components, zustand state management, and responsive layout with grouped sidebar navigation ([#495](https://github.com/wcpos/woocommerce-pos/pull/495), [#498](https://github.com/wcpos/woocommerce-pos/pull/498), [#505](https://github.com/wcpos/woocommerce-pos/pull/505))
 - **New Extensions directory** — browse, discover, and manage extensions directly from POS settings, with Pro integration hooks, GitHub links, and new-extension badges ([#497](https://github.com/wcpos/woocommerce-pos/pull/497), [#500](https://github.com/wcpos/woocommerce-pos/pull/500), [#510](https://github.com/wcpos/woocommerce-pos/pull/510))
@@ -116,126 +143,3 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 - **Tightened permission checks** — capability checks now properly match what's configured on the Access settings page ([#467](https://github.com/wcpos/woocommerce-pos/pull/467))
 - **Improved performance during large syncs** — the UI stays responsive while syncing large product catalogs ([8657e1f](https://github.com/wcpos/monorepo/commit/8657e1f))
 - **Fixed web hydration in standalone mode** — the web app loads correctly when accessed directly without the desktop wrapper ([#19](https://github.com/wcpos/monorepo/pull/19))
-
-= 1.8.7 - 2026/01/13 =
-* New: Template management system for customizing receipts
-* New: Preview modal for templates in admin
-* New: wcpos_ function prefix aliases (woocommerce_pos_ deprecated)
-* Fix: Pro template only shows when license is active
-* Fix: Template admin UI improvements and column ordering
-
-= 1.8.6 - 2026/01/06 = 
-* Fix: 'missing redirect_uri' error during login
-
-= 1.8.5 - 2026/01/05 = 
-* Fix: PSR-4 issue with folder
-
-= 1.8.4 - 2026/01/05 = 
-* Fix: show correct order when re-opening
-* Fix: images not showing due to CORS
-* Fix: saving site info on desktop and mobile applications
-* Fix: sub-directory URLs for the web application
-* Fix: Rich Text Editor conflict with some plugins
-* Improve: login for desktop and native applications
-
-= 1.8.3 - 2025/12/23 =
-* Fix: 'Headers already sent' warnings effecting some users
-
-= 1.8.2 - 2025/12/19  = 
-* Fix: critical error when old Pro plugin installed and activated < 1.8.0
-
-= 1.8.1 - 2025/12/19 =
-* Fix: search not working after update
-
-= 1.8.0 - 2025/12/18 =
-**🎉 Major Update - Native Mobile Apps & Improved Architecture**
-
-This release marks a significant milestone for WCPOS! The entire codebase has been rewritten to support our new native iOS and Android applications (currently in beta).
-
-* **New:** Native iOS app now available via [TestFlight](https://testflight.apple.com/join/JGBdVRrW)
-* **New:** Native Android app now available via [Google Play Beta](https://play.google.com/apps/internaltest/4701620234973853884)
-* **New:** Theme support - choose between light and dark modes
-* **New:** Receipt template editor (beta) - customize your receipts directly in the settings
-* **New:** Session management - view and revoke active sessions from the POS Settings
-* **New:** Support for WooCommerce Cost of Goods Sold (COGS) field
-* **New:** Product Brands API endpoint for better brand management
-* **Improved:** Error logging - no more mysterious "Invalid response from server" messages! Errors now provide clear, actionable information
-* **Improved:** Authentication system with better security and session handling
-* **Improved:** Styling updated to Tailwind v4 for a more consistent UI
-* **Pro:** WCPOS Pro is now a standalone plugin - download from [wcpos.com/my-account](https://wcpos.com/my-account)
-
-⚠️ **Note:** This is a major update. We recommend updating when you have time to test the POS thoroughly. You can rollback to version 1.7.14 if needed.
-
-= 1.7.14 - 2025/11/19 =
-* Change: Plugin name changed from "WooCommerce POS" to "WCPOS" to comply with WooCommerce trademark requirements
-* Note: This is a branding change only - all functionality remains the same
-
-= 1.7.13 - 2025/08/06 = 
-* Fix: New Order emails to send after order calculations
-
-= 1.7.12 - 2025/07/25 = 
-* Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt
-* Fix: Remove the X-Frame-Options Header for which prevents desktop application users from logging in
-* Fix: Checkout email settings have been tested and should now work
-
-= 1.7.12 - 2025/07/25 = 
-* Security Fix: POS receipts should not be publically accessible, NOTE: you may need to re-sync past orders to view the receipt
-* Fix: Remove the X-Frame-Options Header for which prevents desktop application users from logging in
-* Fix: Checkout email settings have been tested and should now work
-
-= 1.7.11 - 2025/06/18 = 
-* Fix: is_internal_meta_key errors for barcodes as '_global_unique_id'
-
-= 1.7.10 - 2025/05/27 = 
-* Fix: Undefined variable $cashback in Card gateway
-* Fix: Allow non-protected meta_data in Customer response data
-
-= 1.7.9 - 2025/05/21 =
-* Security Fix: fix missing authorisation on reading POS settings API (low severity), reported by Marek Mikita (patchstack)
-* Fix: Add SKU and prices to Miscellaneous Products
-* Fix: Update Card Gateway for HPOS compatibility
-
-= 1.7.8 - 2025/05/06 = 
-* Fix: disable Lite Speed caching for POS templates, causing issues with checkout
-
-= 1.7.7 - 2025/04/14 = 
-* Fix: issue where variant was not saving properly in the Order Item meta data
-
-= 1.7.5 - 2025/04/09 =
-* Fix: $object->object_type error, use $object->get_type() instead
-* Fix: increase woocommerce_get_checkout_order_received_url to ensure POS Thank You page is used for POS orders
-
-= 1.7.4 - 2025/03/22 = 
-* Revert: changes to the default receipt template
-
-= 1.7.3 - 2025/03/21 = 
-* Fix: default receipt template to display Miscellaneous Product Price and better match WooCommerce templates
-* Fix: issue where customer data is not correctly clearing when switching from Customer to Guest
-
-= 1.7.2 - 2024/12/27 =
-* Fix: Negative fees with tax_status='none' and/or tax_class are now applied correctly to the order
-* Fix: Remove routes from WP API index for POS to reduce request size
-* Fix: Annoying issue where pagination resets while searching
-* Fix: Minor cart display issues
-* Fix: Add html decode for special characters
-* Fix: Remove 'low stock' as an option in the products filter - this status does not exist
-* Fix: Variation attributes doubling when barcode scanning
-
-= 1.7.1 - 2024/11/14 = 
-* Fix: Error updating quantity for Product Variations when decimal quantities enabled
-* Plugin Conflict: The wePOS plugin alters the standard WC REST API response, which in turn breaks WCPOS
-This small update adds code to prevent WCPOS from being activated if wePOS is detected
-
-= 1.7.0 - 2024/11/13 =
-* Enhancement: Updated all React components to use modern standards (Tailwind, Radix UI), improving reliability and usability
-* Enhancement: Improved the local database query engine for a more responsive POS experience
-* Enhancement: Improved barcode scanning detection
-* Fix: Popover positioning issues
-* Fix: Customer search on Android devices
-* Fix: Quick discounts calculation bug affecting some users
-* Pro: New Reports page for End of Day Reporting (Z-Report)
-
-== Upgrade Notice ==
-
-= 1.8.0 =
-**Major Update** - Update when you have time to test the POS. You can rollback to the previous version if needed. Pro users: WCPOS Pro is now standalone - download the latest version from wcpos.com/my-account

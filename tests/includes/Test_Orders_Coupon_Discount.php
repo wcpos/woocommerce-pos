@@ -849,6 +849,207 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	}
 
 	// ======================================================================
+	// Additional edge-case coverage for coupon + stock-safe product handling
+	// ======================================================================
+
+	/**
+	 * Variation line items should use POS sale context for exclude_sale_items checks.
+	 */
+	public function test_variation_exclude_sale_items_respects_pos_discount(): void {
+		$variable_product = ProductHelper::create_variation_product();
+		$variation_ids    = $variable_product->get_children();
+		$variation        = wc_get_product( $variation_ids[0] );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $variation );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( 18 );
+		$item->set_total( 16 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '16',
+					'regular_price' => '18',
+					'tax_status'    => 'none',
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'var_nosale',
+			'publish',
+			array(
+				'discount_type'      => 'percent',
+				'coupon_amount'      => '10',
+				'exclude_sale_items' => 'yes',
+			)
+		);
+
+		$order->apply_coupon( 'var_nosale' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$this->assertEquals( 16.00, round( (float) $item->get_total(), 2 ), 'Variation POS-discounted item should be treated as on-sale for exclude_sale_items.' );
+	}
+
+	/**
+	 * Fixed-product coupons should apply against POS-discounted line prices.
+	 */
+	public function test_fixed_product_coupon_applies_to_pos_price(): void {
+		$order = $this->create_pos_order_with_discount();
+		CouponHelper::create_coupon(
+			'fixedprod5',
+			'publish',
+			array(
+				'discount_type' => 'fixed_product',
+				'coupon_amount' => '5',
+			)
+		);
+
+		$order->apply_coupon( 'fixedprod5' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$this->assertEquals( 11.00, round( (float) $item->get_total(), 2 ), 'Fixed-product coupon should reduce the POS price (16 - 5 = 11).' );
+	}
+
+	/**
+	 * Stacked coupons should calculate consistently from POS-discounted prices.
+	 */
+	public function test_stacked_coupons_apply_consistently_to_pos_price(): void {
+		$order = $this->create_pos_order_with_discount();
+		CouponHelper::create_coupon(
+			'stackpct10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+		CouponHelper::create_coupon(
+			'stackcart3',
+			'publish',
+			array(
+				'discount_type' => 'fixed_cart',
+				'coupon_amount' => '3',
+			)
+		);
+
+		$order->apply_coupon( 'stackpct10' );
+		$order->apply_coupon( 'stackcart3' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		// 16.00 - 10% (=1.60) - 3.00 = 11.40.
+		$this->assertEquals( 11.40, round( (float) $item->get_total(), 2 ), 'Stacked coupons should apply consistently to POS-discounted price.' );
+	}
+
+	/**
+	 * Quantity/rounding edge case for POS-discounted coupon calculations.
+	 */
+	public function test_quantity_rounding_with_pos_discounted_coupon(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 24.99,
+				'price'         => 24.99,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 3 );
+		$item->set_subtotal( 74.97 ); // 24.99 * 3 original.
+		$item->set_total( 59.97 );    // 19.99 * 3 POS price.
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '19.99',
+					'regular_price' => '24.99',
+					'tax_status'    => 'none',
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'qtyround10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'qtyround10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+
+		$this->assertEquals( 74.97, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should remain the original line subtotal.' );
+		$this->assertEquals( 53.97, round( (float) $item->get_total(), 2 ), 'Coupon math should remain stable for quantity + decimal prices.' );
+	}
+
+	/**
+	 * Invalid _woocommerce_pos_data on a real product should fall back safely.
+	 */
+	public function test_coupon_validation_falls_back_with_invalid_pos_json(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => 30,
+				'price'         => 30,
+			)
+		);
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( 30 );
+		$item->set_total( 30 );
+		$item->add_meta_data( '_woocommerce_pos_data', '{invalid json' );
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'invalidjson10',
+			'publish',
+			array(
+				'discount_type' => 'percent',
+				'coupon_amount' => '10',
+			)
+		);
+
+		$order->apply_coupon( 'invalidjson10' );
+
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$this->assertEquals( 27.00, round( (float) $item->get_total(), 2 ), 'Invalid POS meta should gracefully fall back to standard WooCommerce coupon behavior.' );
+	}
+
+	// ======================================================================
 	// Helper methods
 	// ======================================================================
 

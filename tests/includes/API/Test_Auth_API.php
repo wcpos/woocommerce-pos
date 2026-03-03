@@ -89,7 +89,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertEquals( 'success', $data['status'] );
 		$this->assertTrue( $data['received_header_auth'] );
-		$this->assertEquals( 'Bearer test_token', $data['header_value'] );
+		$this->assertEquals( \strlen( 'Bearer test_token' ), $data['header_length'] );
 		$this->assertEquals( 'header', $data['auth_method'] );
 	}
 
@@ -103,7 +103,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 
 		$this->assertEquals( 'success', $data['status'] );
 		$this->assertTrue( $data['received_param_auth'] );
-		$this->assertEquals( 'Bearer test_token', $data['param_value'] );
+		$this->assertEquals( \strlen( 'Bearer test_token' ), $data['param_length'] );
 		$this->assertEquals( 'param', $data['auth_method'] );
 	}
 

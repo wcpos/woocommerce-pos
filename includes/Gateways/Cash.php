@@ -174,9 +174,8 @@ class Cash extends WC_Payment_Gateway {
 
 			$order->add_item( $fee );
 			$order->set_total( wc_format_decimal( floatval( $order->get_total() ) - floatval( $tendered ) ) );
-			$order->save();
 
-			// Set order status to 'wc-pos-partial'.
+			// update_status() calls save() internally, persisting meta, total, and added item.
 			$order->update_status( 'wc-pos-partial' );
 		}
 

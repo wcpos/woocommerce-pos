@@ -84,6 +84,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that catalog cache TTL is one hour.
+	 */
+	public function test_catalog_cache_ttl_is_one_hour(): void {
+		$this->assertSame( HOUR_IN_SECONDS, Extensions::CACHE_TTL );
+	}
+
+	/**
 	 * Test that HTTP failure returns empty array.
 	 */
 	public function test_get_catalog_returns_empty_on_failure(): void {

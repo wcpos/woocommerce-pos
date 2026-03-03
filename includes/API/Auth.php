@@ -200,15 +200,15 @@ class Auth extends WP_REST_Controller {
 			'message'    => 'Authorization token detected successfully',
 		);
 
-		// Add authorization details.
+		// Add authorization details (mask values to avoid leaking tokens in logs).
 		$response_data['received_header_auth'] = $has_header_auth;
 		if ( $has_header_auth ) {
-			$response_data['header_value'] = $header_auth;
+			$response_data['header_length'] = \strlen( $header_auth );
 		}
 
 		$response_data['received_param_auth'] = $has_param_auth;
 		if ( $has_param_auth ) {
-			$response_data['param_value'] = $param_auth;
+			$response_data['param_length'] = \strlen( $param_auth );
 		}
 
 		// Indicate which method was used.

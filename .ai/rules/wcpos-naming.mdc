@@ -1,0 +1,44 @@
+---
+description: WCPOS naming convention for copyright compliance
+globs:
+alwaysApply: true
+---
+
+# WCPOS Naming Convention
+
+## Official Names
+
+Due to copyright considerations, always use the following names:
+
+| Correct | Incorrect |
+|---------|-----------|
+| WCPOS | WooCommerce POS |
+| WCPOS Pro | WooCommerce POS Pro |
+
+## Usage Guidelines
+
+1. **In code, UI, and documentation**: Always use "WCPOS" or "WCPOS Pro"
+2. **Exception - WordPress.org slug**: The plugin slug `woocommerce-pos` remains unchanged (it's a technical identifier that cannot be changed)
+3. **Exception - GitHub repo names**: Repository names like `woocommerce-pos` and `woocommerce-pos-pro` remain unchanged
+4. **Exception - Existing database fields**: Fields like `wcposVersion` and `wcposProVersion` remain unchanged
+
+## Examples
+
+```
+✅ "Welcome to WCPOS!"
+❌ "Welcome to WooCommerce POS!"
+
+✅ "WCPOS Pro 1.8.5 is now available"
+❌ "WooCommerce POS Pro 1.8.5 is now available"
+
+✅ "Update your WCPOS plugin"
+❌ "Update your WooCommerce POS plugin"
+```
+
+## Technical Identifiers (Unchanged)
+
+These technical identifiers retain "woocommerce-pos" for backwards compatibility:
+- WordPress.org slug: `woocommerce-pos`
+- GitHub repos: `woocommerce-pos`, `woocommerce-pos-pro`
+- Metadata fields: `wcposVersion`, `wcposProVersion`
+- ZIP filenames: `woocommerce-pos.zip`, `woocommerce-pos-pro.zip`

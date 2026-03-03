@@ -116,6 +116,7 @@ trait Uuid_Handler {
 
 			if ( $should_update_uuid ) {
 				$object->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
+				$object->save_meta_data();
 			}
 		} finally {
 			$this->release_lock( $lock_key );

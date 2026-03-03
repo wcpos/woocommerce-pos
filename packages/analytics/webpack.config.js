@@ -1,8 +1,6 @@
 const path = require('path');
 
 const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
-const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
-// const ESLintPlugin = require('eslint-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const LiveReloadPlugin = require('webpack-livereload-plugin');
@@ -101,10 +99,6 @@ module.exports = function (_env, argv) {
 			extensions: ['.tsx', '.ts', '.js'],
 		},
 		plugins: [
-			// new ForkTsCheckerWebpackPlugin(),
-			// new ESLintPlugin({
-			// 	extensions: ["js", "jsx", "ts", "tsx"],
-			// }),
 			new MiniCssExtractPlugin({
 				filename: './css/[name].css',
 			}),
