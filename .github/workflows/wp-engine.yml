@@ -9,10 +9,10 @@ jobs:
 
     steps:
       - name: 🏗 Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: 🏗 Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
         with:
           version: '10.8.0'
 
@@ -25,7 +25,7 @@ jobs:
           pnpm analytics build
 
       - name: 🚀 Deploy to WP Engine
-        uses: wpengine/github-action-wpe-site-deploy@v3
+        uses: wpengine/github-action-wpe-site-deploy@7bdbfb62eb657ae92afb91cb889d9c3fb36ef6c0 # v3
         with:
           WPE_SSHG_KEY_PRIVATE: ${{ secrets.WPE_SSHG_KEY_PRIVATE }}
           WPE_ENV: wcposdev
