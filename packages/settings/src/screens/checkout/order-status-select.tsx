@@ -4,10 +4,11 @@ import { Select } from '../../components/ui';
 
 interface OrderStatusSelectProps {
 	selectedStatus: string;
-	mutate: (data: Record<string, unknown>) => void;
+	onChange: (value: string) => void;
+	disabled?: boolean;
 }
 
-function OrderStatusSelect({ selectedStatus, mutate }: OrderStatusSelectProps) {
+function OrderStatusSelect({ selectedStatus, onChange, disabled }: OrderStatusSelectProps) {
 	const order_statuses = window?.wcpos?.settings?.order_statuses ?? {};
 
 	const options = React.useMemo(() => {
@@ -19,8 +20,9 @@ function OrderStatusSelect({ selectedStatus, mutate }: OrderStatusSelectProps) {
 			options={options ? options : []}
 			value={selectedStatus}
 			onChange={({ value }) => {
-				mutate({ order_status: String(value) });
+				onChange(String(value));
 			}}
+			disabled={disabled}
 		/>
 	);
 }

@@ -79,7 +79,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 	public function test_get_checkout_default_settings(): void {
 		$response = $this->api->get_checkout_settings( $this->mock_rest_request() );
 		$settings = $response->get_data();
-		$this->assertEquals( 'wc-completed', $settings['order_status'] );
+		$this->assertArrayNotHasKey( 'order_status', $settings );
 		$this->assertIsArray( $settings['admin_emails'] );
 		$this->assertTrue( $settings['admin_emails']['enabled'] );
 		$this->assertIsArray( $settings['customer_emails'] );
