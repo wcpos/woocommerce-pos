@@ -82,7 +82,7 @@ class Templates {
 			'label'               => __( 'Template', 'woocommerce-pos' ),
 			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
 			'labels'              => $labels,
-			'supports'            => array( 'title', 'editor', 'revisions' ),
+			'supports'            => array( 'title', 'editor', 'revisions', 'page-attributes' ),
 			'taxonomies'          => array( 'wcpos_template_type' ),
 			'hierarchical'        => false,
 			'public'              => false,
@@ -194,6 +194,7 @@ class Templates {
 			'output_type'   => get_post_meta( $template_id, '_template_output_type', true ) ? get_post_meta( $template_id, '_template_output_type', true ) : 'html',
 			'is_virtual'    => false,
 			'source'        => 'custom',
+			'menu_order'    => $post->menu_order,
 			'date_created'  => $post->post_date,
 			'date_modified' => $post->post_modified,
 		);
@@ -221,16 +222,17 @@ class Templates {
 		);
 
 		return array(
-			'id'         => $template_id,
-			'title'      => $titles[ $template_id ] ?? $template_id,
-			'content'    => file_get_contents( $file_path ),
-			'type'       => $type,
-			'language'   => 'php',
-			'file_path'  => $file_path,
-			'engine'     => 'legacy-php',
+			'id'          => $template_id,
+			'title'       => $titles[ $template_id ] ?? $template_id,
+			'content'     => file_get_contents( $file_path ),
+			'type'        => $type,
+			'language'    => 'php',
+			'file_path'   => $file_path,
+			'engine'      => 'legacy-php',
 			'output_type' => 'html',
-			'is_virtual' => true,
-			'source'     => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
+			'is_virtual'  => true,
+			'source'      => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
+			'menu_order'  => 0,
 		);
 	}
 

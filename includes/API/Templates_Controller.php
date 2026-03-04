@@ -118,6 +118,8 @@ class Templates_Controller extends WP_REST_Controller {
 			'post_status'    => 'publish',
 			'posts_per_page' => $request->get_param( 'per_page' ) ?? -1,
 			'paged'          => $request->get_param( 'page' ) ?? 1,
+			'orderby'        => 'menu_order',
+			'order'          => 'ASC',
 		);
 
 		if ( $type ) {
