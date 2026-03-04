@@ -11,9 +11,9 @@
  *   $receipt_data — Canonical receipt payload (array)
  *   $template     — Template metadata (array)
  *
- * @see https://wcpos.com/docs/templates/receipt-data
+ * @see https://docs.wcpos.com/templates/receipt-data-reference
  *
- * @package WCPOS\WooCommercePOS\Templates\Examples
+ * @package WCPOS\WooCommercePOS
  */
 
 if ( ! \defined( 'ABSPATH' ) ) {
