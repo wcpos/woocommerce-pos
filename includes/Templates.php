@@ -488,7 +488,7 @@ class Templates {
 		return array_filter(
 			$starters,
 			function ( $starter ) {
-				return ! empty( $starter['file'] ) && file_exists( $starter['file'] );
+				return file_exists( $starter['file'] );
 			}
 		);
 	}
