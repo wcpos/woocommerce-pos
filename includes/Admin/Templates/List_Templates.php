@@ -337,6 +337,17 @@ class List_Templates {
 				background: #f6f7f7;
 				border-radius: 0 0 4px 4px;
 			}
+			.wcpos-badge-offline {
+				display: inline-block;
+				background: #dcedc8;
+				color: #33691e;
+				font-size: 11px;
+				font-weight: 600;
+				padding: 2px 8px;
+				border-radius: 3px;
+				margin-left: 6px;
+				vertical-align: middle;
+			}
 		</style>
 
 		<div class="wcpos-templates-intro">
@@ -369,7 +380,12 @@ class List_Templates {
 				<div class="wcpos-starter-grid">
 					<?php foreach ( $starter_templates as $key => $starter ) : ?>
 						<div class="wcpos-starter-card">
-							<h4><?php echo esc_html( $starter['title'] ); ?></h4>
+							<h4>
+								<?php echo esc_html( $starter['title'] ); ?>
+								<?php if ( 'logicless' === $starter['engine'] ) : ?>
+									<span class="wcpos-badge-offline"><?php esc_html_e( 'Offline', 'woocommerce-pos' ); ?></span>
+								<?php endif; ?>
+							</h4>
 							<p><?php echo esc_html( $starter['description'] ); ?></p>
 							<a href="<?php echo esc_url( $this->get_install_starter_url( $key ) ); ?>" class="button button-small button-primary">
 								<?php esc_html_e( 'Install', 'woocommerce-pos' ); ?>
@@ -865,6 +881,13 @@ class List_Templates {
 		} else {
 			echo '<span style="color: #646970;">';
 			esc_html_e( 'Inactive', 'woocommerce-pos' );
+			echo '</span>';
+		}
+
+		$engine = get_post_meta( $post_id, '_template_engine', true );
+		if ( 'logicless' === $engine ) {
+			echo ' <span class="wcpos-badge-offline">';
+			esc_html_e( 'Offline', 'woocommerce-pos' );
 			echo '</span>';
 		}
 	}
