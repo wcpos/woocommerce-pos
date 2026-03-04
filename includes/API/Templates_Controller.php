@@ -222,7 +222,7 @@ class Templates_Controller extends WP_REST_Controller {
 
 		// Add computed fields.
 		$template['offline_capable'] = 'logicless' === $engine;
-		$template['menu_order']      = $template['menu_order'] ?? 0;
+		$template['menu_order']      = isset( $template['menu_order'] ) ? (int) $template['menu_order'] : 0;
 
 		// Content handling:
 		// - In 'edit' context: always include content (for admin editor)

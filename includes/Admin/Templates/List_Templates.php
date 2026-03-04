@@ -884,8 +884,7 @@ class List_Templates {
 			echo '</span>';
 		}
 
-		$engine = get_post_meta( $post_id, '_template_engine', true );
-		if ( 'logicless' === $engine ) {
+		if ( 'logicless' === ( $template['engine'] ?? '' ) ) {
 			echo ' <span class="wcpos-badge-offline">';
 			esc_html_e( 'Offline', 'woocommerce-pos' );
 			echo '</span>';

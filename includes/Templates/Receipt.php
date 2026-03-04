@@ -415,7 +415,8 @@ class Receipt {
 			$template_id = sanitize_text_field( wp_unslash( $_GET['template'] ) );
 
 			if ( is_numeric( $template_id ) ) {
-				$template = TemplatesManager::get_template( (int) $template_id );
+				$post_id  = (int) $template_id;
+				$template = 'publish' === get_post_status( $post_id ) ? TemplatesManager::get_template( $post_id ) : null;
 			} else {
 				$template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
 			}
