@@ -392,13 +392,14 @@ class List_Templates {
 				<?php
 				$docs_url = 'https://wcpos.com/docs/templates';
 				/* translators: %s: URL to template documentation */
-				$docs_text = __( 'Read the <a href="%s" target="_blank">full template documentation</a> for a complete reference of every field, helper function, and worked examples.', 'woocommerce-pos' );
+				$docs_text = __( 'Read the <a href="%s" target="_blank" rel="noopener noreferrer">full template documentation</a> for a complete reference of every field, helper function, and worked examples.', 'woocommerce-pos' );
 				echo wp_kses(
 					sprintf( $docs_text, esc_url( $docs_url ) ),
 					array(
 						'a' => array(
 							'href'   => array(),
 							'target' => array(),
+							'rel'    => array(),
 						),
 					)
 				);

@@ -520,7 +520,8 @@ class Templates {
 				'post_content' => $content,
 				'post_status'  => 'publish',
 				'post_type'    => 'wcpos_template',
-			)
+			),
+			true
 		);
 
 		if ( is_wp_error( $post_id ) ) {
