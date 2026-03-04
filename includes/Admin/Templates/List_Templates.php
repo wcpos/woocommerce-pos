@@ -178,32 +178,6 @@ class List_Templates {
 				max-width: 720px;
 				line-height: 1.5;
 			}
-			.wcpos-templates-intro .wcpos-data-reference {
-				background: #f6f7f7;
-				border: 1px solid #dcdcde;
-				border-radius: 4px;
-				padding: 14px 18px;
-				margin: 14px 0;
-				font-size: 13px;
-			}
-			.wcpos-templates-intro .wcpos-data-reference code {
-				background: #e8eaed;
-				padding: 2px 6px;
-				border-radius: 3px;
-				font-size: 12px;
-			}
-			.wcpos-templates-intro .wcpos-data-reference ul {
-				margin: 8px 0 0 18px;
-				padding: 0;
-				color: #3c434a;
-			}
-			.wcpos-templates-intro .wcpos-data-reference li {
-				margin-bottom: 3px;
-			}
-			.wcpos-templates-intro .wcpos-docs-link {
-				display: inline-block;
-				margin-top: 4px;
-			}
 
 			.wcpos-virtual-templates-wrapper {
 				margin: 0;
@@ -368,31 +342,11 @@ class List_Templates {
 		<div class="wcpos-templates-intro">
 			<h2><?php esc_html_e( 'Receipt Templates', 'woocommerce-pos' ); ?></h2>
 			<p>
-				<?php esc_html_e( 'Customise your POS receipts with PHP or logicless templates. Every template receives two key variables:', 'woocommerce-pos' ); ?>
-			</p>
-			<div class="wcpos-data-reference">
-				<strong><code>$order</code></strong> &mdash;
-				<?php esc_html_e( 'The full WooCommerce order object. Use any WC_Order method you normally would.', 'woocommerce-pos' ); ?>
-				<br><br>
-				<strong><code>$receipt_data</code></strong> &mdash;
-				<?php esc_html_e( 'A structured array with all the receipt information pre-calculated:', 'woocommerce-pos' ); ?>
-				<ul>
-					<li><code>meta</code> &mdash; <?php esc_html_e( 'order ID, order number, currency, creation date', 'woocommerce-pos' ); ?></li>
-					<li><code>store</code> &mdash; <?php esc_html_e( 'name, address, phone, email, tax ID', 'woocommerce-pos' ); ?></li>
-					<li><code>cashier</code> &mdash; <?php esc_html_e( 'ID and display name of the POS operator', 'woocommerce-pos' ); ?></li>
-					<li><code>customer</code> &mdash; <?php esc_html_e( 'name, billing/shipping addresses', 'woocommerce-pos' ); ?></li>
-					<li><code>lines</code> &mdash; <?php esc_html_e( 'line items with SKU, qty, unit price, and line totals (incl/excl tax)', 'woocommerce-pos' ); ?></li>
-					<li><code>totals</code> &mdash; <?php esc_html_e( 'subtotal, discount, tax, grand total, paid, change', 'woocommerce-pos' ); ?></li>
-					<li><code>payments</code> &mdash; <?php esc_html_e( 'method, amount tendered, change given', 'woocommerce-pos' ); ?></li>
-					<li><code>tax_summary</code> &mdash; <?php esc_html_e( 'tax rates, labels, and amounts', 'woocommerce-pos' ); ?></li>
-					<li><code>presentation_hints</code> &mdash; <?php esc_html_e( 'display_tax mode, locale, rounding settings', 'woocommerce-pos' ); ?></li>
-				</ul>
-			</div>
-			<p>
+				<?php esc_html_e( 'Customise your POS receipts with PHP or logicless templates.', 'woocommerce-pos' ); ?>
 				<?php
-				$docs_url = 'https://wcpos.com/docs/templates';
+				$docs_url = 'https://docs.wcpos.com/templates/';
 				/* translators: %s: URL to template documentation */
-				$docs_text = __( 'Read the <a href="%s" target="_blank" rel="noopener noreferrer">full template documentation</a> for a complete reference of every field, helper function, and worked examples.', 'woocommerce-pos' );
+				$docs_text = __( '<a href="%s" target="_blank" rel="noopener noreferrer">Read the documentation</a> for a complete reference and examples.', 'woocommerce-pos' );
 				echo wp_kses(
 					sprintf( $docs_text, esc_url( $docs_url ) ),
 					array(
