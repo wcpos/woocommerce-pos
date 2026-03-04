@@ -303,9 +303,9 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test depth beyond 2 does not process inner sections.
+	 * Test deeply nested sections render correctly.
 	 */
-	public function test_depth_beyond_two_not_processed(): void {
+	public function test_deep_nesting_renders(): void {
 		$data = array(
 			'meta' => array( 'currency' => 'USD' ),
 			'a'    => array(
@@ -326,7 +326,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 			$data
 		);
 
-		$this->assertStringNotContainsString( 'deep', $output );
+		$this->assertStringContainsString( 'deep', $output );
 	}
 
 	// ─── Task 6: Money formatting ───
@@ -425,16 +425,25 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test unclosed section tag is output literally.
+	 * Test unclosed section tag throws a syntax exception.
+	 *
+	 * @throws \Mustache\Exception\SyntaxException Expected exception.
 	 */
-	public function test_unclosed_section_output_literally(): void {
-		$data   = array(
+	public function test_unclosed_section_throws_exception(): void {
+		$data = array(
 			'meta'  => array( 'currency' => 'USD' ),
 			'lines' => array(),
 		);
-		$output = $this->render( '{{#lines}}no closing tag', $data );
 
-		$this->assertStringContainsString( '{{#lines}}', $output );
+		$this->expectException( \Mustache\Exception\SyntaxException::class );
+
+		try {
+			$this->render( '{{#lines}}no closing tag', $data );
+		} catch ( \Mustache\Exception\SyntaxException $e ) {
+			// Clean up the output buffer opened by render() helper.
+			ob_end_clean();
+			throw $e;
+		}
 	}
 
 	/**

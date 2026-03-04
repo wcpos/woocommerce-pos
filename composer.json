@@ -28,6 +28,7 @@
     "php": ">=7.4",
     "ext-json": "*",
     "erusev/parsedown": "^1.7",
+    "mustache/mustache": "^3.0",
     "ramsey/uuid": "^4.2"
   },
   "config": {
