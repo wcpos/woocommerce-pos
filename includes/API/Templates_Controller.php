@@ -217,10 +217,21 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return array|WP_REST_Response Prepared template data.
 	 */
 	public function prepare_item_for_response( $template, $request ) {
-		// Remove content from listing to reduce payload size.
 		$context = $request->get_param( 'context' ) ?? 'view';
-		if ( 'edit' !== $context && isset( $template['content'] ) ) {
-			unset( $template['content'] );
+		$engine  = $template['engine'] ?? 'legacy-php';
+
+		// Add computed fields.
+		$template['offline_capable'] = 'logicless' === $engine;
+		$template['menu_order']      = $template['menu_order'] ?? 0;
+
+		// Content handling:
+		// - In 'edit' context: always include content (for admin editor)
+		// - In 'view' context: include content only for logicless templates (POS needs it for offline rendering)
+		// - PHP templates: strip content in view context (can't be rendered client-side).
+		if ( 'edit' !== $context ) {
+			if ( 'logicless' !== $engine ) {
+				unset( $template['content'] );
+			}
 		}
 
 		return $template;
