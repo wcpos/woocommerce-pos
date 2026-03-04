@@ -447,6 +447,95 @@ class Templates {
 	}
 
 	/**
+	 * Get available starter/example templates.
+	 *
+	 * Returns metadata for example templates bundled with the plugin.
+	 * These can be installed as custom templates by the user.
+	 *
+	 * @return array Array of starter template definitions.
+	 */
+	public static function get_starter_templates(): array {
+		$examples_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/';
+
+		$starters = array(
+			'minimal-receipt'  => array(
+				'title'       => __( 'Minimal Receipt', 'woocommerce-pos' ),
+				'description' => __( 'A clean, data-driven receipt using the $receipt_data payload. Good starting point for custom templates.', 'woocommerce-pos' ),
+				'file'        => $examples_dir . 'minimal-receipt.php',
+				'type'        => 'receipt',
+				'language'    => 'php',
+				'engine'      => 'legacy-php',
+			),
+			'thermal-receipt'  => array(
+				'title'       => __( 'Thermal Printer Receipt', 'woocommerce-pos' ),
+				'description' => __( 'Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines.', 'woocommerce-pos' ),
+				'file'        => $examples_dir . 'thermal-receipt.php',
+				'type'        => 'receipt',
+				'language'    => 'php',
+				'engine'      => 'legacy-php',
+			),
+			'gift-receipt'     => array(
+				'title'       => __( 'Gift Receipt', 'woocommerce-pos' ),
+				'description' => __( 'Shows items without prices. Displays the customer note as a gift message. Useful for gift wrapping counters.', 'woocommerce-pos' ),
+				'file'        => $examples_dir . 'gift-receipt.php',
+				'type'        => 'receipt',
+				'language'    => 'php',
+				'engine'      => 'legacy-php',
+			),
+		);
+
+		// Only include starters whose files actually exist.
+		return array_filter(
+			$starters,
+			function ( $starter ) {
+				return ! empty( $starter['file'] ) && file_exists( $starter['file'] );
+			}
+		);
+	}
+
+	/**
+	 * Install a starter template as a custom (database) template.
+	 *
+	 * @param string $starter_key Key from get_starter_templates().
+	 *
+	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
+	 */
+	public static function install_starter_template( string $starter_key ) {
+		$starters = self::get_starter_templates();
+
+		if ( ! isset( $starters[ $starter_key ] ) ) {
+			return new \WP_Error( 'invalid_starter', __( 'Starter template not found.', 'woocommerce-pos' ) );
+		}
+
+		$starter = $starters[ $starter_key ];
+		$content = file_get_contents( $starter['file'] );
+
+		if ( false === $content ) {
+			return new \WP_Error( 'read_failed', __( 'Could not read starter template file.', 'woocommerce-pos' ) );
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'   => $starter['title'],
+				'post_content' => $content,
+				'post_status'  => 'publish',
+				'post_type'    => 'wcpos_template',
+			)
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		wp_set_object_terms( $post_id, $starter['type'], 'wcpos_template_type' );
+		update_post_meta( $post_id, '_template_language', $starter['language'] );
+		update_post_meta( $post_id, '_template_engine', $starter['engine'] );
+		update_post_meta( $post_id, '_template_output_type', 'html' );
+
+		return $post_id;
+	}
+
+	/**
 	 * Register default template types (receipt, report).
 	 *
 	 * @return void

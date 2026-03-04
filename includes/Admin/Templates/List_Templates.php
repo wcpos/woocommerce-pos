@@ -155,14 +155,56 @@ class List_Templates {
 		}
 
 		$virtual_templates = TemplatesManager::detect_filesystem_templates( 'receipt' );
+		$starter_templates = TemplatesManager::get_starter_templates();
 		$preview_order     = $this->get_last_pos_order();
-
-		if ( empty( $virtual_templates ) ) {
-			return $views;
-		}
 
 		?>
 		<style>
+			.wcpos-templates-intro {
+				margin: 15px 20px 0 0;
+				background: #fff;
+				border: 1px solid #c3c4c7;
+				padding: 20px 24px;
+			}
+			.wcpos-templates-intro h2 {
+				margin: 0 0 8px 0;
+				padding: 0;
+				font-size: 18px;
+				font-weight: 600;
+			}
+			.wcpos-templates-intro p {
+				margin: 0 0 12px 0;
+				color: #3c434a;
+				max-width: 720px;
+				line-height: 1.5;
+			}
+			.wcpos-templates-intro .wcpos-data-reference {
+				background: #f6f7f7;
+				border: 1px solid #dcdcde;
+				border-radius: 4px;
+				padding: 14px 18px;
+				margin: 14px 0;
+				font-size: 13px;
+			}
+			.wcpos-templates-intro .wcpos-data-reference code {
+				background: #e8eaed;
+				padding: 2px 6px;
+				border-radius: 3px;
+				font-size: 12px;
+			}
+			.wcpos-templates-intro .wcpos-data-reference ul {
+				margin: 8px 0 0 18px;
+				padding: 0;
+				color: #3c434a;
+			}
+			.wcpos-templates-intro .wcpos-data-reference li {
+				margin-bottom: 3px;
+			}
+			.wcpos-templates-intro .wcpos-docs-link {
+				display: inline-block;
+				margin-top: 4px;
+			}
+
 			.wcpos-virtual-templates-wrapper {
 				margin: 0;
 			}
@@ -203,6 +245,45 @@ class List_Templates {
 			.wcpos-virtual-templates .status-inactive {
 				color: #646970;
 			}
+
+			.wcpos-starter-templates {
+				margin: 15px 20px 15px 0;
+				background: #fff;
+				border: 1px solid #c3c4c7;
+				border-left: 4px solid #dba617;
+				padding: 15px 20px;
+			}
+			.wcpos-starter-templates h3 {
+				margin: 0 0 6px 0;
+				padding: 0;
+				font-size: 14px;
+			}
+			.wcpos-starter-templates > p {
+				margin: 0 0 15px 0;
+				color: #646970;
+			}
+			.wcpos-starter-grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+				gap: 12px;
+			}
+			.wcpos-starter-card {
+				border: 1px solid #dcdcde;
+				border-radius: 4px;
+				padding: 14px 16px;
+				background: #f6f7f7;
+			}
+			.wcpos-starter-card h4 {
+				margin: 0 0 6px 0;
+				font-size: 13px;
+			}
+			.wcpos-starter-card p {
+				margin: 0 0 10px 0;
+				font-size: 12px;
+				color: #646970;
+				line-height: 1.4;
+			}
+
 			.wcpos-custom-templates-header {
 				margin: 20px 20px 10px 0;
 			}
@@ -284,7 +365,49 @@ class List_Templates {
 			}
 		</style>
 
+		<div class="wcpos-templates-intro">
+			<h2><?php esc_html_e( 'Receipt Templates', 'woocommerce-pos' ); ?></h2>
+			<p>
+				<?php esc_html_e( 'Customise your POS receipts with PHP or logicless templates. Every template receives two key variables:', 'woocommerce-pos' ); ?>
+			</p>
+			<div class="wcpos-data-reference">
+				<strong><code>$order</code></strong> &mdash;
+				<?php esc_html_e( 'The full WooCommerce order object. Use any WC_Order method you normally would.', 'woocommerce-pos' ); ?>
+				<br><br>
+				<strong><code>$receipt_data</code></strong> &mdash;
+				<?php esc_html_e( 'A structured array with all the receipt information pre-calculated:', 'woocommerce-pos' ); ?>
+				<ul>
+					<li><code>meta</code> &mdash; <?php esc_html_e( 'order ID, order number, currency, creation date', 'woocommerce-pos' ); ?></li>
+					<li><code>store</code> &mdash; <?php esc_html_e( 'name, address, phone, email, tax ID', 'woocommerce-pos' ); ?></li>
+					<li><code>cashier</code> &mdash; <?php esc_html_e( 'ID and display name of the POS operator', 'woocommerce-pos' ); ?></li>
+					<li><code>customer</code> &mdash; <?php esc_html_e( 'name, billing/shipping addresses', 'woocommerce-pos' ); ?></li>
+					<li><code>lines</code> &mdash; <?php esc_html_e( 'line items with SKU, qty, unit price, and line totals (incl/excl tax)', 'woocommerce-pos' ); ?></li>
+					<li><code>totals</code> &mdash; <?php esc_html_e( 'subtotal, discount, tax, grand total, paid, change', 'woocommerce-pos' ); ?></li>
+					<li><code>payments</code> &mdash; <?php esc_html_e( 'method, amount tendered, change given', 'woocommerce-pos' ); ?></li>
+					<li><code>tax_summary</code> &mdash; <?php esc_html_e( 'tax rates, labels, and amounts', 'woocommerce-pos' ); ?></li>
+					<li><code>presentation_hints</code> &mdash; <?php esc_html_e( 'display_tax mode, locale, rounding settings', 'woocommerce-pos' ); ?></li>
+				</ul>
+			</div>
+			<p>
+				<?php
+				$docs_url = 'https://wcpos.com/docs/templates';
+				/* translators: %s: URL to template documentation */
+				$docs_text = __( 'Read the <a href="%s" target="_blank">full template documentation</a> for a complete reference of every field, helper function, and worked examples.', 'woocommerce-pos' );
+				echo wp_kses(
+					sprintf( $docs_text, esc_url( $docs_url ) ),
+					array(
+						'a' => array(
+							'href'   => array(),
+							'target' => array(),
+						),
+					)
+				);
+				?>
+			</p>
+		</div>
+
 		<div class="wcpos-virtual-templates-wrapper">
+			<?php if ( ! empty( $virtual_templates ) ) : ?>
 			<div class="wcpos-virtual-templates">
 				<h3><?php esc_html_e( 'Default Templates', 'woocommerce-pos' ); ?></h3>
 				<p><?php esc_html_e( 'These templates are automatically detected from your plugin and theme files. They cannot be deleted.', 'woocommerce-pos' ); ?></p>
@@ -351,6 +474,25 @@ class List_Templates {
 					</tbody>
 				</table>
 			</div>
+			<?php endif; ?>
+
+			<?php if ( ! empty( $starter_templates ) ) : ?>
+			<div class="wcpos-starter-templates">
+				<h3><?php esc_html_e( 'Starter Templates', 'woocommerce-pos' ); ?></h3>
+				<p><?php esc_html_e( 'Ready-made examples that demonstrate different receipt styles. Install one to get a working template you can customise.', 'woocommerce-pos' ); ?></p>
+				<div class="wcpos-starter-grid">
+					<?php foreach ( $starter_templates as $key => $starter ) : ?>
+						<div class="wcpos-starter-card">
+							<h4><?php echo esc_html( $starter['title'] ); ?></h4>
+							<p><?php echo esc_html( $starter['description'] ); ?></p>
+							<a href="<?php echo esc_url( $this->get_install_starter_url( $key ) ); ?>" class="button button-small button-primary">
+								<?php esc_html_e( 'Install', 'woocommerce-pos' ); ?>
+							</a>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			</div>
+			<?php endif; ?>
 
 			<div class="wcpos-custom-templates-header">
 				<h3><?php esc_html_e( 'Custom Templates', 'woocommerce-pos' ); ?></h3>
@@ -610,6 +752,15 @@ class List_Templates {
 			<?php
 		}
 
+		// Starter installed success notice (shown on edit screen after redirect).
+		if ( isset( $_GET['wcpos_installed'] ) && '1' === $_GET['wcpos_installed'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Starter template installed. You can now customise it and activate it when ready.', 'woocommerce-pos' ); ?></p>
+			</div>
+			<?php
+		}
+
 		// Error notice.
 		if ( isset( $_GET['wcpos_error'] ) ) {
 			?>
@@ -646,6 +797,53 @@ class List_Templates {
 			admin_url( 'admin-post.php?action=wcpos_copy_template&template_id=' . rawurlencode( $template_id ) ),
 			'wcpos_copy_template_' . $template_id
 		);
+	}
+
+	/**
+	 * Get URL to install a starter template.
+	 *
+	 * @param string $starter_key Starter template key.
+	 *
+	 * @return string Install URL.
+	 */
+	private function get_install_starter_url( string $starter_key ): string {
+		return wp_nonce_url(
+			admin_url( 'admin-post.php?action=wcpos_install_starter&starter_key=' . rawurlencode( $starter_key ) ),
+			'wcpos_install_starter_' . $starter_key
+		);
+	}
+
+	/**
+	 * Handle installing a starter template as a custom template.
+	 *
+	 * @return void
+	 */
+	public function install_starter_template(): void {
+		$starter_key = isset( $_GET['starter_key'] ) ? sanitize_text_field( wp_unslash( $_GET['starter_key'] ) ) : '';
+
+		if ( empty( $starter_key ) ) {
+			wp_die( esc_html__( 'Invalid starter template key.', 'woocommerce-pos' ) );
+		}
+
+		$nonce_action = 'wcpos_install_starter_' . $starter_key;
+
+		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', $nonce_action ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_die( esc_html__( 'You do not have permission to install templates.', 'woocommerce-pos' ) );
+		}
+
+		$post_id = TemplatesManager::install_starter_template( $starter_key );
+
+		if ( is_wp_error( $post_id ) ) {
+			wp_die( esc_html( $post_id->get_error_message() ) );
+		}
+
+		// Redirect to edit the new template.
+		wp_safe_redirect( admin_url( 'post.php?post=' . $post_id . '&action=edit&wcpos_installed=1' ) );
+		exit;
 	}
 
 	/**
