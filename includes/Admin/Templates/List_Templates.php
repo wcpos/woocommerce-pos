@@ -362,6 +362,24 @@ class List_Templates {
 		</div>
 
 		<div class="wcpos-virtual-templates-wrapper">
+			<?php if ( ! empty( $starter_templates ) ) : ?>
+			<div class="wcpos-starter-templates">
+				<h3><?php esc_html_e( 'Starter Templates', 'woocommerce-pos' ); ?></h3>
+				<p><?php esc_html_e( 'Ready-made examples that demonstrate different receipt styles. Install one to get a working template you can customise.', 'woocommerce-pos' ); ?></p>
+				<div class="wcpos-starter-grid">
+					<?php foreach ( $starter_templates as $key => $starter ) : ?>
+						<div class="wcpos-starter-card">
+							<h4><?php echo esc_html( $starter['title'] ); ?></h4>
+							<p><?php echo esc_html( $starter['description'] ); ?></p>
+							<a href="<?php echo esc_url( $this->get_install_starter_url( $key ) ); ?>" class="button button-small button-primary">
+								<?php esc_html_e( 'Install', 'woocommerce-pos' ); ?>
+							</a>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			</div>
+			<?php endif; ?>
+
 			<?php if ( ! empty( $virtual_templates ) ) : ?>
 			<div class="wcpos-virtual-templates">
 				<h3><?php esc_html_e( 'Default Templates', 'woocommerce-pos' ); ?></h3>
@@ -428,24 +446,6 @@ class List_Templates {
 						<?php endforeach; ?>
 					</tbody>
 				</table>
-			</div>
-			<?php endif; ?>
-
-			<?php if ( ! empty( $starter_templates ) ) : ?>
-			<div class="wcpos-starter-templates">
-				<h3><?php esc_html_e( 'Starter Templates', 'woocommerce-pos' ); ?></h3>
-				<p><?php esc_html_e( 'Ready-made examples that demonstrate different receipt styles. Install one to get a working template you can customise.', 'woocommerce-pos' ); ?></p>
-				<div class="wcpos-starter-grid">
-					<?php foreach ( $starter_templates as $key => $starter ) : ?>
-						<div class="wcpos-starter-card">
-							<h4><?php echo esc_html( $starter['title'] ); ?></h4>
-							<p><?php echo esc_html( $starter['description'] ); ?></p>
-							<a href="<?php echo esc_url( $this->get_install_starter_url( $key ) ); ?>" class="button button-small button-primary">
-								<?php esc_html_e( 'Install', 'woocommerce-pos' ); ?>
-							</a>
-						</div>
-					<?php endforeach; ?>
-				</div>
 			</div>
 			<?php endif; ?>
 
