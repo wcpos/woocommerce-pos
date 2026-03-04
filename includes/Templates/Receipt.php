@@ -408,6 +408,24 @@ class Receipt {
 			}
 		}
 
+		// Check for template selection parameter (used by POS app to switch templates).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['template'] ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$template_id = sanitize_text_field( wp_unslash( $_GET['template'] ) );
+
+			if ( is_numeric( $template_id ) ) {
+				$template = TemplatesManager::get_template( (int) $template_id );
+			} else {
+				$template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
+			}
+
+			// Only allow published receipt templates.
+			if ( $template && 'receipt' === ( $template['type'] ?? '' ) ) {
+				return $template;
+			}
+		}
+
 		// Get active receipt template (can be virtual or from database).
 		return TemplatesManager::get_active_template( 'receipt' );
 	}
