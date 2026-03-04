@@ -8,78 +8,55 @@ No PHP required — just HTML, CSS, and placeholder variables.
 Logicless templates cannot loop over arrays (line items, payments),
 so this format works best for simple order summaries.
 
+Note: Logicless output passes through wp_kses_post, which strips
+<style>, <head>, and document-level tags. Use inline styles only.
+
 @see https://docs.wcpos.com/templates/receipt-data-reference
 -->
-<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<style>
-		* { box-sizing: border-box; margin: 0; padding: 0; }
-		body {
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-			font-size: 14px;
-			color: #333;
-			padding: 24px;
-			max-width: 400px;
-			margin: 0 auto;
-		}
-		.store { text-align: center; margin-bottom: 20px; }
-		.store-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-		.store-address { font-size: 12px; color: #666; }
-		.divider { border: none; border-top: 1px dashed #ccc; margin: 16px 0; }
-		.row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
-		.row .label { color: #555; }
-		.total-row { display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px; }
-		.footer { text-align: center; margin-top: 24px; font-size: 12px; color: #999; }
-	</style>
-</head>
-<body>
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #333; padding: 24px; max-width: 400px; margin: 0 auto;">
 
-	<div class="store">
-		<div class="store-name">{{store.name}}</div>
-		<div class="store-address">{{store.address_lines}}</div>
+	<div style="text-align: center; margin-bottom: 20px;">
+		<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+		<div style="font-size: 12px; color: #666;">{{store.address_lines}}</div>
 	</div>
 
-	<hr class="divider">
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
 
-	<div class="row">
-		<span class="label">Order</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Order</span>
 		<span>#{{meta.order_number}}</span>
 	</div>
-	<div class="row">
-		<span class="label">Date</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Date</span>
 		<span>{{meta.created_at_gmt}}</span>
 	</div>
-	<div class="row">
-		<span class="label">Cashier</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Cashier</span>
 		<span>{{cashier.name}}</span>
 	</div>
-	<div class="row">
-		<span class="label">Customer</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Customer</span>
 		<span>{{customer.name}}</span>
 	</div>
 
-	<hr class="divider">
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
 
-	<div class="row">
-		<span class="label">Subtotal</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Subtotal</span>
 		<span>{{totals.subtotal_incl}}</span>
 	</div>
-	<div class="row">
-		<span class="label">Tax</span>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Tax</span>
 		<span>{{totals.tax_total}}</span>
 	</div>
 
-	<div class="total-row">
+	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px;">
 		<span>Total</span>
 		<span>{{totals.grand_total_incl}}</span>
 	</div>
 
-	<div class="footer">
+	<div style="text-align: center; margin-top: 24px; font-size: 12px; color: #999;">
 		Thank you for your purchase!
 	</div>
 
-</body>
-</html>
+</div>
