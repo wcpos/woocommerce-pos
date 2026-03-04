@@ -382,7 +382,7 @@ class List_Templates {
 						<div class="wcpos-starter-card">
 							<h4>
 								<?php echo esc_html( $starter['title'] ); ?>
-								<?php if ( 'logicless' === $starter['engine'] ) : ?>
+								<?php if ( 'logicless' === ( $starter['engine'] ?? '' ) ) : ?>
 									<span class="wcpos-badge-offline"><?php esc_html_e( 'Offline', 'woocommerce-pos' ); ?></span>
 								<?php endif; ?>
 							</h4>
