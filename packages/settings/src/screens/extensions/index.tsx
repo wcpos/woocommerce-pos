@@ -42,7 +42,7 @@ function Extensions() {
 		queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
 	});
 
-	const isPro = !!(window as any)?.wcpos?.pro;
+	const isPro = !!(window as any)?.wcpos?.settings?.getComponent?.('extensions.action');
 
 	React.useEffect(() => {
 		if (extensions.length > 0) {
