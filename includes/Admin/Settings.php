@@ -127,48 +127,69 @@ class Settings {
 		$settings_service = SettingsService::instance();
 		$barcodes         = array_values( $settings_service->get_barcodes() );
 		$order_statuses   = $settings_service->get_order_statuses();
-		$new_ext_count    = $this->get_new_extensions_count();
+		$update_ext_count = $this->get_update_available_count();
 		$unread_logs      = Logs::get_unread_counts( get_current_user_id() );
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s,
-            newExtensionsCount: %s,
+            updateExtensionsCount: %s,
             unreadLogCounts: %s
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
-			json_encode( $new_ext_count ),
+			json_encode( $update_ext_count ),
 			json_encode( $unread_logs ),
 			json_encode( TRANSLATION_VERSION )
 		);
 	}
 
 	/**
-	 * Get the count of extensions the current user hasn't seen yet.
+	 * Get the count of extensions that have updates available.
 	 *
-	 * Uses the cached catalog transient to avoid remote fetches on every page load.
-	 * Returns null if the catalog hasn't been fetched yet.
+	 * Uses the cached catalog transient and local plugin versions to avoid
+	 * remote fetches on every page load. Returns null if the catalog hasn't
+	 * been fetched yet.
 	 *
 	 * @return int|null
 	 */
-	private function get_new_extensions_count(): ?int {
+	private function get_update_available_count(): ?int {
 		$cached = get_transient( ExtensionsService::TRANSIENT_KEY );
 
 		if ( false === $cached || ! \is_array( $cached ) ) {
 			return null;
 		}
 
-		$catalog_slugs = array_column( $cached, 'slug' );
-		$seen_slugs    = get_user_meta( get_current_user_id(), '_wcpos_seen_extension_slugs', true );
-
-		if ( ! \is_array( $seen_slugs ) ) {
-			$seen_slugs = array();
+		if ( ! \function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 
-		$new_slugs = array_diff( $catalog_slugs, $seen_slugs );
+		$installed_plugins = get_plugins();
+		$installed_by_slug = array();
+		$count             = 0;
 
-		return \count( $new_slugs );
+		foreach ( $installed_plugins as $plugin_file => $plugin_data ) {
+			$parts = explode( '/', $plugin_file, 2 );
+			if ( isset( $parts[1] ) ) {
+				$installed_by_slug[ $parts[0] ] = $plugin_data['Version'] ?? '';
+			}
+		}
+
+		foreach ( $cached as $entry ) {
+			if ( ! \is_array( $entry ) ) {
+				continue;
+			}
+			$slug       = $entry['slug'] ?? '';
+			$remote_ver = $entry['latest_version'] ?? $entry['version'] ?? '';
+
+			if ( $slug && $remote_ver && isset( $installed_by_slug[ $slug ] ) ) {
+				if ( version_compare( $installed_by_slug[ $slug ], $remote_ver, '<' ) ) {
+					++$count;
+				}
+			}
+		}
+
+		return $count;
 	}
 }
