@@ -261,12 +261,7 @@ class Orders {
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
 			if ( $sku ) {
-				// Disable object_read so set_sku() skips the uniqueness check.
-				// This is a synthetic product that's never saved to the database,
-				// so SKU collisions with real products are irrelevant.
-				$product->set_object_read( false );
-				$product->set_sku( $sku );
-				$product->set_object_read( true );
+				$this->set_synthetic_product_sku( $product, $sku );
 			}
 
 			// Misc products are synthetic and never persisted to DB, so we can
@@ -376,12 +371,7 @@ class Orders {
 			$product->set_name( $item->get_name() );
 			$sku = $item->get_meta( '_sku', true );
 			if ( $sku ) {
-				// Disable object_read so set_sku() skips the uniqueness check.
-				// This is a synthetic product that's never saved to the database,
-				// so SKU collisions with real products are irrelevant.
-				$product->set_object_read( false );
-				$product->set_sku( $sku );
-				$product->set_object_read( true );
+				$this->set_synthetic_product_sku( $product, $sku );
 			}
 		}
 
@@ -772,5 +762,21 @@ class Orders {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Set SKU on a synthetic product, bypassing WooCommerce's uniqueness check.
+	 *
+	 * Synthetic products (product_id=0) are never saved to the database, so
+	 * SKU collisions with real products are irrelevant. Temporarily disabling
+	 * object_read causes set_sku() to skip the wc_product_has_unique_sku() call.
+	 *
+	 * @param WC_Product_Simple $product Synthetic product instance.
+	 * @param string            $sku     SKU value from order-item meta.
+	 */
+	private function set_synthetic_product_sku( WC_Product_Simple $product, string $sku ): void {
+		$product->set_object_read( false );
+		$product->set_sku( $sku );
+		$product->set_object_read( true );
 	}
 }
