@@ -166,26 +166,25 @@ class Settings {
 		}
 
 		$installed_plugins = get_plugins();
+		$installed_by_slug = array();
 		$count             = 0;
+
+		foreach ( $installed_plugins as $plugin_file => $plugin_data ) {
+			$parts = explode( '/', $plugin_file, 2 );
+			if ( isset( $parts[1] ) ) {
+				$installed_by_slug[ $parts[0] ] = $plugin_data['Version'] ?? '';
+			}
+		}
 
 		foreach ( $cached as $entry ) {
 			if ( ! \is_array( $entry ) ) {
 				continue;
 			}
-			$slug        = $entry['slug'] ?? '';
-			$remote_ver  = $entry['latest_version'] ?? $entry['version'] ?? '';
-			$plugin_file = null;
+			$slug       = $entry['slug'] ?? '';
+			$remote_ver = $entry['latest_version'] ?? $entry['version'] ?? '';
 
-			foreach ( array_keys( $installed_plugins ) as $pf ) {
-				if ( 0 === strpos( $pf, $slug . '/' ) ) {
-					$plugin_file = $pf;
-					break;
-				}
-			}
-
-			if ( $plugin_file && $remote_ver ) {
-				$local_ver = $installed_plugins[ $plugin_file ]['Version'] ?? '';
-				if ( version_compare( $local_ver, $remote_ver, '<' ) ) {
+			if ( $slug && $remote_ver && isset( $installed_by_slug[ $slug ] ) ) {
+				if ( version_compare( $installed_by_slug[ $slug ], $remote_ver, '<' ) ) {
 					++$count;
 				}
 			}

@@ -33,14 +33,21 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test returns null when catalog transient is empty.
+	 * Invoke the private get_update_available_count method via reflection.
 	 */
-	public function test_returns_null_when_no_catalog_cached(): void {
+	private function invoke_get_update_available_count(): ?int {
 		$settings = new Settings();
 		$method   = new \ReflectionMethod( $settings, 'get_update_available_count' );
 		$method->setAccessible( true );
 
-		$this->assertNull( $method->invoke( $settings ) );
+		return $method->invoke( $settings );
+	}
+
+	/**
+	 * Test returns null when catalog transient is empty.
+	 */
+	public function test_returns_null_when_no_catalog_cached(): void {
+		$this->assertNull( $this->invoke_get_update_available_count() );
 	}
 
 	/**
@@ -58,11 +65,7 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 			3600
 		);
 
-		$settings = new Settings();
-		$method   = new \ReflectionMethod( $settings, 'get_update_available_count' );
-		$method->setAccessible( true );
-
-		$this->assertSame( 0, $method->invoke( $settings ) );
+		$this->assertSame( 0, $this->invoke_get_update_available_count() );
 	}
 
 	/**
@@ -72,10 +75,16 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 		if ( ! \function_exists( 'get_plugins' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-		$installed   = get_plugins();
-		$plugin_file = array_key_first( $installed );
-		$this->assertNotNull( $plugin_file );
-		$slug = dirname( (string) $plugin_file );
+
+		// Find a plugin whose path contains a directory (slug/file.php).
+		$slug = null;
+		foreach ( array_keys( get_plugins() ) as $plugin_file ) {
+			if ( str_contains( (string) $plugin_file, '/' ) ) {
+				$slug = dirname( (string) $plugin_file );
+				break;
+			}
+		}
+		$this->assertNotNull( $slug, 'No directory-based plugin found in test environment' );
 
 		set_transient(
 			ExtensionsService::TRANSIENT_KEY,
@@ -92,11 +101,7 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 			3600
 		);
 
-		$settings = new Settings();
-		$method   = new \ReflectionMethod( $settings, 'get_update_available_count' );
-		$method->setAccessible( true );
-
 		// Only the detected installed plugin has a "newer" version.
-		$this->assertSame( 1, $method->invoke( $settings ) );
+		$this->assertSame( 1, $this->invoke_get_update_available_count() );
 	}
 }
