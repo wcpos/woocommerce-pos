@@ -69,12 +69,19 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 	 * Test returns count of extensions with available updates.
 	 */
 	public function test_returns_count_of_updatable_extensions(): void {
-		// Use WooCommerce as a known installed plugin.
+		if ( ! \function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$installed   = get_plugins();
+		$plugin_file = array_key_first( $installed );
+		$this->assertNotNull( $plugin_file );
+		$slug = dirname( (string) $plugin_file );
+
 		set_transient(
 			ExtensionsService::TRANSIENT_KEY,
 			array(
 				array(
-					'slug'           => 'woocommerce',
+					'slug'           => $slug,
 					'latest_version' => '999.0.0',
 				),
 				array(
@@ -89,7 +96,7 @@ class Test_Settings_Extensions_Badge extends WP_UnitTestCase {
 		$method   = new \ReflectionMethod( $settings, 'get_update_available_count' );
 		$method->setAccessible( true );
 
-		// Only woocommerce is installed and has a "newer" version.
+		// Only the detected installed plugin has a "newer" version.
 		$this->assertSame( 1, $method->invoke( $settings ) );
 	}
 }

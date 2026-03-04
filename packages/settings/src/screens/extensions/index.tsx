@@ -45,10 +45,8 @@ function Extensions() {
 	const isPro = !!(window as any)?.wcpos?.settings?.getComponent?.('extensions.action');
 
 	React.useEffect(() => {
-		if (extensions.length > 0) {
-			const updateCount = extensions.filter((ext) => ext.status === 'update_available').length;
-			setUpdateExtensionsCount(updateCount);
-		}
+		const updateCount = extensions.filter((ext) => ext.status === 'update_available').length;
+		setUpdateExtensionsCount(updateCount);
 	}, [extensions]);
 
 	const categories = React.useMemo(() => {

@@ -169,6 +169,9 @@ class Settings {
 		$count             = 0;
 
 		foreach ( $cached as $entry ) {
+			if ( ! \is_array( $entry ) ) {
+				continue;
+			}
 			$slug        = $entry['slug'] ?? '';
 			$remote_ver  = $entry['latest_version'] ?? $entry['version'] ?? '';
 			$plugin_file = null;

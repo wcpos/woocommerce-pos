@@ -44,15 +44,36 @@ function GitHubIcon() {
 	);
 }
 
+function isGitHubUrl(url: string): boolean {
+	try {
+		const host = new URL(url).hostname.toLowerCase();
+		return host === 'github.com' || host === 'www.github.com';
+	} catch {
+		return false;
+	}
+}
+
 /**
  * Build a GitHub release URL from homepage + version.
  * Returns null if homepage isn't a GitHub URL.
  */
 function releaseUrl(homepage: string, version: string): string | null {
-	if (!homepage || !homepage.includes('github.com')) {
+	try {
+		const parsed = new URL(homepage);
+		const host = parsed.hostname.toLowerCase();
+		if (host !== 'github.com' && host !== 'www.github.com') {
+			return null;
+		}
+
+		const [owner, repo] = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
+		if (!owner || !repo) {
+			return null;
+		}
+
+		return `https://github.com/${owner}/${repo}/releases/tag/v${encodeURIComponent(version)}`;
+	} catch {
 		return null;
 	}
-	return `${homepage}/releases/tag/v${version}`;
 }
 
 /**
@@ -177,7 +198,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 				</h3>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:mt-0.5">
 					<VersionLine extension={extension} />
-					{extension.homepage && (
+					{extension.homepage && isGitHubUrl(extension.homepage) && (
 						<a
 							href={extension.homepage}
 							target="_blank"
