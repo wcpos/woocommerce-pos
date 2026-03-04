@@ -49,4 +49,43 @@ class Receipt_Data_Schema {
 		'paid_total',
 		'change_total',
 	);
+
+	/**
+	 * Field names (terminal key segment) that represent money values.
+	 *
+	 * Used by the logicless renderer to auto-format currency output.
+	 * Matched against the last segment of dot-path keys during substitution.
+	 */
+	const MONEY_FIELDS = array(
+		// Line items.
+		'unit_price_incl',
+		'unit_price_excl',
+		'line_subtotal_incl',
+		'line_subtotal_excl',
+		'discounts_incl',
+		'discounts_excl',
+		'line_total_incl',
+		'line_total_excl',
+		// Fees, shipping, discounts (shared names).
+		'total_incl',
+		'total_excl',
+		// Totals.
+		'subtotal_incl',
+		'subtotal_excl',
+		'discount_total_incl',
+		'discount_total_excl',
+		'tax_total',
+		'grand_total_incl',
+		'grand_total_excl',
+		'paid_total',
+		'change_total',
+		// Tax summary.
+		'taxable_amount_excl',
+		'tax_amount',
+		'taxable_amount_incl',
+		// Payments.
+		'amount',
+		'tendered',
+		'change',
+	);
 }
