@@ -560,6 +560,15 @@ class Single_Template {
 			<?php
 		}
 
+		// Starter installed success notice (shown on edit screen after redirect).
+		if ( isset( $_GET['wcpos_installed'] ) && '1' === $_GET['wcpos_installed'] ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><?php esc_html_e( 'Starter template installed. You can now customise it and activate it when ready.', 'woocommerce-pos' ); ?></p>
+			</div>
+			<?php
+		}
+
 		// Error notice.
 		if ( isset( $_GET['wcpos_error'] ) ) {
 			?>
