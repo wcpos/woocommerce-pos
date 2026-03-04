@@ -555,15 +555,6 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1.5, $data['stock_quantity'] );
 	}
 
-	/**
-	 * @see Test_Decimal_Quantities::test_product_update_with_decimal_stock_quantity()
-	 * This test is skipped because decimal_qty setting must be applied before API routes
-	 * are registered. The Test_Decimal_Quantities class handles this properly.
-	 */
-	public function test_product_update_decimal_quantities(): void {
-		$this->markTestSkipped( 'Covered by Test_Decimal_Quantities::test_product_update_with_decimal_stock_quantity' );
-	}
-
 	public function test_product_orderby_decimal_stock_quantity(): void {
 		$this->setup_decimal_quantity_tests();
 		$this->assertTrue( woocommerce_pos_get_settings( 'general', 'decimal_qty' ) );
