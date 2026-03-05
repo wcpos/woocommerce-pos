@@ -182,4 +182,56 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		wp_set_current_user( 0 );
 	}
+
+	/**
+	 * Test orderby=code ascending.
+	 */
+	public function test_coupon_orderby_code_asc(): void {
+		$coupon_b = CouponHelper::create_coupon( 'bravo' );
+		$coupon_a = CouponHelper::create_coupon( 'alpha' );
+		$coupon_d = CouponHelper::create_coupon( 'delta' );
+		$coupon_c = CouponHelper::create_coupon( 'charlie' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'code',
+				'order'   => 'asc',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data  = $response->get_data();
+		$codes = wp_list_pluck( $data, 'code' );
+
+		$this->assertEquals( array( 'alpha', 'bravo', 'charlie', 'delta' ), $codes );
+	}
+
+	/**
+	 * Test orderby=code descending.
+	 */
+	public function test_coupon_orderby_code_desc(): void {
+		$coupon_b = CouponHelper::create_coupon( 'bravo' );
+		$coupon_a = CouponHelper::create_coupon( 'alpha' );
+		$coupon_d = CouponHelper::create_coupon( 'delta' );
+		$coupon_c = CouponHelper::create_coupon( 'charlie' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_query_params(
+			array(
+				'orderby' => 'code',
+				'order'   => 'desc',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data  = $response->get_data();
+		$codes = wp_list_pluck( $data, 'code' );
+
+		$this->assertEquals( array( 'delta', 'charlie', 'bravo', 'alpha' ), $codes );
+	}
 }
