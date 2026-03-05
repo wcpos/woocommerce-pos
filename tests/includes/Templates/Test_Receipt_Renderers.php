@@ -238,17 +238,22 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	 * Test store address formats country/state display names.
 	 */
 	public function test_receipt_data_builder_formats_country_state(): void {
+		$previous_default_country = get_option( 'woocommerce_default_country', '' );
 		update_option( 'woocommerce_default_country', 'US:AL' );
 
-		$order   = OrderHelper::create_order();
-		$builder = new Receipt_Data_Builder();
-		$data    = $builder->build( $order, 'live' );
+		try {
+			$order   = OrderHelper::create_order();
+			$builder = new Receipt_Data_Builder();
+			$data    = $builder->build( $order, 'live' );
 
-		$address_lines = $data['store']['address_lines'];
-		$last_line     = end( $address_lines );
+			$address_lines = $data['store']['address_lines'];
+			$last_line     = end( $address_lines );
 
-		$this->assertStringContainsString( 'Alabama', $last_line );
-		$this->assertStringNotContainsString( 'US:AL', $last_line );
+			$this->assertStringContainsString( 'Alabama', $last_line );
+			$this->assertStringNotContainsString( 'US:AL', $last_line );
+		} finally {
+			update_option( 'woocommerce_default_country', $previous_default_country );
+		}
 	}
 
 	/**
@@ -264,7 +269,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$builder = new Receipt_Data_Builder();
 		$data    = $builder->build( $order, 'live' );
 
-		$this->assertSame( 'Guest', $data['customer']['name'] );
+		$this->assertSame( __( 'Guest', 'woocommerce-pos' ), $data['customer']['name'] );
 		$this->assertNull( $data['customer']['id'] );
 	}
 
