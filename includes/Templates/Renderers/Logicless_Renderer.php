@@ -59,6 +59,9 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 
 		$formatted_data = $this->format_money_fields( $receipt_data );
 
+		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
+		$content = preg_replace( '/<!--.*?-->/s', '', $content );
+
 		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
 		$mustache = new Mustache_Engine(
 			array(
@@ -96,8 +99,12 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = $this->format_money_fields( $value, (string) $k );
 			} elseif ( is_numeric( $value ) && isset( $this->money_fields[ $k ] ) ) {
-				$result[ $k ] = wp_strip_all_tags(
-					wc_price( (float) $value, array( 'currency' => $this->currency ) )
+				$result[ $k ] = html_entity_decode(
+					wp_strip_all_tags(
+						wc_price( (float) $value, array( 'currency' => $this->currency ) )
+					),
+					ENT_QUOTES | ENT_SUBSTITUTE,
+					'UTF-8'
 				);
 			} else {
 				$result[ $k ] = $value;

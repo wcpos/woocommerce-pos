@@ -127,7 +127,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test logicless renderer formats money fields as currency.
+	 * Test logicless renderer formats money fields as currency without raw HTML entities.
 	 */
 	public function test_logicless_renderer_formats_money_fields(): void {
 		$order        = OrderHelper::create_order();
@@ -152,6 +152,9 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( '19.99', $output );
 		$this->assertStringNotContainsString( '{{', $output );
+		// Entities from wc_price() should be decoded, not double-escaped.
+		$this->assertStringNotContainsString( '&amp;', $output );
+		$this->assertStringNotContainsString( '&#36;', $output );
 	}
 
 	/**
@@ -205,6 +208,69 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( 'Widget', $output );
 		$this->assertStringNotContainsString( 'Array', $output );
+	}
+
+	/**
+	 * Test logicless renderer strips HTML comments from template.
+	 */
+	public function test_logicless_renderer_strips_html_comments(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = array(
+			'meta' => array(
+				'currency' => 'USD',
+			),
+		);
+
+		$template = array(
+			'content' => "<!-- This is a comment\nspanning multiple lines --><p>Hello</p>",
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Hello', $output );
+		$this->assertStringNotContainsString( 'This is a comment', $output );
+	}
+
+	/**
+	 * Test store address formats country/state display names.
+	 */
+	public function test_receipt_data_builder_formats_country_state(): void {
+		$previous_default_country = get_option( 'woocommerce_default_country', '' );
+		update_option( 'woocommerce_default_country', 'US:AL' );
+
+		try {
+			$order   = OrderHelper::create_order();
+			$builder = new Receipt_Data_Builder();
+			$data    = $builder->build( $order, 'live' );
+
+			$address_lines = $data['store']['address_lines'];
+			$last_line     = end( $address_lines );
+
+			$this->assertStringContainsString( 'Alabama', $last_line );
+			$this->assertStringNotContainsString( 'US:AL', $last_line );
+		} finally {
+			update_option( 'woocommerce_default_country', $previous_default_country );
+		}
+	}
+
+	/**
+	 * Test receipt data builder sets Guest name for anonymous orders.
+	 */
+	public function test_receipt_data_builder_guest_customer_name(): void {
+		$order = OrderHelper::create_order();
+		$order->set_customer_id( 0 );
+		$order->set_billing_first_name( '' );
+		$order->set_billing_last_name( '' );
+		$order->save();
+
+		$builder = new Receipt_Data_Builder();
+		$data    = $builder->build( $order, 'live' );
+
+		$this->assertSame( __( 'Guest', 'woocommerce-pos' ), $data['customer']['name'] );
+		$this->assertNull( $data['customer']['id'] );
 	}
 
 	/**
