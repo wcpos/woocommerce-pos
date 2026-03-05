@@ -8,6 +8,13 @@
  * - Template listing (virtual and database)
  * - Single template retrieval
  * - Active template retrieval
+ * - Search/category/modified_after filters
+ * - PATCH updates
+ * - Batch updates
+ * - Copy
+ * - Install from gallery
+ * - Preview
+ * - Gallery listing
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
@@ -45,6 +52,34 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Create a template post for testing.
+	 *
+	 * @param string $title  Template title.
+	 * @param string $type   Template type slug.
+	 * @param string $status Post status.
+	 *
+	 * @return int Post ID.
+	 */
+	private function create_template( string $title, string $type = 'receipt', string $status = 'publish' ): int {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => $status,
+				'post_title'  => $title,
+			)
+		);
+		wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
+
+		// Set required meta so get_template works.
+		update_post_meta( $post_id, '_template_engine', 'logicless' );
+		update_post_meta( $post_id, '_template_output_type', 'html' );
+		update_post_meta( $post_id, '_template_language', 'html' );
+		update_post_meta( $post_id, '_template_tax_display', 'default' );
+
+		return $post_id;
+	}
+
+	/**
 	 * Test namespace property.
 	 */
 	public function test_namespace_property(): void {
@@ -71,6 +106,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/templates', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\w-]+)', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/templates/active', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/gallery', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/batch', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/install', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\d]+)', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\d]+)/copy', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/templates/(?P<id>[\w-]+)/preview', $routes );
 	}
 
 	/**
@@ -263,6 +304,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'per_page', $params );
 		$this->assertArrayHasKey( 'type', $params );
 		$this->assertArrayHasKey( 'context', $params );
+		$this->assertArrayHasKey( 'search', $params );
+		$this->assertArrayHasKey( 'category', $params );
+		$this->assertArrayHasKey( 'modified_after', $params );
 	}
 
 	/**
@@ -328,6 +372,235 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		if ( ! empty( $data ) ) {
 			$first_template = $data[0];
 			$this->assertArrayNotHasKey( 'content', $first_template );
+		}
+	}
+
+	// ---- Task 5: Search and filter tests ----
+
+	/**
+	 * Test search filters templates by title.
+	 */
+	public function test_search_filters_templates_by_title(): void {
+		$id_alpha = $this->create_template( 'Alpha Receipt' );
+		$id_beta  = $this->create_template( 'Beta Invoice' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'search', 'Alpha' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data   = $response->get_data();
+		$titles = array_column( $data, 'title' );
+
+		$this->assertContains( 'Alpha Receipt', $titles );
+		$this->assertNotContains( 'Beta Invoice', $titles );
+
+		wp_delete_post( $id_alpha, true );
+		wp_delete_post( $id_beta, true );
+	}
+
+	/**
+	 * Test category filter returns matching templates.
+	 */
+	public function test_category_filter_returns_matching_templates(): void {
+		$id_receipt = $this->create_template( 'Category Receipt A' );
+		$id_gift    = $this->create_template( 'Category Gift B' );
+
+		wp_set_object_terms( $id_receipt, 'receipt', 'wcpos_template_category' );
+		wp_set_object_terms( $id_gift, 'gift-receipt', 'wcpos_template_category' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'category', 'gift-receipt' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data   = $response->get_data();
+		$titles = array_column( $data, 'title' );
+
+		$this->assertContains( 'Category Gift B', $titles );
+		$this->assertNotContains( 'Category Receipt A', $titles );
+
+		wp_delete_post( $id_receipt, true );
+		wp_delete_post( $id_gift, true );
+	}
+
+	// ---- Task 6: PATCH tests ----
+
+	/**
+	 * Test PATCH template updates status.
+	 */
+	public function test_patch_template_updates_status(): void {
+		$post_id = $this->create_template( 'Status Test Template' );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_body_params( array( 'status' => 'draft' ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$post = get_post( $post_id );
+		$this->assertEquals( 'draft', $post->post_status );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test PATCH template updates menu_order.
+	 */
+	public function test_patch_template_updates_menu_order(): void {
+		$post_id = $this->create_template( 'Order Test Template' );
+
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_body_params( array( 'menu_order' => 5 ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$post = get_post( $post_id );
+		$this->assertEquals( 5, $post->menu_order );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	// ---- Task 7: Batch tests ----
+
+	/**
+	 * Test batch update multiple templates.
+	 */
+	public function test_batch_update_multiple_templates(): void {
+		$id1 = $this->create_template( 'Batch A' );
+		$id2 = $this->create_template( 'Batch B' );
+		$id3 = $this->create_template( 'Batch C' );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array( 'id' => $id1, 'status' => 'draft', 'menu_order' => 1 ),
+					array( 'id' => $id2, 'status' => 'publish', 'menu_order' => 2 ),
+					array( 'id' => $id3, 'menu_order' => 3 ),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'update', $data );
+		$this->assertCount( 3, $data['update'] );
+
+		$this->assertEquals( 'draft', get_post( $id1 )->post_status );
+		$this->assertEquals( 'publish', get_post( $id2 )->post_status );
+		$this->assertEquals( 3, get_post( $id3 )->menu_order );
+
+		wp_delete_post( $id1, true );
+		wp_delete_post( $id2, true );
+		wp_delete_post( $id3, true );
+	}
+
+	// ---- Task 8: Copy and Install tests ----
+
+	/**
+	 * Test copy template creates a new post.
+	 */
+	public function test_copy_template_creates_new_post(): void {
+		$original_id = $this->create_template( 'Original Template' );
+		wp_update_post(
+			array(
+				'ID'           => $original_id,
+				'post_content' => '<p>Template content here</p>',
+			)
+		);
+
+		$request  = $this->wp_rest_post_request( '/wcpos/v1/templates/' . $original_id . '/copy' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 201, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertStringContainsString( 'Copy of Original Template', $data['title'] );
+		$this->assertNotEquals( $original_id, $data['id'] );
+
+		// The copy should be a draft.
+		$copy_post = get_post( $data['id'] );
+		$this->assertEquals( 'draft', $copy_post->post_status );
+
+		wp_delete_post( $original_id, true );
+		wp_delete_post( $data['id'], true );
+	}
+
+	/**
+	 * Test install gallery template via API.
+	 */
+	public function test_install_gallery_template_via_api(): void {
+		// Check if gallery templates are available.
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		if ( empty( $gallery ) ) {
+			$this->markTestSkipped( 'No gallery templates available.' );
+		}
+
+		$first_key = $gallery[0]['key'];
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/install' );
+		$request->set_body_params( array( 'gallery_key' => $first_key ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 201, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'id', $data );
+		$this->assertTrue( is_numeric( $data['id'] ) );
+
+		wp_delete_post( $data['id'], true );
+	}
+
+	// ---- Task 9: Preview tests ----
+
+	/**
+	 * Test preview returns a URL.
+	 */
+	public function test_preview_returns_url(): void {
+		$post_id = $this->create_template( 'Preview Template' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'preview_url', $data );
+		$this->assertArrayHasKey( 'order_id', $data );
+		$this->assertArrayHasKey( 'template_id', $data );
+		$this->assertStringContainsString( 'wcpos_template_preview', $data['preview_url'] );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	// ---- Task 10: Gallery listing tests ----
+
+	/**
+	 * Test gallery endpoint returns premade templates.
+	 */
+	public function test_gallery_endpoint_returns_premade_templates(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertIsArray( $data );
+
+		if ( ! empty( $data ) ) {
+			$keys = array_column( $data, 'key' );
+			$this->assertContains( 'standard-receipt', $keys );
+
+			// Verify content_file is stripped from the response.
+			foreach ( $data as $template ) {
+				$this->assertArrayNotHasKey( 'content_file', $template );
+			}
 		}
 	}
 }
