@@ -7,6 +7,7 @@ export function SearchField({ value, onChange }: SearchFieldProps) {
 	return (
 		<input
 			type="search"
+			aria-label="Search templates"
 			placeholder="Search templates..."
 			value={value}
 			onChange={(e) => onChange(e.target.value)}

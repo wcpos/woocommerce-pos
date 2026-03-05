@@ -15,6 +15,17 @@ const SnackbarContext = React.createContext<SnackbarContextValue>({
 	addSnackbar: () => {},
 });
 
+let snackbarCounter = 0;
+
+function getSnackbarId() {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return crypto.randomUUID();
+	}
+
+	snackbarCounter += 1;
+	return `snackbar-${Date.now()}-${snackbarCounter}`;
+}
+
 export function useSnackbar() {
 	return React.useContext(SnackbarContext);
 }
@@ -23,7 +34,7 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
 	const [messages, setMessages] = React.useState<SnackbarMessage[]>([]);
 
 	const addSnackbar = React.useCallback((msg: Omit<SnackbarMessage, 'id'>) => {
-		const id = String(Date.now());
+		const id = getSnackbarId();
 		setMessages((prev) => [...prev, { ...msg, id }]);
 
 		setTimeout(() => {
@@ -35,7 +46,12 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
 		<SnackbarContext.Provider value={{ addSnackbar }}>
 			{children}
 			{messages.length > 0 && (
-				<div className="wcpos:fixed wcpos:bottom-4 wcpos:right-4 wcpos:z-50 wcpos:flex wcpos:flex-col wcpos:gap-2">
+				<div
+					className="wcpos:fixed wcpos:bottom-4 wcpos:right-4 wcpos:z-50 wcpos:flex wcpos:flex-col wcpos:gap-2"
+					aria-live="polite"
+					aria-atomic="true"
+					role="status"
+				>
 					{messages.map((msg) => (
 						<div
 							key={msg.id}

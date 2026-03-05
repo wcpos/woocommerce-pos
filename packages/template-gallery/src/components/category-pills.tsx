@@ -14,7 +14,7 @@ function formatLabel(slug: string): string {
 }
 
 export function CategoryPills({ categories, active, onChange }: CategoryPillsProps) {
-	const allCategories = ['all', ...categories];
+	const allCategories = Array.from(new Set(['all', ...categories.filter((category) => category !== 'all')]));
 
 	return (
 		<div className="wcpos:flex wcpos:gap-2 wcpos:flex-wrap">

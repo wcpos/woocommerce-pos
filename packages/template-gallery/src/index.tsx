@@ -15,7 +15,7 @@ function Root() {
 			fallbackRender={({ error }) => (
 				<div className="wcpos:p-6 wcpos:text-red-600">
 					<h2>Template Gallery failed to load</h2>
-					<pre>{error?.message}</pre>
+					<pre>{error instanceof Error ? error.message : String(error)}</pre>
 				</div>
 			)}
 		>
@@ -30,5 +30,6 @@ function Root() {
 
 const el = document.getElementById('wcpos-template-gallery');
 if (el) {
+	el.classList.add('template-gallery-root');
 	createRoot(el).render(<Root />);
 }

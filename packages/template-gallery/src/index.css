@@ -8,9 +8,12 @@
 	--color-wp-admin-theme-black: #1d2327;
 }
 
-*,
-::before,
-::after {
+.template-gallery-root,
+.template-gallery-root *,
+.template-gallery-root *::before,
+.template-gallery-root *::after,
+.template-gallery-root::before,
+.template-gallery-root::after {
 	box-sizing: border-box;
 	border-width: 0;
 	border-style: solid;

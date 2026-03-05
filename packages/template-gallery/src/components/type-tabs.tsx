@@ -8,10 +8,9 @@ const tabs = [
 
 interface TypeTabsProps {
 	activeType: string;
-	onChange: (type: string) => void;
 }
 
-export function TypeTabs({ activeType, onChange }: TypeTabsProps) {
+export function TypeTabs({ activeType }: TypeTabsProps) {
 	return (
 		<div className="wcpos:flex wcpos:gap-1 wcpos:border-b wcpos:border-gray-200 wcpos:mb-4">
 			{tabs.map((tab) => (
@@ -19,7 +18,6 @@ export function TypeTabs({ activeType, onChange }: TypeTabsProps) {
 					key={tab.id}
 					type="button"
 					disabled={!tab.enabled}
-					onClick={() => onChange(tab.id)}
 					className={classnames(
 						'wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:border-b-2 wcpos:-mb-px wcpos:bg-transparent wcpos:cursor-pointer',
 						tab.id === activeType

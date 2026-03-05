@@ -64,6 +64,9 @@ export function TemplateCard(props: TemplateCardProps) {
 							type="button"
 							onClick={props.onActivate}
 							disabled={props.isToggling}
+							aria-disabled={props.isToggling}
+							aria-label={isActive ? 'Deactivate template' : 'Activate template'}
+							aria-pressed={isActive}
 							title={isActive ? 'Deactivate' : 'Activate'}
 							className={classnames(
 								'wcpos:w-3 wcpos:h-3 wcpos:rounded-full wcpos:border-2 wcpos:shrink-0 wcpos:mt-0.5 wcpos:cursor-pointer wcpos:p-0',

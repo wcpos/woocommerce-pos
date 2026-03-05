@@ -12,11 +12,19 @@ function LoadingFallback() {
 	);
 }
 
-function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+function ErrorFallback({
+	error,
+	resetErrorBoundary,
+}: {
+	error: unknown;
+	resetErrorBoundary: () => void;
+}) {
+	const errorMessage = error instanceof Error ? error.message : String(error);
+
 	return (
 		<div className="wcpos:p-6 wcpos:text-center">
 			<p className="wcpos:text-red-600 wcpos:mb-2">Failed to load templates.</p>
-			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">{error.message}</p>
+			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">{errorMessage}</p>
 			<button
 				type="button"
 				onClick={resetErrorBoundary}
@@ -29,8 +37,6 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
 }
 
 export function GalleryLayout() {
-	const [activeType, setActiveType] = React.useState('receipt');
-
 	return (
 		<div className="wcpos:max-w-7xl">
 			<div className="wcpos:mb-6">
@@ -42,7 +48,7 @@ export function GalleryLayout() {
 				</p>
 			</div>
 
-			<TypeTabs activeType={activeType} onChange={setActiveType} />
+			<TypeTabs activeType="receipt" />
 
 			<ErrorBoundary FallbackComponent={ErrorFallback}>
 				<React.Suspense fallback={<LoadingFallback />}>

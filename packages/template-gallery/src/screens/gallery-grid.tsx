@@ -68,16 +68,47 @@ export function GalleryGrid() {
 		(t: AnyTemplate) => 'is_active' in t && t.is_active,
 	).length;
 
+	const customIndexById = React.useMemo(
+		() => new Map(customTemplates.map((template, index) => [template.id, index])),
+		[customTemplates],
+	);
+
 	const editUrl = (id: number) =>
 		`${window.location.origin}/wp-admin/post.php?post=${id}&action=edit`;
 
+	const persistReorder = React.useCallback((reordered: Template[]) => {
+		const updates = reordered.map((template, index) => ({
+			id: template.id,
+			menu_order: index,
+		}));
+
+		reorderTemplates.mutate(updates);
+	}, [reorderTemplates.mutate]);
+
+	const moveTemplate = React.useCallback((templateId: number, direction: 'previous' | 'next') => {
+		const sourceIndex = customTemplates.findIndex((template) => template.id === templateId);
+		if (sourceIndex < 0) return;
+
+		const targetIndex = direction === 'previous' ? sourceIndex - 1 : sourceIndex + 1;
+		if (targetIndex < 0 || targetIndex >= customTemplates.length) return;
+
+		const reordered = [...customTemplates];
+		const [movedTemplate] = reordered.splice(sourceIndex, 1);
+		reordered.splice(targetIndex, 0, movedTemplate);
+
+		persistReorder(reordered);
+	}, [customTemplates, persistReorder]);
+
 	// Find the template being previewed
-	const previewTemplate = previewId
+	const previewTemplate = previewId !== null
 		? (templates.find((t: AnyTemplate) => t.id === previewId) ??
 			galleryTemplates.find((t: GalleryTemplate) => t.key === previewId))
 		: null;
 
 	const previewIsGallery = previewTemplate ? 'key' in previewTemplate : false;
+	const previewTemplateId = previewTemplate
+		? ('key' in previewTemplate ? previewTemplate.key : previewTemplate.id)
+		: null;
 
 	// Monitor drag-and-drop reordering for custom templates
 	React.useEffect(() => {
@@ -86,27 +117,28 @@ export function GalleryGrid() {
 				const target = location.current.dropTargets[0];
 				if (!target) return;
 
-				const sourceIndex = source.data.index as number;
-				const targetIndex = target.data.index as number;
+				const sourceId = source.data.id as number;
+				const targetId = target.data.id as number;
+				if (sourceId === targetId) return;
+
+				const sourceIndex = customTemplates.findIndex((template) => template.id === sourceId);
+				const targetIndex = customTemplates.findIndex((template) => template.id === targetId);
+				if (sourceIndex < 0 || targetIndex < 0) return;
+
 				const edge = extractClosestEdge(target.data);
 
 				const reordered = reorderWithEdge({
-					list: filteredCustom,
+					list: customTemplates,
 					startIndex: sourceIndex,
 					indexOfTarget: targetIndex,
 					closestEdgeOfTarget: edge,
 					axis: 'horizontal',
 				});
 
-				const updates = reordered.map((t, idx) => ({
-					id: t.id,
-					menu_order: idx,
-				}));
-
-				reorderTemplates.mutate(updates);
+				persistReorder(reordered);
 			},
 		});
-	}, [filteredCustom, reorderTemplates]);
+	}, [customTemplates, persistReorder]);
 
 	return (
 		<div className="wcpos:space-y-6">
@@ -158,7 +190,14 @@ export function GalleryGrid() {
 				)}
 				<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:lg:grid-cols-4 wcpos:gap-4">
 					{filteredCustom.map((t: Template, index: number) => (
-						<DraggableCard key={t.id} id={t.id} index={index}>
+						<DraggableCard
+							key={t.id}
+							id={t.id}
+							index={customIndexById.get(t.id) ?? index}
+							total={customTemplates.length}
+							onMove={moveTemplate}
+							disableDrag={customTemplates.length < 2}
+						>
 							<TemplateCard
 								template={t}
 								isGallery={false}
@@ -197,23 +236,22 @@ export function GalleryGrid() {
 			{/* Preview modal */}
 			{previewTemplate && (
 				<PreviewModal
-					templateId={
-						previewIsGallery
-							? (previewTemplate as GalleryTemplate).key
-							: previewTemplate.id
-					}
+					templateId={previewTemplateId ?? ''}
 					templateName={previewTemplate.title}
 					templateDescription={previewTemplate.description}
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
 					onActivate={() => {
-						const t = previewTemplate as AnyTemplate;
-						if (typeof t.id === 'number') {
-							toggleTemplate.mutate({
-								id: t.id,
-								status: t.is_active ? 'draft' : 'publish',
-							});
-						}
+						if (typeof previewId !== 'number') return;
+						const latestTemplate = templates.find((template): template is Template =>
+							typeof template.id === 'number' && template.id === previewId,
+						);
+						if (!latestTemplate) return;
+
+						toggleTemplate.mutate({
+							id: latestTemplate.id,
+							status: latestTemplate.is_active ? 'draft' : 'publish',
+						});
 					}}
 					onCustomize={() => {
 						const t = previewTemplate as GalleryTemplate;

@@ -8,11 +8,13 @@ import type { AnyTemplate, Template } from '../types';
 export function useTemplates(type = 'receipt') {
 	return useSuspenseQuery({
 		queryKey: ['templates', type],
-		queryFn: () =>
-			apiFetch<AnyTemplate[]>({
-				path: `wcpos/v1/templates?wcpos=1&type=${type}`,
+		queryFn: () => {
+			const params = new URLSearchParams({ wcpos: '1', type });
+			return apiFetch<AnyTemplate[]>({
+				path: `wcpos/v1/templates?${params.toString()}`,
 				method: 'GET',
-			}),
+			});
+		},
 	});
 }
 
