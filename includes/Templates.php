@@ -670,6 +670,65 @@ class Templates {
 	}
 
 	/**
+	 * Install a gallery template as a custom (database) template.
+	 *
+	 * @param string $gallery_key Key matching a gallery template JSON file.
+	 *
+	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
+	 */
+	public static function install_gallery_template( string $gallery_key ) {
+		$gallery_templates = self::get_gallery_templates();
+		$template          = null;
+
+		foreach ( $gallery_templates as $gt ) {
+			if ( $gt['key'] === $gallery_key ) {
+				$template = $gt;
+				break;
+			}
+		}
+
+		if ( ! $template ) {
+			return new \WP_Error( 'invalid_gallery_key', __( 'Gallery template not found.', 'woocommerce-pos' ) );
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'   => $template['title'],
+				'post_content' => $template['content'],
+				'post_status'  => 'publish',
+				'post_type'    => 'wcpos_template',
+			),
+			true
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		// Set taxonomies.
+		wp_set_object_terms( $post_id, $template['type'] ?? 'receipt', 'wcpos_template_type' );
+		if ( ! empty( $template['category'] ) ) {
+			wp_set_object_terms( $post_id, $template['category'], 'wcpos_template_category' );
+		}
+
+		// Set meta fields.
+		update_post_meta( $post_id, '_template_description', $template['description'] ?? '' );
+		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'logicless' );
+		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
+		update_post_meta( $post_id, '_template_language', 'logicless' === ( $template['engine'] ?? '' ) ? 'html' : 'php' );
+		update_post_meta( $post_id, '_template_is_premade', '1' );
+		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
+		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
+		update_post_meta( $post_id, '_template_tax_display', 'default' );
+
+		if ( ! empty( $template['paper_width'] ) ) {
+			update_post_meta( $post_id, '_template_paper_width', $template['paper_width'] );
+		}
+
+		return $post_id;
+	}
+
+	/**
 	 * Register default template types (receipt, report).
 	 *
 	 * @return void

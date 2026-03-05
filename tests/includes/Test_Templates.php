@@ -471,6 +471,54 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test install_gallery_template creates a post.
+	 */
+	public function test_install_gallery_template_creates_post(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$this->assertIsInt( $post_id );
+		$this->assertGreaterThan( 0, $post_id );
+
+		$post = get_post( $post_id );
+		$this->assertEquals( 'wcpos_template', $post->post_type );
+		$this->assertEquals( 'Standard Receipt', $post->post_title );
+		$this->assertNotEmpty( $post->post_content );
+	}
+
+	/**
+	 * Test install_gallery_template sets metadata.
+	 */
+	public function test_install_gallery_template_sets_metadata(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$this->assertTrue( (bool) get_post_meta( $post_id, '_template_is_premade', true ) );
+		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
+		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
+		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+	}
+
+	/**
+	 * Test install_gallery_template sets taxonomies.
+	 */
+	public function test_install_gallery_template_sets_taxonomies(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$type_terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
+		$this->assertEquals( 'receipt', $type_terms[0]->slug );
+
+		$cat_terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
+		$this->assertEquals( 'receipt', $cat_terms[0]->slug );
+	}
+
+	/**
+	 * Test install_gallery_template returns error for invalid key.
+	 */
+	public function test_install_gallery_template_invalid_key_returns_error(): void {
+		$result = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'nonexistent' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+	}
+
+	/**
 	 * Test legacy set_active_template method.
 	 */
 	public function test_legacy_set_active_template_method(): void {
