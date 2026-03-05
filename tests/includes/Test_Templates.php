@@ -381,6 +381,40 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_gallery_templates returns an array.
+	 */
+	public function test_get_gallery_templates_returns_array(): void {
+		$templates = Templates::get_gallery_templates();
+		$this->assertIsArray( $templates );
+	}
+
+	/**
+	 * Test get_gallery_templates finds standard-receipt.
+	 */
+	public function test_get_gallery_templates_finds_standard_receipt(): void {
+		$templates = Templates::get_gallery_templates();
+		$keys      = array_column( $templates, 'key' );
+		$this->assertContains( 'standard-receipt', $keys );
+	}
+
+	/**
+	 * Test gallery template has all required fields.
+	 */
+	public function test_gallery_template_has_required_fields(): void {
+		$templates = Templates::get_gallery_templates();
+		$template  = $templates[0];
+
+		$this->assertArrayHasKey( 'key', $template );
+		$this->assertArrayHasKey( 'title', $template );
+		$this->assertArrayHasKey( 'description', $template );
+		$this->assertArrayHasKey( 'type', $template );
+		$this->assertArrayHasKey( 'category', $template );
+		$this->assertArrayHasKey( 'engine', $template );
+		$this->assertArrayHasKey( 'content', $template );
+		$this->assertArrayHasKey( 'version', $template );
+	}
+
+	/**
 	 * Test legacy set_active_template method.
 	 */
 	public function test_legacy_set_active_template_method(): void {

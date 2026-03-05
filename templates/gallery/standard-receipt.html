@@ -1,0 +1,122 @@
+<!--
+Simple Receipt — Logicless Example Template.
+
+Demonstrates the logicless template engine with section blocks:
+  {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+  {{^key}}...{{/key}}  — show block when value is empty/falsy
+  {{.}}                — current value (for arrays of strings)
+  {{key.path}}         — dot-path placeholder substitution
+
+Money fields are auto-formatted as currency.
+No PHP required — just HTML, CSS, and placeholder variables.
+
+Note: Logicless output passes through wp_kses_post, which strips
+<style>, <head>, and document-level tags. Use inline styles only.
+
+@see https://docs.wcpos.com/templates/receipt-data-reference
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #333; padding: 24px; max-width: 400px; margin: 0 auto;">
+
+	<div style="text-align: center; margin-bottom: 20px;">
+		<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+		{{#store.address_lines}}
+		<div style="font-size: 12px; color: #666;">{{.}}</div>
+		{{/store.address_lines}}
+		{{#store.phone}}
+		<div style="font-size: 12px; color: #666;">{{store.phone}}</div>
+		{{/store.phone}}
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Order</span>
+		<span>#{{meta.order_number}}</span>
+	</div>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Date</span>
+		<span>{{meta.created_at_gmt}}</span>
+	</div>
+	{{#cashier.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Cashier</span>
+		<span>{{cashier.name}}</span>
+	</div>
+	{{/cashier.name}}
+	{{#customer.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+		<span style="color: #555;">Customer</span>
+		<span>{{customer.name}}</span>
+	</div>
+	{{/customer.name}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	{{#lines}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span>{{name}} x{{qty}}</span>
+		<span>{{line_total_incl}}</span>
+	</div>
+	{{/lines}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	{{#fees}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{total_incl}}</span>
+	</div>
+	{{/fees}}
+
+	{{#shipping}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{total_incl}}</span>
+	</div>
+	{{/shipping}}
+
+	{{#discounts}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; color: #16a34a;">
+		<span>{{label}}</span>
+		<span>-{{total_incl}}</span>
+	</div>
+	{{/discounts}}
+
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span style="color: #555;">Subtotal</span>
+		<span>{{totals.subtotal_incl}}</span>
+	</div>
+
+	{{#tax_summary}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{tax_amount}}</span>
+	</div>
+	{{/tax_summary}}
+
+	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px;">
+		<span>Total</span>
+		<span>{{totals.grand_total_incl}}</span>
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	{{#payments}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+		<span style="color: #555;">{{method_title}}</span>
+		<span>{{amount}}</span>
+	</div>
+	{{/payments}}
+
+	{{^customer.name}}
+	<div style="text-align: center; margin-top: 24px; font-size: 12px; color: #999;">
+		Thank you for your purchase!
+	</div>
+	{{/customer.name}}
+	{{#customer.name}}
+	<div style="text-align: center; margin-top: 24px; font-size: 12px; color: #999;">
+		Thank you, {{customer.name}}!
+	</div>
+	{{/customer.name}}
+
+</div>

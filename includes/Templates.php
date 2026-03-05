@@ -531,6 +531,81 @@ class Templates {
 	}
 
 	/**
+	 * Get gallery templates from the templates/gallery/ directory.
+	 *
+	 * @param string|null $type     Filter by type. Null for all.
+	 * @param string|null $category Filter by category. Null for all.
+	 *
+	 * @return array Array of gallery template data.
+	 */
+	public static function get_gallery_templates( ?string $type = null, ?string $category = null ): array {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+
+		if ( ! is_dir( $gallery_dir ) ) {
+			return array();
+		}
+
+		$templates  = array();
+		$json_files = glob( $gallery_dir . '*.json' );
+
+		if ( ! $json_files ) {
+			return array();
+		}
+
+		foreach ( $json_files as $json_file ) {
+			$metadata = json_decode( file_get_contents( $json_file ), true );
+
+			if ( ! $metadata || empty( $metadata['key'] ) ) {
+				continue;
+			}
+
+			if ( $type && ( $metadata['type'] ?? '' ) !== $type ) {
+				continue;
+			}
+			if ( $category && ( $metadata['category'] ?? '' ) !== $category ) {
+				continue;
+			}
+
+			$key          = $metadata['key'];
+			$content_file = null;
+			$extensions   = array( 'html', 'php', 'xml' );
+
+			foreach ( $extensions as $ext ) {
+				$candidate = $gallery_dir . $key . '.' . $ext;
+				if ( file_exists( $candidate ) ) {
+					$content_file = $candidate;
+					break;
+				}
+			}
+
+			if ( ! $content_file ) {
+				continue;
+			}
+
+			$templates[] = array_merge(
+				$metadata,
+				array(
+					'content'         => file_get_contents( $content_file ),
+					'content_file'    => $content_file,
+					'is_premade'      => true,
+					'is_virtual'      => true,
+					'source'          => 'gallery',
+					'offline_capable' => 'logicless' === ( $metadata['engine'] ?? '' ),
+				)
+			);
+		}
+
+		usort(
+			$templates,
+			function ( $a, $b ) {
+				return strcmp( $a['key'], $b['key'] );
+			}
+		);
+
+		return $templates;
+	}
+
+	/**
 	 * Install a starter template as a custom (database) template.
 	 *
 	 * @param string $starter_key Key from get_starter_templates().
