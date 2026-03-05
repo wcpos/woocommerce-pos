@@ -527,7 +527,22 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		return rest_ensure_response( array( 'update' => $results ) );
+		$response = rest_ensure_response( array( 'update' => $results ) );
+
+		// Return 400 when every batch item failed.
+		$has_success = false;
+		foreach ( $results as $result_item ) {
+			if ( ! isset( $result_item['error'] ) ) {
+				$has_success = true;
+				break;
+			}
+		}
+
+		if ( ! $has_success && ! empty( $results ) ) {
+			$response->set_status( 400 );
+		}
+
+		return $response;
 	}
 
 	/**
