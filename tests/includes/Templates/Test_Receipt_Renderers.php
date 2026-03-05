@@ -60,4 +60,174 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
 		$this->assertStringContainsString( 'live', $output );
 	}
+
+	/**
+	 * Test logicless renderer does not crash when template references an array value.
+	 */
+	public function test_logicless_renderer_handles_array_value_without_error(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = array(
+			'meta'     => array(
+				'currency' => 'USD',
+			),
+			'customer' => array(
+				'name'            => 'John Doe',
+				'billing_address' => array(
+					'city'  => 'New York',
+					'state' => 'NY',
+				),
+			),
+		);
+
+		$template = array(
+			'content' => '<p>{{customer.name}}</p><p>{{customer.billing_address}}</p>',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'John Doe', $output );
+		$this->assertStringNotContainsString( 'Array', $output );
+	}
+
+	/**
+	 * Test logicless renderer iterates array sections correctly.
+	 */
+	public function test_logicless_renderer_iterates_array_sections(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = array(
+			'meta'  => array(
+				'currency' => 'USD',
+			),
+			'lines' => array(
+				array(
+					'name' => 'Widget',
+					'qty'  => 2,
+				),
+				array(
+					'name' => 'Gadget',
+					'qty'  => 1,
+				),
+			),
+		);
+
+		$template = array(
+			'content' => '{{#lines}}<div>{{name}} x{{qty}}</div>{{/lines}}',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Widget x2', $output );
+		$this->assertStringContainsString( 'Gadget x1', $output );
+	}
+
+	/**
+	 * Test logicless renderer formats money fields as currency.
+	 */
+	public function test_logicless_renderer_formats_money_fields(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = array(
+			'meta'   => array(
+				'currency' => 'USD',
+			),
+			'totals' => array(
+				'grand_total_incl' => 19.99,
+				'subtotal_incl'    => 19.99,
+			),
+		);
+
+		$template = array(
+			'content' => '<span>{{totals.grand_total_incl}}</span>',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( '19.99', $output );
+		$this->assertStringNotContainsString( '{{', $output );
+	}
+
+	/**
+	 * Test logicless renderer renders empty comment for empty template.
+	 */
+	public function test_logicless_renderer_handles_empty_template(): void {
+		$order    = OrderHelper::create_order();
+		$template = array( 'content' => '' );
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, array() );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( '<!-- Empty logicless receipt template -->', $output );
+	}
+
+	/**
+	 * Test logicless renderer handles nested arrays in line items without error.
+	 */
+	public function test_logicless_renderer_handles_nested_arrays_in_lines(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = array(
+			'meta'  => array(
+				'currency' => 'USD',
+			),
+			'lines' => array(
+				array(
+					'name'            => 'Widget',
+					'qty'             => 2,
+					'line_total_incl' => 10.00,
+					'taxes'           => array(
+						array(
+							'code'   => '1',
+							'label'  => 'Tax',
+							'amount' => 1.00,
+						),
+					),
+				),
+			),
+		);
+
+		$template = array(
+			'content' => '{{#lines}}<div>{{name}} {{line_total_incl}}</div>{{/lines}}',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Widget', $output );
+		$this->assertStringNotContainsString( 'Array', $output );
+	}
+
+	/**
+	 * Test logicless renderer with the full simple receipt template and real order data.
+	 */
+	public function test_logicless_renderer_full_receipt_no_error(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/simple-receipt.html';
+		$this->assertFileExists( $template_path );
+
+		$template = array(
+			'content' => file_get_contents( $template_path ),
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertNotEmpty( $output );
+		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
+		$this->assertStringNotContainsString( '{{', $output );
+	}
 }

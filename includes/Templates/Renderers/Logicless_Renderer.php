@@ -59,9 +59,17 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 
 		$formatted_data = $this->format_money_fields( $receipt_data );
 
+		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
 		$mustache = new Mustache_Engine(
 			array(
-				'entity_flags' => ENT_QUOTES | ENT_SUBSTITUTE,
+				'entity_flags' => $flags,
+				'escape'       => function ( $value ) use ( $flags ) {
+					if ( \is_array( $value ) ) {
+						return '';
+					}
+
+					return htmlspecialchars( (string) $value, $flags, 'UTF-8' );
+				},
 			)
 		);
 
