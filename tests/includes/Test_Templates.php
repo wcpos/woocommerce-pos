@@ -378,6 +378,12 @@ class Test_Templates extends WP_UnitTestCase {
 
 		$kitchen_ticket = term_exists( 'kitchen-ticket', 'wcpos_template_category' );
 		$this->assertNotNull( $kitchen_ticket );
+
+		$purchase_order = term_exists( 'purchase-order', 'wcpos_template_category' );
+		$this->assertNotNull( $purchase_order );
+
+		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
+		$this->assertNotNull( $bar_ticket );
 	}
 
 	/**
