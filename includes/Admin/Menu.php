@@ -12,6 +12,8 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\PLUGIN_PATH;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -33,6 +35,13 @@ class Menu {
 	public $settings_screen_id;
 
 	/**
+	 * Gallery submenu page hook suffix.
+	 *
+	 * @var string
+	 */
+	public $gallery_screen_id;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -41,7 +50,7 @@ class Menu {
 			add_filter( 'custom_menu_order', '__return_true' );
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
-		}
+}
 
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
@@ -147,8 +156,20 @@ class Menu {
 			array( '\WCPOS\WooCommercePOS\Admin\Settings', 'display_settings_page' )
 		);
 
+		// Template Gallery SPA page.
+		$this->gallery_screen_id = add_submenu_page(
+			PLUGIN_NAME,
+			__( 'Templates', 'woocommerce-pos' ),
+			__( 'Template Gallery', 'woocommerce-pos' ),
+			'manage_woocommerce_pos',
+			'wcpos-templates',
+			array( $this, 'render_gallery_page' )
+		);
+		add_action( 'load-' . $this->gallery_screen_id, array( $this, 'enqueue_gallery_assets' ) );
+
 		// Note: Templates submenu is automatically added by the custom post type registration
-		// with 'show_in_menu' => PLUGIN_NAME.
+		// with 'show_in_menu' => PLUGIN_NAME. The redirect in redirect_template_list_page()
+		// sends the old CPT list view to the Gallery SPA.
 
 		// adjust submenu.
 		global $submenu;
@@ -218,4 +239,52 @@ class Menu {
 			);
 		}
 	}
+
+	/**
+	 * Render the Template Gallery SPA mount point.
+	 */
+	public function render_gallery_page(): void {
+		echo '<div class="wrap"><div id="wcpos-template-gallery"></div></div>';
+	}
+
+	/**
+	 * Enqueue the Template Gallery SPA assets.
+	 */
+	public function enqueue_gallery_assets(): void {
+		$asset_file = PLUGIN_PATH . 'packages/template-gallery/build/index.asset.php';
+
+		if ( ! file_exists( $asset_file ) ) {
+			return;
+		}
+
+		$asset = require $asset_file;
+
+		wp_enqueue_script(
+			'wcpos-template-gallery',
+			PLUGIN_URL . 'packages/template-gallery/build/index.js',
+			$asset['dependencies'],
+			$asset['version'],
+			true
+		);
+
+		if ( file_exists( PLUGIN_PATH . 'packages/template-gallery/build/index.css' ) ) {
+			wp_enqueue_style(
+				'wcpos-template-gallery',
+				PLUGIN_URL . 'packages/template-gallery/build/index.css',
+				array( 'wp-components' ),
+				$asset['version']
+			);
+		}
+
+		wp_localize_script(
+			'wcpos-template-gallery',
+			'wcposTemplateGallery',
+			array(
+				'restUrl'    => rest_url( 'wcpos/v1/' ),
+				'nonce'      => wp_create_nonce( 'wp_rest' ),
+				'isProActive' => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			)
+		);
+	}
+
 }
