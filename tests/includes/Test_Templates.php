@@ -351,6 +351,36 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that template category taxonomy exists.
+	 */
+	public function test_template_category_taxonomy_exists(): void {
+		$this->assertTrue( taxonomy_exists( 'wcpos_template_category' ) );
+	}
+
+	/**
+	 * Test that default template categories are registered.
+	 */
+	public function test_default_categories_registered(): void {
+		// Re-trigger registration to insert terms within this test's transaction.
+		new Templates();
+
+		$receipt = term_exists( 'receipt', 'wcpos_template_category' );
+		$this->assertNotNull( $receipt );
+
+		$invoice = term_exists( 'invoice', 'wcpos_template_category' );
+		$this->assertNotNull( $invoice );
+
+		$gift_receipt = term_exists( 'gift-receipt', 'wcpos_template_category' );
+		$this->assertNotNull( $gift_receipt );
+
+		$credit_note = term_exists( 'credit-note', 'wcpos_template_category' );
+		$this->assertNotNull( $credit_note );
+
+		$kitchen_ticket = term_exists( 'kitchen-ticket', 'wcpos_template_category' );
+		$this->assertNotNull( $kitchen_ticket );
+	}
+
+	/**
 	 * Test legacy set_active_template method.
 	 */
 	public function test_legacy_set_active_template_method(): void {

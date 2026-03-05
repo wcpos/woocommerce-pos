@@ -83,7 +83,7 @@ class Templates {
 			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
 			'labels'              => $labels,
 			'supports'            => array( 'title', 'editor', 'revisions', 'page-attributes' ),
-			'taxonomies'          => array( 'wcpos_template_type' ),
+			'taxonomies'          => array( 'wcpos_template_type', 'wcpos_template_category' ),
 			'hierarchical'        => false,
 			'public'              => false,
 			'show_ui'             => true,
@@ -164,6 +164,33 @@ class Templates {
 
 		// Register default template types.
 		$this->register_default_template_types();
+
+		// Register category taxonomy for gallery filtering.
+		register_taxonomy(
+			'wcpos_template_category',
+			array( 'wcpos_template' ),
+			array(
+				'labels'            => array(
+					'name'          => _x( 'Template Categories', 'Taxonomy General Name', 'woocommerce-pos' ),
+					'singular_name' => _x( 'Template Category', 'Taxonomy Singular Name', 'woocommerce-pos' ),
+				),
+				'hierarchical'      => false,
+				'public'            => false,
+				'show_ui'           => true,
+				'show_admin_column' => true,
+				'show_in_nav_menus' => false,
+				'show_tagcloud'     => false,
+				'show_in_rest'      => true,
+				'capabilities'      => array(
+					'manage_terms' => 'manage_woocommerce_pos',
+					'edit_terms'   => 'manage_woocommerce_pos',
+					'delete_terms' => 'manage_woocommerce_pos',
+					'assign_terms' => 'manage_woocommerce_pos',
+				),
+			)
+		);
+
+		$this->register_default_template_categories();
 	}
 
 	/**
@@ -573,6 +600,29 @@ class Templates {
 					'description' => __( 'Report templates for analytics', 'woocommerce-pos' ),
 				)
 			);
+		}
+	}
+
+	/**
+	 * Register default template categories.
+	 *
+	 * @return void
+	 */
+	private function register_default_template_categories(): void {
+		$categories = array(
+			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
+			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
+			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
+			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
+			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
+			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
+			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
+		);
+
+		foreach ( $categories as $slug => $name ) {
+			if ( ! term_exists( $slug, 'wcpos_template_category' ) ) {
+				wp_insert_term( $name, 'wcpos_template_category', array( 'slug' => $slug ) );
+			}
 		}
 	}
 
