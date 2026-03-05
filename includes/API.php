@@ -89,7 +89,6 @@ class API {
 		 *                           - 'product_variations'    => Fully qualified name of the class handling product variations.
 		 *                           - 'orders'                => Fully qualified name of the class handling orders.
 		 *                           - 'customers'             => Fully qualified name of the class handling customers.
-		 *                           - 'coupons'               => Fully qualified name of the class handling coupons.
 		 *                           - 'product_tags'          => Fully qualified name of the class handling product tags.
 		 *                           - 'product_categories'    => Fully qualified name of the class handling product categories.
 		 *                           - 'taxes'                 => Fully qualified name of the class handling taxes.
@@ -117,7 +116,6 @@ class API {
 				'product_variations'    => API\Product_Variations_Controller::class,
 				'orders'                => API\Orders_Controller::class,
 				'customers'             => API\Customers_Controller::class,
-				'coupons'               => API\Coupons_Controller::class,
 				'product_tags'          => API\Product_Tags_Controller::class,
 				'product_categories'    => API\Product_Categories_Controller::class,
 				'product_brands'        => API\Product_Brands_Controller::class,
