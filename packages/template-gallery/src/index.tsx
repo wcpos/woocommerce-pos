@@ -1,16 +1,35 @@
-import { createRoot } from '@wordpress/element';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { RouterProvider } from '@tanstack/react-router';
+import { createRoot } from 'react-dom/client';
+import { ErrorBoundary } from 'react-error-boundary';
 
-function App() {
+import { SnackbarProvider } from './components/snackbar';
+import { queryClient } from './query-client';
+import { router } from './router';
+
+import './index.css';
+
+function Root() {
 	return (
-		<div>
-			<h1>Template Gallery</h1>
-			<p>Gallery SPA is loading. The full frontend will be implemented in the next plan.</p>
-		</div>
+		<ErrorBoundary
+			fallbackRender={({ error }) => (
+				<div className="wcpos:p-6 wcpos:text-red-600">
+					<h2>Template Gallery failed to load</h2>
+					<pre>{error instanceof Error ? error.message : String(error)}</pre>
+				</div>
+			)}
+		>
+			<QueryClientProvider client={queryClient}>
+				<SnackbarProvider>
+					<RouterProvider router={router} />
+				</SnackbarProvider>
+			</QueryClientProvider>
+		</ErrorBoundary>
 	);
 }
 
-const container = document.getElementById( 'wcpos-template-gallery' );
-if ( container ) {
-	const root = createRoot( container );
-	root.render( <App /> );
+const el = document.getElementById('wcpos-template-gallery');
+if (el) {
+	el.classList.add('template-gallery-root');
+	createRoot(el).render(<Root />);
 }
