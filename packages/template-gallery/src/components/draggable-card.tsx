@@ -99,6 +99,10 @@ export function DraggableCard({
 	}, [flashEdge, id, index, onMove, total]);
 
 	const handleKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+		if (disableDrag || event.target !== event.currentTarget) {
+			return;
+		}
+
 		if (event.key === ' ' || event.key === 'Enter') {
 			event.preventDefault();
 			setIsKeyboardDragging((value) => !value);
@@ -121,7 +125,7 @@ export function DraggableCard({
 			event.preventDefault();
 			moveNext();
 		}
-	}, [moveNext, movePrevious]);
+	}, [disableDrag, moveNext, movePrevious]);
 
 	return (
 		<div
@@ -148,7 +152,7 @@ export function DraggableCard({
 				<button
 					type="button"
 					onClick={movePrevious}
-					disabled={index <= 0}
+					disabled={disableDrag || index <= 0}
 					aria-label="Move template earlier"
 					className="wcpos:h-6 wcpos:w-6 wcpos:border wcpos:border-gray-300 wcpos:rounded wcpos:bg-white wcpos:text-gray-700 wcpos:text-xs wcpos:cursor-pointer disabled:wcpos:opacity-40 disabled:wcpos:cursor-not-allowed"
 				>
@@ -157,7 +161,7 @@ export function DraggableCard({
 				<button
 					type="button"
 					onClick={moveNext}
-					disabled={index >= total - 1}
+					disabled={disableDrag || index >= total - 1}
 					aria-label="Move template later"
 					className="wcpos:h-6 wcpos:w-6 wcpos:border wcpos:border-gray-300 wcpos:rounded wcpos:bg-white wcpos:text-gray-700 wcpos:text-xs wcpos:cursor-pointer disabled:wcpos:opacity-40 disabled:wcpos:cursor-not-allowed"
 				>
