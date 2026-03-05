@@ -50,7 +50,8 @@ class Menu {
 			add_filter( 'custom_menu_order', '__return_true' );
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
-}
+			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
+		}
 
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
@@ -287,4 +288,22 @@ class Menu {
 		);
 	}
 
+	/**
+	 * Redirect the old CPT list page (edit.php?post_type=wcpos_template) to the Gallery SPA.
+	 *
+	 * Only redirects the list view, not the individual post editor.
+	 */
+	public function redirect_template_list_page(): void {
+		global $pagenow;
+
+		if (
+			'edit.php' === $pagenow
+			&& isset( $_GET['post_type'] )
+			&& 'wcpos_template' === $_GET['post_type']
+			&& ! isset( $_GET['post_status'] )
+		) {
+			wp_safe_redirect( admin_url( 'admin.php?page=wcpos-templates' ) );
+			exit;
+		}
+	}
 }
