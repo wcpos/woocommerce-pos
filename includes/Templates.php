@@ -211,20 +211,41 @@ class Templates {
 		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
 
 		return array(
-			'id'            => $post->ID,
-			'title'         => $post->post_title,
-			'content'       => $post->post_content,
-			'type'          => $type,
-			'language'      => get_post_meta( $template_id, '_template_language', true ) ? get_post_meta( $template_id, '_template_language', true ) : 'php',
-			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
-			'engine'        => get_post_meta( $template_id, '_template_engine', true ) ? get_post_meta( $template_id, '_template_engine', true ) : 'legacy-php',
-			'output_type'   => get_post_meta( $template_id, '_template_output_type', true ) ? get_post_meta( $template_id, '_template_output_type', true ) : 'html',
-			'is_virtual'    => false,
-			'source'        => 'custom',
-			'menu_order'    => $post->menu_order,
-			'date_created'  => $post->post_date,
-			'date_modified' => $post->post_modified,
+			'id'              => $post->ID,
+			'title'           => $post->post_title,
+			'description'     => get_post_meta( $template_id, '_template_description', true ) ?: '',
+			'content'         => $post->post_content,
+			'type'            => $type,
+			'category'        => self::get_template_category( $template_id ),
+			'language'        => get_post_meta( $template_id, '_template_language', true ) ?: 'php',
+			'file_path'       => get_post_meta( $template_id, '_template_file_path', true ),
+			'engine'          => get_post_meta( $template_id, '_template_engine', true ) ?: 'legacy-php',
+			'output_type'     => get_post_meta( $template_id, '_template_output_type', true ) ?: 'html',
+			'tax_display'     => get_post_meta( $template_id, '_template_tax_display', true ) ?: 'default',
+			'is_virtual'      => false,
+			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
+			'gallery_key'     => get_post_meta( $template_id, '_template_gallery_key', true ) ?: null,
+			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
+			'source'          => 'custom',
+			'menu_order'      => $post->menu_order,
+			'date_created'    => $post->post_date,
+			'date_modified'   => $post->post_modified,
 		);
+	}
+
+	/**
+	 * Get the category slug for a template.
+	 *
+	 * @param int $template_id Template post ID.
+	 *
+	 * @return string Category slug or empty string.
+	 */
+	private static function get_template_category( int $template_id ): string {
+		$terms = wp_get_post_terms( $template_id, 'wcpos_template_category' );
+		if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+			return $terms[0]->slug;
+		}
+		return '';
 	}
 
 	/**

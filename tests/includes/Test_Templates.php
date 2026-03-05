@@ -415,6 +415,62 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that get_template includes description field.
+	 */
+	public function test_get_template_includes_description(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_description', 'A test description.' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertArrayHasKey( 'description', $template );
+		$this->assertEquals( 'A test description.', $template['description'] );
+	}
+
+	/**
+	 * Test that get_template includes gallery source fields.
+	 */
+	public function test_get_template_includes_gallery_source_fields(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_is_premade', '1' );
+		update_post_meta( $post_id, '_template_gallery_version', '2' );
+		update_post_meta( $post_id, '_template_gallery_key', 'standard-receipt' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertTrue( $template['is_premade'] );
+		$this->assertEquals( 2, $template['gallery_version'] );
+		$this->assertEquals( 'standard-receipt', $template['gallery_key'] );
+	}
+
+	/**
+	 * Test that get_template includes tax_display field.
+	 */
+	public function test_get_template_includes_tax_display(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_tax_display', 'incl' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertEquals( 'incl', $template['tax_display'] );
+	}
+
+	/**
 	 * Test legacy set_active_template method.
 	 */
 	public function test_legacy_set_active_template_method(): void {
