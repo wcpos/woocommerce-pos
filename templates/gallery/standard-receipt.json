@@ -1,0 +1,11 @@
+{
+    "key": "standard-receipt",
+    "title": "Standard Receipt",
+    "description": "Clean modern layout with logo, store info, itemized lines, tax breakdown, and payment details.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

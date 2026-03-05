@@ -351,6 +351,187 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that template category taxonomy exists.
+	 */
+	public function test_template_category_taxonomy_exists(): void {
+		$this->assertTrue( taxonomy_exists( 'wcpos_template_category' ) );
+	}
+
+	/**
+	 * Test that default template categories are registered.
+	 */
+	public function test_default_categories_registered(): void {
+		// Re-trigger registration to insert terms within this test's transaction.
+		new Templates();
+
+		$receipt = term_exists( 'receipt', 'wcpos_template_category' );
+		$this->assertNotNull( $receipt );
+
+		$invoice = term_exists( 'invoice', 'wcpos_template_category' );
+		$this->assertNotNull( $invoice );
+
+		$gift_receipt = term_exists( 'gift-receipt', 'wcpos_template_category' );
+		$this->assertNotNull( $gift_receipt );
+
+		$credit_note = term_exists( 'credit-note', 'wcpos_template_category' );
+		$this->assertNotNull( $credit_note );
+
+		$kitchen_ticket = term_exists( 'kitchen-ticket', 'wcpos_template_category' );
+		$this->assertNotNull( $kitchen_ticket );
+
+		$purchase_order = term_exists( 'purchase-order', 'wcpos_template_category' );
+		$this->assertNotNull( $purchase_order );
+
+		$bar_ticket = term_exists( 'bar-ticket', 'wcpos_template_category' );
+		$this->assertNotNull( $bar_ticket );
+	}
+
+	/**
+	 * Test get_gallery_templates returns an array.
+	 */
+	public function test_get_gallery_templates_returns_array(): void {
+		$templates = Templates::get_gallery_templates();
+		$this->assertIsArray( $templates );
+	}
+
+	/**
+	 * Test get_gallery_templates finds standard-receipt.
+	 */
+	public function test_get_gallery_templates_finds_standard_receipt(): void {
+		$templates = Templates::get_gallery_templates();
+		$keys      = array_column( $templates, 'key' );
+		$this->assertContains( 'standard-receipt', $keys );
+	}
+
+	/**
+	 * Test gallery template has all required fields.
+	 */
+	public function test_gallery_template_has_required_fields(): void {
+		$templates = Templates::get_gallery_templates();
+		$this->assertNotEmpty( $templates, 'Expected at least one gallery template.' );
+		$template  = $templates[0];
+
+		$this->assertArrayHasKey( 'key', $template );
+		$this->assertArrayHasKey( 'title', $template );
+		$this->assertArrayHasKey( 'description', $template );
+		$this->assertArrayHasKey( 'type', $template );
+		$this->assertArrayHasKey( 'category', $template );
+		$this->assertArrayHasKey( 'engine', $template );
+		$this->assertArrayHasKey( 'content', $template );
+		$this->assertArrayHasKey( 'version', $template );
+	}
+
+	/**
+	 * Test that get_template includes description field.
+	 */
+	public function test_get_template_includes_description(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_description', 'A test description.' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertArrayHasKey( 'description', $template );
+		$this->assertEquals( 'A test description.', $template['description'] );
+	}
+
+	/**
+	 * Test that get_template includes gallery source fields.
+	 */
+	public function test_get_template_includes_gallery_source_fields(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_is_premade', '1' );
+		update_post_meta( $post_id, '_template_gallery_version', '2' );
+		update_post_meta( $post_id, '_template_gallery_key', 'standard-receipt' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertTrue( $template['is_premade'] );
+		$this->assertEquals( 2, $template['gallery_version'] );
+		$this->assertEquals( 'standard-receipt', $template['gallery_key'] );
+	}
+
+	/**
+	 * Test that get_template includes tax_display field.
+	 */
+	public function test_get_template_includes_tax_display(): void {
+		$post_id = $this->factory->post->create( array(
+			'post_type'   => 'wcpos_template',
+			'post_status' => 'publish',
+			'post_title'  => 'Test Template',
+		) );
+		update_post_meta( $post_id, '_template_tax_display', 'incl' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertEquals( 'incl', $template['tax_display'] );
+	}
+
+	/**
+	 * Test install_gallery_template creates a post.
+	 */
+	public function test_install_gallery_template_creates_post(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$this->assertIsInt( $post_id );
+		$this->assertGreaterThan( 0, $post_id );
+
+		$post = get_post( $post_id );
+		$this->assertEquals( 'wcpos_template', $post->post_type );
+		$this->assertEquals( 'Standard Receipt', $post->post_title );
+		$this->assertNotEmpty( $post->post_content );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test install_gallery_template sets metadata.
+	 */
+	public function test_install_gallery_template_sets_metadata(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$this->assertTrue( (bool) get_post_meta( $post_id, '_template_is_premade', true ) );
+		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
+		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
+		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test install_gallery_template sets taxonomies.
+	 */
+	public function test_install_gallery_template_sets_taxonomies(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
+
+		$type_terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
+		$this->assertEquals( 'receipt', $type_terms[0]->slug );
+
+		$cat_terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
+		$this->assertEquals( 'receipt', $cat_terms[0]->slug );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test install_gallery_template returns error for invalid key.
+	 */
+	public function test_install_gallery_template_invalid_key_returns_error(): void {
+		$result = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'nonexistent' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+	}
+
+	/**
 	 * Test legacy set_active_template method.
 	 */
 	public function test_legacy_set_active_template_method(): void {

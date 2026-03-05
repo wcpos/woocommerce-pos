@@ -83,7 +83,7 @@ class Templates {
 			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
 			'labels'              => $labels,
 			'supports'            => array( 'title', 'editor', 'revisions', 'page-attributes' ),
-			'taxonomies'          => array( 'wcpos_template_type' ),
+			'taxonomies'          => array( 'wcpos_template_type', 'wcpos_template_category' ),
 			'hierarchical'        => false,
 			'public'              => false,
 			'show_ui'             => true,
@@ -164,6 +164,33 @@ class Templates {
 
 		// Register default template types.
 		$this->register_default_template_types();
+
+		// Register category taxonomy for gallery filtering.
+		register_taxonomy(
+			'wcpos_template_category',
+			array( 'wcpos_template' ),
+			array(
+				'labels'            => array(
+					'name'          => _x( 'Template Categories', 'Taxonomy General Name', 'woocommerce-pos' ),
+					'singular_name' => _x( 'Template Category', 'Taxonomy Singular Name', 'woocommerce-pos' ),
+				),
+				'hierarchical'      => false,
+				'public'            => false,
+				'show_ui'           => true,
+				'show_admin_column' => true,
+				'show_in_nav_menus' => false,
+				'show_tagcloud'     => false,
+				'show_in_rest'      => true,
+				'capabilities'      => array(
+					'manage_terms' => 'manage_woocommerce_pos',
+					'edit_terms'   => 'manage_woocommerce_pos',
+					'delete_terms' => 'manage_woocommerce_pos',
+					'assign_terms' => 'manage_woocommerce_pos',
+				),
+			)
+		);
+
+		$this->register_default_template_categories();
 	}
 
 	/**
@@ -183,21 +210,49 @@ class Templates {
 		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
 		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
 
+		$description     = get_post_meta( $template_id, '_template_description', true );
+		$language        = get_post_meta( $template_id, '_template_language', true );
+		$engine          = get_post_meta( $template_id, '_template_engine', true );
+		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
+		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
+		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+
 		return array(
-			'id'            => $post->ID,
-			'title'         => $post->post_title,
-			'content'       => $post->post_content,
-			'type'          => $type,
-			'language'      => get_post_meta( $template_id, '_template_language', true ) ? get_post_meta( $template_id, '_template_language', true ) : 'php',
-			'file_path'     => get_post_meta( $template_id, '_template_file_path', true ),
-			'engine'        => get_post_meta( $template_id, '_template_engine', true ) ? get_post_meta( $template_id, '_template_engine', true ) : 'legacy-php',
-			'output_type'   => get_post_meta( $template_id, '_template_output_type', true ) ? get_post_meta( $template_id, '_template_output_type', true ) : 'html',
-			'is_virtual'    => false,
-			'source'        => 'custom',
-			'menu_order'    => $post->menu_order,
-			'date_created'  => $post->post_date,
-			'date_modified' => $post->post_modified,
+			'id'              => $post->ID,
+			'title'           => $post->post_title,
+			'description'     => $description ? $description : '',
+			'content'         => $post->post_content,
+			'type'            => $type,
+			'category'        => self::get_template_category( $template_id ),
+			'language'        => $language ? $language : 'php',
+			'file_path'       => get_post_meta( $template_id, '_template_file_path', true ),
+			'engine'          => $engine ? $engine : 'legacy-php',
+			'output_type'     => $output_type ? $output_type : 'html',
+			'tax_display'     => $tax_display ? $tax_display : 'default',
+			'is_virtual'      => false,
+			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
+			'gallery_key'     => $gallery_key ? $gallery_key : null,
+			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
+			'source'          => 'custom',
+			'menu_order'      => $post->menu_order,
+			'date_created'    => $post->post_date,
+			'date_modified'   => $post->post_modified,
 		);
+	}
+
+	/**
+	 * Get the category slug for a template.
+	 *
+	 * @param int $template_id Template post ID.
+	 *
+	 * @return string Category slug or empty string.
+	 */
+	private static function get_template_category( int $template_id ): string {
+		$terms = wp_get_post_terms( $template_id, 'wcpos_template_category' );
+		if ( ! empty( $terms ) && ! is_wp_error( $terms ) ) {
+			return $terms[0]->slug;
+		}
+		return '';
 	}
 
 	/**
@@ -504,6 +559,81 @@ class Templates {
 	}
 
 	/**
+	 * Get gallery templates from the templates/gallery/ directory.
+	 *
+	 * @param string|null $type     Filter by type. Null for all.
+	 * @param string|null $category Filter by category. Null for all.
+	 *
+	 * @return array Array of gallery template data.
+	 */
+	public static function get_gallery_templates( ?string $type = null, ?string $category = null ): array {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+
+		if ( ! is_dir( $gallery_dir ) ) {
+			return array();
+		}
+
+		$templates  = array();
+		$json_files = glob( $gallery_dir . '*.json' );
+
+		if ( ! $json_files ) {
+			return array();
+		}
+
+		foreach ( $json_files as $json_file ) {
+			$metadata = json_decode( file_get_contents( $json_file ), true );
+
+			if ( ! $metadata || empty( $metadata['key'] ) ) {
+				continue;
+			}
+
+			if ( $type && ( $metadata['type'] ?? '' ) !== $type ) {
+				continue;
+			}
+			if ( $category && ( $metadata['category'] ?? '' ) !== $category ) {
+				continue;
+			}
+
+			$key          = $metadata['key'];
+			$content_file = null;
+			$extensions   = array( 'html', 'php', 'xml' );
+
+			foreach ( $extensions as $ext ) {
+				$candidate = $gallery_dir . $key . '.' . $ext;
+				if ( file_exists( $candidate ) ) {
+					$content_file = $candidate;
+					break;
+				}
+			}
+
+			if ( ! $content_file ) {
+				continue;
+			}
+
+			$templates[] = array_merge(
+				$metadata,
+				array(
+					'content'         => file_get_contents( $content_file ),
+					'content_file'    => $content_file,
+					'is_premade'      => true,
+					'is_virtual'      => true,
+					'source'          => 'gallery',
+					'offline_capable' => 'logicless' === ( $metadata['engine'] ?? '' ),
+				)
+			);
+		}
+
+		usort(
+			$templates,
+			function ( $a, $b ) {
+				return strcmp( $a['key'], $b['key'] );
+			}
+		);
+
+		return $templates;
+	}
+
+	/**
 	 * Install a starter template as a custom (database) template.
 	 *
 	 * @param string $starter_key Key from get_starter_templates().
@@ -547,6 +677,66 @@ class Templates {
 	}
 
 	/**
+	 * Install a gallery template as a custom (database) template.
+	 *
+	 * @param string $gallery_key Key matching a gallery template JSON file.
+	 *
+	 * @return int|\WP_Error Post ID on success, WP_Error on failure.
+	 */
+	public static function install_gallery_template( string $gallery_key ) {
+		$gallery_templates = self::get_gallery_templates();
+		$template          = null;
+
+		foreach ( $gallery_templates as $gt ) {
+			if ( $gt['key'] === $gallery_key ) {
+				$template = $gt;
+				break;
+			}
+		}
+
+		if ( ! $template ) {
+			return new \WP_Error( 'invalid_gallery_key', __( 'Gallery template not found.', 'woocommerce-pos' ) );
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'   => $template['title'],
+				'post_content' => $template['content'],
+				'post_status'  => 'publish',
+				'post_type'    => 'wcpos_template',
+			),
+			true
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		// Set taxonomies.
+		wp_set_object_terms( $post_id, $template['type'] ?? 'receipt', 'wcpos_template_type' );
+		if ( ! empty( $template['category'] ) ) {
+			wp_set_object_terms( $post_id, $template['category'], 'wcpos_template_category' );
+		}
+
+		// Set meta fields.
+		update_post_meta( $post_id, '_template_description', $template['description'] ?? '' );
+		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'logicless' );
+		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
+		$engine_value = isset( $template['engine'] ) ? $template['engine'] : '';
+		update_post_meta( $post_id, '_template_language', 'logicless' === $engine_value ? 'html' : 'php' );
+		update_post_meta( $post_id, '_template_is_premade', '1' );
+		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
+		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
+		update_post_meta( $post_id, '_template_tax_display', 'default' );
+
+		if ( ! empty( $template['paper_width'] ) ) {
+			update_post_meta( $post_id, '_template_paper_width', $template['paper_width'] );
+		}
+
+		return $post_id;
+	}
+
+	/**
 	 * Register default template types (receipt, report).
 	 *
 	 * @return void
@@ -573,6 +763,29 @@ class Templates {
 					'description' => __( 'Report templates for analytics', 'woocommerce-pos' ),
 				)
 			);
+		}
+	}
+
+	/**
+	 * Register default template categories.
+	 *
+	 * @return void
+	 */
+	private function register_default_template_categories(): void {
+		$categories = array(
+			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
+			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
+			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
+			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
+			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
+			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
+			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
+		);
+
+		foreach ( $categories as $slug => $name ) {
+			if ( ! term_exists( $slug, 'wcpos_template_category' ) ) {
+				wp_insert_term( $name, 'wcpos_template_category', array( 'slug' => $slug ) );
+			}
 		}
 	}
 

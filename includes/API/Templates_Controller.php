@@ -40,10 +40,13 @@ class Templates_Controller extends WP_REST_Controller {
 	/**
 	 * Register routes.
 	 *
+	 * Fixed paths must be registered before regex patterns to avoid
+	 * the wildcard (?P<id>[\w-]+) capturing "active", "gallery", etc.
+	 *
 	 * @return void
 	 */
 	public function register_routes(): void {
-		// List all templates (virtual + database).
+		// 1. GET /templates (collection).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,
@@ -55,25 +58,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// Get single template (supports numeric and string IDs).
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_item' ),
-				'permission_callback' => array( $this, 'get_item_permissions_check' ),
-				'args'                => array(
-					'id' => array(
-						'description' => __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
-						'type'        => 'string',
-						'required'    => true,
-					),
-				),
-			)
-		);
-
-		// Get active template for a type.
+		// 2. GET /templates/active (fixed path).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/active',
@@ -91,6 +76,167 @@ class Templates_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		// 3. GET /templates/gallery (fixed path).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/gallery',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_gallery_items' ),
+				'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				'args'                => array(
+					'type'     => array(
+						'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'category' => array(
+						'description'       => __( 'Filter by template category slug.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+				),
+			)
+		);
+
+		// 4. POST /templates/batch (fixed path).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/batch',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'batch_items' ),
+				'permission_callback' => array( $this, 'update_item_permissions_check' ),
+				'args'                => array(
+					'update' => array(
+						'description' => __( 'Array of templates to update.', 'woocommerce-pos' ),
+						'type'        => 'array',
+						'required'    => true,
+						'items'       => array(
+							'type'       => 'object',
+							'properties' => array(
+								'id'          => array(
+									'type' => 'integer',
+									'required' => true,
+								),
+								'status'      => array(
+									'type' => 'string',
+									'enum' => array( 'publish', 'draft' ),
+								),
+								'menu_order'  => array( 'type' => 'integer' ),
+								'tax_display' => array(
+									'type' => 'string',
+									'enum' => array( 'default', 'incl', 'excl' ),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+
+		// 5. POST /templates/install (fixed path).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/install',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'install_gallery_item' ),
+				'permission_callback' => array( $this, 'update_item_permissions_check' ),
+				'args'                => array(
+					'gallery_key' => array(
+						'description'       => __( 'Gallery template key to install.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+				),
+			)
+		);
+
+		// 6. GET /templates/{id} (regex).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_item' ),
+				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'args'                => array(
+					'id' => array(
+						'description' => __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
+						'type'        => 'string',
+						'required'    => true,
+					),
+				),
+			)
+		);
+
+		// 7. PATCH /templates/{id} (regex).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)',
+			array(
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => array( $this, 'update_item' ),
+				'permission_callback' => array( $this, 'update_item_permissions_check' ),
+				'args'                => array(
+					'id'          => array(
+						'type' => 'integer',
+						'required' => true,
+					),
+					'status'      => array(
+						'type' => 'string',
+						'enum' => array( 'publish', 'draft' ),
+					),
+					'menu_order'  => array( 'type' => 'integer' ),
+					'tax_display' => array(
+						'type' => 'string',
+						'enum' => array( 'default', 'incl', 'excl' ),
+					),
+				),
+			)
+		);
+
+		// 8. POST /templates/{id}/copy (regex).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)/copy',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'copy_item' ),
+				'permission_callback' => array( $this, 'update_item_permissions_check' ),
+				'args'                => array(
+					'id' => array(
+						'description' => __( 'Template ID to copy.', 'woocommerce-pos' ),
+						'type'        => 'integer',
+						'required'    => true,
+					),
+				),
+			)
+		);
+
+		// 9. GET /templates/{id}/preview (regex).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\w-]+)/preview',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'preview_item' ),
+				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'args'                => array(
+					'id' => array(
+						'description' => __( 'Template ID to preview.', 'woocommerce-pos' ),
+						'type'        => 'string',
+						'required'    => true,
+					),
+				),
+			)
+		);
 	}
 
 	/**
@@ -102,51 +248,108 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
 	 */
 	public function get_items( $request ) {
-		$type      = $request->get_param( 'type' ) ?? 'receipt';
-		$templates = array();
+		$type           = $request->get_param( 'type' ) ?? 'receipt';
+		$search         = $request->get_param( 'search' );
+		$category       = $request->get_param( 'category' );
+		$modified_after = $request->get_param( 'modified_after' );
+		$per_page       = (int) ( $request->get_param( 'per_page' ) ?? -1 );
+		$page           = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
+		$has_filters    = $search || $category || $modified_after;
+		$templates      = array();
 
-		// Get virtual (filesystem) templates first.
-		$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
-		foreach ( $virtual_templates as $template ) {
-			$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $type );
-			$templates[]           = $this->prepare_item_for_response( $template, $request );
+		// Get virtual (filesystem) templates first, but skip when filters are active.
+		if ( ! $has_filters ) {
+			$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
+			foreach ( $virtual_templates as $template ) {
+				$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $type );
+				$templates[]           = $this->prepare_item_for_response( $template, $request );
+			}
 		}
 
 		// Get database templates.
 		$args = array(
 			'post_type'      => 'wcpos_template',
-			'post_status'    => 'publish',
-			'posts_per_page' => $request->get_param( 'per_page' ) ?? -1,
-			'paged'          => $request->get_param( 'page' ) ?? 1,
+			'post_status'    => array( 'publish', 'draft' ),
+			'posts_per_page' => ( ! $has_filters && $per_page > 0 ) ? -1 : $per_page,
+			'paged'          => ( ! $has_filters && $per_page > 0 ) ? 1 : $page,
 			'orderby'        => 'menu_order',
 			'order'          => 'ASC',
 		);
 
+		// Type filter (always applied via tax_query).
+		$tax_query = array();
 		if ( $type ) {
-			$args['tax_query'] = array(
+			$tax_query[] = array(
+				'taxonomy' => 'wcpos_template_type',
+				'field'    => 'slug',
+				'terms'    => $type,
+			);
+		}
+
+		// Category filter.
+		if ( $category ) {
+			$tax_query[] = array(
+				'taxonomy' => 'wcpos_template_category',
+				'field'    => 'slug',
+				'terms'    => $category,
+			);
+		}
+
+		if ( ! empty( $tax_query ) ) {
+			if ( \count( $tax_query ) > 1 ) {
+				$tax_query['relation'] = 'AND';
+			}
+			$args['tax_query'] = $tax_query;
+		}
+
+		// Search filter (title/content OR description meta).
+		if ( $search ) {
+			$matching_ids = $this->get_search_matching_template_ids( $search, $args );
+			$args['post__in'] = empty( $matching_ids ) ? array( 0 ) : $matching_ids;
+		}
+
+		// Modified after filter.
+		if ( $modified_after ) {
+			$args['date_query'] = array(
 				array(
-					'taxonomy' => 'wcpos_template_type',
-					'field'    => 'slug',
-					'terms'    => $type,
+					'column' => 'post_modified',
+					'after'  => $modified_after,
 				),
 			);
 		}
 
 		$query = new WP_Query( $args );
 
+		$db_templates = array();
 		foreach ( $query->posts as $post ) {
 			$template = TemplatesManager::get_template( $post->ID );
 			if ( $template ) {
 				$template['is_active'] = TemplatesManager::is_active_template( $post->ID, $template['type'] );
-				$templates[]           = $this->prepare_item_for_response( $template, $request );
+				$db_templates[]        = $this->prepare_item_for_response( $template, $request );
 			}
 		}
 
-		$total_items = \count( $virtual_templates ) + $query->found_posts;
+		if ( ! $has_filters ) {
+			$all_templates = array_merge( $templates, $db_templates );
+			$total_items   = \count( $all_templates );
+
+			if ( $per_page > 0 ) {
+				$offset      = ( $page - 1 ) * $per_page;
+				$templates   = \array_slice( $all_templates, $offset, $per_page );
+				$total_pages = $total_items > 0 ? (int) \ceil( $total_items / $per_page ) : 1;
+			} else {
+				$templates   = $all_templates;
+				$total_pages = 1;
+			}
+		} else {
+			$templates   = $db_templates;
+			$total_items = (int) $query->found_posts;
+			$total_pages = (int) max( 1, $query->max_num_pages );
+		}
 
 		$response = rest_ensure_response( $templates );
 		$response->header( 'X-WP-Total', (string) $total_items );
-		$response->header( 'X-WP-TotalPages', (string) max( 1, $query->max_num_pages ) );
+		$response->header( 'X-WP-TotalPages', (string) max( 1, $total_pages ) );
 
 		return $response;
 	}
@@ -209,6 +412,354 @@ class Templates_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Update a single template.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function update_item( $request ) {
+		$id   = (int) $request['id'];
+		$post = get_post( $id );
+
+		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
+			return new WP_Error(
+				'wcpos_template_invalid_id',
+				__( 'Invalid template ID.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$update_args = array( 'ID' => $id );
+		$needs_update = false;
+
+		// Update status.
+		$status = $request->get_param( 'status' );
+		if ( null !== $status ) {
+			$update_args['post_status'] = $status;
+			$needs_update = true;
+		}
+
+		// Update menu_order.
+		$menu_order = $request->get_param( 'menu_order' );
+		if ( null !== $menu_order ) {
+			$update_args['menu_order'] = (int) $menu_order;
+			$needs_update = true;
+		}
+
+		if ( $needs_update ) {
+			$result = wp_update_post( $update_args, true );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		}
+
+		// Update tax_display meta.
+		$tax_display = $request->get_param( 'tax_display' );
+		if ( null !== $tax_display ) {
+			update_post_meta( $id, '_template_tax_display', $tax_display );
+		}
+
+		$template = TemplatesManager::get_template( $id );
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_template_not_found',
+				__( 'Template not found after update.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$template['is_active'] = TemplatesManager::is_active_template( $id, $template['type'] );
+
+		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
+	}
+
+	/**
+	 * Batch update templates.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function batch_items( $request ) {
+		$updates = $request->get_param( 'update' );
+		$results = array();
+
+		if ( ! \is_array( $updates ) ) {
+			return new WP_Error(
+				'wcpos_invalid_batch',
+				__( 'The update parameter must be an array.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		foreach ( $updates as $index => $item ) {
+			if ( ! \is_array( $item ) || empty( $item['id'] ) || ! \is_numeric( $item['id'] ) ) {
+				$results[] = array(
+					'id'    => \is_array( $item ) ? ( $item['id'] ?? null ) : null,
+					'error' => array(
+						'code'    => 'wcpos_template_missing_id',
+						/* translators: %d: batch item index. */
+						'message' => sprintf( __( 'Batch item %d must include a numeric id.', 'woocommerce-pos' ), $index + 1 ),
+					),
+				);
+				continue;
+			}
+
+			$item_id = (int) $item['id'];
+
+			$item_request = new WP_REST_Request( 'PATCH' );
+			$item_request->set_body_params( $item );
+			$item_request->set_url_params( array( 'id' => $item_id ) );
+
+			$result = $this->update_item( $item_request );
+
+			if ( is_wp_error( $result ) ) {
+				$results[] = array(
+					'id'    => $item_id,
+					'error' => array(
+						'code'    => $result->get_error_code(),
+						'message' => $result->get_error_message(),
+					),
+				);
+			} else {
+				$results[] = $result->get_data();
+			}
+		}
+
+		$response = rest_ensure_response( array( 'update' => $results ) );
+
+		// Return 400 when every batch item failed.
+		$has_success = false;
+		foreach ( $results as $result_item ) {
+			if ( ! isset( $result_item['error'] ) ) {
+				$has_success = true;
+				break;
+			}
+		}
+
+		if ( ! $has_success && ! empty( $results ) ) {
+			$response->set_status( 400 );
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Copy a template.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function copy_item( $request ) {
+		$id       = (int) $request['id'];
+		$template = TemplatesManager::get_template( $id );
+
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_template_invalid_id',
+				__( 'Invalid template ID.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$source_post = get_post( $id );
+
+		// Create the copy.
+		$new_post_id = wp_insert_post(
+			array(
+				/* translators: %s: original template title */
+				'post_title'   => sprintf( __( 'Copy of %s', 'woocommerce-pos' ), $source_post->post_title ),
+				'post_content' => $source_post->post_content,
+				'post_status'  => 'draft',
+				'post_type'    => 'wcpos_template',
+				'menu_order'   => $source_post->menu_order,
+			),
+			true
+		);
+
+		if ( is_wp_error( $new_post_id ) ) {
+			return $new_post_id;
+		}
+
+		// Copy taxonomies.
+		$taxonomies = get_object_taxonomies( 'wcpos_template' );
+		foreach ( $taxonomies as $taxonomy ) {
+			$terms = wp_get_object_terms( $id, $taxonomy, array( 'fields' => 'slugs' ) );
+			if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+				wp_set_object_terms( $new_post_id, $terms, $taxonomy );
+			}
+		}
+
+		// Copy meta fields.
+		$meta_keys = array(
+			'_template_description',
+			'_template_language',
+			'_template_engine',
+			'_template_output_type',
+			'_template_tax_display',
+			'_template_paper_width',
+		);
+
+		foreach ( $meta_keys as $meta_key ) {
+			$value = get_post_meta( $id, $meta_key, true );
+			if ( '' !== $value ) {
+				update_post_meta( $new_post_id, $meta_key, $value );
+			}
+		}
+
+		$new_template = TemplatesManager::get_template( $new_post_id );
+		if ( ! $new_template ) {
+			return new WP_Error(
+				'wcpos_template_copy_failed',
+				__( 'Failed to retrieve copied template.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$new_template['is_active'] = false;
+
+		$response = rest_ensure_response( $this->prepare_item_for_response( $new_template, $request ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Install a gallery template.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function install_gallery_item( $request ) {
+		$gallery_key = $request->get_param( 'gallery_key' );
+		$result      = TemplatesManager::install_gallery_template( $gallery_key );
+
+		if ( is_wp_error( $result ) ) {
+			$status = $this->get_wp_error_status( $result, 400 );
+			$result->add_data( array( 'status' => $status ) );
+			return $result;
+		}
+
+		$template = TemplatesManager::get_template( $result );
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_template_install_failed',
+				__( 'Template was installed but could not be retrieved.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$template['is_active'] = false;
+
+		$response = rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Preview a template.
+	 *
+	 * Returns a preview URL for the template rendered with a sample POS order.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function preview_item( $request ) {
+		$id   = $request['id'];
+		$type = $request->get_param( 'type' ) ?? 'receipt';
+
+		// Validate the template exists.
+		if ( is_numeric( $id ) ) {
+			$template = TemplatesManager::get_template( (int) $id );
+		} else {
+			$template = TemplatesManager::get_virtual_template( $id, $type );
+		}
+
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_template_invalid_id',
+				__( 'Invalid template ID.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		// Find a recent POS order for preview data.
+		$order_query = new \WC_Order_Query(
+			array(
+				'limit'      => 1,
+				'orderby'    => 'date',
+				'order'      => 'DESC',
+				'created_via' => 'woocommerce-pos',
+				'return'     => 'ids',
+			)
+		);
+
+		$order_ids = $order_query->get_orders();
+		if ( empty( $order_ids ) ) {
+			$fallback_query = new \WC_Order_Query(
+				array(
+					'limit'   => 1,
+					'orderby' => 'date',
+					'order'   => 'DESC',
+					'return'  => 'ids',
+				)
+			);
+			$order_ids      = $fallback_query->get_orders();
+		}
+
+		$order_id  = ! empty( $order_ids ) ? (int) $order_ids[0] : 0;
+		$order     = $order_id ? wc_get_order( $order_id ) : null;
+		$order_key = $order ? $order->get_order_key() : '';
+
+		// Build receipt preview URL.
+		$preview_url = add_query_arg(
+			array(
+				'key'                    => $order_key,
+				'wcpos_preview_template' => $id,
+			),
+			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
+		);
+
+		return rest_ensure_response(
+			array(
+				'preview_url' => $preview_url,
+				'order_id'    => $order_id,
+				'template_id' => $id,
+			)
+		);
+	}
+
+	/**
+	 * Get gallery templates.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response Response object on success.
+	 */
+	public function get_gallery_items( $request ) {
+		$type     = $request->get_param( 'type' );
+		$category = $request->get_param( 'category' );
+
+		$templates = TemplatesManager::get_gallery_templates( $type, $category );
+
+		// Strip internal content_file from the response.
+		$templates = array_map(
+			function ( $template ) {
+				unset( $template['content_file'] );
+				return $template;
+			},
+			$templates
+		);
+
+		return rest_ensure_response( $templates );
+	}
+
+	/**
 	 * Prepare template for response.
 	 *
 	 * @param array           $template Template data.
@@ -244,21 +795,21 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function get_collection_params() {
 		return array(
-			'page'     => array(
+			'page'           => array(
 				'description'       => __( 'Current page of the collection.', 'woocommerce-pos' ),
 				'type'              => 'integer',
 				'default'           => 1,
 				'sanitize_callback' => 'absint',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
-			'per_page' => array(
+			'per_page'       => array(
 				'description'       => __( 'Maximum number of items to be returned in result set.', 'woocommerce-pos' ),
 				'type'              => 'integer',
 				'default'           => -1,
-				'sanitize_callback' => 'absint',
-				'validate_callback' => 'rest_validate_request_arg',
+				'sanitize_callback' => array( $this, 'sanitize_per_page_param' ),
+				'validate_callback' => array( $this, 'validate_per_page_param' ),
 			),
-			'type'     => array(
+			'type'           => array(
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'default'           => 'receipt',
@@ -266,7 +817,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
-			'context'  => array(
+			'context'        => array(
 				'description'       => __( 'Scope under which the request is made.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'default'           => 'view',
@@ -274,7 +825,108 @@ class Templates_Controller extends WP_REST_Controller {
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
+			'search'         => array(
+				'description'       => __( 'Search templates by title or description.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'category'       => array(
+				'description'       => __( 'Filter by template category slug.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'modified_after' => array(
+				'description'       => __( 'Limit to templates modified after this ISO 8601 date.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
 		);
+	}
+
+	/**
+	 * Get template IDs matching title/content search OR description meta search.
+	 *
+	 * @param string $search Search term.
+	 * @param array  $args   Base query args (without search constraints).
+	 *
+	 * @return int[] Matching template IDs.
+	 */
+	private function get_search_matching_template_ids( string $search, array $args ): array {
+		$base_query_args = $args;
+		unset( $base_query_args['post__in'] );
+		$base_query_args['fields']        = 'ids';
+		$base_query_args['posts_per_page'] = -1;
+		$base_query_args['paged']         = 1;
+		$base_query_args['no_found_rows'] = true;
+
+		$title_query_args      = $base_query_args;
+		$title_query_args['s'] = $search;
+		$title_query           = new WP_Query( $title_query_args );
+
+		$description_query_args               = $base_query_args;
+		$description_query_args['meta_query'] = array(
+			array(
+				'key'     => '_template_description',
+				'value'   => $search,
+				'compare' => 'LIKE',
+			),
+		);
+		$description_query                    = new WP_Query( $description_query_args );
+
+		return array_values( array_unique( array_merge( $title_query->posts, $description_query->posts ) ) );
+	}
+
+	/**
+	 * Preserve -1 for "all items", otherwise sanitize as a positive integer.
+	 *
+	 * @param mixed $value Requested per_page value.
+	 *
+	 * @return int
+	 */
+	public function sanitize_per_page_param( $value ): int {
+		$value = (int) $value;
+		return -1 === $value ? -1 : absint( $value );
+	}
+
+	/**
+	 * Validate per_page as either -1 or a positive integer.
+	 *
+	 * @param mixed $value Requested per_page value.
+	 *
+	 * @return bool
+	 */
+	public function validate_per_page_param( $value ): bool {
+		$value = (int) $value;
+		return -1 === $value || $value > 0;
+	}
+
+	/**
+	 * Get a valid HTTP status code from WP_Error data.
+	 *
+	 * @param WP_Error $error         Error object.
+	 * @param int      $fallback_code Fallback status code.
+	 *
+	 * @return int
+	 */
+	private function get_wp_error_status( WP_Error $error, int $fallback_code = 400 ): int {
+		$error_data = $error->get_error_data();
+		$status     = null;
+
+		if ( \is_array( $error_data ) && isset( $error_data['status'] ) ) {
+			$status = $error_data['status'];
+		} elseif ( \is_numeric( $error_data ) ) {
+			$status = $error_data;
+		}
+
+		if ( null === $status ) {
+			return $fallback_code;
+		}
+
+		$status = (int) $status;
+		return ( $status >= 100 && $status <= 599 ) ? $status : $fallback_code;
 	}
 
 	/**
@@ -308,6 +960,25 @@ class Templates_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
 				__( 'Sorry, you cannot view this template.', 'woocommerce-pos' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if a given request has access to update templates.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
+	 */
+	public function update_item_permissions_check( $request ) {
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			return new WP_Error(
+				'wcpos_rest_cannot_update',
+				__( 'Sorry, you cannot update templates.', 'woocommerce-pos' ),
 				array( 'status' => rest_authorization_required_code() )
 			);
 		}
