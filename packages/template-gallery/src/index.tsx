@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 
+import { SnackbarProvider } from './components/snackbar';
 import { queryClient } from './query-client';
 import { router } from './router';
 
@@ -19,7 +20,9 @@ function Root() {
 			)}
 		>
 			<QueryClientProvider client={queryClient}>
-				<RouterProvider router={router} />
+				<SnackbarProvider>
+					<RouterProvider router={router} />
+				</SnackbarProvider>
 			</QueryClientProvider>
 		</ErrorBoundary>
 	);

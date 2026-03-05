@@ -121,22 +121,28 @@ export function GalleryGrid() {
 			</div>
 
 			{/* Gallery templates section */}
-			{filteredGallery.length > 0 && (
+			{galleryTemplates.length > 0 && (
 				<section>
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
 						Gallery Templates
 					</h2>
-					<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:lg:grid-cols-4 wcpos:gap-4">
-						{filteredGallery.map((t: GalleryTemplate) => (
-							<TemplateCard
-								key={t.key}
-								template={t}
-								isGallery
-								onPreview={() => setPreviewId(t.key)}
-								onCustomize={() => installGallery.mutate(t.key)}
-							/>
-						))}
-					</div>
+					{filteredGallery.length > 0 ? (
+						<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:lg:grid-cols-4 wcpos:gap-4">
+							{filteredGallery.map((t: GalleryTemplate) => (
+								<TemplateCard
+									key={t.key}
+									template={t}
+									isGallery
+									onPreview={() => setPreviewId(t.key)}
+									onCustomize={() => installGallery.mutate(t.key)}
+								/>
+							))}
+						</div>
+					) : (
+						<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
+							No gallery templates match your filters.
+						</p>
+					)}
 				</section>
 			)}
 
@@ -145,6 +151,11 @@ export function GalleryGrid() {
 				<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
 					Your Templates
 				</h2>
+				{customTemplates.length === 0 && (
+					<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:mb-3">
+						No custom templates yet. Create one or customise a gallery template to get started.
+					</p>
+				)}
 				<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:lg:grid-cols-4 wcpos:gap-4">
 					{filteredCustom.map((t: Template, index: number) => (
 						<DraggableCard key={t.id} id={t.id} index={index}>
