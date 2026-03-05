@@ -252,39 +252,34 @@ class Menu {
 	 * Enqueue the Template Gallery SPA assets.
 	 */
 	public function enqueue_gallery_assets(): void {
-		$asset_file = PLUGIN_PATH . 'packages/template-gallery/build/index.asset.php';
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) );
+		$dir            = $is_development ? 'build' : 'assets';
 
-		if ( ! file_exists( $asset_file ) ) {
-			return;
-		}
-
-		$asset = require $asset_file;
+		wp_enqueue_style(
+			'wcpos-template-gallery-styles',
+			PLUGIN_URL . $dir . '/css/template-gallery.css',
+			array(),
+			PLUGIN_VERSION
+		);
 
 		wp_enqueue_script(
 			'wcpos-template-gallery',
-			PLUGIN_URL . 'packages/template-gallery/build/index.js',
-			$asset['dependencies'],
-			$asset['version'],
+			PLUGIN_URL . $dir . '/js/template-gallery.js',
+			array( 'react', 'react-dom', 'wp-api-fetch', 'wp-url' ),
+			PLUGIN_VERSION,
 			true
 		);
 
-		if ( file_exists( PLUGIN_PATH . 'packages/template-gallery/build/index.css' ) ) {
-			wp_enqueue_style(
-				'wcpos-template-gallery',
-				PLUGIN_URL . 'packages/template-gallery/build/index.css',
-				array( 'wp-components' ),
-				$asset['version']
-			);
-		}
+		wp_add_inline_script( 'wcpos-template-gallery', $this->gallery_inline_script(), 'before' );
+	}
 
-		wp_localize_script(
-			'wcpos-template-gallery',
-			'wcposTemplateGallery',
-			array(
-				'restUrl'    => rest_url( 'wcpos/v1/' ),
-				'nonce'      => wp_create_nonce( 'wp_rest' ),
-				'isProActive' => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
-			)
+	/**
+	 * Generate the inline script for gallery data.
+	 */
+	private function gallery_inline_script(): string {
+		return \sprintf(
+			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s };',
+			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) )
 		);
 	}
 
