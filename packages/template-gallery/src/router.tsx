@@ -8,6 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { GalleryLayout } from './layouts/gallery-layout';
 import { queryClient } from './query-client';
+import { GalleryGrid } from './screens/gallery-grid';
 
 const rootRoute = createRootRoute({
 	component: GalleryLayout,
@@ -30,11 +31,7 @@ const indexRoute = createRoute({
 			}),
 		]);
 	},
-	component: () => (
-		<div className="wcpos:text-gray-400 wcpos:text-center wcpos:py-12">
-			Gallery grid loading...
-		</div>
-	),
+	component: GalleryGrid,
 });
 
 const routeTree = rootRoute.addChildren([indexRoute]);
