@@ -1,7 +1,7 @@
 import { NavGroup } from './nav-group';
 import { NavItem } from './nav-item';
 import PosIcon from '../../assets/wcpos-icon.svg';
-import { useNewExtensionsCount } from '../screens/extensions/use-new-extensions-count';
+import { useUpdateExtensionsCount } from '../screens/extensions/use-update-extensions-count';
 import { useUnreadLogCounts } from '../screens/logs/use-unread-log-counts';
 import { useRegisteredPages } from '../store/use-registry';
 import { t } from '../translations';
@@ -14,7 +14,7 @@ interface NavSidebarProps {
 export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 	const toolsPages = useRegisteredPages('tools');
 	const accountPages = useRegisteredPages('account');
-	const newExtensionsCount = useNewExtensionsCount();
+	const updateExtensionsCount = useUpdateExtensionsCount();
 	const unreadLogCounts = useUnreadLogCounts();
 
 	return (
@@ -46,7 +46,7 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 					<NavItem
 						to="/extensions"
 						label={t('common.extensions', 'Extensions')}
-						badge={newExtensionsCount ?? undefined}
+						badge={updateExtensionsCount ?? undefined}
 						onClick={onNavItemClick}
 					/>
 				</NavGroup>

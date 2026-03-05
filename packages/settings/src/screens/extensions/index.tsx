@@ -4,7 +4,7 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
-import { markExtensionsSeen, setNewExtensionsCount } from './use-new-extensions-count';
+import { setUpdateExtensionsCount } from './use-update-extensions-count';
 import Notice from '../../components/notice';
 import { t } from '../../translations';
 
@@ -42,13 +42,11 @@ function Extensions() {
 		queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
 	});
 
-	const isPro = !!(window as any)?.wcpos?.pro;
+	const isPro = !!(window as any)?.wcpos?.settings?.getComponent?.('extensions.action');
 
 	React.useEffect(() => {
-		if (extensions.length > 0) {
-			setNewExtensionsCount(0);
-			markExtensionsSeen();
-		}
+		const updateCount = extensions.filter((ext) => ext.status === 'update_available').length;
+		setUpdateExtensionsCount(updateCount);
 	}, [extensions]);
 
 	const categories = React.useMemo(() => {

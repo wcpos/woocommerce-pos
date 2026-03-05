@@ -484,6 +484,14 @@ class Templates {
 				'language'    => 'php',
 				'engine'      => 'legacy-php',
 			),
+			'simple-receipt'   => array(
+				'title'       => __( 'Simple Receipt (Logicless)', 'woocommerce-pos' ),
+				'description' => __( 'Order summary using the logicless {{placeholder}} engine. No PHP required — just HTML and CSS. Good for simple receipts without line item detail.', 'woocommerce-pos' ),
+				'file'        => $examples_dir . 'simple-receipt.html',
+				'type'        => 'receipt',
+				'language'    => 'html',
+				'engine'      => 'logicless',
+			),
 		);
 
 		// Only include starters whose files actually exist.
