@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { CategoryPills } from '../components/category-pills';
+import { PreviewModal } from '../components/preview-modal';
 import { SearchField } from '../components/search-field';
 import { TemplateCard } from '../components/template-card';
 import { useTemplates, useToggleTemplate } from '../hooks/use-templates';
@@ -143,36 +144,28 @@ export function GalleryGrid() {
 				Active templates: {activeCount} of {templates.length}
 			</div>
 
-			{/* Preview modal placeholder -- wired in Task 6 */}
+			{/* Preview modal */}
 			{previewTemplate && (
-				<div
-					className="wcpos:fixed wcpos:inset-0 wcpos:z-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:bg-black/50"
-					onClick={() => setPreviewId(null)}
-					onKeyDown={(e) => e.key === 'Escape' && setPreviewId(null)}
-					role="dialog"
-					aria-modal="true"
-				>
-					<div
-						className="wcpos:bg-white wcpos:rounded-lg wcpos:shadow-xl wcpos:p-6 wcpos:max-w-lg wcpos:text-center"
-						onClick={(e) => e.stopPropagation()}
-					>
-						<h2 className="wcpos:text-lg wcpos:font-semibold wcpos:m-0 wcpos:mb-2">
-							{previewIsGallery
-								? (previewTemplate as GalleryTemplate).title
-								: (previewTemplate as AnyTemplate).title}
-						</h2>
-						<p className="wcpos:text-gray-500 wcpos:text-sm">
-							Full preview modal coming in the next commit.
-						</p>
-						<button
-							type="button"
-							onClick={() => setPreviewId(null)}
-							className="wcpos:mt-4 wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:bg-wp-admin-theme-color wcpos:text-white wcpos:border-0 wcpos:rounded wcpos:cursor-pointer"
-						>
-							Close
-						</button>
-					</div>
-				</div>
+				<PreviewModal
+					templateId={previewIsGallery ? (previewTemplate as GalleryTemplate).key : previewTemplate.id}
+					templateName={previewTemplate.title}
+					templateDescription={previewTemplate.description}
+					isGallery={previewIsGallery}
+					onClose={() => setPreviewId(null)}
+					onActivate={() => {
+						const t = previewTemplate as AnyTemplate;
+						if (typeof t.id === 'number') {
+							toggleTemplate.mutate({
+								id: t.id,
+								status: t.is_active ? 'draft' : 'publish',
+							});
+						}
+					}}
+					onCustomize={() => {
+						const t = previewTemplate as GalleryTemplate;
+						installGallery.mutate(t.key);
+					}}
+				/>
 			)}
 		</div>
 	);
