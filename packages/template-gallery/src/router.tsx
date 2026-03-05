@@ -5,14 +5,20 @@ import {
 	createHashHistory,
 } from '@tanstack/react-router';
 
+import { GalleryLayout } from './layouts/gallery-layout';
+
 const rootRoute = createRootRoute({
-	component: () => <div>Gallery placeholder</div>,
+	component: GalleryLayout,
 });
 
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/',
-	component: () => null,
+	component: () => (
+		<div className="wcpos:text-gray-400 wcpos:text-center wcpos:py-12">
+			Gallery grid loading...
+		</div>
+	),
 });
 
 const routeTree = rootRoute.addChildren([indexRoute]);
