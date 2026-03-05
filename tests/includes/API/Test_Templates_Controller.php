@@ -19,6 +19,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\Templates_Controller;
 
 /**
@@ -167,6 +168,28 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$headers = $response->get_headers();
 		$this->assertArrayHasKey( 'X-WP-Total', $headers );
 		$this->assertArrayHasKey( 'X-WP-TotalPages', $headers );
+	}
+
+	/**
+	 * Test get_items respects per_page when virtual templates are included.
+	 */
+	public function test_get_items_respects_per_page_with_virtual_templates(): void {
+		$virtual_templates = \WCPOS\WooCommercePOS\Templates::detect_filesystem_templates( 'receipt' );
+		if ( empty( $virtual_templates ) ) {
+			$this->markTestSkipped( 'No virtual templates available.' );
+		}
+
+		$post_id = $this->create_template( 'Per Page Contract Template' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'per_page', 1 );
+		$request->set_param( 'page', 1 );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertCount( 1, $response->get_data() );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**
@@ -401,6 +424,32 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test search filters templates by description meta.
+	 */
+	public function test_search_filters_templates_by_description(): void {
+		$id_match = $this->create_template( 'Description Match Template' );
+		$id_other = $this->create_template( 'Description Other Template' );
+
+		update_post_meta( $id_match, '_template_description', 'Contains zebra keyword' );
+		update_post_meta( $id_other, '_template_description', 'Contains unrelated keyword' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'search', 'zebra' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data   = $response->get_data();
+		$titles = array_column( $data, 'title' );
+
+		$this->assertContains( 'Description Match Template', $titles );
+		$this->assertNotContains( 'Description Other Template', $titles );
+
+		wp_delete_post( $id_match, true );
+		wp_delete_post( $id_other, true );
+	}
+
+	/**
 	 * Test category filter returns matching templates.
 	 */
 	public function test_category_filter_returns_matching_templates(): void {
@@ -501,6 +550,23 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $id3, true );
 	}
 
+	/**
+	 * Test batch update item validation for missing ids.
+	 */
+	public function test_batch_update_with_missing_id_returns_item_error(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'update' => array(
+					array( 'menu_order' => 20 ),
+				),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+	}
+
 	// ---- Task 8: Copy and Install tests ----
 
 	/**
@@ -564,6 +630,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_preview_returns_url(): void {
 		$post_id = $this->create_template( 'Preview Template' );
+		$order   = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
 		$response = $this->server->dispatch( $request );
@@ -574,9 +643,16 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'preview_url', $data );
 		$this->assertArrayHasKey( 'order_id', $data );
 		$this->assertArrayHasKey( 'template_id', $data );
-		$this->assertStringContainsString( 'wcpos_template_preview', $data['preview_url'] );
+		$this->assertStringContainsString( '/wcpos-checkout/wcpos-receipt/' . $order->get_id(), $data['preview_url'] );
+
+		$query = wp_parse_url( $data['preview_url'], PHP_URL_QUERY );
+		parse_str( (string) $query, $query_params );
+		$this->assertEquals( $order->get_order_key(), $query_params['key'] ?? '' );
+		$this->assertEquals( (string) $post_id, (string) ( $query_params['wcpos_preview_template'] ?? '' ) );
+		$this->assertEquals( $order->get_id(), $data['order_id'] );
 
 		wp_delete_post( $post_id, true );
+		wp_delete_post( $order->get_id(), true );
 	}
 
 	// ---- Task 10: Gallery listing tests ----

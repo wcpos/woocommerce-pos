@@ -408,6 +408,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 */
 	public function test_gallery_template_has_required_fields(): void {
 		$templates = Templates::get_gallery_templates();
+		$this->assertNotEmpty( $templates, 'Expected at least one gallery template.' );
 		$template  = $templates[0];
 
 		$this->assertArrayHasKey( 'key', $template );
@@ -489,6 +490,8 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'wcpos_template', $post->post_type );
 		$this->assertEquals( 'Standard Receipt', $post->post_title );
 		$this->assertNotEmpty( $post->post_content );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**
@@ -501,6 +504,8 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
 		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
 		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**
@@ -514,6 +519,8 @@ class Test_Templates extends WP_UnitTestCase {
 
 		$cat_terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
 		$this->assertEquals( 'receipt', $cat_terms[0]->slug );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**

@@ -252,6 +252,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$search         = $request->get_param( 'search' );
 		$category       = $request->get_param( 'category' );
 		$modified_after = $request->get_param( 'modified_after' );
+		$per_page       = (int) ( $request->get_param( 'per_page' ) ?? -1 );
+		$page           = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
 		$has_filters    = $search || $category || $modified_after;
 		$templates      = array();
 
@@ -268,8 +270,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$args = array(
 			'post_type'      => 'wcpos_template',
 			'post_status'    => array( 'publish', 'draft' ),
-			'posts_per_page' => $request->get_param( 'per_page' ) ?? -1,
-			'paged'          => $request->get_param( 'page' ) ?? 1,
+			'posts_per_page' => ( ! $has_filters && $per_page > 0 ) ? -1 : $per_page,
+			'paged'          => ( ! $has_filters && $per_page > 0 ) ? 1 : $page,
 			'orderby'        => 'menu_order',
 			'order'          => 'ASC',
 		);
@@ -300,9 +302,10 @@ class Templates_Controller extends WP_REST_Controller {
 			$args['tax_query'] = $tax_query;
 		}
 
-		// Search filter.
+		// Search filter (title/content OR description meta).
 		if ( $search ) {
-			$args['s'] = $search;
+			$matching_ids = $this->get_search_matching_template_ids( $search, $args );
+			$args['post__in'] = empty( $matching_ids ) ? array( 0 ) : $matching_ids;
 		}
 
 		// Modified after filter.
@@ -317,20 +320,36 @@ class Templates_Controller extends WP_REST_Controller {
 
 		$query = new WP_Query( $args );
 
+		$db_templates = array();
 		foreach ( $query->posts as $post ) {
 			$template = TemplatesManager::get_template( $post->ID );
 			if ( $template ) {
 				$template['is_active'] = TemplatesManager::is_active_template( $post->ID, $template['type'] );
-				$templates[]           = $this->prepare_item_for_response( $template, $request );
+				$db_templates[]        = $this->prepare_item_for_response( $template, $request );
 			}
 		}
 
-		$virtual_count = $has_filters ? 0 : ( isset( $virtual_templates ) ? \count( $virtual_templates ) : 0 );
-		$total_items   = $virtual_count + $query->found_posts;
+		if ( ! $has_filters ) {
+			$all_templates = array_merge( $templates, $db_templates );
+			$total_items   = \count( $all_templates );
+
+			if ( $per_page > 0 ) {
+				$offset      = ( $page - 1 ) * $per_page;
+				$templates   = \array_slice( $all_templates, $offset, $per_page );
+				$total_pages = $total_items > 0 ? (int) \ceil( $total_items / $per_page ) : 1;
+			} else {
+				$templates   = $all_templates;
+				$total_pages = 1;
+			}
+		} else {
+			$templates   = $db_templates;
+			$total_items = (int) $query->found_posts;
+			$total_pages = (int) max( 1, $query->max_num_pages );
+		}
 
 		$response = rest_ensure_response( $templates );
 		$response->header( 'X-WP-Total', (string) $total_items );
-		$response->header( 'X-WP-TotalPages', (string) max( 1, $query->max_num_pages ) );
+		$response->header( 'X-WP-TotalPages', (string) max( 1, $total_pages ) );
 
 		return $response;
 	}
@@ -474,16 +493,30 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		foreach ( $updates as $item ) {
+		foreach ( $updates as $index => $item ) {
+			if ( ! \is_array( $item ) || empty( $item['id'] ) || ! \is_numeric( $item['id'] ) ) {
+				$results[] = array(
+					'id'    => \is_array( $item ) ? ( $item['id'] ?? null ) : null,
+					'error' => array(
+						'code'    => 'wcpos_template_missing_id',
+						/* translators: %d: batch item index. */
+						'message' => sprintf( __( 'Batch item %d must include a numeric id.', 'woocommerce-pos' ), $index + 1 ),
+					),
+				);
+				continue;
+			}
+
+			$item_id = (int) $item['id'];
+
 			$item_request = new WP_REST_Request( 'PATCH' );
 			$item_request->set_body_params( $item );
-			$item_request->set_url_params( array( 'id' => $item['id'] ) );
+			$item_request->set_url_params( array( 'id' => $item_id ) );
 
 			$result = $this->update_item( $item_request );
 
 			if ( is_wp_error( $result ) ) {
 				$results[] = array(
-					'id'    => $item['id'],
+					'id'    => $item_id,
 					'error' => array(
 						'code'    => $result->get_error_code(),
 						'message' => $result->get_error_message(),
@@ -590,7 +623,8 @@ class Templates_Controller extends WP_REST_Controller {
 		$result      = TemplatesManager::install_gallery_template( $gallery_key );
 
 		if ( is_wp_error( $result ) ) {
-			$result->add_data( array( 'status' => 400 ) );
+			$status = $this->get_wp_error_status( $result, 400 );
+			$result->add_data( array( 'status' => $status ) );
 			return $result;
 		}
 
@@ -651,17 +685,29 @@ class Templates_Controller extends WP_REST_Controller {
 		);
 
 		$order_ids = $order_query->get_orders();
-		$order_id  = ! empty( $order_ids ) ? $order_ids[0] : 0;
+		if ( empty( $order_ids ) ) {
+			$fallback_query = new \WC_Order_Query(
+				array(
+					'limit'   => 1,
+					'orderby' => 'date',
+					'order'   => 'DESC',
+					'return'  => 'ids',
+				)
+			);
+			$order_ids      = $fallback_query->get_orders();
+		}
 
-		// Build preview URL with a nonce for security.
+		$order_id  = ! empty( $order_ids ) ? (int) $order_ids[0] : 0;
+		$order     = $order_id ? wc_get_order( $order_id ) : null;
+		$order_key = $order ? $order->get_order_key() : '';
+
+		// Build receipt preview URL.
 		$preview_url = add_query_arg(
 			array(
-				'wcpos_template_preview' => 1,
-				'template_id'            => $id,
-				'order_id'               => $order_id,
-				'_wpnonce'               => wp_create_nonce( 'wcpos_template_preview_' . $id ),
+				'key'                    => $order_key,
+				'wcpos_preview_template' => $id,
 			),
-			site_url( '/' )
+			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
 		);
 
 		return rest_ensure_response(
@@ -745,8 +791,8 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Maximum number of items to be returned in result set.', 'woocommerce-pos' ),
 				'type'              => 'integer',
 				'default'           => -1,
-				'sanitize_callback' => 'absint',
-				'validate_callback' => 'rest_validate_request_arg',
+				'sanitize_callback' => array( $this, 'sanitize_per_page_param' ),
+				'validate_callback' => array( $this, 'validate_per_page_param' ),
 			),
 			'type'           => array(
 				'description'       => __( 'Filter by template type.', 'woocommerce-pos' ),
@@ -783,6 +829,89 @@ class Templates_Controller extends WP_REST_Controller {
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);
+	}
+
+	/**
+	 * Get template IDs matching title/content search OR description meta search.
+	 *
+	 * @param string $search Search term.
+	 * @param array  $args   Base query args (without search constraints).
+	 *
+	 * @return int[] Matching template IDs.
+	 */
+	private function get_search_matching_template_ids( string $search, array $args ): array {
+		$base_query_args = $args;
+		unset( $base_query_args['post__in'] );
+		$base_query_args['fields']        = 'ids';
+		$base_query_args['posts_per_page'] = -1;
+		$base_query_args['paged']         = 1;
+		$base_query_args['no_found_rows'] = true;
+
+		$title_query_args      = $base_query_args;
+		$title_query_args['s'] = $search;
+		$title_query           = new WP_Query( $title_query_args );
+
+		$description_query_args               = $base_query_args;
+		$description_query_args['meta_query'] = array(
+			array(
+				'key'     => '_template_description',
+				'value'   => $search,
+				'compare' => 'LIKE',
+			),
+		);
+		$description_query                    = new WP_Query( $description_query_args );
+
+		return array_values( array_unique( array_merge( $title_query->posts, $description_query->posts ) ) );
+	}
+
+	/**
+	 * Preserve -1 for "all items", otherwise sanitize as a positive integer.
+	 *
+	 * @param mixed $value Requested per_page value.
+	 *
+	 * @return int
+	 */
+	public function sanitize_per_page_param( $value ): int {
+		$value = (int) $value;
+		return -1 === $value ? -1 : absint( $value );
+	}
+
+	/**
+	 * Validate per_page as either -1 or a positive integer.
+	 *
+	 * @param mixed $value Requested per_page value.
+	 *
+	 * @return bool
+	 */
+	public function validate_per_page_param( $value ): bool {
+		$value = (int) $value;
+		return -1 === $value || $value > 0;
+	}
+
+	/**
+	 * Get a valid HTTP status code from WP_Error data.
+	 *
+	 * @param WP_Error $error         Error object.
+	 * @param int      $fallback_code Fallback status code.
+	 *
+	 * @return int
+	 */
+	private function get_wp_error_status( WP_Error $error, int $fallback_code = 400 ): int {
+		$error_data = $error->get_error_data();
+		$status     = null;
+
+		if ( \is_array( $error_data ) && isset( $error_data['status'] ) ) {
+			$status = $error_data['status'];
+		} elseif ( \is_numeric( $error_data ) ) {
+			$status = $error_data;
+		}
+
+		if ( null === $status ) {
+			return $fallback_code;
+		}
+
+		$status = (int) $status;
+		return ( $status >= 100 && $status <= 599 ) ? $status : $fallback_code;
 	}
 
 	/**
