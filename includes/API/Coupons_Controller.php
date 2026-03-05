@@ -123,6 +123,40 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	}
 
 	/**
+	 * Get the query params for collections.
+	 *
+	 * @return array $params The collection parameters.
+	 */
+	public function get_collection_params() {
+		$params = parent::get_collection_params();
+
+		// Ensure 'orderby' is set and is an array before attempting to modify it.
+		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
+			$params['orderby']['enum'] = array_unique( array_merge( $params['orderby']['enum'], array( 'code' ) ) );
+		}
+
+		return $params;
+	}
+
+	/**
+	 * Prepare objects query.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return array|WP_Error
+	 */
+	protected function prepare_objects_query( $request ) {
+		$args = parent::prepare_objects_query( $request );
+
+		// Coupon code is stored as post_title.
+		if ( isset( $request['orderby'] ) && 'code' === $request['orderby'] ) {
+			$args['orderby'] = 'title';
+		}
+
+		return $args;
+	}
+
+	/**
 	 * Filter coupon object returned from the REST API.
 	 *
 	 * @param WP_REST_Response $response The response object.
