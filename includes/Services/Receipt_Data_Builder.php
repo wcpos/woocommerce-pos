@@ -39,7 +39,7 @@ class Receipt_Data_Builder {
 						get_option( 'woocommerce_store_address', '' ),
 						get_option( 'woocommerce_store_address_2', '' ),
 						trim( get_option( 'woocommerce_store_city', '' ) . ' ' . get_option( 'woocommerce_store_postcode', '' ) ),
-						get_option( 'woocommerce_default_country', '' ),
+						$this->get_store_country_state(),
 					)
 				)
 			),
@@ -59,9 +59,16 @@ class Receipt_Data_Builder {
 			}
 		}
 
+		$customer_id   = $order->get_customer_id();
+		$customer_name = trim( $order->get_formatted_billing_full_name() );
+
+		if ( ! $customer_id && '' === $customer_name ) {
+			$customer_name = __( 'Guest', 'woocommerce-pos' );
+		}
+
 		$customer = array(
-			'id'               => $order->get_customer_id() ? $order->get_customer_id() : null,
-			'name'             => trim( $order->get_formatted_billing_full_name() ),
+			'id'               => $customer_id ? $customer_id : null,
+			'name'             => $customer_name,
 			'billing_address'  => $order->get_address( 'billing' ),
 			'shipping_address' => $order->get_address( 'shipping' ),
 			'tax_id'           => '',
@@ -234,6 +241,36 @@ class Receipt_Data_Builder {
 		}
 
 		return $summary;
+	}
+
+	/**
+	 * Get formatted store country/state string.
+	 *
+	 * The woocommerce_default_country option stores "CC:SS" (e.g. "US:AL").
+	 * This converts it to display names like "Alabama, United States (US)".
+	 *
+	 * @return string
+	 */
+	private function get_store_country_state(): string {
+		$raw = get_option( 'woocommerce_default_country', '' );
+		if ( '' === $raw ) {
+			return '';
+		}
+
+		$parts   = explode( ':', $raw );
+		$country = $parts[0] ?? '';
+		$state   = $parts[1] ?? '';
+
+		$country_name = WC()->countries->get_countries()[ $country ] ?? $country;
+
+		if ( '' !== $state ) {
+			$states     = WC()->countries->get_states( $country );
+			$state_name = $states[ $state ] ?? $state;
+
+			return $state_name . ', ' . $country_name;
+		}
+
+		return $country_name;
 	}
 
 	/**
