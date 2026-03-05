@@ -2,18 +2,43 @@
 /**
  * Logicless receipt renderer.
  *
+ * Uses Mustache.php to render templates with section blocks:
+ *   {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+ *   {{^key}}...{{/key}}  — show block when value is empty/falsy
+ *   {{.}}                — current value (for arrays of scalars)
+ *   {{key.path}}         — dot-path placeholder substitution
+ *
+ * Money fields are pre-formatted as currency before rendering.
+ *
  * @package WCPOS\WooCommercePOS\Templates\Renderers
  */
 
 namespace WCPOS\WooCommercePOS\Templates\Renderers;
 
+use Mustache\Engine as Mustache_Engine;
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Renderer_Interface;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WC_Abstract_Order;
 
 /**
  * Logicless_Renderer class.
  */
 class Logicless_Renderer implements Receipt_Renderer_Interface {
+
+	/**
+	 * Money field names (flipped for O(1) lookup).
+	 *
+	 * @var array
+	 */
+	private $money_fields = array();
+
+	/**
+	 * Currency code for formatting.
+	 *
+	 * @var string
+	 */
+	private $currency = 'USD';
+
 	/**
 	 * Render logicless template output.
 	 *
@@ -29,61 +54,48 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 			return;
 		}
 
-		$flat = $this->flatten_data( $receipt_data );
+		$this->currency     = $receipt_data['meta']['currency'] ?? 'USD';
+		$this->money_fields = array_flip( Receipt_Data_Schema::MONEY_FIELDS );
 
-		$output = preg_replace_callback(
-			'/\\{\\{\\s*([\\w\\.\\-]+)\\s*\\}\\}/',
-			function ( $matches ) use ( $flat ) {
-				$key = $matches[1];
-				return isset( $flat[ $key ] ) ? (string) $flat[ $key ] : '';
-			},
-			$content
+		$formatted_data = $this->format_money_fields( $receipt_data );
+
+		$mustache = new Mustache_Engine(
+			array(
+				'entity_flags' => ENT_QUOTES | ENT_SUBSTITUTE,
+			)
 		);
+
+		$output = $mustache->render( $content, $formatted_data );
 
 		echo wp_kses_post( $output );
 	}
 
 	/**
-	 * Flatten nested arrays into dot-path keys.
+	 * Recursively format money fields in receipt data.
 	 *
-	 * @param array  $data   Nested array.
-	 * @param string $prefix Key prefix.
+	 * Walks the data structure and replaces numeric values whose terminal
+	 * key name matches a known money field with a formatted currency string.
 	 *
-	 * @return array
+	 * @param array  $data Receipt data (or nested portion).
+	 * @param string $key  Current key name (for terminal matching).
+	 *
+	 * @return array Formatted data.
 	 */
-	private function flatten_data( array $data, string $prefix = '' ): array {
+	private function format_money_fields( array $data, string $key = '' ): array {
 		$result = array();
 
-		foreach ( $data as $key => $value ) {
-			$path = '' === $prefix ? (string) $key : $prefix . '.' . $key;
-
+		foreach ( $data as $k => $value ) {
 			if ( \is_array( $value ) ) {
-				if ( $this->is_associative( $value ) ) {
-					$result = array_merge( $result, $this->flatten_data( $value, $path ) );
-				} elseif ( isset( $value[0] ) && ! \is_array( $value[0] ) ) {
-					$result[ $path ] = implode( ', ', array_map( 'strval', $value ) );
-				}
-				continue;
+				$result[ $k ] = $this->format_money_fields( $value, (string) $k );
+			} elseif ( is_numeric( $value ) && isset( $this->money_fields[ $k ] ) ) {
+				$result[ $k ] = wp_strip_all_tags(
+					wc_price( (float) $value, array( 'currency' => $this->currency ) )
+				);
+			} else {
+				$result[ $k ] = $value;
 			}
-
-			$result[ $path ] = $value;
 		}
 
 		return $result;
-	}
-
-	/**
-	 * Determine whether an array is associative.
-	 *
-	 * @param array $array Array value.
-	 *
-	 * @return bool
-	 */
-	private function is_associative( array $array ): bool {
-		if ( array() === $array ) {
-			return false;
-		}
-
-		return array_keys( $array ) !== range( 0, count( $array ) - 1 );
 	}
 }
