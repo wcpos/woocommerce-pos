@@ -30,6 +30,7 @@ export function DraggableCard({
 	disableDrag = false,
 }: DraggableCardProps) {
 	const ref = React.useRef<HTMLDivElement>(null);
+	const flashTimeoutRef = React.useRef<number | null>(null);
 	const [isDragging, setIsDragging] = React.useState(false);
 	const [isKeyboardDragging, setIsKeyboardDragging] = React.useState(false);
 	const [closestEdge, setClosestEdge] = React.useState<Edge | null>(null);
@@ -65,9 +66,24 @@ export function DraggableCard({
 		};
 	}, [disableDrag, id, index]);
 
+	React.useEffect(() => {
+		return () => {
+			if (flashTimeoutRef.current !== null) {
+				window.clearTimeout(flashTimeoutRef.current);
+			}
+		};
+	}, []);
+
 	const flashEdge = React.useCallback((edge: Edge) => {
 		setClosestEdge(edge);
-		window.setTimeout(() => setClosestEdge(null), 250);
+		if (flashTimeoutRef.current !== null) {
+			window.clearTimeout(flashTimeoutRef.current);
+		}
+
+		flashTimeoutRef.current = window.setTimeout(() => {
+			setClosestEdge(null);
+			flashTimeoutRef.current = null;
+		}, 250);
 	}, []);
 
 	const movePrevious = React.useCallback(() => {

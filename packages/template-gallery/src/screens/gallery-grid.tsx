@@ -254,6 +254,7 @@ export function GalleryGrid() {
 						});
 					}}
 					onCustomize={() => {
+						if (!previewIsGallery) return;
 						const t = previewTemplate as GalleryTemplate;
 						installGallery.mutate(t.key);
 					}}

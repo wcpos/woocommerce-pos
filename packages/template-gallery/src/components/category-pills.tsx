@@ -23,6 +23,7 @@ export function CategoryPills({ categories, active, onChange }: CategoryPillsPro
 					key={cat}
 					type="button"
 					onClick={() => onChange(cat)}
+					aria-pressed={cat === active}
 					className={classnames(
 						'wcpos:px-3 wcpos:py-1 wcpos:rounded-full wcpos:text-sm wcpos:border wcpos:cursor-pointer',
 						cat === active

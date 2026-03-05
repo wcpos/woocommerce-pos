@@ -32,14 +32,27 @@ export function useSnackbar() {
 
 export function SnackbarProvider({ children }: { children: React.ReactNode }) {
 	const [messages, setMessages] = React.useState<SnackbarMessage[]>([]);
+	const timeoutIdsRef = React.useRef<Record<string, number>>({});
 
 	const addSnackbar = React.useCallback((msg: Omit<SnackbarMessage, 'id'>) => {
 		const id = getSnackbarId();
 		setMessages((prev) => [...prev, { ...msg, id }]);
 
-		setTimeout(() => {
+		const timeoutId = window.setTimeout(() => {
+			delete timeoutIdsRef.current[id];
 			setMessages((prev) => prev.filter((m) => m.id !== id));
 		}, 3000);
+
+		timeoutIdsRef.current[id] = timeoutId;
+	}, []);
+
+	React.useEffect(() => {
+		return () => {
+			Object.values(timeoutIdsRef.current).forEach((timeoutId) => {
+				window.clearTimeout(timeoutId);
+			});
+			timeoutIdsRef.current = {};
+		};
 	}, []);
 
 	return (

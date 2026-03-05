@@ -130,7 +130,7 @@ export function PreviewModal({
 							title={`Preview of ${templateName}`}
 							className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							style={{ height: '600px' }}
-							sandbox="allow-scripts allow-same-origin"
+							sandbox="allow-scripts"
 						/>
 					) : (
 						<div className="wcpos:text-gray-500 wcpos:text-center wcpos:py-8">
