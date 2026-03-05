@@ -118,10 +118,19 @@ class Templates_Controller extends WP_REST_Controller {
 						'items'       => array(
 							'type'       => 'object',
 							'properties' => array(
-								'id'          => array( 'type' => 'integer', 'required' => true ),
-								'status'      => array( 'type' => 'string', 'enum' => array( 'publish', 'draft' ) ),
+								'id'          => array(
+									'type' => 'integer',
+									'required' => true,
+								),
+								'status'      => array(
+									'type' => 'string',
+									'enum' => array( 'publish', 'draft' ),
+								),
 								'menu_order'  => array( 'type' => 'integer' ),
-								'tax_display' => array( 'type' => 'string', 'enum' => array( 'default', 'incl', 'excl' ) ),
+								'tax_display' => array(
+									'type' => 'string',
+									'enum' => array( 'default', 'incl', 'excl' ),
+								),
 							),
 						),
 					),
@@ -176,10 +185,19 @@ class Templates_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'update_item' ),
 				'permission_callback' => array( $this, 'update_item_permissions_check' ),
 				'args'                => array(
-					'id'          => array( 'type' => 'integer', 'required' => true ),
-					'status'      => array( 'type' => 'string', 'enum' => array( 'publish', 'draft' ) ),
+					'id'          => array(
+						'type' => 'integer',
+						'required' => true,
+					),
+					'status'      => array(
+						'type' => 'string',
+						'enum' => array( 'publish', 'draft' ),
+					),
 					'menu_order'  => array( 'type' => 'integer' ),
-					'tax_display' => array( 'type' => 'string', 'enum' => array( 'default', 'incl', 'excl' ) ),
+					'tax_display' => array(
+						'type' => 'string',
+						'enum' => array( 'default', 'incl', 'excl' ),
+					),
 				),
 			)
 		);

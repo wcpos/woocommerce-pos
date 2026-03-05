@@ -210,21 +210,28 @@ class Templates {
 		$terms = wp_get_post_terms( $template_id, 'wcpos_template_type' );
 		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
 
+		$description     = get_post_meta( $template_id, '_template_description', true );
+		$language        = get_post_meta( $template_id, '_template_language', true );
+		$engine          = get_post_meta( $template_id, '_template_engine', true );
+		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
+		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
+		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+
 		return array(
 			'id'              => $post->ID,
 			'title'           => $post->post_title,
-			'description'     => get_post_meta( $template_id, '_template_description', true ) ?: '',
+			'description'     => $description ? $description : '',
 			'content'         => $post->post_content,
 			'type'            => $type,
 			'category'        => self::get_template_category( $template_id ),
-			'language'        => get_post_meta( $template_id, '_template_language', true ) ?: 'php',
+			'language'        => $language ? $language : 'php',
 			'file_path'       => get_post_meta( $template_id, '_template_file_path', true ),
-			'engine'          => get_post_meta( $template_id, '_template_engine', true ) ?: 'legacy-php',
-			'output_type'     => get_post_meta( $template_id, '_template_output_type', true ) ?: 'html',
-			'tax_display'     => get_post_meta( $template_id, '_template_tax_display', true ) ?: 'default',
+			'engine'          => $engine ? $engine : 'legacy-php',
+			'output_type'     => $output_type ? $output_type : 'html',
+			'tax_display'     => $tax_display ? $tax_display : 'default',
 			'is_virtual'      => false,
 			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
-			'gallery_key'     => get_post_meta( $template_id, '_template_gallery_key', true ) ?: null,
+			'gallery_key'     => $gallery_key ? $gallery_key : null,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
 			'source'          => 'custom',
 			'menu_order'      => $post->menu_order,
@@ -715,7 +722,8 @@ class Templates {
 		update_post_meta( $post_id, '_template_description', $template['description'] ?? '' );
 		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'logicless' );
 		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
-		update_post_meta( $post_id, '_template_language', 'logicless' === ( $template['engine'] ?? '' ) ? 'html' : 'php' );
+		$engine_value = isset( $template['engine'] ) ? $template['engine'] : '';
+		update_post_meta( $post_id, '_template_language', 'logicless' === $engine_value ? 'html' : 'php' );
 		update_post_meta( $post_id, '_template_is_premade', '1' );
 		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
 		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
