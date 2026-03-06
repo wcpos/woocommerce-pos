@@ -14,7 +14,7 @@ export type FieldSchema = Record<string, SectionInfo>;
 export interface EditorConfig {
 	fieldSchema: FieldSchema;
 	sampleData: Record<string, unknown>;
-	engine: 'logicless' | 'legacy-php';
+	engine: 'logicless' | 'legacy-php' | 'thermal';
 	templateId: number;
 	previewUrl: string;
 	postContent: string;
