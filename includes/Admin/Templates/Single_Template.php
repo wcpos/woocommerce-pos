@@ -424,7 +424,7 @@ class Single_Template {
 		$sample_data = null;
 		if ( $last_order ) {
 			$builder     = new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder();
-			$sample_data = $builder->build( $last_order );
+			$sample_data = $this->sanitize_preview_data( $builder->build( $last_order ) );
 		}
 		if ( ! $sample_data ) {
 			$sample_data = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_mock_receipt_data();
@@ -503,6 +503,48 @@ class Single_Template {
 			</div>
 			<?php
 		}
+	}
+
+	/**
+	 * Strip PII from receipt data before sending to the client-side preview.
+	 *
+	 * Replaces real customer names, addresses, and cashier names with
+	 * placeholder values so the template preview works without leaking
+	 * sensitive data into the page source.
+	 *
+	 * @param array $data Receipt data from Receipt_Data_Builder::build().
+	 *
+	 * @return array Sanitized data safe for client-side use.
+	 */
+	private function sanitize_preview_data( array $data ): array {
+		$empty_address = array(
+			'first_name' => '',
+			'last_name'  => '',
+			'company'    => '',
+			'address_1'  => '',
+			'address_2'  => '',
+			'city'       => '',
+			'state'      => '',
+			'postcode'   => '',
+			'country'    => '',
+			'email'      => '',
+			'phone'      => '',
+		);
+
+		// Redact customer PII.
+		if ( isset( $data['customer'] ) ) {
+			$data['customer']['name']             = __( 'Sample Customer', 'woocommerce-pos' );
+			$data['customer']['billing_address']  = $empty_address;
+			$data['customer']['shipping_address'] = $empty_address;
+			$data['customer']['tax_id']           = '';
+		}
+
+		// Redact cashier name.
+		if ( isset( $data['cashier'] ) ) {
+			$data['cashier']['name'] = __( 'Sample Cashier', 'woocommerce-pos' );
+		}
+
+		return $data;
 	}
 
 	/**

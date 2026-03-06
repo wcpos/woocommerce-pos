@@ -169,15 +169,23 @@ class Receipt_Data_Schema {
 			'customer'    => array(
 				'label'  => __( 'Customer', 'woocommerce-pos' ),
 				'fields' => array(
-					'id'     => array(
+					'id'               => array(
 						'type'  => 'number',
 						'label' => __( 'Customer ID', 'woocommerce-pos' ),
 					),
-					'name'   => array(
+					'name'             => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Name', 'woocommerce-pos' ),
 					),
-					'tax_id' => array(
+					'billing_address'  => array(
+						'type'  => 'object',
+						'label' => __( 'Billing Address', 'woocommerce-pos' ),
+					),
+					'shipping_address' => array(
+						'type'  => 'object',
+						'label' => __( 'Shipping Address', 'woocommerce-pos' ),
+					),
+					'tax_id'           => array(
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					),
@@ -187,6 +195,10 @@ class Receipt_Data_Schema {
 				'label'    => __( 'Line Items', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
+					'key'                => array(
+						'type'  => 'string',
+						'label' => __( 'Item Key', 'woocommerce-pos' ),
+					),
 					'sku'                => array(
 						'type'  => 'string',
 						'label' => __( 'SKU', 'woocommerce-pos' ),
@@ -230,6 +242,10 @@ class Receipt_Data_Schema {
 					'line_total_excl'    => array(
 						'type'  => 'money',
 						'label' => __( 'Line Total (excl tax)', 'woocommerce-pos' ),
+					),
+					'taxes'              => array(
+						'type'  => 'array',
+						'label' => __( 'Line Taxes', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -332,6 +348,10 @@ class Receipt_Data_Schema {
 				'label'    => __( 'Tax Summary', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
+					'code'                => array(
+						'type'  => 'string',
+						'label' => __( 'Tax Code', 'woocommerce-pos' ),
+					),
 					'label'               => array(
 						'type'  => 'string',
 						'label' => __( 'Tax Label', 'woocommerce-pos' ),
@@ -377,6 +397,10 @@ class Receipt_Data_Schema {
 					'change'       => array(
 						'type'  => 'money',
 						'label' => __( 'Change', 'woocommerce-pos' ),
+					),
+					'reference'    => array(
+						'type'  => 'string',
+						'label' => __( 'Reference', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -425,6 +449,8 @@ class Receipt_Data_Schema {
 	 * @return array
 	 */
 	public static function get_mock_receipt_data(): array {
+		$store_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : '';
+
 		return array(
 			'meta'               => array(
 				'schema_version' => self::VERSION,
@@ -435,7 +461,7 @@ class Receipt_Data_Schema {
 				'currency'       => function_exists( 'get_option' ) ? get_option( 'woocommerce_currency', 'USD' ) : 'USD',
 			),
 			'store'              => array(
-				'name'          => function_exists( 'get_bloginfo' ) ? ( get_bloginfo( 'name' ) ? get_bloginfo( 'name' ) : 'Sample Store' ) : 'Sample Store',
+				'name'          => $store_name ? $store_name : 'Sample Store',
 				'address_lines' => array( '123 Main Street', 'Anytown, ST 12345' ),
 				'tax_id'        => '',
 				'phone'         => '(555) 123-4567',
