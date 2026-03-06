@@ -92,7 +92,7 @@ class Templates {
 			'hierarchical'        => false,
 			'public'              => false,
 			'show_ui'             => true,
-			'show_in_menu'        => \WCPOS\WooCommercePOS\PLUGIN_NAME, // Register under POS menu.
+			'show_in_menu'        => false, // Hidden from menu; Gallery SPA provides the submenu entry.
 			'menu_position'       => 5,
 			'show_in_admin_bar'   => true,
 			'show_in_nav_menus'   => false,

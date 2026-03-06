@@ -58,6 +58,7 @@ jobs:
           composer install --no-dev
           pnpm settings build
           pnpm analytics build
+          pnpm template-gallery build
 
       - name: 📂 Sync to Temporary Directory
         if: steps.check_version.outputs.release == 'true'
