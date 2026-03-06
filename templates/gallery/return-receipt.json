@@ -1,0 +1,11 @@
+{
+    "key": "return-receipt",
+    "title": "Return Receipt",
+    "description": "Credit note showing returned items, refund amounts, and refund payment method.",
+    "type": "receipt",
+    "category": "credit-note",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

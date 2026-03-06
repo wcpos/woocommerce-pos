@@ -1,0 +1,11 @@
+{
+    "key": "layby-receipt",
+    "title": "Layby / Deposit Receipt",
+    "description": "Partial payment receipt showing items on hold, amount paid, and balance remaining.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

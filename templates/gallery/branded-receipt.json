@@ -1,0 +1,11 @@
+{
+    "key": "branded-receipt",
+    "title": "Branded Receipt",
+    "description": "Marketing-oriented receipt with large logo area, accent color bar, and social media placeholders.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

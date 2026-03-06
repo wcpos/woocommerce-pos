@@ -1,0 +1,33 @@
+<!--
+Gift Receipt — items without prices, with gift message.
+
+Shows item names and quantities only. Displays the customer note
+as a gift message. Includes order reference for returns.
+-->
+<div style="box-sizing: border-box; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #333; padding: 30px; max-width: 400px; margin: 0 auto;">
+
+	<div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e8e0d4;">
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px;">Gift Receipt</div>
+		<div style="font-size: 22px; font-weight: 400; font-style: italic;">{{store.name}}</div>
+	</div>
+
+	{{#lines}}
+	<div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ddd;">
+		<span style="flex: 1;">{{name}}</span>
+		{{#qty}}<span style="color: #888; font-size: 13px; flex-shrink: 0; margin-left: 12px;">x{{qty}}</span>{{/qty}}
+	</div>
+	{{/lines}}
+
+	{{#meta.customer_note}}
+	<div style="margin: 24px 0; padding: 16px; background: #faf8f5; border: 1px solid #e8e0d4; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6;">
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">A message for you</div>
+		{{meta.customer_note}}
+	</div>
+	{{/meta.customer_note}}
+
+	<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e0d4; text-align: center; font-size: 11px; color: #999;">
+		<div style="margin-bottom: 8px;">Items may be returned or exchanged within 30 days with this receipt.</div>
+		<div>{{meta.created_at_gmt}} &middot; #{{meta.order_number}}</div>
+	</div>
+
+</div>
