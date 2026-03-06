@@ -1,4 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+
+declare const jQuery: any;
 
 interface PhpPreviewProps {
 	previewUrl: string;
@@ -11,10 +13,22 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 		const wp = (window as any).wp;
 		if (wp?.autosave?.server) {
 			wp.autosave.server.triggerSave();
-			setTimeout(() => setIframeKey((k) => k + 1), 2000);
 		} else {
 			setIframeKey((k) => k + 1);
 		}
+	}, []);
+
+	useEffect(() => {
+		if (typeof jQuery === 'undefined') return;
+
+		const onAutosaveComplete = () => {
+			setIframeKey((k) => k + 1);
+		};
+
+		jQuery(document).on('after-autosave', onAutosaveComplete);
+		return () => {
+			jQuery(document).off('after-autosave', onAutosaveComplete);
+		};
 	}, []);
 
 	if (!previewUrl) {
@@ -56,7 +70,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 				<iframe
 					key={iframeKey}
 					src={previewUrl}
-					style={{ width: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
+					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
 					title="Template preview"
 				/>
 			</div>

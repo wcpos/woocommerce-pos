@@ -115,6 +115,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'presentation_hints', $tree );
 	}
 
+	/**
+	 * Test get_mock_receipt_data has all required keys.
+	 */
 	public function test_get_mock_receipt_data_has_all_required_keys(): void {
 		$mock = Receipt_Data_Schema::get_mock_receipt_data();
 
@@ -123,6 +126,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * Test get_mock_receipt_data has line items with expected fields.
+	 */
 	public function test_get_mock_receipt_data_has_line_items(): void {
 		$mock = Receipt_Data_Schema::get_mock_receipt_data();
 
@@ -132,6 +138,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'line_total_incl', $mock['lines'][0] );
 	}
 
+	/**
+	 * Test get_mock_receipt_data totals are numeric floats.
+	 */
 	public function test_get_mock_receipt_data_totals_are_numeric(): void {
 		$mock = Receipt_Data_Schema::get_mock_receipt_data();
 

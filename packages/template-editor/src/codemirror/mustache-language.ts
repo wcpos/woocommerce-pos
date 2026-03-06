@@ -1,18 +1,18 @@
 import { StreamLanguage, StringStream } from '@codemirror/language';
 
 interface MustacheState {
-	inTag: boolean;
+	closeDelimiter: '}}' | '}}}' | null;
 }
 
 export const mustacheLanguage = StreamLanguage.define<MustacheState>({
 	name: 'mustache',
 	startState(): MustacheState {
-		return { inTag: false };
+		return { closeDelimiter: null };
 	},
 	token(stream: StringStream, state: MustacheState): string | null {
-		if (state.inTag) {
-			if (stream.match('}}')) {
-				state.inTag = false;
+		if (state.closeDelimiter) {
+			if (stream.match(state.closeDelimiter)) {
+				state.closeDelimiter = null;
 				return 'brace';
 			}
 			const ch = stream.next();
@@ -25,13 +25,18 @@ export const mustacheLanguage = StreamLanguage.define<MustacheState>({
 			return 'variableName';
 		}
 
+		if (stream.match('{{{')) {
+			state.closeDelimiter = '}}}';
+			return 'brace';
+		}
+
 		if (stream.match('{{')) {
-			state.inTag = true;
+			state.closeDelimiter = '}}';
 			return 'brace';
 		}
 
 		while (stream.next() != null) {
-			if (stream.match('{{', false)) {
+			if (stream.match('{{{', false) || stream.match('{{', false)) {
 				break;
 			}
 		}
