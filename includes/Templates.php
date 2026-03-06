@@ -625,7 +625,7 @@ class Templates {
 					'is_premade'      => true,
 					'is_virtual'      => true,
 					'source'          => 'gallery',
-					'offline_capable' => in_array( $metadata['engine'] ?? '', self::OFFLINE_CAPABLE_ENGINES, true ),
+					'offline_capable' => in_array( $metadata['engine'] ?? 'logicless', self::OFFLINE_CAPABLE_ENGINES, true ),
 				)
 			);
 		}
@@ -725,19 +725,19 @@ class Templates {
 			wp_set_object_terms( $post_id, $template['category'], 'wcpos_template_category' );
 		}
 
-		// Set meta fields.
+		// Set meta fields — normalize engine once for consistent derived values.
+		$engine = $template['engine'] ?? 'logicless';
 		update_post_meta( $post_id, '_template_description', $template['description'] ?? '' );
-		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'logicless' );
+		update_post_meta( $post_id, '_template_engine', $engine );
 		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
-		$engine_value = isset( $template['engine'] ) ? $template['engine'] : '';
-		if ( 'logicless' === $engine_value ) {
-			$language_value = 'html';
-		} elseif ( 'thermal' === $engine_value ) {
-			$language_value = 'xml';
+		if ( 'logicless' === $engine ) {
+			$language = 'html';
+		} elseif ( 'thermal' === $engine ) {
+			$language = 'xml';
 		} else {
-			$language_value = 'php';
+			$language = 'php';
 		}
-		update_post_meta( $post_id, '_template_language', $language_value );
+		update_post_meta( $post_id, '_template_language', $language );
 		update_post_meta( $post_id, '_template_is_premade', '1' );
 		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
 		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
