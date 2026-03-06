@@ -521,7 +521,7 @@ class Receipt_Data_Schema {
 			'fiscal'             => array(
 				'immutable_id'    => '',
 				'receipt_number'  => '',
-				'sequence'        => null,
+				'sequence'        => 0,
 				'hash'            => '',
 				'qr_payload'      => '',
 				'tax_agency_code' => '',

@@ -445,9 +445,14 @@ class Single_Template {
 			'postContent' => $post->post_content,
 		);
 
+		$encoded_config = wp_json_encode( $config );
+		if ( false === $encoded_config ) {
+			$encoded_config = '{}';
+		}
+
 		return \sprintf(
 			'var wcposTemplateEditor = %s;',
-			wp_json_encode( $config )
+			$encoded_config
 		);
 	}
 
