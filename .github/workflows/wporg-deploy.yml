@@ -27,6 +27,7 @@ jobs:
           composer install --no-dev
           pnpm settings build
           pnpm analytics build
+          pnpm template-gallery build
 
       - name: 📦 WordPress Plugin Deploy
         id: deploy

@@ -168,10 +168,6 @@ class Menu {
 		);
 		add_action( 'load-' . $this->gallery_screen_id, array( $this, 'enqueue_gallery_assets' ) );
 
-		// Note: Templates submenu is automatically added by the custom post type registration
-		// with 'show_in_menu' => PLUGIN_NAME. The redirect in redirect_template_list_page()
-		// sends the old CPT list view to the Gallery SPA.
-
 		// adjust submenu.
 		global $submenu;
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];

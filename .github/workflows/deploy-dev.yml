@@ -25,6 +25,7 @@ jobs:
           composer install --no-dev
           pnpm settings build
           pnpm analytics build
+          pnpm template-gallery build
 
       - name: 📦 Create deployment package
         run: |

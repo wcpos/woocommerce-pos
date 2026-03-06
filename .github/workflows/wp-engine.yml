@@ -23,6 +23,7 @@ jobs:
           composer install --no-dev
           pnpm settings build
           pnpm analytics build
+          pnpm template-gallery build
 
       - name: 🚀 Deploy to WP Engine
         uses: wpengine/github-action-wpe-site-deploy@7bdbfb62eb657ae92afb91cb889d9c3fb36ef6c0 # v3
