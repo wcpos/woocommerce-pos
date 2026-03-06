@@ -33,6 +33,11 @@ class Templates {
 	const SUPPORTED_TYPES = array( 'receipt', 'report' );
 
 	/**
+	 * Engines that support offline (client-side) rendering.
+	 */
+	const OFFLINE_CAPABLE_ENGINES = array( 'logicless', 'thermal' );
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -620,7 +625,7 @@ class Templates {
 					'is_premade'      => true,
 					'is_virtual'      => true,
 					'source'          => 'gallery',
-					'offline_capable' => in_array( $metadata['engine'] ?? '', array( 'logicless', 'thermal' ), true ),
+					'offline_capable' => in_array( $metadata['engine'] ?? '', self::OFFLINE_CAPABLE_ENGINES, true ),
 				)
 			);
 		}
