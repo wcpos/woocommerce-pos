@@ -69,10 +69,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$receipt = new Receipt( $order->get_id() );
 
 		$_GET['template'] = (string) $post_id;
-
-		$template = $this->invoke_get_custom_template( $receipt );
-
-		unset( $_GET['template'] );
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
 
 		$this->assertIsArray( $template );
 		$this->assertEquals( $post_id, $template['id'] );
@@ -97,10 +98,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$receipt = new Receipt( $order->get_id() );
 
 		$_GET['template'] = (string) $post_id;
-
-		$template = $this->invoke_get_custom_template( $receipt );
-
-		unset( $_GET['template'] );
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
 
 		// Should fall back to the active/default template, not the draft.
 		$this->assertIsArray( $template );
@@ -115,10 +117,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$receipt = new Receipt( $order->get_id() );
 
 		$_GET['template'] = TemplatesManager::TEMPLATE_PLUGIN_CORE;
-
-		$template = $this->invoke_get_custom_template( $receipt );
-
-		unset( $_GET['template'] );
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
 
 		$this->assertIsArray( $template );
 		$this->assertEquals( TemplatesManager::TEMPLATE_PLUGIN_CORE, $template['id'] );
@@ -134,10 +137,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$receipt = new Receipt( $order->get_id() );
 
 		$_GET['template'] = '999999';
-
-		$template = $this->invoke_get_custom_template( $receipt );
-
-		unset( $_GET['template'] );
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
 
 		// Should return the active/default template (not null, not the invalid ID).
 		$this->assertIsArray( $template );
@@ -162,10 +166,11 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$receipt = new Receipt( $order->get_id() );
 
 		$_GET['template'] = (string) $post_id;
-
-		$template = $this->invoke_get_custom_template( $receipt );
-
-		unset( $_GET['template'] );
+		try {
+			$template = $this->invoke_get_custom_template( $receipt );
+		} finally {
+			unset( $_GET['template'] );
+		}
 
 		// Should fall back since the template is a report, not a receipt.
 		$this->assertIsArray( $template );
