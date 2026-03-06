@@ -9,12 +9,11 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Templates_Controller;
 use WP_REST_Request;
-use WP_UnitTestCase;
 
 /**
  * Test_Templates_Controller_Response class.
  */
-class Test_Templates_Controller_Response extends WP_UnitTestCase {
+class Test_Templates_Controller_Response extends WCPOS_REST_Unit_Test_Case {
 
 	/**
 	 * Test logicless template includes content in view context.
@@ -99,5 +98,63 @@ class Test_Templates_Controller_Response extends WP_UnitTestCase {
 		$result = $controller->prepare_item_for_response( $template, $request );
 
 		$this->assertEquals( 0, $result['menu_order'] );
+	}
+
+	/**
+	 * Test database templates include date_modified_gmt in REST response.
+	 */
+	public function test_get_items_returns_date_modified_gmt(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_title'  => 'Test Template',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$db_template = null;
+		foreach ( $data as $template ) {
+			if ( isset( $template['id'] ) && $template['id'] === $post_id ) {
+				$db_template = $template;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $db_template, 'Database template should be in response' );
+		$this->assertArrayHasKey( 'date_modified_gmt', $db_template );
+		$this->assertNotEmpty( $db_template['date_modified_gmt'] );
+		$post = get_post( $post_id );
+		$expected_gmt = preg_replace( '/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/', '$1T$2', $post->post_modified_gmt );
+		$this->assertSame( $expected_gmt, $db_template['date_modified_gmt'] );
+	}
+
+	/**
+	 * Test virtual (filesystem) templates include date_modified_gmt in REST response.
+	 */
+	public function test_virtual_templates_have_date_modified_gmt(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$virtual = null;
+		foreach ( $data as $template ) {
+			if ( isset( $template['is_virtual'] ) && $template['is_virtual'] ) {
+				$virtual = $template;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $virtual, 'Virtual template should be in response' );
+		$this->assertArrayHasKey( 'date_modified_gmt', $virtual );
+		$this->assertNotEmpty( $virtual['date_modified_gmt'] );
+		$file_path = \WCPOS\WooCommercePOS\Templates::get_virtual_template_path( $virtual['id'], $virtual['type'] ?? 'receipt' );
+		$this->assertNotNull( $file_path, 'Virtual template file path should exist' );
+		$expected = gmdate( 'Y-m-d\TH:i:s', filemtime( $file_path ) );
+		$this->assertSame( $expected, $virtual['date_modified_gmt'] );
 	}
 }
