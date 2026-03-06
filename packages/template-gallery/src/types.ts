@@ -7,7 +7,7 @@ export interface Template {
 	type: string;
 	category: string;
 	language: string;
-	engine: 'legacy-php' | 'logicless';
+	engine: 'legacy-php' | 'logicless' | 'thermal';
 	output_type: string;
 	tax_display: string;
 	is_virtual: false;

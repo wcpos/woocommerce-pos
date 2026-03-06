@@ -82,6 +82,28 @@ class Test_Templates_Controller_Response extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test thermal template includes content in view context.
+	 */
+	public function test_thermal_template_includes_content_in_view_context(): void {
+		$template = array(
+			'id'      => 'test',
+			'title'   => 'Test',
+			'content' => '<receipt paper-width="48"><text>{{store.name}}</text></receipt>',
+			'engine'  => 'thermal',
+			'type'    => 'receipt',
+		);
+
+		$controller = new Templates_Controller();
+		$request    = new WP_REST_Request( 'GET', '/wcpos/v1/templates' );
+		$request->set_param( 'context', 'view' );
+
+		$result = $controller->prepare_item_for_response( $template, $request );
+
+		$this->assertTrue( $result['offline_capable'] );
+		$this->assertArrayHasKey( 'content', $result );
+	}
+
+	/**
 	 * Test menu_order defaults to zero.
 	 */
 	public function test_menu_order_defaults_to_zero(): void {

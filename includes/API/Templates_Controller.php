@@ -772,7 +772,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$engine  = $template['engine'] ?? 'legacy-php';
 
 		// Add computed fields.
-		$template['offline_capable'] = 'logicless' === $engine;
+		$template['offline_capable'] = in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true );
 		$template['menu_order']      = isset( $template['menu_order'] ) ? (int) $template['menu_order'] : 0;
 
 		// Normalize date_modified_gmt to ISO-like format (Y-m-d\TH:i:s) for consistency with other endpoints.
@@ -782,10 +782,10 @@ class Templates_Controller extends WP_REST_Controller {
 
 		// Content handling:
 		// - In 'edit' context: always include content (for admin editor)
-		// - In 'view' context: include content only for logicless templates (POS needs it for offline rendering)
+		// - In 'view' context: include content for offline-capable engines (logicless, thermal)
 		// - PHP templates: strip content in view context (can't be rendered client-side).
 		if ( 'edit' !== $context ) {
-			if ( 'logicless' !== $engine ) {
+			if ( ! in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 				unset( $template['content'] );
 			}
 		}

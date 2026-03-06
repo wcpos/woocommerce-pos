@@ -1,0 +1,11 @@
+{
+    "key": "thermal-simple-58mm",
+    "title": "Simple Thermal Receipt (58mm)",
+    "description": "Clean, minimal thermal receipt for narrow 58mm paper. Same layout as 80mm, adjusted for 32-character width.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "thermal",
+    "output_type": "escpos",
+    "paper_width": "58mm",
+    "version": 1
+}

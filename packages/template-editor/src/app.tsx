@@ -3,6 +3,7 @@ import { CodeEditor } from './components/code-editor';
 import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
 import { PhpPreview } from './components/php-preview';
+import { ThermalPreview } from './components/thermal-preview';
 import { useContentSync } from './hooks/use-content-sync';
 import type { EditorConfig } from './types';
 
@@ -26,11 +27,11 @@ export function App({ config }: AppProps) {
 		}
 	}, []);
 
-	const isLogicless = config.engine === 'logicless';
+	const showFieldPicker = config.engine === 'logicless' || config.engine === 'thermal';
 
 	return (
 		<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4 wcpos:flex-wrap lg:wcpos:flex-nowrap">
-			{isLogicless && (
+			{showFieldPicker && (
 				<FieldPicker
 					schema={config.fieldSchema}
 					onInsertField={handleInsertField}
@@ -44,7 +45,9 @@ export function App({ config }: AppProps) {
 				onInsertRef={insertRef}
 			/>
 
-			{isLogicless ? (
+			{config.engine === 'thermal' ? (
+				<ThermalPreview content={content} sampleData={config.sampleData} />
+			) : config.engine === 'logicless' ? (
 				<LivePreview
 					content={content}
 					sampleData={config.sampleData}

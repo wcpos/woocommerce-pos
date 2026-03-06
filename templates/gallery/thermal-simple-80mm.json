@@ -1,0 +1,11 @@
+{
+    "key": "thermal-simple-80mm",
+    "title": "Simple Thermal Receipt (80mm)",
+    "description": "Clean, minimal thermal receipt for standard 80mm paper. Store header, line items, totals, and barcode.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "thermal",
+    "output_type": "escpos",
+    "paper_width": "80mm",
+    "version": 1
+}

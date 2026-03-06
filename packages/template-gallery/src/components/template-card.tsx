@@ -33,7 +33,11 @@ export function TemplateCard(props: TemplateCardProps) {
 	const description = template.description;
 	const isActive = !isGallery && 'is_active' in template && template.is_active;
 	const engine = template.engine;
-	const isOffline = engine === 'logicless' || ('offline_capable' in template && template.offline_capable);
+	const isOffline =
+		engine === 'logicless' ||
+		engine === 'thermal' ||
+		('offline_capable' in template && template.offline_capable);
+	const isThermal = engine === 'thermal';
 
 	return (
 		<div
@@ -89,6 +93,11 @@ export function TemplateCard(props: TemplateCardProps) {
 					{isOffline && (
 						<span className="wcpos:text-xs wcpos:bg-green-50 wcpos:text-green-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded">
 							Offline
+						</span>
+					)}
+					{isThermal && (
+						<span className="wcpos:text-xs wcpos:bg-blue-50 wcpos:text-blue-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded">
+							Thermal Printer
 						</span>
 					)}
 					{engine === 'legacy-php' && (
