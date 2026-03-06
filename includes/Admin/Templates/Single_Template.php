@@ -382,7 +382,8 @@ class Single_Template {
 			return;
 		}
 
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) );
+		$is_development = isset( $_ENV['DEVELOPMENT'] )
+			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
 		$dir            = $is_development ? 'build' : 'assets';
 
 		wp_enqueue_style(

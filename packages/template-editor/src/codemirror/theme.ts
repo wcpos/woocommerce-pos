@@ -21,4 +21,8 @@ export const wordpressTheme = EditorView.theme({
 	'.cm-activeLine': {
 		backgroundColor: '#f0f6fc',
 	},
+	'.cm-mustache': {
+		color: '#b5533c',
+		fontWeight: 'bold',
+	},
 });

@@ -122,7 +122,7 @@ class Frontend {
 		 */
 		$development = apply_filters(
 			'woocommerce_pos_development_mode',
-			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && $_ENV['DEVELOPMENT'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			( \defined( 'WCPOS_DEVELOPMENT' ) && WCPOS_DEVELOPMENT ) || ( isset( $_ENV['DEVELOPMENT'] ) && wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) ) )
 		);
 
 		$user                 = wp_get_current_user();

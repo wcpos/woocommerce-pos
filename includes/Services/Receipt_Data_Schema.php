@@ -102,6 +102,18 @@ class Receipt_Data_Schema {
 			'meta'        => array(
 				'label'  => __( 'Order Meta', 'woocommerce-pos' ),
 				'fields' => array(
+					'schema_version' => array(
+						'type'  => 'string',
+						'label' => __( 'Schema Version', 'woocommerce-pos' ),
+					),
+					'mode'           => array(
+						'type'  => 'string',
+						'label' => __( 'Mode', 'woocommerce-pos' ),
+					),
+					'order_id'       => array(
+						'type'  => 'number',
+						'label' => __( 'Order ID', 'woocommerce-pos' ),
+					),
 					'order_number'   => array(
 						'type'  => 'string',
 						'label' => __( 'Order Number', 'woocommerce-pos' ),
@@ -144,6 +156,10 @@ class Receipt_Data_Schema {
 			'cashier'     => array(
 				'label'  => __( 'Cashier', 'woocommerce-pos' ),
 				'fields' => array(
+					'id'   => array(
+						'type'  => 'number',
+						'label' => __( 'Cashier ID', 'woocommerce-pos' ),
+					),
 					'name' => array(
 						'type'  => 'string',
 						'label' => __( 'Cashier Name', 'woocommerce-pos' ),
@@ -153,6 +169,10 @@ class Receipt_Data_Schema {
 			'customer'    => array(
 				'label'  => __( 'Customer', 'woocommerce-pos' ),
 				'fields' => array(
+					'id'     => array(
+						'type'  => 'number',
+						'label' => __( 'Customer ID', 'woocommerce-pos' ),
+					),
 					'name'   => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Name', 'woocommerce-pos' ),
@@ -338,6 +358,10 @@ class Receipt_Data_Schema {
 				'label'    => __( 'Payments', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
+					'method_id'    => array(
+						'type'  => 'string',
+						'label' => __( 'Method ID', 'woocommerce-pos' ),
+					),
 					'method_title' => array(
 						'type'  => 'string',
 						'label' => __( 'Payment Method', 'woocommerce-pos' ),
@@ -359,13 +383,33 @@ class Receipt_Data_Schema {
 			'fiscal'      => array(
 				'label'  => __( 'Fiscal', 'woocommerce-pos' ),
 				'fields' => array(
-					'receipt_number' => array(
+					'immutable_id'    => array(
+						'type'  => 'string',
+						'label' => __( 'Immutable ID', 'woocommerce-pos' ),
+					),
+					'receipt_number'  => array(
 						'type'  => 'string',
 						'label' => __( 'Receipt Number', 'woocommerce-pos' ),
 					),
-					'qr_payload'     => array(
+					'sequence'        => array(
+						'type'  => 'number',
+						'label' => __( 'Sequence', 'woocommerce-pos' ),
+					),
+					'hash'            => array(
+						'type'  => 'string',
+						'label' => __( 'Hash', 'woocommerce-pos' ),
+					),
+					'qr_payload'      => array(
 						'type'  => 'string',
 						'label' => __( 'QR Payload', 'woocommerce-pos' ),
+					),
+					'tax_agency_code' => array(
+						'type'  => 'string',
+						'label' => __( 'Tax Agency Code', 'woocommerce-pos' ),
+					),
+					'signed_at'       => array(
+						'type'  => 'string',
+						'label' => __( 'Signed At', 'woocommerce-pos' ),
 					),
 				),
 			),

@@ -8,7 +8,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { html } from '@codemirror/lang-html';
 import { php } from '@codemirror/lang-php';
 import { wordpressTheme } from '../codemirror/theme';
-import { mustacheLanguage } from '../codemirror/mustache-language';
+import { mustacheOverlay } from '../codemirror/mustache-language';
 
 interface UseCodemirrorOptions {
 	initialDoc: string;
@@ -26,7 +26,7 @@ export function useCodemirror({ initialDoc, engine, onChange }: UseCodemirrorOpt
 		if (!containerRef.current) return;
 
 		const languageExtension = engine === 'logicless'
-			? [html(), mustacheLanguage]
+			? [html(), mustacheOverlay]
 			: [php()];
 
 		const state = EditorState.create({

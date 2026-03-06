@@ -21,7 +21,8 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 	useEffect(() => {
 		if (typeof jQuery === 'undefined') return;
 
-		const onAutosaveComplete = () => {
+		const onAutosaveComplete = (_event: unknown, data?: { success?: boolean }) => {
+			if (data && data.success === false) return;
 			setIframeKey((k) => k + 1);
 		};
 
