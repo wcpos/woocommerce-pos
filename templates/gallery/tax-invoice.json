@@ -1,0 +1,11 @@
+{
+    "key": "tax-invoice",
+    "title": "Tax Invoice",
+    "description": "Tax compliance focused with prominent tax ID, itemized tax rates, and tax summary table.",
+    "type": "receipt",
+    "category": "invoice",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

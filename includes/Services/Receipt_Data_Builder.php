@@ -29,6 +29,7 @@ class Receipt_Data_Builder {
 			'order_id'       => $order->get_id(),
 			'order_number'   => $order->get_order_number(),
 			'currency'       => $order->get_currency(),
+			'customer_note'  => $order->get_customer_note(),
 		);
 
 		$store = array(

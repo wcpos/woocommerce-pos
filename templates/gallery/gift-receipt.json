@@ -1,0 +1,11 @@
+{
+    "key": "gift-receipt",
+    "title": "Gift Receipt",
+    "description": "Items listed without prices. Includes gift message from customer note and return reference.",
+    "type": "receipt",
+    "category": "gift-receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}
