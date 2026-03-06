@@ -620,7 +620,7 @@ class Templates {
 					'is_premade'      => true,
 					'is_virtual'      => true,
 					'source'          => 'gallery',
-					'offline_capable' => 'logicless' === ( $metadata['engine'] ?? '' ),
+					'offline_capable' => in_array( $metadata['engine'] ?? '', array( 'logicless', 'thermal' ), true ),
 				)
 			);
 		}
