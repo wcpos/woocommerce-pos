@@ -36,6 +36,11 @@ class Single_Template {
 		add_action( 'admin_post_wcpos_copy_template', array( $this, 'copy_template' ) );
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
+
+		// Remove the default content editor — our React app replaces it.
+		add_action( 'init', function () {
+			remove_post_type_support( 'wcpos_template', 'editor' );
+		} );
 	}
 
 	/**
@@ -94,14 +99,13 @@ class Single_Template {
 			return;
 		}
 
-		$message = __( 'Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language.', 'woocommerce-pos' );
+		// Hidden textarea for WordPress save flow — React syncs content here.
+		echo '<textarea name="content" id="wcpos-template-content" style="display:none;">';
+		echo esc_textarea( $post->post_content );
+		echo '</textarea>';
 
-		echo '<div class="wcpos-template-info" style="margin: 10px 0; padding: 10px; background: #f0f0f1; border-left: 4px solid #72aee6;">';
-		echo '<p style="margin: 0;">';
-		echo '<strong>' . esc_html__( 'Template Code Editor', 'woocommerce-pos' ) . '</strong><br>';
-		echo esc_html( $message );
-		echo '</p>';
-		echo '</div>';
+		// React editor mount point.
+		echo '<div id="wcpos-template-editor"></div>';
 	}
 
 	/**
@@ -125,15 +129,6 @@ class Single_Template {
 			array( $this, 'render_actions_metabox' ),
 			'wcpos_template',
 			'side',
-			'default'
-		);
-
-		add_meta_box(
-			'wcpos_template_preview',
-			__( 'Template Preview', 'woocommerce-pos' ),
-			array( $this, 'render_preview_metabox' ),
-			'wcpos_template',
-			'normal',
 			'default'
 		);
 	}
@@ -193,78 +188,6 @@ class Single_Template {
 			</p>
 			<?php
 		}
-	}
-
-	/**
-	 * Render preview metabox.
-	 *
-	 * @param \WP_Post $post Post object.
-	 *
-	 * @return void
-	 */
-	public function render_preview_metabox( \WP_Post $post ): void {
-		$template = TemplatesManager::get_template( $post->ID );
-
-		// Only show preview for receipt templates.
-		if ( ! $template || 'receipt' !== $template['type'] ) {
-			?>
-			<p><?php esc_html_e( 'Preview is only available for receipt templates.', 'woocommerce-pos' ); ?></p>
-			<?php
-			return;
-		}
-
-		// Get the last POS order.
-		$last_order = $this->get_last_pos_order();
-
-		if ( ! $last_order ) {
-			?>
-			<p><?php esc_html_e( 'No POS orders found. Create an order in the POS to preview templates.', 'woocommerce-pos' ); ?></p>
-			<?php
-			return;
-		}
-
-		// Build preview URL with template ID for preview.
-		$preview_url = $this->get_receipt_preview_url( $last_order, $post->ID );
-
-		?>
-		<div class="wcpos-template-preview">
-			<p style="margin-bottom: 10px;">
-				<strong><?php esc_html_e( 'Preview with Order:', 'woocommerce-pos' ); ?></strong> 
-				<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $last_order->get_id() . '&action=edit' ) ); ?>" target="_blank">
-					#<?php echo esc_html( $last_order->get_order_number() ); ?>
-				</a>
-				<span style="margin-left: 10px;">
-					<a href="<?php echo esc_url( $preview_url ); ?>" target="_blank" class="button button-small">
-						<?php esc_html_e( 'Open in New Tab', 'woocommerce-pos' ); ?>
-					</a>
-				</span>
-			</p>
-			<p class="description" style="margin-bottom: 10px;">
-				<?php esc_html_e( 'Note: Save the template first to see your latest changes in the preview.', 'woocommerce-pos' ); ?>
-			</p>
-			<div style="border: 1px solid #ddd; background: #fff;">
-				<iframe 
-					src="<?php echo esc_url( $preview_url ); ?>" 
-					style="width: 100%; height: 600px; border: none;"
-					id="wcpos-template-preview-iframe"
-				></iframe>
-			</div>
-			<p style="margin-top: 10px;">
-				<button type="button" class="button" id="wcpos-refresh-preview">
-					<?php esc_html_e( 'Refresh Preview', 'woocommerce-pos' ); ?>
-				</button>
-			</p>
-		</div>
-
-		<script>
-		jQuery(document).ready(function($) {
-			$('#wcpos-refresh-preview').on('click', function() {
-				var iframe = $('#wcpos-template-preview-iframe');
-				iframe.attr('src', iframe.attr('src'));
-			});
-		});
-		</script>
-		<?php
 	}
 
 	/**
@@ -458,75 +381,71 @@ class Single_Template {
 			return;
 		}
 
-		// Enqueue CodeMirror for code editing.
-		wp_enqueue_code_editor( array( 'type' => 'application/x-httpd-php' ) );
-		wp_enqueue_script( 'wp-theme-plugin-editor' );
-		wp_enqueue_style( 'wp-codemirror' );
+		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) );
+		$dir            = $is_development ? 'build' : 'assets';
 
-		// Add CSS to hide Visual editor tab and set editor height.
-		wp_add_inline_style(
-			'wp-codemirror',
-			'
-			/* Hide Visual editor tab for templates */
-			.post-type-wcpos_template #wp-content-editor-tools .wp-editor-tabs {
-				display: none;
-			}
-			.post-type-wcpos_template #wp-content-wrap {
-				border: none;
-			}
-			/* Set CodeMirror editor height */
-			.post-type-wcpos_template .CodeMirror {
-				height: 600px;
-			}
-			'
+		wp_enqueue_style(
+			'wcpos-template-editor-styles',
+			PLUGIN_URL . $dir . '/css/template-editor.css',
+			array(),
+			PLUGIN_VERSION
 		);
 
-		// Add custom script for template editor.
-		wp_add_inline_script(
-			'wp-theme-plugin-editor',
-			"
-			jQuery(document).ready(function($) {
-				// Force Text editor mode (not Visual)
-				if (typeof switchEditors !== 'undefined') {
-					$('#content-html').addClass('wp-editor-area');
-					switchEditors.go('content', 'html');
-				}
+		wp_enqueue_script(
+			'wcpos-template-editor',
+			PLUGIN_URL . $dir . '/js/template-editor.js',
+			array( 'react', 'react-dom' ),
+			PLUGIN_VERSION,
+			true
+		);
 
-				// Initialize CodeMirror for the main editor
-				if (typeof wp !== 'undefined' && wp.codeEditor) {
-					var editorSettings = wp.codeEditor.defaultSettings ? _.clone(wp.codeEditor.defaultSettings) : {};
-					var language = $('#wcpos_template_language').val();
-					
-					// Set mode based on language
-					editorSettings.codemirror = _.extend(
-						{},
-						editorSettings.codemirror,
-						{
-							mode: language === 'javascript' ? 'javascript' : 'application/x-httpd-php',
-							lineNumbers: true,
-							lineWrapping: true,
-							indentUnit: 4,
-							indentWithTabs: true,
-							styleActiveLine: true,
-							matchBrackets: true,
-							autoCloseBrackets: true,
-							autoCloseTags: true,
-							lint: false,
-							gutters: ['CodeMirror-linenumbers']
-						}
-					);
-					
-					var editor = wp.codeEditor.initialize($('#content'), editorSettings);
-					
-					// Update CodeMirror mode when language changes
-					$('#wcpos_template_language').on('change', function() {
-						var newLanguage = $(this).val();
-						var newMode = newLanguage === 'javascript' ? 'javascript' : 'application/x-httpd-php';
-						editor.codemirror.setOption('mode', newMode);
-					});
-				}
-			});
-			"
+		wp_add_inline_script(
+			'wcpos-template-editor',
+			$this->get_editor_inline_script( $post ),
+			'before'
+		);
+	}
+
+	/**
+	 * Generate the inline script data for the template editor React app.
+	 *
+	 * @param \WP_Post $post Post object.
+	 *
+	 * @return string JavaScript to inject before the editor script.
+	 */
+	private function get_editor_inline_script( \WP_Post $post ): string {
+		$template = TemplatesManager::get_template( $post->ID );
+		$engine   = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+
+		// Get sample receipt data — real order if available, mock fallback.
+		$last_order  = $this->get_last_pos_order();
+		$sample_data = null;
+		if ( $last_order ) {
+			$builder     = new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder();
+			$sample_data = $builder->build( $last_order );
+		}
+		if ( ! $sample_data ) {
+			$sample_data = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_mock_receipt_data();
+		}
+
+		// Build preview URL for PHP templates.
+		$preview_url = '';
+		if ( $last_order ) {
+			$preview_url = $this->get_receipt_preview_url( $last_order, $post->ID );
+		}
+
+		$config = array(
+			'fieldSchema' => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree(),
+			'sampleData'  => $sample_data,
+			'engine'      => $engine,
+			'templateId'  => $post->ID,
+			'previewUrl'  => $preview_url,
+			'postContent' => $post->post_content,
+		);
+
+		return \sprintf(
+			'var wcposTemplateEditor = %s;',
+			wp_json_encode( $config )
 		);
 	}
 
