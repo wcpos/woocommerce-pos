@@ -1,0 +1,51 @@
+<receipt paper-width="32">
+  <align mode="center">
+    <bold><size width="2" height="2">{{store.name}}</size></bold>
+    <text>{{store.address_lines.0}}</text>
+    <text>{{store.phone}}</text>
+  </align>
+  <line />
+  <text>{{meta.order_number}}</text>
+  <text>{{meta.created_at_gmt}}</text>
+  <line />
+  {{#lines}}
+  <text>{{name}}</text>
+  <row>
+    <col width="6">x{{qty}}</col>
+    <col width="10">@ {{unit_price_incl}}</col>
+    <col width="16" align="right">{{line_total_incl}}</col>
+  </row>
+  {{/lines}}
+  <line />
+  <row>
+    <col width="16">Subtotal</col>
+    <col width="16" align="right">{{totals.subtotal_incl}}</col>
+  </row>
+  {{#totals.discount}}
+  <row>
+    <col width="16">Discount</col>
+    <col width="16" align="right">-{{totals.discount}}</col>
+  </row>
+  {{/totals.discount}}
+  <row>
+    <col width="16">Tax</col>
+    <col width="16" align="right">{{totals.total_tax}}</col>
+  </row>
+  <line style="double" />
+  <row>
+    <col width="16"><bold>TOTAL</bold></col>
+    <col width="16" align="right"><bold>{{totals.grand_total_incl}}</bold></col>
+  </row>
+  <line />
+  {{#payments}}
+  <row>
+    <col width="16">{{method_title}}</col>
+    <col width="16" align="right">{{amount}}</col>
+  </row>
+  {{/payments}}
+  <feed lines="2" />
+  <align mode="center">
+    <text>Thank you!</text>
+  </align>
+  <cut />
+</receipt>

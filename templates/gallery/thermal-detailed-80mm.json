@@ -1,0 +1,11 @@
+{
+    "key": "thermal-detailed-80mm",
+    "title": "Detailed Thermal Receipt (80mm)",
+    "description": "Extended thermal receipt with customer info, tax breakdown, fiscal data, and QR code.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "thermal",
+    "output_type": "escpos",
+    "paper_width": "80mm",
+    "version": 1
+}

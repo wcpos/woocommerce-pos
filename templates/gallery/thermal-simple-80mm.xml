@@ -1,0 +1,57 @@
+<receipt paper-width="48">
+  <align mode="center">
+    <bold><size width="2" height="2">{{store.name}}</size></bold>
+    <text>{{store.address_lines.0}}</text>
+    <text>{{store.phone}}</text>
+  </align>
+  <line />
+  <row>
+    <col width="24">{{meta.order_number}}</col>
+    <col width="24" align="right">{{meta.created_at_gmt}}</col>
+  </row>
+  <line />
+  {{#lines}}
+  <text>{{name}}</text>
+  <row>
+    <col width="6">x{{qty}}</col>
+    <col width="18">@ {{unit_price_incl}}</col>
+    <col width="24" align="right">{{line_total_incl}}</col>
+  </row>
+  {{/lines}}
+  <line />
+  <row>
+    <col width="24">Subtotal</col>
+    <col width="24" align="right">{{totals.subtotal_incl}}</col>
+  </row>
+  {{#totals.discount}}
+  <row>
+    <col width="24">Discount</col>
+    <col width="24" align="right">-{{totals.discount}}</col>
+  </row>
+  {{/totals.discount}}
+  <row>
+    <col width="24">Tax</col>
+    <col width="24" align="right">{{totals.total_tax}}</col>
+  </row>
+  <line style="double" />
+  <row>
+    <col width="24"><bold>TOTAL</bold></col>
+    <col width="24" align="right"><bold>{{totals.grand_total_incl}}</bold></col>
+  </row>
+  <line />
+  {{#payments}}
+  <row>
+    <col width="24">{{method_title}}</col>
+    <col width="24" align="right">{{amount}}</col>
+  </row>
+  {{/payments}}
+  <feed lines="2" />
+  <align mode="center">
+    <barcode type="code128" height="60">{{meta.order_number}}</barcode>
+  </align>
+  <feed lines="1" />
+  <align mode="center">
+    <text>Thank you!</text>
+  </align>
+  <cut />
+</receipt>

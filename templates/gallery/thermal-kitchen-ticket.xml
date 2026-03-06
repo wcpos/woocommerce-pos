@@ -1,0 +1,23 @@
+<receipt paper-width="48">
+  <align mode="center">
+    <bold><size width="2" height="2">KITCHEN</size></bold>
+  </align>
+  <line style="double" />
+  <row>
+    <col width="24"><bold><size width="2">{{meta.order_number}}</size></bold></col>
+    <col width="24" align="right">{{meta.created_at_gmt}}</col>
+  </row>
+  <line style="double" />
+  {{#lines}}
+  <row>
+    <col width="8"><bold><size width="2">x{{qty}}</size></bold></col>
+    <col width="40"><bold><size width="2">{{name}}</size></bold></col>
+  </row>
+  {{#note}}
+  <text>  * {{note}}</text>
+  {{/note}}
+  {{/lines}}
+  <line style="double" />
+  <feed lines="3" />
+  <cut />
+</receipt>
