@@ -524,6 +524,36 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test thermal gallery templates are discovered.
+	 */
+	public function test_get_gallery_templates_finds_thermal_templates(): void {
+		$templates = Templates::get_gallery_templates();
+		$keys      = array_column( $templates, 'key' );
+		$this->assertContains( 'thermal-simple-80mm', $keys );
+		$this->assertContains( 'thermal-simple-58mm', $keys );
+		$this->assertContains( 'thermal-detailed-80mm', $keys );
+		$this->assertContains( 'thermal-kitchen-ticket', $keys );
+	}
+
+	/**
+	 * Test thermal gallery templates are marked offline_capable.
+	 */
+	public function test_thermal_gallery_template_is_offline_capable(): void {
+		$templates = Templates::get_gallery_templates();
+		$thermal   = null;
+		foreach ( $templates as $t ) {
+			if ( 'thermal-simple-80mm' === $t['key'] ) {
+				$thermal = $t;
+				break;
+			}
+		}
+		$this->assertNotNull( $thermal, 'thermal-simple-80mm should be in gallery' );
+		$this->assertEquals( 'thermal', $thermal['engine'] );
+		$this->assertTrue( $thermal['offline_capable'] );
+		$this->assertNotEmpty( $thermal['content'] );
+	}
+
+	/**
 	 * Test install_gallery_template returns error for invalid key.
 	 */
 	public function test_install_gallery_template_invalid_key_returns_error(): void {
