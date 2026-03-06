@@ -381,8 +381,8 @@ class Single_Template {
 			return;
 		}
 
-		global $post;
-		if ( ! $post ) {
+		$post = get_post();
+		if ( ! $post instanceof \WP_Post ) {
 			return;
 		}
 
