@@ -64,4 +64,54 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertContains( 'total_incl', $fields );
 		$this->assertContains( 'total_excl', $fields );
 	}
+
+	/**
+	 * Test get_field_tree returns all required sections.
+	 */
+	public function test_get_field_tree_returns_all_required_sections(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$expected_sections = array( 'meta', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'fiscal' );
+		foreach ( $expected_sections as $section ) {
+			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
+			$this->assertArrayHasKey( 'label', $tree[ $section ] );
+			$this->assertArrayHasKey( 'fields', $tree[ $section ] );
+		}
+	}
+
+	/**
+	 * Test get_field_tree marks array sections correctly.
+	 */
+	public function test_get_field_tree_marks_array_sections(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$array_sections = array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' );
+		foreach ( $array_sections as $section ) {
+			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
+		}
+
+		$scalar_sections = array( 'meta', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
+		foreach ( $scalar_sections as $section ) {
+			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
+		}
+	}
+
+	/**
+	 * Test get_field_tree money fields have money type.
+	 */
+	public function test_get_field_tree_money_fields_have_money_type(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$this->assertSame( 'money', $tree['totals']['fields']['grand_total_incl']['type'] );
+		$this->assertSame( 'money', $tree['lines']['fields']['line_total_incl']['type'] );
+		$this->assertSame( 'string', $tree['store']['fields']['name']['type'] );
+	}
+
+	/**
+	 * Test get_field_tree excludes presentation_hints.
+	 */
+	public function test_get_field_tree_excludes_presentation_hints(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+		$this->assertArrayNotHasKey( 'presentation_hints', $tree );
+	}
 }
