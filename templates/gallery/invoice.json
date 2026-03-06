@@ -1,0 +1,11 @@
+{
+    "key": "invoice",
+    "title": "Invoice",
+    "description": "Full-page A4/Letter layout with company header, billing/shipping addresses, and detailed line items.",
+    "type": "receipt",
+    "category": "invoice",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}
