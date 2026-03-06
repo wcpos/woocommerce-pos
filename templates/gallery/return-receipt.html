@@ -1,0 +1,78 @@
+<!--
+Return Receipt / Credit Note — for refunds.
+
+Shows returned items with refund amounts, total refund,
+and the payment method used for the refund.
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 400px; margin: 0 auto;">
+
+	<div style="text-align: center; margin-bottom: 16px;">
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #dc2626; font-weight: 600; margin-bottom: 6px;">Credit Note</div>
+		<div style="font-size: 20px; font-weight: 700;">{{store.name}}</div>
+		{{#store.address_lines}}
+		<div style="font-size: 11px; color: #666;">{{.}}</div>
+		{{/store.address_lines}}
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Reference</span>
+		<span>#{{meta.order_number}}</span>
+	</div>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Date</span>
+		<span>{{meta.created_at_gmt}}</span>
+	</div>
+	{{#cashier.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Processed by</span>
+		<span>{{cashier.name}}</span>
+	</div>
+	{{/cashier.name}}
+	{{#customer.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Customer</span>
+		<span>{{customer.name}}</span>
+	</div>
+	{{/customer.name}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">Returned Items</div>
+
+	{{#lines}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+		<span>{{name}} x{{qty}}</span>
+		<span>{{line_total_incl}}</span>
+	</div>
+	{{/lines}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	{{#tax_summary}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{tax_amount}}</span>
+	</div>
+	{{/tax_summary}}
+
+	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #dc2626; margin-top: 8px; color: #dc2626;">
+		<span>Refund Total</span>
+		<span>{{totals.grand_total_incl}}</span>
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	{{#payments}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Refunded via {{method_title}}</span>
+		<span>{{amount}}</span>
+	</div>
+	{{/payments}}
+
+	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
+		Please retain this receipt for your records.
+	</div>
+
+</div>

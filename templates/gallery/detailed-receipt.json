@@ -1,0 +1,11 @@
+{
+    "key": "detailed-receipt",
+    "title": "Detailed Receipt",
+    "description": "Extended info with SKU, unit price, full tax breakdown, customer address, and cashier details.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}
