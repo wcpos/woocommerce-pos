@@ -466,9 +466,8 @@ class Single_Template {
 	 * @return void
 	 */
 	public function admin_notices(): void {
-		global $post;
-
-		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
+		$screen = get_current_screen();
+		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
 			return;
 		}
 
