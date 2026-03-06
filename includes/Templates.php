@@ -237,6 +237,7 @@ class Templates {
 			'menu_order'      => $post->menu_order,
 			'date_created'    => $post->post_date,
 			'date_modified'   => $post->post_modified,
+			'date_modified_gmt' => $post->post_modified_gmt,
 		);
 	}
 
@@ -277,17 +278,18 @@ class Templates {
 		);
 
 		return array(
-			'id'          => $template_id,
-			'title'       => $titles[ $template_id ] ?? $template_id,
-			'content'     => file_get_contents( $file_path ),
-			'type'        => $type,
-			'language'    => 'php',
-			'file_path'   => $file_path,
-			'engine'      => 'legacy-php',
-			'output_type' => 'html',
-			'is_virtual'  => true,
-			'source'      => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
-			'menu_order'  => 0,
+			'id'                => $template_id,
+			'title'             => $titles[ $template_id ] ?? $template_id,
+			'content'           => file_get_contents( $file_path ),
+			'type'              => $type,
+			'language'          => 'php',
+			'file_path'         => $file_path,
+			'engine'            => 'legacy-php',
+			'output_type'       => 'html',
+			'is_virtual'        => true,
+			'source'            => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
+			'menu_order'        => 0,
+			'date_modified_gmt' => gmdate( 'Y-m-d H:i:s', filemtime( $file_path ) ),
 		);
 	}
 
