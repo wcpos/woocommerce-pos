@@ -114,4 +114,30 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree = Receipt_Data_Schema::get_field_tree();
 		$this->assertArrayNotHasKey( 'presentation_hints', $tree );
 	}
+
+	public function test_get_mock_receipt_data_has_all_required_keys(): void {
+		$mock = Receipt_Data_Schema::get_mock_receipt_data();
+
+		foreach ( Receipt_Data_Schema::REQUIRED_KEYS as $key ) {
+			$this->assertArrayHasKey( $key, $mock, "Missing required key: {$key}" );
+		}
+	}
+
+	public function test_get_mock_receipt_data_has_line_items(): void {
+		$mock = Receipt_Data_Schema::get_mock_receipt_data();
+
+		$this->assertNotEmpty( $mock['lines'] );
+		$this->assertArrayHasKey( 'name', $mock['lines'][0] );
+		$this->assertArrayHasKey( 'qty', $mock['lines'][0] );
+		$this->assertArrayHasKey( 'line_total_incl', $mock['lines'][0] );
+	}
+
+	public function test_get_mock_receipt_data_totals_are_numeric(): void {
+		$mock = Receipt_Data_Schema::get_mock_receipt_data();
+
+		foreach ( Receipt_Data_Schema::TOTAL_MONEY_KEYS as $key ) {
+			$this->assertArrayHasKey( $key, $mock['totals'], "Missing total: {$key}" );
+			$this->assertIsFloat( $mock['totals'][ $key ] );
+		}
+	}
 }

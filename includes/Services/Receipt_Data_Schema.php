@@ -218,4 +218,124 @@ class Receipt_Data_Schema {
 			),
 		);
 	}
+
+	/**
+	 * Get mock receipt data for the template editor preview.
+	 *
+	 * Used as fallback when no POS order exists. Provides realistic sample
+	 * data that exercises all template sections (lines, fees, tax, etc.).
+	 *
+	 * @return array
+	 */
+	public static function get_mock_receipt_data(): array {
+		return array(
+			'meta'               => array(
+				'schema_version' => self::VERSION,
+				'mode'           => 'live',
+				'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
+				'order_id'       => 1234,
+				'order_number'   => '1234',
+				'currency'       => function_exists( 'get_option' ) ? get_option( 'woocommerce_currency', 'USD' ) : 'USD',
+			),
+			'store'              => array(
+				'name'          => function_exists( 'get_bloginfo' ) ? ( get_bloginfo( 'name' ) ?: 'Sample Store' ) : 'Sample Store',
+				'address_lines' => array( '123 Main Street', 'Anytown, ST 12345' ),
+				'tax_id'        => '',
+				'phone'         => '(555) 123-4567',
+				'email'         => function_exists( 'get_option' ) ? get_option( 'admin_email', 'store@example.com' ) : 'store@example.com',
+			),
+			'cashier'            => array(
+				'id'   => 1,
+				'name' => 'Jane Smith',
+			),
+			'customer'           => array(
+				'id'               => 42,
+				'name'             => 'John Doe',
+				'billing_address'  => array(),
+				'shipping_address' => array(),
+				'tax_id'           => '',
+			),
+			'lines'              => array(
+				array(
+					'key'                => '1',
+					'sku'                => 'WIDGET-001',
+					'name'               => 'Premium Widget',
+					'qty'                => 2.0,
+					'unit_price_incl'    => 29.99,
+					'unit_price_excl'    => 27.26,
+					'line_subtotal_incl' => 59.98,
+					'line_subtotal_excl' => 54.53,
+					'discounts_incl'     => 0.0,
+					'discounts_excl'     => 0.0,
+					'line_total_incl'    => 59.98,
+					'line_total_excl'    => 54.53,
+					'taxes'              => array(),
+				),
+				array(
+					'key'                => '2',
+					'sku'                => 'GADGET-002',
+					'name'               => 'Standard Gadget',
+					'qty'                => 1.0,
+					'unit_price_incl'    => 15.50,
+					'unit_price_excl'    => 14.09,
+					'line_subtotal_incl' => 15.50,
+					'line_subtotal_excl' => 14.09,
+					'discounts_incl'     => 0.0,
+					'discounts_excl'     => 0.0,
+					'line_total_incl'    => 15.50,
+					'line_total_excl'    => 14.09,
+					'taxes'              => array(),
+				),
+			),
+			'fees'               => array(),
+			'shipping'           => array(),
+			'discounts'          => array(),
+			'totals'             => array(
+				'subtotal_incl'       => 75.48,
+				'subtotal_excl'       => 68.62,
+				'discount_total_incl' => 0.0,
+				'discount_total_excl' => 0.0,
+				'tax_total'           => 6.86,
+				'grand_total_incl'    => 75.48,
+				'grand_total_excl'    => 68.62,
+				'paid_total'          => 75.48,
+				'change_total'        => 0.0,
+			),
+			'tax_summary'        => array(
+				array(
+					'code'                => '1',
+					'rate'                => 10.0,
+					'label'               => 'Tax',
+					'taxable_amount_excl' => 68.62,
+					'tax_amount'          => 6.86,
+					'taxable_amount_incl' => 75.48,
+				),
+			),
+			'payments'           => array(
+				array(
+					'method_id'    => 'pos_cash',
+					'method_title' => 'Cash',
+					'amount'       => 75.48,
+					'reference'    => '',
+					'tendered'     => 80.00,
+					'change'       => 4.52,
+				),
+			),
+			'fiscal'             => array(
+				'immutable_id'    => '',
+				'receipt_number'  => '',
+				'sequence'        => null,
+				'hash'            => '',
+				'qr_payload'      => '',
+				'tax_agency_code' => '',
+				'signed_at'       => '',
+			),
+			'presentation_hints' => array(
+				'display_tax'             => 'itemized',
+				'prices_entered_with_tax' => false,
+				'rounding_mode'           => 'no',
+				'locale'                  => function_exists( 'get_locale' ) ? get_locale() : 'en_US',
+			),
+		);
+	}
 }
