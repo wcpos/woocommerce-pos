@@ -775,6 +775,11 @@ class Templates_Controller extends WP_REST_Controller {
 		$template['offline_capable'] = 'logicless' === $engine;
 		$template['menu_order']      = isset( $template['menu_order'] ) ? (int) $template['menu_order'] : 0;
 
+		// Normalize date_modified_gmt to ISO-like format (Y-m-d\TH:i:s) for consistency with other endpoints.
+		if ( isset( $template['date_modified_gmt'] ) && preg_match( '/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/', $template['date_modified_gmt'] ) ) {
+			$template['date_modified_gmt'] = preg_replace( '/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/', '$1T$2', $template['date_modified_gmt'] );
+		}
+
 		// Content handling:
 		// - In 'edit' context: always include content (for admin editor)
 		// - In 'view' context: include content only for logicless templates (POS needs it for offline rendering)

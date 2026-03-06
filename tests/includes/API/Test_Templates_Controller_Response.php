@@ -128,6 +128,9 @@ class Test_Templates_Controller_Response extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotNull( $db_template, 'Database template should be in response' );
 		$this->assertArrayHasKey( 'date_modified_gmt', $db_template );
 		$this->assertNotEmpty( $db_template['date_modified_gmt'] );
+		$post = get_post( $post_id );
+		$expected_gmt = preg_replace( '/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/', '$1T$2', $post->post_modified_gmt );
+		$this->assertSame( $expected_gmt, $db_template['date_modified_gmt'] );
 	}
 
 	/**
@@ -149,5 +152,9 @@ class Test_Templates_Controller_Response extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotNull( $virtual, 'Virtual template should be in response' );
 		$this->assertArrayHasKey( 'date_modified_gmt', $virtual );
 		$this->assertNotEmpty( $virtual['date_modified_gmt'] );
+		$file_path = \WCPOS\WooCommercePOS\Templates::get_virtual_template_path( $virtual['id'], $virtual['type'] ?? 'receipt' );
+		$this->assertNotNull( $file_path, 'Virtual template file path should exist' );
+		$expected = gmdate( 'Y-m-d\TH:i:s', filemtime( $file_path ) );
+		$this->assertSame( $expected, $virtual['date_modified_gmt'] );
 	}
 }

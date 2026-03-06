@@ -103,9 +103,8 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		unset( $_GET['template'] );
 
 		// Should fall back to the active/default template, not the draft.
-		if ( null !== $template ) {
-			$this->assertNotEquals( $post_id, $template['id'] );
-		}
+		$this->assertIsArray( $template );
+		$this->assertNotEquals( $post_id, $template['id'] );
 	}
 
 	/**
@@ -169,8 +168,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		unset( $_GET['template'] );
 
 		// Should fall back since the template is a report, not a receipt.
-		if ( null !== $template ) {
-			$this->assertNotEquals( $post_id, $template['id'] );
-		}
+		$this->assertIsArray( $template );
+		$this->assertNotEquals( $post_id, $template['id'] );
 	}
 }
