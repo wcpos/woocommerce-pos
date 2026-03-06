@@ -3,7 +3,7 @@
     "title": "Kitchen Ticket",
     "description": "Order items only with large font, no pricing. Designed for kitchen display or prep stations.",
     "type": "receipt",
-    "category": "receipt",
+    "category": "kitchen-ticket",
     "engine": "thermal",
     "output_type": "escpos",
     "paper_width": "80mm",

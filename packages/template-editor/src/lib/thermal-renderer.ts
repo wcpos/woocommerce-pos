@@ -114,15 +114,26 @@ function intAttr(el: Element, name: string, fallback: number): number {
 	return Number.isNaN(n) ? fallback : n;
 }
 
+function enumAttr<T extends string>(
+	el: Element,
+	name: string,
+	allowed: readonly T[],
+	fallback: T,
+): T {
+	const value = el.getAttribute(name);
+	return value && (allowed as readonly string[]).includes(value)
+		? (value as T)
+		: fallback;
+}
+
 function parseChildren(parent: Element): ThermalNode[] {
 	const nodes: ThermalNode[] = [];
 
 	for (const child of Array.from(parent.childNodes)) {
 		if (child.nodeType === 3) {
 			const text = child.textContent ?? '';
-			if (text.trim()) {
-				nodes.push({ type: 'raw-text', value: text.trim() });
-			}
+			if (!text.trim()) continue;
+			nodes.push({ type: 'raw-text', value: text });
 			continue;
 		}
 
@@ -156,7 +167,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'align':
 				nodes.push({
 					type: 'align',
-					mode: (el.getAttribute('mode') as 'left' | 'center' | 'right') ?? 'left',
+					mode: enumAttr(el, 'mode', ['left', 'center', 'right'] as const, 'left'),
 					children: parseChildren(el),
 				});
 				break;
@@ -168,7 +179,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'line':
 				nodes.push({
 					type: 'line',
-					style: (el.getAttribute('style') as 'single' | 'double') ?? 'single',
+					style: enumAttr(el, 'style', ['single', 'double'] as const, 'single'),
 				});
 				break;
 			case 'barcode':
@@ -196,7 +207,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'cut':
 				nodes.push({
 					type: 'cut',
-					cutType: (el.getAttribute('type') as 'full' | 'partial') ?? 'partial',
+					cutType: enumAttr(el, 'type', ['full', 'partial'] as const, 'partial'),
 				});
 				break;
 			case 'feed':
@@ -220,7 +231,7 @@ function parseRowChildren(row: Element): ColNode[] {
 			cols.push({
 				type: 'col',
 				width: intAttr(child, 'width', 12),
-				align: (child.getAttribute('align') as 'left' | 'right') ?? 'left',
+				align: enumAttr(child, 'align', ['left', 'right'] as const, 'left'),
 				children: parseChildren(child),
 			});
 		}
@@ -275,7 +286,7 @@ function renderNode(node: ThermalNode): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children)}</span>`;
 		case 'size':
-			return `<span style="font-size: ${node.width}em; line-height: 1.2">${renderNodes(node.children)}</span>`;
+			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2">${renderNodes(node.children)}</span>`;
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children)}</div>`;
 		case 'row': {

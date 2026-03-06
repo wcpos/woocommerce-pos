@@ -725,7 +725,14 @@ class Templates {
 		update_post_meta( $post_id, '_template_engine', $template['engine'] ?? 'logicless' );
 		update_post_meta( $post_id, '_template_output_type', $template['output_type'] ?? 'html' );
 		$engine_value = isset( $template['engine'] ) ? $template['engine'] : '';
-		update_post_meta( $post_id, '_template_language', 'logicless' === $engine_value ? 'html' : 'php' );
+		if ( 'logicless' === $engine_value ) {
+			$language_value = 'html';
+		} elseif ( 'thermal' === $engine_value ) {
+			$language_value = 'xml';
+		} else {
+			$language_value = 'php';
+		}
+		update_post_meta( $post_id, '_template_language', $language_value );
 		update_post_meta( $post_id, '_template_is_premade', '1' );
 		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
 		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
