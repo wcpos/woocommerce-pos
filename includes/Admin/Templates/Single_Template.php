@@ -372,13 +372,17 @@ class Single_Template {
 	 * @return void
 	 */
 	public function enqueue_scripts( string $hook ): void {
-		global $post;
-
 		if ( ! \in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {
 			return;
 		}
 
-		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
+		$screen = get_current_screen();
+		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
+			return;
+		}
+
+		global $post;
+		if ( ! $post ) {
 			return;
 		}
 
@@ -532,7 +536,7 @@ class Single_Template {
 		);
 
 		// Redact customer PII.
-		if ( isset( $data['customer'] ) ) {
+		if ( isset( $data['customer'] ) && \is_array( $data['customer'] ) ) {
 			$data['customer']['name']             = __( 'Sample Customer', 'woocommerce-pos' );
 			$data['customer']['billing_address']  = $empty_address;
 			$data['customer']['shipping_address'] = $empty_address;
@@ -540,7 +544,7 @@ class Single_Template {
 		}
 
 		// Redact cashier name.
-		if ( isset( $data['cashier'] ) ) {
+		if ( isset( $data['cashier'] ) && \is_array( $data['cashier'] ) ) {
 			$data['cashier']['name'] = __( 'Sample Cashier', 'woocommerce-pos' );
 		}
 

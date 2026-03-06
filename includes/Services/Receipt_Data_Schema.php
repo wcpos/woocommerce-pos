@@ -92,8 +92,9 @@ class Receipt_Data_Schema {
 	/**
 	 * Get the field tree for the template editor field picker.
 	 *
-	 * Returns a structured array describing every section and field in the
-	 * receipt_data contract. Used by the JS field picker sidebar.
+	 * Returns a structured array describing the data-bearing sections of the
+	 * receipt_data contract (excludes presentation_hints). Used by the JS
+	 * field picker sidebar.
 	 *
 	 * @return array<string, array{label: string, is_array?: bool, fields: array<string, array{type: string, label: string}>}>
 	 */
