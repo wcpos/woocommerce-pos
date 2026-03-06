@@ -14,7 +14,8 @@ export function useMustachePreview(template: string, data: Record<string, unknow
 			try {
 				const rendered = Mustache.render(template, data);
 				setHtml(rendered);
-			} catch {
+			} catch (error) {
+				console.warn('Mustache rendering error:', error);
 				setHtml('<div style="color:red;padding:16px;">Template rendering error. Check your Mustache syntax.</div>');
 			}
 		}, debounceMs);

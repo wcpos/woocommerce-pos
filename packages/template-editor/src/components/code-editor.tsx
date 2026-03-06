@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { useCodemirror } from '../hooks/use-codemirror';
 import type { EditorConfig } from '../types';
 
@@ -15,9 +16,11 @@ export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEd
 		onChange,
 	});
 
-	if (onInsertRef) {
-		onInsertRef.current = insertAtCursor;
-	}
+	useLayoutEffect(() => {
+		if (onInsertRef) {
+			onInsertRef.current = insertAtCursor;
+		}
+	}, [onInsertRef, insertAtCursor]);
 
 	return (
 		<div

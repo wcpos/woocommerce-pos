@@ -13,6 +13,8 @@
 namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
  * Single_Template class.
@@ -38,9 +40,8 @@ class Single_Template {
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
 
 		// Remove the default content editor — our React app replaces it.
-		add_action( 'init', function () {
-			remove_post_type_support( 'wcpos_template', 'editor' );
-		} );
+		// Called directly because this class is instantiated after init.
+		remove_post_type_support( 'wcpos_template', 'editor' );
 	}
 
 	/**

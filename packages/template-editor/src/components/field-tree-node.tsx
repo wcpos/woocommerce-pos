@@ -23,7 +23,7 @@ export function FieldTreeNode({ sectionKey, section, searchFilter, onInsertField
 
 	const handleSectionClick = () => {
 		if (section.is_array) {
-			onInsertField(`{{#${sectionKey}}}\n{{name}}\n{{/${sectionKey}}}`);
+			onInsertField(`{{#${sectionKey}}}\n\n{{/${sectionKey}}}`);
 		}
 	};
 
@@ -47,13 +47,15 @@ export function FieldTreeNode({ sectionKey, section, searchFilter, onInsertField
 				</span>
 				{section.label}
 				{section.is_array && (
-					<span
+					<button
+						type="button"
 						className="wcpos:ml-auto wcpos:text-xs wcpos:bg-blue-100 wcpos:text-blue-700 wcpos:px-1.5 wcpos:rounded wcpos:cursor-pointer"
 						onClick={(e) => { e.stopPropagation(); handleSectionClick(); }}
 						title={`Insert {{#${sectionKey}}}...{{/${sectionKey}}} block`}
+						aria-label={`Insert {{#${sectionKey}}}...{{/${sectionKey}}} block`}
 					>
 						[]
-					</span>
+					</button>
 				)}
 			</button>
 

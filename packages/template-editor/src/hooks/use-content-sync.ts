@@ -14,6 +14,7 @@ export function useContentSync() {
 		const textarea = getTextarea();
 		if (textarea) {
 			textarea.value = content;
+			textarea.dispatchEvent(new Event('input', { bubbles: true }));
 		}
 	}, [getTextarea]);
 

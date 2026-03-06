@@ -36,7 +36,7 @@ export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProp
 				<iframe
 					srcDoc={srcdoc}
 					sandbox="allow-same-origin"
-					style={{ width: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
+					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
 					title="Template preview"
 				/>
 			</div>
