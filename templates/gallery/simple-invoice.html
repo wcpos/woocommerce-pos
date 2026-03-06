@@ -1,0 +1,83 @@
+<!--
+Simple Invoice — single-column, minimal styling.
+
+A clean starting point for customization. No address blocks,
+just store info, items, and totals.
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 32px; max-width: 600px; margin: 0 auto;">
+
+	<div style="margin-bottom: 24px;">
+		<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px;">Invoice</div>
+		<div style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+		{{#store.address_lines}}
+		<div style="font-size: 12px; color: #666;">{{.}}</div>
+		{{/store.address_lines}}
+	</div>
+
+	<div style="display: flex; gap: 32px; margin-bottom: 24px; font-size: 12px; color: #555;">
+		<div><span style="font-weight: 600;">Invoice #:</span> {{meta.order_number}}</div>
+		<div><span style="font-weight: 600;">Date:</span> {{meta.created_at_gmt}}</div>
+	</div>
+
+	{{#customer.name}}
+	<div style="margin-bottom: 24px; font-size: 12px;">
+		<span style="font-weight: 600;">Customer:</span> {{customer.name}}
+	</div>
+	{{/customer.name}}
+
+	<div style="border-top: 2px solid #333; border-bottom: 1px solid #eee;">
+		{{#lines}}
+		<div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+			<div>
+				<div>{{name}}</div>
+				<div style="font-size: 11px; color: #888;">Qty: {{qty}} x {{unit_price_incl}}</div>
+			</div>
+			<div style="flex-shrink: 0; margin-left: 16px; font-weight: 500;">{{line_total_incl}}</div>
+		</div>
+		{{/lines}}
+	</div>
+
+	<div style="margin-top: 16px;">
+		<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+			<span style="color: #555;">Subtotal</span>
+			<span>{{totals.subtotal_incl}}</span>
+		</div>
+
+		{{#discounts}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
+			<span>{{label}}</span>
+			<span>-{{total_incl}}</span>
+		</div>
+		{{/discounts}}
+
+		{{#shipping}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+			<span style="color: #555;">{{label}}</span>
+			<span>{{total_incl}}</span>
+		</div>
+		{{/shipping}}
+
+		{{#tax_summary}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+			<span style="color: #555;">{{label}}</span>
+			<span>{{tax_amount}}</span>
+		</div>
+		{{/tax_summary}}
+
+		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 8px;">
+			<span>Total</span>
+			<span>{{totals.grand_total_incl}}</span>
+		</div>
+	</div>
+
+	{{#payments}}
+	<div style="margin-top: 16px; font-size: 12px; color: #555;">
+		Paid via {{method_title}}: {{amount}}
+	</div>
+	{{/payments}}
+
+	<div style="margin-top: 32px; font-size: 11px; color: #999; text-align: center;">
+		Thank you for your business.
+	</div>
+
+</div>

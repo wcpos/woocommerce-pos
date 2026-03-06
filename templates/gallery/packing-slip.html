@@ -1,0 +1,71 @@
+<!--
+Packing Slip — fulfillment companion.
+
+Items and quantities only, no pricing.
+Shipping address prominent for warehouse use.
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 40px; max-width: 800px; margin: 0 auto;">
+
+	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;">
+		<div>
+			<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="font-size: 12px; color: #666;">{{.}}</div>
+			{{/store.address_lines}}
+		</div>
+		<div style="text-align: right;">
+			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Packing Slip</div>
+			<div style="font-size: 12px; margin-top: 8px; color: #666;">
+				<div>Order #{{meta.order_number}}</div>
+				<div>{{meta.created_at_gmt}}</div>
+			</div>
+		</div>
+	</div>
+
+	{{#customer.shipping_address.address_1}}
+	<div style="margin-bottom: 24px; padding: 16px; border: 2px solid #333; border-radius: 6px;">
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">Ship To</div>
+		{{#customer.name}}<div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">{{customer.name}}</div>{{/customer.name}}
+		<div style="font-size: 13px;">
+			<div>{{customer.shipping_address.address_1}}</div>
+			{{#customer.shipping_address.address_2}}<div>{{customer.shipping_address.address_2}}</div>{{/customer.shipping_address.address_2}}
+			<div>{{customer.shipping_address.city}} {{customer.shipping_address.postcode}}</div>
+			<div>{{customer.shipping_address.state}} {{customer.shipping_address.country}}</div>
+		</div>
+	</div>
+	{{/customer.shipping_address.address_1}}
+
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+		<thead>
+			<tr style="border-bottom: 2px solid #333;">
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Item</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">SKU</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Qty</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; width: 60px;">Packed</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr style="border-bottom: 1px solid #eee;">
+				<td style="padding: 10px 4px; font-weight: 500;">{{name}}</td>
+				<td style="padding: 10px 4px; color: #888; font-size: 12px;">{{sku}}</td>
+				<td style="padding: 10px 4px; text-align: center; font-size: 15px; font-weight: 600;">{{qty}}</td>
+				<td style="padding: 10px 4px; text-align: center;">
+					<span style="display: inline-block; width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 3px;"></span>
+				</td>
+			</tr>
+			{{/lines}}
+		</tbody>
+	</table>
+
+	{{#meta.customer_note}}
+	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px;">
+		<span style="font-weight: 600;">Customer Note:</span> {{meta.customer_note}}
+	</div>
+	{{/meta.customer_note}}
+
+	<div style="margin-top: 32px; text-align: center; font-size: 11px; color: #999;">
+		Order #{{meta.order_number}} &middot; {{meta.created_at_gmt}}
+	</div>
+
+</div>

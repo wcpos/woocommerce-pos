@@ -1,0 +1,11 @@
+{
+    "key": "quote",
+    "title": "Quote / Estimate",
+    "description": "Pre-sale document with items and pricing. No payment section. Includes validity notice and terms.",
+    "type": "receipt",
+    "category": "purchase-order",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

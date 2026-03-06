@@ -1,0 +1,11 @@
+{
+    "key": "packing-slip",
+    "title": "Packing Slip",
+    "description": "Fulfillment companion with items and quantities only. No pricing. Shipping address prominent.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "paper_width": null,
+    "version": 1
+}

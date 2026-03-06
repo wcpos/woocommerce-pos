@@ -1,0 +1,141 @@
+<!--
+Tax Invoice — tax compliance focused.
+
+Store tax ID prominent. Tax summary with taxable amounts and rates.
+Suited for jurisdictions requiring itemized tax documentation.
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 40px; max-width: 800px; margin: 0 auto;">
+
+	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+		<div>
+			<div style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="font-size: 12px; color: #666;">{{.}}</div>
+			{{/store.address_lines}}
+			{{#store.phone}}
+			<div style="font-size: 12px; color: #666;">Phone: {{store.phone}}</div>
+			{{/store.phone}}
+			{{#store.email}}
+			<div style="font-size: 12px; color: #666;">Email: {{store.email}}</div>
+			{{/store.email}}
+		</div>
+		<div style="text-align: right;">
+			<div style="font-size: 24px; font-weight: 700; color: #1a56db; text-transform: uppercase;">Tax Invoice</div>
+			{{#store.tax_id}}
+			<div style="font-size: 13px; font-weight: 600; margin-top: 4px; padding: 4px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; display: inline-block;">Tax ID: {{store.tax_id}}</div>
+			{{/store.tax_id}}
+		</div>
+	</div>
+
+	<div style="display: flex; gap: 40px; margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 6px;">
+		<div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Invoice No.</div>
+			<div style="font-weight: 600;">#{{meta.order_number}}</div>
+		</div>
+		<div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Date</div>
+			<div>{{meta.created_at_gmt}}</div>
+		</div>
+		{{#customer.name}}
+		<div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Customer</div>
+			<div>{{customer.name}}</div>
+		</div>
+		{{/customer.name}}
+		{{#customer.tax_id}}
+		<div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Customer Tax ID</div>
+			<div>{{customer.tax_id}}</div>
+		</div>
+		{{/customer.tax_id}}
+	</div>
+
+	{{#customer.billing_address.address_1}}
+	<div style="margin-bottom: 24px; font-size: 12px;">
+		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Billing Address</div>
+		<div>{{customer.billing_address.address_1}}</div>
+		{{#customer.billing_address.address_2}}<div>{{customer.billing_address.address_2}}</div>{{/customer.billing_address.address_2}}
+		<div>{{customer.billing_address.city}} {{customer.billing_address.postcode}}</div>
+		<div>{{customer.billing_address.state}} {{customer.billing_address.country}}</div>
+	</div>
+	{{/customer.billing_address.address_1}}
+
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+		<thead>
+			<tr style="border-bottom: 2px solid #333;">
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Item</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Qty</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Unit (excl.)</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Total (excl.)</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr style="border-bottom: 1px solid #eee;">
+				<td style="padding: 8px 4px;">{{name}}{{#sku}} <span style="color: #888; font-size: 11px;">({{sku}})</span>{{/sku}}</td>
+				<td style="padding: 8px 4px; text-align: center;">{{qty}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{unit_price_excl}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{line_total_excl}}</td>
+			</tr>
+			{{/lines}}
+		</tbody>
+	</table>
+
+	<div style="display: flex; justify-content: flex-end;">
+		<div style="width: 320px;">
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+				<span style="color: #555;">Subtotal (excl. tax)</span>
+				<span>{{totals.subtotal_excl}}</span>
+			</div>
+
+			{{#shipping}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+				<span style="color: #555;">{{label}}</span>
+				<span>{{total_excl}}</span>
+			</div>
+			{{/shipping}}
+
+			{{#discounts}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
+				<span>{{label}}</span>
+				<span>-{{total_excl}}</span>
+			</div>
+			{{/discounts}}
+		</div>
+	</div>
+
+	{{#tax_summary}}
+	<div style="margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
+		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 8px;">Tax Summary</div>
+		<div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px;">
+			<span style="flex: 2;">{{label}}{{#rate}} @ {{rate}}%{{/rate}}</span>
+			{{#taxable_amount_excl}}<span style="flex: 1; text-align: right; color: #555;">Taxable: {{taxable_amount_excl}}</span>{{/taxable_amount_excl}}
+			<span style="flex: 1; text-align: right; font-weight: 600;">Tax: {{tax_amount}}</span>
+		</div>
+	</div>
+	{{/tax_summary}}
+
+	<div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+		<div style="width: 320px;">
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+				<span style="color: #555;">Total Tax</span>
+				<span>{{totals.tax_total}}</span>
+			</div>
+			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333;">
+				<span>Total (incl. tax)</span>
+				<span>{{totals.grand_total_incl}}</span>
+			</div>
+		</div>
+	</div>
+
+	{{#payments}}
+	<div style="margin-top: 16px; font-size: 12px; color: #555;">
+		Paid via {{method_title}}: {{amount}}
+	</div>
+	{{/payments}}
+
+	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
+		This is a tax invoice. Please retain for your records.
+	</div>
+
+</div>

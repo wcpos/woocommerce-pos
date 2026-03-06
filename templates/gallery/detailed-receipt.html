@@ -1,0 +1,143 @@
+<!--
+Detailed Receipt — the "show everything" template.
+
+Includes SKU per line, unit price, full tax breakdown with rates,
+customer billing address, cashier name, and store tax ID.
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 420px; margin: 0 auto;">
+
+	<div style="text-align: center; margin-bottom: 16px;">
+		<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+		{{#store.address_lines}}
+		<div style="font-size: 11px; color: #666;">{{.}}</div>
+		{{/store.address_lines}}
+		{{#store.phone}}
+		<div style="font-size: 11px; color: #666;">{{store.phone}}</div>
+		{{/store.phone}}
+		{{#store.email}}
+		<div style="font-size: 11px; color: #666;">{{store.email}}</div>
+		{{/store.email}}
+		{{#store.tax_id}}
+		<div style="font-size: 11px; color: #666;">Tax ID: {{store.tax_id}}</div>
+		{{/store.tax_id}}
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Order</span>
+		<span>#{{meta.order_number}}</span>
+	</div>
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Date</span>
+		<span>{{meta.created_at_gmt}}</span>
+	</div>
+	{{#cashier.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Cashier</span>
+		<span>{{cashier.name}}</span>
+	</div>
+	{{/cashier.name}}
+	{{#customer.name}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Customer</span>
+		<span>{{customer.name}}</span>
+	</div>
+	{{/customer.name}}
+
+	{{#customer.billing_address.address_1}}
+	<div style="margin-top: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px; font-size: 11px; color: #555;">
+		<div style="font-weight: 600; margin-bottom: 4px;">Billing Address</div>
+		<div>{{customer.billing_address.address_1}}</div>
+		{{#customer.billing_address.address_2}}<div>{{customer.billing_address.address_2}}</div>{{/customer.billing_address.address_2}}
+		<div>{{customer.billing_address.city}} {{customer.billing_address.postcode}}</div>
+		<div>{{customer.billing_address.state}} {{customer.billing_address.country}}</div>
+	</div>
+	{{/customer.billing_address.address_1}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	{{#lines}}
+	<div style="margin-bottom: 8px;">
+		<div style="display: flex; justify-content: space-between; font-size: 13px;">
+			<span style="font-weight: 600;">{{name}}</span>
+			<span>{{line_total_incl}}</span>
+		</div>
+		<div style="font-size: 11px; color: #888; padding-left: 8px;">
+			{{qty}} x {{unit_price_incl}}
+			{{#sku}} &middot; SKU: {{sku}}{{/sku}}
+		</div>
+		{{#discounts_incl}}
+		<div style="font-size: 11px; color: #16a34a; padding-left: 8px;">
+			Discount: -{{discounts_incl}}
+		</div>
+		{{/discounts_incl}}
+	</div>
+	{{/lines}}
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+
+	{{#fees}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{total_incl}}</span>
+	</div>
+	{{/fees}}
+
+	{{#shipping}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">{{label}}</span>
+		<span>{{total_incl}}</span>
+	</div>
+	{{/shipping}}
+
+	{{#discounts}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #16a34a;">
+		<span>{{label}}</span>
+		<span>-{{total_incl}}</span>
+	</div>
+	{{/discounts}}
+
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Subtotal</span>
+		<span>{{totals.subtotal_incl}}</span>
+	</div>
+
+	{{#tax_summary}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
+		<span>{{tax_amount}}</span>
+	</div>
+	{{/tax_summary}}
+
+	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px;">
+		<span>Total</span>
+		<span>{{totals.grand_total_incl}}</span>
+	</div>
+
+	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+
+	{{#payments}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">{{method_title}}</span>
+		<span>{{amount}}</span>
+	</div>
+	{{#tendered}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+		<span>Tendered</span>
+		<span>{{tendered}}</span>
+	</div>
+	{{/tendered}}
+	{{#change}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+		<span>Change</span>
+		<span>{{change}}</span>
+	</div>
+	{{/change}}
+	{{/payments}}
+
+	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
+		Thank you for your purchase!
+	</div>
+
+</div>

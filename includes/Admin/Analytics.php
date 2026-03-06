@@ -35,7 +35,8 @@ class Analytics {
 	 * Enqueue analytics assets.
 	 */
 	public function enqueue_assets() {
-		$is_development = isset( $_ENV['DEVELOPMENT'] ) && sanitize_text_field( $_ENV['DEVELOPMENT'] );
+		$is_development = isset( $_ENV['DEVELOPMENT'] )
+			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
 		$dir = $is_development ? 'build' : 'assets';
 
 		// Inject translation version for i18next.
