@@ -63,7 +63,7 @@ function DraggableRow({
 	React.useEffect(() => {
 		const row = rowRef.current;
 		const handle = handleRef.current;
-		if (!row || !handle) return;
+		if (!row || !handle || isVirtual) return;
 
 		const cleanupDrag = draggable({
 			element: row,
@@ -91,7 +91,7 @@ function DraggableRow({
 			cleanupDrag();
 			cleanupDrop();
 		};
-	}, [template.id, index]);
+	}, [template.id, index, isVirtual]);
 
 	return (
 		<tr
@@ -111,9 +111,12 @@ function DraggableRow({
 			)}
 			<td
 				ref={handleRef}
-				className="wcpos:px-3 wcpos:py-2 wcpos:cursor-grab wcpos:text-gray-400 wcpos:text-center wcpos:w-8"
+				className={classnames(
+					'wcpos:px-3 wcpos:py-2 wcpos:text-gray-400 wcpos:text-center wcpos:w-8',
+					isVirtual ? 'wcpos:cursor-default' : 'wcpos:cursor-grab',
+				)}
 			>
-				≡
+				{isVirtual ? '' : '≡'}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
 				{template.title}
