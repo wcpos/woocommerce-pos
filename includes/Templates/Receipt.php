@@ -160,7 +160,7 @@ class Receipt {
 	private function get_template_engine( array $template ): string {
 		$engine = isset( $template['engine'] ) ? sanitize_text_field( $template['engine'] ) : 'legacy-php';
 
-		return in_array( $engine, array( 'logicless', 'legacy-php' ), true ) ? $engine : 'legacy-php';
+		return in_array( $engine, array( 'logicless', 'thermal', 'legacy-php' ), true ) ? $engine : 'legacy-php';
 	}
 
 	/**
