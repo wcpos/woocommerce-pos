@@ -13,7 +13,7 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import type { AnyTemplate, Template } from '../types';
+import type { AnyTemplate } from '../types';
 
 function formatCategory(slug: string): string {
 	return slug
@@ -32,10 +32,10 @@ function formatEngine(engine: string): string {
 }
 
 interface DraggableRowProps {
-	template: Template;
+	template: AnyTemplate;
 	index: number;
-	onPreview: (id: number) => void;
-	onDisable: (id: number) => void;
+	onPreview: (id: number | string) => void;
+	onDisable: (id: number | string) => void;
 	onDelete: (id: number) => void;
 	isToggling: boolean;
 	isDeleting: boolean;
@@ -56,8 +56,9 @@ function DraggableRow({
 	const [closestEdge, setClosestEdge] = React.useState<Edge | null>(null);
 
 	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
-	const editUrl = `${adminUrl}/post.php?post=${template.id}&action=edit`;
-	const canDelete = !template.is_premade && !template.is_virtual;
+	const isVirtual = template.is_virtual;
+	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
+	const canDelete = !template.is_premade && !isVirtual;
 
 	React.useEffect(() => {
 		const row = rowRef.current;
@@ -132,26 +133,30 @@ function DraggableRow({
 					>
 						Preview
 					</button>
-					<a
-						href={editUrl}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
-					>
-						Edit
-					</a>
-					<button
-						type="button"
-						onClick={() => onDisable(template.id)}
-						disabled={isToggling}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
-					>
-						Disable
-					</button>
+					{editUrl && (
+						<a
+							href={editUrl}
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
+						>
+							Edit
+						</a>
+					)}
+					{!isVirtual && (
+						<button
+							type="button"
+							onClick={() => onDisable(template.id)}
+							disabled={isToggling}
+							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
+						>
+							Disable
+						</button>
+					)}
 					{canDelete && (
 						<button
 							type="button"
 							onClick={() => {
 								if (window.confirm(`Delete "${template.title}" permanently?`)) {
-									onDelete(template.id);
+									onDelete(template.id as number);
 								}
 							}}
 							disabled={isDeleting}
@@ -169,9 +174,9 @@ function DraggableRow({
 interface ActiveTemplatesTableProps {
 	templates: AnyTemplate[];
 	onPreview: (id: number | string) => void;
-	onDisable: (id: number) => void;
+	onDisable: (id: number | string) => void;
 	onDelete: (id: number) => void;
-	onReorder: (updates: Array<{ id: number; menu_order: number }>) => void;
+	onReorder: (updates: Array<{ id: number | string; menu_order: number }>) => void;
 	isToggling: boolean;
 	isDeleting: boolean;
 }
@@ -187,7 +192,11 @@ export function ActiveTemplatesTable({
 }: ActiveTemplatesTableProps) {
 	const activeTemplates = React.useMemo(() => {
 		return templates
-			.filter((t): t is Template => 'status' in t && t.status === 'publish' && typeof t.id === 'number')
+			.filter((t): t is AnyTemplate => {
+				if ('status' in t && t.status === 'publish') return true;
+				if (t.is_virtual && t.is_active) return true;
+				return false;
+			})
 			.sort((a, b) => a.menu_order - b.menu_order);
 	}, [templates]);
 
@@ -197,8 +206,8 @@ export function ActiveTemplatesTable({
 				const target = location.current.dropTargets[0];
 				if (!target) return;
 
-				const sourceId = source.data.id as number;
-				const targetId = target.data.id as number;
+				const sourceId = source.data.id as number | string;
+				const targetId = target.data.id as number | string;
 				if (sourceId === targetId) return;
 
 				const sourceIndex = activeTemplates.findIndex((t) => t.id === sourceId);

@@ -28,7 +28,7 @@ const CATEGORIES = [
 ];
 
 function matchesFilters(
-	template: { title: string; category: string; offline_capable?: boolean; output_type?: string; is_premade?: boolean },
+	template: { title: string; category: string; engine?: string; offline_capable?: boolean; output_type?: string; is_premade?: boolean },
 	filters: FilterState,
 ): boolean {
 	if (filters.search && !template.title.toLowerCase().includes(filters.search.toLowerCase())) {
@@ -39,10 +39,15 @@ function matchesFilters(
 		return false;
 	}
 
-	if (filters.connectivity === 'offline' && template.offline_capable !== true) {
+	const isOffline =
+		template.engine === 'logicless' ||
+		template.engine === 'thermal' ||
+		template.offline_capable === true;
+
+	if (filters.connectivity === 'offline' && !isOffline) {
 		return false;
 	}
-	if (filters.connectivity === 'online' && template.offline_capable !== false) {
+	if (filters.connectivity === 'online' && isOffline) {
 		return false;
 	}
 
@@ -110,9 +115,9 @@ export function GalleryGrid() {
 				<ActiveTemplatesTable
 					templates={templates}
 					onPreview={setPreviewId}
-					onDisable={(id) => toggleTemplate.mutate({ id, status: 'draft' })}
+					onDisable={(id) => { if (typeof id === 'number') toggleTemplate.mutate({ id, status: 'draft' }); }}
 					onDelete={(id) => deleteTemplate.mutate(id)}
-					onReorder={(updates) => reorderTemplates.mutate(updates)}
+					onReorder={(updates) => reorderTemplates.mutate(updates.filter((u): u is { id: number; menu_order: number } => typeof u.id === 'number'))}
 					isToggling={toggleTemplate.isPending}
 					isDeleting={deleteTemplate.isPending}
 				/>
