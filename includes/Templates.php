@@ -641,6 +641,25 @@ class Templates {
 	}
 
 	/**
+	 * Get a single gallery template by its key.
+	 *
+	 * @param string $key Gallery template key (e.g. "standard-receipt").
+	 *
+	 * @return null|array Gallery template data or null if not found.
+	 */
+	public static function get_gallery_template_by_key( string $key ): ?array {
+		$templates = self::get_gallery_templates();
+
+		foreach ( $templates as $template ) {
+			if ( ( $template['key'] ?? '' ) === $key ) {
+				return $template;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Install a starter template as a custom (database) template.
 	 *
 	 * @param string $starter_key Key from get_starter_templates().

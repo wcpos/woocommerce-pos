@@ -7,6 +7,7 @@
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
  * @see     http://wcpos.com
+ * @package WCPOS\WooCommercePOS\Tests
  */
 
 namespace WCPOS\WooCommercePOS\Tests;
@@ -425,11 +426,13 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that get_template includes description field.
 	 */
 	public function test_get_template_includes_description(): void {
-		$post_id = $this->factory->post->create( array(
-			'post_type'   => 'wcpos_template',
-			'post_status' => 'publish',
-			'post_title'  => 'Test Template',
-		) );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'Test Template',
+			)
+		);
 		update_post_meta( $post_id, '_template_description', 'A test description.' );
 		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 
@@ -443,11 +446,13 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that get_template includes gallery source fields.
 	 */
 	public function test_get_template_includes_gallery_source_fields(): void {
-		$post_id = $this->factory->post->create( array(
-			'post_type'   => 'wcpos_template',
-			'post_status' => 'publish',
-			'post_title'  => 'Test Template',
-		) );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'Test Template',
+			)
+		);
 		update_post_meta( $post_id, '_template_is_premade', '1' );
 		update_post_meta( $post_id, '_template_gallery_version', '2' );
 		update_post_meta( $post_id, '_template_gallery_key', 'standard-receipt' );
@@ -464,11 +469,13 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test that get_template includes tax_display field.
 	 */
 	public function test_get_template_includes_tax_display(): void {
-		$post_id = $this->factory->post->create( array(
-			'post_type'   => 'wcpos_template',
-			'post_status' => 'publish',
-			'post_title'  => 'Test Template',
-		) );
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'Test Template',
+			)
+		);
 		update_post_meta( $post_id, '_template_tax_display', 'incl' );
 		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 
@@ -579,5 +586,24 @@ class Test_Templates extends WP_UnitTestCase {
 
 		$this->assertTrue( $result );
 		$this->assertTrue( Templates::is_active_template( $post_id, 'receipt' ) );
+	}
+
+	/**
+	 * Test get_gallery_template_by_key returns a template for a valid key.
+	 */
+	public function test_get_gallery_template_by_key_returns_template(): void {
+		$template = Templates::get_gallery_template_by_key( 'standard-receipt' );
+		$this->assertNotNull( $template );
+		$this->assertEquals( 'standard-receipt', $template['key'] );
+		$this->assertArrayHasKey( 'content', $template );
+		$this->assertNotEmpty( $template['content'] );
+	}
+
+	/**
+	 * Test get_gallery_template_by_key returns null for an invalid key.
+	 */
+	public function test_get_gallery_template_by_key_returns_null_for_invalid(): void {
+		$template = Templates::get_gallery_template_by_key( 'nonexistent-template' );
+		$this->assertNull( $template );
 	}
 }

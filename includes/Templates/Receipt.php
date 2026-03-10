@@ -402,10 +402,16 @@ class Receipt {
 			if ( is_numeric( $preview_id ) ) {
 				// Database template.
 				return TemplatesManager::get_template( (int) $preview_id );
-			} else {
-				// Virtual template.
-				return TemplatesManager::get_virtual_template( $preview_id, 'receipt' );
 			}
+
+			// Virtual template (theme/plugin-pro/plugin-core).
+			$template = TemplatesManager::get_virtual_template( $preview_id, 'receipt' );
+			if ( $template ) {
+				return $template;
+			}
+
+			// Gallery template (e.g. "standard-receipt").
+			return TemplatesManager::get_gallery_template_by_key( $preview_id );
 		}
 
 		// Check for template selection parameter (used by POS app to switch templates).

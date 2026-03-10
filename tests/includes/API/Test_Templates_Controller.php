@@ -15,6 +15,8 @@
  * - Install from gallery
  * - Preview
  * - Gallery listing
+ *
+ * @package WCPOS\WooCommercePOS\Tests\API
  */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
@@ -132,7 +134,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test get_items requires manage_woocommerce_pos capability.
 	 */
 	public function test_get_items_requires_capability(): void {
-		// Create a user without manage_woocommerce_pos capability
+		// Create a user without manage_woocommerce_pos capability.
 		$subscriber = $this->factory->user->create(
 			array(
 				'role' => 'subscriber',
@@ -164,7 +166,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'output_type', $data[0] );
 		}
 
-		// Check headers
+		// Check headers.
 		$headers = $response->get_headers();
 		$this->assertArrayHasKey( 'X-WP-Total', $headers );
 		$this->assertArrayHasKey( 'X-WP-TotalPages', $headers );
@@ -224,7 +226,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_param( 'type', 'invalid-type-xyz' );
 		$response = $this->server->dispatch( $request );
 
-		// Invalid type should return 400 (bad request)
+		// Invalid type should return 400 (bad request).
 		$this->assertEquals( 400, $response->get_status() );
 	}
 
@@ -236,7 +238,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_param( 'per_page', 0 );
 		$response = $this->server->dispatch( $request );
 
-		// per_page=0 should be treated as invalid - either returns 400 or uses default
+		// per_page=0 should be treated as invalid - either returns 400 or uses default.
 		$this->assertContains( $response->get_status(), array( 200, 400 ) );
 	}
 
@@ -248,7 +250,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_param( 'context', 'invalid-context' );
 		$response = $this->server->dispatch( $request );
 
-		// Invalid context should fail validation
+		// Invalid context should fail validation.
 		$this->assertEquals( 400, $response->get_status() );
 	}
 
@@ -295,7 +297,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/active' );
 		$response = $this->server->dispatch( $request );
 
-		// Either returns a template (200) or no active template (404)
+		// Either returns a template (200) or no active template (404).
 		$this->assertContains( $response->get_status(), array( 200, 404 ) );
 
 		if ( 200 === $response->get_status() ) {
@@ -313,7 +315,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_param( 'type', 'receipt' );
 		$response = $this->server->dispatch( $request );
 
-		// Either returns a template (200) or no active template (404)
+		// Either returns a template (200) or no active template (404).
 		$this->assertContains( $response->get_status(), array( 200, 404 ) );
 	}
 
@@ -363,7 +365,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Test shop_manager can access templates.
 	 */
 	public function test_shop_manager_can_access_templates(): void {
-		// shop_manager should have manage_woocommerce_pos through custom caps
+		// shop_manager should have manage_woocommerce_pos through custom caps.
 		$manager_id = $this->factory->user->create(
 			array(
 				'role' => 'shop_manager',
@@ -527,9 +529,20 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_body_params(
 			array(
 				'update' => array(
-					array( 'id' => $id1, 'status' => 'draft', 'menu_order' => 1 ),
-					array( 'id' => $id2, 'status' => 'publish', 'menu_order' => 2 ),
-					array( 'id' => $id3, 'menu_order' => 3 ),
+					array(
+						'id' => $id1,
+						'status' => 'draft',
+						'menu_order' => 1,
+					),
+					array(
+						'id' => $id2,
+						'status' => 'publish',
+						'menu_order' => 2,
+					),
+					array(
+						'id' => $id3,
+						'menu_order' => 3,
+					),
 				),
 			)
 		);
@@ -652,6 +665,33 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $order->get_id(), $data['order_id'] );
 
 		wp_delete_post( $post_id, true );
+		wp_delete_post( $order->get_id(), true );
+	}
+
+	/**
+	 * Test preview returns a URL for a gallery template key.
+	 */
+	public function test_preview_returns_url_for_gallery_template(): void {
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		if ( empty( $gallery ) ) {
+			$this->markTestSkipped( 'No gallery templates available.' );
+		}
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		$gallery_key = $gallery[0]['key'];
+		$request     = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $gallery_key . '/preview' );
+		$response    = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'preview_url', $data );
+		$this->assertStringContainsString( 'wcpos_preview_template=' . $gallery_key, $data['preview_url'] );
+		$this->assertEquals( $gallery_key, $data['template_id'] );
+
 		wp_delete_post( $order->get_id(), true );
 	}
 
