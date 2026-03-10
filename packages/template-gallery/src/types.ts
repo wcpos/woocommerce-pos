@@ -12,6 +12,7 @@ export interface Template {
 	tax_display: string;
 	is_virtual: false;
 	is_premade: boolean;
+	status: 'publish' | 'draft';
 	is_active: boolean;
 	offline_capable: boolean;
 	gallery_key: string | null;

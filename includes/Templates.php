@@ -238,6 +238,7 @@ class Templates {
 			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
 			'gallery_key'     => $gallery_key ? $gallery_key : null,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
+			'status'          => $post->post_status,
 			'source'          => 'custom',
 			'menu_order'      => $post->menu_order,
 			'date_created'    => $post->post_date,

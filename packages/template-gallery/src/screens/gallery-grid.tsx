@@ -84,8 +84,10 @@ export function GalleryGrid() {
 		matchesFilters(t, filters),
 	);
 
+	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+
 	const editUrl = (id: number) =>
-		`${window.location.origin}/wp-admin/post.php?post=${id}&action=edit`;
+		`${adminUrl}/post.php?post=${id}&action=edit`;
 
 	// Find the template being previewed
 	const previewTemplate = previewId !== null
@@ -112,6 +114,7 @@ export function GalleryGrid() {
 					onDelete={(id) => deleteTemplate.mutate(id)}
 					onReorder={(updates) => reorderTemplates.mutate(updates)}
 					isToggling={toggleTemplate.isPending}
+					isDeleting={deleteTemplate.isPending}
 				/>
 			</section>
 
@@ -172,7 +175,7 @@ export function GalleryGrid() {
 									onActivate={() =>
 										toggleTemplate.mutate({
 											id: t.id,
-											status: t.is_active ? 'draft' : 'publish',
+											status: t.status === 'publish' ? 'draft' : 'publish',
 										})
 									}
 									onEdit={() => {
@@ -184,7 +187,7 @@ export function GalleryGrid() {
 
 							{/* New template card */}
 							<a
-								href={`${window.location.origin}/wp-admin/post-new.php?post_type=wcpos_template`}
+								href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
 								className="wcpos:border-2 wcpos:border-dashed wcpos:border-gray-300 wcpos:rounded-lg wcpos:flex wcpos:items-center wcpos:justify-center wcpos:min-h-48 hover:wcpos:border-gray-400 wcpos:text-gray-400 hover:wcpos:text-gray-500 wcpos:no-underline"
 							>
 								<span className="wcpos:text-sm wcpos:font-medium">
@@ -213,7 +216,7 @@ export function GalleryGrid() {
 
 						toggleTemplate.mutate({
 							id: latestTemplate.id,
-							status: latestTemplate.is_active ? 'draft' : 'publish',
+							status: latestTemplate.status === 'publish' ? 'draft' : 'publish',
 						});
 					}}
 					onCustomize={() => {

@@ -31,7 +31,7 @@ export function TemplateCard(props: TemplateCardProps) {
 
 	const name = template.title;
 	const description = template.description;
-	const isActive = !isGallery && 'is_active' in template && template.is_active;
+	const isActive = !isGallery && 'status' in template && template.status === 'publish';
 	const engine = template.engine;
 	const isOffline =
 		engine === 'logicless' ||

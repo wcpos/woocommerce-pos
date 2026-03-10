@@ -38,6 +38,7 @@ interface DraggableRowProps {
 	onDisable: (id: number) => void;
 	onDelete: (id: number) => void;
 	isToggling: boolean;
+	isDeleting: boolean;
 }
 
 function DraggableRow({
@@ -47,13 +48,15 @@ function DraggableRow({
 	onDisable,
 	onDelete,
 	isToggling,
+	isDeleting,
 }: DraggableRowProps) {
 	const rowRef = React.useRef<HTMLTableRowElement>(null);
 	const handleRef = React.useRef<HTMLTableCellElement>(null);
 	const [isDragging, setIsDragging] = React.useState(false);
 	const [closestEdge, setClosestEdge] = React.useState<Edge | null>(null);
 
-	const editUrl = `${window.location.origin}/wp-admin/post.php?post=${template.id}&action=edit`;
+	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+	const editUrl = `${adminUrl}/post.php?post=${template.id}&action=edit`;
 	const canDelete = !template.is_premade && !template.is_virtual;
 
 	React.useEffect(() => {
@@ -146,8 +149,13 @@ function DraggableRow({
 					{canDelete && (
 						<button
 							type="button"
-							onClick={() => onDelete(template.id)}
-							className="wcpos:text-xs wcpos:text-red-600 hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+							onClick={() => {
+								if (window.confirm(`Delete "${template.title}" permanently?`)) {
+									onDelete(template.id);
+								}
+							}}
+							disabled={isDeleting}
+							className="wcpos:text-xs wcpos:text-red-600 hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
 						>
 							Delete
 						</button>
@@ -165,6 +173,7 @@ interface ActiveTemplatesTableProps {
 	onDelete: (id: number) => void;
 	onReorder: (updates: Array<{ id: number; menu_order: number }>) => void;
 	isToggling: boolean;
+	isDeleting: boolean;
 }
 
 export function ActiveTemplatesTable({
@@ -174,10 +183,11 @@ export function ActiveTemplatesTable({
 	onDelete,
 	onReorder,
 	isToggling,
+	isDeleting,
 }: ActiveTemplatesTableProps) {
 	const activeTemplates = React.useMemo(() => {
 		return templates
-			.filter((t): t is Template => 'is_active' in t && t.is_active && typeof t.id === 'number')
+			.filter((t): t is Template => 'status' in t && t.status === 'publish' && typeof t.id === 'number')
 			.sort((a, b) => a.menu_order - b.menu_order);
 	}, [templates]);
 
@@ -255,6 +265,7 @@ export function ActiveTemplatesTable({
 							onDisable={onDisable}
 							onDelete={onDelete}
 							isToggling={isToggling}
+							isDeleting={isDeleting}
 						/>
 					))}
 				</tbody>

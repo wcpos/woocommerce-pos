@@ -87,6 +87,8 @@ export function FilterSidebar({
 					type="button"
 					onClick={onToggleCollapse}
 					aria-label="Expand filters"
+					aria-expanded={false}
+					aria-controls="template-filters-sidebar"
 					className="wcpos:p-2 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:bg-white wcpos:cursor-pointer wcpos:text-gray-600 hover:wcpos:border-gray-400"
 				>
 					&#9776;
@@ -111,7 +113,7 @@ export function FilterSidebar({
 	};
 
 	return (
-		<div className="wcpos:shrink-0 wcpos:w-56 wcpos:space-y-5">
+		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:space-y-5">
 			{/* Header */}
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between">
 				<span className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
@@ -121,6 +123,8 @@ export function FilterSidebar({
 					type="button"
 					onClick={onToggleCollapse}
 					aria-label="Collapse filters"
+					aria-expanded={true}
+					aria-controls="template-filters-sidebar"
 					className="wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-lg wcpos:leading-none"
 				>
 					&#10005;
