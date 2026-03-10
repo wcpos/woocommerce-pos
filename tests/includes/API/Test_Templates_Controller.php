@@ -695,6 +695,61 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $order->get_id(), true );
 	}
 
+	// ---- DELETE tests ----
+
+	/**
+	 * Test deleting a custom template permanently removes it.
+	 */
+	public function test_delete_custom_template(): void {
+		$post_id = $this->create_template( 'Deletable Template' );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/templates/' . $post_id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['deleted'] );
+		$this->assertEquals( $post_id, $data['id'] );
+
+		// Confirm the post is actually gone.
+		$this->assertNull( get_post( $post_id ) );
+	}
+
+	/**
+	 * Test deleting a premade template returns 403.
+	 */
+	public function test_delete_premade_template_returns_403(): void {
+		$post_id = $this->create_template( 'Premade Template' );
+		update_post_meta( $post_id, '_template_is_premade', '1' );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/templates/' . $post_id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 'wcpos_template_cannot_delete', $data['code'] );
+
+		// Confirm the post still exists.
+		$this->assertNotNull( get_post( $post_id ) );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test deleting a nonexistent template returns 404.
+	 */
+	public function test_delete_nonexistent_template_returns_404(): void {
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/templates/999999' );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 404, $response->get_status() );
+	}
+
 	// ---- Task 10: Gallery listing tests ----
 
 	/**
