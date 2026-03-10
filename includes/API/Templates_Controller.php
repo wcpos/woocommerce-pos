@@ -237,6 +237,27 @@ class Templates_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		// 10. DELETE /templates/{id} (regex).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)',
+			array(
+				'methods'             => WP_REST_Server::DELETABLE,
+				'callback'            => array( $this, 'delete_item' ),
+				'permission_callback' => array( $this, 'update_item_permissions_check' ),
+				'args'                => array(
+					'id' => array(
+						'description'       => __( 'Template ID to delete.', 'woocommerce-pos' ),
+						'type'              => 'integer',
+						'required'          => true,
+						'validate_callback' => function ( $value ) {
+							return is_numeric( $value );
+						},
+					),
+				),
+			)
+		);
 	}
 
 	/**
@@ -624,6 +645,53 @@ class Templates_Controller extends WP_REST_Controller {
 		$response->set_status( 201 );
 
 		return $response;
+	}
+
+	/**
+	 * Delete a custom template.
+	 *
+	 * Built-in (premade or virtual) templates cannot be deleted.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
+	 */
+	public function delete_item( $request ) {
+		$id       = (int) $request['id'];
+		$template = TemplatesManager::get_template( $id );
+
+		if ( ! $template ) {
+			return new WP_Error(
+				'wcpos_template_invalid_id',
+				__( 'Invalid template ID.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		if ( ! empty( $template['is_premade'] ) || ! empty( $template['is_virtual'] ) ) {
+			return new WP_Error(
+				'wcpos_template_cannot_delete',
+				__( 'Built-in templates cannot be deleted.', 'woocommerce-pos' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$deleted = wp_delete_post( $id, true );
+
+		if ( ! $deleted ) {
+			return new WP_Error(
+				'wcpos_template_delete_failed',
+				__( 'Failed to delete template.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'deleted' => true,
+				'id'      => $id,
+			)
+		);
 	}
 
 	/**
