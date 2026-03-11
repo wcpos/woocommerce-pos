@@ -161,7 +161,7 @@ class Menu {
 		$this->gallery_screen_id = add_submenu_page(
 			PLUGIN_NAME,
 			__( 'Templates', 'woocommerce-pos' ),
-			__( 'Template Gallery', 'woocommerce-pos' ),
+			__( 'Templates', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			'wcpos-templates',
 			array( $this, 'render_gallery_page' )

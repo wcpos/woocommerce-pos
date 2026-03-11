@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { usePreview } from '../hooks/use-preview';
+import { renderThermalPreview } from '../lib/thermal-renderer';
 
 interface PreviewModalProps {
 	templateId: number | string;
@@ -10,6 +11,40 @@ interface PreviewModalProps {
 	onClose: () => void;
 	onActivate?: () => void;
 	onCustomize?: () => void;
+}
+
+function ThermalPreviewContent({
+	templateContent,
+	receiptData,
+	templateName,
+}: {
+	templateContent: string;
+	receiptData: Record<string, unknown>;
+	templateName: string;
+}) {
+	const html = React.useMemo(() => {
+		try {
+			return renderThermalPreview(templateContent, receiptData);
+		} catch {
+			return '<div style="color:red;padding:16px;">Thermal template rendering error. Check your XML syntax.</div>';
+		}
+	}, [templateContent, receiptData]);
+
+	const srcdoc = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${html}</body>
+</html>`;
+
+	return (
+		<iframe
+			srcDoc={srcdoc}
+			title={`Preview of ${templateName}`}
+			className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
+			style={{ height: '600px' }}
+			sandbox="allow-same-origin"
+		/>
+	);
 }
 
 export function PreviewModal({
@@ -124,6 +159,12 @@ export function PreviewModal({
 						<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:h-64">
 							<span className="wcpos:text-gray-400">Loading preview...</span>
 						</div>
+					) : preview?.engine === 'thermal' && preview.template_content && preview.receipt_data ? (
+						<ThermalPreviewContent
+							templateContent={preview.template_content}
+							receiptData={preview.receipt_data}
+							templateName={templateName}
+						/>
 					) : preview?.preview_url ? (
 						<iframe
 							src={preview.preview_url}

@@ -695,6 +695,77 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $order->get_id(), true );
 	}
 
+	/**
+	 * Test preview returns thermal data for thermal gallery template.
+	 */
+	public function test_preview_returns_thermal_data_for_thermal_template(): void {
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$thermal = null;
+
+		foreach ( $gallery as $t ) {
+			if ( 'thermal' === ( $t['engine'] ?? '' ) ) {
+				$thermal = $t;
+				break;
+			}
+		}
+
+		if ( ! $thermal ) {
+			$this->markTestSkipped( 'No thermal gallery templates available.' );
+		}
+
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $thermal['key'] . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 'thermal', $data['engine'] );
+		$this->assertArrayHasKey( 'template_content', $data );
+		$this->assertArrayHasKey( 'receipt_data', $data );
+		$this->assertStringContainsString( '<receipt', $data['template_content'] );
+		$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
+		$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
+		// Money fields should be pre-formatted strings.
+		$this->assertIsString( $data['receipt_data']['totals']['grand_total_incl'] );
+
+		wp_delete_post( $order->get_id(), true );
+	}
+
+	/**
+	 * Test preview returns thermal data with mock data when no orders exist.
+	 */
+	public function test_preview_thermal_with_no_orders_uses_mock_data(): void {
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+		$thermal = null;
+
+		foreach ( $gallery as $t ) {
+			if ( 'thermal' === ( $t['engine'] ?? '' ) ) {
+				$thermal = $t;
+				break;
+			}
+		}
+
+		if ( ! $thermal ) {
+			$this->markTestSkipped( 'No thermal gallery templates available.' );
+		}
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $thermal['key'] . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 'thermal', $data['engine'] );
+		$this->assertArrayHasKey( 'template_content', $data );
+		$this->assertArrayHasKey( 'receipt_data', $data );
+		// Mock data has order_id 1234.
+		$this->assertEquals( 1234, $data['receipt_data']['meta']['order_id'] );
+	}
+
 	// ---- DELETE tests ----
 
 	/**

@@ -51,8 +51,13 @@ function matchesFilters(
 		return false;
 	}
 
-	if (filters.output !== 'all' && template.output_type !== filters.output) {
-		return false;
+	if (filters.output !== 'all') {
+		const isThermal =
+			template.output_type === 'escpos' ||
+			template.output_type === 'thermal' ||
+			template.engine === 'thermal';
+		if (filters.output === 'escpos' && !isThermal) return false;
+		if (filters.output === 'html' && isThermal) return false;
 	}
 
 	if (filters.source === 'custom' && template.is_premade !== false) {
@@ -118,95 +123,105 @@ export function GalleryGrid() {
 					onDisable={(id) => { if (typeof id === 'number') toggleTemplate.mutate({ id, status: 'draft' }); }}
 					onDelete={(id) => deleteTemplate.mutate(id)}
 					onReorder={(updates) => reorderTemplates.mutate(updates)}
-					togglingId={toggleTemplate.isPending ? (typeof toggleTemplate.variables === 'object' ? toggleTemplate.variables.id : null) : null}
+					togglingId={toggleTemplate.isPending && toggleTemplate.variables != null ? toggleTemplate.variables.id ?? null : null}
 					deletingId={deleteTemplate.isPending ? deleteTemplate.variables ?? null : null}
 				/>
 			</section>
 
-			{/* Gallery with Sidebar */}
-			<div className="wcpos:flex wcpos:gap-6">
-				<FilterSidebar
-					filters={filters}
-					onChange={setFilters}
-					availableCategories={CATEGORIES}
-					collapsed={sidebarCollapsed}
-					onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
-				/>
+			{/* Receipt Template Gallery */}
+			<section>
+				<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
+					Receipt Template Gallery
+				</h2>
+				<div className="wcpos:flex wcpos:gap-6">
+					<FilterSidebar
+						filters={filters}
+						onChange={setFilters}
+						availableCategories={CATEGORIES}
+						collapsed={sidebarCollapsed}
+						onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+					/>
 
-				<div className="wcpos:flex-1 wcpos:min-w-0 wcpos:space-y-6">
-					{/* Gallery templates section */}
-					{galleryTemplates.length > 0 && (
+					<div className="wcpos:flex-1 wcpos:min-w-0 wcpos:space-y-6">
+						{/* Gallery templates section */}
+						{galleryTemplates.length > 0 && (
+							<section>
+								<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-600 wcpos:mb-3 wcpos:m-0">
+									Gallery Templates
+								</h3>
+									{filteredGallery.length > 0 ? (
+									<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+										{filteredGallery.map((t: GalleryTemplate) => (
+											<TemplateCard
+												key={t.key}
+												template={t}
+												isGallery
+												onPreview={() => setPreviewId(t.key)}
+												onCustomize={() => installGallery.mutate(t.key)}
+											/>
+										))}
+									</div>
+								) : (
+									<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
+										No gallery templates match your filters.
+									</p>
+								)}
+							</section>
+						)}
+
+						{/* Custom templates section */}
 						<section>
-							<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
-								Gallery Templates
-							</h2>
-							{filteredGallery.length > 0 ? (
-								<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-									{filteredGallery.map((t: GalleryTemplate) => (
-										<TemplateCard
-											key={t.key}
-											template={t}
-											isGallery
-											onPreview={() => setPreviewId(t.key)}
-											onCustomize={() => installGallery.mutate(t.key)}
-										/>
-									))}
-								</div>
-							) : (
-								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
-									No gallery templates match your filters.
+							<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-600 wcpos:mb-3 wcpos:m-0">
+								Your Templates
+							</h3>
+							{customTemplates.length === 0 && (
+								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:mb-3">
+									No custom templates yet. Create one or customise a gallery template to get started.
 								</p>
 							)}
+							{customTemplates.length > 0 && filteredCustom.length === 0 && (
+								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
+									No custom templates match your filters.
+								</p>
+							)}
+							<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+								{filteredCustom.map((t: Template) => (
+									<TemplateCard
+										key={t.id}
+										template={t}
+										isGallery={false}
+										onPreview={() => setPreviewId(t.id)}
+										onActivate={() =>
+											toggleTemplate.mutate({
+												id: t.id,
+												status: t.status === 'publish' ? 'draft' : 'publish',
+											})
+										}
+										onEdit={() => {
+											window.location.href = editUrl(t.id);
+										}}
+										isToggling={
+											toggleTemplate.isPending &&
+											toggleTemplate.variables != null &&
+											toggleTemplate.variables.id === t.id
+										}
+									/>
+								))}
+
+								{/* New template card */}
+								<a
+									href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
+									className="wcpos:border-2 wcpos:border-dashed wcpos:border-gray-300 wcpos:rounded-lg wcpos:flex wcpos:items-center wcpos:justify-center wcpos:min-h-48 hover:wcpos:border-gray-400 wcpos:text-gray-400 hover:wcpos:text-gray-500 wcpos:no-underline"
+								>
+									<span className="wcpos:text-sm wcpos:font-medium">
+										+ New Template
+									</span>
+								</a>
+							</div>
 						</section>
-					)}
-
-					{/* Custom templates section */}
-					<section>
-						<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
-							Your Templates
-						</h2>
-						{customTemplates.length === 0 && (
-							<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:mb-3">
-								No custom templates yet. Create one or customise a gallery template to get started.
-							</p>
-						)}
-						<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-							{filteredCustom.map((t: Template) => (
-								<TemplateCard
-									key={t.id}
-									template={t}
-									isGallery={false}
-									onPreview={() => setPreviewId(t.id)}
-									onActivate={() =>
-										toggleTemplate.mutate({
-											id: t.id,
-											status: t.status === 'publish' ? 'draft' : 'publish',
-										})
-									}
-									onEdit={() => {
-										window.location.href = editUrl(t.id);
-									}}
-									isToggling={
-									toggleTemplate.isPending &&
-									typeof toggleTemplate.variables === 'object' &&
-									toggleTemplate.variables?.id === t.id
-								}
-								/>
-							))}
-
-							{/* New template card */}
-							<a
-								href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
-								className="wcpos:border-2 wcpos:border-dashed wcpos:border-gray-300 wcpos:rounded-lg wcpos:flex wcpos:items-center wcpos:justify-center wcpos:min-h-48 hover:wcpos:border-gray-400 wcpos:text-gray-400 hover:wcpos:text-gray-500 wcpos:no-underline"
-							>
-								<span className="wcpos:text-sm wcpos:font-medium">
-									+ New Template
-								</span>
-							</a>
-						</div>
-					</section>
+					</div>
 				</div>
-			</div>
+			</section>
 
 			{/* Preview modal */}
 			{previewTemplate && (

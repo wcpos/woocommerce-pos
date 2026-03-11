@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use WP_Error;
 use WP_Query;
@@ -787,7 +789,34 @@ class Templates_Controller extends WP_REST_Controller {
 		$order     = $order_id ? wc_get_order( $order_id ) : null;
 		$order_key = $order ? $order->get_order_key() : '';
 
-		// Build receipt preview URL.
+		// Determine engine.
+		$engine = $template['engine'] ?? 'legacy-php';
+
+		// Thermal templates return raw content + data for client-side rendering.
+		if ( 'thermal' === $engine ) {
+			$content = $template['content'] ?? '';
+
+			if ( $order ) {
+				$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+			} else {
+				$receipt_data = Receipt_Data_Schema::get_mock_receipt_data();
+			}
+
+			$currency       = $receipt_data['meta']['currency'] ?? 'USD';
+			$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+
+			return rest_ensure_response(
+				array(
+					'engine'           => 'thermal',
+					'template_content' => $content,
+					'receipt_data'     => $formatted_data,
+					'order_id'         => $order_id,
+					'template_id'      => $id,
+				)
+			);
+		}
+
+		// Non-thermal: return an iframe preview URL.
 		$preview_url = add_query_arg(
 			array(
 				'key'                    => $order_key,

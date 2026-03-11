@@ -26,20 +26,6 @@ use WC_Abstract_Order;
 class Logicless_Renderer implements Receipt_Renderer_Interface {
 
 	/**
-	 * Money field names (flipped for O(1) lookup).
-	 *
-	 * @var array
-	 */
-	private $money_fields = array();
-
-	/**
-	 * Currency code for formatting.
-	 *
-	 * @var string
-	 */
-	private $currency = 'USD';
-
-	/**
 	 * Render logicless template output.
 	 *
 	 * @param array             $template     Template metadata/content.
@@ -54,10 +40,8 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 			return;
 		}
 
-		$this->currency     = $receipt_data['meta']['currency'] ?? 'USD';
-		$this->money_fields = array_flip( Receipt_Data_Schema::MONEY_FIELDS );
-
-		$formatted_data = $this->format_money_fields( $receipt_data );
+		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
+		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
 		$content = preg_replace( '/<!--.*?-->/s', '', $content );
@@ -79,38 +63,5 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		$output = $mustache->render( $content, $formatted_data );
 
 		echo wp_kses_post( $output );
-	}
-
-	/**
-	 * Recursively format money fields in receipt data.
-	 *
-	 * Walks the data structure and replaces numeric values whose terminal
-	 * key name matches a known money field with a formatted currency string.
-	 *
-	 * @param array  $data Receipt data (or nested portion).
-	 * @param string $key  Current key name (for terminal matching).
-	 *
-	 * @return array Formatted data.
-	 */
-	private function format_money_fields( array $data, string $key = '' ): array {
-		$result = array();
-
-		foreach ( $data as $k => $value ) {
-			if ( \is_array( $value ) ) {
-				$result[ $k ] = $this->format_money_fields( $value, (string) $k );
-			} elseif ( is_numeric( $value ) && isset( $this->money_fields[ $k ] ) ) {
-				$result[ $k ] = html_entity_decode(
-					wp_strip_all_tags(
-						wc_price( (float) $value, array( 'currency' => $this->currency ) )
-					),
-					ENT_QUOTES | ENT_SUBSTITUTE,
-					'UTF-8'
-				);
-			} else {
-				$result[ $k ] = $value;
-			}
-		}
-
-		return $result;
 	}
 }

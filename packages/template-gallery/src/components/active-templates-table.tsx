@@ -15,20 +15,32 @@ import classnames from 'classnames';
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import type { AnyTemplate, Template } from '../types';
 
-function formatCategory(slug: string): string {
+function formatCategory(slug: string | undefined): string {
+	if (!slug) return '\u2014';
 	return slug
 		.split('-')
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 		.join(' ');
 }
 
-function formatEngine(engine: string): string {
-	const engines: Record<string, string> = {
-		'legacy-php': 'Legacy PHP',
-		logicless: 'Logicless',
-		thermal: 'Thermal',
-	};
-	return engines[engine] ?? engine;
+function formatConnectivity(template: AnyTemplate): {
+	label: string;
+	className: string;
+} {
+	const isOffline =
+		template.engine === 'logicless' ||
+		template.engine === 'thermal' ||
+		('offline_capable' in template && template.offline_capable);
+
+	return isOffline
+		? { label: 'Offline', className: 'wcpos:text-green-600' }
+		: { label: 'Online', className: 'wcpos:text-gray-500' };
+}
+
+function formatOutput(template: AnyTemplate): string {
+	if (template.output_type === 'escpos' || template.output_type === 'thermal' || template.engine === 'thermal')
+		return 'Thermal';
+	return 'HTML';
 }
 
 interface DraggableRowProps {
@@ -93,24 +105,33 @@ function DraggableRow({
 		};
 	}, [template.id, index, isVirtual]);
 
+	const connectivity = formatConnectivity(template);
+
 	return (
 		<tr
 			ref={rowRef}
 			className={classnames(
 				'wcpos:relative wcpos:border-b wcpos:border-gray-100',
 				isDragging && 'wcpos:opacity-50',
-				closestEdge === 'top' && 'wcpos:shadow-[inset_0_2px_0_0_var(--color-wp-admin-theme-color)]',
-				closestEdge === 'bottom' && 'wcpos:shadow-[inset_0_-2px_0_0_var(--color-wp-admin-theme-color)]',
 			)}
 		>
 			<td
 				ref={handleRef}
 				className={classnames(
-					'wcpos:px-3 wcpos:py-2 wcpos:text-gray-400 wcpos:text-center wcpos:w-8',
+					'wcpos:px-3 wcpos:py-2 wcpos:text-gray-400 wcpos:text-center wcpos:w-8 wcpos:relative wcpos:overflow-visible',
 					isVirtual ? 'wcpos:cursor-default' : 'wcpos:cursor-grab',
 				)}
 			>
-				{isVirtual ? '' : '≡'}
+				{closestEdge && (
+					<div
+						className={classnames(
+							'wcpos:pointer-events-none wcpos:absolute wcpos:left-0 wcpos:h-0.5 wcpos:bg-wp-admin-theme-color wcpos:z-10',
+							closestEdge === 'top' ? 'wcpos:-top-px' : 'wcpos:-bottom-px',
+						)}
+						style={{ width: 'calc(var(--table-width, 100%) + 1px)' }}
+					/>
+				)}
+				{isVirtual ? '' : '\u2261'}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
 				{template.title}
@@ -118,8 +139,11 @@ function DraggableRow({
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
 			</td>
+			<td className={classnames('wcpos:px-3 wcpos:py-2 wcpos:text-sm', connectivity.className)}>
+				{connectivity.label}
+			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
-				{formatEngine(template.engine)}
+				{formatOutput(template)}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
@@ -187,6 +211,8 @@ export function ActiveTemplatesTable({
 	togglingId,
 	deletingId,
 }: ActiveTemplatesTableProps) {
+	const tableRef = React.useRef<HTMLTableElement>(null);
+
 	const activeTemplates = React.useMemo(() => {
 		return templates
 			.filter((t) => {
@@ -199,6 +225,18 @@ export function ActiveTemplatesTable({
 
 	const onReorderRef = React.useRef(onReorder);
 	onReorderRef.current = onReorder;
+
+	// Set --table-width CSS variable so the drop indicator can span the full row.
+	React.useEffect(() => {
+		const table = tableRef.current;
+		if (!table) return;
+
+		const observer = new ResizeObserver(([entry]) => {
+			table.style.setProperty('--table-width', `${entry.contentRect.width}px`);
+		});
+		observer.observe(table);
+		return () => observer.disconnect();
+	}, []);
 
 	React.useEffect(() => {
 		return monitorForElements({
@@ -248,7 +286,7 @@ export function ActiveTemplatesTable({
 
 	return (
 		<div className="wcpos:bg-white wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden">
-			<table className="wcpos:w-full wcpos:border-collapse">
+			<table ref={tableRef} className="wcpos:w-full wcpos:border-collapse">
 				<thead>
 					<tr className="wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50">
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:w-8" />
@@ -259,7 +297,10 @@ export function ActiveTemplatesTable({
 							Category
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Engine
+							Connectivity
+						</th>
+						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
+							Output
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Actions

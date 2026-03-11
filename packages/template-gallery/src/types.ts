@@ -64,7 +64,10 @@ export interface GalleryTemplate {
 export type AnyTemplate = Template | VirtualTemplate;
 
 export interface PreviewResponse {
-	preview_url: string;
+	preview_url?: string;
+	engine?: string;
+	template_content?: string;
+	receipt_data?: Record<string, unknown>;
 	order_id: number;
 	template_id: number | string;
 }

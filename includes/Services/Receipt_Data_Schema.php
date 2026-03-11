@@ -90,6 +90,45 @@ class Receipt_Data_Schema {
 	);
 
 	/**
+	 * Format money fields in receipt data using wc_price().
+	 *
+	 * Recursively walks the data structure and replaces numeric values
+	 * whose terminal key matches a known money field with a formatted
+	 * currency string (e.g. "$29.99").
+	 *
+	 * @param array  $data     Receipt data array (or nested sub-array).
+	 * @param string $currency WooCommerce currency code.
+	 *
+	 * @return array Data with money fields formatted as strings.
+	 */
+	public static function format_money_fields( array $data, string $currency = 'USD' ): array {
+		static $lookup = null;
+		if ( null === $lookup ) {
+			$lookup = array_flip( self::MONEY_FIELDS );
+		}
+
+		$result = array();
+
+		foreach ( $data as $k => $value ) {
+			if ( \is_array( $value ) ) {
+				$result[ $k ] = self::format_money_fields( $value, $currency );
+			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
+				$result[ $k ] = html_entity_decode(
+					wp_strip_all_tags(
+						wc_price( (float) $value, array( 'currency' => $currency ) )
+					),
+					ENT_QUOTES | ENT_SUBSTITUTE,
+					'UTF-8'
+				);
+			} else {
+				$result[ $k ] = $value;
+			}
+		}
+
+		return $result;
+	}
+
+	/**
 	 * Get the field tree for the template editor field picker.
 	 *
 	 * Returns a structured array describing template-picker sections and fields
