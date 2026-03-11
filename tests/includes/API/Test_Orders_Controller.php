@@ -1042,13 +1042,14 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Updating an order with coupon_lines that have IDs should not fail.
+	 * Updating an order with unchanged coupon_lines should preserve coupon line IDs.
 	 *
-	 * WooCommerce V3 throws "Coupon item ID is readonly" if coupon_lines contain
-	 * an 'id' field. The POS sends back the full response data on updates, so
-	 * we need to strip coupon line IDs before passing to the parent controller.
+	 * WooCommerce V3 treats coupon_lines differently from other line types — it
+	 * rejects IDs and does a full remove-and-reapply. Since the POS sends back
+	 * the full order object, we override calculate_coupons to skip recalculation
+	 * when coupon codes haven't changed, preserving stable line item IDs.
 	 */
-	public function test_update_order_with_coupon_line_ids(): void {
+	public function test_update_order_with_unchanged_coupon_lines_preserves_ids(): void {
 		CouponHelper::create_coupon( 'testcoupon' );
 
 		// Create an order with a coupon.
@@ -1079,7 +1080,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotEmpty( $data['coupon_lines'] );
 		$this->assertNotEmpty( $data['coupon_lines'][0]['id'], 'Coupon line should have an ID in the response.' );
 
-		// Now update the order, sending back just the coupon_lines (which include IDs from the response).
+		$original_coupon_id = $data['coupon_lines'][0]['id'];
+
+		// Update the order, sending back the same coupon_lines (with IDs from the response).
 		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $data['id'] );
 		$update_request->set_body_params(
 			array(
@@ -1088,7 +1091,64 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
 
 		$this->assertEquals( 200, $update_response->get_status(), 'Update should succeed despite coupon_lines containing IDs.' );
+		$this->assertEquals( $original_coupon_id, $update_data['coupon_lines'][0]['id'], 'Coupon line ID should be preserved when coupons are unchanged.' );
+	}
+
+	/**
+	 * Adding a new coupon to an order that already has one should work.
+	 *
+	 * When the coupon codes change, calculate_coupons should do the full
+	 * remove-and-reapply to recalculate discounts.
+	 */
+	public function test_update_order_adding_new_coupon(): void {
+		CouponHelper::create_coupon( 'coupon1' );
+		CouponHelper::create_coupon( 'coupon2' );
+
+		// Create an order with the first coupon.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items'   => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Test Product',
+						'quantity'   => 1,
+						'total'      => '10',
+						'subtotal'   => '10',
+					),
+				),
+				'coupon_lines' => array(
+					array(
+						'code' => 'coupon1',
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertCount( 1, $data['coupon_lines'] );
+
+		// Update the order: keep existing coupon (with ID) + add a new one (no ID).
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $data['id'] );
+		$update_request->set_body_params(
+			array(
+				'coupon_lines' => array(
+					$data['coupon_lines'][0],
+					array( 'code' => 'coupon2' ),
+				),
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
+
+		$this->assertEquals( 200, $update_response->get_status(), 'Update should succeed when adding a new coupon.' );
+		$this->assertCount( 2, $update_data['coupon_lines'], 'Order should have two coupons after update.' );
 	}
 }
