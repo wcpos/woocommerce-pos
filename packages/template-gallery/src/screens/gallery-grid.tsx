@@ -51,8 +51,13 @@ function matchesFilters(
 		return false;
 	}
 
-	if (filters.output !== 'all' && template.output_type !== filters.output) {
-		return false;
+	if (filters.output !== 'all') {
+		const isThermal =
+			template.output_type === 'escpos' ||
+			template.output_type === 'thermal' ||
+			template.engine === 'thermal';
+		if (filters.output === 'escpos' && !isThermal) return false;
+		if (filters.output === 'html' && isThermal) return false;
 	}
 
 	if (filters.source === 'custom' && template.is_premade !== false) {
