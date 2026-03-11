@@ -277,7 +277,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
-		// Proceed with the parent method to handle the creation.
+		// Proceed with the parent method to handle the update.
 		return parent::update_item( $request );
 	}
 
@@ -1064,5 +1064,67 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Override WooCommerce V3's calculate_coupons to handle the POS sending
+	 * back full order data (including coupon line IDs).
+	 *
+	 * WooCommerce V3 treats coupon_lines differently from other line types:
+	 * instead of using IDs to match existing items, it does a full remove-and-
+	 * reapply by code. It also rejects any coupon_line with an 'id' field.
+	 *
+	 * Since the POS always sends the complete order object on updates, coupon_lines
+	 * will contain IDs from the previous response. We compare the requested coupon
+	 * codes with the existing ones on the order: if they match, we skip the
+	 * recalculation entirely (preserving stable line item IDs). If they differ,
+	 * we strip the IDs and delegate to the parent for the remove-and-reapply.
+	 *
+	 * @throws \WC_REST_Exception When a coupon is invalid.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @param \WC_Order       $order   Order object.
+	 *
+	 * @return bool True if coupons were recalculated, false if skipped.
+	 */
+	protected function calculate_coupons( $request, $order ) {
+		if ( ! isset( $request['coupon_lines'] ) || ! \is_array( $request['coupon_lines'] ) ) {
+			return false;
+		}
+
+		// Extract coupon codes from the request.
+		$requested_codes = array();
+		foreach ( $request['coupon_lines'] as $item ) {
+			$code = $item['code'] ?? '';
+			if ( '' !== $code ) {
+				$requested_codes[] = wc_strtolower( wc_format_coupon_code( wc_clean( $code ) ) );
+			}
+		}
+
+		// Get the existing coupon codes on the order.
+		$existing_codes = array_map(
+			function ( $coupon ) {
+				return wc_strtolower( $coupon->get_code() );
+			},
+			array_values( $order->get_coupons() )
+		);
+
+		sort( $requested_codes );
+		sort( $existing_codes );
+
+		// If the coupon codes haven't changed, skip recalculation entirely.
+		// This preserves stable coupon line item IDs across saves.
+		if ( $requested_codes === $existing_codes ) {
+			return false;
+		}
+
+		// Codes have changed — strip IDs and let the parent handle remove-and-reapply.
+		$coupon_lines = $request['coupon_lines'];
+		foreach ( $coupon_lines as &$coupon_line ) {
+			unset( $coupon_line['id'] );
+		}
+		$request->set_param( 'coupon_lines', $coupon_lines );
+
+		return parent::calculate_coupons( $request, $order );
 	}
 }
