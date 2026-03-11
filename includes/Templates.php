@@ -221,6 +221,7 @@ class Templates {
 		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
 		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
 		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+		$category        = self::get_template_category( $template_id );
 
 		return array(
 			'id'              => $post->ID,
@@ -228,7 +229,7 @@ class Templates {
 			'description'     => $description ? $description : '',
 			'content'         => $post->post_content,
 			'type'            => $type,
-			'category'        => self::get_template_category( $template_id ),
+			'category'        => '' !== $category ? $category : 'receipt',
 			'language'        => $language ? $language : 'php',
 			'file_path'       => get_post_meta( $template_id, '_template_file_path', true ),
 			'engine'          => $engine ? $engine : 'legacy-php',
@@ -288,6 +289,7 @@ class Templates {
 			'title'             => $titles[ $template_id ] ?? $template_id,
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
+			'category'          => 'receipt',
 			'language'          => 'php',
 			'file_path'         => $file_path,
 			'engine'            => 'legacy-php',
