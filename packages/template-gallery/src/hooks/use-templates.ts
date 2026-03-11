@@ -82,3 +82,23 @@ export function useReorderTemplates() {
 		},
 	});
 }
+
+export function useDeleteTemplate() {
+	const queryClient = useQueryClient();
+	const { addSnackbar } = useSnackbar();
+
+	return useMutation({
+		mutationFn: async (id: number) =>
+			apiFetch({
+				path: `wcpos/v1/templates/${id}?wcpos=1`,
+				method: 'DELETE',
+			}),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ['templates'] });
+			addSnackbar({ message: 'Template deleted', status: 'success' });
+		},
+		onError: () => {
+			addSnackbar({ message: 'Failed to delete template', status: 'error' });
+		},
+	});
+}
