@@ -113,7 +113,7 @@ export function FilterSidebar({
 	};
 
 	return (
-		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:space-y-5">
+		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:space-y-6">
 			{/* Header */}
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between">
 				<span className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
@@ -141,6 +141,8 @@ export function FilterSidebar({
 				className="wcpos:w-full wcpos:px-3 wcpos:py-1.5 wcpos:border wcpos:border-gray-300 wcpos:rounded-md wcpos:text-sm focus:wcpos:outline-none focus:wcpos:ring-1 focus:wcpos:ring-wp-admin-theme-color focus:wcpos:border-wp-admin-theme-color"
 			/>
 
+			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+
 			{/* Categories */}
 			<fieldset className="wcpos:space-y-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
 				<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0">
@@ -162,6 +164,8 @@ export function FilterSidebar({
 				))}
 			</fieldset>
 
+			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+
 			{/* Connectivity */}
 			<RadioGroup
 				label="Connectivity"
@@ -180,6 +184,8 @@ export function FilterSidebar({
 				}
 			/>
 
+			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+
 			{/* Output */}
 			<RadioGroup
 				label="Output"
@@ -197,6 +203,8 @@ export function FilterSidebar({
 					})
 				}
 			/>
+
+			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
 
 			{/* Source */}
 			<RadioGroup

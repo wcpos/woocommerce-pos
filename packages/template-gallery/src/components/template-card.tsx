@@ -52,7 +52,7 @@ export function TemplateCard(props: TemplateCardProps) {
 			<button
 				type="button"
 				onClick={onPreview}
-				className="wcpos:aspect-[3/4] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0"
+				className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0"
 			>
 				<span className="wcpos:text-gray-400 wcpos:text-sm">Preview</span>
 			</button>
