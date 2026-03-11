@@ -21,15 +21,15 @@
     <col width="16">Subtotal</col>
     <col width="16" align="right">{{totals.subtotal_incl}}</col>
   </row>
-  {{#totals.discount}}
+  {{#discounts}}
   <row>
-    <col width="16">Discount</col>
-    <col width="16" align="right">-{{totals.discount}}</col>
+    <col width="16">{{label}}</col>
+    <col width="16" align="right">-{{total_incl}}</col>
   </row>
-  {{/totals.discount}}
+  {{/discounts}}
   <row>
     <col width="16">Tax</col>
-    <col width="16" align="right">{{totals.total_tax}}</col>
+    <col width="16" align="right">{{totals.tax_total}}</col>
   </row>
   <line style="double" />
   <row>
