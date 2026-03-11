@@ -13,7 +13,7 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import type { AnyTemplate } from '../types';
+import type { AnyTemplate, Template } from '../types';
 
 function formatCategory(slug: string): string {
 	return slug
@@ -99,16 +99,10 @@ function DraggableRow({
 			className={classnames(
 				'wcpos:relative wcpos:border-b wcpos:border-gray-100',
 				isDragging && 'wcpos:opacity-50',
+				closestEdge === 'top' && 'wcpos:shadow-[inset_0_2px_0_0_var(--color-wp-admin-theme-color)]',
+				closestEdge === 'bottom' && 'wcpos:shadow-[inset_0_-2px_0_0_var(--color-wp-admin-theme-color)]',
 			)}
 		>
-			{closestEdge && (
-				<td
-					className="wcpos:p-0 wcpos:border-0"
-					style={{ position: 'absolute', left: 0, right: 0, top: closestEdge === 'top' ? 0 : undefined, bottom: closestEdge === 'bottom' ? 0 : undefined, height: '2px', padding: 0 }}
-				>
-					<div className="wcpos:h-0.5 wcpos:bg-wp-admin-theme-color wcpos:w-full" />
-				</td>
-			)}
 			<td
 				ref={handleRef}
 				className={classnames(
@@ -179,9 +173,9 @@ interface ActiveTemplatesTableProps {
 	onPreview: (id: number | string) => void;
 	onDisable: (id: number | string) => void;
 	onDelete: (id: number) => void;
-	onReorder: (updates: Array<{ id: number | string; menu_order: number }>) => void;
-	isToggling: boolean;
-	isDeleting: boolean;
+	onReorder: (updates: Array<{ id: number; menu_order: number }>) => void;
+	togglingId: number | null;
+	deletingId: number | null;
 }
 
 export function ActiveTemplatesTable({
@@ -190,18 +184,21 @@ export function ActiveTemplatesTable({
 	onDisable,
 	onDelete,
 	onReorder,
-	isToggling,
-	isDeleting,
+	togglingId,
+	deletingId,
 }: ActiveTemplatesTableProps) {
 	const activeTemplates = React.useMemo(() => {
 		return templates
-			.filter((t): t is AnyTemplate => {
+			.filter((t) => {
 				if ('status' in t && t.status === 'publish') return true;
 				if (t.is_virtual && t.is_active) return true;
 				return false;
 			})
 			.sort((a, b) => a.menu_order - b.menu_order);
 	}, [templates]);
+
+	const onReorderRef = React.useRef(onReorder);
+	onReorderRef.current = onReorder;
 
 	React.useEffect(() => {
 		return monitorForElements({
@@ -227,15 +224,17 @@ export function ActiveTemplatesTable({
 					axis: 'vertical',
 				});
 
-				const updates = reordered.map((t, i) => ({
-					id: t.id,
-					menu_order: i,
-				}));
+				const updates = reordered
+					.filter((t): t is Template => typeof t.id === 'number')
+					.map((t, i) => ({
+						id: t.id,
+						menu_order: i,
+					}));
 
-				onReorder(updates);
+				onReorderRef.current(updates);
 			},
 		});
-	}, [activeTemplates, onReorder]);
+	}, [activeTemplates]);
 
 	if (activeTemplates.length === 0) {
 		return (
@@ -276,8 +275,8 @@ export function ActiveTemplatesTable({
 							onPreview={onPreview}
 							onDisable={onDisable}
 							onDelete={onDelete}
-							isToggling={isToggling}
-							isDeleting={isDeleting}
+							isToggling={template.id === togglingId}
+							isDeleting={template.id === deletingId}
 						/>
 					))}
 				</tbody>

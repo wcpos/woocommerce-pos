@@ -117,9 +117,9 @@ export function GalleryGrid() {
 					onPreview={setPreviewId}
 					onDisable={(id) => { if (typeof id === 'number') toggleTemplate.mutate({ id, status: 'draft' }); }}
 					onDelete={(id) => deleteTemplate.mutate(id)}
-					onReorder={(updates) => reorderTemplates.mutate(updates.filter((u): u is { id: number; menu_order: number } => typeof u.id === 'number'))}
-					isToggling={toggleTemplate.isPending}
-					isDeleting={deleteTemplate.isPending}
+					onReorder={(updates) => reorderTemplates.mutate(updates)}
+					togglingId={toggleTemplate.isPending ? (typeof toggleTemplate.variables === 'object' ? toggleTemplate.variables.id : null) : null}
+					deletingId={deleteTemplate.isPending ? deleteTemplate.variables ?? null : null}
 				/>
 			</section>
 
