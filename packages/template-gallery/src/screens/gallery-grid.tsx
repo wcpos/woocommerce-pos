@@ -123,7 +123,7 @@ export function GalleryGrid() {
 					onDisable={(id) => { if (typeof id === 'number') toggleTemplate.mutate({ id, status: 'draft' }); }}
 					onDelete={(id) => deleteTemplate.mutate(id)}
 					onReorder={(updates) => reorderTemplates.mutate(updates)}
-					togglingId={toggleTemplate.isPending && typeof toggleTemplate.variables === 'object' ? toggleTemplate.variables?.id ?? null : null}
+					togglingId={toggleTemplate.isPending && toggleTemplate.variables != null ? toggleTemplate.variables.id ?? null : null}
 					deletingId={deleteTemplate.isPending ? deleteTemplate.variables ?? null : null}
 				/>
 			</section>
@@ -179,6 +179,11 @@ export function GalleryGrid() {
 									No custom templates yet. Create one or customise a gallery template to get started.
 								</p>
 							)}
+							{customTemplates.length > 0 && filteredCustom.length === 0 && (
+								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
+									No custom templates match your filters.
+								</p>
+							)}
 							<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
 								{filteredCustom.map((t: Template) => (
 									<TemplateCard
@@ -197,8 +202,8 @@ export function GalleryGrid() {
 										}}
 										isToggling={
 											toggleTemplate.isPending &&
-											typeof toggleTemplate.variables === 'object' &&
-											toggleTemplate.variables?.id === t.id
+											toggleTemplate.variables != null &&
+											toggleTemplate.variables.id === t.id
 										}
 									/>
 								))}
