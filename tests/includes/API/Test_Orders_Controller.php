@@ -1150,5 +1150,9 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $update_response->get_status(), 'Update should succeed when adding a new coupon.' );
 		$this->assertCount( 2, $update_data['coupon_lines'], 'Order should have two coupons after update.' );
+
+		$coupon_codes = array_column( $update_data['coupon_lines'], 'code' );
+		$this->assertContains( 'coupon1', $coupon_codes, 'First coupon should be present.' );
+		$this->assertContains( 'coupon2', $coupon_codes, 'Second coupon should be present.' );
 	}
 }
