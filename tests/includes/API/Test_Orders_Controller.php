@@ -2,6 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -1038,5 +1039,56 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'CONFLICT-SKU', $data['line_items'][0]['sku'] );
+	}
+
+	/**
+	 * Updating an order with coupon_lines that have IDs should not fail.
+	 *
+	 * WooCommerce V3 throws "Coupon item ID is readonly" if coupon_lines contain
+	 * an 'id' field. The POS sends back the full response data on updates, so
+	 * we need to strip coupon line IDs before passing to the parent controller.
+	 */
+	public function test_update_order_with_coupon_line_ids(): void {
+		CouponHelper::create_coupon( 'testcoupon' );
+
+		// Create an order with a coupon.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items'   => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Test Product',
+						'quantity'   => 1,
+						'total'      => '10',
+						'subtotal'   => '10',
+					),
+				),
+				'coupon_lines' => array(
+					array(
+						'code' => 'testcoupon',
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertNotEmpty( $data['coupon_lines'] );
+		$this->assertNotEmpty( $data['coupon_lines'][0]['id'], 'Coupon line should have an ID in the response.' );
+
+		// Now update the order, sending back just the coupon_lines (which include IDs from the response).
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $data['id'] );
+		$update_request->set_body_params(
+			array(
+				'coupon_lines' => $data['coupon_lines'],
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+
+		$this->assertEquals( 200, $update_response->get_status(), 'Update should succeed despite coupon_lines containing IDs.' );
 	}
 }

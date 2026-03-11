@@ -277,7 +277,12 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
-		// Proceed with the parent method to handle the creation.
+		// Strip IDs from coupon_lines to avoid "Coupon item ID is readonly" error.
+		// WooCommerce V3 rejects coupon_lines that include an 'id' field, but the POS
+		// sends back the full order data (including coupon line IDs from the response).
+		$this->wcpos_strip_coupon_line_ids( $request );
+
+		// Proceed with the parent method to handle the update.
 		return parent::update_item( $request );
 	}
 
@@ -1064,5 +1069,28 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Strip IDs from coupon_lines in the request.
+	 *
+	 * WooCommerce V3 REST API throws "Coupon item ID is readonly" if coupon_lines
+	 * contain an 'id' field. The POS sends back full order data on updates, which
+	 * includes the coupon line IDs from the previous response.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 */
+	private function wcpos_strip_coupon_line_ids( WP_REST_Request $request ): void {
+		if ( ! isset( $request['coupon_lines'] ) || ! \is_array( $request['coupon_lines'] ) ) {
+			return;
+		}
+
+		$coupon_lines = $request['coupon_lines'];
+
+		foreach ( $coupon_lines as &$coupon_line ) {
+			unset( $coupon_line['id'] );
+		}
+
+		$request['coupon_lines'] = $coupon_lines;
 	}
 }
