@@ -2,7 +2,7 @@ export interface FilterState {
 	search: string;
 	categories: string[];
 	connectivity: 'all' | 'offline' | 'online';
-	output: 'all' | 'html' | 'thermal';
+	output: 'all' | 'html' | 'escpos';
 	source: 'all' | 'custom' | 'builtin';
 }
 
@@ -194,7 +194,7 @@ export function FilterSidebar({
 				options={[
 					{ value: 'all', label: 'All' },
 					{ value: 'html', label: 'HTML' },
-					{ value: 'thermal', label: 'Thermal' },
+					{ value: 'escpos', label: 'Thermal' },
 				]}
 				onChange={(v) =>
 					onChange({

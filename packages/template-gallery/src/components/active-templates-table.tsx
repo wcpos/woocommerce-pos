@@ -38,7 +38,8 @@ function formatConnectivity(template: AnyTemplate): {
 }
 
 function formatOutput(template: AnyTemplate): string {
-	if (template.output_type === 'thermal') return 'Thermal';
+	if (template.output_type === 'escpos' || template.output_type === 'thermal' || template.engine === 'thermal')
+		return 'Thermal';
 	return 'HTML';
 }
 

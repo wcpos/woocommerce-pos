@@ -12,7 +12,6 @@
 	"dependencies": {
 		"@atlaskit/pragmatic-drag-and-drop": "^1.7.7",
 		"@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
-		"@atlaskit/pragmatic-drag-and-drop-react-drop-indicator": "^3.2.12",
 		"@tanstack/react-query": "^5.90.21",
 		"@tanstack/react-router": "^1.159.5",
 		"@wordpress/api-fetch": "^7.39.0",
