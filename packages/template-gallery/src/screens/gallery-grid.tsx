@@ -186,7 +186,11 @@ export function GalleryGrid() {
 									onEdit={() => {
 										window.location.href = editUrl(t.id);
 									}}
-									isToggling={toggleTemplate.isPending}
+									isToggling={
+									toggleTemplate.isPending &&
+									typeof toggleTemplate.variables === 'object' &&
+									toggleTemplate.variables?.id === t.id
+								}
 								/>
 							))}
 
