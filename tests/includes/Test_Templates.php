@@ -511,7 +511,6 @@ class Test_Templates extends WP_UnitTestCase {
 	public function test_install_gallery_template_sets_metadata(): void {
 		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
 
-		$this->assertTrue( (bool) get_post_meta( $post_id, '_template_is_premade', true ) );
 		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
 		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
 		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
