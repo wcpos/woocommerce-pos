@@ -13,6 +13,8 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
+import { TemplateTags } from './template-tags';
+
 import type { AnyTemplate, Template, VirtualTemplate } from '../types';
 
 function formatCategory(slug: string | undefined): string {
@@ -21,26 +23,6 @@ function formatCategory(slug: string | undefined): string {
 		.split('-')
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 		.join(' ');
-}
-
-function formatConnectivity(template: AnyTemplate): {
-	label: string;
-	className: string;
-} {
-	const isOffline =
-		template.engine === 'logicless' ||
-		template.engine === 'thermal' ||
-		('offline_capable' in template && template.offline_capable);
-
-	return isOffline
-		? { label: 'Offline', className: 'wcpos:text-green-600' }
-		: { label: 'Online', className: 'wcpos:text-gray-500' };
-}
-
-function formatOutput(template: AnyTemplate): string {
-	if (template.output_type === 'escpos' || template.output_type === 'thermal' || template.engine === 'thermal')
-		return 'Thermal';
-	return 'HTML';
 }
 
 function isTemplateEnabled(template: AnyTemplate): boolean {
@@ -113,8 +95,6 @@ function DraggableRow({
 		};
 	}, [template.id, index]);
 
-	const connectivity = formatConnectivity(template);
-
 	return (
 		<tr
 			ref={rowRef}
@@ -139,17 +119,14 @@ function DraggableRow({
 				)}
 				&#8801;
 			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
-				{template.title}
+			<td className="wcpos:px-3 wcpos:py-2">
+				<div className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
+					{template.title}
+				</div>
+				<TemplateTags template={template} />
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
-			</td>
-			<td className={classnames('wcpos:px-3 wcpos:py-2 wcpos:text-sm', connectivity.className)}>
-				{connectivity.label}
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
-				{formatOutput(template)}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
 				<button
@@ -296,12 +273,6 @@ export function TemplatesTable({
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Category
-						</th>
-						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Connectivity
-						</th>
-						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Output
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-center wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Active
