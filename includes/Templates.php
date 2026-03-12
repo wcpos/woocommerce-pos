@@ -534,6 +534,63 @@ class Templates {
 	}
 
 	/**
+	 * Get the list of disabled virtual template IDs.
+	 *
+	 * @return string[] Array of disabled virtual template IDs.
+	 */
+	public static function get_disabled_virtual_templates(): array {
+		$disabled = get_option( 'wcpos_disabled_virtual_templates', array() );
+
+		if ( ! \is_array( $disabled ) ) {
+			return array();
+		}
+
+		return $disabled;
+	}
+
+	/**
+	 * Check if a virtual template is disabled.
+	 *
+	 * @param string $template_id Virtual template ID.
+	 *
+	 * @return bool True if disabled.
+	 */
+	public static function is_virtual_template_disabled( string $template_id ): bool {
+		$disabled = self::get_disabled_virtual_templates();
+
+		return \in_array( $template_id, $disabled, true );
+	}
+
+	/**
+	 * Set the disabled state of a virtual template.
+	 *
+	 * @param string $template_id Virtual template ID.
+	 * @param bool   $disabled    True to disable, false to enable.
+	 *
+	 * @return bool True on success.
+	 */
+	public static function set_virtual_template_disabled( string $template_id, bool $disabled ): bool {
+		$current = self::get_disabled_virtual_templates();
+
+		if ( $disabled ) {
+			if ( ! \in_array( $template_id, $current, true ) ) {
+				$current[] = $template_id;
+			}
+		} else {
+			$current = array_values(
+				array_filter(
+					$current,
+					function ( $id ) use ( $template_id ) {
+						return $id !== $template_id;
+					}
+				)
+			);
+		}
+
+		return update_option( 'wcpos_disabled_virtual_templates', $current );
+	}
+
+	/**
 	 * Check if a template is currently active.
 	 *
 	 * @param int|string $template_id Template ID.
