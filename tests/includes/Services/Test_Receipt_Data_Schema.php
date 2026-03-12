@@ -186,6 +186,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'policies_and_conditions', $store );
 		$this->assertArrayHasKey( 'footer_imprint', $store );
 
+		// Type checks to catch shape regressions.
 		$this->assertIsString( $store['logo'] );
 		$this->assertIsString( $store['opening_hours'] );
 		$this->assertIsString( $store['personal_notes'] );
