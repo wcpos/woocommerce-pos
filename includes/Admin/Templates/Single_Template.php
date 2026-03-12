@@ -39,6 +39,12 @@ class Single_Template {
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
 
+		// Remove default taxonomy metaboxes — consolidated into Template Settings.
+		add_action( 'admin_menu', function () {
+			remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
+			remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
+		});
+
 		// Remove the default content editor — our React app replaces it.
 		// Called directly because this class is instantiated after init.
 		remove_post_type_support( 'wcpos_template', 'editor' );
@@ -130,7 +136,7 @@ class Single_Template {
 			array( $this, 'render_actions_metabox' ),
 			'wcpos_template',
 			'side',
-			'default'
+			'high'
 		);
 	}
 

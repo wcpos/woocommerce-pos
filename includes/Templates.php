@@ -87,7 +87,7 @@ class Templates {
 			'label'               => __( 'Template', 'woocommerce-pos' ),
 			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
 			'labels'              => $labels,
-			'supports'            => array( 'title', 'editor', 'revisions', 'page-attributes' ),
+			'supports'            => array( 'title', 'editor', 'revisions' ),
 			'taxonomies'          => array( 'wcpos_template_type', 'wcpos_template_category' ),
 			'hierarchical'        => false,
 			'public'              => false,
