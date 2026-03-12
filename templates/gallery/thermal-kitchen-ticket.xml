@@ -13,9 +13,6 @@
     <col width="8"><bold><size width="2">x{{qty}}</size></bold></col>
     <col width="40"><bold><size width="2">{{name}}</size></bold></col>
   </row>
-  {{#note}}
-  <text>  * {{note}}</text>
-  {{/note}}
   {{/lines}}
   <line style="double" />
   <feed lines="3" />

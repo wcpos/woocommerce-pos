@@ -14,19 +14,21 @@
     <col width="16">Date:</col>
     <col width="32" align="right">{{meta.created_at_gmt}}</col>
   </row>
+  {{#cashier.name}}
   <row>
     <col width="16">Cashier:</col>
-    <col width="32" align="right">{{meta.cashier}}</col>
+    <col width="32" align="right">{{cashier.name}}</col>
   </row>
+  {{/cashier.name}}
   <line />
-  {{#customer.first_name}}
+  {{#customer.name}}
   <bold><text>Customer</text></bold>
-  <text>{{customer.first_name}} {{customer.last_name}}</text>
-  {{#customer.email}}
-  <text>{{customer.email}}</text>
-  {{/customer.email}}
+  <text>{{customer.name}}</text>
+  {{#customer.billing_address.email}}
+  <text>{{customer.billing_address.email}}</text>
+  {{/customer.billing_address.email}}
   <line />
-  {{/customer.first_name}}
+  {{/customer.name}}
   <row>
     <col width="24"><bold>Item</bold></col>
     <col width="8" align="right"><bold>Qty</bold></col>
@@ -49,34 +51,34 @@
     <col width="24">Subtotal</col>
     <col width="24" align="right">{{totals.subtotal_incl}}</col>
   </row>
-  {{#totals.discount}}
-  <row>
-    <col width="24">Discount</col>
-    <col width="24" align="right">-{{totals.discount}}</col>
-  </row>
-  {{/totals.discount}}
-  {{#totals.shipping}}
-  <row>
-    <col width="24">Shipping</col>
-    <col width="24" align="right">{{totals.shipping}}</col>
-  </row>
-  {{/totals.shipping}}
-  {{#totals.fees}}
-  <row>
-    <col width="24">Fees</col>
-    <col width="24" align="right">{{totals.fees}}</col>
-  </row>
-  {{/totals.fees}}
-  <line />
-  {{#tax_lines}}
+  {{#discounts}}
   <row>
     <col width="24">{{label}}</col>
-    <col width="24" align="right">{{tax_total}}</col>
+    <col width="24" align="right">-{{total_incl}}</col>
   </row>
-  {{/tax_lines}}
+  {{/discounts}}
+  {{#shipping}}
+  <row>
+    <col width="24">{{label}}</col>
+    <col width="24" align="right">{{total_incl}}</col>
+  </row>
+  {{/shipping}}
+  {{#fees}}
+  <row>
+    <col width="24">{{label}}</col>
+    <col width="24" align="right">{{total_incl}}</col>
+  </row>
+  {{/fees}}
+  <line />
+  {{#tax_summary}}
+  <row>
+    <col width="24">{{label}}</col>
+    <col width="24" align="right">{{tax_amount}}</col>
+  </row>
+  {{/tax_summary}}
   <row>
     <col width="24">Tax Total</col>
-    <col width="24" align="right">{{totals.total_tax}}</col>
+    <col width="24" align="right">{{totals.tax_total}}</col>
   </row>
   <line style="double" />
   <row>
@@ -89,12 +91,22 @@
     <col width="24">{{method_title}}</col>
     <col width="24" align="right">{{amount}}</col>
   </row>
+  {{#tendered}}
+  <row>
+    <col width="24">  Tendered</col>
+    <col width="24" align="right">{{tendered}}</col>
+  </row>
+  {{/tendered}}
+  {{#change}}
+  <row>
+    <col width="24">  Change</col>
+    <col width="24" align="right">{{change}}</col>
+  </row>
+  {{/change}}
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
     <barcode type="code128" height="60">{{meta.order_number}}</barcode>
-    <feed lines="1" />
-    <qrcode size="4">{{meta.order_url}}</qrcode>
   </align>
   <feed lines="1" />
   <align mode="center">
