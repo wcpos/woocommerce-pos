@@ -1,9 +1,9 @@
 import * as React from 'react';
 
-import { ActiveTemplatesTable } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { TemplateCard } from '../components/template-card';
+import { TemplatesTable } from '../components/active-templates-table';
 import {
 	useGalleryTemplates,
 	useInstallGalleryTemplate,
@@ -11,21 +11,13 @@ import {
 import {
 	useTemplates,
 	useToggleTemplate,
+	useToggleVirtualTemplate,
 	useReorderTemplates,
 	useDeleteTemplate,
 } from '../hooks/use-templates';
 
 import type { FilterState } from '../components/filter-sidebar';
-import type { AnyTemplate, GalleryTemplate, Template } from '../types';
-
-const CATEGORIES = [
-	'receipt',
-	'invoice',
-	'gift-receipt',
-	'credit-note',
-	'purchase-order',
-	'kitchen-ticket',
-];
+import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
 function matchesFilters(
 	template: { title: string; category: string; engine?: string; offline_capable?: boolean; output_type?: string; is_premade?: boolean },
@@ -78,6 +70,7 @@ export function GalleryGrid() {
 	const { data: templates = [] } = useTemplates('receipt');
 	const { data: galleryTemplates = [] } = useGalleryTemplates('receipt');
 	const toggleTemplate = useToggleTemplate();
+	const toggleVirtualTemplate = useToggleVirtualTemplate();
 	const installGallery = useInstallGalleryTemplate();
 	const reorderTemplates = useReorderTemplates();
 	const deleteTemplate = useDeleteTemplate();
@@ -86,18 +79,7 @@ export function GalleryGrid() {
 		matchesFilters(t, filters),
 	);
 
-	const customTemplates = templates.filter(
-		(t: AnyTemplate): t is Template => typeof t.id === 'number',
-	);
-
-	const filteredCustom = customTemplates.filter((t: Template) =>
-		matchesFilters(t, filters),
-	);
-
 	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
-
-	const editUrl = (id: number) =>
-		`${adminUrl}/post.php?post=${id}&action=edit`;
 
 	// Find the template being previewed
 	const previewTemplate = previewId !== null
@@ -110,118 +92,104 @@ export function GalleryGrid() {
 		? ('key' in previewTemplate ? previewTemplate.key : previewTemplate.id)
 		: null;
 
+	const handleToggle = (id: number | string) => {
+		if (typeof id === 'string') {
+			const vt = templates.find((t): t is VirtualTemplate => t.is_virtual && t.id === id);
+			if (vt) {
+				const isCurrentlyDisabled = 'is_disabled' in vt && vt.is_disabled;
+				toggleVirtualTemplate.mutate({ id, disabled: !isCurrentlyDisabled });
+			}
+		} else {
+			const t = templates.find((tmpl): tmpl is Template => !tmpl.is_virtual && tmpl.id === id);
+			if (t) {
+				toggleTemplate.mutate({
+					id,
+					status: t.status === 'publish' ? 'draft' : 'publish',
+				});
+			}
+		}
+	};
+
+	const togglingId: number | string | null = (() => {
+		if (toggleTemplate.isPending && toggleTemplate.variables != null) {
+			return toggleTemplate.variables.id ?? null;
+		}
+		if (toggleVirtualTemplate.isPending && toggleVirtualTemplate.variables != null) {
+			return toggleVirtualTemplate.variables.id ?? null;
+		}
+		return null;
+	})();
+
 	return (
 		<div className="wcpos:space-y-6">
-			{/* Active Templates Table section */}
+			{/* Your Templates section */}
 			<section>
-				<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
-					Active Templates
-				</h2>
-				<ActiveTemplatesTable
+				<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:mb-3">
+					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
+						Your Templates
+					</h2>
+					<a
+						href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
+						className="page-title-action"
+					>
+						Add New Template
+					</a>
+				</div>
+				<TemplatesTable
 					templates={templates}
 					onPreview={setPreviewId}
-					onDisable={(id) => { if (typeof id === 'number') toggleTemplate.mutate({ id, status: 'draft' }); }}
+					onToggle={handleToggle}
 					onDelete={(id) => deleteTemplate.mutate(id)}
-					onReorder={(updates) => reorderTemplates.mutate(updates)}
-					togglingId={toggleTemplate.isPending && toggleTemplate.variables != null ? toggleTemplate.variables.id ?? null : null}
+					onReorder={(orderedIds) => reorderTemplates.mutate(orderedIds)}
+					togglingId={togglingId}
 					deletingId={deleteTemplate.isPending ? deleteTemplate.variables ?? null : null}
 				/>
 			</section>
 
-			{/* Receipt Template Gallery */}
-			<section>
-				<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
-					Receipt Template Gallery
-				</h2>
-				<div className="wcpos:flex wcpos:gap-6">
-					<FilterSidebar
-						filters={filters}
-						onChange={setFilters}
-						availableCategories={CATEGORIES}
-						collapsed={sidebarCollapsed}
-						onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
-					/>
+			{/* Template Gallery section */}
+			{galleryTemplates.length > 0 && (
+				<section>
+					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
+						Template Gallery
+					</h2>
+					<div className="wcpos:flex wcpos:gap-6">
+						<FilterSidebar
+							filters={filters}
+							onChange={setFilters}
+							availableCategories={[
+								'receipt',
+								'invoice',
+								'gift-receipt',
+								'credit-note',
+								'purchase-order',
+								'kitchen-ticket',
+							]}
+							collapsed={sidebarCollapsed}
+							onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+						/>
 
-					<div className="wcpos:flex-1 wcpos:min-w-0 wcpos:space-y-6">
-						{/* Gallery templates section */}
-						{galleryTemplates.length > 0 && (
-							<section>
-								<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-600 wcpos:mb-3 wcpos:m-0">
-									Gallery Templates
-								</h3>
-									{filteredGallery.length > 0 ? (
-									<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-										{filteredGallery.map((t: GalleryTemplate) => (
-											<TemplateCard
-												key={t.key}
-												template={t}
-												isGallery
-												onPreview={() => setPreviewId(t.key)}
-												onCustomize={() => installGallery.mutate(t.key)}
-											/>
-										))}
-									</div>
-								) : (
-									<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
-										No gallery templates match your filters.
-									</p>
-								)}
-							</section>
-						)}
-
-						{/* Custom templates section */}
-						<section>
-							<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-600 wcpos:mb-3 wcpos:m-0">
-								Your Templates
-							</h3>
-							{customTemplates.length === 0 && (
-								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:mb-3">
-									No custom templates yet. Create one or customise a gallery template to get started.
-								</p>
-							)}
-							{customTemplates.length > 0 && filteredCustom.length === 0 && (
+						<div className="wcpos:flex-1 wcpos:min-w-0">
+							{filteredGallery.length > 0 ? (
+								<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+									{filteredGallery.map((t: GalleryTemplate) => (
+										<TemplateCard
+											key={t.key}
+											template={t}
+											isGallery
+											onPreview={() => setPreviewId(t.key)}
+											onCustomize={() => installGallery.mutate(t.key)}
+										/>
+									))}
+								</div>
+							) : (
 								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
-									No custom templates match your filters.
+									No gallery templates match your filters.
 								</p>
 							)}
-							<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-								{filteredCustom.map((t: Template) => (
-									<TemplateCard
-										key={t.id}
-										template={t}
-										isGallery={false}
-										onPreview={() => setPreviewId(t.id)}
-										onActivate={() =>
-											toggleTemplate.mutate({
-												id: t.id,
-												status: t.status === 'publish' ? 'draft' : 'publish',
-											})
-										}
-										onEdit={() => {
-											window.location.href = editUrl(t.id);
-										}}
-										isToggling={
-											toggleTemplate.isPending &&
-											toggleTemplate.variables != null &&
-											toggleTemplate.variables.id === t.id
-										}
-									/>
-								))}
-
-								{/* New template card */}
-								<a
-									href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
-									className="wcpos:border-2 wcpos:border-dashed wcpos:border-gray-300 wcpos:rounded-lg wcpos:flex wcpos:items-center wcpos:justify-center wcpos:min-h-48 hover:wcpos:border-gray-400 wcpos:text-gray-400 hover:wcpos:text-gray-500 wcpos:no-underline"
-								>
-									<span className="wcpos:text-sm wcpos:font-medium">
-										+ New Template
-									</span>
-								</a>
-							</div>
-						</section>
+						</div>
 					</div>
-				</div>
-			</section>
+				</section>
+			)}
 
 			{/* Preview modal */}
 			{previewTemplate && (
