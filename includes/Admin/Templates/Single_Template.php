@@ -39,12 +39,6 @@ class Single_Template {
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
 
-		// Remove default taxonomy metaboxes — consolidated into Template Settings.
-		add_action( 'admin_menu', function () {
-			remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
-			remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
-		});
-
 		// Remove the default content editor — our React app replaces it.
 		// Called directly because this class is instantiated after init.
 		remove_post_type_support( 'wcpos_template', 'editor' );
@@ -121,6 +115,10 @@ class Single_Template {
 	 * @return void
 	 */
 	public function add_meta_boxes(): void {
+		// Remove default taxonomy metaboxes — consolidated into Template Settings.
+		remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
+		remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
+
 		add_meta_box(
 			'wcpos_template_settings',
 			__( 'Template Settings', 'woocommerce-pos' ),
@@ -582,11 +580,13 @@ class Single_Template {
 			$preview_url = $this->get_receipt_preview_url( $last_order, $post->ID );
 		}
 
+		$paper_width = get_post_meta( $post->ID, '_template_paper_width', true );
+
 		$config = array(
 			'fieldSchema' => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree(),
 			'sampleData'  => $sample_data,
 			'engine'      => $engine,
-			'paperWidth'  => get_post_meta( $post->ID, '_template_paper_width', true ) ?: null,
+			'paperWidth'  => $paper_width ? $paper_width : null,
 			'templateId'  => $post->ID,
 			'previewUrl'  => $preview_url,
 			'postContent' => $post->post_content,
