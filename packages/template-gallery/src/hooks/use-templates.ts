@@ -42,7 +42,7 @@ export function useToggleTemplate() {
 	});
 }
 
-export function useToggleVirtualTemplate() {
+export function useToggleVirtualTemplate(type = 'receipt') {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 
@@ -52,8 +52,8 @@ export function useToggleVirtualTemplate() {
 				path: 'wcpos/v1/templates/batch?wcpos=1',
 				method: 'POST',
 				data: disabled
-					? { disable_virtual: [id] }
-					: { enable_virtual: [id] },
+					? { type, disable_virtual: [id] }
+					: { type, enable_virtual: [id] },
 			}),
 		onSuccess: (_data, { disabled }) => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
@@ -88,7 +88,7 @@ export function useCopyTemplate() {
 	});
 }
 
-export function useReorderTemplates() {
+export function useReorderTemplates(type = 'receipt') {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 
@@ -97,7 +97,7 @@ export function useReorderTemplates() {
 			apiFetch({
 				path: 'wcpos/v1/templates/batch?wcpos=1',
 				method: 'POST',
-				data: { order },
+				data: { type, order },
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });

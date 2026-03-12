@@ -606,7 +606,6 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		wp_delete_post( $id1, true );
 		wp_delete_post( $id2, true );
-		delete_option( 'wcpos_template_order_receipt' );
 	}
 
 	/**
@@ -882,8 +881,6 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 404, $response->get_status() );
 	}
-
-	// ---- Task 10: Gallery listing tests ----
 
 	// ---- Task 3: Sorted order and disabled state tests ----
 

@@ -156,14 +156,13 @@ export function GalleryGrid() {
 						<FilterSidebar
 							filters={filters}
 							onChange={setFilters}
-							availableCategories={[
-								'receipt',
-								'invoice',
-								'gift-receipt',
-								'credit-note',
-								'purchase-order',
-								'kitchen-ticket',
-							]}
+							availableCategories={Array.from(
+								new Set(
+									galleryTemplates
+										.map((t) => t.category)
+										.filter((c) => c.length > 0),
+								),
+							)}
 							collapsed={sidebarCollapsed}
 							onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
 						/>
