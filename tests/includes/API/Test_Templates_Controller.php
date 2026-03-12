@@ -583,6 +583,61 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 400, $response->get_status() );
 	}
 
+	/**
+	 * Test batch reorder saves ordered template IDs including virtual.
+	 */
+	public function test_batch_reorder_saves_order_with_virtual_ids(): void {
+		$id1 = $this->create_template( 'Reorder A' );
+		$id2 = $this->create_template( 'Reorder B' );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'order' => array( 'plugin-core', $id2, $id1 ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$stored = \WCPOS\WooCommercePOS\Templates::get_template_order( 'receipt' );
+		$this->assertEquals( array( 'plugin-core', $id2, $id1 ), $stored );
+
+		wp_delete_post( $id1, true );
+		wp_delete_post( $id2, true );
+		delete_option( 'wcpos_template_order_receipt' );
+	}
+
+	/**
+	 * Test batch toggle virtual template disabled state.
+	 */
+	public function test_batch_toggle_virtual_template(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'disable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Templates::is_virtual_template_disabled( 'plugin-core' ) );
+
+		// Now re-enable.
+		$request2 = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request2->set_body_params(
+			array(
+				'enable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response2 = $this->server->dispatch( $request2 );
+
+		$this->assertEquals( 200, $response2->get_status() );
+		$this->assertFalse( \WCPOS\WooCommercePOS\Templates::is_virtual_template_disabled( 'plugin-core' ) );
+
+		delete_option( 'wcpos_disabled_virtual_templates' );
+	}
+
 	// ---- Task 8: Copy and Install tests ----
 
 	/**
