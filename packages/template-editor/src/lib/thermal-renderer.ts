@@ -287,8 +287,7 @@ function renderNode(node: ThermalNode): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children)}</span>`;
 		case 'size': {
-			const scale = Math.max(node.width, node.height);
-			return `<span style="font-size: ${scale}em; line-height: 1.2; display: inline-block; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children)}</span>`;
+			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children)}</span>`;
 		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children)}</div>`;
