@@ -191,4 +191,19 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 0.0, (float) $line['unit_price_incl'] );
 		$this->assertEquals( 0.0, (float) $line['unit_price_excl'] );
 	}
+
+	/**
+	 * Test build includes new store fields.
+	 */
+	public function test_build_includes_new_store_fields(): void {
+		$order   = OrderHelper::create_order();
+		$payload = $this->builder->build( $order, 'live' );
+		$store   = $payload['store'];
+
+		$this->assertArrayHasKey( 'logo', $store );
+		$this->assertArrayHasKey( 'opening_hours', $store );
+		$this->assertArrayHasKey( 'personal_notes', $store );
+		$this->assertArrayHasKey( 'policies_and_conditions', $store );
+		$this->assertArrayHasKey( 'footer_imprint', $store );
+	}
 }

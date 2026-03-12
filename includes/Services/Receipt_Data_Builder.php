@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Abstract_Order;
+use WCPOS\WooCommercePOS\Abstracts\Store;
 
 /**
  * Receipt_Data_Builder class.
@@ -48,6 +49,16 @@ class Receipt_Data_Builder {
 			'phone'         => get_option( 'woocommerce_store_phone', '' ),
 			'email'         => get_option( 'admin_email', '' ),
 		);
+
+		$pos_store = new Store();
+
+		$logo_src      = $pos_store->get_logo_image_src( 'full' );
+		$store['logo'] = $logo_src ? $logo_src[0] : null;
+
+		$store['opening_hours']           = $pos_store->get_opening_hours() ? $pos_store->get_opening_hours() : null;
+		$store['personal_notes']          = $pos_store->get_personal_notes() ? $pos_store->get_personal_notes() : null;
+		$store['policies_and_conditions'] = $pos_store->get_policies_and_conditions() ? $pos_store->get_policies_and_conditions() : null;
+		$store['footer_imprint']          = $pos_store->get_footer_imprint() ? $pos_store->get_footer_imprint() : null;
 
 		$cashier = array(
 			'id'   => (int) $order->get_meta( '_pos_user' ),
