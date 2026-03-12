@@ -20,6 +20,24 @@ use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
  * Single_Template class.
  */
 class Single_Template {
+	private const VALID_ENGINES = array( 'logicless', 'thermal', 'legacy-php' );
+
+	private const VALID_CATEGORIES = array(
+		'receipt',
+		'invoice',
+		'gift-receipt',
+		'credit-note',
+		'purchase-order',
+		'kitchen-ticket',
+		'bar-ticket',
+	);
+
+	private const ENGINE_LANGUAGE_MAP = array(
+		'thermal'    => 'xml',
+		'logicless'  => 'html',
+		'legacy-php' => 'php',
+	);
+
 	/**
 	 * Constructor.
 	 */
@@ -457,9 +475,8 @@ class Single_Template {
 
 		// Save category.
 		if ( isset( $_POST['wcpos_template_category'] ) ) {
-			$category        = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
-			$valid_categories = array( 'receipt', 'invoice', 'gift-receipt', 'credit-note', 'purchase-order', 'kitchen-ticket', 'bar-ticket' );
-			if ( ! empty( $category ) && \in_array( $category, $valid_categories, true ) ) {
+			$category = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
+			if ( ! empty( $category ) && \in_array( $category, self::VALID_CATEGORIES, true ) ) {
 				wp_set_object_terms( $post_id, $category, 'wcpos_template_category' );
 			} elseif ( empty( $category ) ) {
 				wp_set_object_terms( $post_id, array(), 'wcpos_template_category' );
@@ -467,15 +484,9 @@ class Single_Template {
 		}
 
 		// Save engine and derive output_type + language.
-		$language_map = array(
-			'thermal'    => 'xml',
-			'logicless'  => 'html',
-			'legacy-php' => 'php',
-		);
-
 		if ( isset( $_POST['wcpos_template_engine'] ) ) {
 			$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
-			if ( \in_array( $engine, array( 'logicless', 'thermal', 'legacy-php' ), true ) ) {
+			if ( \in_array( $engine, self::VALID_ENGINES, true ) ) {
 				update_post_meta( $post_id, '_template_engine', $engine );
 
 				// Derive output_type from engine.
@@ -483,7 +494,7 @@ class Single_Template {
 				update_post_meta( $post_id, '_template_output_type', $output_type );
 
 				// Derive language from engine.
-				update_post_meta( $post_id, '_template_language', $language_map[ $engine ] );
+				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $engine ] );
 			}
 		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
 			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
