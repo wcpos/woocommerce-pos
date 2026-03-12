@@ -67,12 +67,14 @@ export function GalleryGrid() {
 	const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
 	const [previewId, setPreviewId] = React.useState<number | string | null>(null);
 
-	const { data: templates = [] } = useTemplates('receipt');
-	const { data: galleryTemplates = [] } = useGalleryTemplates('receipt');
+	const type = 'receipt';
+
+	const { data: templates = [] } = useTemplates(type);
+	const { data: galleryTemplates = [] } = useGalleryTemplates(type);
 	const toggleTemplate = useToggleTemplate();
-	const toggleVirtualTemplate = useToggleVirtualTemplate();
+	const toggleVirtualTemplate = useToggleVirtualTemplate(type);
 	const installGallery = useInstallGalleryTemplate();
-	const reorderTemplates = useReorderTemplates();
+	const reorderTemplates = useReorderTemplates(type);
 	const deleteTemplate = useDeleteTemplate();
 
 	const filteredGallery = galleryTemplates.filter((t: GalleryTemplate) =>
