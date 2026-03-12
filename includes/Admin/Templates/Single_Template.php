@@ -186,14 +186,6 @@ class Single_Template {
 			'legacy-php' => __( 'Prints using your browser\'s print dialog. Requires a server connection to generate the receipt.', 'woocommerce-pos' ),
 		);
 
-		$language_map = array(
-			'thermal'    => 'xml',
-			'logicless'  => 'html',
-			'legacy-php' => 'php',
-		);
-
-		$language = $language_map[ $engine ] ?? 'php';
-
 		?>
 		<!-- Category -->
 		<p>
@@ -226,7 +218,6 @@ class Single_Template {
 					</option>
 				<?php endforeach; ?>
 			</select>
-			<input type="hidden" name="wcpos_template_language" value="<?php echo esc_attr( $language ); ?>" />
 		</p>
 		<p id="wcpos-engine-description" class="description" style="margin-top: -8px;">
 			<?php echo esc_html( $engine_descriptions[ $engine ] ?? '' ); ?>
@@ -248,8 +239,6 @@ class Single_Template {
 			var paperField = document.getElementById('wcpos-paper-size-field');
 			var descEl = document.getElementById('wcpos-engine-description');
 			var descriptions = <?php echo wp_json_encode( $engine_descriptions ); ?>;
-			var languageMap = <?php echo wp_json_encode( $language_map ); ?>;
-			var languageInput = document.querySelector('input[name="wcpos_template_language"]');
 
 			if (engineSelect) {
 				engineSelect.addEventListener('change', function() {
@@ -259,9 +248,6 @@ class Single_Template {
 					}
 					if (descEl) {
 						descEl.textContent = descriptions[val] || '';
-					}
-					if (languageInput && languageMap[val]) {
-						languageInput.value = languageMap[val];
 					}
 				});
 			}
@@ -464,15 +450,22 @@ class Single_Template {
 
 		// Save category.
 		if ( isset( $_POST['wcpos_template_category'] ) ) {
-			$category = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
-			if ( ! empty( $category ) ) {
+			$category        = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
+			$valid_categories = array( 'receipt', 'invoice', 'gift-receipt', 'credit-note', 'purchase-order', 'kitchen-ticket', 'bar-ticket' );
+			if ( ! empty( $category ) && \in_array( $category, $valid_categories, true ) ) {
 				wp_set_object_terms( $post_id, $category, 'wcpos_template_category' );
-			} else {
+			} elseif ( empty( $category ) ) {
 				wp_set_object_terms( $post_id, array(), 'wcpos_template_category' );
 			}
 		}
 
-		// Save engine.
+		// Save engine and derive output_type + language.
+		$language_map = array(
+			'thermal'    => 'xml',
+			'logicless'  => 'html',
+			'legacy-php' => 'php',
+		);
+
 		if ( isset( $_POST['wcpos_template_engine'] ) ) {
 			$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
 			if ( \in_array( $engine, array( 'logicless', 'thermal', 'legacy-php' ), true ) ) {
@@ -481,18 +474,14 @@ class Single_Template {
 				// Derive output_type from engine.
 				$output_type = 'thermal' === $engine ? 'escpos' : 'html';
 				update_post_meta( $post_id, '_template_output_type', $output_type );
+
+				// Derive language from engine.
+				update_post_meta( $post_id, '_template_language', $language_map[ $engine ] );
 			}
 		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
 			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
 			update_post_meta( $post_id, '_template_output_type', 'html' );
-		}
-
-		// Save language.
-		if ( isset( $_POST['wcpos_template_language'] ) ) {
-			$language = sanitize_text_field( wp_unslash( $_POST['wcpos_template_language'] ) );
-			if ( \in_array( $language, array( 'php', 'javascript', 'xml', 'html' ), true ) ) {
-				update_post_meta( $post_id, '_template_language', $language );
-			}
+			update_post_meta( $post_id, '_template_language', 'php' );
 		}
 
 		// Save paper width.
