@@ -8,8 +8,6 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Abstract_Order;
-use WCPOS\WooCommercePOS\Abstracts\Store;
-
 /**
  * Receipt_Data_Builder class.
  */
@@ -50,15 +48,19 @@ class Receipt_Data_Builder {
 			'email'         => get_option( 'admin_email', '' ),
 		);
 
-		$pos_store = new Store();
+		$pos_store = wcpos_get_store();
 
-		$logo_src      = $pos_store->get_logo_image_src( 'full' );
-		$store['logo'] = $logo_src ? $logo_src[0] : null;
+		$logo_src                = $pos_store->get_logo_image_src( 'full' );
+		$opening_hours           = $pos_store->get_opening_hours();
+		$personal_notes          = $pos_store->get_personal_notes();
+		$policies_and_conditions = $pos_store->get_policies_and_conditions();
+		$footer_imprint          = $pos_store->get_footer_imprint();
 
-		$store['opening_hours']           = $pos_store->get_opening_hours() ? $pos_store->get_opening_hours() : null;
-		$store['personal_notes']          = $pos_store->get_personal_notes() ? $pos_store->get_personal_notes() : null;
-		$store['policies_and_conditions'] = $pos_store->get_policies_and_conditions() ? $pos_store->get_policies_and_conditions() : null;
-		$store['footer_imprint']          = $pos_store->get_footer_imprint() ? $pos_store->get_footer_imprint() : null;
+		$store['logo']                    = ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
+		$store['opening_hours']           = $opening_hours ?: null;
+		$store['personal_notes']          = $personal_notes ?: null;
+		$store['policies_and_conditions'] = $policies_and_conditions ?: null;
+		$store['footer_imprint']          = $footer_imprint ?: null;
 
 		$cashier = array(
 			'id'   => (int) $order->get_meta( '_pos_user' ),

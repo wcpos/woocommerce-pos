@@ -186,6 +186,12 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'policies_and_conditions', $store );
 		$this->assertArrayHasKey( 'footer_imprint', $store );
 
+		$this->assertIsString( $store['logo'] );
+		$this->assertIsString( $store['opening_hours'] );
+		$this->assertIsString( $store['personal_notes'] );
+		$this->assertIsString( $store['policies_and_conditions'] );
+		$this->assertIsString( $store['footer_imprint'] );
+
 		// Mock data should have non-empty values for preview.
 		$this->assertNotEmpty( $store['opening_hours'] );
 		$this->assertNotEmpty( $store['footer_imprint'] );
