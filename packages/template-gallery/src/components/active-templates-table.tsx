@@ -13,7 +13,7 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import type { AnyTemplate, Template } from '../types';
+import type { AnyTemplate, Template, VirtualTemplate } from '../types';
 
 function formatCategory(slug: string | undefined): string {
 	if (!slug) return '\u2014';
@@ -43,11 +43,18 @@ function formatOutput(template: AnyTemplate): string {
 	return 'HTML';
 }
 
+function isTemplateEnabled(template: AnyTemplate): boolean {
+	if (template.is_virtual) {
+		return !('is_disabled' in template && (template as VirtualTemplate).is_disabled);
+	}
+	return (template as Template).status === 'publish';
+}
+
 interface DraggableRowProps {
 	template: AnyTemplate;
 	index: number;
 	onPreview: (id: number | string) => void;
-	onDisable: (id: number | string) => void;
+	onToggle: (id: number | string) => void;
 	onDelete: (id: number) => void;
 	isToggling: boolean;
 	isDeleting: boolean;
@@ -57,7 +64,7 @@ function DraggableRow({
 	template,
 	index,
 	onPreview,
-	onDisable,
+	onToggle,
 	onDelete,
 	isToggling,
 	isDeleting,
@@ -71,11 +78,12 @@ function DraggableRow({
 	const isVirtual = template.is_virtual;
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
 	const canDelete = !template.is_premade && !isVirtual;
+	const enabled = isTemplateEnabled(template);
 
 	React.useEffect(() => {
 		const row = rowRef.current;
 		const handle = handleRef.current;
-		if (!row || !handle || isVirtual) return;
+		if (!row || !handle) return;
 
 		const cleanupDrag = draggable({
 			element: row,
@@ -103,7 +111,7 @@ function DraggableRow({
 			cleanupDrag();
 			cleanupDrop();
 		};
-	}, [template.id, index, isVirtual]);
+	}, [template.id, index]);
 
 	const connectivity = formatConnectivity(template);
 
@@ -113,14 +121,12 @@ function DraggableRow({
 			className={classnames(
 				'wcpos:relative wcpos:border-b wcpos:border-gray-100',
 				isDragging && 'wcpos:opacity-50',
+				!enabled && 'wcpos:opacity-60',
 			)}
 		>
 			<td
 				ref={handleRef}
-				className={classnames(
-					'wcpos:px-3 wcpos:py-2 wcpos:text-gray-400 wcpos:text-center wcpos:w-8 wcpos:relative wcpos:overflow-visible',
-					isVirtual ? 'wcpos:cursor-default' : 'wcpos:cursor-grab',
-				)}
+				className="wcpos:px-3 wcpos:py-2 wcpos:text-gray-400 wcpos:text-center wcpos:w-8 wcpos:relative wcpos:overflow-visible wcpos:cursor-grab"
 			>
 				{closestEdge && (
 					<div
@@ -131,7 +137,7 @@ function DraggableRow({
 						style={{ width: 'calc(var(--table-width, 100%) + 1px)' }}
 					/>
 				)}
-				{isVirtual ? '' : '\u2261'}
+				&#8801;
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
 				{template.title}
@@ -144,6 +150,28 @@ function DraggableRow({
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatOutput(template)}
+			</td>
+			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
+				<button
+					type="button"
+					onClick={() => onToggle(template.id)}
+					disabled={isToggling}
+					aria-label={enabled ? 'Deactivate template' : 'Activate template'}
+					aria-pressed={enabled}
+					className={classnames(
+						'wcpos:relative wcpos:inline-flex wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:cursor-pointer wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:bg-transparent wcpos:p-0',
+						'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color focus:wcpos:ring-offset-2',
+						enabled ? 'wcpos:bg-wp-admin-theme-color' : 'wcpos:bg-gray-200',
+						isToggling && 'wcpos:opacity-50 wcpos:cursor-not-allowed',
+					)}
+				>
+					<span
+						className={classnames(
+							'wcpos:pointer-events-none wcpos:inline-block wcpos:h-4 wcpos:w-4 wcpos:transform wcpos:rounded-full wcpos:bg-white wcpos:shadow wcpos:ring-0 wcpos:transition wcpos:duration-200 wcpos:ease-in-out',
+							enabled ? 'wcpos:translate-x-4' : 'wcpos:translate-x-0',
+						)}
+					/>
+				</button>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
@@ -161,16 +189,6 @@ function DraggableRow({
 						>
 							Edit
 						</a>
-					)}
-					{!isVirtual && (
-						<button
-							type="button"
-							onClick={() => onDisable(template.id)}
-							disabled={isToggling}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
-						>
-							Disable
-						</button>
 					)}
 					{canDelete && (
 						<button
@@ -192,36 +210,26 @@ function DraggableRow({
 	);
 }
 
-interface ActiveTemplatesTableProps {
+interface TemplatesTableProps {
 	templates: AnyTemplate[];
 	onPreview: (id: number | string) => void;
-	onDisable: (id: number | string) => void;
+	onToggle: (id: number | string) => void;
 	onDelete: (id: number) => void;
-	onReorder: (updates: Array<{ id: number; menu_order: number }>) => void;
-	togglingId: number | null;
+	onReorder: (orderedIds: Array<number | string>) => void;
+	togglingId: number | string | null;
 	deletingId: number | null;
 }
 
-export function ActiveTemplatesTable({
+export function TemplatesTable({
 	templates,
 	onPreview,
-	onDisable,
+	onToggle,
 	onDelete,
 	onReorder,
 	togglingId,
 	deletingId,
-}: ActiveTemplatesTableProps) {
+}: TemplatesTableProps) {
 	const tableRef = React.useRef<HTMLTableElement>(null);
-
-	const activeTemplates = React.useMemo(() => {
-		return templates
-			.filter((t) => {
-				if ('status' in t && t.status === 'publish') return true;
-				if (t.is_virtual && t.is_active) return true;
-				return false;
-			})
-			.sort((a, b) => a.menu_order - b.menu_order);
-	}, [templates]);
 
 	const onReorderRef = React.useRef(onReorder);
 	onReorderRef.current = onReorder;
@@ -248,37 +256,30 @@ export function ActiveTemplatesTable({
 				const targetId = target.data.id as number | string;
 				if (sourceId === targetId) return;
 
-				const sourceIndex = activeTemplates.findIndex((t) => t.id === sourceId);
-				const targetIndex = activeTemplates.findIndex((t) => t.id === targetId);
+				const sourceIndex = templates.findIndex((t) => t.id === sourceId);
+				const targetIndex = templates.findIndex((t) => t.id === targetId);
 				if (sourceIndex < 0 || targetIndex < 0) return;
 
 				const edge = extractClosestEdge(target.data);
 
 				const reordered = reorderWithEdge({
-					list: activeTemplates,
+					list: templates,
 					startIndex: sourceIndex,
 					indexOfTarget: targetIndex,
 					closestEdgeOfTarget: edge,
 					axis: 'vertical',
 				});
 
-				const updates = reordered
-					.filter((t): t is Template => typeof t.id === 'number')
-					.map((t, i) => ({
-						id: t.id,
-						menu_order: i,
-					}));
-
-				onReorderRef.current(updates);
+				onReorderRef.current(reordered.map((t) => t.id));
 			},
 		});
-	}, [activeTemplates]);
+	}, [templates]);
 
-	if (activeTemplates.length === 0) {
+	if (templates.length === 0) {
 		return (
 			<div className="wcpos:bg-white wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-8 wcpos:text-center">
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:m-0">
-					No active templates. Browse the gallery below to enable one.
+					No templates yet. Browse the gallery below to get started.
 				</p>
 			</div>
 		);
@@ -302,19 +303,22 @@ export function ActiveTemplatesTable({
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Output
 						</th>
+						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-center wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
+							Active
+						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Actions
 						</th>
 					</tr>
 				</thead>
 				<tbody>
-					{activeTemplates.map((template, index) => (
+					{templates.map((template, index) => (
 						<DraggableRow
 							key={template.id}
 							template={template}
 							index={index}
 							onPreview={onPreview}
-							onDisable={onDisable}
+							onToggle={onToggle}
 							onDelete={onDelete}
 							isToggling={template.id === togglingId}
 							isDeleting={template.id === deletingId}

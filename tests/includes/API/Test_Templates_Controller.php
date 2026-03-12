@@ -52,6 +52,10 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		delete_option( 'wcpos_template_order_receipt' );
+		delete_option( 'wcpos_template_order_report' );
+		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_report' );
 	}
 
 	/**
@@ -580,6 +584,58 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 400, $response->get_status() );
 	}
 
+	/**
+	 * Test batch reorder saves ordered template IDs including virtual.
+	 */
+	public function test_batch_reorder_saves_order_with_virtual_ids(): void {
+		$id1 = $this->create_template( 'Reorder A' );
+		$id2 = $this->create_template( 'Reorder B' );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'order' => array( 'plugin-core', $id2, $id1 ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$stored = \WCPOS\WooCommercePOS\Templates::get_template_order( 'receipt' );
+		$this->assertEquals( array( 'plugin-core', $id2, $id1 ), $stored );
+
+		wp_delete_post( $id1, true );
+		wp_delete_post( $id2, true );
+	}
+
+	/**
+	 * Test batch toggle virtual template disabled state.
+	 */
+	public function test_batch_toggle_virtual_template(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request->set_body_params(
+			array(
+				'disable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertTrue( \WCPOS\WooCommercePOS\Templates::is_virtual_template_disabled( 'plugin-core' ) );
+
+		// Now re-enable.
+		$request2 = $this->wp_rest_post_request( '/wcpos/v1/templates/batch' );
+		$request2->set_body_params(
+			array(
+				'enable_virtual' => array( 'plugin-core' ),
+			)
+		);
+		$response2 = $this->server->dispatch( $request2 );
+
+		$this->assertEquals( 200, $response2->get_status() );
+		$this->assertFalse( \WCPOS\WooCommercePOS\Templates::is_virtual_template_disabled( 'plugin-core' ) );
+	}
+
 	// ---- Task 8: Copy and Install tests ----
 
 	/**
@@ -823,7 +879,103 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 404, $response->get_status() );
 	}
 
-	// ---- Task 10: Gallery listing tests ----
+	// ---- Sorted order and disabled state tests ----
+
+	/**
+	 * Test get_items returns templates sorted by stored order.
+	 */
+	public function test_get_items_sorted_by_stored_order(): void {
+		$id1 = $this->create_template( 'Template A' );
+		$id2 = $this->create_template( 'Template B' );
+		$id3 = $this->create_template( 'Template C' );
+
+		// Store custom order: C, A, B.
+		\WCPOS\WooCommercePOS\Templates::save_template_order(
+			array( $id3, $id1, $id2 ),
+			'receipt'
+		);
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$db_templates = array_values(
+			array_filter(
+				$data,
+				function ( $t ) use ( $id1, $id2, $id3 ) {
+					return \in_array( $t['id'], array( $id1, $id2, $id3 ), true );
+				}
+			)
+		);
+
+		$this->assertCount( 3, $db_templates );
+		$this->assertEquals( $id3, $db_templates[0]['id'] );
+		$this->assertEquals( $id1, $db_templates[1]['id'] );
+		$this->assertEquals( $id2, $db_templates[2]['id'] );
+
+		wp_delete_post( $id1, true );
+		wp_delete_post( $id2, true );
+		wp_delete_post( $id3, true );
+	}
+
+	/**
+	 * Test get_items includes is_disabled for virtual templates.
+	 */
+	public function test_get_items_includes_is_disabled_for_virtual(): void {
+		\WCPOS\WooCommercePOS\Templates::set_virtual_template_disabled( 'plugin-core', true );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$core = null;
+		foreach ( $data as $t ) {
+			if ( 'plugin-core' === ( $t['id'] ?? '' ) ) {
+				$core = $t;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $core );
+		$this->assertArrayHasKey( 'is_disabled', $core );
+		$this->assertTrue( $core['is_disabled'] );
+	}
+
+	/**
+	 * Test templates not in stored order are appended at end.
+	 */
+	public function test_templates_not_in_order_appended(): void {
+		$id1 = $this->create_template( 'Ordered Template' );
+		$id2 = $this->create_template( 'Unordered Template' );
+
+		// Only id1 is in the stored order.
+		\WCPOS\WooCommercePOS\Templates::save_template_order(
+			array( 'plugin-core', $id1 ),
+			'receipt'
+		);
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+		$ids  = array_column( $data, 'id' );
+
+		// id1 should appear before id2.
+		$pos1 = array_search( $id1, $ids, true );
+		$pos2 = array_search( $id2, $ids, true );
+		$this->assertNotFalse( $pos1 );
+		$this->assertNotFalse( $pos2 );
+		$this->assertLessThan( $pos2, $pos1 );
+
+		wp_delete_post( $id1, true );
+		wp_delete_post( $id2, true );
+	}
+
+	// ---- Gallery listing tests ----
 
 	/**
 	 * Test gallery endpoint returns premade templates.

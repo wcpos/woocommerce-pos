@@ -495,6 +495,109 @@ class Templates {
 	}
 
 	/**
+	 * Get the stored display order for templates of a given type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return array Ordered array of template IDs (int for database, string for virtual).
+	 */
+	public static function get_template_order( string $type = 'receipt' ): array {
+		$order = get_option( 'wcpos_template_order_' . $type, array() );
+
+		if ( ! \is_array( $order ) ) {
+			return array();
+		}
+
+		return $order;
+	}
+
+	/**
+	 * Save the display order for templates of a given type.
+	 *
+	 * @param array  $order Array of template IDs in display order.
+	 * @param string $type  Template type (receipt, report).
+	 *
+	 * @return bool True on success.
+	 */
+	public static function save_template_order( array $order, string $type = 'receipt' ): bool {
+		// Sanitize: keep only integers and safe strings.
+		$sanitized = array();
+		foreach ( $order as $id ) {
+			if ( \is_int( $id ) || ( \is_numeric( $id ) && (int) $id > 0 ) ) {
+				$sanitized[] = (int) $id;
+			} elseif ( \is_string( $id ) ) {
+				$clean = sanitize_text_field( $id );
+				if ( '' !== $clean ) {
+					$sanitized[] = $clean;
+				}
+			}
+		}
+
+		return update_option( 'wcpos_template_order_' . $type, $sanitized );
+	}
+
+	/**
+	 * Get the list of disabled virtual template IDs for a given type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return string[] Array of disabled virtual template IDs.
+	 */
+	public static function get_disabled_virtual_templates( string $type = 'receipt' ): array {
+		$disabled = get_option( 'wcpos_disabled_virtual_templates_' . $type, array() );
+
+		if ( ! \is_array( $disabled ) ) {
+			return array();
+		}
+
+		return $disabled;
+	}
+
+	/**
+	 * Check if a virtual template is disabled.
+	 *
+	 * @param string $template_id Virtual template ID.
+	 * @param string $type        Template type (receipt, report).
+	 *
+	 * @return bool True if disabled.
+	 */
+	public static function is_virtual_template_disabled( string $template_id, string $type = 'receipt' ): bool {
+		$disabled = self::get_disabled_virtual_templates( $type );
+
+		return \in_array( $template_id, $disabled, true );
+	}
+
+	/**
+	 * Set the disabled state of a virtual template.
+	 *
+	 * @param string $template_id Virtual template ID.
+	 * @param bool   $disabled    True to disable, false to enable.
+	 * @param string $type        Template type (receipt, report).
+	 *
+	 * @return bool True on success.
+	 */
+	public static function set_virtual_template_disabled( string $template_id, bool $disabled, string $type = 'receipt' ): bool {
+		$current = self::get_disabled_virtual_templates( $type );
+
+		if ( $disabled ) {
+			if ( ! \in_array( $template_id, $current, true ) ) {
+				$current[] = $template_id;
+			}
+		} else {
+			$current = array_values(
+				array_filter(
+					$current,
+					function ( $id ) use ( $template_id ) {
+						return $id !== $template_id;
+					}
+				)
+			);
+		}
+
+		return update_option( 'wcpos_disabled_virtual_templates_' . $type, $current );
+	}
+
+	/**
 	 * Check if a template is currently active.
 	 *
 	 * @param int|string $template_id Template ID.
