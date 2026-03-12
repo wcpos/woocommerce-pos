@@ -34,6 +34,7 @@ export function App({ config }: AppProps) {
 			{showFieldPicker && (
 				<FieldPicker
 					schema={config.fieldSchema}
+					engine={config.engine}
 					onInsertField={handleInsertField}
 				/>
 			)}

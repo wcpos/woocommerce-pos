@@ -145,17 +145,31 @@ class Single_Template {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
 		$template = TemplatesManager::get_template( $post->ID );
-		$language = $template ? $template['language'] : 'php';
+		$engine   = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+
+		$engine_labels = array(
+			'thermal'    => __( 'XML (Thermal)', 'woocommerce-pos' ),
+			'logicless'  => __( 'HTML (Logicless)', 'woocommerce-pos' ),
+			'legacy-php' => __( 'PHP (Legacy)', 'woocommerce-pos' ),
+		);
+
+		$engine_label = $engine_labels[ $engine ] ?? $engine;
+
+		$language_map = array(
+			'thermal'    => 'xml',
+			'logicless'  => 'html',
+			'legacy-php' => 'php',
+		);
+
+		$language = $language_map[ $engine ] ?? 'php';
 
 		?>
 		<p>
-			<label for="wcpos_template_language">
-				<strong><?php esc_html_e( 'Language', 'woocommerce-pos' ); ?></strong>
+			<label>
+				<strong><?php esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong>
 			</label>
-			<select name="wcpos_template_language" id="wcpos_template_language" style="width: 100%;">
-				<option value="php" <?php selected( $language, 'php' ); ?>>PHP</option>
-				<option value="javascript" <?php selected( $language, 'javascript' ); ?>>JavaScript</option>
-			</select>
+			<input type="text" value="<?php echo esc_attr( $engine_label ); ?>" style="width: 100%;" disabled="disabled" />
+			<input type="hidden" name="wcpos_template_language" value="<?php echo esc_attr( $language ); ?>" />
 		</p>
 		<?php
 	}
@@ -350,7 +364,7 @@ class Single_Template {
 		// Save language.
 		if ( isset( $_POST['wcpos_template_language'] ) ) {
 			$language = sanitize_text_field( wp_unslash( $_POST['wcpos_template_language'] ) );
-			if ( \in_array( $language, array( 'php', 'javascript' ), true ) ) {
+			if ( \in_array( $language, array( 'php', 'javascript', 'xml', 'html' ), true ) ) {
 				update_post_meta( $post_id, '_template_language', $language );
 			}
 		}

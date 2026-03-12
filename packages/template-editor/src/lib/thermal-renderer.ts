@@ -286,13 +286,14 @@ function renderNode(node: ThermalNode): string {
 			return `<span style="text-decoration: underline">${renderNodes(node.children)}</span>`;
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children)}</span>`;
-		case 'size':
-			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2">${renderNodes(node.children)}</span>`;
+		case 'size': {
+			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children)}</span>`;
+		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children)}</div>`;
 		case 'row': {
 			const cols = node.children.map(renderCol).join('');
-			return `<div style="display: flex">${cols}</div>`;
+			return `<div style="display: flex; max-width: 100%; overflow: hidden">${cols}</div>`;
 		}
 		case 'col':
 			return renderCol(node);
@@ -321,13 +322,13 @@ function renderNode(node: ThermalNode): string {
 }
 
 function renderCol(node: ColNode): string {
-	return `<span style="flex: 0 0 ${node.width}ch; text-align: ${node.align}; overflow: hidden">${renderNodes(node.children)}</span>`;
+	return `<span style="flex: 0 0 ${node.width}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children)}</span>`;
 }
 
 function renderHtml(ast: ReceiptNode): string {
 	const width = ast.paperWidth;
 	const inner = renderNodes(ast.children);
-	return `<div style="width: ${width}ch; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin: 0 auto; overflow: hidden; white-space: pre-wrap; word-break: break-all;">${inner}</div>`;
+	return `<div style="width: ${width}ch; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin: 0 auto; overflow: hidden; white-space: pre-wrap; word-break: break-all; box-sizing: content-box">${inner}</div>`;
 }
 
 // -- Public API --
