@@ -21,12 +21,30 @@
     <col width="16">Subtotal</col>
     <col width="16" align="right">{{totals.subtotal_incl}}</col>
   </row>
+  {{#shipping}}
+  <row>
+    <col width="16">{{label}}</col>
+    <col width="16" align="right">{{total_incl}}</col>
+  </row>
+  {{/shipping}}
+  {{#fees}}
+  <row>
+    <col width="16">{{label}}</col>
+    <col width="16" align="right">{{total_incl}}</col>
+  </row>
+  {{/fees}}
   {{#discounts}}
   <row>
     <col width="16">{{label}}</col>
     <col width="16" align="right">-{{total_incl}}</col>
   </row>
   {{/discounts}}
+  {{#tax_summary}}
+  <row>
+    <col width="16">{{label}}</col>
+    <col width="16" align="right">{{tax_amount}}</col>
+  </row>
+  {{/tax_summary}}
   <row>
     <col width="16">Tax</col>
     <col width="16" align="right">{{totals.tax_total}}</col>
@@ -42,6 +60,18 @@
     <col width="16">{{method_title}}</col>
     <col width="16" align="right">{{amount}}</col>
   </row>
+  {{#tendered}}
+  <row>
+    <col width="16">  Tendered</col>
+    <col width="16" align="right">{{tendered}}</col>
+  </row>
+  {{/tendered}}
+  {{#change}}
+  <row>
+    <col width="16">  Change</col>
+    <col width="16" align="right">{{change}}</col>
+  </row>
+  {{/change}}
   {{/payments}}
   <feed lines="2" />
   <align mode="center">

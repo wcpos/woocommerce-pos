@@ -46,6 +46,11 @@
     <col width="16" align="right">{{line_total_incl}}</col>
   </row>
   {{/lines}}
+  {{#meta.customer_note}}
+  <line />
+  <bold><text>Note</text></bold>
+  <text>{{meta.customer_note}}</text>
+  {{/meta.customer_note}}
   <line />
   <row>
     <col width="24">Subtotal</col>
@@ -103,6 +108,9 @@
     <col width="24" align="right">{{change}}</col>
   </row>
   {{/change}}
+  {{#reference}}
+  <text>  Ref: {{reference}}</text>
+  {{/reference}}
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
