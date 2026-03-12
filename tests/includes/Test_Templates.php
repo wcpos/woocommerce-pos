@@ -57,6 +57,8 @@ class Test_Templates extends WP_UnitTestCase {
 		// Clean up options.
 		delete_option( 'wcpos_active_template_receipt' );
 		delete_option( 'wcpos_active_template_report' );
+		delete_option( 'wcpos_template_order_receipt' );
+		delete_option( 'wcpos_template_order_report' );
 	}
 
 	/**
@@ -605,5 +607,40 @@ class Test_Templates extends WP_UnitTestCase {
 	public function test_get_gallery_template_by_key_returns_null_for_invalid(): void {
 		$template = Templates::get_gallery_template_by_key( 'nonexistent-template' );
 		$this->assertNull( $template );
+	}
+
+	/**
+	 * Test get_template_order returns empty array by default.
+	 */
+	public function test_get_template_order_returns_empty_by_default(): void {
+		$order = Templates::get_template_order( 'receipt' );
+		$this->assertIsArray( $order );
+		$this->assertEmpty( $order );
+	}
+
+	/**
+	 * Test save and retrieve template order.
+	 */
+	public function test_save_and_get_template_order(): void {
+		$order = array( 'plugin-pro', 42, 'plugin-core', 15 );
+		Templates::save_template_order( $order, 'receipt' );
+
+		$retrieved = Templates::get_template_order( 'receipt' );
+		$this->assertEquals( $order, $retrieved );
+	}
+
+	/**
+	 * Test save_template_order sanitizes values.
+	 */
+	public function test_save_template_order_sanitizes_values(): void {
+		$order = array( 'plugin-core', 42, '<script>alert(1)</script>', 99 );
+		Templates::save_template_order( $order, 'receipt' );
+
+		$retrieved = Templates::get_template_order( 'receipt' );
+		// Script tag should be sanitized away.
+		$this->assertNotContains( '<script>alert(1)</script>', $retrieved );
+		$this->assertContains( 'plugin-core', $retrieved );
+		$this->assertContains( 42, $retrieved );
+		$this->assertContains( 99, $retrieved );
 	}
 }

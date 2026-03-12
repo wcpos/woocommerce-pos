@@ -492,6 +492,48 @@ class Templates {
 	}
 
 	/**
+	 * Get the stored display order for templates of a given type.
+	 *
+	 * @param string $type Template type (receipt, report).
+	 *
+	 * @return array Ordered array of template IDs (int for database, string for virtual).
+	 */
+	public static function get_template_order( string $type = 'receipt' ): array {
+		$order = get_option( 'wcpos_template_order_' . $type, array() );
+
+		if ( ! \is_array( $order ) ) {
+			return array();
+		}
+
+		return $order;
+	}
+
+	/**
+	 * Save the display order for templates of a given type.
+	 *
+	 * @param array  $order Array of template IDs in display order.
+	 * @param string $type  Template type (receipt, report).
+	 *
+	 * @return bool True on success.
+	 */
+	public static function save_template_order( array $order, string $type = 'receipt' ): bool {
+		// Sanitize: keep only integers and safe strings.
+		$sanitized = array();
+		foreach ( $order as $id ) {
+			if ( \is_int( $id ) || ( \is_numeric( $id ) && (int) $id > 0 ) ) {
+				$sanitized[] = (int) $id;
+			} elseif ( \is_string( $id ) ) {
+				$clean = sanitize_text_field( $id );
+				if ( '' !== $clean ) {
+					$sanitized[] = $clean;
+				}
+			}
+		}
+
+		return update_option( 'wcpos_template_order_' . $type, $sanitized );
+	}
+
+	/**
 	 * Check if a template is currently active.
 	 *
 	 * @param int|string $template_id Template ID.
