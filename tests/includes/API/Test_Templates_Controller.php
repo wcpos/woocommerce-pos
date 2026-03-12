@@ -713,26 +713,28 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->markTestSkipped( 'No thermal gallery templates available.' );
 		}
 
-		$order = OrderHelper::create_order();
+		$order = OrderHelper::create_order( array( 'total' => 50 ) );
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $thermal['key'] . '/preview' );
-		$response = $this->server->dispatch( $request );
+		try {
+			$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $thermal['key'] . '/preview' );
+			$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 200, $response->get_status() );
+			$this->assertEquals( 200, $response->get_status() );
 
-		$data = $response->get_data();
-		$this->assertEquals( 'thermal', $data['engine'] );
-		$this->assertArrayHasKey( 'template_content', $data );
-		$this->assertArrayHasKey( 'receipt_data', $data );
-		$this->assertStringContainsString( '<receipt', $data['template_content'] );
-		$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
-		$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
-		// Money fields should be pre-formatted strings.
-		$this->assertIsString( $data['receipt_data']['totals']['grand_total_incl'] );
-
-		wp_delete_post( $order->get_id(), true );
+			$data = $response->get_data();
+			$this->assertEquals( 'thermal', $data['engine'] );
+			$this->assertArrayHasKey( 'template_content', $data );
+			$this->assertArrayHasKey( 'receipt_data', $data );
+			$this->assertStringContainsString( '<receipt', $data['template_content'] );
+			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
+			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
+			// Money fields should be pre-formatted strings.
+			$this->assertIsString( $data['receipt_data']['totals']['grand_total_incl'] );
+		} finally {
+			wp_delete_post( $order->get_id(), true );
+		}
 	}
 
 	/**

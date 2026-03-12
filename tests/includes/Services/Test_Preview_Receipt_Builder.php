@@ -61,17 +61,31 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 * @covers ::build
 	 */
 	public function test_store_info_uses_wc_settings(): void {
-		update_option( 'blogname', 'My Test Store' );
-		update_option( 'woocommerce_store_address', '789 Elm Street' );
-		update_option( 'woocommerce_store_city', 'Portland' );
-		update_option( 'woocommerce_store_postcode', '97201' );
-		update_option( 'woocommerce_currency', 'EUR' );
+		$original_name     = get_option( 'blogname' );
+		$original_address  = get_option( 'woocommerce_store_address' );
+		$original_city     = get_option( 'woocommerce_store_city' );
+		$original_postcode = get_option( 'woocommerce_store_postcode' );
+		$original_currency = get_option( 'woocommerce_currency' );
 
-		$data = $this->builder->build();
+		try {
+			update_option( 'blogname', 'My Test Store' );
+			update_option( 'woocommerce_store_address', '789 Elm Street' );
+			update_option( 'woocommerce_store_city', 'Portland' );
+			update_option( 'woocommerce_store_postcode', '97201' );
+			update_option( 'woocommerce_currency', 'EUR' );
 
-		$this->assertEquals( 'My Test Store', $data['store']['name'] );
-		$this->assertContains( '789 Elm Street', $data['store']['address_lines'] );
-		$this->assertEquals( 'EUR', $data['meta']['currency'] );
+			$data = $this->builder->build();
+
+			$this->assertEquals( 'My Test Store', $data['store']['name'] );
+			$this->assertContains( '789 Elm Street', $data['store']['address_lines'] );
+			$this->assertEquals( 'EUR', $data['meta']['currency'] );
+		} finally {
+			update_option( 'blogname', $original_name );
+			update_option( 'woocommerce_store_address', $original_address );
+			update_option( 'woocommerce_store_city', $original_city );
+			update_option( 'woocommerce_store_postcode', $original_postcode );
+			update_option( 'woocommerce_currency', $original_currency );
+		}
 	}
 
 	/**
@@ -123,15 +137,21 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 * @covers ::build
 	 */
 	public function test_all_sections_populated(): void {
-		update_option( 'woocommerce_calc_taxes', 'yes' );
+		$original_calc_taxes = get_option( 'woocommerce_calc_taxes' );
 
-		$data = $this->builder->build();
+		try {
+			update_option( 'woocommerce_calc_taxes', 'yes' );
 
-		$this->assertNotEmpty( $data['fees'], 'Fees section should not be empty' );
-		$this->assertNotEmpty( $data['shipping'], 'Shipping section should not be empty' );
-		$this->assertNotEmpty( $data['discounts'], 'Discounts section should not be empty' );
-		$this->assertNotEmpty( $data['tax_summary'], 'Tax summary section should not be empty' );
-		$this->assertNotEmpty( $data['payments'], 'Payments section should not be empty' );
+			$data = $this->builder->build();
+
+			$this->assertNotEmpty( $data['fees'], 'Fees section should not be empty' );
+			$this->assertNotEmpty( $data['shipping'], 'Shipping section should not be empty' );
+			$this->assertNotEmpty( $data['discounts'], 'Discounts section should not be empty' );
+			$this->assertNotEmpty( $data['tax_summary'], 'Tax summary section should not be empty' );
+			$this->assertNotEmpty( $data['payments'], 'Payments section should not be empty' );
+		} finally {
+			update_option( 'woocommerce_calc_taxes', $original_calc_taxes );
+		}
 	}
 
 	/**

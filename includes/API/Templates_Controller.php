@@ -858,10 +858,12 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Legacy-php and other engines: return content + data for client display.
+		// Legacy-php and other engines cannot be rendered server-side without a real order.
 		return rest_ensure_response(
 			array(
-				'preview_html' => $banner . ( $template['content'] ?? '' ),
+				'preview_html' => $banner . '<div style="padding: 40px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #666;">'
+					. esc_html__( 'Create a POS order to preview this template.', 'woocommerce-pos' )
+					. '</div>',
 				'order_id'     => 0,
 				'template_id'  => $id,
 			)
@@ -874,7 +876,9 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return string Banner HTML markup.
 	 */
 	private function get_preview_banner_html(): string {
-		return '<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">Preview — Sample receipt with demo data</div>';
+		$text = esc_html__( 'Preview — Sample receipt with demo data', 'woocommerce-pos' );
+
+		return '<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">' . $text . '</div>';
 	}
 
 	/**

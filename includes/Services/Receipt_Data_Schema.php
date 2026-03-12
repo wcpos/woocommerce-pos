@@ -51,6 +51,23 @@ class Receipt_Data_Schema {
 	);
 
 	/**
+	 * Money fields where a zero value should remain numeric 0 (Mustache-falsy)
+	 * so that section guards like {{#change}}...{{/change}} treat them as empty.
+	 *
+	 * All other money fields are always formatted to a currency string,
+	 * including when their value is zero (e.g. "$0.00").
+	 */
+	const ZERO_FALSY_MONEY_FIELDS = array(
+		'change',
+		'tendered',
+		'discounts_incl',
+		'discounts_excl',
+		'change_total',
+		'discount_total_incl',
+		'discount_total_excl',
+	);
+
+	/**
 	 * Field names (terminal key segment) that represent money values.
 	 *
 	 * Used by the logicless renderer to auto-format currency output.
@@ -103,8 +120,10 @@ class Receipt_Data_Schema {
 	 */
 	public static function format_money_fields( array $data, string $currency = 'USD' ): array {
 		static $lookup = null;
+		static $zero_falsy = null;
 		if ( null === $lookup ) {
-			$lookup = array_flip( self::MONEY_FIELDS );
+			$lookup     = array_flip( self::MONEY_FIELDS );
+			$zero_falsy = array_flip( self::ZERO_FALSY_MONEY_FIELDS );
 		}
 
 		$result = array();
@@ -113,9 +132,9 @@ class Receipt_Data_Schema {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				// Keep zero values as numeric 0 so Mustache section guards
-				// (e.g. {{#change}}) treat them as falsy instead of rendering "$0.00".
-				if ( 0.0 === (float) $value ) {
+				// For conditional-display fields (change, tendered, discounts, etc.),
+				// keep zero as numeric 0 so Mustache section guards treat them as falsy.
+				if ( 0.0 === (float) $value && isset( $zero_falsy[ $k ] ) ) {
 					$result[ $k ] = 0;
 				} else {
 					$result[ $k ] = html_entity_decode(
