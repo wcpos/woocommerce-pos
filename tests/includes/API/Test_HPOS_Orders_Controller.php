@@ -896,4 +896,52 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		// Check if the SKU is saved
 		$this->assertEquals( 'SKU-123', $data['line_items'][0]['sku'] );
 	}
+
+	/**
+	 * Test that a cashier can update an order with HPOS enabled.
+	 *
+	 * With HPOS + sync disabled, get_post() returns a shop_order_placehold post
+	 * that has map_meta_cap = false, causing WordPress to check the generic
+	 * 'edit_post' capability. Cashiers have 'edit_shop_orders' but not 'edit_posts',
+	 * so the standard permission check fails. Our override fixes this.
+	 */
+	public function test_cashier_can_update_order_with_hpos(): void {
+		$this->assertTrue( OrderUtil::custom_orders_table_usage_is_enabled(), 'HPOS must be enabled for this test.' );
+
+		// Create a cashier user with POS capabilities but NOT generic edit_posts.
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$cashier    = get_user_by( 'id', $cashier_id );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+
+		$this->assertFalse(
+			user_can( $cashier_id, 'edit_posts' ),
+			'Cashier should not have generic edit_posts capability.'
+		);
+		$this->assertTrue(
+			user_can( $cashier_id, 'edit_shop_orders' ),
+			'Cashier should have edit_shop_orders capability.'
+		);
+
+		// Create an order as admin.
+		$order = OrderHelper::create_order();
+
+		// Switch to cashier.
+		wp_set_current_user( $cashier_id );
+
+		// Update the order.
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'status' => 'processing',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals(
+			200,
+			$response->get_status(),
+			'Cashier should be able to update an order with HPOS enabled. Response: ' . wp_json_encode( $response->get_data() )
+		);
+	}
 }
