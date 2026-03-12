@@ -230,7 +230,14 @@ class Activator {
 		// are both idempotent, so this is safe. Without this, capabilities added
 		// in newer versions would never reach existing installs because add_role()
 		// is a no-op when the role already exists.
-		$this->single_activate();
+		// Deferred to 'init' because create_pos_roles() calls __() which
+		// requires translations to be loaded (WordPress 6.7+).
+		add_action(
+			'init',
+			function () {
+				$this->single_activate();
+			}
+		);
 
 		$lock_released = false;
 		$release_lock  = function () use ( &$lock_released ): void {
