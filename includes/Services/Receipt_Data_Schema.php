@@ -166,6 +166,10 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Currency', 'woocommerce-pos' ),
 					),
+					'customer_note'  => array(
+						'type'  => 'string',
+						'label' => __( 'Customer Note', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'store'       => array(
@@ -494,7 +498,7 @@ class Receipt_Data_Schema {
 		return array(
 			'meta'               => array(
 				'schema_version' => self::VERSION,
-				'mode'           => 'live',
+				'mode'           => 'preview',
 				'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
 				'order_id'       => 1234,
 				'order_number'   => '1234',

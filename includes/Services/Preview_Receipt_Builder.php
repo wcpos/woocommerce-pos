@@ -82,10 +82,9 @@ class Preview_Receipt_Builder {
 		$prices_include_tax = wc_prices_include_tax();
 
 		// Build line items.
-		$lines              = array();
-		$lines_total_excl   = 0.0;
-		$lines_total_incl   = 0.0;
-		$lines_taxable_excl = 0.0;
+		$lines            = array();
+		$lines_total_excl = 0.0;
+		$lines_total_incl = 0.0;
 
 		foreach ( $raw_products as $index => $product ) {
 			$qty        = self::LINE_QUANTITIES[ $index ] ?? 1;
@@ -118,9 +117,8 @@ class Preview_Receipt_Builder {
 				'taxes'              => array(),
 			);
 
-			$lines_total_excl   += $line_total_excl;
-			$lines_total_incl   += $line_total_incl;
-			$lines_taxable_excl += $line_total_excl;
+			$lines_total_excl += $line_total_excl;
+			$lines_total_incl += $line_total_incl;
 		}
 
 		// Fee (excl tax).
@@ -240,16 +238,20 @@ class Preview_Receipt_Builder {
 
 		$taxable_amount_incl = $taxable_excl + $total_tax;
 
-		$tax_summary = array(
-			array(
-				'code'                => $tax_code,
-				'rate'                => $tax_rate,
-				'label'               => $tax_label,
-				'taxable_amount_excl' => $taxable_excl,
-				'tax_amount'          => $total_tax,
-				'taxable_amount_incl' => $taxable_amount_incl,
-			),
-		);
+		if ( $tax_rate > 0 ) {
+			$tax_summary = array(
+				array(
+					'code'                => $tax_code,
+					'rate'                => $tax_rate,
+					'label'               => $tax_label,
+					'taxable_amount_excl' => $taxable_excl,
+					'tax_amount'          => $total_tax,
+					'taxable_amount_incl' => $taxable_amount_incl,
+				),
+			);
+		} else {
+			$tax_summary = array();
+		}
 
 		$payments = array(
 			array(
@@ -438,15 +440,19 @@ class Preview_Receipt_Builder {
 	 * @return array Tax config with rate (float), label (string), and code (string).
 	 */
 	private function get_tax_config(): array {
+		if ( ! wc_tax_enabled() ) {
+			return array(
+				'rate'  => 0.0,
+				'label' => '',
+				'code'  => '',
+			);
+		}
+
 		$default = array(
 			'rate'  => self::FALLBACK_TAX_RATE,
 			'label' => __( 'Tax', 'woocommerce-pos' ),
 			'code'  => '1',
 		);
-
-		if ( ! wc_tax_enabled() ) {
-			return $default;
-		}
 
 		$raw     = get_option( 'woocommerce_default_country', '' );
 		$parts   = explode( ':', $raw );

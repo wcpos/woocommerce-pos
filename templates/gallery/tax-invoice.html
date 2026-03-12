@@ -101,6 +101,13 @@ Suited for jurisdictions requiring itemized tax documentation.
 			</div>
 			{{/shipping}}
 
+			{{#fees}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+				<span style="color: #555;">{{label}}</span>
+				<span>{{total_excl}}</span>
+			</div>
+			{{/fees}}
+
 			{{#discounts}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
 				<span>{{label}}</span>
@@ -161,7 +168,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	{{#meta.customer_note}}
 	<div style="margin-top: 20px; padding: 12px 16px; background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px;">
 		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px; font-weight: 600;">Customer Note</div>
-		<div style="color: #78350f;">{{meta.customer_note}}</div>
+		<div style="color: #78350f; white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
 
