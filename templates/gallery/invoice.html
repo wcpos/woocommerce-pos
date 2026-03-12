@@ -2,7 +2,8 @@
 Invoice — full-page A4/Letter layout.
 
 Company header with tax ID, billing and shipping addresses,
-table-style line items, tax breakdown, and payment info.
+table-style line items with discount column, tax breakdown,
+customer note, and payment info.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 40px; max-width: 800px; margin: 0 auto;">
 
@@ -65,6 +66,7 @@ table-style line items, tax breakdown, and payment info.
 				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">SKU</th>
 				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Qty</th>
 				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Unit Price</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Discount</th>
 				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
 			</tr>
 		</thead>
@@ -75,6 +77,7 @@ table-style line items, tax breakdown, and payment info.
 				<td style="padding: 8px 4px; color: #888; font-size: 12px;">{{sku}}</td>
 				<td style="padding: 8px 4px; text-align: center;">{{qty}}</td>
 				<td style="padding: 8px 4px; text-align: right;">{{unit_price_incl}}</td>
+				<td style="padding: 8px 4px; text-align: right; color: #16a34a;">{{#discounts_incl}}-{{discounts_incl}}{{/discounts_incl}}</td>
 				<td style="padding: 8px 4px; text-align: right;">{{line_total_incl}}</td>
 			</tr>
 			{{/lines}}
@@ -94,6 +97,13 @@ table-style line items, tax breakdown, and payment info.
 				<span>{{total_incl}}</span>
 			</div>
 			{{/shipping}}
+
+			{{#fees}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+				<span style="color: #555;">{{label}}</span>
+				<span>{{total_incl}}</span>
+			</div>
+			{{/fees}}
 
 			{{#discounts}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #16a34a;">
@@ -122,6 +132,12 @@ table-style line items, tax breakdown, and payment info.
 			{{/payments}}
 		</div>
 	</div>
+
+	{{#meta.customer_note}}
+	<div style="margin-top: 24px; padding: 12px 16px; background: #fefce8; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; color: #854d0e;">
+		<strong>Customer Note:</strong> {{meta.customer_note}}
+	</div>
+	{{/meta.customer_note}}
 
 	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
 		Thank you for your business.
