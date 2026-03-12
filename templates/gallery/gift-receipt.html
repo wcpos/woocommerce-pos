@@ -12,14 +12,14 @@ as a gift message. Includes order reference for returns.
 	</div>
 
 	{{#lines}}
-	<div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #ddd;">
+	<div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #d4c8b8;">
 		<span style="flex: 1;">{{name}}</span>
 		{{#qty}}<span style="color: #888; font-size: 13px; flex-shrink: 0; margin-left: 12px;">x{{qty}}</span>{{/qty}}
 	</div>
 	{{/lines}}
 
 	{{#meta.customer_note}}
-	<div style="margin: 24px 0; padding: 16px; background: #faf8f5; border: 1px solid #e8e0d4; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6;">
+	<div style="margin: 24px 0; padding: 20px; background: #faf8f5; border: 1px dotted #d4c8b8; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
 		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">A message for you</div>
 		{{meta.customer_note}}
 	</div>

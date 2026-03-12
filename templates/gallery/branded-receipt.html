@@ -4,18 +4,18 @@ Branded Receipt — marketing-oriented template.
 Large logo placeholder area, accent color bar, store contact info,
 and social media link placeholders in the footer.
 -->
-<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; max-width: 440px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; max-width: 440px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
 
-	<div style="background: #1f2937; color: #fff; padding: 28px 24px; text-align: center;">
-		<div style="font-size: 24px; font-weight: 700; letter-spacing: 1px;">{{store.name}}</div>
+	<div style="background: #1a1a2e; color: #fff; padding: 32px; text-align: center;">
+		<div style="font-size: 26px; font-weight: 700; letter-spacing: 1.5px;">{{store.name}}</div>
 		{{#store.address_lines}}
-		<div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">{{.}}</div>
+		<div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">{{.}}</div>
 		{{/store.address_lines}}
 	</div>
 
-	<div style="height: 4px; background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);"></div>
+	<div style="height: 6px; background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);"></div>
 
-	<div style="padding: 24px;">
+	<div style="padding: 28px;">
 
 		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 			<span style="color: #555;">Order</span>
@@ -31,12 +31,18 @@ and social media link placeholders in the footer.
 			<span>{{cashier.name}}</span>
 		</div>
 		{{/cashier.name}}
+		{{#customer.name}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+			<span style="color: #555;">Customer</span>
+			<span>{{customer.name}}</span>
+		</div>
+		{{/customer.name}}
 
 		<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
 
 		{{#lines}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-			<span>{{name}} <span style="color: #888;">x{{qty}}</span></span>
+		<div style="display: flex; justify-content: space-between; padding: 8px 0;">
+			<span>{{name}} <span style="color: #888;">&times;{{qty}}</span></span>
 			<span>{{line_total_incl}}</span>
 		</div>
 		{{/lines}}
@@ -76,7 +82,7 @@ and social media link placeholders in the footer.
 		</div>
 		{{/tax_summary}}
 
-		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; padding-top: 12px; border-top: 2px solid #1f2937; margin-top: 8px;">
+		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 20px; padding-top: 12px; border-top: 2px solid #1a1a2e; margin-top: 8px;">
 			<span>Total</span>
 			<span>{{totals.grand_total_incl}}</span>
 		</div>
@@ -88,6 +94,18 @@ and social media link placeholders in the footer.
 			<span>{{method_title}}</span>
 			<span>{{amount}}</span>
 		</div>
+		{{#tendered}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+			<span>Tendered</span>
+			<span>{{tendered}}</span>
+		</div>
+		{{/tendered}}
+		{{#change}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+			<span>Change</span>
+			<span>{{change}}</span>
+		</div>
+		{{/change}}
 		{{/payments}}
 
 		{{^customer.name}}
@@ -97,12 +115,12 @@ and social media link placeholders in the footer.
 		{{/customer.name}}
 		{{#customer.name}}
 		<div style="text-align: center; margin-top: 20px; font-size: 13px; color: #555;">
-			Thank you for shopping with us, {{customer.name}}!
+			Thank you, {{customer.name}}!
 		</div>
 		{{/customer.name}}
 	</div>
 
-	<div style="background: #f9fafb; padding: 16px 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+	<div style="background: #f4f4f5; padding: 18px; text-align: center; border-top: 1px solid #e5e7eb;">
 		{{#store.phone}}
 		<div style="font-size: 12px; color: #555;">{{store.phone}}</div>
 		{{/store.phone}}
@@ -110,7 +128,7 @@ and social media link placeholders in the footer.
 		<div style="font-size: 12px; color: #555;">{{store.email}}</div>
 		{{/store.email}}
 		<div style="margin-top: 8px; font-size: 11px; color: #9ca3af;">
-			Follow us on social media for the latest updates
+			Follow us on social media
 		</div>
 	</div>
 

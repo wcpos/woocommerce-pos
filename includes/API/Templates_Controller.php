@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
@@ -799,7 +800,7 @@ class Templates_Controller extends WP_REST_Controller {
 			if ( $order ) {
 				$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 			} else {
-				$receipt_data = Receipt_Data_Schema::get_mock_receipt_data();
+				$receipt_data = ( new Preview_Receipt_Builder() )->build();
 			}
 
 			$currency       = $receipt_data['meta']['currency'] ?? 'USD';
@@ -816,22 +817,108 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Non-thermal: return an iframe preview URL.
-		$preview_url = add_query_arg(
-			array(
-				'key'                    => $order_key,
-				'wcpos_preview_template' => $id,
-			),
-			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
-		);
+		// Non-thermal with a real order: return an iframe preview URL.
+		if ( $order ) {
+			$preview_url = add_query_arg(
+				array(
+					'key'                    => $order_key,
+					'wcpos_preview_template' => $id,
+				),
+				get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
+			);
 
+			return rest_ensure_response(
+				array(
+					'preview_url' => $preview_url,
+					'order_id'    => $order_id,
+					'template_id' => $id,
+				)
+			);
+		}
+
+		// Non-thermal without an order: render server-side with preview data.
+		$receipt_data   = ( new Preview_Receipt_Builder() )->build();
+		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
+		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
+
+		// Add boolean helpers for array sections so templates can gate wrappers.
+		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+
+		$banner = $this->get_preview_banner_html();
+
+		if ( 'logicless' === $engine ) {
+			$html = $this->render_logicless_preview( $template, $formatted_data );
+
+			return rest_ensure_response(
+				array(
+					'preview_html' => $banner . $html,
+					'order_id'     => 0,
+					'template_id'  => $id,
+				)
+			);
+		}
+
+		// Legacy-php and other engines cannot be rendered server-side without a real order.
 		return rest_ensure_response(
 			array(
-				'preview_url' => $preview_url,
-				'order_id'    => $order_id,
-				'template_id' => $id,
+				'preview_html' => $banner . '<div style="padding: 40px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #666;">'
+					. esc_html__( 'Create a POS order to preview this template.', 'woocommerce-pos' )
+					. '</div>',
+				'order_id'     => 0,
+				'template_id'  => $id,
 			)
 		);
+	}
+
+	/**
+	 * Build the preview banner HTML for sample receipt previews.
+	 *
+	 * @return string Banner HTML markup.
+	 */
+	private function get_preview_banner_html(): string {
+		$text = esc_html__( 'Preview — Sample receipt with demo data', 'woocommerce-pos' );
+
+		return '<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">' . $text . '</div>';
+	}
+
+	/**
+	 * Render a logicless template with preview data and return the HTML string.
+	 *
+	 * Uses output buffering to capture the Logicless_Renderer output
+	 * without requiring a real WC_Abstract_Order.
+	 *
+	 * @param array $template       Template metadata including content.
+	 * @param array $formatted_data Receipt data with money fields pre-formatted.
+	 *
+	 * @return string Rendered HTML.
+	 */
+	private function render_logicless_preview( array $template, array $formatted_data ): string {
+		$content = isset( $template['content'] ) && \is_string( $template['content'] ) ? $template['content'] : '';
+
+		if ( '' === $content ) {
+			return '<!-- Empty logicless receipt template -->';
+		}
+
+		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
+		$content = preg_replace( '/<!--.*?-->/s', '', $content );
+
+		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
+		$mustache = new \Mustache\Engine(
+			array(
+				'entity_flags' => $flags,
+				'escape'       => function ( $value ) use ( $flags ) {
+					if ( \is_array( $value ) ) {
+						return '';
+					}
+
+					return htmlspecialchars( (string) $value, $flags, 'UTF-8' );
+				},
+			)
+		);
+
+		$output = $mustache->render( $content, $formatted_data );
+
+		return wp_kses_post( $output );
 	}
 
 	/**

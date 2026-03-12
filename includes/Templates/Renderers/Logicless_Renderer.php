@@ -43,6 +43,9 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
+		// Add boolean helpers for array sections so templates can gate wrappers.
+		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+
 		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
 		$content = preg_replace( '/<!--.*?-->/s', '', $content );
 

@@ -1,11 +1,14 @@
 <!--
 Detailed Receipt — the "show everything" template.
 
-Includes SKU per line, unit price, full tax breakdown with rates,
-customer billing address, cashier name, and store tax ID.
+Dense but organized. Includes SKU per line, unit price, subtotals,
+full tax breakdown with rates and taxable amounts, customer billing
+address, cashier name, store tax ID, payment details with tendered/change/reference,
+customer notes, and all available totals.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 420px; margin: 0 auto;">
 
+	<!-- Store header -->
 	<div style="text-align: center; margin-bottom: 16px;">
 		<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
 		{{#store.address_lines}}
@@ -22,8 +25,10 @@ customer billing address, cashier name, and store tax ID.
 		{{/store.tax_id}}
 	</div>
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<!-- Divider -->
+	<div style="border-top: 1px solid #e2e2e2; margin: 12px 0;"></div>
 
+	<!-- Order meta -->
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">Order</span>
 		<span>#{{meta.order_number}}</span>
@@ -45,9 +50,10 @@ customer billing address, cashier name, and store tax ID.
 	</div>
 	{{/customer.name}}
 
+	<!-- Billing address -->
 	{{#customer.billing_address.address_1}}
-	<div style="margin-top: 8px; padding: 8px; background: #f9f9f9; border-radius: 4px; font-size: 11px; color: #555;">
-		<div style="font-weight: 600; margin-bottom: 4px;">Billing Address</div>
+	<div style="margin-top: 8px; padding: 10px; background: #f8f8f8; border-radius: 4px; font-size: 11px; color: #555;">
+		<div style="font-weight: 700; margin-bottom: 4px;">Billing Address</div>
 		<div>{{customer.billing_address.address_1}}</div>
 		{{#customer.billing_address.address_2}}<div>{{customer.billing_address.address_2}}</div>{{/customer.billing_address.address_2}}
 		<div>{{customer.billing_address.city}} {{customer.billing_address.postcode}}</div>
@@ -55,28 +61,36 @@ customer billing address, cashier name, and store tax ID.
 	</div>
 	{{/customer.billing_address.address_1}}
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<!-- Divider -->
+	<div style="border-top: 1px solid #e2e2e2; margin: 12px 0;"></div>
 
+	<!-- Line items -->
 	{{#lines}}
-	<div style="margin-bottom: 8px;">
+	<div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0;">
 		<div style="display: flex; justify-content: space-between; font-size: 13px;">
-			<span style="font-weight: 600;">{{name}}</span>
+			<span style="font-weight: 700;">{{name}}</span>
 			<span>{{line_total_incl}}</span>
 		</div>
-		<div style="font-size: 11px; color: #888; padding-left: 8px;">
-			{{qty}} x {{unit_price_incl}}
-			{{#sku}} &middot; SKU: {{sku}}{{/sku}}
+		<div style="font-size: 11px; color: #888; padding-left: 8px; margin-top: 2px;">
+			{{qty}} &times; {{unit_price_incl}}{{#sku}} &middot; SKU: {{sku}}{{/sku}}
 		</div>
+		{{#line_subtotal_incl}}
+		<div style="font-size: 11px; color: #888; padding-left: 8px; margin-top: 1px;">
+			Subtotal: {{line_subtotal_incl}}
+		</div>
+		{{/line_subtotal_incl}}
 		{{#discounts_incl}}
-		<div style="font-size: 11px; color: #16a34a; padding-left: 8px;">
+		<div style="font-size: 11px; color: #16a34a; padding-left: 8px; margin-top: 1px;">
 			Discount: -{{discounts_incl}}
 		</div>
 		{{/discounts_incl}}
 	</div>
 	{{/lines}}
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<!-- Divider -->
+	<div style="border-top: 1px solid #e2e2e2; margin: 12px 0;"></div>
 
+	<!-- Fees -->
 	{{#fees}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">{{label}}</span>
@@ -84,6 +98,7 @@ customer billing address, cashier name, and store tax ID.
 	</div>
 	{{/fees}}
 
+	<!-- Shipping -->
 	{{#shipping}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">{{label}}</span>
@@ -91,6 +106,7 @@ customer billing address, cashier name, and store tax ID.
 	</div>
 	{{/shipping}}
 
+	<!-- Discounts -->
 	{{#discounts}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #16a34a;">
 		<span>{{label}}</span>
@@ -98,44 +114,88 @@ customer billing address, cashier name, and store tax ID.
 	</div>
 	{{/discounts}}
 
+	<!-- Subtotal -->
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">Subtotal</span>
 		<span>{{totals.subtotal_incl}}</span>
 	</div>
 
+	<!-- Tax summary -->
 	{{#tax_summary}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-		<span>{{tax_amount}}</span>
+	<div style="margin-bottom: 4px; font-size: 12px;">
+		<div style="display: flex; justify-content: space-between;">
+			<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
+			<span>{{tax_amount}}</span>
+		</div>
+		{{#taxable_amount_excl}}
+		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 8px;">
+			<span>Taxable: {{taxable_amount_excl}}</span>
+		</div>
+		{{/taxable_amount_excl}}
 	</div>
 	{{/tax_summary}}
 
+	<!-- Grand total -->
 	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px;">
 		<span>Total</span>
 		<span>{{totals.grand_total_incl}}</span>
 	</div>
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+	<!-- Divider -->
+	<div style="border-top: 1px solid #e2e2e2; margin: 16px 0;"></div>
 
+	<!-- Payments -->
 	{{#payments}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">{{method_title}}</span>
-		<span>{{amount}}</span>
+	<div style="margin-bottom: 6px;">
+		<div style="display: flex; justify-content: space-between; font-size: 12px;">
+			<span style="color: #555;">{{method_title}}</span>
+			<span>{{amount}}</span>
+		</div>
+		{{#tendered}}
+		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 12px;">
+			<span>Tendered</span>
+			<span>{{tendered}}</span>
+		</div>
+		{{/tendered}}
+		{{#change}}
+		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 12px;">
+			<span>Change</span>
+			<span>{{change}}</span>
+		</div>
+		{{/change}}
+		{{#reference}}
+		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 12px;">
+			<span>Ref: {{reference}}</span>
+		</div>
+		{{/reference}}
 	</div>
-	{{#tendered}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-		<span>Tendered</span>
-		<span>{{tendered}}</span>
-	</div>
-	{{/tendered}}
-	{{#change}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-		<span>Change</span>
-		<span>{{change}}</span>
-	</div>
-	{{/change}}
 	{{/payments}}
 
+	<!-- Paid total -->
+	{{#totals.paid_total}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Paid</span>
+		<span>{{totals.paid_total}}</span>
+	</div>
+	{{/totals.paid_total}}
+
+	<!-- Change total -->
+	{{#totals.change_total}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
+		<span style="color: #555;">Change</span>
+		<span>{{totals.change_total}}</span>
+	</div>
+	{{/totals.change_total}}
+
+	<!-- Customer note -->
+	{{#meta.customer_note}}
+	<div style="margin-top: 12px; padding: 10px; background: #fefce8; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; color: #92400e;">
+		<div style="font-weight: 700; margin-bottom: 4px; font-size: 11px;">Customer Note</div>
+		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
+	</div>
+	{{/meta.customer_note}}
+
+	<!-- Footer -->
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
 		Thank you for your purchase!
 	</div>

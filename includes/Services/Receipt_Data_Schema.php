@@ -51,6 +51,23 @@ class Receipt_Data_Schema {
 	);
 
 	/**
+	 * Money fields where a zero value should remain numeric 0 (Mustache-falsy)
+	 * so that section guards like {{#change}}...{{/change}} treat them as empty.
+	 *
+	 * All other money fields are always formatted to a currency string,
+	 * including when their value is zero (e.g. "$0.00").
+	 */
+	const ZERO_FALSY_MONEY_FIELDS = array(
+		'change',
+		'tendered',
+		'discounts_incl',
+		'discounts_excl',
+		'change_total',
+		'discount_total_incl',
+		'discount_total_excl',
+	);
+
+	/**
 	 * Field names (terminal key segment) that represent money values.
 	 *
 	 * Used by the logicless renderer to auto-format currency output.
@@ -103,8 +120,10 @@ class Receipt_Data_Schema {
 	 */
 	public static function format_money_fields( array $data, string $currency = 'USD' ): array {
 		static $lookup = null;
+		static $zero_falsy = null;
 		if ( null === $lookup ) {
-			$lookup = array_flip( self::MONEY_FIELDS );
+			$lookup     = array_flip( self::MONEY_FIELDS );
+			$zero_falsy = array_flip( self::ZERO_FALSY_MONEY_FIELDS );
 		}
 
 		$result = array();
@@ -113,13 +132,19 @@ class Receipt_Data_Schema {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				$result[ $k ] = html_entity_decode(
-					wp_strip_all_tags(
-						wc_price( (float) $value, array( 'currency' => $currency ) )
-					),
-					ENT_QUOTES | ENT_SUBSTITUTE,
-					'UTF-8'
-				);
+				// For conditional-display fields (change, tendered, discounts, etc.),
+				// keep zero as numeric 0 so Mustache section guards treat them as falsy.
+				if ( 0.0 === (float) $value && isset( $zero_falsy[ $k ] ) ) {
+					$result[ $k ] = 0;
+				} else {
+					$result[ $k ] = html_entity_decode(
+						wp_strip_all_tags(
+							wc_price( (float) $value, array( 'currency' => $currency ) )
+						),
+						ENT_QUOTES | ENT_SUBSTITUTE,
+						'UTF-8'
+					);
+				}
 			} else {
 				$result[ $k ] = $value;
 			}
@@ -165,6 +190,10 @@ class Receipt_Data_Schema {
 					'currency'       => array(
 						'type'  => 'string',
 						'label' => __( 'Currency', 'woocommerce-pos' ),
+					),
+					'customer_note'  => array(
+						'type'  => 'string',
+						'label' => __( 'Customer Note', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -494,11 +523,12 @@ class Receipt_Data_Schema {
 		return array(
 			'meta'               => array(
 				'schema_version' => self::VERSION,
-				'mode'           => 'live',
+				'mode'           => 'preview',
 				'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
 				'order_id'       => 1234,
 				'order_number'   => '1234',
 				'currency'       => function_exists( 'get_option' ) ? get_option( 'woocommerce_currency', 'USD' ) : 'USD',
+				'customer_note'  => 'Please gift wrap this order. Thank you!',
 			),
 			'store'              => array(
 				'name'          => $store_name ? $store_name : 'Sample Store',
@@ -515,28 +545,28 @@ class Receipt_Data_Schema {
 				'id'               => 42,
 				'name'             => 'John Doe',
 				'billing_address'  => array(
-					'first_name' => '',
-					'last_name'  => '',
+					'first_name' => 'John',
+					'last_name'  => 'Doe',
 					'company'    => '',
-					'address_1'  => '',
+					'address_1'  => '123 Main Street',
 					'address_2'  => '',
-					'city'       => '',
-					'state'      => '',
-					'postcode'   => '',
-					'country'    => '',
-					'email'      => '',
-					'phone'      => '',
+					'city'       => 'Anytown',
+					'state'      => 'CA',
+					'postcode'   => '90210',
+					'country'    => 'US',
+					'email'      => 'john.doe@example.com',
+					'phone'      => '(555) 123-4567',
 				),
 				'shipping_address' => array(
-					'first_name' => '',
-					'last_name'  => '',
+					'first_name' => 'John',
+					'last_name'  => 'Doe',
 					'company'    => '',
-					'address_1'  => '',
+					'address_1'  => '123 Main Street',
 					'address_2'  => '',
-					'city'       => '',
-					'state'      => '',
-					'postcode'   => '',
-					'country'    => '',
+					'city'       => 'Anytown',
+					'state'      => 'CA',
+					'postcode'   => '90210',
+					'country'    => 'US',
 				),
 				'tax_id'           => '',
 			),
@@ -572,38 +602,56 @@ class Receipt_Data_Schema {
 					'taxes'              => array(),
 				),
 			),
-			'fees'               => array(),
-			'shipping'           => array(),
-			'discounts'          => array(),
+			'fees'               => array(
+				array(
+					'label'      => 'Gift Wrapping',
+					'total_incl' => 2.75,
+					'total_excl' => 2.50,
+				),
+			),
+			'shipping'           => array(
+				array(
+					'label'      => 'Flat Rate Shipping',
+					'total_incl' => 11.00,
+					'total_excl' => 10.00,
+				),
+			),
+			'discounts'          => array(
+				array(
+					'label'      => 'Summer Sale (10%)',
+					'total_incl' => 7.55,
+					'total_excl' => 6.86,
+				),
+			),
 			'totals'             => array(
 				'subtotal_incl'       => 75.48,
 				'subtotal_excl'       => 68.62,
-				'discount_total_incl' => 0.0,
-				'discount_total_excl' => 0.0,
-				'tax_total'           => 6.86,
-				'grand_total_incl'    => 75.48,
-				'grand_total_excl'    => 68.62,
-				'paid_total'          => 75.48,
-				'change_total'        => 0.0,
+				'discount_total_incl' => 7.55,
+				'discount_total_excl' => 6.86,
+				'tax_total'           => 7.42,
+				'grand_total_incl'    => 81.68,
+				'grand_total_excl'    => 74.26,
+				'paid_total'          => 81.68,
+				'change_total'        => 18.32,
 			),
 			'tax_summary'        => array(
 				array(
 					'code'                => '1',
 					'rate'                => 10.0,
 					'label'               => 'Tax',
-					'taxable_amount_excl' => 68.62,
-					'tax_amount'          => 6.86,
-					'taxable_amount_incl' => 75.48,
+					'taxable_amount_excl' => 74.26,
+					'tax_amount'          => 7.42,
+					'taxable_amount_incl' => 81.68,
 				),
 			),
 			'payments'           => array(
 				array(
 					'method_id'    => 'pos_cash',
 					'method_title' => 'Cash',
-					'amount'       => 75.48,
+					'amount'       => 81.68,
 					'reference'    => '',
-					'tendered'     => 80.00,
-					'change'       => 4.52,
+					'tendered'     => 100.00,
+					'change'       => 18.32,
 				),
 			),
 			'fiscal'             => array(
