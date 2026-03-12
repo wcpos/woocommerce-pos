@@ -841,12 +841,14 @@ class Templates_Controller extends WP_REST_Controller {
 		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
+		$banner = $this->get_preview_banner_html();
+
 		if ( 'logicless' === $engine ) {
 			$html = $this->render_logicless_preview( $template, $formatted_data );
 
 			return rest_ensure_response(
 				array(
-					'preview_html' => $html,
+					'preview_html' => $banner . $html,
 					'order_id'     => 0,
 					'template_id'  => $id,
 				)
@@ -856,11 +858,20 @@ class Templates_Controller extends WP_REST_Controller {
 		// Legacy-php and other engines: return content + data for client display.
 		return rest_ensure_response(
 			array(
-				'preview_html' => $template['content'] ?? '',
+				'preview_html' => $banner . ( $template['content'] ?? '' ),
 				'order_id'     => 0,
 				'template_id'  => $id,
 			)
 		);
+	}
+
+	/**
+	 * Build the preview banner HTML for sample receipt previews.
+	 *
+	 * @return string Banner HTML markup.
+	 */
+	private function get_preview_banner_html(): string {
+		return '<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">Preview — Sample receipt with demo data</div>';
 	}
 
 	/**

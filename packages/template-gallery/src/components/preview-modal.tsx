@@ -13,14 +13,19 @@ interface PreviewModalProps {
 	onCustomize?: () => void;
 }
 
+const PREVIEW_BANNER_HTML =
+	'<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">Preview — Sample receipt with demo data</div>';
+
 function ThermalPreviewContent({
 	templateContent,
 	receiptData,
 	templateName,
+	isSampleData,
 }: {
 	templateContent: string;
 	receiptData: Record<string, unknown>;
 	templateName: string;
+	isSampleData: boolean;
 }) {
 	const html = React.useMemo(() => {
 		try {
@@ -30,10 +35,12 @@ function ThermalPreviewContent({
 		}
 	}, [templateContent, receiptData]);
 
+	const banner = isSampleData ? PREVIEW_BANNER_HTML : '';
+
 	const srcdoc = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${html}</body>
+<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;flex-direction:column;align-items:center;">${banner}${html}</body>
 </html>`;
 
 	return (
@@ -164,6 +171,7 @@ export function PreviewModal({
 							templateContent={preview.template_content}
 							receiptData={preview.receipt_data}
 							templateName={templateName}
+							isSampleData={!preview.order_id}
 						/>
 					) : preview?.preview_html ? (
 						<iframe
