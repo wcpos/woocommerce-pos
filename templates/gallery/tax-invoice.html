@@ -10,6 +10,11 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<!-- Header -->
 	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
 		<div>
+			{{#store.logo}}
+			<div style="margin-bottom: 8px;">
+				<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 200px; height: auto;">
+			</div>
+			{{/store.logo}}
 			<div style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
 			{{#store.address_lines}}
 			<div style="font-size: 12px; color: #666;">{{.}}</div>
@@ -174,9 +179,21 @@ Suited for jurisdictions requiring itemized tax documentation.
 	</div>
 	{{/meta.customer_note}}
 
-	<!-- Footer -->
+	{{#store.policies_and_conditions}}
+	<div style="margin-top: 24px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 11px; color: #666; line-height: 1.5;">
+		{{store.policies_and_conditions}}
+	</div>
+	{{/store.policies_and_conditions}}
+
+	{{#store.footer_imprint}}
+	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #999; text-align: center;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
 	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #999; text-align: center;">
 		This is a tax invoice. Please retain for your records.
 	</div>
+	{{/store.footer_imprint}}
 
 </div>

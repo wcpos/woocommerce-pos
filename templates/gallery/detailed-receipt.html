@@ -10,6 +10,11 @@ customer notes, and all available totals.
 
 	<!-- Store header -->
 	<div style="text-align: center; margin-bottom: 16px;">
+		{{#store.logo}}
+		<div style="margin-bottom: 8px;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 180px; height: auto;">
+		</div>
+		{{/store.logo}}
 		<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
 		{{#store.address_lines}}
 		<div style="font-size: 11px; color: #666;">{{.}}</div>
@@ -23,6 +28,9 @@ customer notes, and all available totals.
 		{{#store.tax_id}}
 		<div style="font-size: 11px; color: #666;">Tax ID: {{store.tax_id}}</div>
 		{{/store.tax_id}}
+		{{#store.opening_hours}}
+		<div style="font-size: 11px; color: #666; margin-top: 4px;">{{store.opening_hours}}</div>
+		{{/store.opening_hours}}
 	</div>
 
 	<!-- Divider -->
@@ -195,9 +203,30 @@ customer notes, and all available totals.
 	</div>
 	{{/meta.customer_note}}
 
+	<!-- Store notes -->
+	{{#store.personal_notes}}
+	<div style="text-align: center; margin-top: 16px; font-size: 11px; color: #666; font-style: italic;">
+		{{store.personal_notes}}
+	</div>
+	{{/store.personal_notes}}
+
+	<!-- Policies -->
+	{{#store.policies_and_conditions}}
+	<div style="margin-top: 12px; padding: 10px; background: #f8f8f8; border-radius: 4px; font-size: 10px; color: #888; line-height: 1.5;">
+		{{store.policies_and_conditions}}
+	</div>
+	{{/store.policies_and_conditions}}
+
 	<!-- Footer -->
+	{{#store.footer_imprint}}
+	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
 		Thank you for your purchase!
 	</div>
+	{{/store.footer_imprint}}
 
 </div>
