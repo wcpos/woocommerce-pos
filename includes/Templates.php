@@ -866,7 +866,6 @@ class Templates {
 			$language = 'php';
 		}
 		update_post_meta( $post_id, '_template_language', $language );
-		update_post_meta( $post_id, '_template_is_premade', '1' );
 		update_post_meta( $post_id, '_template_gallery_key', $gallery_key );
 		update_post_meta( $post_id, '_template_gallery_version', $template['version'] ?? 1 );
 		update_post_meta( $post_id, '_template_tax_display', 'default' );

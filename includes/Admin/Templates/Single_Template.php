@@ -137,6 +137,14 @@ class Single_Template {
 			return;
 		}
 
+		// Back link to the gallery page.
+		$gallery_url = admin_url( 'admin.php?page=wcpos-templates' );
+		printf(
+			'<p style="margin: 0 0 12px;"><a href="%s">&larr; %s</a></p>',
+			esc_url( $gallery_url ),
+			esc_html__( 'Back to Templates', 'woocommerce-pos' )
+		);
+
 		// Hidden textarea for WordPress save flow — React syncs content here.
 		echo '<textarea name="content" id="wcpos-template-content" style="display:none;">';
 		echo esc_textarea( $post->post_content );
@@ -155,6 +163,17 @@ class Single_Template {
 		// Remove default taxonomy metaboxes — consolidated into Template Settings.
 		remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
 		remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
+
+		// Move Publish box to the top of the sidebar by re-registering it first.
+		remove_meta_box( 'submitdiv', 'wcpos_template', 'side' );
+		add_meta_box(
+			'submitdiv',
+			__( 'Publish', 'woocommerce-pos' ),
+			'post_submit_meta_box',
+			'wcpos_template',
+			'side',
+			'high'
+		);
 
 		add_meta_box(
 			'wcpos_template_settings',
