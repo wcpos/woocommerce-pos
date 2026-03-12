@@ -76,6 +76,17 @@ class Received {
 				wp_die( esc_html__( 'Sorry, this order is invalid.', 'woocommerce-pos' ) );
 			}
 
+			// Verify order key to prevent unauthenticated access.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Order key is the auth mechanism here, matching WooCommerce core behavior.
+			$provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+			if ( ! $provided_key || $provided_key !== $order->get_order_key() ) {
+				wp_die(
+					esc_html__( 'Sorry, this order cannot be viewed. The order key is missing or invalid.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
 			$order_json       = $this->get_order_json( $order->get_id() );
 			$payment_method   = $order->get_payment_method();
 			$gateway_settings = woocommerce_pos_get_settings( 'payment_gateways' );
