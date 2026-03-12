@@ -13,9 +13,38 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import { TemplateTags } from './template-tags';
 
 import type { AnyTemplate, Template, VirtualTemplate } from '../types';
+
+function isThermal(template: AnyTemplate): boolean {
+	return (
+		template.engine === 'thermal' ||
+		template.output_type === 'escpos' ||
+		template.output_type === 'thermal'
+	);
+}
+
+function isOffline(template: AnyTemplate): boolean {
+	return (
+		template.engine === 'logicless' ||
+		template.engine === 'thermal' ||
+		template.offline_capable
+	);
+}
+
+function getPrintMethod(template: AnyTemplate): string {
+	return isThermal(template) ? 'Receipt Printer' : 'Browser';
+}
+
+function getPaperSize(template: AnyTemplate): string {
+	if (!isThermal(template)) return '\u2014';
+	const pw = 'paper_width' in template ? template.paper_width : null;
+	return pw || '\u2014';
+}
+
+function getAvailability(template: AnyTemplate): string {
+	return isOffline(template) ? 'Offline' : 'Server';
+}
 
 function formatCategory(slug: string | undefined): string {
 	if (!slug) return '\u2014';
@@ -123,10 +152,18 @@ function DraggableRow({
 				<div className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
 					{template.title}
 				</div>
-				<TemplateTags template={template} />
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
 				{formatCategory(template.category)}
+			</td>
+			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+				{getPrintMethod(template)}
+			</td>
+			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+				{getPaperSize(template)}
+			</td>
+			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-600">
+				{getAvailability(template)}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
 				<button
@@ -273,6 +310,15 @@ export function TemplatesTable({
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Category
+						</th>
+						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
+							Print
+						</th>
+						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
+							Paper
+						</th>
+						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
+							Mode
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-center wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
 							Active
