@@ -151,7 +151,7 @@ class Single_Template {
 		$template    = TemplatesManager::get_template( $post->ID );
 		$engine      = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
-		$is_premade  = $template && ! empty( $template['gallery_key'] );
+		$is_premade  = $template && ! empty( $template['is_premade'] );
 
 		// Get current type term.
 		$type_terms = wp_get_post_terms( $post->ID, 'wcpos_template_type', array( 'fields' => 'slugs' ) );
@@ -224,9 +224,12 @@ class Single_Template {
 		</p>
 
 		<!-- Paper Size — only visible for thermal engine -->
+		<?php
+		$paper_disabled = $is_premade || 'thermal' !== $engine ? 'disabled="disabled"' : '';
+		?>
 		<p id="wcpos-paper-size-field" style="<?php echo 'thermal' !== $engine ? 'display:none;' : ''; ?>">
 			<label><strong><?php esc_html_e( 'Paper Size', 'woocommerce-pos' ); ?></strong></label>
-			<select name="wcpos_template_paper_width" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+			<select name="wcpos_template_paper_width" id="wcpos-template-paper-width" style="width: 100%;" <?php echo $paper_disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 				<option value="80mm" <?php selected( $paper_width, '80mm' ); ?>><?php esc_html_e( '80mm (Standard)', 'woocommerce-pos' ); ?></option>
 				<option value="58mm" <?php selected( $paper_width, '58mm' ); ?>><?php esc_html_e( '58mm (Narrow)', 'woocommerce-pos' ); ?></option>
 			</select>
@@ -237,6 +240,7 @@ class Single_Template {
 		(function() {
 			var engineSelect = document.getElementById('wcpos-template-engine');
 			var paperField = document.getElementById('wcpos-paper-size-field');
+			var paperSelect = document.getElementById('wcpos-template-paper-width');
 			var descEl = document.getElementById('wcpos-engine-description');
 			var descriptions = <?php echo wp_json_encode( $engine_descriptions ); ?>;
 
@@ -245,6 +249,9 @@ class Single_Template {
 					var val = this.value;
 					if (paperField) {
 						paperField.style.display = val === 'thermal' ? '' : 'none';
+					}
+					if (paperSelect) {
+						paperSelect.disabled = val !== 'thermal';
 					}
 					if (descEl) {
 						descEl.textContent = descriptions[val] || '';
@@ -484,12 +491,15 @@ class Single_Template {
 			update_post_meta( $post_id, '_template_language', 'php' );
 		}
 
-		// Save paper width.
-		if ( isset( $_POST['wcpos_template_paper_width'] ) ) {
+		// Save paper width — only relevant for thermal engine.
+		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
+		if ( 'thermal' === $saved_engine && isset( $_POST['wcpos_template_paper_width'] ) ) {
 			$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
 			if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
 				update_post_meta( $post_id, '_template_paper_width', $paper_width );
 			}
+		} elseif ( 'thermal' !== $saved_engine ) {
+			delete_post_meta( $post_id, '_template_paper_width' );
 		}
 	}
 
