@@ -37,6 +37,7 @@ export interface VirtualTemplate {
 	is_virtual: true;
 	is_premade: boolean;
 	is_active: boolean;
+	is_disabled: boolean;
 	offline_capable: boolean;
 	source: 'virtual' | 'gallery';
 	menu_order: number;
