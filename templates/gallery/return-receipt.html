@@ -14,7 +14,7 @@ and the payment method used for the refund.
 		{{/store.address_lines}}
 	</div>
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">Reference</span>
@@ -37,7 +37,7 @@ and the payment method used for the refund.
 	</div>
 	{{/customer.name}}
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
 	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">Returned Items</div>
 
@@ -48,7 +48,7 @@ and the payment method used for the refund.
 	</div>
 	{{/lines}}
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 12px 0;">
+	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
 	{{#tax_summary}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
@@ -62,13 +62,16 @@ and the payment method used for the refund.
 		<span>{{totals.grand_total_incl}}</span>
 	</div>
 
-	<hr style="border: none; border-top: 1px dashed #ccc; margin: 16px 0;">
+	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 16px 0;">
 
 	{{#payments}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">Refunded via {{method_title}}</span>
 		<span>{{amount}}</span>
 	</div>
+	{{#reference}}
+	<div style="margin-bottom: 4px; padding-left: 12px; font-size: 11px; color: #999;">Ref: {{reference}}</div>
+	{{/reference}}
 	{{/payments}}
 
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
