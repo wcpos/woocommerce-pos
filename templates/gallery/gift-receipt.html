@@ -7,6 +7,11 @@ as a gift message. Includes order reference for returns.
 <div style="box-sizing: border-box; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #333; padding: 30px; max-width: 400px; margin: 0 auto;">
 
 	<div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e8e0d4;">
+		{{#store.logo}}
+		<div style="margin-bottom: 10px;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 160px; height: auto;">
+		</div>
+		{{/store.logo}}
 		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px;">Gift Receipt</div>
 		<div style="font-size: 22px; font-weight: 400; font-style: italic;">{{store.name}}</div>
 	</div>
@@ -25,8 +30,19 @@ as a gift message. Includes order reference for returns.
 	</div>
 	{{/meta.customer_note}}
 
+	{{#store.personal_notes}}
+	<div style="text-align: center; margin-top: 16px; font-size: 12px; color: #888; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
+		{{store.personal_notes}}
+	</div>
+	{{/store.personal_notes}}
+
 	<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e0d4; text-align: center; font-size: 11px; color: #999;">
+		{{#store.footer_imprint}}
+		<div style="margin-bottom: 8px;">{{store.footer_imprint}}</div>
+		{{/store.footer_imprint}}
+		{{^store.footer_imprint}}
 		<div style="margin-bottom: 8px;">Items may be returned or exchanged within 30 days with this receipt.</div>
+		{{/store.footer_imprint}}
 		<div>{{meta.created_at_gmt}} &middot; #{{meta.order_number}}</div>
 	</div>
 

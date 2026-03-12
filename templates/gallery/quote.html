@@ -8,6 +8,11 @@ Includes validity placeholder and terms.
 
 	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;">
 		<div>
+			{{#store.logo}}
+			<div style="margin-bottom: 8px;">
+				<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 200px; height: auto;">
+			</div>
+			{{/store.logo}}
 			<div style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
 			{{#store.address_lines}}
 			<div style="font-size: 12px; color: #666;">{{.}}</div>
@@ -86,6 +91,15 @@ Includes validity placeholder and terms.
 		</div>
 	</div>
 
+	{{#store.policies_and_conditions}}
+	<div style="margin-top: 32px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px;">
+		<div style="font-weight: 600; margin-bottom: 8px;">Terms &amp; Conditions</div>
+		<div style="color: #555; line-height: 1.6; white-space: pre-wrap;">
+			{{store.policies_and_conditions}}
+		</div>
+	</div>
+	{{/store.policies_and_conditions}}
+	{{^store.policies_and_conditions}}
 	<div style="margin-top: 32px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px;">
 		<div style="font-weight: 600; margin-bottom: 8px;">Terms &amp; Conditions</div>
 		<div style="color: #555; line-height: 1.6;">
@@ -94,9 +108,17 @@ Includes validity placeholder and terms.
 			This is not a receipt or confirmation of purchase.
 		</div>
 	</div>
+	{{/store.policies_and_conditions}}
 
+	{{#store.footer_imprint}}
+	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
 		This is a quote, not a receipt
 	</div>
+	{{/store.footer_imprint}}
 
 </div>
