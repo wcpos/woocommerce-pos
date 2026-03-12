@@ -20,23 +20,42 @@ use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
  * Single_Template class.
  */
 class Single_Template {
-	private const VALID_ENGINES = array( 'logicless', 'thermal', 'legacy-php' );
-
-	private const VALID_CATEGORIES = array(
-		'receipt',
-		'invoice',
-		'gift-receipt',
-		'credit-note',
-		'purchase-order',
-		'kitchen-ticket',
-		'bar-ticket',
-	);
-
 	private const ENGINE_LANGUAGE_MAP = array(
 		'thermal'    => 'xml',
 		'logicless'  => 'html',
 		'legacy-php' => 'php',
 	);
+
+	/**
+	 * Canonical category slug → label map. Single source of truth for
+	 * both the settings metabox render and the save-post validation.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function get_category_options(): array {
+		return array(
+			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
+			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
+			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
+			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
+			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
+			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
+			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
+		);
+	}
+
+	/**
+	 * Canonical engine slug → label map.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function get_engine_options(): array {
+		return array(
+			'logicless'  => __( 'HTML (Offline)', 'woocommerce-pos' ),
+			'thermal'    => __( 'XML (Receipt Printer)', 'woocommerce-pos' ),
+			'legacy-php' => __( 'PHP (Legacy)', 'woocommerce-pos' ),
+		);
+	}
 
 	/**
 	 * Constructor.
@@ -175,28 +194,16 @@ class Single_Template {
 		$type_terms = wp_get_post_terms( $post->ID, 'wcpos_template_type', array( 'fields' => 'slugs' ) );
 		$current_type = ( ! empty( $type_terms ) && ! is_wp_error( $type_terms ) ) ? $type_terms[0] : 'receipt';
 
-		// Get current category term.
-		$cat_terms = wp_get_post_terms( $post->ID, 'wcpos_template_category', array( 'fields' => 'slugs' ) );
-		$current_category = ( ! empty( $cat_terms ) && ! is_wp_error( $cat_terms ) ) ? $cat_terms[0] : '';
+		// Get current category term — fall back to normalized value from TemplatesManager.
+		$cat_terms        = wp_get_post_terms( $post->ID, 'wcpos_template_category', array( 'fields' => 'slugs' ) );
+		$current_category = ( ! empty( $cat_terms ) && ! is_wp_error( $cat_terms ) )
+			? $cat_terms[0]
+			: ( $template['category'] ?? '' );
 
 		$disabled = $is_premade ? 'disabled="disabled"' : '';
 
-		$categories = array(
-			''               => __( '— Select —', 'woocommerce-pos' ),
-			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
-			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
-			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
-			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
-			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
-			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
-			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
-		);
-
-		$engines = array(
-			'logicless'  => __( 'HTML (Offline)', 'woocommerce-pos' ),
-			'thermal'    => __( 'XML (Receipt Printer)', 'woocommerce-pos' ),
-			'legacy-php' => __( 'PHP (Legacy)', 'woocommerce-pos' ),
-		);
+		$categories = array( '' => __( '— Select —', 'woocommerce-pos' ) ) + self::get_category_options();
+		$engines    = self::get_engine_options();
 
 		$engine_descriptions = array(
 			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
@@ -460,6 +467,13 @@ class Single_Template {
 			return;
 		}
 
+		// Premade gallery templates are immutable — ignore POSTed settings.
+		$template   = TemplatesManager::get_template( $post_id );
+		$is_premade = $template && ! empty( $template['is_premade'] );
+		if ( $is_premade ) {
+			return;
+		}
+
 		// Save template type.
 		if ( isset( $_POST['wcpos_template_type_select'] ) ) {
 			$type = sanitize_text_field( wp_unslash( $_POST['wcpos_template_type_select'] ) );
@@ -476,7 +490,7 @@ class Single_Template {
 		// Save category.
 		if ( isset( $_POST['wcpos_template_category'] ) ) {
 			$category = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
-			if ( ! empty( $category ) && \in_array( $category, self::VALID_CATEGORIES, true ) ) {
+			if ( ! empty( $category ) && \in_array( $category, array_keys( self::get_category_options() ), true ) ) {
 				wp_set_object_terms( $post_id, $category, 'wcpos_template_category' );
 			} elseif ( empty( $category ) ) {
 				wp_set_object_terms( $post_id, array(), 'wcpos_template_category' );
@@ -486,7 +500,7 @@ class Single_Template {
 		// Save engine and derive output_type + language.
 		if ( isset( $_POST['wcpos_template_engine'] ) ) {
 			$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
-			if ( \in_array( $engine, self::VALID_ENGINES, true ) ) {
+			if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
 				update_post_meta( $post_id, '_template_engine', $engine );
 
 				// Derive output_type from engine.
