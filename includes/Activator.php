@@ -226,6 +226,12 @@ class Activator {
 
 		Services\Settings::bump_versions();
 
+		// Re-run activation to sync role capabilities. add_role() and add_cap()
+		// are both idempotent, so this is safe. Without this, capabilities added
+		// in newer versions would never reach existing installs because add_role()
+		// is a no-op when the role already exists.
+		$this->single_activate();
+
 		$lock_released = false;
 		$release_lock  = function () use ( &$lock_released ): void {
 			if ( $lock_released ) {
@@ -336,9 +342,15 @@ class Activator {
 			$cashier_capabilities
 		);
 
+		// Sync all capabilities to the existing role. add_role() is a no-op when
+		// the role already exists, so capabilities added in newer versions would
+		// never reach existing installs without this.
 		$this->add_pos_capability(
 			array(
-				'cashier' => array( 'access_woocommerce_pos' ),
+				'cashier' => array_merge(
+					array( 'access_woocommerce_pos' ),
+					array_keys( $cashier_capabilities )
+				),
 			)
 		);
 	}
