@@ -165,6 +165,18 @@ export function PreviewModal({
 							receiptData={preview.receipt_data}
 							templateName={templateName}
 						/>
+					) : preview?.preview_html ? (
+						<iframe
+							srcDoc={`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${preview.preview_html}</body>
+</html>`}
+							title={`Preview of ${templateName}`}
+							className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
+							style={{ height: '600px' }}
+							sandbox="allow-same-origin"
+						/>
 					) : preview?.preview_url ? (
 						<iframe
 							src={preview.preview_url}
