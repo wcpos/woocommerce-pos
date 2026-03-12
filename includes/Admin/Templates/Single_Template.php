@@ -150,16 +150,43 @@ class Single_Template {
 	public function render_settings_metabox( \WP_Post $post ): void {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
-		$template = TemplatesManager::get_template( $post->ID );
-		$engine   = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+		$template    = TemplatesManager::get_template( $post->ID );
+		$engine      = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
+		$is_premade  = $template && ! empty( $template['gallery_key'] );
 
-		$engine_labels = array(
-			'thermal'    => __( 'XML (Thermal)', 'woocommerce-pos' ),
-			'logicless'  => __( 'HTML (Logicless)', 'woocommerce-pos' ),
+		// Get current type term.
+		$type_terms = wp_get_post_terms( $post->ID, 'wcpos_template_type', array( 'fields' => 'slugs' ) );
+		$current_type = ( ! empty( $type_terms ) && ! is_wp_error( $type_terms ) ) ? $type_terms[0] : 'receipt';
+
+		// Get current category term.
+		$cat_terms = wp_get_post_terms( $post->ID, 'wcpos_template_category', array( 'fields' => 'slugs' ) );
+		$current_category = ( ! empty( $cat_terms ) && ! is_wp_error( $cat_terms ) ) ? $cat_terms[0] : '';
+
+		$disabled = $is_premade ? 'disabled="disabled"' : '';
+
+		$categories = array(
+			''               => __( '— Select —', 'woocommerce-pos' ),
+			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
+			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
+			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
+			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
+			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
+			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
+			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
+		);
+
+		$engines = array(
+			'logicless'  => __( 'HTML (Offline)', 'woocommerce-pos' ),
+			'thermal'    => __( 'XML (Receipt Printer)', 'woocommerce-pos' ),
 			'legacy-php' => __( 'PHP (Legacy)', 'woocommerce-pos' ),
 		);
 
-		$engine_label = $engine_labels[ $engine ] ?? $engine;
+		$engine_descriptions = array(
+			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
+			'thermal'    => __( 'Sends output directly to thermal printers like Epson or Star. Works offline.', 'woocommerce-pos' ),
+			'legacy-php' => __( 'Prints using your browser\'s print dialog. Requires a server connection to generate the receipt.', 'woocommerce-pos' ),
+		);
 
 		$language_map = array(
 			'thermal'    => 'xml',
@@ -170,13 +197,79 @@ class Single_Template {
 		$language = $language_map[ $engine ] ?? 'php';
 
 		?>
+		<!-- Category -->
 		<p>
-			<label>
-				<strong><?php esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong>
-			</label>
-			<input type="text" value="<?php echo esc_attr( $engine_label ); ?>" style="width: 100%;" disabled="disabled" />
+			<label><strong><?php esc_html_e( 'Category', 'woocommerce-pos' ); ?></strong></label>
+			<select name="wcpos_template_category" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+				<?php foreach ( $categories as $slug => $label ) : ?>
+					<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $current_category, $slug ); ?>>
+						<?php echo esc_html( $label ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+		</p>
+
+		<!-- Template Type -->
+		<p>
+			<label><strong><?php esc_html_e( 'Template Type', 'woocommerce-pos' ); ?></strong></label>
+			<select name="wcpos_template_type_select" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+				<option value="receipt" <?php selected( $current_type, 'receipt' ); ?>><?php esc_html_e( 'Receipt', 'woocommerce-pos' ); ?></option>
+				<option value="report" <?php selected( $current_type, 'report' ); ?>><?php esc_html_e( 'Report', 'woocommerce-pos' ); ?></option>
+			</select>
+		</p>
+
+		<!-- Engine -->
+		<p>
+			<label><strong><?php esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong></label>
+			<select name="wcpos_template_engine" id="wcpos-template-engine" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+				<?php foreach ( $engines as $value => $label ) : ?>
+					<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $engine, $value ); ?>>
+						<?php echo esc_html( $label ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
 			<input type="hidden" name="wcpos_template_language" value="<?php echo esc_attr( $language ); ?>" />
 		</p>
+		<p id="wcpos-engine-description" class="description" style="margin-top: -8px;">
+			<?php echo esc_html( $engine_descriptions[ $engine ] ?? '' ); ?>
+		</p>
+
+		<!-- Paper Size — only visible for thermal engine -->
+		<p id="wcpos-paper-size-field" style="<?php echo 'thermal' !== $engine ? 'display:none;' : ''; ?>">
+			<label><strong><?php esc_html_e( 'Paper Size', 'woocommerce-pos' ); ?></strong></label>
+			<select name="wcpos_template_paper_width" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+				<option value="80mm" <?php selected( $paper_width, '80mm' ); ?>><?php esc_html_e( '80mm (Standard)', 'woocommerce-pos' ); ?></option>
+				<option value="58mm" <?php selected( $paper_width, '58mm' ); ?>><?php esc_html_e( '58mm (Narrow)', 'woocommerce-pos' ); ?></option>
+			</select>
+		</p>
+
+		<?php if ( ! $is_premade ) : ?>
+		<script>
+		(function() {
+			var engineSelect = document.getElementById('wcpos-template-engine');
+			var paperField = document.getElementById('wcpos-paper-size-field');
+			var descEl = document.getElementById('wcpos-engine-description');
+			var descriptions = <?php echo wp_json_encode( $engine_descriptions ); ?>;
+			var languageMap = <?php echo wp_json_encode( $language_map ); ?>;
+			var languageInput = document.querySelector('input[name="wcpos_template_language"]');
+
+			if (engineSelect) {
+				engineSelect.addEventListener('change', function() {
+					var val = this.value;
+					if (paperField) {
+						paperField.style.display = val === 'thermal' ? '' : 'none';
+					}
+					if (descEl) {
+						descEl.textContent = descriptions[val] || '';
+					}
+					if (languageInput && languageMap[val]) {
+						languageInput.value = languageMap[val];
+					}
+				});
+			}
+		})();
+		</script>
+		<?php endif; ?>
 		<?php
 	}
 
@@ -345,26 +438,55 @@ class Single_Template {
 	 * @return void
 	 */
 	public function save_post( int $post_id, \WP_Post $post ): void {
-		// Check nonce.
 		if ( ! isset( $_POST['wcpos_template_settings_nonce'] ) ||
 			 ! wp_verify_nonce( $_POST['wcpos_template_settings_nonce'], 'wcpos_template_settings' ) ) {
 			return;
 		}
 
-		// Check autosave.
 		if ( \defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) {
 			return;
 		}
 
-		// Check permissions.
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return;
 		}
 
-		// Ensure template has a type - default to 'receipt'.
-		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
-		if ( empty( $terms ) || is_wp_error( $terms ) ) {
-			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+		// Save template type.
+		if ( isset( $_POST['wcpos_template_type_select'] ) ) {
+			$type = sanitize_text_field( wp_unslash( $_POST['wcpos_template_type_select'] ) );
+			if ( \in_array( $type, array( 'receipt', 'report' ), true ) ) {
+				wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
+			}
+		} else {
+			$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
+			if ( empty( $terms ) || is_wp_error( $terms ) ) {
+				wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+			}
+		}
+
+		// Save category.
+		if ( isset( $_POST['wcpos_template_category'] ) ) {
+			$category = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
+			if ( ! empty( $category ) ) {
+				wp_set_object_terms( $post_id, $category, 'wcpos_template_category' );
+			} else {
+				wp_set_object_terms( $post_id, array(), 'wcpos_template_category' );
+			}
+		}
+
+		// Save engine.
+		if ( isset( $_POST['wcpos_template_engine'] ) ) {
+			$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
+			if ( \in_array( $engine, array( 'logicless', 'thermal', 'legacy-php' ), true ) ) {
+				update_post_meta( $post_id, '_template_engine', $engine );
+
+				// Derive output_type from engine.
+				$output_type = 'thermal' === $engine ? 'escpos' : 'html';
+				update_post_meta( $post_id, '_template_output_type', $output_type );
+			}
+		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
+			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+			update_post_meta( $post_id, '_template_output_type', 'html' );
 		}
 
 		// Save language.
@@ -375,12 +497,12 @@ class Single_Template {
 			}
 		}
 
-		// Missing metadata on existing templates should remain legacy-compatible by default.
-		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
-		}
-		if ( ! metadata_exists( 'post', $post_id, '_template_output_type' ) ) {
-			update_post_meta( $post_id, '_template_output_type', 'html' );
+		// Save paper width.
+		if ( isset( $_POST['wcpos_template_paper_width'] ) ) {
+			$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
+			if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
+				update_post_meta( $post_id, '_template_paper_width', $paper_width );
+			}
 		}
 	}
 
