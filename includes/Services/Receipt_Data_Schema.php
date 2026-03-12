@@ -200,25 +200,45 @@ class Receipt_Data_Schema {
 			'store'       => array(
 				'label'  => __( 'Store', 'woocommerce-pos' ),
 				'fields' => array(
-					'name'          => array(
+					'name'                    => array(
 						'type'  => 'string',
 						'label' => __( 'Store Name', 'woocommerce-pos' ),
 					),
-					'address_lines' => array(
+					'address_lines'           => array(
 						'type'  => 'string[]',
 						'label' => __( 'Address Lines', 'woocommerce-pos' ),
 					),
-					'tax_id'        => array(
+					'tax_id'                  => array(
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					),
-					'phone'         => array(
+					'phone'                   => array(
 						'type'  => 'string',
 						'label' => __( 'Phone', 'woocommerce-pos' ),
 					),
-					'email'         => array(
+					'email'                   => array(
 						'type'  => 'string',
 						'label' => __( 'Email', 'woocommerce-pos' ),
+					),
+					'logo'                    => array(
+						'type'  => 'string',
+						'label' => __( 'Logo URL', 'woocommerce-pos' ),
+					),
+					'opening_hours'           => array(
+						'type'  => 'string',
+						'label' => __( 'Opening Hours', 'woocommerce-pos' ),
+					),
+					'personal_notes'          => array(
+						'type'  => 'string',
+						'label' => __( 'Personal Notes', 'woocommerce-pos' ),
+					),
+					'policies_and_conditions' => array(
+						'type'  => 'string',
+						'label' => __( 'Policies & Conditions', 'woocommerce-pos' ),
+					),
+					'footer_imprint'          => array(
+						'type'  => 'string',
+						'label' => __( 'Footer Imprint', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -531,11 +551,16 @@ class Receipt_Data_Schema {
 				'customer_note'  => 'Please gift wrap this order. Thank you!',
 			),
 			'store'              => array(
-				'name'          => $store_name ? $store_name : 'Sample Store',
-				'address_lines' => array( '123 Main Street', 'Anytown, ST 12345' ),
-				'tax_id'        => '',
-				'phone'         => '(555) 123-4567',
-				'email'         => function_exists( 'get_option' ) ? get_option( 'admin_email', 'store@example.com' ) : 'store@example.com',
+				'name'                    => $store_name ? $store_name : 'Sample Store',
+				'address_lines'           => array( '123 Main Street', 'Anytown, ST 12345' ),
+				'tax_id'                  => '',
+				'phone'                   => '(555) 123-4567',
+				'email'                   => function_exists( 'get_option' ) ? get_option( 'admin_email', 'store@example.com' ) : 'store@example.com',
+				'logo'                    => 'https://s.w.org/style/images/about/WordPress-logotype-wmark.png',
+				'opening_hours'           => 'Mon–Fri 9:00 AM – 5:00 PM',
+				'personal_notes'          => 'Welcome to our store!',
+				'policies_and_conditions' => 'Returns accepted within 30 days with receipt.',
+				'footer_imprint'          => 'Thank you for shopping with us!',
 			),
 			'cashier'            => array(
 				'id'   => 1,
