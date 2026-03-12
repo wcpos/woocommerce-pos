@@ -882,7 +882,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 404, $response->get_status() );
 	}
 
-	// ---- Task 3: Sorted order and disabled state tests ----
+	// ---- Sorted order and disabled state tests ----
 
 	/**
 	 * Test get_items returns templates sorted by stored order.
@@ -921,7 +921,6 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $id1, true );
 		wp_delete_post( $id2, true );
 		wp_delete_post( $id3, true );
-		delete_option( 'wcpos_template_order_receipt' );
 	}
 
 	/**
@@ -980,10 +979,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		wp_delete_post( $id1, true );
 		wp_delete_post( $id2, true );
-		delete_option( 'wcpos_template_order_receipt' );
 	}
 
-	// ---- Task 10: Gallery listing tests ----
+	// ---- Gallery listing tests ----
 
 	/**
 	 * Test gallery endpoint returns premade templates.
