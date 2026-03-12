@@ -114,15 +114,23 @@ class Templates_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'batch_items' ),
 				'permission_callback' => array( $this, 'update_item_permissions_check' ),
 				'args'                => array(
-					'update' => array(
+					'type'            => array(
+						'description'       => __( 'Template type for ordering.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'default'           => 'receipt',
+						'enum'              => array( 'receipt', 'report' ),
+						'sanitize_callback' => 'sanitize_text_field',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
+					'update'          => array(
 						'description' => __( 'Array of templates to update.', 'woocommerce-pos' ),
 						'type'        => 'array',
-						'required'    => true,
+						'required'    => false,
 						'items'       => array(
 							'type'       => 'object',
 							'properties' => array(
 								'id'          => array(
-									'type' => 'integer',
+									'type'     => 'integer',
 									'required' => true,
 								),
 								'status'      => array(
@@ -136,6 +144,23 @@ class Templates_Controller extends WP_REST_Controller {
 								),
 							),
 						),
+					),
+					'order'           => array(
+						'description' => __( 'Ordered array of all template IDs (int for database, string for virtual).', 'woocommerce-pos' ),
+						'type'        => 'array',
+						'items'       => array(
+							'type' => array( 'integer', 'string' ),
+						),
+					),
+					'disable_virtual' => array(
+						'description' => __( 'Array of virtual template IDs to disable.', 'woocommerce-pos' ),
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+					),
+					'enable_virtual'  => array(
+						'description' => __( 'Array of virtual template IDs to enable.', 'woocommerce-pos' ),
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
 					),
 				),
 			)
@@ -355,7 +380,14 @@ class Templates_Controller extends WP_REST_Controller {
 
 		if ( ! $has_filters ) {
 			$all_templates = array_merge( $templates, $db_templates );
-			$total_items   = \count( $all_templates );
+
+			// Sort by stored order.
+			$stored_order = TemplatesManager::get_template_order( $type );
+			if ( ! empty( $stored_order ) ) {
+				$all_templates = $this->sort_by_stored_order( $all_templates, $stored_order );
+			}
+
+			$total_items = \count( $all_templates );
 
 			if ( $per_page > 0 ) {
 				$offset      = ( $page - 1 ) * $per_page;
@@ -506,64 +538,102 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return WP_Error|WP_REST_Response Response object on success, or WP_Error object on failure.
 	 */
 	public function batch_items( $request ) {
+		$type = $request->get_param( 'type' ) ?? 'receipt';
+
+		// Handle order.
+		$order = $request->get_param( 'order' );
+		if ( \is_array( $order ) ) {
+			TemplatesManager::save_template_order( $order, $type );
+		}
+
+		// Handle disable_virtual.
+		$disable_virtual = $request->get_param( 'disable_virtual' );
+		if ( \is_array( $disable_virtual ) ) {
+			foreach ( $disable_virtual as $vid ) {
+				if ( \is_string( $vid ) ) {
+					TemplatesManager::set_virtual_template_disabled( $vid, true, $type );
+				}
+			}
+		}
+
+		// Handle enable_virtual.
+		$enable_virtual = $request->get_param( 'enable_virtual' );
+		if ( \is_array( $enable_virtual ) ) {
+			foreach ( $enable_virtual as $vid ) {
+				if ( \is_string( $vid ) ) {
+					TemplatesManager::set_virtual_template_disabled( $vid, false, $type );
+				}
+			}
+		}
+
+		// Handle update (existing logic for database templates).
 		$updates = $request->get_param( 'update' );
 		$results = array();
 
-		if ( ! \is_array( $updates ) ) {
-			return new WP_Error(
-				'wcpos_invalid_batch',
-				__( 'The update parameter must be an array.', 'woocommerce-pos' ),
-				array( 'status' => 400 )
-			);
-		}
+		if ( \is_array( $updates ) ) {
+			foreach ( $updates as $index => $item ) {
+				if ( ! \is_array( $item ) || empty( $item['id'] ) || ! \is_numeric( $item['id'] ) ) {
+					$results[] = array(
+						'id'    => \is_array( $item ) ? ( $item['id'] ?? null ) : null,
+						'error' => array(
+							'code'    => 'wcpos_template_missing_id',
+							/* translators: %d: batch item index. */
+							'message' => sprintf( __( 'Batch item %d must include a numeric id.', 'woocommerce-pos' ), $index + 1 ),
+						),
+					);
+					continue;
+				}
 
-		foreach ( $updates as $index => $item ) {
-			if ( ! \is_array( $item ) || empty( $item['id'] ) || ! \is_numeric( $item['id'] ) ) {
-				$results[] = array(
-					'id'    => \is_array( $item ) ? ( $item['id'] ?? null ) : null,
-					'error' => array(
-						'code'    => 'wcpos_template_missing_id',
-						/* translators: %d: batch item index. */
-						'message' => sprintf( __( 'Batch item %d must include a numeric id.', 'woocommerce-pos' ), $index + 1 ),
-					),
-				);
-				continue;
-			}
+				$item_id = (int) $item['id'];
 
-			$item_id = (int) $item['id'];
+				$item_request = new WP_REST_Request( 'PATCH' );
+				$item_request->set_body_params( $item );
+				$item_request->set_url_params( array( 'id' => $item_id ) );
 
-			$item_request = new WP_REST_Request( 'PATCH' );
-			$item_request->set_body_params( $item );
-			$item_request->set_url_params( array( 'id' => $item_id ) );
+				$result = $this->update_item( $item_request );
 
-			$result = $this->update_item( $item_request );
-
-			if ( is_wp_error( $result ) ) {
-				$results[] = array(
-					'id'    => $item_id,
-					'error' => array(
-						'code'    => $result->get_error_code(),
-						'message' => $result->get_error_message(),
-					),
-				);
-			} else {
-				$results[] = $result->get_data();
+				if ( is_wp_error( $result ) ) {
+					$results[] = array(
+						'id'    => $item_id,
+						'error' => array(
+							'code'    => $result->get_error_code(),
+							'message' => $result->get_error_message(),
+						),
+					);
+				} else {
+					$results[] = $result->get_data();
+				}
 			}
 		}
 
-		$response = rest_ensure_response( array( 'update' => $results ) );
-
-		// Return 400 when every batch item failed.
-		$has_success = false;
-		foreach ( $results as $result_item ) {
-			if ( ! isset( $result_item['error'] ) ) {
-				$has_success = true;
-				break;
-			}
+		// Build response.
+		$response_data = array();
+		if ( ! empty( $results ) ) {
+			$response_data['update'] = $results;
+		}
+		if ( \is_array( $order ) ) {
+			$response_data['order'] = TemplatesManager::get_template_order( $type );
+		}
+		if ( \is_array( $disable_virtual ) || \is_array( $enable_virtual ) ) {
+			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates( $type );
 		}
 
-		if ( ! $has_success && ! empty( $results ) ) {
-			$response->set_status( 400 );
+		$response = rest_ensure_response( $response_data );
+
+		// Return 400 only when the request contained nothing but update items and every one failed.
+		$has_non_update_ops = \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
+		if ( ! empty( $results ) && ! $has_non_update_ops ) {
+			$has_success = false;
+			foreach ( $results as $result_item ) {
+				if ( ! isset( $result_item['error'] ) ) {
+					$has_success = true;
+					break;
+				}
+			}
+
+			if ( ! $has_success ) {
+				$response->set_status( 400 );
+			}
 		}
 
 		return $response;
@@ -977,7 +1047,48 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Add is_disabled for virtual templates (scoped by type).
+		if ( ! empty( $template['is_virtual'] ) ) {
+			$type = $request->get_param( 'type' ) ?? 'receipt';
+			$template['is_disabled'] = TemplatesManager::is_virtual_template_disabled( (string) $template['id'], $type );
+		}
+
 		return $template;
+	}
+
+	/**
+	 * Sort templates by stored order, appending unordered templates at the end.
+	 *
+	 * @param array $templates    Templates to sort.
+	 * @param array $stored_order Ordered array of template IDs.
+	 *
+	 * @return array Sorted templates.
+	 */
+	private function sort_by_stored_order( array $templates, array $stored_order ): array {
+		// Build a position map from stored order.
+		$position_map = array();
+		foreach ( $stored_order as $index => $id ) {
+			$key                  = \is_int( $id ) ? $id : (string) $id;
+			$position_map[ $key ] = $index;
+		}
+
+		$ordered   = array();
+		$unordered = array();
+
+		foreach ( $templates as $template ) {
+			$id  = $template['id'];
+			$key = \is_int( $id ) ? $id : (string) $id;
+
+			if ( isset( $position_map[ $key ] ) ) {
+				$ordered[ $position_map[ $key ] ] = $template;
+			} else {
+				$unordered[] = $template;
+			}
+		}
+
+		ksort( $ordered );
+
+		return array_merge( array_values( $ordered ), $unordered );
 	}
 
 	/**

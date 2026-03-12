@@ -42,6 +42,32 @@ export function useToggleTemplate() {
 	});
 }
 
+export function useToggleVirtualTemplate(type = 'receipt') {
+	const queryClient = useQueryClient();
+	const { addSnackbar } = useSnackbar();
+
+	return useMutation({
+		mutationFn: async ({ id, disabled }: { id: string; disabled: boolean }) =>
+			apiFetch({
+				path: 'wcpos/v1/templates/batch?wcpos=1',
+				method: 'POST',
+				data: disabled
+					? { type, disable_virtual: [id] }
+					: { type, enable_virtual: [id] },
+			}),
+		onSuccess: (_data, { disabled }) => {
+			queryClient.invalidateQueries({ queryKey: ['templates'] });
+			addSnackbar({
+				message: disabled ? 'Template deactivated' : 'Template activated',
+				status: 'success',
+			});
+		},
+		onError: () => {
+			addSnackbar({ message: 'Failed to update template', status: 'error' });
+		},
+	});
+}
+
 export function useCopyTemplate() {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
@@ -62,16 +88,16 @@ export function useCopyTemplate() {
 	});
 }
 
-export function useReorderTemplates() {
+export function useReorderTemplates(type = 'receipt') {
 	const queryClient = useQueryClient();
 	const { addSnackbar } = useSnackbar();
 
 	return useMutation({
-		mutationFn: async (updates: Array<{ id: number; menu_order: number }>) =>
+		mutationFn: async (order: Array<number | string>) =>
 			apiFetch({
 				path: 'wcpos/v1/templates/batch?wcpos=1',
 				method: 'POST',
-				data: { update: updates },
+				data: { type, order },
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
