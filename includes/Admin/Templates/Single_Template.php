@@ -586,6 +586,7 @@ class Single_Template {
 			'fieldSchema' => \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_field_tree(),
 			'sampleData'  => $sample_data,
 			'engine'      => $engine,
+			'paperWidth'  => get_post_meta( $post->ID, '_template_paper_width', true ) ?: null,
 			'templateId'  => $post->ID,
 			'previewUrl'  => $preview_url,
 			'postContent' => $post->post_content,
