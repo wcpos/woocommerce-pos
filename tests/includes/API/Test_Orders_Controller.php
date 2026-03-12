@@ -1155,4 +1155,50 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertContains( 'coupon1', $coupon_codes, 'First coupon should be present.' );
 		$this->assertContains( 'coupon2', $coupon_codes, 'Second coupon should be present.' );
 	}
+
+	/**
+	 * Test that a cashier can update an order.
+	 *
+	 * Verifies the HPOS permission fix: cashiers with edit_shop_orders should be
+	 * able to update orders even when HPOS placeholder posts cause map_meta_cap
+	 * to check the generic edit_post capability instead of edit_shop_order.
+	 */
+	public function test_cashier_can_update_order(): void {
+		// Create a cashier user with POS capabilities but NOT generic edit_posts.
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		$cashier    = get_user_by( 'id', $cashier_id );
+		$cashier->add_cap( 'access_woocommerce_pos' );
+
+		// Confirm the cashier does NOT have generic edit_posts.
+		$this->assertFalse(
+			user_can( $cashier_id, 'edit_posts' ),
+			'Cashier should not have generic edit_posts capability.'
+		);
+		$this->assertTrue(
+			user_can( $cashier_id, 'edit_shop_orders' ),
+			'Cashier should have edit_shop_orders capability.'
+		);
+
+		// Create an order as admin.
+		$order = OrderHelper::create_order();
+
+		// Switch to cashier.
+		wp_set_current_user( $cashier_id );
+
+		// Update the order.
+		$request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_body_params(
+			array(
+				'status' => 'processing',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals(
+			200,
+			$response->get_status(),
+			'Cashier should be able to update an order. Response: ' . wp_json_encode( $response->get_data() )
+		);
+	}
 }

@@ -80,6 +80,72 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Check if the current user can update an order.
+	 *
+	 * Overrides the parent to fix HPOS compatibility. When HPOS is enabled with
+	 * sync disabled, get_post() returns a shop_order_placehold post type that has
+	 * map_meta_cap = false and no capability_type, causing WordPress to check the
+	 * generic 'edit_post' capability instead of 'edit_shop_order'. Non-admin roles
+	 * like cashier have 'edit_shop_orders' but not the generic 'edit_posts', so the
+	 * permission check fails.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function update_item_permissions_check( $request ) {
+		$result = parent::update_item_permissions_check( $request );
+
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		// Parent check failed — try direct capability check for HPOS compatibility.
+		$id    = (int) $request['id'];
+		$order = wc_get_order( $id );
+
+		if ( ! $order ) {
+			return $result;
+		}
+
+		if ( ! current_user_can( 'edit_shop_orders' ) ) {
+			return $result;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if the current user can delete an order.
+	 *
+	 * Same HPOS fix as update_item_permissions_check.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function delete_item_permissions_check( $request ) {
+		$result = parent::delete_item_permissions_check( $request );
+
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$id    = (int) $request['id'];
+		$order = wc_get_order( $id );
+
+		if ( ! $order ) {
+			return $result;
+		}
+
+		if ( ! current_user_can( 'delete_shop_orders' ) ) {
+			return $result;
+		}
+
+		return true;
+	}
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
