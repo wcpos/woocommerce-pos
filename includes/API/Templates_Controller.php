@@ -355,7 +355,14 @@ class Templates_Controller extends WP_REST_Controller {
 
 		if ( ! $has_filters ) {
 			$all_templates = array_merge( $templates, $db_templates );
-			$total_items   = \count( $all_templates );
+
+			// Sort by stored order.
+			$stored_order = TemplatesManager::get_template_order( $type );
+			if ( ! empty( $stored_order ) ) {
+				$all_templates = $this->sort_by_stored_order( $all_templates, $stored_order );
+			}
+
+			$total_items = \count( $all_templates );
 
 			if ( $per_page > 0 ) {
 				$offset      = ( $page - 1 ) * $per_page;
@@ -977,7 +984,47 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Add is_disabled for virtual templates.
+		if ( ! empty( $template['is_virtual'] ) ) {
+			$template['is_disabled'] = TemplatesManager::is_virtual_template_disabled( (string) $template['id'] );
+		}
+
 		return $template;
+	}
+
+	/**
+	 * Sort templates by stored order, appending unordered templates at the end.
+	 *
+	 * @param array $templates    Templates to sort.
+	 * @param array $stored_order Ordered array of template IDs.
+	 *
+	 * @return array Sorted templates.
+	 */
+	private function sort_by_stored_order( array $templates, array $stored_order ): array {
+		// Build a position map from stored order.
+		$position_map = array();
+		foreach ( $stored_order as $index => $id ) {
+			$key                  = \is_int( $id ) ? $id : (string) $id;
+			$position_map[ $key ] = $index;
+		}
+
+		$ordered   = array();
+		$unordered = array();
+
+		foreach ( $templates as $template ) {
+			$id  = $template['id'];
+			$key = \is_int( $id ) ? $id : (string) $id;
+
+			if ( isset( $position_map[ $key ] ) ) {
+				$ordered[ $position_map[ $key ] ] = $template;
+			} else {
+				$unordered[] = $template;
+			}
+		}
+
+		ksort( $ordered );
+
+		return array_merge( array_values( $ordered ), $unordered );
 	}
 
 	/**
