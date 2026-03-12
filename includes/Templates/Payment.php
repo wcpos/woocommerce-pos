@@ -182,6 +182,17 @@ class Payment {
 			// initialize order and nonces before the user is switched to customer.
 			$this->initialize_order_and_nonces();
 
+			// Verify order key to prevent unauthenticated access.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Order key is the auth mechanism here, matching WooCommerce core behavior.
+			$provided_key = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : '';
+			if ( ! $provided_key || $provided_key !== $this->order->get_order_key() ) {
+				wp_die(
+					esc_html__( 'Sorry, this order cannot be paid for. The order key is missing or invalid.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
 			/*
 			 * The wp_set_current_user() function changes the global user object but it does not authenticate the user
 			 * for the current session. This means that it will not affect nonce creation or validation because WordPress
@@ -460,6 +471,15 @@ class Payment {
 	private function check_troubleshooting_form_submission(): void {
 		// Check if our form has been submitted.
 		if ( isset( $_POST['troubleshooting_form_nonce'] ) ) {
+			// Only allow users with manage_woocommerce capability to modify checkout settings.
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_die(
+					esc_html__( 'You do not have permission to modify checkout settings.', 'woocommerce-pos' ),
+					esc_html__( 'Error', 'woocommerce-pos' ),
+					array( 'response' => 403 )
+				);
+			}
+
 			// Verify the nonce.
 			if ( ! wp_verify_nonce( $_POST['troubleshooting_form_nonce'], 'troubleshooting_form_nonce' ) ) {
 				// Nonce doesn't verify, we should stop execution here.
