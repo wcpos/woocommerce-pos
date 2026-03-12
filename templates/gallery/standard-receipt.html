@@ -19,6 +19,11 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 	<!-- Store Header -->
 	<div style="text-align: center; margin-bottom: 20px;">
+		{{#store.logo}}
+		<div style="margin-bottom: 10px;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 200px; height: auto;">
+		</div>
+		{{/store.logo}}
 		<div style="font-size: 22px; font-weight: 700; margin-bottom: 6px;">{{store.name}}</div>
 		{{#store.address_lines}}
 		<div style="font-size: 12px; color: #666; line-height: 1.5;">{{.}}</div>
@@ -140,6 +145,12 @@ Note: Logicless output passes through wp_kses_post, which strips
 	</div>
 
 	<!-- Footer -->
+	{{#store.footer_imprint}}
+	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
 	{{^customer.name}}
 	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
 		Thank you for your purchase!
@@ -150,5 +161,6 @@ Note: Logicless output passes through wp_kses_post, which strips
 		Thank you, {{customer.name}}!
 	</div>
 	{{/customer.name}}
+	{{/store.footer_imprint}}
 
 </div>

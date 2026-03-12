@@ -7,6 +7,11 @@ and the payment method used for the refund.
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 400px; margin: 0 auto;">
 
 	<div style="text-align: center; margin-bottom: 16px;">
+		{{#store.logo}}
+		<div style="margin-bottom: 8px;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 160px; height: auto;">
+		</div>
+		{{/store.logo}}
 		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #dc2626; font-weight: 600; margin-bottom: 6px;">Credit Note</div>
 		<div style="font-size: 20px; font-weight: 700;">{{store.name}}</div>
 		{{#store.address_lines}}
@@ -74,8 +79,21 @@ and the payment method used for the refund.
 	{{/reference}}
 	{{/payments}}
 
+	{{#store.policies_and_conditions}}
+	<div style="margin-top: 16px; padding: 10px; background: #f8f8f8; border-radius: 4px; font-size: 10px; color: #888; line-height: 1.5; white-space: pre-wrap;">
+		{{store.policies_and_conditions}}
+	</div>
+	{{/store.policies_and_conditions}}
+
+	{{#store.footer_imprint}}
+	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
 		Please retain this receipt for your records.
 	</div>
+	{{/store.footer_imprint}}
 
 </div>
