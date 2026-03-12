@@ -2,13 +2,15 @@ import { useState } from 'react';
 import type { FieldSchema } from '../types';
 import { FieldTreeNode } from './field-tree-node';
 import { SearchField } from './search-field';
+import { ThermalElements } from './thermal-elements';
 
 interface FieldPickerProps {
 	schema: FieldSchema;
+	engine: string;
 	onInsertField: (text: string) => void;
 }
 
-export function FieldPicker({ schema, onInsertField }: FieldPickerProps) {
+export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps) {
 	const [search, setSearch] = useState('');
 
 	return (
@@ -32,6 +34,9 @@ export function FieldPicker({ schema, onInsertField }: FieldPickerProps) {
 						onInsertField={onInsertField}
 					/>
 				))}
+				{engine === 'thermal' && (
+					<ThermalElements searchFilter={search} onInsertField={onInsertField} />
+				)}
 			</div>
 		</div>
 	);
