@@ -221,6 +221,7 @@ class Templates {
 		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
 		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
 		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+		$paper_width     = get_post_meta( $template_id, '_template_paper_width', true );
 		$category        = self::get_template_category( $template_id );
 
 		return array(
@@ -234,6 +235,7 @@ class Templates {
 			'file_path'       => get_post_meta( $template_id, '_template_file_path', true ),
 			'engine'          => $engine ? $engine : 'legacy-php',
 			'output_type'     => $output_type ? $output_type : 'html',
+			'paper_width'     => $paper_width ? $paper_width : null,
 			'tax_display'     => $tax_display ? $tax_display : 'default',
 			'is_virtual'      => false,
 			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
@@ -294,6 +296,7 @@ class Templates {
 			'file_path'         => $file_path,
 			'engine'            => 'legacy-php',
 			'output_type'       => 'html',
+			'paper_width'       => null,
 			'is_virtual'        => true,
 			'source'            => self::TEMPLATE_THEME === $template_id ? 'theme' : 'plugin',
 			'menu_order'        => 0,
