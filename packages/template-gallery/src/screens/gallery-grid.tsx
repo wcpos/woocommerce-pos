@@ -20,7 +20,7 @@ import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
 function matchesFilters(
-	template: { title: string; category: string; engine?: string; offline_capable?: boolean; output_type?: string; is_premade?: boolean },
+	template: { title: string; category: string; engine?: string; output_type?: string; is_premade?: boolean },
 	filters: FilterState,
 ): boolean {
 	if (filters.search && !template.title.toLowerCase().includes(filters.search.toLowerCase())) {
@@ -28,18 +28,6 @@ function matchesFilters(
 	}
 
 	if (filters.categories.length > 0 && !filters.categories.includes(template.category)) {
-		return false;
-	}
-
-	const isOffline =
-		template.engine === 'logicless' ||
-		template.engine === 'thermal' ||
-		template.offline_capable === true;
-
-	if (filters.connectivity === 'offline' && !isOffline) {
-		return false;
-	}
-	if (filters.connectivity === 'online' && isOffline) {
 		return false;
 	}
 

@@ -15,6 +15,7 @@ export interface EditorConfig {
 	fieldSchema: FieldSchema;
 	sampleData: Record<string, unknown>;
 	engine: 'logicless' | 'legacy-php' | 'thermal';
+	paperWidth: string | null;
 	templateId: number;
 	previewUrl: string;
 	postContent: string;

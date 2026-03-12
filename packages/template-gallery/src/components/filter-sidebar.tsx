@@ -1,7 +1,6 @@
 export interface FilterState {
 	search: string;
 	categories: string[];
-	connectivity: 'all' | 'offline' | 'online';
 	output: 'all' | 'html' | 'escpos';
 	source: 'all' | 'custom' | 'builtin';
 }
@@ -9,7 +8,6 @@ export interface FilterState {
 export const DEFAULT_FILTERS: FilterState = {
 	search: '',
 	categories: [],
-	connectivity: 'all',
 	output: 'all',
 	source: 'all',
 };
@@ -67,7 +65,6 @@ function isFiltered(filters: FilterState): boolean {
 	return (
 		filters.search !== '' ||
 		filters.categories.length > 0 ||
-		filters.connectivity !== 'all' ||
 		filters.output !== 'all' ||
 		filters.source !== 'all'
 	);
@@ -166,35 +163,15 @@ export function FilterSidebar({
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
 
-			{/* Connectivity */}
+			{/* Print Method */}
 			<RadioGroup
-				label="Connectivity"
-				name="filter-connectivity"
-				value={filters.connectivity}
-				options={[
-					{ value: 'all', label: 'All' },
-					{ value: 'offline', label: 'Offline capable' },
-					{ value: 'online', label: 'Online only' },
-				]}
-				onChange={(v) =>
-					onChange({
-						...filters,
-						connectivity: v as FilterState['connectivity'],
-					})
-				}
-			/>
-
-			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
-
-			{/* Output */}
-			<RadioGroup
-				label="Output"
-				name="filter-output"
+				label="Print Method"
+				name="filter-print-method"
 				value={filters.output}
 				options={[
 					{ value: 'all', label: 'All' },
-					{ value: 'html', label: 'HTML' },
-					{ value: 'escpos', label: 'Thermal' },
+					{ value: 'html', label: 'Browser' },
+					{ value: 'escpos', label: 'Receipt Printer' },
 				]}
 				onChange={(v) =>
 					onChange({

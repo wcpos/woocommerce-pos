@@ -1,5 +1,6 @@
 import classnames from 'classnames';
 
+import { TemplateTags } from './template-tags';
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface BaseProps {
@@ -32,12 +33,6 @@ export function TemplateCard(props: TemplateCardProps) {
 	const name = template.title;
 	const description = template.description;
 	const isActive = !isGallery && 'status' in template && template.status === 'publish';
-	const engine = template.engine;
-	const isOffline =
-		engine === 'logicless' ||
-		engine === 'thermal' ||
-		('offline_capable' in template && template.offline_capable);
-	const isThermal = engine === 'thermal';
 
 	return (
 		<div
@@ -88,24 +83,8 @@ export function TemplateCard(props: TemplateCardProps) {
 					</p>
 				)}
 
-				{/* Badges */}
-				<div className="wcpos:flex wcpos:gap-1 wcpos:flex-wrap">
-					{isOffline && (
-						<span className="wcpos:text-xs wcpos:bg-green-50 wcpos:text-green-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded">
-							Offline
-						</span>
-					)}
-					{isThermal && (
-						<span className="wcpos:text-xs wcpos:bg-blue-50 wcpos:text-blue-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded">
-							Thermal Printer
-						</span>
-					)}
-					{engine === 'legacy-php' && (
-						<span className="wcpos:text-xs wcpos:bg-gray-100 wcpos:text-gray-600 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded">
-							PHP
-						</span>
-					)}
-				</div>
+				{/* Tags */}
+				<TemplateTags template={template} />
 
 				{/* Actions */}
 				<div className="wcpos:flex wcpos:gap-2 wcpos:mt-auto wcpos:pt-1">
