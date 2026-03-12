@@ -534,12 +534,14 @@ class Templates {
 	}
 
 	/**
-	 * Get the list of disabled virtual template IDs.
+	 * Get the list of disabled virtual template IDs for a given type.
+	 *
+	 * @param string $type Template type (receipt, report).
 	 *
 	 * @return string[] Array of disabled virtual template IDs.
 	 */
-	public static function get_disabled_virtual_templates(): array {
-		$disabled = get_option( 'wcpos_disabled_virtual_templates', array() );
+	public static function get_disabled_virtual_templates( string $type = 'receipt' ): array {
+		$disabled = get_option( 'wcpos_disabled_virtual_templates_' . $type, array() );
 
 		if ( ! \is_array( $disabled ) ) {
 			return array();
@@ -552,11 +554,12 @@ class Templates {
 	 * Check if a virtual template is disabled.
 	 *
 	 * @param string $template_id Virtual template ID.
+	 * @param string $type        Template type (receipt, report).
 	 *
 	 * @return bool True if disabled.
 	 */
-	public static function is_virtual_template_disabled( string $template_id ): bool {
-		$disabled = self::get_disabled_virtual_templates();
+	public static function is_virtual_template_disabled( string $template_id, string $type = 'receipt' ): bool {
+		$disabled = self::get_disabled_virtual_templates( $type );
 
 		return \in_array( $template_id, $disabled, true );
 	}
@@ -566,11 +569,12 @@ class Templates {
 	 *
 	 * @param string $template_id Virtual template ID.
 	 * @param bool   $disabled    True to disable, false to enable.
+	 * @param string $type        Template type (receipt, report).
 	 *
 	 * @return bool True on success.
 	 */
-	public static function set_virtual_template_disabled( string $template_id, bool $disabled ): bool {
-		$current = self::get_disabled_virtual_templates();
+	public static function set_virtual_template_disabled( string $template_id, bool $disabled, string $type = 'receipt' ): bool {
+		$current = self::get_disabled_virtual_templates( $type );
 
 		if ( $disabled ) {
 			if ( ! \in_array( $template_id, $current, true ) ) {
@@ -587,7 +591,7 @@ class Templates {
 			);
 		}
 
-		return update_option( 'wcpos_disabled_virtual_templates', $current );
+		return update_option( 'wcpos_disabled_virtual_templates_' . $type, $current );
 	}
 
 	/**

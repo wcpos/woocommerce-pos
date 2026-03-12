@@ -551,7 +551,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( \is_array( $disable_virtual ) ) {
 			foreach ( $disable_virtual as $vid ) {
 				if ( \is_string( $vid ) ) {
-					TemplatesManager::set_virtual_template_disabled( $vid, true );
+					TemplatesManager::set_virtual_template_disabled( $vid, true, $type );
 				}
 			}
 		}
@@ -561,7 +561,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( \is_array( $enable_virtual ) ) {
 			foreach ( $enable_virtual as $vid ) {
 				if ( \is_string( $vid ) ) {
-					TemplatesManager::set_virtual_template_disabled( $vid, false );
+					TemplatesManager::set_virtual_template_disabled( $vid, false, $type );
 				}
 			}
 		}
@@ -615,13 +615,14 @@ class Templates_Controller extends WP_REST_Controller {
 			$response_data['order'] = TemplatesManager::get_template_order( $type );
 		}
 		if ( \is_array( $disable_virtual ) || \is_array( $enable_virtual ) ) {
-			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates();
+			$response_data['disabled_virtual'] = TemplatesManager::get_disabled_virtual_templates( $type );
 		}
 
 		$response = rest_ensure_response( $response_data );
 
-		// Return 400 when every batch update item failed (only applies to update array).
-		if ( ! empty( $results ) ) {
+		// Return 400 only when the request contained nothing but update items and every one failed.
+		$has_non_update_ops = \is_array( $order ) || \is_array( $disable_virtual ) || \is_array( $enable_virtual );
+		if ( ! empty( $results ) && ! $has_non_update_ops ) {
 			$has_success = false;
 			foreach ( $results as $result_item ) {
 				if ( ! isset( $result_item['error'] ) ) {
@@ -1046,9 +1047,10 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		// Add is_disabled for virtual templates.
+		// Add is_disabled for virtual templates (scoped by type).
 		if ( ! empty( $template['is_virtual'] ) ) {
-			$template['is_disabled'] = TemplatesManager::is_virtual_template_disabled( (string) $template['id'] );
+			$type = $request->get_param( 'type' ) ?? 'receipt';
+			$template['is_disabled'] = TemplatesManager::is_virtual_template_disabled( (string) $template['id'], $type );
 		}
 
 		return $template;

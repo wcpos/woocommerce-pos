@@ -59,7 +59,8 @@ class Test_Templates extends WP_UnitTestCase {
 		delete_option( 'wcpos_active_template_report' );
 		delete_option( 'wcpos_template_order_receipt' );
 		delete_option( 'wcpos_template_order_report' );
-		delete_option( 'wcpos_disabled_virtual_templates' );
+		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_report' );
 	}
 
 	/**

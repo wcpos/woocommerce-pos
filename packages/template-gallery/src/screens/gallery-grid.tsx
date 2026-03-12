@@ -200,16 +200,8 @@ export function GalleryGrid() {
 					isGallery={previewIsGallery}
 					onClose={() => setPreviewId(null)}
 					onActivate={() => {
-						if (typeof previewId !== 'number') return;
-						const latestTemplate = templates.find((template): template is Template =>
-							typeof template.id === 'number' && template.id === previewId,
-						);
-						if (!latestTemplate) return;
-
-						toggleTemplate.mutate({
-							id: latestTemplate.id,
-							status: latestTemplate.status === 'publish' ? 'draft' : 'publish',
-						});
+						if (previewId == null) return;
+						handleToggle(previewId);
 					}}
 					onCustomize={() => {
 						if (!previewIsGallery) return;

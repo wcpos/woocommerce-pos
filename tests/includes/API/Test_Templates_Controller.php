@@ -54,7 +54,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 		delete_option( 'wcpos_template_order_receipt' );
 		delete_option( 'wcpos_template_order_report' );
-		delete_option( 'wcpos_disabled_virtual_templates' );
+		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_report' );
 	}
 
 	/**
@@ -635,7 +636,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response2->get_status() );
 		$this->assertFalse( \WCPOS\WooCommercePOS\Templates::is_virtual_template_disabled( 'plugin-core' ) );
 
-		delete_option( 'wcpos_disabled_virtual_templates' );
+		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_report' );
 	}
 
 	// ---- Task 8: Copy and Install tests ----
@@ -949,7 +951,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'is_disabled', $core );
 		$this->assertTrue( $core['is_disabled'] );
 
-		delete_option( 'wcpos_disabled_virtual_templates' );
+		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
+		delete_option( 'wcpos_disabled_virtual_templates_report' );
 	}
 
 	/**
