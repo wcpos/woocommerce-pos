@@ -841,6 +841,9 @@ class Templates_Controller extends WP_REST_Controller {
 		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
+		// Add boolean helpers for array sections so templates can gate wrappers.
+		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+
 		$banner = $this->get_preview_banner_html();
 
 		if ( 'logicless' === $engine ) {

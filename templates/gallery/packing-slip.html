@@ -59,8 +59,9 @@ Shipping address prominent for warehouse use.
 	</table>
 
 	{{#meta.customer_note}}
-	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">
-		<span style="font-weight: 600;">Customer Note:</span> {{meta.customer_note}}
+	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px;">
+		<div style="font-weight: 600; margin-bottom: 4px;">Customer Note:</div>
+		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
 

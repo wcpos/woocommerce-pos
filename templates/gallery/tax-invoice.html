@@ -118,6 +118,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	</div>
 
 	<!-- Tax summary -->
+	{{#has_tax_summary}}
 	<div style="margin-top: 16px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
 		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 8px; font-weight: 600;">Tax Summary</div>
 		<table style="width: 100%; border-collapse: collapse; font-size: 12px;">
@@ -141,6 +142,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 			</tbody>
 		</table>
 	</div>
+	{{/has_tax_summary}}
 
 	<!-- Final totals -->
 	<div style="display: flex; justify-content: flex-end; margin-top: 16px;">

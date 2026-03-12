@@ -113,13 +113,19 @@ class Receipt_Data_Schema {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				$result[ $k ] = html_entity_decode(
-					wp_strip_all_tags(
-						wc_price( (float) $value, array( 'currency' => $currency ) )
-					),
-					ENT_QUOTES | ENT_SUBSTITUTE,
-					'UTF-8'
-				);
+				// Keep zero values as numeric 0 so Mustache section guards
+				// (e.g. {{#change}}) treat them as falsy instead of rendering "$0.00".
+				if ( 0.0 === (float) $value ) {
+					$result[ $k ] = 0;
+				} else {
+					$result[ $k ] = html_entity_decode(
+						wp_strip_all_tags(
+							wc_price( (float) $value, array( 'currency' => $currency ) )
+						),
+						ENT_QUOTES | ENT_SUBSTITUTE,
+						'UTF-8'
+					);
+				}
 			} else {
 				$result[ $k ] = $value;
 			}

@@ -107,12 +107,14 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$product->set_status( 'publish' );
 		$product->save();
 
-		$data = $this->builder->build();
+		try {
+			$data = $this->builder->build();
 
-		$names = array_column( $data['lines'], 'name' );
-		$this->assertContains( 'Test Product For Preview', $names );
-
-		$product->delete( true );
+			$names = array_column( $data['lines'], 'name' );
+			$this->assertContains( 'Test Product For Preview', $names );
+		} finally {
+			$product->delete( true );
+		}
 	}
 
 	/**
