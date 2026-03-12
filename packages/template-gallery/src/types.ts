@@ -9,6 +9,7 @@ export interface Template {
 	language: string;
 	engine: 'legacy-php' | 'logicless' | 'thermal';
 	output_type: string;
+	paper_width: string | null;
 	tax_display: string;
 	is_virtual: false;
 	is_premade: boolean;
@@ -34,6 +35,7 @@ export interface VirtualTemplate {
 	language: string;
 	engine: string;
 	output_type: string;
+	paper_width: string | null;
 	is_virtual: true;
 	is_premade: boolean;
 	is_active: boolean;
