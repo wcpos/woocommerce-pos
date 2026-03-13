@@ -206,7 +206,16 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 * @param string $file   Path to the l10n PHP file.
 	 */
 	protected function load_translation_file( string $locale, string $file ): void {
-		$this->maybe_convert_file_format( $file );
+		try {
+			$this->maybe_convert_file_format( $file );
+		} catch ( \ParseError $e ) {
+			// File is corrupt — delete it and clear the version transient so it re-downloads.
+			Logger::log( sprintf( 'i18n: Corrupt translation file deleted (%s): %s', $file, $e->getMessage() ) );
+			wp_delete_file( $file );
+			delete_transient( $this->transient_key . '_' . $locale );
+
+			return;
+		}
 
 		// Pass the .mo path — WordPress internally looks for .l10n.php first.
 		$mofile = $this->languages_path . $this->text_domain . '-' . $locale . '.mo';
@@ -318,7 +327,20 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return false;
 		}
 
-		return $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE );
+		if ( ! $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE ) ) {
+			return false;
+		}
+
+		// Verify the write was complete (catches partial/truncated writes).
+		$written_size = $wp_filesystem->size( $file );
+		if ( false === $written_size || strlen( $body ) !== $written_size ) {
+			Logger::log( sprintf( 'i18n: Write verification failed — expected %d bytes, got %s', strlen( $body ), var_export( $written_size, true ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Logging diagnostic info.
+			wp_delete_file( $file );
+
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -366,6 +388,13 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		$body = wp_remote_retrieve_body( $response );
 		if ( empty( $body ) ) {
 			Logger::log( sprintf( 'i18n: Failed to download %s translation - empty response body from %s', $locale, $url ) );
+
+			return false;
+		}
+
+		// Validate the response is a PHP translation file (catches truncated downloads).
+		if ( 0 !== strpos( $body, '<?php' ) || false === strpos( $body, 'return' ) ) {
+			Logger::log( sprintf( 'i18n: Downloaded %s translation is not valid PHP — possible truncated download from %s', $locale, $url ) );
 
 			return false;
 		}
