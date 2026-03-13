@@ -48,6 +48,8 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		delete_transient( 'wcpos_i18n_woocommerce-pos_active_path' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_write_failed' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_active_path' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_nl_NL' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_ja' );
 	}
 
 	/**
@@ -1002,5 +1004,283 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			$reflection->getValue( $i18n ),
 			'Constructor should use uploads fallback when active_path transient is set'
 		);
+	}
+
+	/**
+	 * Verify flat-format translation file is converted to wrapped format with messages key.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 * @covers ::load_translation_file
+	 */
+	public function test_flat_format_file_is_converted_to_wrapped_format(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		// Pre-create a flat-format translation file (no 'messages' key).
+		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+		file_put_contents(
+			$file,
+			"<?php\nreturn array(\n\t'Hello' => 'Hallo',\n\t'Goodbye' => 'Tschüss',\n);\n"
+		);
+
+		// Set the version transient so no HTTP download occurs.
+		set_transient( 'wcpos_i18n_woocommerce-pos_de_DE', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$content = file_get_contents( $file );
+		$this->assertStringContainsString(
+			"'messages'",
+			$content,
+			'Converted file should contain a messages key wrapping the translations'
+		);
+
+		// Verify the converted file is valid PHP that returns the expected structure.
+		$data = include $file;
+		$this->assertIsArray( $data, 'Converted file should return an array' );
+		$this->assertArrayHasKey( 'messages', $data, 'Converted array should have a messages key' );
+		$this->assertEquals( 'Hallo', $data['messages']['Hello'], 'Translation values should be preserved after conversion' );
+		$this->assertEquals( 'Tschüss', $data['messages']['Goodbye'], 'UTF-8 characters should be preserved after conversion' );
+	}
+
+	/**
+	 * Verify already-wrapped format file is not modified by the converter.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 * @covers ::load_translation_file
+	 */
+	public function test_wrapped_format_file_is_not_modified(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		// Pre-create a file already in wrapped format.
+		$file            = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+		$original_content = "<?php\nreturn array(\n\t'messages' => array(\n\t\t'Hello' => 'Hallo',\n\t),\n);\n";
+		file_put_contents( $file, $original_content );
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_de_DE', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$mtime_before = filemtime( $file );
+		// Sleep briefly so any rewrite would have a different mtime.
+		usleep( 100000 );
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$content_after = file_get_contents( $file );
+		$this->assertEquals(
+			$original_content,
+			$content_after,
+			'Already-wrapped file content should not be modified'
+		);
+	}
+
+	/**
+	 * Verify conversion preserves strings containing single quotes.
+	 *
+	 * Single quotes appear in many languages (French l'orange, English It's).
+	 * var_export() must escape them correctly to produce valid PHP.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 */
+	public function test_conversion_preserves_strings_with_single_quotes(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'nl_NL';
+			}
+		);
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-nl_NL.l10n.php';
+		file_put_contents(
+			$file,
+			"<?php\nreturn array(\n\t'the orange' => 'l\\'orange',\n\t'It is done' => 'It\\'s done',\n);\n"
+		);
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_nl_NL', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Verify the converted file is syntactically valid PHP.
+		$content = file_get_contents( $file );
+		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
+
+		exec( 'php -l ' . escapeshellarg( $file ) . ' 2>&1', $output, $exit_code );
+		$this->assertSame( 0, $exit_code, 'Converted file with single quotes should be valid PHP: ' . implode( "\n", $output ) );
+
+		// Verify round-trip: values should survive the conversion.
+		$data = include $file;
+		$this->assertEquals( "l'orange", $data['messages']['the orange'], 'Single-quoted translation value should round-trip correctly' );
+		$this->assertEquals( "It's done", $data['messages']['It is done'], 'Apostrophe in translation value should round-trip correctly' );
+	}
+
+	/**
+	 * Verify conversion preserves null byte plural separators used by gettext.
+	 *
+	 * Real translation files use \x00 (null byte) to separate singular and plural forms.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 */
+	public function test_conversion_preserves_null_byte_plural_separators(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-fr_FR.l10n.php';
+		// Build a flat-format file with a null byte plural separator.
+		$singular = 'POS - Ouvert <span class="count">(%s)</span>';
+		$plural   = 'POS - Ouverts <span class="count">(%s)</span>';
+		$value    = $singular . "\x00" . $plural;
+		$key      = 'POS - Open <span class="count">(%s)</span>';
+
+		// Write using var_export so the null byte is embedded correctly.
+		$flat_content = "<?php\nreturn " . var_export( array( $key => $value ), true ) . ";\n";
+		file_put_contents( $file, $flat_content );
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_fr_FR', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$content = file_get_contents( $file );
+		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
+
+		exec( 'php -l ' . escapeshellarg( $file ) . ' 2>&1', $output, $exit_code );
+		$this->assertSame( 0, $exit_code, 'Converted file with null bytes should be valid PHP: ' . implode( "\n", $output ) );
+
+		// Verify the null byte is preserved in the round-trip.
+		$data           = include $file;
+		$converted_value = $data['messages'][ $key ];
+		$this->assertStringContainsString( "\x00", $converted_value, 'Null byte plural separator should be preserved' );
+		$parts = explode( "\x00", $converted_value );
+		$this->assertEquals( $singular, $parts[0], 'Singular form should survive conversion' );
+		$this->assertEquals( $plural, $parts[1], 'Plural form should survive conversion' );
+	}
+
+	/**
+	 * Verify conversion preserves context separators (\x04) used by gettext.
+	 *
+	 * Gettext uses \x04 to separate context from the translation key.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 */
+	public function test_conversion_preserves_context_separators(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'fr_FR';
+			}
+		);
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-fr_FR.l10n.php';
+		$key  = "Order status\x04POS - Open";
+		$val  = 'POS - Ouvert';
+
+		$flat_content = "<?php\nreturn " . var_export( array( $key => $val ), true ) . ";\n";
+		file_put_contents( $file, $flat_content );
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_fr_FR', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$content = file_get_contents( $file );
+		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
+
+		exec( 'php -l ' . escapeshellarg( $file ) . ' 2>&1', $output, $exit_code );
+		$this->assertSame( 0, $exit_code, 'Converted file with context separators should be valid PHP: ' . implode( "\n", $output ) );
+
+		// Verify the context separator is preserved.
+		$data = include $file;
+		$this->assertArrayHasKey( $key, $data['messages'], 'Key with context separator should survive conversion' );
+		$this->assertEquals( $val, $data['messages'][ $key ], 'Translation value should survive conversion' );
+	}
+
+	/**
+	 * Verify converted file passes PHP syntax check with realistic special characters.
+	 *
+	 * Uses a mix of single quotes, HTML entities, sprintf placeholders, and UTF-8
+	 * characters that commonly appear in real-world translation files.
+	 *
+	 * @covers ::maybe_convert_file_format
+	 */
+	public function test_converted_file_passes_php_syntax_check(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'ja';
+			}
+		);
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-ja.l10n.php';
+		$flat = array(
+			'Add to cart'                          => 'カートに追加',
+			'%d item'                              => '%d アイテム',
+			'<strong>Error:</strong> invalid input' => '<strong>エラー:</strong> 無効な入力',
+			'Upload &amp; crop'                    => 'アップロード &amp; トリミング',
+			"It's a \"test\""                      => "これは「テスト」です",
+			'Price: %1$s – %2$s'                   => '価格: %1$s ～ %2$s',
+			'100% complete'                        => '100% 完了',
+		);
+
+		$flat_content = "<?php\nreturn " . var_export( $flat, true ) . ";\n";
+		file_put_contents( $file, $flat_content );
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_ja', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made when translation file is cached' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$content = file_get_contents( $file );
+		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
+
+		// Primary assertion: converted file must be syntactically valid PHP.
+		exec( 'php -l ' . escapeshellarg( $file ) . ' 2>&1', $output, $exit_code );
+		$this->assertSame( 0, $exit_code, 'Converted file with mixed special characters should be valid PHP: ' . implode( "\n", $output ) );
+
+		// Verify all values round-trip correctly.
+		$data = include $file;
+		$this->assertIsArray( $data['messages'], 'Converted data should contain a messages array' );
+		foreach ( $flat as $key => $expected_value ) {
+			$this->assertArrayHasKey( $key, $data['messages'], "Key '$key' should exist after conversion" );
+			$this->assertEquals( $expected_value, $data['messages'][ $key ], "Value for '$key' should round-trip correctly" );
+		}
 	}
 }
