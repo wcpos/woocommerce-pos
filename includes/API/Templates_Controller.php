@@ -703,6 +703,12 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
+		$engine = $template['engine'] ?? 'legacy-php';
+		if ( 'legacy-php' !== $engine ) {
+			TemplatesManager::save_raw_post_content( $new_post_id, $source_post->post_content );
+		}
+
 		$new_template = TemplatesManager::get_template( $new_post_id );
 		if ( ! $new_template ) {
 			return new WP_Error(

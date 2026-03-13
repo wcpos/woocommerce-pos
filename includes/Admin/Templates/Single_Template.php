@@ -397,9 +397,15 @@ class Single_Template {
 		wp_set_object_terms( $post_id, $virtual_template['type'], 'wcpos_template_type' );
 
 		// Set meta.
+		$engine = $virtual_template['engine'] ?? 'legacy-php';
 		update_post_meta( $post_id, '_template_language', $virtual_template['language'] );
-		update_post_meta( $post_id, '_template_engine', $virtual_template['engine'] ?? 'legacy-php' );
+		update_post_meta( $post_id, '_template_engine', $engine );
 		update_post_meta( $post_id, '_template_output_type', $virtual_template['output_type'] ?? 'html' );
+
+		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
+		if ( 'legacy-php' !== $engine ) {
+			TemplatesManager::save_raw_post_content( $post_id, $virtual_template['content'] );
+		}
 
 		// Redirect to edit the new template.
 		wp_safe_redirect(
@@ -512,27 +518,15 @@ class Single_Template {
 			return;
 		}
 
-		global $wpdb;
-
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$raw_content = wp_unslash( $_POST['content'] );
 
-		$result = $wpdb->update(
-			$wpdb->posts,
-			array( 'post_content' => $raw_content ),
-			array( 'ID' => $post_id ),
-			array( '%s' ),
-			array( '%d' )
-		);
+		$result = TemplatesManager::save_raw_post_content( $post_id, $raw_content );
 
-		if ( false === $result ) {
+		if ( ! $result ) {
 			// Log failure for debugging; the user will see the filtered content on reload.
-			error_log( sprintf( 'WCPOS: Failed to save raw template content for post %d: %s', $post_id, $wpdb->last_error ) );
-			return;
+			error_log( sprintf( 'WCPOS: Failed to save raw template content for post %d', $post_id ) );
 		}
-
-		// Clear the post cache so subsequent reads get the correct content.
-		clean_post_cache( $post_id );
 	}
 
 	/**
