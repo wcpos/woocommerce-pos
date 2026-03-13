@@ -402,8 +402,8 @@ class Single_Template {
 		update_post_meta( $post_id, '_template_engine', $engine );
 		update_post_meta( $post_id, '_template_output_type', $virtual_template['output_type'] ?? 'html' );
 
-		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
-		if ( 'legacy-php' !== $engine ) {
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
+		if ( \in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			TemplatesManager::save_raw_post_content( $post_id, $virtual_template['content'] );
 		}
 
@@ -477,10 +477,10 @@ class Single_Template {
 			update_post_meta( $post_id, '_template_language', 'php' );
 		}
 
-		// Save raw content for non-PHP engines only. Legacy-php templates are
-		// executed via include, so their content must go through wp_kses.
+		// Save raw content for offline-capable engines only. Legacy-php templates
+		// are executed via include, so their content must go through wp_kses.
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
-		if ( 'legacy-php' !== $saved_engine ) {
+		if ( \in_array( $saved_engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			$this->save_raw_content( $post_id );
 		}
 

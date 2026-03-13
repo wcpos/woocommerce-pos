@@ -703,10 +703,18 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
 		$engine = $template['engine'] ?? 'legacy-php';
-		if ( 'legacy-php' !== $engine ) {
-			TemplatesManager::save_raw_post_content( $new_post_id, $source_post->post_content );
+		if ( \in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			if ( ! TemplatesManager::save_raw_post_content( $new_post_id, $source_post->post_content ) ) {
+				wp_delete_post( $new_post_id, true );
+
+				return new WP_Error(
+					'wcpos_template_copy_failed',
+					__( 'Failed to save copied template content.', 'woocommerce-pos' ),
+					array( 'status' => 500 )
+				);
+			}
 		}
 
 		$new_template = TemplatesManager::get_template( $new_post_id );

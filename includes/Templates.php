@@ -843,9 +843,16 @@ class Templates {
 		update_post_meta( $post_id, '_template_engine', $starter['engine'] );
 		update_post_meta( $post_id, '_template_output_type', 'html' );
 
-		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
-		if ( 'legacy-php' !== $starter['engine'] ) {
-			self::save_raw_post_content( $post_id, $content );
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
+		if ( \in_array( $starter['engine'], self::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			if ( ! self::save_raw_post_content( $post_id, $content ) ) {
+				wp_delete_post( $post_id, true );
+
+				return new \WP_Error(
+					'wcpos_template_content_save_failed',
+					__( 'Template was created but raw content could not be saved.', 'woocommerce-pos' )
+				);
+			}
 		}
 
 		return $post_id;
@@ -914,9 +921,16 @@ class Templates {
 			update_post_meta( $post_id, '_template_paper_width', $template['paper_width'] );
 		}
 
-		// Bypass wp_kses for non-PHP engines — it strips unknown HTML/XML tags.
-		if ( 'legacy-php' !== $engine ) {
-			self::save_raw_post_content( $post_id, $template['content'] );
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
+		if ( \in_array( $engine, self::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			if ( ! self::save_raw_post_content( $post_id, $template['content'] ) ) {
+				wp_delete_post( $post_id, true );
+
+				return new \WP_Error(
+					'wcpos_template_content_save_failed',
+					__( 'Template was created but raw content could not be saved.', 'woocommerce-pos' )
+				);
+			}
 		}
 
 		return $post_id;

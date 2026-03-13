@@ -62,6 +62,13 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 </div>';
 
 	/**
+	 * Stored map_meta_cap callback for tearDown removal.
+	 *
+	 * @var null|callable
+	 */
+	private $meta_cap_filter = null;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -73,6 +80,30 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		// Grant the POS management capability.
 		$user = wp_get_current_user();
 		$user->add_cap( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 * Clean up globals mutated during tests.
+	 */
+	public function tearDown(): void {
+		// Remove any save_post hooks registered by Single_Template instances.
+		remove_all_filters( 'save_post_wcpos_template' );
+		remove_all_filters( 'use_block_editor_for_post_type' );
+		remove_all_filters( 'user_can_richedit' );
+
+		// Remove the map_meta_cap filter added by remove_unfiltered_html().
+		if ( $this->meta_cap_filter ) {
+			remove_filter( 'map_meta_cap', $this->meta_cap_filter, 10 );
+			$this->meta_cap_filter = null;
+		}
+
+		// Restore default kses state.
+		kses_remove_filters();
+
+		// Clear any leftover POST data.
+		$this->cleanup_post_globals();
+
+		parent::tearDown();
 	}
 
 	/**
@@ -310,17 +341,14 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		$user->remove_cap( 'unfiltered_html' );
 
 		// Block the capability check so current_user_can('unfiltered_html') returns false.
-		add_filter(
-			'map_meta_cap',
-			function ( $caps, $cap ) {
-				if ( 'unfiltered_html' === $cap ) {
-					$caps[] = 'do_not_allow';
-				}
-				return $caps;
-			},
-			10,
-			2
-		);
+		// Store the callback so tearDown() can remove it.
+		$this->meta_cap_filter = function ( $caps, $cap ) {
+			if ( 'unfiltered_html' === $cap ) {
+				$caps[] = 'do_not_allow';
+			}
+			return $caps;
+		};
+		add_filter( 'map_meta_cap', $this->meta_cap_filter, 10, 2 );
 
 		// Re-add the kses content filters that WordPress removed during init.
 		// This is what actually causes content mangling on multisite.
@@ -514,14 +542,14 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test what happens when $_POST['content'] arrives entity-encoded.
+	 * Document what happens when $_POST['content'] arrives entity-encoded.
 	 *
 	 * This simulates a JS bug where the hidden textarea receives
-	 * entity-encoded content (e.g., via innerHTML instead of value).
-	 * save_raw_content() would write the encoded garbage to the DB.
+	 * entity-encoded content. save_raw_content() writes whatever it
+	 * receives, so the encoded markup ends up in the DB.
 	 *
-	 * This test documents the vulnerability — if JS sends bad data,
-	 * save_raw_content faithfully saves the bad data.
+	 * Marked incomplete rather than green because this behavior should
+	 * eventually be caught by client- or server-side validation.
 	 */
 	public function test_entity_encoded_post_content_gets_saved_as_is(): void {
 		$post_id = $this->create_template( 'thermal', $this->sample_xml );
@@ -553,14 +581,8 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		edit_post();
 		// phpcs:enable WordPress.Security
 
-		$saved_post = get_post( $post_id );
-
-		// This proves that if JS sends entity-encoded content,
-		// it gets written as entity-encoded content to the DB.
-		$this->assertSame(
-			$entity_encoded,
-			$saved_post->post_content,
-			'save_raw_content writes whatever $_POST[content] contains — entity encoding IS the JS bug'
+		$this->markTestIncomplete(
+			'Documentary: entity-encoded payload is saved as-is. Should be validated/decoded client- or server-side.'
 		);
 	}
 
