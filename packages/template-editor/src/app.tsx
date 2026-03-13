@@ -60,7 +60,7 @@ export function App({ config }: AppProps) {
 	return (
 		<>
 			<TemplateInfoBar engine={config.engine} paperWidth={config.paperWidth} />
-			<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4 wcpos:flex-wrap lg:wcpos:flex-nowrap">
+			<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4">
 				{showFieldPicker && (
 					<FieldPicker
 						schema={config.fieldSchema}
@@ -75,7 +75,9 @@ export function App({ config }: AppProps) {
 					onChange={handleChange}
 					onInsertRef={insertRef}
 				/>
+			</div>
 
+			<div className="wcpos:mt-4">
 				{config.engine === 'thermal' ? (
 					<ThermalPreview content={content} sampleData={config.sampleData} />
 				) : config.engine === 'logicless' ? (

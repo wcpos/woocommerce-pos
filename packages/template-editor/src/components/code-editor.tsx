@@ -25,8 +25,8 @@ export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEd
 	return (
 		<div
 			ref={containerRef}
-			className="wcpos:flex-1 wcpos:min-w-0"
-			style={{ minHeight: 500 }}
+			className="wcpos:flex-1 wcpos:min-w-0 wcpos:overflow-auto"
+			style={{ minHeight: 300, maxHeight: 600 }}
 		/>
 	);
 }
