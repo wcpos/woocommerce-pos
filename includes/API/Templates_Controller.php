@@ -1311,7 +1311,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 *
 	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
-	public function preview_item_permissions_check( $request ) {
+	public function preview_item_permissions_check( $_request ) {
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
