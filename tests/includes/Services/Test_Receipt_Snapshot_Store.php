@@ -195,4 +195,27 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 			$wpdb = $original_wpdb;
 		}
 	}
+
+	/**
+	 * Test order note is created when snapshot is persisted.
+	 */
+	public function test_persist_snapshot_adds_order_note(): void {
+		$order = OrderHelper::create_order();
+
+		$this->store->handle_payment_complete( $order->get_id() );
+
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+
+		$snapshot_notes = array_filter(
+			$notes,
+			function ( $note ) {
+				return false !== strpos( $note->content, 'fiscal receipt snapshot created' );
+			}
+		);
+
+		$this->assertCount( 1, $snapshot_notes );
+
+		$note = reset( $snapshot_notes );
+		$this->assertMatchesRegularExpression( '/receipt #\d+/', $note->content );
+	}
 }
