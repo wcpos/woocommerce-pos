@@ -201,6 +201,9 @@ class Receipt_Snapshot_Store {
 			$order->update_meta_data( self::META_KEY_CREATED_AT, $created );
 			$order->save();
 
+			/* translators: %d: receipt sequence number. */
+			$order->add_order_note( \sprintf( __( 'POS fiscal receipt snapshot created (receipt #%d).', 'woocommerce-pos' ), $sequence ) );
+
 			$this->fiscal_service->set_submission_status( $order_id, 'pending' );
 		} finally {
 			$wpdb->get_var(
