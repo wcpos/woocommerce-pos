@@ -88,7 +88,7 @@ function DraggableRow({
 	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
 	const isVirtual = template.is_virtual;
 	const editUrl = !isVirtual ? `${adminUrl}/post.php?post=${template.id}&action=edit` : null;
-	const canDelete = !template.is_premade && !isVirtual;
+	const canDelete = !isVirtual;
 	const enabled = isTemplateEnabled(template);
 
 	React.useEffect(() => {
