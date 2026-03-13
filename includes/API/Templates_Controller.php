@@ -723,7 +723,7 @@ class Templates_Controller extends WP_REST_Controller {
 	/**
 	 * Delete a custom template.
 	 *
-	 * Built-in (premade or virtual) templates cannot be deleted.
+	 * Virtual (filesystem) templates cannot be deleted.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
@@ -741,7 +741,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		if ( ! empty( $template['is_premade'] ) || ! empty( $template['is_virtual'] ) ) {
+		if ( ! empty( $template['is_virtual'] ) ) {
 			return new WP_Error(
 				'wcpos_template_cannot_delete',
 				__( 'Built-in templates cannot be deleted.', 'woocommerce-pos' ),
