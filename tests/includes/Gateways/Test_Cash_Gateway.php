@@ -369,12 +369,28 @@ class Test_Cash_Gateway extends WC_Unit_Test_Case {
 	}
 
 	/**
-	 * Direct test: gateway supports array (no specific support).
+	 * Direct test: gateway supports refunds.
 	 */
 	public function test_direct_gateway_supports(): void {
-		// Cash gateway doesn't declare specific supports
-		// but should inherit default WC_Payment_Gateway supports
 		$this->assertIsArray( $this->gateway->supports );
+		$this->assertContains( 'products', $this->gateway->supports );
+		$this->assertContains( 'refunds', $this->gateway->supports );
+	}
+
+	/**
+	 * Test process_refund returns true.
+	 */
+	public function test_process_refund_returns_true(): void {
+		$order = OrderHelper::create_order();
+
+		$result = $this->gateway->process_refund( $order->get_id(), 10.00, 'Test refund' );
+
+		$this->assertTrue( $result );
+
+		// Also test default-argument path.
+		$result_defaults = $this->gateway->process_refund( $order->get_id() );
+
+		$this->assertTrue( $result_defaults );
 	}
 
 	/**

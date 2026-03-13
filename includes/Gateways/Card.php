@@ -28,6 +28,7 @@ class Card extends WC_Payment_Gateway {
 		$this->icon        = apply_filters( 'woocommerce_pos_card_icon', '' );
 		$this->has_fields  = true;
 		$this->enabled     = 'no';
+		$this->supports    = array( 'products', 'refunds' );
 
 		// Actions.
 		// @phpstan-ignore-next-line -- Action hook type mismatch.
@@ -128,6 +129,21 @@ class Card extends WC_Payment_Gateway {
 			'result'   => 'success',
 			'redirect' => $this->get_return_url( $order ),
 		);
+	}
+
+	/**
+	 * Process a refund.
+	 *
+	 * Card refunds are handled manually, so just return true.
+	 *
+	 * @param int        $order_id Order ID.
+	 * @param float|null $amount   Refund amount.
+	 * @param string     $reason   Refund reason.
+	 *
+	 * @return bool
+	 */
+	public function process_refund( $order_id, $amount = null, $reason = '' ) {
+		return true;
 	}
 
 	/**
