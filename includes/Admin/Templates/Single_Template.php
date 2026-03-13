@@ -27,24 +27,6 @@ class Single_Template {
 	);
 
 	/**
-	 * Canonical category slug → label map. Single source of truth for
-	 * both the settings metabox render and the save-post validation.
-	 *
-	 * @return array<string,string>
-	 */
-	private static function get_category_options(): array {
-		return array(
-			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
-			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
-			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
-			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
-			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
-			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
-			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
-		);
-	}
-
-	/**
 	 * Canonical engine slug → label map.
 	 *
 	 * @return array<string,string>
@@ -176,18 +158,18 @@ class Single_Template {
 		);
 
 		add_meta_box(
-			'wcpos_template_settings',
-			__( 'Template Settings', 'woocommerce-pos' ),
-			array( $this, 'render_settings_metabox' ),
+			'wcpos_template_actions',
+			__( 'Template Actions', 'woocommerce-pos' ),
+			array( $this, 'render_actions_metabox' ),
 			'wcpos_template',
 			'side',
 			'high'
 		);
 
 		add_meta_box(
-			'wcpos_template_actions',
-			__( 'Template Actions', 'woocommerce-pos' ),
-			array( $this, 'render_actions_metabox' ),
+			'wcpos_template_settings',
+			__( 'Template Settings', 'woocommerce-pos' ),
+			array( $this, 'render_settings_metabox' ),
 			'wcpos_template',
 			'side',
 			'high'
@@ -209,20 +191,9 @@ class Single_Template {
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
 
-		// Get current type term.
-		$type_terms = wp_get_post_terms( $post->ID, 'wcpos_template_type', array( 'fields' => 'slugs' ) );
-		$current_type = ( ! empty( $type_terms ) && ! is_wp_error( $type_terms ) ) ? $type_terms[0] : 'receipt';
-
-		// Get current category term — fall back to normalized value from TemplatesManager.
-		$cat_terms        = wp_get_post_terms( $post->ID, 'wcpos_template_category', array( 'fields' => 'slugs' ) );
-		$current_category = ( ! empty( $cat_terms ) && ! is_wp_error( $cat_terms ) )
-			? $cat_terms[0]
-			: ( $template['category'] ?? '' );
-
 		$disabled = $is_premade ? 'disabled="disabled"' : '';
 
-		$categories = array( '' => __( '— Select —', 'woocommerce-pos' ) ) + self::get_category_options();
-		$engines    = self::get_engine_options();
+		$engines = self::get_engine_options();
 
 		$engine_descriptions = array(
 			'logicless'  => __( 'Prints using your browser\'s print dialog. Renders on the device without needing a server connection.', 'woocommerce-pos' ),
@@ -231,27 +202,6 @@ class Single_Template {
 		);
 
 		?>
-		<!-- Category -->
-		<p>
-			<label><strong><?php esc_html_e( 'Category', 'woocommerce-pos' ); ?></strong></label>
-			<select name="wcpos_template_category" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
-				<?php foreach ( $categories as $slug => $label ) : ?>
-					<option value="<?php echo esc_attr( $slug ); ?>" <?php selected( $current_category, $slug ); ?>>
-						<?php echo esc_html( $label ); ?>
-					</option>
-				<?php endforeach; ?>
-			</select>
-		</p>
-
-		<!-- Template Type -->
-		<p>
-			<label><strong><?php esc_html_e( 'Template Type', 'woocommerce-pos' ); ?></strong></label>
-			<select name="wcpos_template_type_select" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
-				<option value="receipt" <?php selected( $current_type, 'receipt' ); ?>><?php esc_html_e( 'Receipt', 'woocommerce-pos' ); ?></option>
-				<option value="report" <?php selected( $current_type, 'report' ); ?>><?php esc_html_e( 'Report', 'woocommerce-pos' ); ?></option>
-			</select>
-		</p>
-
 		<!-- Engine -->
 		<p>
 			<label><strong><?php esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong></label>
@@ -493,27 +443,10 @@ class Single_Template {
 			return;
 		}
 
-		// Save template type.
-		if ( isset( $_POST['wcpos_template_type_select'] ) ) {
-			$type = sanitize_text_field( wp_unslash( $_POST['wcpos_template_type_select'] ) );
-			if ( \in_array( $type, array( 'receipt', 'report' ), true ) ) {
-				wp_set_object_terms( $post_id, $type, 'wcpos_template_type' );
-			}
-		} else {
-			$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
-			if ( empty( $terms ) || is_wp_error( $terms ) ) {
-				wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
-			}
-		}
-
-		// Save category.
-		if ( isset( $_POST['wcpos_template_category'] ) ) {
-			$category = sanitize_text_field( wp_unslash( $_POST['wcpos_template_category'] ) );
-			if ( ! empty( $category ) && \in_array( $category, array_keys( self::get_category_options() ), true ) ) {
-				wp_set_object_terms( $post_id, $category, 'wcpos_template_category' );
-			} elseif ( empty( $category ) ) {
-				wp_set_object_terms( $post_id, array(), 'wcpos_template_category' );
-			}
+		// Ensure template type term exists (default to receipt).
+		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
+		if ( empty( $terms ) || is_wp_error( $terms ) ) {
+			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
 		// Save engine and derive output_type + language.

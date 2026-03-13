@@ -34,14 +34,14 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 
 	if (!previewUrl) {
 		return (
-			<div className="wcpos:w-[360px] wcpos:shrink-0 wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500">
+			<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500">
 				No POS orders found. Create an order in the POS to preview templates.
 			</div>
 		);
 	}
 
 	return (
-		<div className="wcpos:w-[360px] wcpos:shrink-0 wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
+		<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-white">
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
 					Preview
