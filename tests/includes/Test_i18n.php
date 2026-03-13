@@ -1084,6 +1084,10 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 
 		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
+		clearstatcache( true, $file );
+		$mtime_after = filemtime( $file );
+		$this->assertSame( $mtime_before, $mtime_after, 'Already-wrapped file should not be rewritten' );
+
 		$content_after = file_get_contents( $file );
 		$this->assertEquals(
 			$original_content,
