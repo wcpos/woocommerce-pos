@@ -107,11 +107,23 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		global $wpdb;
 
 		$original_wpdb = $wpdb;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$wpdb          = new class() {
+			/**
+			 * Stub prepare.
+			 *
+			 * @param string $query  Query.
+			 * @param mixed  ...$args Args.
+			 */
 			public function prepare( $query, ...$args ) {
 				return vsprintf( str_replace( array( '%s', '%d' ), array( "'%s'", '%d' ), $query ), $args );
 			}
 
+			/**
+			 * Stub get_var.
+			 *
+			 * @param string $query Query.
+			 */
 			public function get_var( $query ) {
 				if ( false !== strpos( $query, 'GET_LOCK' ) ) {
 					return 0;
@@ -130,6 +142,7 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		try {
 			$method->invoke( $this->store );
 		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			$wpdb = $original_wpdb;
 		}
 	}
@@ -162,11 +175,23 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 
 		$original_wpdb = $wpdb;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$wpdb          = new class() {
+			/**
+			 * Stub prepare.
+			 *
+			 * @param string $query  Query.
+			 * @param mixed  ...$args Args.
+			 */
 			public function prepare( $query, ...$args ) {
 				return vsprintf( str_replace( array( '%s', '%d' ), array( "'%s'", '%d' ), $query ), $args );
 			}
 
+			/**
+			 * Stub get_var.
+			 *
+			 * @param string $query Query.
+			 */
 			public function get_var( $query ) {
 				if ( false !== strpos( $query, 'GET_LOCK' ) ) {
 					return 0;
@@ -175,6 +200,9 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 				return null;
 			}
 
+			/**
+			 * Stub get_row.
+			 */
 			public function get_row() {
 				return null;
 			}
@@ -192,7 +220,36 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 				)
 			);
 		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 			$wpdb = $original_wpdb;
 		}
+	}
+
+	/**
+	 * Test order note is created when snapshot is persisted.
+	 */
+	public function test_persist_snapshot_adds_order_note(): void {
+		$order = OrderHelper::create_order();
+
+		$this->store->handle_payment_complete( $order->get_id() );
+
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+
+		$snapshot_notes = array_filter(
+			$notes,
+			function ( $note ) {
+				return false !== strpos( $note->content, 'fiscal receipt snapshot created' );
+			}
+		);
+
+		$this->assertCount( 1, $snapshot_notes );
+
+		$note          = reset( $snapshot_notes );
+		$sequence      = (int) $order->get_meta( Receipt_Snapshot_Store::META_KEY_SEQUENCE, true );
+		$expected_note = sprintf(
+			'POS fiscal receipt snapshot created (receipt #%d).',
+			$sequence
+		);
+		$this->assertSame( $expected_note, $note->content );
 	}
 }
