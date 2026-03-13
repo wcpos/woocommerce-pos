@@ -355,6 +355,11 @@ class Test_Card_Gateway extends WC_Unit_Test_Case {
 		$result = $this->gateway->process_refund( $order->get_id(), 10.00, 'Test refund' );
 
 		$this->assertTrue( $result );
+
+		// Also test default-argument path.
+		$result_defaults = $this->gateway->process_refund( $order->get_id() );
+
+		$this->assertTrue( $result_defaults );
 	}
 
 	/**
