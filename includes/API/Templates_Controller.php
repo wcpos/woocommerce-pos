@@ -723,7 +723,7 @@ class Templates_Controller extends WP_REST_Controller {
 	/**
 	 * Delete a custom template.
 	 *
-	 * Built-in (premade or virtual) templates cannot be deleted.
+	 * Virtual (filesystem) templates cannot be deleted.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *

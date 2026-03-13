@@ -847,9 +847,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test deleting a premade template returns 403.
+	 * Test deleting a premade (non-virtual) template succeeds.
 	 */
-	public function test_delete_premade_template_returns_403(): void {
+	public function test_delete_premade_template_succeeds(): void {
 		$post_id = $this->create_template( 'Premade Template' );
 		update_post_meta( $post_id, '_template_is_premade', '1' );
 
@@ -857,15 +857,14 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request->set_header( 'X-WCPOS', '1' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertEquals( 'wcpos_template_cannot_delete', $data['code'] );
+		$this->assertTrue( $data['deleted'] );
+		$this->assertEquals( $post_id, $data['id'] );
 
-		// Confirm the post still exists.
-		$this->assertNotNull( get_post( $post_id ) );
-
-		wp_delete_post( $post_id, true );
+		// Confirm the post is actually gone.
+		$this->assertNull( get_post( $post_id ) );
 	}
 
 	/**
