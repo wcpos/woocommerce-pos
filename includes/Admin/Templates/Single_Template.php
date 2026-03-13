@@ -510,13 +510,19 @@ class Single_Template {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$raw_content = wp_unslash( $_POST['content'] );
 
-		$wpdb->update(
+		$result = $wpdb->update(
 			$wpdb->posts,
 			array( 'post_content' => $raw_content ),
 			array( 'ID' => $post_id ),
 			array( '%s' ),
 			array( '%d' )
 		);
+
+		if ( false === $result ) {
+			// Log failure for debugging; the user will see the filtered content on reload.
+			error_log( sprintf( 'WCPOS: Failed to save raw template content for post %d: %s', $post_id, $wpdb->last_error ) );
+			return;
+		}
 
 		// Clear the post cache so subsequent reads get the correct content.
 		clean_post_cache( $post_id );
