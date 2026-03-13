@@ -244,7 +244,12 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 
 		$this->assertCount( 1, $snapshot_notes );
 
-		$note = reset( $snapshot_notes );
-		$this->assertMatchesRegularExpression( '/receipt #\d+/', $note->content );
+		$note          = reset( $snapshot_notes );
+		$sequence      = (int) $order->get_meta( Receipt_Snapshot_Store::META_KEY_SEQUENCE, true );
+		$expected_note = sprintf(
+			'POS fiscal receipt snapshot created (receipt #%d).',
+			$sequence
+		);
+		$this->assertSame( $expected_note, $note->content );
 	}
 }
