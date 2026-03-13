@@ -445,7 +445,10 @@ class Single_Template {
 
 		// Ensure template type term exists (default to receipt).
 		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
-		if ( empty( $terms ) || is_wp_error( $terms ) ) {
+		if ( is_wp_error( $terms ) ) {
+			return;
+		}
+		if ( empty( $terms ) ) {
 			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
