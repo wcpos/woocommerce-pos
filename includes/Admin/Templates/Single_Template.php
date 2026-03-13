@@ -508,7 +508,7 @@ class Single_Template {
 	private function save_raw_content( int $post_id ): void {
 		// Nonce already verified in save_post() which calls this method.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-	if ( ! isset( $_POST['content'] ) || ! is_string( $_POST['content'] ) ) {
+		if ( ! isset( $_POST['content'] ) || ! is_string( $_POST['content'] ) ) {
 			return;
 		}
 
