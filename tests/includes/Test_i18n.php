@@ -1283,4 +1283,92 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			$this->assertEquals( $expected_value, $data['messages'][ $key ], "Value for '$key' should round-trip correctly" );
 		}
 	}
+
+	/**
+	 * Verify corrupt translation file is deleted and transient cleared for re-download.
+	 *
+	 * @covers ::load_translation_file
+	 */
+	public function test_corrupt_file_is_deleted_and_transient_cleared(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		// Create a file with a PHP syntax error.
+		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+		file_put_contents( $file, "<?php\nreturn array('messages' => array('broken" );
+
+		set_transient( 'wcpos_i18n_woocommerce-pos_de_DE', '1.8.7', WEEK_IN_SECONDS );
+
+		$this->http_responder = function () {
+			$this->fail( 'No HTTP request should be made on first load — cached version matches' );
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// Corrupt file should be deleted.
+		$this->assertFileDoesNotExist( $file, 'Corrupt translation file should be deleted' );
+
+		// Version transient should be cleared so re-download happens next time.
+		$this->assertFalse(
+			get_transient( 'wcpos_i18n_woocommerce-pos_de_DE' ),
+			'Version transient should be cleared after corrupt file is removed'
+		);
+	}
+
+	/**
+	 * Verify truncated download body (missing PHP tag) is rejected.
+	 *
+	 * @covers ::download_translation
+	 */
+	public function test_truncated_download_without_php_tag_is_rejected(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "rray('Hello' => 'Hallo');",
+			);
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+		$this->assertFileDoesNotExist( $file, 'Truncated download without PHP tag should not be saved' );
+	}
+
+	/**
+	 * Verify download body without return statement is rejected.
+	 *
+	 * @covers ::download_translation
+	 */
+	public function test_download_without_return_statement_is_rejected(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'de_DE';
+			}
+		);
+
+		$this->http_responder = function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\necho 'not a translation file';",
+			);
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+		$this->assertFileDoesNotExist( $file, 'Download without return statement should not be saved' );
+	}
 }
