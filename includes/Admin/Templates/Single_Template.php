@@ -471,8 +471,14 @@ class Single_Template {
 			update_post_meta( $post_id, '_template_language', 'php' );
 		}
 
-		// Save paper width — only relevant for thermal engine.
+		// Save raw content for non-PHP engines only. Legacy-php templates are
+		// executed via include, so their content must go through wp_kses.
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
+		if ( 'legacy-php' !== $saved_engine ) {
+			$this->save_raw_content( $post_id );
+		}
+
+		// Save paper width — only relevant for thermal engine.
 		if ( 'thermal' === $saved_engine && isset( $_POST['wcpos_template_paper_width'] ) ) {
 			$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
 			if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
@@ -481,6 +487,52 @@ class Single_Template {
 		} elseif ( 'thermal' !== $saved_engine ) {
 			delete_post_meta( $post_id, '_template_paper_width' );
 		}
+	}
+
+	/**
+	 * Save raw template content directly to the database.
+	 *
+	 * WordPress applies wp_kses and other content filters during wp_insert_post()
+	 * that encode HTML entities or strip tags in template markup. This method
+	 * overwrites post_content with the raw value from $_POST to preserve the
+	 * original HTML/XML content.
+	 *
+	 * SECURITY: Only call this for non-PHP engines (logicless, thermal).
+	 * Legacy-php templates are executed via include in Legacy_Php_Renderer,
+	 * so their content must remain filtered by wp_kses to prevent code injection.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return void
+	 */
+	private function save_raw_content( int $post_id ): void {
+		// Nonce already verified in save_post() which calls this method.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( ! isset( $_POST['content'] ) || ! is_string( $_POST['content'] ) ) {
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$raw_content = wp_unslash( $_POST['content'] );
+
+		$result = $wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => $raw_content ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
+		);
+
+		if ( false === $result ) {
+			// Log failure for debugging; the user will see the filtered content on reload.
+			error_log( sprintf( 'WCPOS: Failed to save raw template content for post %d: %s', $post_id, $wpdb->last_error ) );
+			return;
+		}
+
+		// Clear the post cache so subsequent reads get the correct content.
+		clean_post_cache( $post_id );
 	}
 
 	/**
