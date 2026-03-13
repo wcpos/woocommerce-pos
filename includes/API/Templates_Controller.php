@@ -1254,7 +1254,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function get_items_permissions_check( $request ) {
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
 				__( 'Sorry, you cannot list templates.', 'woocommerce-pos' ),
@@ -1273,7 +1273,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
 	public function get_item_permissions_check( $request ) {
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
 				__( 'Sorry, you cannot view this template.', 'woocommerce-pos' ),
