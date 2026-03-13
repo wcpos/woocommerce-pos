@@ -255,7 +255,7 @@ class Templates_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'preview_item' ),
-				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
 				'args'                => array(
 					'id' => array(
 						'description' => __( 'Template ID to preview.', 'woocommerce-pos' ),
@@ -1277,6 +1277,27 @@ class Templates_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
 				__( 'Sorry, you cannot view this template.', 'woocommerce-pos' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check if a given request has access to preview a template.
+	 *
+	 * Preview returns order data, so it requires the stricter manage capability.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
+	 */
+	public function preview_item_permissions_check( $request ) {
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			return new WP_Error(
+				'wcpos_rest_cannot_view',
+				__( 'Sorry, you cannot preview this template.', 'woocommerce-pos' ),
 				array( 'status' => rest_authorization_required_code() )
 			);
 		}
