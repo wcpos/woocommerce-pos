@@ -199,6 +199,41 @@ class Templates {
 	}
 
 	/**
+	 * Save raw post content directly to the database, bypassing wp_kses.
+	 *
+	 * WordPress applies wp_kses and other content filters during wp_insert_post()
+	 * that strip unknown HTML/XML tags from template markup. This method writes
+	 * raw content via $wpdb->update() to preserve the original markup.
+	 *
+	 * SECURITY: Only use for non-PHP engines (logicless, thermal). PHP templates
+	 * are executed via include, so their content must remain filtered by wp_kses.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $content Raw template content to save.
+	 *
+	 * @return bool True on success, false on failure.
+	 */
+	public static function save_raw_post_content( int $post_id, string $content ): bool {
+		global $wpdb;
+
+		$result = $wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => $content ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
+		);
+
+		if ( false === $result ) {
+			return false;
+		}
+
+		clean_post_cache( $post_id );
+
+		return true;
+	}
+
+	/**
 	 * Get a database template by ID.
 	 *
 	 * @param int $template_id Template post ID.
@@ -808,6 +843,18 @@ class Templates {
 		update_post_meta( $post_id, '_template_engine', $starter['engine'] );
 		update_post_meta( $post_id, '_template_output_type', 'html' );
 
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
+		if ( \in_array( $starter['engine'], self::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			if ( ! self::save_raw_post_content( $post_id, $content ) ) {
+				wp_delete_post( $post_id, true );
+
+				return new \WP_Error(
+					'wcpos_template_content_save_failed',
+					__( 'Template was created but raw content could not be saved.', 'woocommerce-pos' )
+				);
+			}
+		}
+
 		return $post_id;
 	}
 
@@ -872,6 +919,18 @@ class Templates {
 
 		if ( ! empty( $template['paper_width'] ) ) {
 			update_post_meta( $post_id, '_template_paper_width', $template['paper_width'] );
+		}
+
+		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
+		if ( \in_array( $engine, self::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			if ( ! self::save_raw_post_content( $post_id, $template['content'] ) ) {
+				wp_delete_post( $post_id, true );
+
+				return new \WP_Error(
+					'wcpos_template_content_save_failed',
+					__( 'Template was created but raw content could not be saved.', 'woocommerce-pos' )
+				);
+			}
 		}
 
 		return $post_id;

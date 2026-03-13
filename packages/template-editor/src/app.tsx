@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { CodeEditor } from './components/code-editor';
 import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
@@ -43,6 +43,15 @@ export function App({ config }: AppProps) {
 	const [content, setContent] = useState(config.postContent);
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
+
+	// Sync raw content to the hidden textarea on mount so the form always
+	// submits the correct value — even when the user saves without editing.
+	// The PHP-rendered textarea uses esc_textarea() which entity-encodes the
+	// content in the HTML source. Browsers decode this, but syncing on mount
+	// guarantees the textarea holds the raw value from config.postContent.
+	useEffect(() => {
+		syncContent(config.postContent);
+	}, [syncContent, config.postContent]);
 
 	const handleChange = useCallback((newContent: string) => {
 		setContent(newContent);
