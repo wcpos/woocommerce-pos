@@ -1035,7 +1035,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$content = file_get_contents( $file );
 		$this->assertStringContainsString(
@@ -1079,10 +1079,10 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		};
 
 		$mtime_before = filemtime( $file );
-		// Sleep briefly so any rewrite would have a different mtime.
-		usleep( 100000 );
+		// Sleep to cross filemtime() 1-second granularity boundary.
+		sleep( 1 );
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		clearstatcache( true, $file );
 		$mtime_after = filemtime( $file );
@@ -1125,7 +1125,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		// Verify the converted file is syntactically valid PHP.
 		$content = file_get_contents( $file );
@@ -1173,7 +1173,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$content = file_get_contents( $file );
 		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
@@ -1219,7 +1219,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$content = file_get_contents( $file );
 		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
@@ -1270,7 +1270,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$content = file_get_contents( $file );
 		$this->assertStringContainsString( "'messages'", $content, 'File should have been converted to wrapped format' );
@@ -1312,7 +1312,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			return false;
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		// Corrupt file should be deleted.
 		$this->assertFileDoesNotExist( $file, 'Corrupt translation file should be deleted' );
@@ -1344,7 +1344,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			);
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 		$this->assertFileDoesNotExist( $file, 'Truncated download without PHP tag should not be saved' );
@@ -1370,7 +1370,7 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			);
 		};
 
-		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
 
 		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 		$this->assertFileDoesNotExist( $file, 'Download without return statement should not be saved' );
