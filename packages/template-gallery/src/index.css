@@ -1,4 +1,5 @@
-@import "tailwindcss" prefix(wcpos) important;
+@import "tailwindcss/theme" prefix(wcpos);
+@import "tailwindcss/utilities" prefix(wcpos) important;
 
 @theme {
 	--color-wp-admin-theme-color: var(--wp-admin-theme-color, #007cba);

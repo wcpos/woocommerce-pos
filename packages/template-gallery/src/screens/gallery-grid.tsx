@@ -111,7 +111,7 @@ export function GalleryGrid() {
 	})();
 
 	return (
-		<div className="wcpos:space-y-6">
+		<div className="wcpos:flex wcpos:flex-col wcpos:gap-6">
 			{/* Your Templates section */}
 			<section>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:mb-3">
