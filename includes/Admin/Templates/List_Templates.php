@@ -829,6 +829,12 @@ class List_Templates {
 		$new_columns = array();
 
 		foreach ( $columns as $key => $label ) {
+			// Replace WordPress auto-column with our custom category column.
+			if ( 'taxonomy-wcpos_template_category' === $key ) {
+				$new_columns['wcpos_category'] = __( 'Category', 'woocommerce-pos' );
+				continue;
+			}
+
 			// Rename "Template Types" to "Type".
 			if ( 'taxonomy-wcpos_template_type' === $key ) {
 				$new_columns[ $key ] = __( 'Type', 'woocommerce-pos' );
@@ -862,6 +868,11 @@ class List_Templates {
 	 * @return void
 	 */
 	public function render_custom_column( string $column, int $post_id ): void {
+		if ( 'wcpos_category' === $column ) {
+			$this->render_category_column( $post_id );
+			return;
+		}
+
 		if ( 'wcpos_status' !== $column ) {
 			return;
 		}
@@ -889,6 +900,31 @@ class List_Templates {
 			esc_html_e( 'Offline', 'woocommerce-pos' );
 			echo '</span>';
 		}
+	}
+
+	/**
+	 * Render the category column as comma-separated names.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return void
+	 */
+	private function render_category_column( int $post_id ): void {
+		$terms = wp_get_post_terms( $post_id, 'wcpos_template_category' );
+
+		if ( is_wp_error( $terms ) || empty( $terms ) ) {
+			echo '&mdash;';
+			return;
+		}
+
+		$names = array_map(
+			function ( $term ) {
+				return esc_html( $term->name );
+			},
+			$terms
+		);
+
+		echo implode( ', ', $names ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each name is esc_html'd above.
 	}
 
 	/**

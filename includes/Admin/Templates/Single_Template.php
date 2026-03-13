@@ -443,6 +443,10 @@ class Single_Template {
 			return;
 		}
 
+		// Save raw template content directly, bypassing wp_kses and other
+		// content filters that encode HTML entities or strip tags.
+		$this->save_raw_content( $post_id );
+
 		// Ensure template type term exists (default to receipt).
 		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
 		if ( is_wp_error( $terms ) ) {
@@ -481,6 +485,41 @@ class Single_Template {
 		} elseif ( 'thermal' !== $saved_engine ) {
 			delete_post_meta( $post_id, '_template_paper_width' );
 		}
+	}
+
+	/**
+	 * Save raw template content directly to the database.
+	 *
+	 * WordPress applies wp_kses and other content filters during wp_insert_post()
+	 * that encode HTML entities or strip tags in template markup. This method
+	 * overwrites post_content with the raw value from $_POST to preserve the
+	 * original HTML/XML content.
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return void
+	 */
+	private function save_raw_content( int $post_id ): void {
+		// Nonce already verified in save_post() which calls this method.
+		if ( ! isset( $_POST['content'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$raw_content = wp_unslash( $_POST['content'] );
+
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => $raw_content ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
+		);
+
+		// Clear the post cache so subsequent reads get the correct content.
+		clean_post_cache( $post_id );
 	}
 
 	/**
