@@ -443,10 +443,6 @@ class Single_Template {
 			return;
 		}
 
-		// Save raw template content directly, bypassing wp_kses and other
-		// content filters that encode HTML entities or strip tags.
-		$this->save_raw_content( $post_id );
-
 		// Ensure template type term exists (default to receipt).
 		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
 		if ( is_wp_error( $terms ) ) {
@@ -475,8 +471,14 @@ class Single_Template {
 			update_post_meta( $post_id, '_template_language', 'php' );
 		}
 
-		// Save paper width — only relevant for thermal engine.
+		// Save raw content for non-PHP engines only. Legacy-php templates are
+		// executed via include, so their content must go through wp_kses.
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
+		if ( 'legacy-php' !== $saved_engine ) {
+			$this->save_raw_content( $post_id );
+		}
+
+		// Save paper width — only relevant for thermal engine.
 		if ( 'thermal' === $saved_engine && isset( $_POST['wcpos_template_paper_width'] ) ) {
 			$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
 			if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
@@ -494,6 +496,10 @@ class Single_Template {
 	 * that encode HTML entities or strip tags in template markup. This method
 	 * overwrites post_content with the raw value from $_POST to preserve the
 	 * original HTML/XML content.
+	 *
+	 * SECURITY: Only call this for non-PHP engines (logicless, thermal).
+	 * Legacy-php templates are executed via include in Legacy_Php_Renderer,
+	 * so their content must remain filtered by wp_kses to prevent code injection.
 	 *
 	 * @param int $post_id Post ID.
 	 *
