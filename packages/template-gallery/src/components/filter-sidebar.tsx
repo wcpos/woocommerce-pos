@@ -37,7 +37,7 @@ function formatLabel(slug: string): string {
 
 function RadioGroup({ label, name, value, options, onChange }: RadioGroupProps) {
 	return (
-		<fieldset className="wcpos:space-y-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
+		<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
 			<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0">
 				{label}
 			</legend>
@@ -110,7 +110,7 @@ export function FilterSidebar({
 	};
 
 	return (
-		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:space-y-6">
+		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:flex wcpos:flex-col wcpos:gap-6">
 			{/* Header */}
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between">
 				<span className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
@@ -141,7 +141,7 @@ export function FilterSidebar({
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
 
 			{/* Categories */}
-			<fieldset className="wcpos:space-y-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
+			<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
 				<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0">
 					Category
 				</legend>
