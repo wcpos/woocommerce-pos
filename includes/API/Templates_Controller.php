@@ -1262,6 +1262,15 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
+		// The 'edit' context exposes full template content (including PHP); require manage capability.
+		if ( 'edit' === $request->get_param( 'context' ) && ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			return new WP_Error(
+				'wcpos_rest_cannot_edit',
+				__( 'Sorry, you are not allowed to edit templates.', 'woocommerce-pos' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
 		return true;
 	}
 
@@ -1277,6 +1286,15 @@ class Templates_Controller extends WP_REST_Controller {
 			return new WP_Error(
 				'wcpos_rest_cannot_view',
 				__( 'Sorry, you cannot view this template.', 'woocommerce-pos' ),
+				array( 'status' => rest_authorization_required_code() )
+			);
+		}
+
+		// The 'edit' context exposes full template content (including PHP); require manage capability.
+		if ( 'edit' === $request->get_param( 'context' ) && ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			return new WP_Error(
+				'wcpos_rest_cannot_edit',
+				__( 'Sorry, you are not allowed to edit this template.', 'woocommerce-pos' ),
 				array( 'status' => rest_authorization_required_code() )
 			);
 		}
