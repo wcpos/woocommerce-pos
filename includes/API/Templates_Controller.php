@@ -1307,7 +1307,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 *
 	 * Preview returns order data, so it requires the stricter manage capability.
 	 *
-	 * @param WP_REST_Request $request Full details about the request.
+	 * @param WP_REST_Request $_request Full details about the request.
 	 *
 	 * @return bool|WP_Error True if the request has access, WP_Error object otherwise.
 	 */
