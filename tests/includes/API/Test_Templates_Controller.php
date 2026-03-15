@@ -56,6 +56,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		delete_option( 'wcpos_template_order_report' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
+		remove_role( 'pos_cashier_test' );
 	}
 
 	/**
@@ -385,6 +386,162 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		wp_delete_user( $manager_id );
+	}
+
+	// ---- Cashier permission matrix tests ----
+
+	/**
+	 * Create a user with cashier-equivalent capabilities (access but not manage).
+	 *
+	 * Uses a temporary role so capability caching works reliably in tests.
+	 *
+	 * @return int User ID.
+	 */
+	private function create_cashier_user(): int {
+		// Ensure a disposable 'pos_cashier_test' role exists with only access cap.
+		remove_role( 'pos_cashier_test' );
+		add_role(
+			'pos_cashier_test',
+			'POS Cashier Test',
+			array(
+				'read'                    => true,
+				'access_woocommerce_pos'  => true,
+			)
+		);
+
+		return $this->factory->user->create( array( 'role' => 'pos_cashier_test' ) );
+	}
+
+	/**
+	 * Test cashier can list templates with view context.
+	 */
+	public function test_cashier_can_list_templates_view_context(): void {
+		$cashier_id = $this->create_cashier_user();
+		wp_set_current_user( $cashier_id );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'context', 'view' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Test cashier cannot list templates with edit context.
+	 */
+	public function test_cashier_cannot_list_templates_edit_context(): void {
+		$cashier_id = $this->create_cashier_user();
+		wp_set_current_user( $cashier_id );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'context', 'edit' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Test cashier can read a single template with view context.
+	 */
+	public function test_cashier_can_read_template_view_context(): void {
+		$cashier_id = $this->create_cashier_user();
+		wp_set_current_user( $cashier_id );
+
+		$post_id = $this->create_template( 'Cashier View Template' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_param( 'context', 'view' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		wp_delete_post( $post_id, true );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Test cashier cannot read a single template with edit context.
+	 */
+	public function test_cashier_cannot_read_template_edit_context(): void {
+		$cashier_id = $this->create_cashier_user();
+		wp_set_current_user( $cashier_id );
+
+		$post_id = $this->create_template( 'Cashier Edit Template' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_param( 'context', 'edit' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+
+		wp_delete_post( $post_id, true );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Test cashier cannot preview a template.
+	 */
+	public function test_cashier_cannot_preview_template(): void {
+		$cashier_id = $this->create_cashier_user();
+		wp_set_current_user( $cashier_id );
+
+		$post_id = $this->create_template( 'Cashier Preview Template' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+
+		wp_delete_post( $post_id, true );
+		wp_delete_user( $cashier_id );
+	}
+
+	/**
+	 * Test admin can list templates with edit context.
+	 */
+	public function test_admin_can_list_templates_edit_context(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'context', 'edit' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+	}
+
+	/**
+	 * Test admin can read a single template with edit context.
+	 */
+	public function test_admin_can_read_template_edit_context(): void {
+		$post_id = $this->create_template( 'Admin Edit Template' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$request->set_param( 'context', 'edit' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test admin can preview a template.
+	 */
+	public function test_admin_can_preview_template(): void {
+		$post_id = $this->create_template( 'Admin Preview Template' );
+		$order   = \Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		wp_delete_post( $post_id, true );
+		wp_delete_post( $order->get_id(), true );
 	}
 
 	/**
