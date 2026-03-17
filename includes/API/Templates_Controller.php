@@ -1020,10 +1020,13 @@ class Templates_Controller extends WP_REST_Controller {
 
 		$templates = TemplatesManager::get_gallery_templates( $type, $category );
 
-		// Strip internal content_file from the response.
+		// Strip internal content_file and add UUID to gallery templates.
 		$templates = array_map(
 			function ( $template ) {
 				unset( $template['content_file'] );
+				$type              = $template['type'] ?? 'receipt';
+				$id                = $template['key'] ?? $template['id'] ?? '';
+				$template['uuid']  = $this->get_virtual_template_uuid( (string) $id, $type );
 				return $template;
 			},
 			$templates
@@ -1128,7 +1131,7 @@ class Templates_Controller extends WP_REST_Controller {
 	private function get_database_template_uuid( int $post_id ): string {
 		$uuid = get_post_meta( $post_id, '_woocommerce_pos_uuid', true );
 
-		if ( $uuid && Uuid::isValid( $uuid ) ) {
+		if ( is_string( $uuid ) && '' !== $uuid && Uuid::isValid( $uuid ) ) {
 			return $uuid;
 		}
 
@@ -1139,9 +1142,18 @@ class Templates_Controller extends WP_REST_Controller {
 			return '';
 		}
 
-		update_post_meta( $post_id, '_woocommerce_pos_uuid', $uuid );
+		if ( add_post_meta( $post_id, '_woocommerce_pos_uuid', $uuid, true ) ) {
+			return $uuid;
+		}
 
-		return $uuid;
+		// Another request may have written a UUID concurrently — use it.
+		$persisted_uuid = get_post_meta( $post_id, '_woocommerce_pos_uuid', true );
+		if ( is_string( $persisted_uuid ) && '' !== $persisted_uuid && Uuid::isValid( $persisted_uuid ) ) {
+			return $persisted_uuid;
+		}
+
+		Logger::error( 'Database template UUID persistence failed.', array( 'post_id' => $post_id ) );
+		return '';
 	}
 
 	/**
