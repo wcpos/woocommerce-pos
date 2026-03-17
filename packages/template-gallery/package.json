@@ -27,12 +27,12 @@
 		"@types/mustache": "^4.2.5",
 		"@types/react": "^18.3.28",
 		"@types/react-dom": "^18.3.7",
-		"@vitejs/plugin-react": "^5.1.4",
+		"@vitejs/plugin-react": "^6.0.1",
 		"@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
 		"eslint": "^10.0.3",
 		"tailwindcss": "^4.1.18",
 		"typescript": "^5.9.3",
-		"vite": "^7.3.1",
+		"vite": "^8.0.0",
 		"vitest": "^4.0.18"
 	},
 	"packageManager": "pnpm@10.8.0"
