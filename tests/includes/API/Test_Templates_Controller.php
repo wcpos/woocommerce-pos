@@ -1131,6 +1131,118 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		wp_delete_post( $id2, true );
 	}
 
+	// ---- UUID tests ----
+
+	/**
+	 * Test database template response includes a valid UUID v4.
+	 */
+	public function test_database_template_has_uuid(): void {
+		$post_id = $this->create_template( 'UUID Test Template' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'uuid', $data );
+		$this->assertTrue( \Ramsey\Uuid\Uuid::isValid( $data['uuid'] ) );
+		$this->assertEquals( 4, \Ramsey\Uuid\Uuid::fromString( $data['uuid'] )->getVersion() );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test database template UUID is persisted and stable across requests.
+	 */
+	public function test_database_template_uuid_is_stable(): void {
+		$post_id = $this->create_template( 'Stable UUID Template' );
+
+		$request1  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$response1 = $this->server->dispatch( $request1 );
+		$uuid1     = $response1->get_data()['uuid'];
+
+		$request2  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id );
+		$response2 = $this->server->dispatch( $request2 );
+		$uuid2     = $response2->get_data()['uuid'];
+
+		$this->assertEquals( $uuid1, $uuid2 );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test different database templates get different UUIDs.
+	 */
+	public function test_database_templates_have_unique_uuids(): void {
+		$post_id1 = $this->create_template( 'UUID Unique Template 1' );
+		$post_id2 = $this->create_template( 'UUID Unique Template 2' );
+
+		$request1  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id1 );
+		$response1 = $this->server->dispatch( $request1 );
+
+		$request2  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id2 );
+		$response2 = $this->server->dispatch( $request2 );
+
+		$this->assertNotEquals( $response1->get_data()['uuid'], $response2->get_data()['uuid'] );
+
+		wp_delete_post( $post_id1, true );
+		wp_delete_post( $post_id2, true );
+	}
+
+	/**
+	 * Test virtual template response includes a valid UUID v5.
+	 */
+	public function test_virtual_template_has_uuid(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'uuid', $data );
+		$this->assertTrue( \Ramsey\Uuid\Uuid::isValid( $data['uuid'] ) );
+		$this->assertEquals( 5, \Ramsey\Uuid\Uuid::fromString( $data['uuid'] )->getVersion() );
+	}
+
+	/**
+	 * Test virtual template UUID is deterministic (same ID always gives same UUID).
+	 */
+	public function test_virtual_template_uuid_is_deterministic(): void {
+		$request1  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
+		$response1 = $this->server->dispatch( $request1 );
+
+		$this->assertEquals( 200, $response1->get_status() );
+
+		$request2  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
+		$response2 = $this->server->dispatch( $request2 );
+
+		$this->assertEquals( $response1->get_data()['uuid'], $response2->get_data()['uuid'] );
+	}
+
+	/**
+	 * Test templates listing includes UUID for every template.
+	 */
+	public function test_get_items_includes_uuid_for_all_templates(): void {
+		$post_id = $this->create_template( 'UUID Listing Template' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		foreach ( $data as $template ) {
+			$this->assertArrayHasKey( 'uuid', $template, "Template '{$template['id']}' missing uuid" );
+			$this->assertTrue(
+				\Ramsey\Uuid\Uuid::isValid( $template['uuid'] ),
+				"Template '{$template['id']}' has invalid uuid: {$template['uuid']}"
+			);
+		}
+
+		wp_delete_post( $post_id, true );
+	}
+
 	// ---- Gallery listing tests ----
 
 	/**
