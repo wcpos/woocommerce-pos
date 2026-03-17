@@ -1197,10 +1197,6 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
 		$response = $this->server->dispatch( $request );
 
-		if ( 404 === $response->get_status() ) {
-			$this->markTestSkipped( 'No core virtual template available.' );
-		}
-
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
@@ -1216,9 +1212,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request1  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
 		$response1 = $this->server->dispatch( $request1 );
 
-		if ( 404 === $response1->get_status() ) {
-			$this->markTestSkipped( 'No core virtual template available.' );
-		}
+		$this->assertEquals( 200, $response1->get_status() );
 
 		$request2  = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
 		$response2 = $this->server->dispatch( $request2 );

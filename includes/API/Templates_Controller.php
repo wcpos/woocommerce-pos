@@ -1087,7 +1087,8 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	private function get_template_uuid( array $template ): string {
 		if ( ! empty( $template['is_virtual'] ) ) {
-			return $this->get_virtual_template_uuid( (string) $template['id'] );
+			$type = $template['type'] ?? 'receipt';
+			return $this->get_virtual_template_uuid( (string) $template['id'], $type );
 		}
 
 		return $this->get_database_template_uuid( (int) $template['id'] );
@@ -1097,17 +1098,20 @@ class Templates_Controller extends WP_REST_Controller {
 	 * Generate a deterministic UUID v5 for a virtual template.
 	 *
 	 * Uses the URL namespace with a wcpos-specific prefix so the same
-	 * template ID always produces the same UUID across installations.
+	 * template ID + type always produces the same UUID across installations.
+	 * Type is included because the same ID (e.g. 'plugin-core') can exist
+	 * for both 'receipt' and 'report' template types.
 	 *
 	 * @param string $template_id Virtual template ID (e.g. 'plugin-core').
+	 * @param string $type        Template type (e.g. 'receipt', 'report').
 	 *
 	 * @return string UUID v5 string.
 	 */
-	private function get_virtual_template_uuid( string $template_id ): string {
+	private function get_virtual_template_uuid( string $template_id, string $type ): string {
 		try {
-			return Uuid::uuid5( Uuid::NAMESPACE_URL, 'https://wcpos.com/template/' . $template_id )->toString();
+			return Uuid::uuid5( Uuid::NAMESPACE_URL, 'https://wcpos.com/template/' . $type . '/' . $template_id )->toString();
 		} catch ( \Exception $e ) {
-			Logger::log( 'Virtual template UUID generation failed: ' . $e->getMessage() );
+			Logger::error( 'Virtual template UUID generation failed: ' . $e->getMessage() );
 			return '';
 		}
 	}
@@ -1131,7 +1135,7 @@ class Templates_Controller extends WP_REST_Controller {
 		try {
 			$uuid = Uuid::uuid4()->toString();
 		} catch ( \Exception $e ) {
-			Logger::log( 'Database template UUID generation failed: ' . $e->getMessage() );
+			Logger::error( 'Database template UUID generation failed: ' . $e->getMessage() );
 			return '';
 		}
 
