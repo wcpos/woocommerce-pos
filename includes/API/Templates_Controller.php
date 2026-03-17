@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
@@ -1042,6 +1044,9 @@ class Templates_Controller extends WP_REST_Controller {
 		$context = $request->get_param( 'context' ) ?? 'view';
 		$engine  = $template['engine'] ?? 'legacy-php';
 
+		// Add UUID.
+		$template['uuid'] = $this->get_template_uuid( $template );
+
 		// Add computed fields.
 		$template['offline_capable'] = in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true );
 		$template['menu_order']      = isset( $template['menu_order'] ) ? (int) $template['menu_order'] : 0;
@@ -1068,6 +1073,71 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return $template;
+	}
+
+	/**
+	 * Get or create a UUID for a template.
+	 *
+	 * Database templates store a random UUID v4 in postmeta.
+	 * Virtual templates use a deterministic UUID v5 derived from the template ID.
+	 *
+	 * @param array $template Template data.
+	 *
+	 * @return string UUID string.
+	 */
+	private function get_template_uuid( array $template ): string {
+		if ( ! empty( $template['is_virtual'] ) ) {
+			return $this->get_virtual_template_uuid( (string) $template['id'] );
+		}
+
+		return $this->get_database_template_uuid( (int) $template['id'] );
+	}
+
+	/**
+	 * Generate a deterministic UUID v5 for a virtual template.
+	 *
+	 * Uses the URL namespace with a wcpos-specific prefix so the same
+	 * template ID always produces the same UUID across installations.
+	 *
+	 * @param string $template_id Virtual template ID (e.g. 'plugin-core').
+	 *
+	 * @return string UUID v5 string.
+	 */
+	private function get_virtual_template_uuid( string $template_id ): string {
+		try {
+			return Uuid::uuid5( Uuid::NAMESPACE_URL, 'https://wcpos.com/template/' . $template_id )->toString();
+		} catch ( \Exception $e ) {
+			Logger::log( 'Virtual template UUID generation failed: ' . $e->getMessage() );
+			return '';
+		}
+	}
+
+	/**
+	 * Get or create a UUID v4 for a database template.
+	 *
+	 * Stores the UUID in postmeta with the standard _woocommerce_pos_uuid key.
+	 *
+	 * @param int $post_id Template post ID.
+	 *
+	 * @return string UUID v4 string.
+	 */
+	private function get_database_template_uuid( int $post_id ): string {
+		$uuid = get_post_meta( $post_id, '_woocommerce_pos_uuid', true );
+
+		if ( $uuid && Uuid::isValid( $uuid ) ) {
+			return $uuid;
+		}
+
+		try {
+			$uuid = Uuid::uuid4()->toString();
+		} catch ( \Exception $e ) {
+			Logger::log( 'Database template UUID generation failed: ' . $e->getMessage() );
+			return '';
+		}
+
+		update_post_meta( $post_id, '_woocommerce_pos_uuid', $uuid );
+
+		return $uuid;
 	}
 
 	/**
