@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-02-11T20:52:25+00:00\n"
+"POT-Creation-Date: 2026-03-17T14:49:17+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -66,6 +66,9 @@ msgstr ""
 
 #. translators: wordpress.
 msgid "Settings"
+msgstr ""
+
+msgid "Templates"
 msgstr ""
 
 msgid "Upgrade to Pro"
@@ -153,6 +156,29 @@ msgstr ""
 msgid "Settings failed to load, please contact support"
 msgstr ""
 
+msgid "Receipt Templates"
+msgstr ""
+
+msgid "Customise your POS receipts with PHP or logicless templates."
+msgstr ""
+
+#. translators: %s: URL to template documentation
+#, php-format
+msgid "<a href=\"%s\" target=\"_blank\" rel=\"noopener noreferrer\">Read the documentation</a> for a complete reference and examples."
+msgstr ""
+
+msgid "Starter Templates"
+msgstr ""
+
+msgid "Ready-made examples that demonstrate different receipt styles. Install one to get a working template you can customise."
+msgstr ""
+
+msgid "Offline"
+msgstr ""
+
+msgid "Install"
+msgstr ""
+
 msgid "Default Templates"
 msgstr ""
 
@@ -236,25 +262,64 @@ msgstr ""
 msgid "Template copied successfully. You can now edit your custom template."
 msgstr ""
 
+msgid "Starter template installed. You can now customise it and activate it when ready."
+msgstr ""
+
 msgid "Failed to activate template."
+msgstr ""
+
+msgid "Invalid starter template key."
+msgstr ""
+
+msgid "You do not have permission to install templates."
+msgstr ""
+
+msgid "Category"
+msgstr ""
+
+msgid "HTML (Offline)"
+msgstr ""
+
+msgid "XML (Receipt Printer)"
+msgstr ""
+
+msgid "PHP (Legacy)"
 msgstr ""
 
 msgid "Enter template name"
 msgstr ""
 
-msgid "Edit your template code in the editor below. The content editor uses syntax highlighting based on the template language."
+msgid "Back to Templates"
 msgstr ""
 
-msgid "Template Code Editor"
-msgstr ""
-
-msgid "Template Settings"
+msgid "Publish"
 msgstr ""
 
 msgid "Template Actions"
 msgstr ""
 
-msgid "Language"
+msgid "Template Settings"
+msgstr ""
+
+msgid "Prints using your browser's print dialog. Renders on the device without needing a server connection."
+msgstr ""
+
+msgid "Sends output directly to thermal printers like Epson or Star. Works offline."
+msgstr ""
+
+msgid "Prints using your browser's print dialog. Requires a server connection to generate the receipt."
+msgstr ""
+
+msgid "Template Engine"
+msgstr ""
+
+msgid "Paper Size"
+msgstr ""
+
+msgid "80mm (Standard)"
+msgstr ""
+
+msgid "58mm (Narrow)"
 msgstr ""
 
 msgid "This template is currently active"
@@ -263,25 +328,16 @@ msgstr ""
 msgid "Set as Active Template"
 msgstr ""
 
-msgid "Preview is only available for receipt templates."
-msgstr ""
-
-msgid "No POS orders found. Create an order in the POS to preview templates."
-msgstr ""
-
-msgid "Preview with Order:"
-msgstr ""
-
-msgid "Note: Save the template first to see your latest changes in the preview."
-msgstr ""
-
-msgid "Refresh Preview"
-msgstr ""
-
 msgid "You do not have permission to create templates."
 msgstr ""
 
 msgid "Failed to create template copy."
+msgstr ""
+
+msgid "Sample Customer"
+msgstr ""
+
+msgid "Sample Cashier"
 msgstr ""
 
 msgid "You do not have permission to access the POS."
@@ -400,6 +456,18 @@ msgstr ""
 msgid "Display name of the order status."
 msgstr ""
 
+msgid "Invalid order."
+msgstr ""
+
+msgid "Invalid receipt mode."
+msgstr ""
+
+msgid "No fiscal snapshot found for this order."
+msgstr ""
+
+msgid "Sorry, you cannot view receipts."
+msgstr ""
+
 msgid "Failed to retrieve store data"
 msgstr ""
 
@@ -409,13 +477,75 @@ msgstr ""
 msgid "You do not have permissions to view this data."
 msgstr ""
 
-msgid "Unique identifier for the template (numeric for database, string for virtual)."
-msgstr ""
-
 msgid "Template type."
 msgstr ""
 
+msgid "Filter by template type."
+msgstr ""
+
+msgid "Filter by template category slug."
+msgstr ""
+
+msgid "Template type for ordering."
+msgstr ""
+
+msgid "Array of templates to update."
+msgstr ""
+
+msgid "Ordered array of all template IDs (int for database, string for virtual)."
+msgstr ""
+
+msgid "Array of virtual template IDs to disable."
+msgstr ""
+
+msgid "Array of virtual template IDs to enable."
+msgstr ""
+
+msgid "Gallery template key to install."
+msgstr ""
+
+msgid "Unique identifier for the template (numeric for database, string for virtual)."
+msgstr ""
+
+msgid "Template ID to copy."
+msgstr ""
+
+msgid "Template ID to preview."
+msgstr ""
+
+msgid "Template ID to delete."
+msgstr ""
+
 msgid "No active template found."
+msgstr ""
+
+msgid "Template not found after update."
+msgstr ""
+
+#. translators: %d: batch item index.
+#, php-format
+msgid "Batch item %d must include a numeric id."
+msgstr ""
+
+msgid "Failed to save copied template content."
+msgstr ""
+
+msgid "Failed to retrieve copied template."
+msgstr ""
+
+msgid "Built-in templates cannot be deleted."
+msgstr ""
+
+msgid "Failed to delete template."
+msgstr ""
+
+msgid "Template was installed but could not be retrieved."
+msgstr ""
+
+msgid "Create a POS order to preview this template."
+msgstr ""
+
+msgid "Preview — Sample receipt with demo data"
 msgstr ""
 
 msgid "Current page of the collection."
@@ -424,16 +554,31 @@ msgstr ""
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-msgid "Filter by template type."
+msgid "Scope under which the request is made."
 msgstr ""
 
-msgid "Scope under which the request is made."
+msgid "Search templates by title or description."
+msgstr ""
+
+msgid "Limit to templates modified after this ISO 8601 date."
 msgstr ""
 
 msgid "Sorry, you cannot list templates."
 msgstr ""
 
+msgid "Sorry, you are not allowed to edit templates."
+msgstr ""
+
 msgid "Sorry, you cannot view this template."
+msgstr ""
+
+msgid "Sorry, you are not allowed to edit this template."
+msgstr ""
+
+msgid "Sorry, you cannot preview this template."
+msgstr ""
+
+msgid "Sorry, you cannot update templates."
 msgstr ""
 
 msgid "Order does not exist."
@@ -501,6 +646,262 @@ msgstr[1] ""
 msgid "JWT is not configured properly, please contact the admin"
 msgstr ""
 
+msgid "Gift Wrapping"
+msgstr ""
+
+msgid "Flat Rate Shipping"
+msgstr ""
+
+#. translators: %s: discount percentage
+#, php-format
+msgid "Summer Sale (%s%%)"
+msgstr ""
+
+msgid "Please gift wrap this order. Thank you!"
+msgstr ""
+
+msgid "Tax"
+msgstr ""
+
+msgid "Guest"
+msgstr ""
+
+msgid "Shipping"
+msgstr ""
+
+msgid "Discount"
+msgstr ""
+
+msgid "Order Meta"
+msgstr ""
+
+msgid "Schema Version"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Order ID"
+msgstr ""
+
+msgid "Order Number"
+msgstr ""
+
+msgid "Date/Time"
+msgstr ""
+
+msgid "Currency"
+msgstr ""
+
+msgid "Customer Note"
+msgstr ""
+
+msgid "Store"
+msgstr ""
+
+msgid "Store Name"
+msgstr ""
+
+msgid "Address Lines"
+msgstr ""
+
+msgid "Tax ID"
+msgstr ""
+
+msgid "Phone"
+msgstr ""
+
+msgid "Email"
+msgstr ""
+
+msgid "Logo URL"
+msgstr ""
+
+msgid "Opening Hours"
+msgstr ""
+
+msgid "Personal Notes"
+msgstr ""
+
+msgid "Policies & Conditions"
+msgstr ""
+
+msgid "Footer Imprint"
+msgstr ""
+
+msgid "Cashier ID"
+msgstr ""
+
+msgid "Cashier Name"
+msgstr ""
+
+msgid "Customer"
+msgstr ""
+
+msgid "Customer ID"
+msgstr ""
+
+msgid "Customer Name"
+msgstr ""
+
+msgid "Billing Address"
+msgstr ""
+
+msgid "Shipping Address"
+msgstr ""
+
+msgid "Line Items"
+msgstr ""
+
+msgid "Item Key"
+msgstr ""
+
+msgid "SKU"
+msgstr ""
+
+msgid "Product Name"
+msgstr ""
+
+msgid "Quantity"
+msgstr ""
+
+msgid "Unit Price (incl tax)"
+msgstr ""
+
+msgid "Unit Price (excl tax)"
+msgstr ""
+
+msgid "Subtotal (incl tax)"
+msgstr ""
+
+msgid "Subtotal (excl tax)"
+msgstr ""
+
+msgid "Discounts (incl tax)"
+msgstr ""
+
+msgid "Discounts (excl tax)"
+msgstr ""
+
+msgid "Line Total (incl tax)"
+msgstr ""
+
+msgid "Line Total (excl tax)"
+msgstr ""
+
+msgid "Line Taxes"
+msgstr ""
+
+msgid "Fees"
+msgstr ""
+
+msgid "Fee Label"
+msgstr ""
+
+msgid "Total (incl tax)"
+msgstr ""
+
+msgid "Total (excl tax)"
+msgstr ""
+
+msgid "Shipping Label"
+msgstr ""
+
+msgid "Discounts"
+msgstr ""
+
+msgid "Discount Label"
+msgstr ""
+
+msgid "Totals"
+msgstr ""
+
+msgid "Discount Total (incl tax)"
+msgstr ""
+
+msgid "Discount Total (excl tax)"
+msgstr ""
+
+msgid "Tax Total"
+msgstr ""
+
+msgid "Grand Total (incl tax)"
+msgstr ""
+
+msgid "Grand Total (excl tax)"
+msgstr ""
+
+msgid "Paid Total"
+msgstr ""
+
+msgid "Tax Summary"
+msgstr ""
+
+msgid "Tax Code"
+msgstr ""
+
+msgid "Tax Label"
+msgstr ""
+
+msgid "Tax Rate (%)"
+msgstr ""
+
+msgid "Taxable Amount (excl)"
+msgstr ""
+
+msgid "Tax Amount"
+msgstr ""
+
+msgid "Taxable Amount (incl)"
+msgstr ""
+
+msgid "Payments"
+msgstr ""
+
+msgid "Method ID"
+msgstr ""
+
+msgid "Payment Method"
+msgstr ""
+
+msgid "Amount"
+msgstr ""
+
+msgid "Tendered"
+msgstr ""
+
+msgid "Reference"
+msgstr ""
+
+msgid "Fiscal"
+msgstr ""
+
+msgid "Immutable ID"
+msgstr ""
+
+msgid "Receipt Number"
+msgstr ""
+
+msgid "Sequence"
+msgstr ""
+
+msgid "Hash"
+msgstr ""
+
+msgid "QR Payload"
+msgstr ""
+
+msgid "Tax Agency Code"
+msgstr ""
+
+msgid "Signed At"
+msgstr ""
+
+#. translators: %d: receipt sequence number.
+#, php-format
+msgid "POS fiscal receipt snapshot created (receipt #%d)."
+msgstr ""
+
 #. translators: 1. %s: Settings group id, 2. %s: Settings key.
 #, php-format
 msgid "Settings with id %1$s and key %2$s not found"
@@ -528,9 +929,6 @@ msgstr ""
 
 msgctxt "Post Type Singular Name"
 msgid "Template"
-msgstr ""
-
-msgid "Templates"
 msgstr ""
 
 msgid "Template Archives"
@@ -664,6 +1062,14 @@ msgstr ""
 msgid "Template types list navigation"
 msgstr ""
 
+msgctxt "Taxonomy General Name"
+msgid "Template Categories"
+msgstr ""
+
+msgctxt "Taxonomy Singular Name"
+msgid "Template Category"
+msgstr ""
+
 msgid "Theme Receipt Template"
 msgstr ""
 
@@ -673,10 +1079,67 @@ msgstr ""
 msgid "Default Receipt Template"
 msgstr ""
 
+msgid "Minimal Receipt"
+msgstr ""
+
+msgid "A clean, data-driven receipt using the $receipt_data payload. Good starting point for custom templates."
+msgstr ""
+
+msgid "Thermal Printer Receipt"
+msgstr ""
+
+msgid "Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines."
+msgstr ""
+
+msgid "Gift Receipt"
+msgstr ""
+
+msgid "Shows items without prices. Displays the customer note as a gift message. Useful for gift wrapping counters."
+msgstr ""
+
+msgid "Simple Receipt (Logicless)"
+msgstr ""
+
+msgid "Full receipt using the logicless template engine with section blocks for line items, payments, and conditionals. No PHP required — just HTML and CSS."
+msgstr ""
+
+msgid "Starter template not found."
+msgstr ""
+
+msgid "Could not read starter template file."
+msgstr ""
+
+msgid "Template was created but raw content could not be saved."
+msgstr ""
+
+msgid "Gallery template not found."
+msgstr ""
+
 msgid "Receipt templates for printing orders"
 msgstr ""
 
 msgid "Report templates for analytics"
+msgstr ""
+
+msgid "Receipt"
+msgstr ""
+
+msgid "Invoice"
+msgstr ""
+
+msgid "Credit Note"
+msgstr ""
+
+msgid "Purchase Order"
+msgstr ""
+
+msgid "Kitchen Ticket"
+msgstr ""
+
+msgid "Bar Ticket"
+msgstr ""
+
+msgid "Order"
 msgstr ""
 
 msgid "Missing or invalid redirect_uri parameter."
@@ -716,6 +1179,9 @@ msgstr ""
 msgid "You do not have sufficient permissions to access this page."
 msgstr ""
 
+msgid "Sorry, this order cannot be paid for. The order key is missing or invalid."
+msgstr ""
+
 msgid "This order cannot be paid for. Please contact us if you need assistance."
 msgstr ""
 
@@ -749,13 +1215,13 @@ msgstr ""
 msgid "Paying as customer"
 msgstr ""
 
-msgid "Guest"
-msgstr ""
-
 msgid "Sorry, this order is invalid and cannot be paid for."
 msgstr ""
 
 msgid "Sorry, this order has already been paid for."
+msgstr ""
+
+msgid "You do not have permission to modify checkout settings."
 msgstr ""
 
 msgid "Sorry, this order is invalid."
@@ -797,6 +1263,12 @@ msgstr ""
 msgid "Please contact the site administrator for assistance."
 msgstr ""
 
+msgid "Sorry, this order cannot be viewed. The order key is missing or invalid."
+msgstr ""
+
+msgid "Failed to create temporary template file."
+msgstr ""
+
 msgid "Invalid template language."
 msgstr ""
 
@@ -816,6 +1288,49 @@ msgstr ""
 #. translators: %s: function name.
 #, php-format
 msgid "Template contains dangerous function: %s(). This function is not allowed for security reasons."
+msgstr ""
+
+msgid "A message for you"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "Item"
+msgstr ""
+
+msgid "Qty"
+msgstr ""
+
+msgid "Total"
+msgstr ""
+
+msgid "Subtotal"
+msgstr ""
+
+#. translators: 1: amount tendered 2: change given
+#, php-format
+msgid "Tendered %1$s / Change %2$s"
+msgstr ""
+
+msgid "Thank you for your purchase!"
+msgstr ""
+
+#. translators: %s: tax identification number
+#, php-format
+msgid "Tax ID: %s"
+msgstr ""
+
+msgid "SALES RECEIPT"
+msgstr ""
+
+msgid "Receipt #"
+msgstr ""
+
+msgid "TOTAL"
+msgstr ""
+
+msgid "Note:"
 msgstr ""
 
 msgid "Point of Sale"
