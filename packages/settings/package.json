@@ -13,7 +13,7 @@
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
     "@headlessui/react": "^2.2.9",
     "@tanstack/react-query": "^5.90.21",
-    "@tanstack/react-router": "~1.166.8",
+    "@tanstack/react-router": "1.166.8",
     "@wcpos/i18n": "workspace:*",
     "@wordpress/api-fetch": "^7.39.0",
     "@wordpress/url": "^4.39.0",
