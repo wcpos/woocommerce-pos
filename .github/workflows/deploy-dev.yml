@@ -67,68 +67,37 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 213.239.218.130 >> ~/.ssh/known_hosts
 
-      - name: 🚀 Deploy to dev-free.wcpos.com
+      - name: 🚀 Deploy to dev sites
         run: |
-          # Upload tarball
-          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz root@213.239.218.130:/tmp/
-          
-          # Extract and deploy
-          ssh -o StrictHostKeyChecking=no root@213.239.218.130 << 'EOF'
-            set -e
-            PLUGIN_DIR="/data/wordpress/dev-free/html/wp-content/plugins/woocommerce-pos"
-            
-            # Create directory
-            mkdir -p "$PLUGIN_DIR"
-            
-            # Backup current version (optional)
-            if [ -d "$PLUGIN_DIR" ] && [ "$(ls -A $PLUGIN_DIR)" ]; then
-              mv "$PLUGIN_DIR" "${PLUGIN_DIR}.backup.$(date +%s)"
-            fi
-            
-            # Extract new version
-            mkdir -p "$PLUGIN_DIR"
-            cd "$PLUGIN_DIR"
-            tar -xzf /tmp/woocommerce-pos.tar.gz
-            
-            # Fix permissions
-            chown -R 82:82 "$PLUGIN_DIR"
-            
-            # Cleanup
-            rm -f /tmp/woocommerce-pos.tar.gz
-            rm -rf "${PLUGIN_DIR}.backup."* 2>/dev/null || true
-            
-            echo "✅ Deployed to dev-free.wcpos.com"
-          EOF
+          TARBALL="woocommerce-pos-${GITHUB_RUN_ID}.tar.gz"
 
-      - name: 🚀 Deploy to dev-pro.wcpos.com
-        run: |
-          # Upload tarball
-          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz root@213.239.218.130:/tmp/
-          
-          # Extract and deploy
-          ssh -o StrictHostKeyChecking=no root@213.239.218.130 << 'EOF'
+          # Upload tarball with per-run name to avoid races
+          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
+
+          # Deploy to both dev-free and dev-pro
+          ssh -o StrictHostKeyChecking=no root@213.239.218.130 bash -s -- "${TARBALL}" << 'EOF'
+            TARBALL="$1"
             set -e
-            PLUGIN_DIR="/data/wordpress/dev-pro/html/wp-content/plugins/woocommerce-pos"
-            
-            # Create directory
-            mkdir -p "$PLUGIN_DIR"
-            
-            # Backup current version (optional)
-            if [ -d "$PLUGIN_DIR" ] && [ "$(ls -A $PLUGIN_DIR)" ]; then
-              mv "$PLUGIN_DIR" "${PLUGIN_DIR}.backup.$(date +%s)"
-            fi
-            
-            # Extract new version
-            mkdir -p "$PLUGIN_DIR"
-            cd "$PLUGIN_DIR"
-            tar -xzf /tmp/woocommerce-pos.tar.gz
-            
-            # Fix permissions
-            chown -R 82:82 "$PLUGIN_DIR"
-            
-            # Cleanup
-            rm -f /tmp/woocommerce-pos.tar.gz
-            rm -rf "${PLUGIN_DIR}.backup."* 2>/dev/null || true
-            
-            echo "✅ Deployed to dev-pro.wcpos.com"
+            FAILED=0
+
+            for SITE in dev-free dev-pro; do
+              if (
+                set -e
+                PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/woocommerce-pos"
+
+                rm -rf "$PLUGIN_DIR"
+                mkdir -p "$PLUGIN_DIR"
+                tar -xzf "/tmp/${TARBALL}" -C "$PLUGIN_DIR"
+
+                chown -R 82:82 "$PLUGIN_DIR"
+              ); then
+                echo "✅ Deployed to ${SITE}.wcpos.com"
+              else
+                echo "❌ Deploy failed for ${SITE}.wcpos.com" >&2
+                FAILED=1
+              fi
+            done
+
+            rm -f "/tmp/${TARBALL}"
+            [ "$FAILED" -eq 0 ] || exit 1
           EOF
