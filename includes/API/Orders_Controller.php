@@ -100,7 +100,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $result;
 		}
 
-		// Parent check failed — try direct capability check for HPOS compatibility.
+		// Parent check failed - try direct capability check for HPOS compatibility.
 		$id    = (int) $request['id'];
 		$order = wc_get_order( $id );
 
