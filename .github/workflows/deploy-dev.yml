@@ -7,6 +7,9 @@ on:
 
 jobs:
   deploy:
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     steps:
@@ -72,10 +75,10 @@ jobs:
           TARBALL="woocommerce-pos-${GITHUB_RUN_ID}.tar.gz"
 
           # Upload tarball with per-run name to avoid races
-          scp -o StrictHostKeyChecking=no woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
+          scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
 
           # Deploy to both dev-free and dev-pro
-          ssh -o StrictHostKeyChecking=no root@213.239.218.130 bash -s -- "${TARBALL}" << 'EOF'
+          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 bash -s -- "${TARBALL}" << 'EOF'
             TARBALL="$1"
             set -e
             FAILED=0
@@ -95,6 +98,7 @@ jobs:
               else
                 echo "❌ Deploy failed for ${SITE}.wcpos.com" >&2
                 FAILED=1
+                break
               fi
             done
 
