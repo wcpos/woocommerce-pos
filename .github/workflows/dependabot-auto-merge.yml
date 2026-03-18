@@ -9,4 +9,6 @@ jobs:
   auto-merge:
     if: github.actor == 'dependabot[bot]'
     uses: wcpos/.github/.github/workflows/dependabot-auto-merge.yml@main
-    secrets: inherit
+    secrets:
+      PROJECT_BOT_APP_ID: ${{ secrets.PROJECT_BOT_APP_ID }}
+      PROJECT_BOT_PRIVATE_KEY: ${{ secrets.PROJECT_BOT_PRIVATE_KEY }}
