@@ -100,6 +100,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $result;
 		}
 
+		// Only apply HPOS fallback for the specific authorization error code.
+		if ( ! $this->hpos_enabled || 'woocommerce_rest_cannot_edit' !== $result->get_error_code() ) {
+			return $result;
+		}
+
 		// Parent check failed — try direct capability check for HPOS compatibility.
 		$id    = (int) $request['id'];
 		$order = wc_get_order( $id );
@@ -110,6 +115,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		if ( ! current_user_can( 'edit_shop_orders' ) ) {
 			return $result;
+		}
+
+		// Respect edit_others_shop_orders for orders created by other users.
+		if ( ! current_user_can( 'edit_others_shop_orders' ) ) {
+			$post = get_post( $id );
+			if ( $post && (int) $post->post_author !== get_current_user_id() ) {
+				return $result;
+			}
 		}
 
 		return true;
@@ -131,6 +144,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $result;
 		}
 
+		// Only apply HPOS fallback for the specific authorization error code.
+		if ( ! $this->hpos_enabled || 'woocommerce_rest_cannot_delete' !== $result->get_error_code() ) {
+			return $result;
+		}
+
 		$id    = (int) $request['id'];
 		$order = wc_get_order( $id );
 
@@ -140,6 +158,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		if ( ! current_user_can( 'delete_shop_orders' ) ) {
 			return $result;
+		}
+
+		// Respect delete_others_shop_orders for orders created by other users.
+		if ( ! current_user_can( 'delete_others_shop_orders' ) ) {
+			$post = get_post( $id );
+			if ( $post && (int) $post->post_author !== get_current_user_id() ) {
+				return $result;
+			}
 		}
 
 		return true;
