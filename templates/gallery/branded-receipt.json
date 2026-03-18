@@ -1,7 +1,7 @@
 {
     "key": "branded-receipt",
     "title": "Branded Receipt",
-    "description": "Marketing-oriented receipt with large logo area, accent color bar, and social media placeholders.",
+    "description": "Print-friendly A4 receipt with store logo, tabular line items, and payment details.",
     "type": "receipt",
     "category": "receipt",
     "engine": "logicless",
