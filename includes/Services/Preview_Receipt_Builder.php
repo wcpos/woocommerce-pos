@@ -157,13 +157,14 @@ class Preview_Receipt_Builder {
 		$change_total = round( $tendered - $grand_total_incl, 2 );
 
 		$meta = array(
-			'schema_version' => Receipt_Data_Schema::VERSION,
-			'mode'           => 'preview',
-			'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
-			'order_id'       => 1234,
-			'order_number'   => '1234',
-			'currency'       => $currency,
-			'customer_note'  => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
+			'schema_version'   => Receipt_Data_Schema::VERSION,
+			'mode'             => 'preview',
+			'created_at_gmt'   => gmdate( 'Y-m-d H:i:s' ),
+			'created_at_local' => current_time( 'mysql', false ),
+			'order_id'         => 1234,
+			'order_number'     => '1234',
+			'currency'         => $currency,
+			'customer_note'    => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
 		);
 
 		$store = $this->get_store_info();

@@ -7,7 +7,7 @@
   <line />
   <row>
     <col width="24">{{meta.order_number}}</col>
-    <col width="24" align="right">{{meta.created_at_gmt}}</col>
+    <col width="24" align="right">{{meta.created_at_local}}</col>
   </row>
   <line />
   {{#lines}}

@@ -23,13 +23,14 @@ class Receipt_Data_Builder {
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live' ): array {
 		$meta = array(
-			'schema_version' => Receipt_Data_Schema::VERSION,
-			'mode'           => $mode,
-			'created_at_gmt' => current_time( 'mysql', true ),
-			'order_id'       => $order->get_id(),
-			'order_number'   => $order->get_order_number(),
-			'currency'       => $order->get_currency(),
-			'customer_note'  => $order->get_customer_note(),
+			'schema_version'   => Receipt_Data_Schema::VERSION,
+			'mode'             => $mode,
+			'created_at_gmt'   => current_time( 'mysql', true ),
+			'created_at_local' => current_time( 'mysql', false ),
+			'order_id'         => $order->get_id(),
+			'order_number'     => $order->get_order_number(),
+			'currency'         => $order->get_currency(),
+			'customer_note'    => $order->get_customer_note(),
 		);
 
 		$store = array(

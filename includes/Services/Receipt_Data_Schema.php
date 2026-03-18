@@ -167,31 +167,35 @@ class Receipt_Data_Schema {
 			'meta'        => array(
 				'label'  => __( 'Order Meta', 'woocommerce-pos' ),
 				'fields' => array(
-					'schema_version' => array(
+					'schema_version'   => array(
 						'type'  => 'string',
 						'label' => __( 'Schema Version', 'woocommerce-pos' ),
 					),
-					'mode'           => array(
+					'mode'             => array(
 						'type'  => 'string',
 						'label' => __( 'Mode', 'woocommerce-pos' ),
 					),
-					'order_id'       => array(
+					'order_id'         => array(
 						'type'  => 'number',
 						'label' => __( 'Order ID', 'woocommerce-pos' ),
 					),
-					'order_number'   => array(
+					'order_number'     => array(
 						'type'  => 'string',
 						'label' => __( 'Order Number', 'woocommerce-pos' ),
 					),
-					'created_at_gmt' => array(
+					'created_at_gmt'   => array(
 						'type'  => 'string',
-						'label' => __( 'Date/Time', 'woocommerce-pos' ),
+						'label' => __( 'Date/Time (GMT)', 'woocommerce-pos' ),
 					),
-					'currency'       => array(
+					'created_at_local' => array(
+						'type'  => 'string',
+						'label' => __( 'Date/Time (Local)', 'woocommerce-pos' ),
+					),
+					'currency'         => array(
 						'type'  => 'string',
 						'label' => __( 'Currency', 'woocommerce-pos' ),
 					),
-					'customer_note'  => array(
+					'customer_note'    => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Note', 'woocommerce-pos' ),
 					),
