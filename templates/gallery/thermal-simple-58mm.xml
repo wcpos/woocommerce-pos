@@ -6,7 +6,7 @@
   </align>
   <line />
   <text>{{meta.order_number}}</text>
-  <text>{{meta.created_at_local}}</text>
+  <text>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</text>
   <line />
   {{#lines}}
   <text>{{name}}</text>

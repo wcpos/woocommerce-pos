@@ -546,13 +546,14 @@ class Receipt_Data_Schema {
 
 		return array(
 			'meta'               => array(
-				'schema_version' => self::VERSION,
-				'mode'           => 'preview',
-				'created_at_gmt' => gmdate( 'Y-m-d H:i:s' ),
-				'order_id'       => 1234,
-				'order_number'   => '1234',
-				'currency'       => function_exists( 'get_option' ) ? get_option( 'woocommerce_currency', 'USD' ) : 'USD',
-				'customer_note'  => 'Please gift wrap this order. Thank you!',
+				'schema_version'   => self::VERSION,
+				'mode'             => 'preview',
+				'created_at_gmt'   => gmdate( 'Y-m-d H:i:s' ),
+				'created_at_local' => function_exists( 'current_time' ) ? current_time( 'mysql', false ) : gmdate( 'Y-m-d H:i:s' ),
+				'order_id'         => 1234,
+				'order_number'     => '1234',
+				'currency'         => function_exists( 'get_option' ) ? get_option( 'woocommerce_currency', 'USD' ) : 'USD',
+				'customer_note'    => 'Please gift wrap this order. Thank you!',
 			),
 			'store'              => array(
 				'name'                    => $store_name ? $store_name : 'Sample Store',

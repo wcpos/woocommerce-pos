@@ -26,7 +26,7 @@ All styles are inline (wp_kses_post strips <style> tags).
 
 	<!-- Order Info -->
 	<div style="font-size: 11px; color: #999;">
-		<div>#{{meta.order_number}} &middot; {{meta.created_at_local}}</div>
+		<div>#{{meta.order_number}} &middot; {{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
 		{{#cashier.name}}
 		<div>Served by {{cashier.name}}</div>
 		{{/cashier.name}}
