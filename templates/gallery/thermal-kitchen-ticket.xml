@@ -5,7 +5,7 @@
   <line style="double" />
   <row>
     <col width="24"><bold><size width="2">{{meta.order_number}}</size></bold></col>
-    <col width="24" align="right">{{meta.created_at_gmt}}</col>
+    <col width="24" align="right">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</col>
   </row>
   <line style="double" />
   {{#lines}}

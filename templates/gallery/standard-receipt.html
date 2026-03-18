@@ -44,7 +44,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</div>
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">Date</span>
-			<span>{{meta.created_at_gmt}}</span>
+			<span>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
 		</div>
 		{{#cashier.name}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">

@@ -12,7 +12,7 @@
   </row>
   <row>
     <col width="16">Date:</col>
-    <col width="32" align="right">{{meta.created_at_gmt}}</col>
+    <col width="32" align="right">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</col>
   </row>
   {{#cashier.name}}
   <row>
