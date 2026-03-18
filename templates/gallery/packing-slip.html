@@ -22,7 +22,7 @@ Shipping address prominent for warehouse use.
 			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Packing Slip</div>
 			<div style="font-size: 12px; margin-top: 8px; color: #666;">
 				<div>Order #{{meta.order_number}}</div>
-				<div>{{meta.created_at_gmt}}</div>
+				<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
 			</div>
 		</div>
 	</div>
@@ -71,7 +71,7 @@ Shipping address prominent for warehouse use.
 	{{/meta.customer_note}}
 
 	<div style="margin-top: 32px; text-align: center; font-size: 11px; color: #999;">
-		Order #{{meta.order_number}} &middot; {{meta.created_at_gmt}}
+		Order #{{meta.order_number}} &middot; {{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}
 	</div>
 
 </div>
