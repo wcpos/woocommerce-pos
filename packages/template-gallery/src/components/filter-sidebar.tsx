@@ -2,14 +2,12 @@ export interface FilterState {
 	search: string;
 	categories: string[];
 	output: 'all' | 'html' | 'escpos';
-	source: 'all' | 'custom' | 'builtin';
 }
 
 export const DEFAULT_FILTERS: FilterState = {
 	search: '',
 	categories: [],
 	output: 'all',
-	source: 'all',
 };
 
 interface FilterSidebarProps {
@@ -65,8 +63,7 @@ function isFiltered(filters: FilterState): boolean {
 	return (
 		filters.search !== '' ||
 		filters.categories.length > 0 ||
-		filters.output !== 'all' ||
-		filters.source !== 'all'
+		filters.output !== 'all'
 	);
 }
 
@@ -163,40 +160,20 @@ export function FilterSidebar({
 
 			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
 
-			{/* Print Method */}
+			{/* Format */}
 			<RadioGroup
-				label="Print Method"
-				name="filter-print-method"
+				label="Format"
+				name="filter-format"
 				value={filters.output}
 				options={[
 					{ value: 'all', label: 'All' },
-					{ value: 'html', label: 'Browser' },
-					{ value: 'escpos', label: 'Receipt Printer' },
+					{ value: 'html', label: 'HTML (browser print)' },
+					{ value: 'escpos', label: 'ESC/POS (thermal printer)' },
 				]}
 				onChange={(v) =>
 					onChange({
 						...filters,
 						output: v as FilterState['output'],
-					})
-				}
-			/>
-
-			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
-
-			{/* Source */}
-			<RadioGroup
-				label="Source"
-				name="filter-source"
-				value={filters.source}
-				options={[
-					{ value: 'all', label: 'All' },
-					{ value: 'custom', label: 'Custom' },
-					{ value: 'builtin', label: 'Built-in' },
-				]}
-				onChange={(v) =>
-					onChange({
-						...filters,
-						source: v as FilterState['source'],
 					})
 				}
 			/>
