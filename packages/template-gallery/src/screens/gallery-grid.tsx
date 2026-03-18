@@ -20,7 +20,7 @@ import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
 function matchesFilters(
-	template: { title: string; category: string; engine?: string; output_type?: string; is_premade?: boolean },
+	template: { title: string; category: string; engine?: string; output_type?: string },
 	filters: FilterState,
 ): boolean {
 	if (filters.search && !template.title.toLowerCase().includes(filters.search.toLowerCase())) {
@@ -38,13 +38,6 @@ function matchesFilters(
 			template.engine === 'thermal';
 		if (filters.output === 'escpos' && !isThermal) return false;
 		if (filters.output === 'html' && isThermal) return false;
-	}
-
-	if (filters.source === 'custom' && template.is_premade !== false) {
-		return false;
-	}
-	if (filters.source === 'builtin' && template.is_premade !== true) {
-		return false;
 	}
 
 	return true;
@@ -139,9 +132,12 @@ export function GalleryGrid() {
 			{/* Template Gallery section */}
 			{galleryTemplates.length > 0 && (
 				<section>
-					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:mb-3 wcpos:m-0">
+					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
 						Template Gallery
 					</h2>
+					<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-1 wcpos:mb-3">
+						Starter templates you can customise to match your business. Preview any template or click Customise to make it your own.
+					</p>
 					<div className="wcpos:flex wcpos:gap-6">
 						<FilterSidebar
 							filters={filters}

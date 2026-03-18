@@ -39,16 +39,25 @@ function ErrorFallback({
 export function GalleryLayout() {
 	return (
 		<div className="wcpos:max-w-7xl">
+			<TypeTabs activeType="receipt" />
+
 			<div className="wcpos:mb-6">
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
 					Receipt Templates
 				</h1>
-				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-1">
-					Customise your POS receipts.
+				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2 wcpos:max-w-2xl">
+					Design and manage the receipts printed at your point of sale.
+					Templates use HTML or ESC/POS format and can be fully customised.{' '}
+					<a
+						href="https://docs.wcpos.com/templates/receipt-templates"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
+					>
+						Learn more
+					</a>
 				</p>
 			</div>
-
-			<TypeTabs activeType="receipt" />
 
 			<ErrorBoundary FallbackComponent={ErrorFallback}>
 				<React.Suspense fallback={<LoadingFallback />}>
