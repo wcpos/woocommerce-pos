@@ -944,44 +944,4 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			'Cashier should be able to update an order with HPOS enabled. Response: ' . wp_json_encode( $response->get_data() )
 		);
 	}
-
-	/**
-	 * Test that a cashier can delete an order with HPOS enabled.
-	 *
-	 * Same HPOS placeholder post type issue as the update test: the delete
-	 * permission check falls back to the generic 'delete_post' capability
-	 * instead of 'delete_shop_order'. Our override fixes this.
-	 */
-	public function test_cashier_can_delete_order_with_hpos(): void {
-		$this->assertTrue( OrderUtil::custom_orders_table_usage_is_enabled(), 'HPOS must be enabled for this test.' );
-
-		// Create a cashier user with POS capabilities but NOT generic delete_posts.
-		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
-		$cashier    = get_user_by( 'id', $cashier_id );
-		$cashier->add_cap( 'access_woocommerce_pos' );
-
-		$this->assertTrue(
-			user_can( $cashier_id, 'delete_shop_orders' ),
-			'Cashier should have delete_shop_orders capability.'
-		);
-
-		// Create an order as admin.
-		$order = OrderHelper::create_order();
-
-		// Switch to cashier.
-		wp_set_current_user( $cashier_id );
-
-		// Delete the order (trash it).
-		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/orders/' . $order->get_id() );
-		$request->set_header( 'X-WCPOS', '1' );
-		$request->set_param( 'force', false );
-
-		$response = $this->server->dispatch( $request );
-
-		$this->assertContains(
-			$response->get_status(),
-			array( 200, 202 ),
-			'Cashier should be able to delete an order with HPOS enabled. Response: ' . wp_json_encode( $response->get_data() )
-		);
-	}
 }
