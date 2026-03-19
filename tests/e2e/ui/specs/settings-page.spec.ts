@@ -18,28 +18,8 @@ test.describe('Settings Page', () => {
 	});
 
 	test('Navigation sidebar is visible', async ({ adminPage }) => {
-		// Capture console errors for debugging
-		const errors: string[] = [];
-		adminPage.on('console', (msg) => {
-			if (msg.type() === 'error') errors.push(msg.text());
-		});
-		adminPage.on('pageerror', (err) => errors.push(err.message));
-
-		// Re-navigate to capture console from the start
-		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings');
-		await adminPage.waitForLoadState('networkidle');
-		await adminPage.waitForTimeout(5000);
-
-		// Debug: dump rendered HTML and console errors when aside is missing
-		const nav = adminPage.locator('aside');
-		const isVisible = await nav.isVisible().catch(() => false);
-		if (!isVisible) {
-			const html = await adminPage.locator('#woocommerce-pos-settings').innerHTML();
-			console.log('DEBUG mount-div innerHTML:', html.substring(0, 3000));
-			console.log('DEBUG console errors:', JSON.stringify(errors));
-		}
-
 		// Wait for React app to render the aside nav
+		const nav = adminPage.locator('aside');
 		await expect(nav).toBeVisible({ timeout: 15000 });
 
 		// All five nav links should be present
