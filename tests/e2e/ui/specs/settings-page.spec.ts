@@ -33,8 +33,20 @@ test.describe('Settings Page', () => {
 		const isVisible = await nav.isVisible().catch(() => false);
 		if (!isVisible) {
 			const html = await adminPage.locator('#woocommerce-pos-settings').innerHTML();
+			const reactInfo = await adminPage.evaluate(() => ({
+				reactDefined: typeof (window as any).React !== 'undefined',
+				reactVersion: (window as any).React?.version,
+				reactDOMDefined: typeof (window as any).ReactDOM !== 'undefined',
+				wpDefined: typeof (window as any).wp !== 'undefined',
+				wpApiFetchDefined: typeof (window as any).wp?.apiFetch !== 'undefined',
+				useSyncExists: typeof (window as any).React?.useSyncExternalStore,
+				scriptTags: Array.from(document.querySelectorAll('script[src*="react"]')).map(
+					(s) => (s as HTMLScriptElement).src
+				),
+			}));
 			console.log('DEBUG mount-div innerHTML:', html.substring(0, 3000));
 			console.log('DEBUG console errors:', JSON.stringify(errors));
+			console.log('DEBUG react info:', JSON.stringify(reactInfo));
 		}
 
 		await expect(nav).toBeVisible({ timeout: 15000 });
