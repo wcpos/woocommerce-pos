@@ -41,7 +41,7 @@
   "homepage": "https://wcpos.com",
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@wordpress/env": "11.1.0",
+    "@wordpress/env": "^11.1.0",
     "jsdoc": "^4.0.5",
     "newman": "^6.2.2",
     "taffydb": "^2.7.3",
