@@ -10,10 +10,14 @@ import path from 'path';
  * require() calls for external modules. In IIFE format there is no
  * require(), so we replace them with the corresponding globals.
  */
+/**
+ * Use globalThis prefix to avoid `var React = React` self-reference
+ * when the CJS shim declares a local variable with the same name.
+ */
 const externalGlobals: Record<string, string> = {
-	'react': 'React',
-	'react-dom': 'ReactDOM',
-	'react-dom/client': 'ReactDOM',
+	'react': 'globalThis.React',
+	'react-dom': 'globalThis.ReactDOM',
+	'react-dom/client': 'globalThis.ReactDOM',
 };
 
 function fixCjsExternals(): Plugin {
