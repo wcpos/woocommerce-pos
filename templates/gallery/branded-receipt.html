@@ -1,153 +1,158 @@
 <!--
-Branded Receipt — marketing-oriented template.
+Branded Receipt — print-friendly A4 receipt with store logo.
 
-Large logo placeholder area, accent color bar, store contact info,
-and social media link placeholders in the footer.
+Clean layout designed for printing on standard paper.
+Store branding via logo and name, tabular line items,
+payment details with tendered/change.
 -->
-<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; max-width: 440px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;">
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; max-width: 190mm; margin: 0 auto; padding: 40px;">
 
-	<div style="background: #1a1a2e; color: #fff; padding: 32px; text-align: center;">
-		{{#store.logo}}
-		<div style="margin-bottom: 12px;">
-			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 180px; height: auto;">
+	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;">
+		<div>
+			{{#store.logo}}
+			<div style="margin-bottom: 8px;">
+				<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 200px; height: auto;">
+			</div>
+			{{/store.logo}}
+			<div style="font-size: 22px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="font-size: 12px; color: #666;">{{.}}</div>
+			{{/store.address_lines}}
+			{{#store.phone}}
+			<div style="font-size: 12px; color: #666;">{{store.phone}}</div>
+			{{/store.phone}}
+			{{#store.email}}
+			<div style="font-size: 12px; color: #666;">{{store.email}}</div>
+			{{/store.email}}
+			{{#store.tax_id}}
+			<div style="font-size: 12px; color: #666;">Tax ID: {{store.tax_id}}</div>
+			{{/store.tax_id}}
 		</div>
-		{{/store.logo}}
-		<div style="font-size: 26px; font-weight: 700; letter-spacing: 1.5px;">{{store.name}}</div>
-		{{#store.address_lines}}
-		<div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">{{.}}</div>
-		{{/store.address_lines}}
+		<div style="text-align: right;">
+			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Receipt</div>
+			<div style="font-size: 13px; margin-top: 8px;">
+				<div>#{{meta.order_number}}</div>
+				<div style="color: #666;">{{meta.created_at_gmt}}</div>
+			</div>
+			{{#cashier.name}}
+			<div style="font-size: 12px; color: #666; margin-top: 4px;">Served by {{cashier.name}}</div>
+			{{/cashier.name}}
+			{{#customer.name}}
+			<div style="font-size: 12px; color: #666; margin-top: 4px;">Customer: {{customer.name}}</div>
+			{{/customer.name}}
+		</div>
 	</div>
 
-	<div style="height: 6px; background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);"></div>
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+		<thead>
+			<tr style="border-bottom: 2px solid #333;">
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Item</th>
+				<th style="width: 56px; text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Qty</th>
+				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Unit Price</th>
+				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Total</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr style="border-bottom: 1px solid #eee;">
+				<td style="padding: 8px 4px;">{{name}}</td>
+				<td style="padding: 8px 4px; text-align: center; white-space: nowrap;">{{qty}}</td>
+				<td style="padding: 8px 4px; text-align: right; white-space: nowrap;">{{unit_price_incl}}</td>
+				<td style="padding: 8px 4px; text-align: right; white-space: nowrap;">{{line_total_incl}}</td>
+			</tr>
+			{{/lines}}
+		</tbody>
+	</table>
 
-	<div style="padding: 28px;">
+	<div style="display: flex; justify-content: flex-end;">
+		<div style="width: 280px;">
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+				<span style="color: #555;">Subtotal</span>
+				<span>{{totals.subtotal_excl}}</span>
+			</div>
 
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">Order</span>
-			<span>#{{meta.order_number}}</span>
-		</div>
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">Date</span>
-			<span>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
-		</div>
-		{{#cashier.name}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">Served by</span>
-			<span>{{cashier.name}}</span>
-		</div>
-		{{/cashier.name}}
-		{{#customer.name}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">Customer</span>
-			<span>{{customer.name}}</span>
-		</div>
-		{{/customer.name}}
+			{{#fees}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+				<span style="color: #555;">{{label}}</span>
+				<span>{{total_excl}}</span>
+			</div>
+			{{/fees}}
 
-		<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
+			{{#shipping}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+				<span style="color: #555;">{{label}}</span>
+				<span>{{total_excl}}</span>
+			</div>
+			{{/shipping}}
 
-		{{#lines}}
-		<div style="display: flex; justify-content: space-between; padding: 8px 0;">
-			<span>{{name}} <span style="color: #888;">&times;{{qty}}</span></span>
-			<span>{{line_total_incl}}</span>
-		</div>
-		{{/lines}}
+			{{#discounts}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #16a34a;">
+				<span>{{label}}</span>
+				<span>-{{total_excl}}</span>
+			</div>
+			{{/discounts}}
 
-		<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
+			{{#tax_summary}}
+			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
+				<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
+				<span>{{tax_amount}}</span>
+			</div>
+			{{/tax_summary}}
 
-		{{#fees}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #555;">
-			<span>{{label}}</span>
-			<span>{{total_incl}}</span>
-		</div>
-		{{/fees}}
+			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
+				<span>Total</span>
+				<span>{{totals.grand_total_incl}}</span>
+			</div>
 
-		{{#shipping}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #555;">
-			<span>{{label}}</span>
-			<span>{{total_incl}}</span>
+			{{#payments}}
+			<div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #555;">
+				<span>{{method_title}}</span>
+				<span>{{amount}}</span>
+			</div>
+			{{#tendered}}
+			<div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+				<span>Tendered</span>
+				<span>{{tendered}}</span>
+			</div>
+			{{/tendered}}
+			{{#change}}
+			<div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: #888; padding-left: 12px;">
+				<span>Change</span>
+				<span>{{change}}</span>
+			</div>
+			{{/change}}
+			{{/payments}}
 		</div>
-		{{/shipping}}
-
-		{{#discounts}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #16a34a;">
-			<span>{{label}}</span>
-			<span>-{{total_incl}}</span>
-		</div>
-		{{/discounts}}
-
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">Subtotal</span>
-			<span>{{totals.subtotal_incl}}</span>
-		</div>
-
-		{{#tax_summary}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-			<span style="color: #555;">{{label}}</span>
-			<span>{{tax_amount}}</span>
-		</div>
-		{{/tax_summary}}
-
-		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 20px; padding-top: 12px; border-top: 2px solid #1a1a2e; margin-top: 8px;">
-			<span>Total</span>
-			<span>{{totals.grand_total_incl}}</span>
-		</div>
-
-		<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
-
-		{{#payments}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #555;">
-			<span>{{method_title}}</span>
-			<span>{{amount}}</span>
-		</div>
-		{{#tendered}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-			<span>Tendered</span>
-			<span>{{tendered}}</span>
-		</div>
-		{{/tendered}}
-		{{#change}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-			<span>Change</span>
-			<span>{{change}}</span>
-		</div>
-		{{/change}}
-		{{/payments}}
-
-		{{#store.footer_imprint}}
-		<div style="text-align: center; margin-top: 20px; font-size: 13px; color: #555;">
-			{{store.footer_imprint}}
-		</div>
-		{{/store.footer_imprint}}
-		{{^store.footer_imprint}}
-		{{^customer.name}}
-		<div style="text-align: center; margin-top: 20px; font-size: 13px; color: #555;">
-			Thank you for shopping with us!
-		</div>
-		{{/customer.name}}
-		{{#customer.name}}
-		<div style="text-align: center; margin-top: 20px; font-size: 13px; color: #555;">
-			Thank you, {{customer.name}}!
-		</div>
-		{{/customer.name}}
-		{{/store.footer_imprint}}
-
-		{{#store.personal_notes}}
-		<div style="text-align: center; padding: 0 28px 20px; font-size: 12px; color: #555; font-style: italic; white-space: pre-wrap;">
-			{{store.personal_notes}}
-		</div>
-		{{/store.personal_notes}}
 	</div>
 
-	<div style="background: #f4f4f5; padding: 18px; text-align: center; border-top: 1px solid #e5e7eb;">
-		{{#store.phone}}
-		<div style="font-size: 12px; color: #555;">{{store.phone}}</div>
-		{{/store.phone}}
-		{{#store.email}}
-		<div style="font-size: 12px; color: #555;">{{store.email}}</div>
-		{{/store.email}}
-		<div style="margin-top: 8px; font-size: 11px; color: #9ca3af;">
-			Follow us on social media
-		</div>
+	{{#store.personal_notes}}
+	<div style="margin-top: 24px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 12px; color: #555; white-space: pre-wrap;">
+		{{store.personal_notes}}
 	</div>
+	{{/store.personal_notes}}
+
+	{{#store.policies_and_conditions}}
+	<div style="margin-top: 16px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 11px; color: #666; line-height: 1.5; white-space: pre-wrap;">
+		{{store.policies_and_conditions}}
+	</div>
+	{{/store.policies_and_conditions}}
+
+	{{#store.footer_imprint}}
+	<div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
+		{{store.footer_imprint}}
+	</div>
+	{{/store.footer_imprint}}
+	{{^store.footer_imprint}}
+	{{^customer.name}}
+	<div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
+		Thank you for shopping with us!
+	</div>
+	{{/customer.name}}
+	{{#customer.name}}
+	<div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
+		Thank you, {{customer.name}}!
+	</div>
+	{{/customer.name}}
+	{{/store.footer_imprint}}
 
 </div>
