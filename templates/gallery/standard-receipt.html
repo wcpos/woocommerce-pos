@@ -39,22 +39,22 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<!-- Order Meta -->
 	<div style="margin-bottom: 20px;">
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">Order</span>
+			<span style="color: #555;">{{i18n.order}}</span>
 			<span>#{{meta.order_number}}</span>
 		</div>
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">Date</span>
+			<span style="color: #555;">{{i18n.date}}</span>
 			<span>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
 		</div>
 		{{#cashier.name}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">Cashier</span>
+			<span style="color: #555;">{{i18n.cashier}}</span>
 			<span>{{cashier.name}}</span>
 		</div>
 		{{/cashier.name}}
 		{{#customer.name}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">Customer</span>
+			<span style="color: #555;">{{i18n.customer}}</span>
 			<span>{{customer.name}}</span>
 		</div>
 		{{/customer.name}}
@@ -101,7 +101,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{/discounts}}
 
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">Subtotal</span>
+			<span style="color: #555;">{{i18n.subtotal}}</span>
 			<span>{{totals.subtotal_incl}}</span>
 		</div>
 
@@ -114,7 +114,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 		<!-- Grand Total -->
 		<div style="display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 18px; padding-top: 10px; border-top: 2px solid #333; margin-top: 10px;">
-			<span>Total</span>
+			<span>{{i18n.total}}</span>
 			<span>{{totals.grand_total_incl}}</span>
 		</div>
 	</div>
@@ -131,13 +131,13 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</div>
 		{{#tendered}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
-			<span style="padding-left: 8px;">Tendered</span>
+			<span style="padding-left: 8px;">{{i18n.tendered}}</span>
 			<span>{{tendered}}</span>
 		</div>
 		{{/tendered}}
 		{{#change}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
-			<span style="padding-left: 8px;">Change</span>
+			<span style="padding-left: 8px;">{{i18n.change}}</span>
 			<span>{{change}}</span>
 		</div>
 		{{/change}}
@@ -153,7 +153,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 	{{^store.footer_imprint}}
 	{{^customer.name}}
 	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
-		Thank you for your purchase!
+		{{i18n.thank_you_purchase}}
 	</div>
 	{{/customer.name}}
 	{{#customer.name}}
