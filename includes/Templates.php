@@ -15,6 +15,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WP_Query;
+use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 
 /**
  * Templates class.
@@ -880,10 +881,13 @@ class Templates {
 			return new \WP_Error( 'invalid_gallery_key', __( 'Gallery template not found.', 'woocommerce-pos' ) );
 		}
 
+		// Translate interpolated phrases (text mixed with Mustache variables) for the current locale.
+		$content = Receipt_I18n_Labels::translate_interpolated_phrases( $template['content'] );
+
 		$post_id = wp_insert_post(
 			array(
 				'post_title'   => $template['title'],
-				'post_content' => $template['content'],
+				'post_content' => $content,
 				'post_status'  => 'publish',
 				'post_type'    => 'wcpos_template',
 			),
@@ -923,7 +927,7 @@ class Templates {
 
 		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
 		if ( \in_array( $engine, self::OFFLINE_CAPABLE_ENGINES, true ) ) {
-			if ( ! self::save_raw_post_content( $post_id, $template['content'] ) ) {
+			if ( ! self::save_raw_post_content( $post_id, $content ) ) {
 				wp_delete_post( $post_id, true );
 
 				return new \WP_Error(
