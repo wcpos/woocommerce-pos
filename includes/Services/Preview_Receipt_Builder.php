@@ -297,6 +297,7 @@ class Preview_Receipt_Builder {
 			'payments'           => $payments,
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
+			'i18n'               => Receipt_I18n_Labels::get_labels(),
 		);
 	}
 
