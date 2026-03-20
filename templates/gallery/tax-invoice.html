@@ -27,7 +27,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 			{{/store.email}}
 		</div>
 		<div style="text-align: right;">
-			<div style="font-size: 24px; font-weight: 700; color: #1a56db; text-transform: uppercase;">Tax Invoice</div>
+			<div style="font-size: 24px; font-weight: 700; color: #1a56db; text-transform: uppercase;">{{i18n.tax_invoice}}</div>
 			{{#store.tax_id}}
 			<div style="font-size: 13px; font-weight: 600; margin-top: 4px; padding: 4px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; display: inline-block;">Tax ID: {{store.tax_id}}</div>
 			{{/store.tax_id}}
@@ -37,22 +37,22 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<!-- Info bar -->
 	<div style="display: flex; gap: 40px; margin-bottom: 24px; padding: 16px; background: #f9fafb; border-radius: 6px;">
 		<div>
-			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Invoice No.</div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">{{i18n.invoice_no}}</div>
 			<div style="font-weight: 600;">#{{meta.order_number}}</div>
 		</div>
 		<div>
-			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Date</div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">{{i18n.date}}</div>
 			<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
 		</div>
 		{{#customer.name}}
 		<div>
-			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Customer</div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">{{i18n.customer}}</div>
 			<div>{{customer.name}}</div>
 		</div>
 		{{/customer.name}}
 		{{#customer.tax_id}}
 		<div>
-			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Customer Tax ID</div>
+			<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">{{i18n.customer_tax_id}}</div>
 			<div>{{customer.tax_id}}</div>
 		</div>
 		{{/customer.tax_id}}
@@ -61,7 +61,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<!-- Billing address -->
 	{{#customer.billing_address.address_1}}
 	<div style="margin-bottom: 24px; font-size: 12px;">
-		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">Billing Address</div>
+		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 4px;">{{i18n.billing_address}}</div>
 		<div>{{customer.billing_address.address_1}}</div>
 		{{#customer.billing_address.address_2}}<div>{{customer.billing_address.address_2}}</div>{{/customer.billing_address.address_2}}
 		<div>{{customer.billing_address.city}} {{customer.billing_address.postcode}}</div>
@@ -73,10 +73,10 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
 		<thead>
 			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Item</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Qty</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Unit (excl.)</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Total (excl.)</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.item}}</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.qty}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.unit_excl}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.total_excl}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -95,7 +95,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<div style="display: flex; justify-content: flex-end;">
 		<div style="width: 320px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-				<span style="color: #555;">Subtotal (excl. tax)</span>
+				<span style="color: #555;">{{i18n.subtotal_excl_tax}}</span>
 				<span>{{totals.subtotal_excl}}</span>
 			</div>
 
@@ -125,14 +125,14 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<!-- Tax summary -->
 	{{#has_tax_summary}}
 	<div style="margin-top: 16px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;">
-		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 8px; font-weight: 600;">Tax Summary</div>
+		<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 8px; font-weight: 600;">{{i18n.tax_summary}}</div>
 		<table style="width: 100%; border-collapse: collapse; font-size: 12px;">
 			<thead>
 				<tr style="border-bottom: 1px solid #e5e7eb;">
-					<th style="text-align: left; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">Tax</th>
-					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">Taxable (excl.)</th>
-					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">Tax Amount</th>
-					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">Taxable (incl.)</th>
+					<th style="text-align: left; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">{{i18n.tax}}</th>
+					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">{{i18n.taxable_excl}}</th>
+					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">{{i18n.tax_amount}}</th>
+					<th style="text-align: right; padding: 4px 0; font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600;">{{i18n.taxable_incl}}</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -153,11 +153,11 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<div style="display: flex; justify-content: flex-end; margin-top: 16px;">
 		<div style="width: 320px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-				<span style="color: #555;">Total Tax</span>
+				<span style="color: #555;">{{i18n.total_tax}}</span>
 				<span>{{totals.tax_total}}</span>
 			</div>
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333;">
-				<span>Grand Total (incl. tax)</span>
+				<span>{{i18n.grand_total_incl_tax}}</span>
 				<span>{{totals.grand_total_incl}}</span>
 			</div>
 		</div>
@@ -174,7 +174,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	<!-- Customer note -->
 	{{#meta.customer_note}}
 	<div style="margin-top: 20px; padding: 12px 16px; background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px;">
-		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px; font-weight: 600;">Customer Note</div>
+		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px; font-weight: 600;">{{i18n.customer_note}}</div>
 		<div style="color: #78350f; white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
@@ -192,7 +192,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #999; text-align: center;">
-		This is a tax invoice. Please retain for your records.
+		{{i18n.tax_invoice_retain}}
 	</div>
 	{{/store.footer_imprint}}
 
