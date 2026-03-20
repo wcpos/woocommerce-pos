@@ -32,7 +32,7 @@ Includes validity placeholder and terms.
 
 	{{#customer.name}}
 	<div style="margin-bottom: 24px; padding: 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;">
-		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px;">Prepared For</div>
+		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px;">{{i18n.prepared_for}}</div>
 		<div style="font-weight: 600;">{{customer.name}}</div>
 		{{#customer.billing_address.address_1}}
 		<div style="font-size: 12px; color: #555; margin-top: 4px;">
@@ -103,9 +103,7 @@ Includes validity placeholder and terms.
 	<div style="margin-top: 32px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px;">
 		<div style="font-weight: 600; margin-bottom: 8px;">{{i18n.terms_and_conditions}}</div>
 		<div style="color: #555; line-height: 1.6;">
-			This quote is valid for 30 days from the date of issue.
-			Prices are subject to change after the validity period.
-			This is not a receipt or confirmation of purchase.
+			{{i18n.quote_validity}}
 		</div>
 	</div>
 	{{/store.policies_and_conditions}}
@@ -117,7 +115,7 @@ Includes validity placeholder and terms.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-		This is a quote, not a receipt
+		{{i18n.quote_not_receipt}}
 	</div>
 	{{/store.footer_imprint}}
 

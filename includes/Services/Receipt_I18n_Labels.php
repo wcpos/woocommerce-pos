@@ -36,6 +36,8 @@ class Receipt_I18n_Labels {
 			'cashier'                => __( 'Cashier', 'woocommerce-pos' ),
 			'customer'               => __( 'Customer', 'woocommerce-pos' ),
 			'customer_tax_id'        => __( 'Customer Tax ID', 'woocommerce-pos' ),
+			'prepared_for'           => __( 'Prepared For', 'woocommerce-pos' ),
+			'processed_by'           => __( 'Processed by', 'woocommerce-pos' ),
 
 			// Addresses.
 			'bill_to'                => __( 'Bill To', 'woocommerce-pos' ),
@@ -95,6 +97,9 @@ class Receipt_I18n_Labels {
 			'thank_you_business'     => __( 'Thank you for your business.', 'woocommerce-pos' ),
 			'tax_invoice_retain'     => __( 'This is a tax invoice. Please retain for your records.', 'woocommerce-pos' ),
 			'gift_return_policy'     => __( 'Items may be returned or exchanged within 30 days with this receipt.', 'woocommerce-pos' ),
+			'quote_validity'         => __( 'This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase.', 'woocommerce-pos' ),
+			'quote_not_receipt'      => __( 'This is a quote, not a receipt', 'woocommerce-pos' ),
+			'return_retain_receipt'  => __( 'Please retain this receipt for your records.', 'woocommerce-pos' ),
 
 			// Thermal / kitchen.
 			'kitchen'                => __( 'KITCHEN', 'woocommerce-pos' ),

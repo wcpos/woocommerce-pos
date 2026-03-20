@@ -31,7 +31,7 @@ and the payment method used for the refund.
 	</div>
 	{{#cashier.name}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Processed by</span>
+		<span style="color: #555;">{{i18n.processed_by}}</span>
 		<span>{{cashier.name}}</span>
 	</div>
 	{{/cashier.name}}
@@ -92,7 +92,7 @@ and the payment method used for the refund.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
-		Please retain this receipt for your records.
+		{{i18n.return_retain_receipt}}
 	</div>
 	{{/store.footer_imprint}}
 
