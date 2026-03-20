@@ -38,22 +38,22 @@ customer notes, and all available totals.
 
 	<!-- Order meta -->
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Order</span>
+		<span style="color: #555;">{{i18n.order}}</span>
 		<span>#{{meta.order_number}}</span>
 	</div>
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Date</span>
+		<span style="color: #555;">{{i18n.date}}</span>
 		<span>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
 	</div>
 	{{#cashier.name}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Cashier</span>
+		<span style="color: #555;">{{i18n.cashier}}</span>
 		<span>{{cashier.name}}</span>
 	</div>
 	{{/cashier.name}}
 	{{#customer.name}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Customer</span>
+		<span style="color: #555;">{{i18n.customer}}</span>
 		<span>{{customer.name}}</span>
 	</div>
 	{{/customer.name}}
@@ -61,7 +61,7 @@ customer notes, and all available totals.
 	<!-- Billing address -->
 	{{#customer.billing_address.address_1}}
 	<div style="margin-top: 8px; padding: 10px; background: #f8f8f8; border-radius: 4px; font-size: 11px; color: #555;">
-		<div style="font-weight: 700; margin-bottom: 4px;">Billing Address</div>
+		<div style="font-weight: 700; margin-bottom: 4px;">{{i18n.billing_address}}</div>
 		<div>{{customer.billing_address.address_1}}</div>
 		{{#customer.billing_address.address_2}}<div>{{customer.billing_address.address_2}}</div>{{/customer.billing_address.address_2}}
 		<div>{{customer.billing_address.city}} {{customer.billing_address.postcode}}</div>
@@ -124,7 +124,7 @@ customer notes, and all available totals.
 
 	<!-- Subtotal -->
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Subtotal</span>
+		<span style="color: #555;">{{i18n.subtotal}}</span>
 		<span>{{totals.subtotal_incl}}</span>
 	</div>
 
@@ -145,7 +145,7 @@ customer notes, and all available totals.
 
 	<!-- Grand total -->
 	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #333; margin-top: 8px;">
-		<span>Total</span>
+		<span>{{i18n.total}}</span>
 		<span>{{totals.grand_total_incl}}</span>
 	</div>
 
@@ -161,13 +161,13 @@ customer notes, and all available totals.
 		</div>
 		{{#tendered}}
 		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 12px;">
-			<span>Tendered</span>
+			<span>{{i18n.tendered}}</span>
 			<span>{{tendered}}</span>
 		</div>
 		{{/tendered}}
 		{{#change}}
 		<div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; padding-left: 12px;">
-			<span>Change</span>
+			<span>{{i18n.change}}</span>
 			<span>{{change}}</span>
 		</div>
 		{{/change}}
@@ -182,7 +182,7 @@ customer notes, and all available totals.
 	<!-- Paid total -->
 	{{#totals.paid_total}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Paid</span>
+		<span style="color: #555;">{{i18n.paid}}</span>
 		<span>{{totals.paid_total}}</span>
 	</div>
 	{{/totals.paid_total}}
@@ -190,7 +190,7 @@ customer notes, and all available totals.
 	<!-- Change total -->
 	{{#totals.change_total}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Change</span>
+		<span style="color: #555;">{{i18n.change}}</span>
 		<span>{{totals.change_total}}</span>
 	</div>
 	{{/totals.change_total}}
@@ -198,7 +198,7 @@ customer notes, and all available totals.
 	<!-- Customer note -->
 	{{#meta.customer_note}}
 	<div style="margin-top: 12px; padding: 10px; background: #fefce8; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; color: #92400e;">
-		<div style="font-weight: 700; margin-bottom: 4px; font-size: 11px;">Customer Note</div>
+		<div style="font-weight: 700; margin-bottom: 4px; font-size: 11px;">{{i18n.customer_note}}</div>
 		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
@@ -225,7 +225,7 @@ customer notes, and all available totals.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #999;">
-		Thank you for your purchase!
+		{{i18n.thank_you_purchase}}
 	</div>
 	{{/store.footer_imprint}}
 
