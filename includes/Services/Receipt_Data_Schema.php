@@ -33,6 +33,7 @@ class Receipt_Data_Schema {
 		'payments',
 		'fiscal',
 		'presentation_hints',
+		'i18n',
 	);
 
 	/**
@@ -530,6 +531,37 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
+			// Note: field_tree is for the template editor picker — include commonly used keys.
+			// Full list is in Receipt_I18n_Labels::get_labels().
+			'i18n'        => array(
+				'label'  => __( 'Labels (i18n)', 'woocommerce-pos' ),
+				'fields' => array(
+					'order'    => array(
+						'type'  => 'string',
+						'label' => __( 'Order', 'woocommerce-pos' ),
+					),
+					'date'     => array(
+						'type'  => 'string',
+						'label' => __( 'Date', 'woocommerce-pos' ),
+					),
+					'cashier'  => array(
+						'type'  => 'string',
+						'label' => __( 'Cashier', 'woocommerce-pos' ),
+					),
+					'customer' => array(
+						'type'  => 'string',
+						'label' => __( 'Customer', 'woocommerce-pos' ),
+					),
+					'subtotal' => array(
+						'type'  => 'string',
+						'label' => __( 'Subtotal', 'woocommerce-pos' ),
+					),
+					'total'    => array(
+						'type'  => 'string',
+						'label' => __( 'Total', 'woocommerce-pos' ),
+					),
+				),
+			),
 		);
 	}
 
@@ -699,6 +731,7 @@ class Receipt_Data_Schema {
 				'rounding_mode'           => 'no',
 				'locale'                  => function_exists( 'get_locale' ) ? get_locale() : 'en_US',
 			),
+			'i18n'               => Receipt_I18n_Labels::get_labels(),
 		);
 	}
 }
