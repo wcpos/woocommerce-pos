@@ -20,7 +20,7 @@
   {{/lines}}
   <line />
   <row>
-    <col width="24">Subtotal</col>
+    <col width="24">{{i18n.subtotal}}</col>
     <col width="24" align="right">{{totals.subtotal_incl}}</col>
   </row>
   {{#shipping}}
@@ -48,12 +48,12 @@
   </row>
   {{/tax_summary}}
   <row>
-    <col width="24">Tax</col>
+    <col width="24">{{i18n.tax}}</col>
     <col width="24" align="right">{{totals.tax_total}}</col>
   </row>
   <line style="double" />
   <row>
-    <col width="24"><bold>TOTAL</bold></col>
+    <col width="24"><bold>{{i18n.total}}</bold></col>
     <col width="24" align="right"><bold>{{totals.grand_total_incl}}</bold></col>
   </row>
   <line />
@@ -64,13 +64,13 @@
   </row>
   {{#tendered}}
   <row>
-    <col width="24">  Tendered</col>
+    <col width="24">  {{i18n.tendered}}</col>
     <col width="24" align="right">{{tendered}}</col>
   </row>
   {{/tendered}}
   {{#change}}
   <row>
-    <col width="24">  Change</col>
+    <col width="24">  {{i18n.change}}</col>
     <col width="24" align="right">{{change}}</col>
   </row>
   {{/change}}
@@ -81,7 +81,7 @@
   </align>
   <feed lines="1" />
   <align mode="center">
-    <text>Thank you!</text>
+    <text>{{i18n.thank_you}}</text>
   </align>
   <cut />
 </receipt>
