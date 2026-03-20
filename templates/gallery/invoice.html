@@ -29,7 +29,7 @@ customer note, and payment info.
 			{{/store.tax_id}}
 		</div>
 		<div style="text-align: right;">
-			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Invoice</div>
+			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.invoice}}</div>
 			<div style="font-size: 13px; margin-top: 8px;">
 				<div>#{{meta.order_number}}</div>
 				<div style="color: #666;">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
@@ -40,7 +40,7 @@ customer note, and payment info.
 	<div style="display: flex; gap: 40px; margin-bottom: 32px;">
 		{{#customer.billing_address.address_1}}
 		<div style="flex: 1;">
-			<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">Bill To</div>
+			<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">{{i18n.bill_to}}</div>
 			{{#customer.name}}<div style="font-weight: 600;">{{customer.name}}</div>{{/customer.name}}
 			<div style="font-size: 12px; color: #555;">
 				<div>{{customer.billing_address.address_1}}</div>
@@ -53,7 +53,7 @@ customer note, and payment info.
 
 		{{#customer.shipping_address.address_1}}
 		<div style="flex: 1;">
-			<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">Ship To</div>
+			<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">{{i18n.ship_to}}</div>
 			<div style="font-size: 12px; color: #555;">
 				<div>{{customer.shipping_address.address_1}}</div>
 				{{#customer.shipping_address.address_2}}<div>{{customer.shipping_address.address_2}}</div>{{/customer.shipping_address.address_2}}
@@ -67,12 +67,12 @@ customer note, and payment info.
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
 		<thead>
 			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Item</th>
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">SKU</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Qty</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Unit Price</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Discount</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.item}}</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.sku}}</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.qty}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.unit_price}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.discount}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.total}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -92,7 +92,7 @@ customer note, and payment info.
 	<div style="display: flex; justify-content: flex-end;">
 		<div style="width: 280px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-				<span style="color: #555;">Subtotal</span>
+				<span style="color: #555;">{{i18n.subtotal}}</span>
 				<span>{{totals.subtotal_incl}}</span>
 			</div>
 
@@ -125,7 +125,7 @@ customer note, and payment info.
 			{{/tax_summary}}
 
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
-				<span>Total</span>
+				<span>{{i18n.total}}</span>
 				<span>{{totals.grand_total_incl}}</span>
 			</div>
 
@@ -140,7 +140,7 @@ customer note, and payment info.
 
 	{{#meta.customer_note}}
 	<div style="margin-top: 24px; padding: 12px 16px; background: #fefce8; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; color: #854d0e;">
-		<div style="font-weight: 600; margin-bottom: 4px;">Customer Note:</div>
+		<div style="font-weight: 600; margin-bottom: 4px;">{{i18n.customer_note}}:</div>
 		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
@@ -158,7 +158,7 @@ customer note, and payment info.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="margin-top: 48px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
-		Thank you for your business.
+		{{i18n.thank_you_business}}
 	</div>
 	{{/store.footer_imprint}}
 
