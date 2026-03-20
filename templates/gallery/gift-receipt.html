@@ -12,7 +12,7 @@ as a gift message. Includes order reference for returns.
 			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 160px; height: auto;">
 		</div>
 		{{/store.logo}}
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px;">Gift Receipt</div>
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px;">{{i18n.gift_receipt}}</div>
 		<div style="font-size: 22px; font-weight: 400; font-style: italic;">{{store.name}}</div>
 	</div>
 
@@ -25,7 +25,7 @@ as a gift message. Includes order reference for returns.
 
 	{{#meta.customer_note}}
 	<div style="margin: 24px 0; padding: 20px; background: #faf8f5; border: 1px dotted #d4c8b8; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">A message for you</div>
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">{{i18n.a_message_for_you}}</div>
 		{{meta.customer_note}}
 	</div>
 	{{/meta.customer_note}}
@@ -41,7 +41,7 @@ as a gift message. Includes order reference for returns.
 		<div style="margin-bottom: 8px;">{{store.footer_imprint}}</div>
 		{{/store.footer_imprint}}
 		{{^store.footer_imprint}}
-		<div style="margin-bottom: 8px;">Items may be returned or exchanged within 30 days with this receipt.</div>
+		<div style="margin-bottom: 8px;">{{i18n.gift_return_policy}}</div>
 		{{/store.footer_imprint}}
 		<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}} &middot; #{{meta.order_number}}</div>
 	</div>

@@ -12,7 +12,7 @@ and the payment method used for the refund.
 			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 160px; height: auto;">
 		</div>
 		{{/store.logo}}
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #dc2626; font-weight: 600; margin-bottom: 6px;">Credit Note</div>
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #dc2626; font-weight: 600; margin-bottom: 6px;">{{i18n.credit_note}}</div>
 		<div style="font-size: 20px; font-weight: 700;">{{store.name}}</div>
 		{{#store.address_lines}}
 		<div style="font-size: 11px; color: #666;">{{.}}</div>
@@ -22,11 +22,11 @@ and the payment method used for the refund.
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Reference</span>
+		<span style="color: #555;">{{i18n.reference}}</span>
 		<span>#{{meta.order_number}}</span>
 	</div>
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Date</span>
+		<span style="color: #555;">{{i18n.date}}</span>
 		<span>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
 	</div>
 	{{#cashier.name}}
@@ -37,14 +37,14 @@ and the payment method used for the refund.
 	{{/cashier.name}}
 	{{#customer.name}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Customer</span>
+		<span style="color: #555;">{{i18n.customer}}</span>
 		<span>{{customer.name}}</span>
 	</div>
 	{{/customer.name}}
 
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
-	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">Returned Items</div>
+	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">{{i18n.returned_items}}</div>
 
 	{{#lines}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
@@ -63,7 +63,7 @@ and the payment method used for the refund.
 	{{/tax_summary}}
 
 	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #dc2626; margin-top: 8px; color: #dc2626;">
-		<span>Refund Total</span>
+		<span>{{i18n.total_refunded}}</span>
 		<span>{{totals.grand_total_incl}}</span>
 	</div>
 

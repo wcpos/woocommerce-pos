@@ -19,7 +19,7 @@ Shipping address prominent for warehouse use.
 			{{/store.address_lines}}
 		</div>
 		<div style="text-align: right;">
-			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Packing Slip</div>
+			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.packing_slip}}</div>
 			<div style="font-size: 12px; margin-top: 8px; color: #666;">
 				<div>Order #{{meta.order_number}}</div>
 				<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
@@ -29,7 +29,7 @@ Shipping address prominent for warehouse use.
 
 	{{#customer.shipping_address.address_1}}
 	<div style="margin-bottom: 24px; padding: 16px; border: 2px solid #333; border-radius: 6px;">
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">Ship To</div>
+		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">{{i18n.ship_to}}</div>
 		{{#customer.name}}<div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">{{customer.name}}</div>{{/customer.name}}
 		<div style="font-size: 13px;">
 			<div>{{customer.shipping_address.address_1}}</div>
@@ -43,10 +43,10 @@ Shipping address prominent for warehouse use.
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
 		<thead>
 			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Item</th>
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">SKU</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Qty</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; width: 60px;">Packed</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.item}}</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.sku}}</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.qty}}</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; width: 60px;">{{i18n.packed}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -65,7 +65,7 @@ Shipping address prominent for warehouse use.
 
 	{{#meta.customer_note}}
 	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px;">
-		<div style="font-weight: 600; margin-bottom: 4px;">Customer Note:</div>
+		<div style="font-weight: 600; margin-bottom: 4px;">{{i18n.customer_note}}:</div>
 		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
 	</div>
 	{{/meta.customer_note}}
