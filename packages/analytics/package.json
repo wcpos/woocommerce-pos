@@ -16,8 +16,8 @@
     "@wordpress/url": "^4.39.0",
     "classnames": "^2.5.1",
     "lodash": "^4.17.23",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "react-error-boundary": "^6.1.0"
   },
   "devDependencies": {
