@@ -29,7 +29,7 @@ payment details with tendered/change.
 			{{/store.tax_id}}
 		</div>
 		<div style="text-align: right;">
-			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">Receipt</div>
+			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.receipt}}</div>
 			<div style="font-size: 13px; margin-top: 8px;">
 				<div>#{{meta.order_number}}</div>
 				<div style="color: #666;">{{meta.created_at_gmt}}</div>
@@ -46,10 +46,10 @@ payment details with tendered/change.
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
 		<thead>
 			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Item</th>
-				<th style="width: 56px; text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Qty</th>
-				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Unit Price</th>
-				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">Total</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.item}}</th>
+				<th style="width: 56px; text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">{{i18n.qty}}</th>
+				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">{{i18n.unit_price}}</th>
+				<th style="width: 96px; text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">{{i18n.total}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -67,7 +67,7 @@ payment details with tendered/change.
 	<div style="display: flex; justify-content: flex-end;">
 		<div style="width: 280px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-				<span style="color: #555;">Subtotal</span>
+				<span style="color: #555;">{{i18n.subtotal}}</span>
 				<span>{{totals.subtotal_excl}}</span>
 			</div>
 
@@ -100,7 +100,7 @@ payment details with tendered/change.
 			{{/tax_summary}}
 
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
-				<span>Total</span>
+				<span>{{i18n.total}}</span>
 				<span>{{totals.grand_total_incl}}</span>
 			</div>
 
@@ -111,13 +111,13 @@ payment details with tendered/change.
 			</div>
 			{{#tendered}}
 			<div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-				<span>Tendered</span>
+				<span>{{i18n.tendered}}</span>
 				<span>{{tendered}}</span>
 			</div>
 			{{/tendered}}
 			{{#change}}
 			<div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: #888; padding-left: 12px;">
-				<span>Change</span>
+				<span>{{i18n.change}}</span>
 				<span>{{change}}</span>
 			</div>
 			{{/change}}
@@ -145,7 +145,7 @@ payment details with tendered/change.
 	{{^store.footer_imprint}}
 	{{^customer.name}}
 	<div style="margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; font-size: 11px; color: #999; text-align: center;">
-		Thank you for shopping with us!
+		{{i18n.thank_you_shopping}}
 	</div>
 	{{/customer.name}}
 	{{#customer.name}}

@@ -1,6 +1,6 @@
 <receipt paper-width="48">
   <align mode="center">
-    <bold><size width="2" height="2">KITCHEN</size></bold>
+    <bold><size width="2" height="2">{{i18n.kitchen}}</size></bold>
   </align>
   <line style="double" />
   <row>

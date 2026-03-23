@@ -22,7 +22,7 @@ Includes validity placeholder and terms.
 			{{/store.phone}}
 		</div>
 		<div style="text-align: right;">
-			<div style="font-size: 28px; font-weight: 300; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px;">Quote</div>
+			<div style="font-size: 28px; font-weight: 300; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px;">{{i18n.quote}}</div>
 			<div style="font-size: 12px; margin-top: 8px; color: #666;">
 				<div>Ref: #{{meta.order_number}}</div>
 				<div>Date: {{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
@@ -32,7 +32,7 @@ Includes validity placeholder and terms.
 
 	{{#customer.name}}
 	<div style="margin-bottom: 24px; padding: 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;">
-		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px;">Prepared For</div>
+		<div style="font-size: 11px; text-transform: uppercase; color: #92400e; margin-bottom: 4px;">{{i18n.prepared_for}}</div>
 		<div style="font-weight: 600;">{{customer.name}}</div>
 		{{#customer.billing_address.address_1}}
 		<div style="font-size: 12px; color: #555; margin-top: 4px;">
@@ -45,10 +45,10 @@ Includes validity placeholder and terms.
 	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
 		<thead>
 			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Item</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Qty</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Unit Price</th>
-				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">Total</th>
+				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.item}}</th>
+				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.qty}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.unit_price}}</th>
+				<th style="text-align: right; padding: 8px 4px; font-size: 11px; text-transform: uppercase;">{{i18n.total}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -66,7 +66,7 @@ Includes validity placeholder and terms.
 	<div style="display: flex; justify-content: flex-end;">
 		<div style="width: 280px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-				<span style="color: #555;">Subtotal</span>
+				<span style="color: #555;">{{i18n.subtotal}}</span>
 				<span>{{totals.subtotal_incl}}</span>
 			</div>
 
@@ -85,7 +85,7 @@ Includes validity placeholder and terms.
 			{{/tax_summary}}
 
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
-				<span>Total</span>
+				<span>{{i18n.total}}</span>
 				<span>{{totals.grand_total_incl}}</span>
 			</div>
 		</div>
@@ -93,7 +93,7 @@ Includes validity placeholder and terms.
 
 	{{#store.policies_and_conditions}}
 	<div style="margin-top: 32px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px;">
-		<div style="font-weight: 600; margin-bottom: 8px;">Terms &amp; Conditions</div>
+		<div style="font-weight: 600; margin-bottom: 8px;">{{i18n.terms_and_conditions}}</div>
 		<div style="color: #555; line-height: 1.6; white-space: pre-wrap;">
 			{{store.policies_and_conditions}}
 		</div>
@@ -101,11 +101,9 @@ Includes validity placeholder and terms.
 	{{/store.policies_and_conditions}}
 	{{^store.policies_and_conditions}}
 	<div style="margin-top: 32px; padding: 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px;">
-		<div style="font-weight: 600; margin-bottom: 8px;">Terms &amp; Conditions</div>
+		<div style="font-weight: 600; margin-bottom: 8px;">{{i18n.terms_and_conditions}}</div>
 		<div style="color: #555; line-height: 1.6;">
-			This quote is valid for 30 days from the date of issue.
-			Prices are subject to change after the validity period.
-			This is not a receipt or confirmation of purchase.
+			{{i18n.quote_validity}}
 		</div>
 	</div>
 	{{/store.policies_and_conditions}}
@@ -117,7 +115,7 @@ Includes validity placeholder and terms.
 	{{/store.footer_imprint}}
 	{{^store.footer_imprint}}
 	<div style="text-align: center; margin-top: 24px; font-size: 11px; color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
-		This is a quote, not a receipt
+		{{i18n.quote_not_receipt}}
 	</div>
 	{{/store.footer_imprint}}
 

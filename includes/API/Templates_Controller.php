@@ -892,6 +892,9 @@ class Templates_Controller extends WP_REST_Controller {
 			$currency       = $receipt_data['meta']['currency'] ?? 'USD';
 			$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
+			// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
+			$formatted_data['t'] = true;
+
 			return rest_ensure_response(
 				array(
 					'engine'           => 'thermal',
@@ -987,6 +990,9 @@ class Templates_Controller extends WP_REST_Controller {
 
 		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
 		$content = preg_replace( '/<!--.*?-->/s', '', $content );
+
+		// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
+		$formatted_data['t'] = true;
 
 		$flags    = ENT_QUOTES | ENT_SUBSTITUTE;
 		$mustache = new \Mustache\Engine(

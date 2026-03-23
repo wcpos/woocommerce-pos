@@ -46,6 +46,10 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		// Add boolean helpers for array sections so templates can gate wrappers.
 		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
+		// Safety net: if a template uses {{#t}}...{{/t}} markers (from gallery source),
+		// setting t = true makes Mustache pass the inner text through unchanged.
+		$formatted_data['t'] = true;
+
 		// Strip HTML comments — wp_kses_post removes the delimiters but leaves the text.
 		$content = preg_replace( '/<!--.*?-->/s', '', $content );
 

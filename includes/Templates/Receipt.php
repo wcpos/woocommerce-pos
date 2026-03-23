@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
@@ -361,6 +362,10 @@ class Receipt {
 		if ( 'fiscal' === $mode ) {
 			$snapshot = $snapshot_store->get_snapshot( $order->get_id() );
 			if ( $snapshot ) {
+				// Backfill i18n labels for pre-upgrade snapshots that lack them.
+				if ( ! isset( $snapshot['i18n'] ) ) {
+					$snapshot['i18n'] = Receipt_I18n_Labels::get_labels();
+				}
 				return $snapshot;
 			}
 

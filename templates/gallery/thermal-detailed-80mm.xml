@@ -7,22 +7,22 @@
   </align>
   <line />
   <row>
-    <col width="16">Order:</col>
+    <col width="16">{{i18n.order}}:</col>
     <col width="32" align="right">{{meta.order_number}}</col>
   </row>
   <row>
-    <col width="16">Date:</col>
+    <col width="16">{{i18n.date}}:</col>
     <col width="32" align="right">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</col>
   </row>
   {{#cashier.name}}
   <row>
-    <col width="16">Cashier:</col>
+    <col width="16">{{i18n.cashier}}:</col>
     <col width="32" align="right">{{cashier.name}}</col>
   </row>
   {{/cashier.name}}
   <line />
   {{#customer.name}}
-  <bold><text>Customer</text></bold>
+  <bold><text>{{i18n.customer}}</text></bold>
   <text>{{customer.name}}</text>
   {{#customer.billing_address.email}}
   <text>{{customer.billing_address.email}}</text>
@@ -30,9 +30,9 @@
   <line />
   {{/customer.name}}
   <row>
-    <col width="24"><bold>Item</bold></col>
-    <col width="8" align="right"><bold>Qty</bold></col>
-    <col width="16" align="right"><bold>Total</bold></col>
+    <col width="24"><bold>{{i18n.item}}</bold></col>
+    <col width="8" align="right"><bold>{{i18n.qty}}</bold></col>
+    <col width="16" align="right"><bold>{{i18n.total}}</bold></col>
   </row>
   <line />
   {{#lines}}
@@ -48,12 +48,12 @@
   {{/lines}}
   {{#meta.customer_note}}
   <line />
-  <bold><text>Note</text></bold>
+  <bold><text>{{i18n.customer_note}}</text></bold>
   <text>{{meta.customer_note}}</text>
   {{/meta.customer_note}}
   <line />
   <row>
-    <col width="24">Subtotal</col>
+    <col width="24">{{i18n.subtotal}}</col>
     <col width="24" align="right">{{totals.subtotal_incl}}</col>
   </row>
   {{#discounts}}
@@ -82,12 +82,12 @@
   </row>
   {{/tax_summary}}
   <row>
-    <col width="24">Tax Total</col>
+    <col width="24">{{i18n.total_tax}}</col>
     <col width="24" align="right">{{totals.tax_total}}</col>
   </row>
   <line style="double" />
   <row>
-    <col width="24"><bold><size width="2">TOTAL</size></bold></col>
+    <col width="24"><bold><size width="2">{{i18n.total}}</size></bold></col>
     <col width="24" align="right"><bold><size width="2">{{totals.grand_total_incl}}</size></bold></col>
   </row>
   <line style="double" />
@@ -98,13 +98,13 @@
   </row>
   {{#tendered}}
   <row>
-    <col width="24">  Tendered</col>
+    <col width="24">  {{i18n.tendered}}</col>
     <col width="24" align="right">{{tendered}}</col>
   </row>
   {{/tendered}}
   {{#change}}
   <row>
-    <col width="24">  Change</col>
+    <col width="24">  {{i18n.change}}</col>
     <col width="24" align="right">{{change}}</col>
   </row>
   {{/change}}
@@ -118,7 +118,7 @@
   </align>
   <feed lines="1" />
   <align mode="center">
-    <text>Thank you for your purchase!</text>
+    <text>{{i18n.thank_you_purchase}}</text>
   </align>
   <cut />
 </receipt>
