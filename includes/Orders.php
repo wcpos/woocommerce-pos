@@ -537,9 +537,21 @@ class Orders {
 	/**
 	 * Add the subtotal filter if not already active, and schedule its removal.
 	 *
-	 * The filter is removed on the next calculate_totals() call via
-	 * woocommerce_order_after_calculate_totals, which fires at the end of
-	 * recalculate_coupons().
+	 * The filter is active during the coupon recalculation phase so that
+	 * WC_Discounts uses the POS price as the discount base. It is removed
+	 * BEFORE calculate_totals() runs, so that:
+	 * - subtotal_tax is calculated from the stored subtotal (regular_price), not POS price
+	 * - discount_total = subtotal - total includes the POS/sale discount, not just coupon discounts
+	 *
+	 * Timeline within recalculate_coupons():
+	 *   1. activate filter (here)
+	 *   2. reset: set_total(get_subtotal()) → uses POS price ✓
+	 *   3. WC_Discounts::set_items_from_order() → uses POS price ✓
+	 *   4. apply_coupon() for each coupon → uses POS price ✓
+	 *   5. set_item_discount_amounts() → sets final totals
+	 *   6. calculate_totals(true) → woocommerce_order_before_calculate_totals fires → DEACTIVATE
+	 *   7. calculate_taxes() → uses stored subtotal (regular_price) ✓
+	 *   8. discount_total = subtotal - total → includes POS discount ✓
 	 */
 	public static function activate_pos_subtotal_filter(): void {
 		if ( has_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ) ) ) {
@@ -549,7 +561,7 @@ class Orders {
 		self::$coupon_recalculation_active = true;
 		add_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10, 2 );
 		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10, 2 );
-		add_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
+		add_action( 'woocommerce_order_before_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
 	}
 
 	/**
@@ -720,7 +732,7 @@ class Orders {
 		self::$coupon_recalculation_active = false;
 		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
 		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
-		remove_action( 'woocommerce_order_after_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
+		remove_action( 'woocommerce_order_before_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
 	}
 
 	/**
