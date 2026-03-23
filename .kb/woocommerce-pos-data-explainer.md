@@ -25,7 +25,7 @@ WooCommerce's line item model has two price fields:
 
 There is no built-in concept of "original price before a manual adjustment." When a WP Admin user edits a line item price, WooCommerce overwrites **both** subtotal and total — the original price is gone.
 
-The POS needs something different. When a cashier changes a price from $18 to $16, the POS wants to show "was $18, now $16" in the cart and on receipts. To do this, the POS uses a different convention:
+The POS needs something different. When a cashier changes a price from $18 to $16, the POS wants to show "was $18, now $16" in the cart and on receipts. To support this, the POS uses a different convention:
 
 | Field | POS meaning |
 |---|---|
