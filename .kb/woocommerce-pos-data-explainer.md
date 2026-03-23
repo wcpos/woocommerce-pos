@@ -56,7 +56,7 @@ The original/reference price per unit, taken from `product.regular_price` at the
 
 ### `tax_status`
 
-The tax status for the line item. Can be `"taxable"`, `"none"`, or `"shipping"`.
+The tax status for the line item. It can be `"taxable"`, `"none"`, or `"shipping"`.
 
 - Taken from `product.tax_status` at the time the item is added
 - Needed because the WC REST API **does not include tax_status on line items**, only on products
@@ -66,7 +66,7 @@ The tax status for the line item. Can be `"taxable"`, `"none"`, or `"shipping"`.
 
 ## Where it's set
 
-### Client side (monorepo-v2)
+### Client-side (monorepo-v2)
 
 When adding a product to the cart (`utils.ts`):
 ```ts
@@ -88,7 +88,7 @@ updatedItem = updatePosDataMeta(updatedItem, {
 });
 ```
 
-### Server side (woocommerce-pos)
+### Server-side (woocommerce-pos)
 
 The server **reads** the meta but never **writes** it. It's set by the client and sent via the REST API as part of the line item's `meta_data` array.
 
@@ -107,7 +107,7 @@ The problem: POS sets `subtotal = regular_price * qty` (e.g., $18), but the cash
 
 `Orders.php` hooks into `woocommerce_order_item_get_subtotal` during coupon recalculation. When WC reads `get_subtotal()`, the filter intercepts and returns the POS price from `_woocommerce_pos_data` instead:
 
-```
+```text
 Without filter: get_subtotal() -> $18 (stored subtotal)
 With filter:    get_subtotal() -> $16 (from pos_data.price)
 ```
@@ -122,7 +122,7 @@ The stored `subtotal` ($18) is never modified. Only the getter is filtered durin
 
 ### Visual summary
 
-```
+```text
 Product: regular_price=$18, no WC sale
 
 Cashier sets price to $16:
