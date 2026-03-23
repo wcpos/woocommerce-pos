@@ -214,16 +214,29 @@ class Receipt_I18n_Labels {
 	public static function translate_interpolated_phrases( string $content ): string {
 		$phrases = self::get_interpolated_phrases();
 
+		// Sort by key length descending to prevent substring replacement issues.
+		uksort(
+			$phrases,
+			function ( $a, $b ) {
+				return strlen( $b ) - strlen( $a );
+			}
+		);
+
 		foreach ( $phrases as $english => $config ) {
 			if ( false === strpos( $content, $english ) ) {
 				continue;
 			}
 
 			// Build the translated string with Mustache variables re-inserted.
+			// Handle both %s and %1$s numbered placeholders that translators may use.
 			$translated = $config['format'];
 			foreach ( $config['variables'] as $index => $variable ) {
-				$placeholder = 1 === count( $config['variables'] ) ? '%s' : '%' . ( $index + 1 ) . '$s';
-				$translated  = str_replace( $placeholder, $variable, $translated );
+				$numbered   = '%' . ( $index + 1 ) . '$s';
+				$translated = str_replace( $numbered, $variable, $translated );
+			}
+			// Replace any remaining positional %s (single-variable case).
+			if ( 1 === count( $config['variables'] ) ) {
+				$translated = str_replace( '%s', $config['variables'][0], $translated );
 			}
 
 			$content = str_replace( $english, $translated, $content );

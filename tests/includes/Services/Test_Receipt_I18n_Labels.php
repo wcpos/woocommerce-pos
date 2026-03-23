@@ -63,7 +63,7 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	public function test_interpolated_phrases_contain_mustache_placeholders(): void {
 		$phrases = Receipt_I18n_Labels::get_interpolated_phrases();
 
-		foreach ( $phrases as $english => $translated ) {
+		foreach ( array_keys( $phrases ) as $english ) {
 			$this->assertMatchesRegularExpression( '/\{\{/', $english, "English phrase '$english' should contain Mustache placeholder." );
 		}
 	}
@@ -72,12 +72,23 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	 * Test translate_interpolated_phrases replaces known phrases.
 	 */
 	public function test_translate_interpolated_phrases_replaces_known_phrases(): void {
+		// Force a non-English translation so we can verify replacement actually occurs.
+		$filter = function ( $translation, $text ) {
+			if ( 'Paid via %s' === $text ) {
+				return 'Payé via %s';
+			}
+			return $translation;
+		};
+		add_filter( 'gettext', $filter, 10, 2 );
+
 		$content = '<span>Paid via {{method_title}}</span>';
 		$result  = Receipt_I18n_Labels::translate_interpolated_phrases( $content );
 
-		// In English locale, should remain the same (English to English).
-		$this->assertStringContainsString( '{{method_title}}', $result );
-		$this->assertStringContainsString( 'Paid via', $result );
+		$this->assertStringContainsString( '{{method_title}}', $result, 'Mustache placeholder must be preserved.' );
+		$this->assertStringContainsString( 'Payé via', $result, 'Translation must replace English phrase.' );
+		$this->assertStringNotContainsString( 'Paid via', $result, 'Original English phrase must be replaced.' );
+
+		remove_filter( 'gettext', $filter, 10 );
 	}
 
 	/**
@@ -105,9 +116,20 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	 * Test translate_interpolated_phrases handles multiple occurrences.
 	 */
 	public function test_translate_interpolated_phrases_handles_multiple_occurrences(): void {
+		$filter = function ( $translation, $text ) {
+			if ( 'Paid via %s' === $text ) {
+				return 'Payé via %s';
+			}
+			return $translation;
+		};
+		add_filter( 'gettext', $filter, 10, 2 );
+
 		$content = '<span>Paid via {{method_title}}</span><span>Paid via {{method_title}}</span>';
 		$result  = Receipt_I18n_Labels::translate_interpolated_phrases( $content );
 
-		$this->assertSame( 2, substr_count( $result, '{{method_title}}' ) );
+		$this->assertSame( 2, substr_count( $result, '{{method_title}}' ), 'Both Mustache placeholders must be preserved.' );
+		$this->assertSame( 2, substr_count( $result, 'Payé via' ), 'Both occurrences must be translated.' );
+
+		remove_filter( 'gettext', $filter, 10 );
 	}
 }

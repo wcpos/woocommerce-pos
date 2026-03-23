@@ -88,7 +88,7 @@ All styles are inline (wp_kses_post strips <style> tags).
 		{{#payments}}
 		<div>{{method_title}} {{amount}}</div>
 		{{#tendered}}
-		<div>Tendered {{tendered}} / Change {{change}}</div>
+		<div>{{i18n.tendered}} {{tendered}} / {{i18n.change}} {{change}}</div>
 		{{/tendered}}
 		{{/payments}}
 	</div>
