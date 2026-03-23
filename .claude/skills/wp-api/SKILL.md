@@ -19,7 +19,7 @@ curl -H "X-WCPOS: 1" http://localhost:8888/wp-json/
 
 ## Authentication
 
-WCPOS uses JWT tokens, not WordPress cookies or application passwords.
+WCPOS uses JWT tokens for mobile/POS client authentication. The admin/settings frontend uses standard WordPress cookie authentication via `@wordpress/api-fetch` — no bearer token is needed for those requests.
 
 ### Token Types
 1. **Access Token**: Short-lived (30 min), used for API requests
@@ -37,7 +37,10 @@ echo json_encode($auth->generate_token_pair($user));
 ### Sending Tokens
 
 1. **Header** (preferred): `Authorization: Bearer <token>`
-2. **Query param** (fallback): `?authorization=Bearer%20<token>`
+2. **Query param** (fallback, avoid in production): `?authorization=Bearer%20<token>`
+
+> ⚠️ Query-parameter tokens may be exposed in server logs, browser history, and proxies.
+> Use only when header forwarding is unavailable, and only in controlled environments.
 
 ### Apache Authorization Header Issue
 

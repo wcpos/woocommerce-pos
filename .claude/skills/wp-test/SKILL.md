@@ -136,7 +136,7 @@ pnpm run pretest
 
 ## Test File Organization
 
-```
+```text
 tests/
 ├── bootstrap.php
 ├── includes/

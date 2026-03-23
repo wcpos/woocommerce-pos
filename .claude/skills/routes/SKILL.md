@@ -7,7 +7,7 @@ description: Use when adding new routes, modifying navigation, or understanding 
 
 The app uses [Expo Router](https://docs.expo.dev/router/introduction/) for file-based navigation. Routes are defined by the file structure in `apps/main/app/`.
 
-### Route Groups
+## Route Groups
 - `(groupName)` - Route groups organize routes without affecting the URL path
 - `[param]` - Dynamic route parameters
 - `[...param]` - Catch-all route parameters
@@ -17,7 +17,7 @@ The app uses [Expo Router](https://docs.expo.dev/router/introduction/) for file-
 Provides: SafeAreaProvider, GestureHandlerRootView, KeyboardProvider, HydrationProviders, Toaster
 
 ### Protected Routes
-```
+```text
 Stack.Protected guard={!!storeDB}
 ├── (app)     # Main app - requires authentication
 └── (auth)    # Auth screens - shown when not authenticated
@@ -36,6 +36,7 @@ Redirects to `/(app)` when `storeDB` exists.
 **Initial Route:** `(drawer)`
 
 ### App-Level Modals
+
 | Route | File | Description |
 |-------|------|-------------|
 | `/settings` | `(modals)/settings.tsx` | App settings modal |
@@ -61,6 +62,7 @@ All modals use `containedTransparentModal` presentation with fade animation.
 Responsive layouts: small screens use tabs, larger screens use columns with resizable panels.
 
 ### Tab Layout (`(tabs)/`) - Mobile
+
 | Route | Tab Icon | Description |
 |-------|----------|-------------|
 | `/` | `gifts` | Products tab |
@@ -77,6 +79,7 @@ Renders `POSProducts` and `OpenOrders` side-by-side in resizable panels.
 | `/cart/[orderId]` | Specific order cart |
 
 ### POS Modals
+
 | Route | Description |
 |-------|-------------|
 | `/cart/[orderId]/checkout` | Payment/checkout |
@@ -107,6 +110,7 @@ Renders `POSProducts` and `OpenOrders` side-by-side in resizable panels.
 - Responsive: Large screens get permanent drawer + columns. Small screens get overlay drawer + tabs.
 
 ## Special Files
+
 | File | Purpose |
 |------|---------|
 | `+html.tsx` | Custom HTML document for web builds |

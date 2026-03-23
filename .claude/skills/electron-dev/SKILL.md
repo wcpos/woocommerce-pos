@@ -41,6 +41,8 @@ git worktree add .worktrees/electron-dev -b electron-dev-session
 
 First init the submodule (checks out whatever commit the monorepo pointer references), then pull latest from electron's main. The monorepo submodule pointer is often behind — skipping the pull means you get stale electron code.
 
+Replace `<worktree-path>` below with the worktree created in step 2 (i.e., `.worktrees/electron-dev`).
+
 ```bash
 cd <worktree-path> && git submodule update --init apps/electron
 cd <worktree-path>/apps/electron && git checkout main && git pull origin main
@@ -76,16 +78,18 @@ Inline osascript drops the `cd` from the command string. Always use a temp file:
 
 ```bash
 WORKTREE_PATH="<absolute-worktree-path>"
-cat > /tmp/launch-electron-dev.sh << SCRIPT
+TEMP_SCRIPT=$(mktemp)
+cat > "$TEMP_SCRIPT" << SCRIPT
 #!/usr/bin/env bash
-osascript <<'APPLESCRIPT'
+osascript <<APPLESCRIPT
 tell application "Terminal"
-  do script "cd $WORKTREE_PATH && pnpm --filter @wcpos/app-electron dev"
+  do script "cd \\"$WORKTREE_PATH\\" && pnpm --filter @wcpos/app-electron dev"
   activate
 end tell
 APPLESCRIPT
 SCRIPT
-bash /tmp/launch-electron-dev.sh
+bash "$TEMP_SCRIPT"
+rm "$TEMP_SCRIPT"
 ```
 
 Report: "Electron dev launched in Terminal window. Logs are visible there."
