@@ -66,7 +66,7 @@ class Test_Install_Gallery_I18n extends WP_UnitTestCase {
 		};
 		add_filter( 'gettext', $filter, 10, 2 );
 
-		$result = Templates::install_gallery_template( 'standard-receipt' );
+		$result = Templates::install_gallery_template( 'invoice' );
 
 		remove_filter( 'gettext', $filter, 10 );
 
@@ -75,7 +75,7 @@ class Test_Install_Gallery_I18n extends WP_UnitTestCase {
 		$post = get_post( $result );
 		$this->assertNotNull( $post, 'Installed template post should exist.' );
 
-		// The standard-receipt contains "Paid via {{method_title}}" which should be translated.
+		// The invoice template contains "Paid via {{method_title}}" which should be translated.
 		$this->assertStringContainsString( 'Payé via', $post->post_content, 'Installed template content must contain translated phrase.' );
 		$this->assertStringContainsString( '{{method_title}}', $post->post_content, 'Installed template must preserve Mustache placeholders.' );
 
