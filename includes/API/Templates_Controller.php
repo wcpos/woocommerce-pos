@@ -303,10 +303,12 @@ class Templates_Controller extends WP_REST_Controller {
 
 		$store_id = $request->get_param( 'store_id' );
 		if ( $store_id ) {
-			$resolved = TemplatesManager::resolve_templates( (int) $store_id, $type );
-			$data = array();
+			$resolved  = TemplatesManager::resolve_templates( (int) $store_id, $type );
+			$active_id = ! empty( $resolved ) ? $resolved[0]['id'] : null;
+			$data      = array();
 			foreach ( $resolved as $template ) {
-				$data[] = $this->prepare_item_for_response( $template, $request );
+				$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
+				$data[]                = $this->prepare_item_for_response( $template, $request );
 			}
 			return rest_ensure_response( $data );
 		}
