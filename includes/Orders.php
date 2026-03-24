@@ -689,36 +689,55 @@ class Orders {
 	 * @return array Tax rates array from WC_Tax::find_rates().
 	 */
 	private static function get_tax_rates_for_item( $item, $order ): array {
-		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
-		if ( empty( $tax_based_on ) ) {
-			$tax_based_on = 'base';
-		}
-
-		if ( 'billing' === $tax_based_on ) {
-			$country  = $order->get_billing_country();
-			$state    = $order->get_billing_state();
-			$postcode = $order->get_billing_postcode();
-			$city     = $order->get_billing_city();
-		} elseif ( 'shipping' === $tax_based_on ) {
-			$country  = $order->get_shipping_country();
-			$state    = $order->get_shipping_state();
-			$postcode = $order->get_shipping_postcode();
-			$city     = $order->get_shipping_city();
-		} else {
-			$country  = WC()->countries->get_base_country();
-			$state    = WC()->countries->get_base_state();
-			$postcode = WC()->countries->get_base_postcode();
-			$city     = WC()->countries->get_base_city();
-		}
+		$tax_location = self::resolve_order_tax_location( $order );
 
 		return WC_Tax::find_rates(
 			array(
-				'country'   => $country,
-				'state'     => $state,
-				'postcode'  => $postcode,
-				'city'      => $city,
+				'country'   => $tax_location['country'],
+				'state'     => $tax_location['state'],
+				'postcode'  => $tax_location['postcode'],
+				'city'      => $tax_location['city'],
 				'tax_class' => $item->get_tax_class(),
 			)
+		);
+	}
+
+	/**
+	 * Resolve the tax location for an order based on POS settings.
+	 *
+	 * Mirrors the logic in the get_tax_location filter callback but can be
+	 * called statically without invoking the protected WC_Abstract_Order method.
+	 *
+	 * @param \WC_Order $order The order object.
+	 *
+	 * @return array{country: string, state: string, postcode: string, city: string}
+	 */
+	private static function resolve_order_tax_location( \WC_Order $order ): array {
+		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
+
+		if ( 'billing' === $tax_based_on ) {
+			return array(
+				'country'  => $order->get_billing_country(),
+				'state'    => $order->get_billing_state(),
+				'postcode' => $order->get_billing_postcode(),
+				'city'     => $order->get_billing_city(),
+			);
+		}
+
+		if ( 'shipping' === $tax_based_on ) {
+			return array(
+				'country'  => $order->get_shipping_country(),
+				'state'    => $order->get_shipping_state(),
+				'postcode' => $order->get_shipping_postcode(),
+				'city'     => $order->get_shipping_city(),
+			);
+		}
+
+		return array(
+			'country'  => WC()->countries->get_base_country(),
+			'state'    => WC()->countries->get_base_state(),
+			'postcode' => WC()->countries->get_base_postcode(),
+			'city'     => WC()->countries->get_base_city(),
 		);
 	}
 
