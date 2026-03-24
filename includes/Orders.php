@@ -500,7 +500,7 @@ class Orders {
 		// differently than the original inclusive extraction.
 		if ( $item instanceof \WC_Order_Item_Product && ! empty( self::$saved_subtotals ) ) {
 			$item_id = $item->get_id();
-			if ( 0 === $item_id ) {
+			if ( 0 === $item_id && $item->get_order() ) {
 				foreach ( $item->get_order()->get_items() as $id => $order_item ) {
 					if ( $order_item === $item && isset( self::$saved_subtotals[ $id ] ) ) {
 						$item_id = $id;
