@@ -676,10 +676,9 @@ class Orders {
 			return null;
 		}
 		if ( $order->get_prices_include_tax() ) {
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally using WC's existing filter.
 			// Use woocommerce_order_get_tax_location filter so pro plugin store overrides apply.
 			$tax_location = apply_filters(
-				'woocommerce_order_get_tax_location',
+				'woocommerce_order_get_tax_location', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 				array(
 					'country'  => WC()->countries->get_base_country(),
 					'state'    => WC()->countries->get_base_state(),
