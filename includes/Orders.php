@@ -33,7 +33,11 @@ class Orders {
 	 */
 	private static $coupon_recalculation_active = false;
 
-	/** @var array<int,array{subtotal:string,subtotal_tax:string}> Saved subtotals keyed by item_id. */
+	/**
+	 * Saved subtotals keyed by item_id.
+	 *
+	 * @var array<int,array{subtotal:string,subtotal_tax:string}>
+	 */
 	private static $saved_subtotals = array();
 
 	/**
@@ -673,19 +677,25 @@ class Orders {
 		}
 		if ( $order->get_prices_include_tax() ) {
 			// Use woocommerce_order_get_tax_location filter so pro plugin store overrides apply.
-			$tax_location = apply_filters( 'woocommerce_order_get_tax_location', array(
-				'country'  => WC()->countries->get_base_country(),
-				'state'    => WC()->countries->get_base_state(),
-				'postcode' => WC()->countries->get_base_postcode(),
-				'city'     => WC()->countries->get_base_city(),
-			), $order );
-			$tax_rates = WC_Tax::find_rates( array(
-				'country'   => $tax_location['country'],
-				'state'     => $tax_location['state'],
-				'postcode'  => $tax_location['postcode'] ?? '',
-				'city'      => $tax_location['city'] ?? '',
-				'tax_class' => $item->get_tax_class(),
-			) );
+			$tax_location = apply_filters(
+				'woocommerce_order_get_tax_location',
+				array(
+					'country'  => WC()->countries->get_base_country(),
+					'state'    => WC()->countries->get_base_state(),
+					'postcode' => WC()->countries->get_base_postcode(),
+					'city'     => WC()->countries->get_base_city(),
+				),
+				$order
+			);
+			$tax_rates    = WC_Tax::find_rates(
+				array(
+					'country'   => $tax_location['country'],
+					'state'     => $tax_location['state'],
+					'postcode'  => $tax_location['postcode'] ?? '',
+					'city'      => $tax_location['city'] ?? '',
+					'tax_class' => $item->get_tax_class(),
+				)
+			);
 
 			if ( ! empty( $tax_rates ) ) {
 				$taxes      = WC_Tax::calc_tax( $pos_price, $tax_rates, true );
@@ -799,14 +809,14 @@ class Orders {
 	 * We save here (priority 5, before deactivate at 10) and restore per-item
 	 * in order_item_after_calculate_taxes.
 	 *
-	 * @param bool              $and_taxes Whether taxes will be calculated.
-	 * @param \WC_Abstract_Order $order    The order object.
+	 * @param bool               $and_taxes Whether taxes will be calculated.
+	 * @param \WC_Abstract_Order $order     The order object.
 	 */
 	public function save_all_item_subtotals( $and_taxes, $order ): void {
+		self::$saved_subtotals = array();
 		if ( ! $and_taxes || ! woocommerce_pos_is_pos_order( $order ) ) {
 			return;
 		}
-		self::$saved_subtotals = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
 			if ( $item instanceof \WC_Order_Item_Product ) {
 				self::$saved_subtotals[ $item_id ] = array(
