@@ -4,7 +4,7 @@
 
 WCPOS is a distributed system spanning multiple repos and services:
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Client Apps                               │
 │  monorepo-v2 (React Native + Expo + Electron)                   │
@@ -40,7 +40,7 @@ WCPOS is a distributed system spanning multiple repos and services:
 
 PHP plugin under namespace `WCPOS\WooCommercePOS\`. PSR-4 autoloading via Composer.
 
-```
+```text
 includes/
   Init.php                 — Bootstrap: loads common, frontend, admin, integrations
   API.php                  — WCPOS REST API router (/wcpos/v1)

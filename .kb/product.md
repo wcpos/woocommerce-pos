@@ -42,4 +42,4 @@ Three codebases make up the product:
 - **React Native + Expo** for true cross-platform native apps
 - **WooCommerce REST API** as the sole server communication layer
 - **System fonts** everywhere — no external font dependencies
-- **GPL v2** open source license, matching the WordPress ecosystem
+- **GPL v2** open-source license, matching the WordPress ecosystem
