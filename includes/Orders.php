@@ -36,7 +36,7 @@ class Orders {
 	/**
 	 * Saved subtotals keyed by item_id.
 	 *
-	 * @var array<int,array{subtotal:string,subtotal_tax:string,taxes_subtotal:array}>
+	 * @var array<int,array{subtotal:string,subtotal_tax:string}>
 	 */
 	private static $saved_subtotals = array();
 
@@ -511,11 +511,6 @@ class Orders {
 			if ( $item_id && isset( self::$saved_subtotals[ $item_id ] ) ) {
 				$item->set_subtotal( self::$saved_subtotals[ $item_id ]['subtotal'] );
 				$item->set_subtotal_tax( self::$saved_subtotals[ $item_id ]['subtotal_tax'] );
-				if ( ! empty( self::$saved_subtotals[ $item_id ]['taxes_subtotal'] ) ) {
-					$existing_taxes             = $item->get_taxes();
-					$existing_taxes['subtotal'] = self::$saved_subtotals[ $item_id ]['taxes_subtotal'];
-					$item->set_taxes( $existing_taxes );
-				}
 			}
 		}
 
@@ -767,11 +762,9 @@ class Orders {
 
 		foreach ( $order->get_items() as $item_id => $item ) {
 			if ( $item instanceof \WC_Order_Item_Product ) {
-				$item_taxes = $item->get_taxes();
 				self::$saved_subtotals[ $item_id ] = array(
-					'subtotal'       => $item->get_subtotal( 'edit' ),
-					'subtotal_tax'   => $item->get_subtotal_tax( 'edit' ),
-					'taxes_subtotal' => $item_taxes['subtotal'] ?? array(),
+					'subtotal'     => $item->get_subtotal( 'edit' ),
+					'subtotal_tax' => $item->get_subtotal_tax( 'edit' ),
 				);
 			}
 		}
