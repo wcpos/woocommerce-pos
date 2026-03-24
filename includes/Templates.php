@@ -729,18 +729,20 @@ class Templates {
 		}
 
 		// Collect enabled database (custom) templates.
-		$posts = get_posts( array(
-			'post_type'      => 'wcpos_template',
-			'post_status'    => 'publish',
-			'posts_per_page' => -1,
-			'tax_query'      => array(
-				array(
-					'taxonomy' => 'wcpos_template_type',
-					'field'    => 'slug',
-					'terms'    => $type,
+		$posts = get_posts(
+			array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'wcpos_template_type',
+						'field'    => 'slug',
+						'terms'    => $type,
+					),
 				),
-			),
-		) );
+			)
+		);
 		foreach ( $posts as $post ) {
 			$template = self::get_template( $post->ID );
 			if ( $template ) {
@@ -751,11 +753,14 @@ class Templates {
 		// Sort by stored order if available.
 		if ( ! empty( $order ) ) {
 			$order_map = array_flip( array_map( 'strval', $order ) );
-			usort( $templates, function ( $a, $b ) use ( $order_map ) {
-				$pos_a = $order_map[ (string) $a['id'] ] ?? PHP_INT_MAX;
-				$pos_b = $order_map[ (string) $b['id'] ] ?? PHP_INT_MAX;
-				return $pos_a - $pos_b;
-			} );
+			usort(
+				$templates,
+				function ( $a, $b ) use ( $order_map ) {
+					$pos_a = $order_map[ (string) $a['id'] ] ?? PHP_INT_MAX;
+					$pos_b = $order_map[ (string) $b['id'] ] ?? PHP_INT_MAX;
+					return $pos_a - $pos_b;
+				}
+			);
 		}
 
 		return $templates;
@@ -779,9 +784,14 @@ class Templates {
 
 		if ( ! empty( $order ) ) {
 			// Remove active_id from its current position.
-			$order = array_values( array_filter( $order, function ( $id ) use ( $active_id ) {
-				return (string) $id !== (string) $active_id;
-			} ) );
+			$order = array_values(
+				array_filter(
+					$order,
+					function ( $id ) use ( $active_id ) {
+						return (string) $id !== (string) $active_id;
+					}
+				)
+			);
 
 			// Prepend it.
 			array_unshift( $order, $active_id );
