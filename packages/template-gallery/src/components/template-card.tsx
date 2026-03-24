@@ -1,6 +1,7 @@
 import classnames from 'classnames';
 
 import { TemplateTags } from './template-tags';
+import { t } from '../translations';
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface BaseProps {
@@ -49,7 +50,7 @@ export function TemplateCard(props: TemplateCardProps) {
 				onClick={onPreview}
 				className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0"
 			>
-				<span className="wcpos:text-gray-400 wcpos:text-sm">Preview</span>
+				<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
 			</button>
 
 			{/* Card body */}
@@ -64,9 +65,9 @@ export function TemplateCard(props: TemplateCardProps) {
 							onClick={props.onActivate}
 							disabled={props.isToggling}
 							aria-disabled={props.isToggling}
-							aria-label={isActive ? 'Deactivate template' : 'Activate template'}
+							aria-label={isActive ? t('card.deactivate_template') : t('card.activate_template')}
 							aria-pressed={isActive}
-							title={isActive ? 'Deactivate' : 'Activate'}
+							title={isActive ? t('card.deactivate') : t('card.activate')}
 							className={classnames(
 								'wcpos:w-3 wcpos:h-3 wcpos:rounded-full wcpos:border-2 wcpos:shrink-0 wcpos:mt-0.5 wcpos:cursor-pointer wcpos:p-0',
 								isActive
@@ -93,7 +94,7 @@ export function TemplateCard(props: TemplateCardProps) {
 						onClick={onPreview}
 						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
-						Preview
+						{t('common.preview')}
 					</button>
 					{isGallery ? (
 						<button
@@ -101,7 +102,7 @@ export function TemplateCard(props: TemplateCardProps) {
 							onClick={props.onCustomize}
 							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 						>
-							Customize
+							{t('common.customize')}
 						</button>
 					) : (
 						<button
@@ -109,7 +110,7 @@ export function TemplateCard(props: TemplateCardProps) {
 							onClick={props.onEdit}
 							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 						>
-							Edit
+							{t('common.edit')}
 						</button>
 					)}
 				</div>

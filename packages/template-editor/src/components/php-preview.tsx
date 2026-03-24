@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { t } from '../translations';
 
 declare const jQuery: any;
 
@@ -35,7 +36,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 	if (!previewUrl) {
 		return (
 			<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500">
-				No POS orders found. Create an order in the POS to preview templates.
+				{t('editor.no_orders')}
 			</div>
 		);
 	}
@@ -44,7 +45,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 		<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-white">
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
-					Preview
+					{t('editor.preview')}
 				</span>
 				<div className="wcpos:flex wcpos:gap-2">
 					<button
@@ -52,7 +53,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 						onClick={handleSaveAndPreview}
 						className="wcpos:text-xs wcpos:px-2 wcpos:py-1 wcpos:bg-blue-600 wcpos:text-white wcpos:rounded hover:wcpos:bg-blue-700"
 					>
-						Save & Preview
+						{t('editor.save_and_preview')}
 					</button>
 					<a
 						href={previewUrl}
@@ -60,19 +61,19 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 						rel="noopener noreferrer"
 						className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline wcpos:self-center"
 					>
-						Open in tab
+						{t('editor.open_in_tab')}
 					</a>
 				</div>
 			</div>
 			<div className="wcpos:p-2 wcpos:text-xs wcpos:text-amber-700 wcpos:bg-amber-50 wcpos:border-b wcpos:border-amber-200">
-				PHP templates require saving before the preview updates.
+				{t('editor.php_save_notice')}
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
 				<iframe
 					key={iframeKey}
 					src={previewUrl}
 					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
-					title="Template preview"
+					title={t('editor.template_preview')}
 				/>
 			</div>
 		</div>

@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { usePreview } from '../hooks/use-preview';
 import { renderThermalPreview } from '../lib/thermal-renderer';
+import { t } from '../translations';
 
 interface PreviewModalProps {
 	templateId: number | string;
@@ -13,8 +14,9 @@ interface PreviewModalProps {
 	onCustomize?: () => void;
 }
 
-const PREVIEW_BANNER_HTML =
-	'<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">Preview — Sample receipt with demo data</div>';
+function getPreviewBannerHtml(): string {
+	return `<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">${t('modal.preview_banner')}</div>`;
+}
 
 function ThermalPreviewContent({
 	templateContent,
@@ -31,11 +33,11 @@ function ThermalPreviewContent({
 		try {
 			return renderThermalPreview(templateContent, receiptData);
 		} catch {
-			return '<div style="color:red;padding:16px;">Thermal template rendering error. Check your XML syntax.</div>';
+			return `<div style="color:red;padding:16px;">${t('modal.render_error')}</div>`;
 		}
 	}, [templateContent, receiptData]);
 
-	const banner = isSampleData ? PREVIEW_BANNER_HTML : '';
+	const banner = isSampleData ? getPreviewBannerHtml() : '';
 
 	const srcdoc = `<!DOCTYPE html>
 <html>
@@ -154,7 +156,7 @@ export function PreviewModal({
 						type="button"
 						onClick={onClose}
 						className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-2xl wcpos:leading-none wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1"
-						aria-label="Close preview"
+						aria-label={t('modal.close')}
 					>
 						&times;
 					</button>
@@ -164,7 +166,7 @@ export function PreviewModal({
 				<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:p-4 wcpos:bg-gray-50">
 					{isLoading ? (
 						<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:h-64">
-							<span className="wcpos:text-gray-400">Loading preview...</span>
+							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
 						</div>
 					) : preview?.engine === 'thermal' && preview.template_content && preview.receipt_data ? (
 						<ThermalPreviewContent
@@ -195,7 +197,7 @@ export function PreviewModal({
 						/>
 					) : (
 						<div className="wcpos:text-gray-500 wcpos:text-center wcpos:py-8">
-							No preview available. Create a POS order first.
+							{t('modal.no_preview')}
 						</div>
 					)}
 				</div>
@@ -203,7 +205,7 @@ export function PreviewModal({
 				{/* Footer actions */}
 				<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:p-4 wcpos:border-t wcpos:border-gray-200">
 					<div className="wcpos:text-xs wcpos:text-gray-500">
-						{preview?.order_id ? <>Preview order: #{preview.order_id}</> : null}
+						{preview?.order_id ? <>{t('modal.preview_order', { orderId: preview.order_id })}</> : null}
 					</div>
 					<div className="wcpos:flex wcpos:gap-2">
 						{isGallery ? (
@@ -215,7 +217,7 @@ export function PreviewModal({
 								}}
 								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-white wcpos:bg-wp-admin-theme-color wcpos:border-0 wcpos:rounded wcpos:cursor-pointer hover:wcpos:bg-wp-admin-theme-color-darker-10"
 							>
-								Customize
+								{t('common.customize')}
 							</button>
 						) : (
 							<button
@@ -226,7 +228,7 @@ export function PreviewModal({
 								}}
 								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-white wcpos:bg-wp-admin-theme-color wcpos:border-0 wcpos:rounded wcpos:cursor-pointer hover:wcpos:bg-wp-admin-theme-color-darker-10"
 							>
-								Activate
+								{t('common.activate')}
 							</button>
 						)}
 						{preview?.preview_url && (
@@ -236,7 +238,7 @@ export function PreviewModal({
 								rel="noopener noreferrer"
 								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-gray-700 wcpos:bg-white wcpos:border wcpos:border-gray-300 wcpos:rounded wcpos:no-underline hover:wcpos:bg-gray-50"
 							>
-								Open in New Tab
+								{t('modal.open_new_tab')}
 							</a>
 						)}
 					</div>

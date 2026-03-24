@@ -2,6 +2,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 import { useSnackbar } from '../components/snackbar';
+import { t } from '../translations';
 
 import type { AnyTemplate, Template } from '../types';
 
@@ -32,12 +33,12 @@ export function useToggleTemplate() {
 		onSuccess: (_data, { status }) => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			addSnackbar({
-				message: status === 'publish' ? 'Template activated' : 'Template deactivated',
+				message: status === 'publish' ? t('snackbar.template_activated') : t('snackbar.template_deactivated'),
 				status: 'success',
 			});
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to update template', status: 'error' });
+			addSnackbar({ message: t('snackbar.update_failed'), status: 'error' });
 		},
 	});
 }
@@ -58,12 +59,12 @@ export function useToggleVirtualTemplate(type = 'receipt') {
 		onSuccess: (_data, { disabled }) => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			addSnackbar({
-				message: disabled ? 'Template deactivated' : 'Template activated',
+				message: disabled ? t('snackbar.template_deactivated') : t('snackbar.template_activated'),
 				status: 'success',
 			});
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to update template', status: 'error' });
+			addSnackbar({ message: t('snackbar.update_failed'), status: 'error' });
 		},
 	});
 }
@@ -80,10 +81,10 @@ export function useCopyTemplate() {
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
-			addSnackbar({ message: 'Template copied', status: 'success' });
+			addSnackbar({ message: t('snackbar.template_copied'), status: 'success' });
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to copy template', status: 'error' });
+			addSnackbar({ message: t('snackbar.copy_failed'), status: 'error' });
 		},
 	});
 }
@@ -101,10 +102,10 @@ export function useReorderTemplates(type = 'receipt') {
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
-			addSnackbar({ message: 'Order saved', status: 'success' });
+			addSnackbar({ message: t('snackbar.order_saved'), status: 'success' });
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to save order', status: 'error' });
+			addSnackbar({ message: t('snackbar.save_order_failed'), status: 'error' });
 		},
 	});
 }
@@ -121,10 +122,10 @@ export function useDeleteTemplate() {
 			}),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
-			addSnackbar({ message: 'Template deleted', status: 'success' });
+			addSnackbar({ message: t('snackbar.template_deleted'), status: 'success' });
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to delete template', status: 'error' });
+			addSnackbar({ message: t('snackbar.delete_failed'), status: 'error' });
 		},
 	});
 }

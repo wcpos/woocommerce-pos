@@ -623,7 +623,8 @@ class Single_Template {
 		}
 
 		return \sprintf(
-			'var wcposTemplateEditor = %s;',
+			'var wcpos = wcpos || {}; wcpos.translationVersion = %s; var wcposTemplateEditor = %s;',
+			wp_json_encode( PLUGIN_VERSION ),
 			$encoded_config
 		);
 	}

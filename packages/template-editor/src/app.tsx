@@ -5,6 +5,7 @@ import { LivePreview } from './components/live-preview';
 import { PhpPreview } from './components/php-preview';
 import { ThermalPreview } from './components/thermal-preview';
 import { useContentSync } from './hooks/use-content-sync';
+import { t } from './translations';
 import type { EditorConfig } from './types';
 
 function TemplateInfoBar({ engine, paperWidth }: { engine: string; paperWidth: string | null }) {
@@ -15,15 +16,15 @@ function TemplateInfoBar({ engine, paperWidth }: { engine: string; paperWidth: s
 	if (engine === 'thermal') {
 		icon = '\uD83D\uDDA8\uFE0F'; // printer emoji
 		const size = paperWidth === '58mm' ? '58mm' : '80mm';
-		text = `Receipt Printer template (${size} paper) \u2014 Sends output directly to a thermal printer like Epson or Star. Renders on the device without needing a server connection.`;
+		text = t('editor.info_thermal', { size });
 		bgClass = 'wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800';
 	} else if (engine === 'legacy-php') {
 		icon = '\uD83D\uDDA5\uFE0F'; // monitor emoji
-		text = 'Browser template (Legacy PHP) \u2014 Prints using your browser\u2019s print dialog. Requires a server connection to generate the receipt.';
+		text = t('editor.info_legacy_php');
 		bgClass = 'wcpos:bg-amber-50 wcpos:border-amber-200 wcpos:text-amber-800';
 	} else {
 		icon = '\uD83D\uDDA5\uFE0F'; // monitor emoji
-		text = 'Browser template \u2014 Prints using your browser\u2019s print dialog. Renders on the device without needing a server connection.';
+		text = t('editor.info_browser');
 		bgClass = 'wcpos:bg-gray-50 wcpos:border-gray-200 wcpos:text-gray-700';
 	}
 

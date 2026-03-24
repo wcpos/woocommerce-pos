@@ -16,6 +16,7 @@ import {
 	useDeleteTemplate,
 } from '../hooks/use-templates';
 
+import { t } from '../translations';
 import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
@@ -109,13 +110,13 @@ export function GalleryGrid() {
 			<section>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:mb-3">
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
-						Your Templates
+						{t('gallery.your_templates')}
 					</h2>
 					<a
 						href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
 						className="page-title-action"
 					>
-						Add New Template
+						{t('gallery.add_new')}
 					</a>
 				</div>
 				<TemplatesTable
@@ -133,10 +134,10 @@ export function GalleryGrid() {
 			{galleryTemplates.length > 0 && (
 				<section>
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
-						Template Gallery
+						{t('gallery.template_gallery')}
 					</h2>
 					<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-1 wcpos:mb-3">
-						Starter templates you can customise to match your business. Preview any template or click Customise to make it your own.
+						{t('gallery.description')}
 					</p>
 					<div className="wcpos:flex wcpos:gap-6">
 						<FilterSidebar
@@ -168,7 +169,7 @@ export function GalleryGrid() {
 								</div>
 							) : (
 								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
-									No gallery templates match your filters.
+									{t('gallery.no_matches')}
 								</p>
 							)}
 						</div>

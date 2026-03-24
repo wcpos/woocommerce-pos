@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FieldSchema } from '../types';
+import { t } from '../translations';
 import { FieldTreeNode } from './field-tree-node';
 import { SearchField } from './search-field';
 import { ThermalElements } from './thermal-elements';
@@ -20,7 +21,7 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 		>
 			<div className="wcpos:p-2 wcpos:border-b wcpos:border-gray-200">
 				<div className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:mb-2">
-					Fields
+					{t('editor.fields')}
 				</div>
 				<SearchField value={search} onChange={setSearch} />
 			</div>

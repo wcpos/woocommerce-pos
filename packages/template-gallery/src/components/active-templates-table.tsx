@@ -14,6 +14,7 @@ import classnames from 'classnames';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 
+import { t } from '../translations';
 import type { AnyTemplate, Template, VirtualTemplate } from '../types';
 
 function isThermal(template: AnyTemplate): boolean {
@@ -33,7 +34,7 @@ function isOffline(template: AnyTemplate): boolean {
 }
 
 function getPrintMethod(template: AnyTemplate): string {
-	return isThermal(template) ? 'Receipt Printer' : 'Browser';
+	return isThermal(template) ? t('table.receipt_printer') : t('table.browser');
 }
 
 function getPaperSize(template: AnyTemplate): string {
@@ -43,7 +44,7 @@ function getPaperSize(template: AnyTemplate): string {
 }
 
 function getAvailability(template: AnyTemplate): string {
-	return isOffline(template) ? 'Offline' : 'Server';
+	return isOffline(template) ? t('table.offline') : t('table.server');
 }
 
 function formatCategory(slug: string | undefined): string {
@@ -170,7 +171,7 @@ function DraggableRow({
 					type="button"
 					onClick={() => onToggle(template.id)}
 					disabled={isToggling}
-					aria-label={enabled ? 'Deactivate template' : 'Activate template'}
+					aria-label={enabled ? t('table.deactivate_template') : t('table.activate_template')}
 					aria-pressed={enabled}
 					className={classnames(
 						'wcpos:relative wcpos:inline-flex wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:cursor-pointer wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:bg-transparent wcpos:p-0',
@@ -194,28 +195,28 @@ function DraggableRow({
 						onClick={() => onPreview(template.id)}
 						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
-						Preview
+						{t('common.preview')}
 					</button>
 					{editUrl && (
 						<a
 							href={editUrl}
 							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:no-underline"
 						>
-							Edit
+							{t('common.edit')}
 						</a>
 					)}
 					{canDelete && (
 						<button
 							type="button"
 							onClick={() => {
-								if (window.confirm(`Delete "${template.title}" permanently?`)) {
+								if (window.confirm(t('table.confirm_delete', { title: template.title }))) {
 									onDelete(template.id as number);
 								}
 							}}
 							disabled={isDeleting}
 							className="wcpos:text-xs wcpos:text-red-600 hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer disabled:wcpos:opacity-50 disabled:wcpos:cursor-not-allowed"
 						>
-							Delete
+							{t('common.delete')}
 						</button>
 					)}
 				</div>
@@ -293,7 +294,7 @@ export function TemplatesTable({
 		return (
 			<div className="wcpos:bg-white wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-8 wcpos:text-center">
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:m-0">
-					No templates yet. Browse the gallery below to get started.
+					{t('table.no_templates')}
 				</p>
 			</div>
 		);
@@ -306,25 +307,25 @@ export function TemplatesTable({
 					<tr className="wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50">
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:w-8" />
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Title
+							{t('common.title')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Category
+							{t('common.category')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Print
+							{t('table.header_print')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Paper
+							{t('table.header_paper')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Mode
+							{t('table.header_mode')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-center wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Active
+							{t('table.header_active')}
 						</th>
 						<th className="wcpos:px-3 wcpos:py-2 wcpos:text-left wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider">
-							Actions
+							{t('table.header_actions')}
 						</th>
 					</tr>
 				</thead>

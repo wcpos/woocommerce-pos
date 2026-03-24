@@ -276,9 +276,10 @@ class Menu {
 	 */
 	private function gallery_inline_script(): string {
 		return \sprintf(
-			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s };',
+			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s }; wcpos.translationVersion = %s;',
 			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) ),
-			wp_json_encode( untrailingslashit( admin_url() ) )
+			wp_json_encode( untrailingslashit( admin_url() ) ),
+			wp_json_encode( PLUGIN_VERSION )
 		);
 	}
 
