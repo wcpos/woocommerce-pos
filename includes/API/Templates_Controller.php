@@ -300,6 +300,19 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function get_items( $request ) {
 		$type           = $request->get_param( 'type' ) ?? 'receipt';
+
+		$store_id = $request->get_param( 'store_id' );
+		if ( $store_id ) {
+			$resolved  = TemplatesManager::resolve_templates( (int) $store_id, $type );
+			$active_id = ! empty( $resolved ) ? $resolved[0]['id'] : null;
+			$data      = array();
+			foreach ( $resolved as $template ) {
+				$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
+				$data[]                = $this->prepare_item_for_response( $template, $request );
+			}
+			return rest_ensure_response( $data );
+		}
+
 		$search         = $request->get_param( 'search' );
 		$category       = $request->get_param( 'category' );
 		$modified_after = $request->get_param( 'modified_after' );
@@ -308,11 +321,15 @@ class Templates_Controller extends WP_REST_Controller {
 		$has_filters    = $search || $category || $modified_after;
 		$templates      = array();
 
+		// Compute the active template ID once from the final enabled order.
+		$enabled = TemplatesManager::get_enabled_templates( $type );
+		$active_template_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+
 		// Get virtual (filesystem) templates first, but skip when filters are active.
 		if ( ! $has_filters ) {
 			$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
 			foreach ( $virtual_templates as $template ) {
-				$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $type );
+				$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
 				$templates[]           = $this->prepare_item_for_response( $template, $request );
 			}
 		}
@@ -375,7 +392,7 @@ class Templates_Controller extends WP_REST_Controller {
 		foreach ( $query->posts as $post ) {
 			$template = TemplatesManager::get_template( $post->ID );
 			if ( $template ) {
-				$template['is_active'] = TemplatesManager::is_active_template( $post->ID, $template['type'] );
+				$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
 				$db_templates[]        = $this->prepare_item_for_response( $template, $request );
 			}
 		}
@@ -440,7 +457,9 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $template['type'] );
+		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
+		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
 	}
@@ -527,7 +546,9 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template['is_active'] = TemplatesManager::is_active_template( $id, $template['type'] );
+		$enabled = TemplatesManager::get_enabled_templates( $template['type'] ?? 'receipt' );
+		$active_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
 	}
@@ -1250,6 +1271,13 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Limit to templates modified after this ISO 8601 date.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'store_id'       => array(
+				'description'       => __( 'Limit results to templates resolved for a specific store.', 'woocommerce-pos' ),
+				'type'              => 'integer',
+				'default'           => 0,
+				'sanitize_callback' => 'absint',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);
