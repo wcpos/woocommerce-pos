@@ -33,6 +33,9 @@ class Orders {
 	 */
 	private static $coupon_recalculation_active = false;
 
+	/** @var array<int,array{subtotal:string,subtotal_tax:string}> Saved subtotals keyed by item_id. */
+	private static $saved_subtotals = array();
+
 	/**
 	 * Constructor.
 	 */
@@ -52,6 +55,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_applied_coupon', array( $this, 'before_coupon_recalculation' ), 10, 2 );
+		add_action( 'woocommerce_order_before_calculate_totals', array( $this, 'save_all_item_subtotals' ), 5, 2 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 	}
 
@@ -487,6 +491,25 @@ class Orders {
 	 * @return void
 	 */
 	public function order_item_after_calculate_taxes( $item ): void {
+		// Restore subtotals corrupted by calculate_taxes() exclusive-math recalculation.
+		// With compound-only rates + prices_include_tax, WC recalculates subtotal_tax
+		// differently than the original inclusive extraction.
+		if ( $item instanceof \WC_Order_Item_Product && ! empty( self::$saved_subtotals ) ) {
+			$item_id = $item->get_id();
+			if ( ! $item_id && $item->get_order() ) {
+				foreach ( $item->get_order()->get_items() as $id => $order_item ) {
+					if ( $order_item === $item && isset( self::$saved_subtotals[ $id ] ) ) {
+						$item_id = $id;
+						break;
+					}
+				}
+			}
+			if ( $item_id && isset( self::$saved_subtotals[ $item_id ] ) ) {
+				$item->set_subtotal( self::$saved_subtotals[ $item_id ]['subtotal'] );
+				$item->set_subtotal_tax( self::$saved_subtotals[ $item_id ]['subtotal_tax'] );
+			}
+		}
+
 		$meta_data = $item->get_meta_data();
 
 		foreach ( $meta_data as $meta ) {
@@ -649,7 +672,20 @@ class Orders {
 			return null;
 		}
 		if ( $order->get_prices_include_tax() ) {
-			$tax_rates = self::get_tax_rates_for_item( $item, $order );
+			// Use woocommerce_order_get_tax_location filter so pro plugin store overrides apply.
+			$tax_location = apply_filters( 'woocommerce_order_get_tax_location', array(
+				'country'  => WC()->countries->get_base_country(),
+				'state'    => WC()->countries->get_base_state(),
+				'postcode' => WC()->countries->get_base_postcode(),
+				'city'     => WC()->countries->get_base_city(),
+			), $order );
+			$tax_rates = WC_Tax::find_rates( array(
+				'country'   => $tax_location['country'],
+				'state'     => $tax_location['state'],
+				'postcode'  => $tax_location['postcode'] ?? '',
+				'city'      => $tax_location['city'] ?? '',
+				'tax_class' => $item->get_tax_class(),
+			) );
 
 			if ( ! empty( $tax_rates ) ) {
 				$taxes      = WC_Tax::calc_tax( $pos_price, $tax_rates, true );
@@ -752,6 +788,33 @@ class Orders {
 		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
 		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
 		remove_action( 'woocommerce_order_before_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
+	}
+
+
+	/**
+	 * Save all line item subtotals before calculate_totals runs.
+	 *
+	 * WC's calculate_taxes() recalculates subtotal_tax using exclusive-tax math.
+	 * With compound-only rates + prices_include_tax, this corrupts subtotal_tax.
+	 * We save here (priority 5, before deactivate at 10) and restore per-item
+	 * in order_item_after_calculate_taxes.
+	 *
+	 * @param bool              $and_taxes Whether taxes will be calculated.
+	 * @param \WC_Abstract_Order $order    The order object.
+	 */
+	public function save_all_item_subtotals( $and_taxes, $order ): void {
+		if ( ! $and_taxes || ! woocommerce_pos_is_pos_order( $order ) ) {
+			return;
+		}
+		self::$saved_subtotals = array();
+		foreach ( $order->get_items() as $item_id => $item ) {
+			if ( $item instanceof \WC_Order_Item_Product ) {
+				self::$saved_subtotals[ $item_id ] = array(
+					'subtotal'     => $item->get_subtotal( 'edit' ),
+					'subtotal_tax' => $item->get_subtotal_tax( 'edit' ),
+				);
+			}
+		}
 	}
 
 	/**
