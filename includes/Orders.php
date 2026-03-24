@@ -500,7 +500,7 @@ class Orders {
 		// differently than the original inclusive extraction.
 		if ( $item instanceof \WC_Order_Item_Product && ! empty( self::$saved_subtotals ) ) {
 			$item_id = $item->get_id();
-			if ( ! $item_id && $item->get_order() ) {
+			if ( 0 === $item_id ) {
 				foreach ( $item->get_order()->get_items() as $id => $order_item ) {
 					if ( $order_item === $item && isset( self::$saved_subtotals[ $id ] ) ) {
 						$item_id = $id;
@@ -676,6 +676,7 @@ class Orders {
 			return null;
 		}
 		if ( $order->get_prices_include_tax() ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally using WC's existing filter.
 			// Use woocommerce_order_get_tax_location filter so pro plugin store overrides apply.
 			$tax_location = apply_filters(
 				'woocommerce_order_get_tax_location',
@@ -719,71 +720,6 @@ class Orders {
 		return array(
 			'subtotal'     => $pos_price,
 			'subtotal_tax' => (float) $item->get_subtotal_tax( 'edit' ),
-		);
-	}
-
-	/**
-	 * Get the applicable tax rates for an order item.
-	 *
-	 * Determines the tax location from the order's POS tax-based-on meta
-	 * (matching the logic in get_tax_location filter) and finds the rates
-	 * for the item's tax class.
-	 *
-	 * @param WC_Order_Item_Product $item  The order item.
-	 * @param WC_Order              $order The order.
-	 *
-	 * @return array Tax rates array from WC_Tax::find_rates().
-	 */
-	private static function get_tax_rates_for_item( $item, $order ): array {
-		$tax_location = self::resolve_order_tax_location( $order );
-
-		return WC_Tax::find_rates(
-			array(
-				'country'   => $tax_location['country'],
-				'state'     => $tax_location['state'],
-				'postcode'  => $tax_location['postcode'],
-				'city'      => $tax_location['city'],
-				'tax_class' => $item->get_tax_class(),
-			)
-		);
-	}
-
-	/**
-	 * Resolve the tax location for an order based on POS settings.
-	 *
-	 * Mirrors the logic in the get_tax_location filter callback but can be
-	 * called statically without invoking the protected WC_Abstract_Order method.
-	 *
-	 * @param \WC_Order $order The order object.
-	 *
-	 * @return array{country: string, state: string, postcode: string, city: string}
-	 */
-	private static function resolve_order_tax_location( \WC_Order $order ): array {
-		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
-
-		if ( 'billing' === $tax_based_on ) {
-			return array(
-				'country'  => $order->get_billing_country(),
-				'state'    => $order->get_billing_state(),
-				'postcode' => $order->get_billing_postcode(),
-				'city'     => $order->get_billing_city(),
-			);
-		}
-
-		if ( 'shipping' === $tax_based_on ) {
-			return array(
-				'country'  => $order->get_shipping_country(),
-				'state'    => $order->get_shipping_state(),
-				'postcode' => $order->get_shipping_postcode(),
-				'city'     => $order->get_shipping_city(),
-			);
-		}
-
-		return array(
-			'country'  => WC()->countries->get_base_country(),
-			'state'    => WC()->countries->get_base_state(),
-			'postcode' => WC()->countries->get_base_postcode(),
-			'city'     => WC()->countries->get_base_city(),
 		);
 	}
 
