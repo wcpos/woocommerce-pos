@@ -300,6 +300,17 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function get_items( $request ) {
 		$type           = $request->get_param( 'type' ) ?? 'receipt';
+
+		$store_id = $request->get_param( 'store_id' );
+		if ( $store_id ) {
+			$resolved = TemplatesManager::resolve_templates( (int) $store_id, $type );
+			$data = array();
+			foreach ( $resolved as $template ) {
+				$data[] = $this->prepare_item_for_response( $template, $request );
+			}
+			return rest_ensure_response( $data );
+		}
+
 		$search         = $request->get_param( 'search' );
 		$category       = $request->get_param( 'category' );
 		$modified_after = $request->get_param( 'modified_after' );
@@ -308,11 +319,16 @@ class Templates_Controller extends WP_REST_Controller {
 		$has_filters    = $search || $category || $modified_after;
 		$templates      = array();
 
+		$first_active_set = false;
+
 		// Get virtual (filesystem) templates first, but skip when filters are active.
 		if ( ! $has_filters ) {
 			$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
 			foreach ( $virtual_templates as $template ) {
-				$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $type );
+				$template['is_active'] = ( false === $first_active_set );
+				if ( $template['is_active'] ) {
+					$first_active_set = true;
+				}
 				$templates[]           = $this->prepare_item_for_response( $template, $request );
 			}
 		}
@@ -375,7 +391,10 @@ class Templates_Controller extends WP_REST_Controller {
 		foreach ( $query->posts as $post ) {
 			$template = TemplatesManager::get_template( $post->ID );
 			if ( $template ) {
-				$template['is_active'] = TemplatesManager::is_active_template( $post->ID, $template['type'] );
+				$template['is_active'] = ( false === $first_active_set );
+				if ( $template['is_active'] ) {
+					$first_active_set = true;
+				}
 				$db_templates[]        = $this->prepare_item_for_response( $template, $request );
 			}
 		}
@@ -440,7 +459,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template['is_active'] = TemplatesManager::is_active_template( $template['id'], $template['type'] );
+		$template['is_active'] = false;
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
 	}
@@ -527,7 +546,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$template['is_active'] = TemplatesManager::is_active_template( $id, $template['type'] );
+		$template['is_active'] = false;
 
 		return rest_ensure_response( $this->prepare_item_for_response( $template, $request ) );
 	}
@@ -1250,6 +1269,13 @@ class Templates_Controller extends WP_REST_Controller {
 				'description'       => __( 'Limit to templates modified after this ISO 8601 date.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'store_id'       => array(
+				'description'       => __( 'Limit results to templates resolved for a specific store.', 'woocommerce-pos' ),
+				'type'              => 'integer',
+				'default'           => 0,
+				'sanitize_callback' => 'absint',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);
