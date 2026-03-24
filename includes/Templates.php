@@ -656,6 +656,142 @@ class Templates {
 	}
 
 	/**
+	 * Resolve the ordered list of templates for a given store.
+	 *
+	 * If the store has a per-store override (active_receipt_templates meta),
+	 * returns only those templates intersected with the global enabled list.
+	 * Otherwise returns the full global enabled list.
+	 *
+	 * @param int    $store_id Store post ID. 0 for global defaults.
+	 * @param string $type     Template type (e.g. 'receipt').
+	 *
+	 * @return array Array of template data arrays, in display order.
+	 */
+	public static function resolve_templates( int $store_id, string $type = 'receipt' ): array {
+		$global_list = self::get_enabled_templates( $type );
+
+		if ( ! $store_id ) {
+			return $global_list;
+		}
+
+		$meta_key = '_wcpos_active_' . sanitize_key( $type ) . '_templates';
+		$raw      = get_post_meta( $store_id, $meta_key, true );
+		$override = is_string( $raw ) ? json_decode( $raw, true ) : array();
+
+		if ( empty( $override ) || ! \is_array( $override ) ) {
+			return $global_list;
+		}
+
+		// Build a lookup of global templates by ID (normalize to string for comparison).
+		$global_by_id = array();
+		foreach ( $global_list as $template ) {
+			$global_by_id[ (string) $template['id'] ] = $template;
+		}
+
+		// Intersect store override with global enabled list, preserving store order.
+		$resolved = array();
+		foreach ( $override as $template_id ) {
+			$key = (string) $template_id;
+			if ( isset( $global_by_id[ $key ] ) ) {
+				$resolved[] = $global_by_id[ $key ];
+			}
+		}
+
+		// Fallback: if all overridden templates are globally disabled, use global list.
+		if ( empty( $resolved ) ) {
+			return $global_list;
+		}
+
+		return $resolved;
+	}
+
+	/**
+	 * Get all enabled templates for a type, in stored order.
+	 *
+	 * Combines virtual (filesystem) templates and database (custom) templates,
+	 * filters to only enabled ones, and sorts by the stored template order.
+	 *
+	 * @param string $type Template type.
+	 *
+	 * @return array Array of template data arrays.
+	 */
+	public static function get_enabled_templates( string $type = 'receipt' ): array {
+		$disabled_virtual = self::get_disabled_virtual_templates( $type );
+		$order            = self::get_template_order( $type );
+		$templates        = array();
+
+		// Collect enabled virtual templates.
+		$virtual = self::detect_filesystem_templates( $type );
+		foreach ( $virtual as $template ) {
+			if ( ! \in_array( (string) $template['id'], $disabled_virtual, true ) ) {
+				$templates[] = $template;
+			}
+		}
+
+		// Collect enabled database (custom) templates.
+		$posts = get_posts( array(
+			'post_type'      => 'wcpos_template',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'tax_query'      => array(
+				array(
+					'taxonomy' => 'wcpos_template_type',
+					'field'    => 'slug',
+					'terms'    => $type,
+				),
+			),
+		) );
+		foreach ( $posts as $post ) {
+			$template = self::get_template( $post->ID );
+			if ( $template ) {
+				$templates[] = $template;
+			}
+		}
+
+		// Sort by stored order if available.
+		if ( ! empty( $order ) ) {
+			$order_map = array_flip( array_map( 'strval', $order ) );
+			usort( $templates, function ( $a, $b ) use ( $order_map ) {
+				$pos_a = $order_map[ (string) $a['id'] ] ?? PHP_INT_MAX;
+				$pos_b = $order_map[ (string) $b['id'] ] ?? PHP_INT_MAX;
+				return $pos_a - $pos_b;
+			} );
+		}
+
+		return $templates;
+	}
+
+	/**
+	 * One-time migration: move the active template to first position in the order,
+	 * then delete the wcpos_active_template_{type} option.
+	 *
+	 * @param string $type Template type.
+	 */
+	public static function migrate_active_template_to_order( string $type = 'receipt' ): void {
+		$option_key = 'wcpos_active_template_' . $type;
+		$active_id  = get_option( $option_key );
+
+		if ( false === $active_id ) {
+			return; // Nothing to migrate.
+		}
+
+		$order = self::get_template_order( $type );
+
+		if ( ! empty( $order ) ) {
+			// Remove active_id from its current position.
+			$order = array_values( array_filter( $order, function ( $id ) use ( $active_id ) {
+				return (string) $id !== (string) $active_id;
+			} ) );
+
+			// Prepend it.
+			array_unshift( $order, $active_id );
+			self::save_template_order( $order, $type );
+		}
+
+		delete_option( $option_key );
+	}
+
+	/**
 	 * Get available starter/example templates.
 	 *
 	 * Returns metadata for example templates bundled with the plugin.
