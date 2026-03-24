@@ -1,9 +1,11 @@
 import classnames from 'classnames';
 
+import { t } from '../translations';
+
 const tabs = [
-	{ id: 'receipt', label: 'Receipts', enabled: true },
-	{ id: 'report', label: 'Reports', enabled: false },
-	{ id: 'email', label: 'Email', enabled: false },
+	{ id: 'receipt', labelKey: 'tabs.receipts', enabled: true },
+	{ id: 'report', labelKey: 'tabs.reports', enabled: false },
+	{ id: 'email', labelKey: 'tabs.email', enabled: false },
 ] as const;
 
 interface TypeTabsProps {
@@ -26,10 +28,10 @@ export function TypeTabs({ activeType }: TypeTabsProps) {
 						!tab.enabled && 'wcpos:opacity-50 wcpos:cursor-not-allowed',
 					)}
 				>
-					{tab.label}
+					{t(tab.labelKey)}
 					{!tab.enabled && (
 						<span className="wcpos:ml-1 wcpos:text-xs wcpos:bg-gray-100 wcpos:text-gray-500 wcpos:rounded wcpos:px-1">
-							Soon
+							{t('tabs.soon')}
 						</span>
 					)}
 				</button>

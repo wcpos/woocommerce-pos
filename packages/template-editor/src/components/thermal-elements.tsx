@@ -1,57 +1,62 @@
 import { useState } from 'react';
+import { t } from '../translations';
 
 interface ThermalElementsProps {
 	searchFilter: string;
 	onInsertField: (text: string) => void;
 }
 
-const ELEMENTS = [
-	{
-		key: 'barcode',
-		label: 'Barcode',
-		snippet: '<barcode type="code128" height="60">{{meta.order_number}}</barcode>',
-	},
-	{
-		key: 'qrcode',
-		label: 'QR Code',
-		snippet: '<qrcode size="4">{{meta.order_number}}</qrcode>',
-	},
-	{
-		key: 'line-single',
-		label: 'Line (single)',
-		snippet: '<line />',
-	},
-	{
-		key: 'line-double',
-		label: 'Line (double)',
-		snippet: '<line style="double" />',
-	},
-	{
-		key: 'row',
-		label: 'Row / Columns',
-		snippet: '<row>\n  <col width="24"></col>\n  <col width="24" align="right"></col>\n</row>',
-	},
-	{
-		key: 'feed',
-		label: 'Feed (blank lines)',
-		snippet: '<feed lines="1" />',
-	},
-	{
-		key: 'cut',
-		label: 'Cut',
-		snippet: '<cut />',
-	},
-	{
-		key: 'image',
-		label: 'Image',
-		snippet: '<image src="" width="200" />',
-	},
-];
+function getElements() {
+	return [
+		{
+			key: 'barcode',
+			label: t('element.barcode'),
+			snippet: '<barcode type="code128" height="60">{{meta.order_number}}</barcode>',
+		},
+		{
+			key: 'qrcode',
+			label: t('element.qr_code'),
+			snippet: '<qrcode size="4">{{meta.order_number}}</qrcode>',
+		},
+		{
+			key: 'line-single',
+			label: t('element.line_single'),
+			snippet: '<line />',
+		},
+		{
+			key: 'line-double',
+			label: t('element.line_double'),
+			snippet: '<line style="double" />',
+		},
+		{
+			key: 'row',
+			label: t('element.row_columns'),
+			snippet: '<row>\n  <col width="24"></col>\n  <col width="24" align="right"></col>\n</row>',
+		},
+		{
+			key: 'feed',
+			label: t('element.feed'),
+			snippet: '<feed lines="1" />',
+		},
+		{
+			key: 'cut',
+			label: t('element.cut'),
+			snippet: '<cut />',
+		},
+		{
+			key: 'image',
+			label: t('element.image'),
+			snippet: '<image src="" width="200" />',
+		},
+	];
+}
 
 export function ThermalElements({ searchFilter, onInsertField }: ThermalElementsProps) {
 	const [expanded, setExpanded] = useState(false);
 
-	const filtered = ELEMENTS.filter(({ key, label }) => {
+	const elements = getElements();
+
+	const filtered = elements.filter(({ key, label }) => {
 		if (!searchFilter) return true;
 		const lower = searchFilter.toLowerCase();
 		return key.toLowerCase().includes(lower) || label.toLowerCase().includes(lower);
@@ -71,7 +76,7 @@ export function ThermalElements({ searchFilter, onInsertField }: ThermalElements
 				<span className="wcpos:text-xs wcpos:text-gray-400 wcpos:w-4">
 					{isExpanded ? '\u25BC' : '\u25B6'}
 				</span>
-				Elements
+				{t('editor.elements')}
 			</button>
 
 			{isExpanded && (

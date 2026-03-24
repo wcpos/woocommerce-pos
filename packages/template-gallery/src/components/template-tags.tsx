@@ -1,3 +1,4 @@
+import { t } from '../translations';
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface TemplateTagsProps {
@@ -31,16 +32,16 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 			{thermal ? (
 				<span
 					className="wcpos:text-xs wcpos:bg-blue-50 wcpos:text-blue-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="Designed for thermal receipt printers like Epson or Star. If you don't have a receipt printer, use a Browser template instead."
+					title={t('tags.receipt_printer_tip')}
 				>
-					Receipt Printer
+					{t('tags.receipt_printer')}
 				</span>
 			) : (
 				<span
 					className="wcpos:text-xs wcpos:bg-gray-100 wcpos:text-gray-600 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="Prints using your browser's built-in print dialog. Works with any printer but requires a browser window."
+					title={t('tags.browser_tip')}
 				>
-					Browser
+					{t('tags.browser')}
 				</span>
 			)}
 
@@ -48,7 +49,7 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 			{thermal && paperWidth === '80mm' && (
 				<span
 					className="wcpos:text-xs wcpos:bg-slate-100 wcpos:text-slate-600 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="Formatted for 80mm (standard) thermal paper. Most receipt printers use this size."
+					title={t('tags.80mm_tip')}
 				>
 					80mm
 				</span>
@@ -56,7 +57,7 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 			{thermal && paperWidth === '58mm' && (
 				<span
 					className="wcpos:text-xs wcpos:bg-slate-100 wcpos:text-slate-600 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="Formatted for 58mm (narrow) thermal paper. Check your printer specs if you're not sure which size you need."
+					title={t('tags.58mm_tip')}
 				>
 					58mm
 				</span>
@@ -66,16 +67,16 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 			{offline ? (
 				<span
 					className="wcpos:text-xs wcpos:bg-green-50 wcpos:text-green-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="This template renders on the device without needing a server connection. Faster and works even if your internet goes down."
+					title={t('tags.offline_tip')}
 				>
-					Works Offline
+					{t('tags.works_offline')}
 				</span>
 			) : (
 				<span
 					className="wcpos:text-xs wcpos:bg-amber-50 wcpos:text-amber-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="This template needs your WordPress server to generate the receipt. Requires an active internet connection and may be slower."
+					title={t('tags.server_tip')}
 				>
-					Server Required
+					{t('tags.server_required')}
 				</span>
 			)}
 
@@ -83,9 +84,9 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 			{template.engine === 'legacy-php' && (
 				<span
 					className="wcpos:text-xs wcpos:bg-amber-50 wcpos:text-amber-700 wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded"
-					title="This template uses the older PHP engine. Consider switching to a newer template for faster, offline-capable receipts."
+					title={t('tags.legacy_php_tip')}
 				>
-					&#9888; Legacy PHP
+					&#9888; {t('tags.legacy_php')}
 				</span>
 			)}
 		</div>

@@ -3,11 +3,12 @@ import { Outlet } from '@tanstack/react-router';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { TypeTabs } from '../components/type-tabs';
+import { t } from '../translations';
 
 function LoadingFallback() {
 	return (
 		<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:py-16">
-			<div className="wcpos:text-gray-400 wcpos:text-sm">Loading templates...</div>
+			<div className="wcpos:text-gray-400 wcpos:text-sm">{t('layout.loading')}</div>
 		</div>
 	);
 }
@@ -23,14 +24,14 @@ function ErrorFallback({
 
 	return (
 		<div className="wcpos:p-6 wcpos:text-center">
-			<p className="wcpos:text-red-600 wcpos:mb-2">Failed to load templates.</p>
+			<p className="wcpos:text-red-600 wcpos:mb-2">{t('layout.error')}</p>
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">{errorMessage}</p>
 			<button
 				type="button"
 				onClick={resetErrorBoundary}
 				className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:bg-wp-admin-theme-color wcpos:text-white wcpos:border-0 wcpos:rounded wcpos:cursor-pointer"
 			>
-				Try Again
+				{t('layout.try_again')}
 			</button>
 		</div>
 	);
@@ -43,18 +44,17 @@ export function GalleryLayout() {
 
 			<div className="wcpos:mb-6">
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
-					Receipt Templates
+					{t('layout.title')}
 				</h1>
 				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2 wcpos:max-w-2xl">
-					Design and manage the receipts printed at your point of sale.
-					Templates use HTML or ESC/POS format and can be fully customised.{' '}
+					{t('layout.description')}{' '}
 					<a
 						href="https://docs.wcpos.com/templates/receipt-templates"
 						target="_blank"
 						rel="noopener noreferrer"
 						className="wcpos:text-wp-admin-theme-color hover:wcpos:underline"
 					>
-						Learn more
+						{t('layout.learn_more')}
 					</a>
 				</p>
 			</div>

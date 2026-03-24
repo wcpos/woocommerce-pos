@@ -1,4 +1,5 @@
 import { useMustachePreview } from '../hooks/use-mustache-preview';
+import { t } from '../translations';
 
 interface LivePreviewProps {
 	content: string;
@@ -19,7 +20,7 @@ export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProp
 		<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-white">
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
-					Preview
+					{t('editor.preview')}
 				</span>
 				{previewUrl && (
 					<a
@@ -28,7 +29,7 @@ export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProp
 						rel="noopener noreferrer"
 						className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline"
 					>
-						Open in tab
+						{t('editor.open_in_tab')}
 					</a>
 				)}
 			</div>
@@ -37,7 +38,7 @@ export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProp
 					srcDoc={srcdoc}
 					sandbox="allow-same-origin"
 					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
-					title="Template preview"
+					title={t('editor.template_preview')}
 				/>
 			</div>
 		</div>

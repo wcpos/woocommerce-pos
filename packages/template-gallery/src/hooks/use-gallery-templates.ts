@@ -2,6 +2,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 import { useSnackbar } from '../components/snackbar';
+import { t } from '../translations';
 
 import type { GalleryTemplate, Template } from '../types';
 
@@ -30,10 +31,10 @@ export function useInstallGalleryTemplate() {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			queryClient.invalidateQueries({ queryKey: ['gallery-templates'] });
-			addSnackbar({ message: 'Gallery template installed', status: 'success' });
+			addSnackbar({ message: t('snackbar.gallery_installed'), status: 'success' });
 		},
 		onError: () => {
-			addSnackbar({ message: 'Failed to install template', status: 'error' });
+			addSnackbar({ message: t('snackbar.install_failed'), status: 'error' });
 		},
 	});
 }

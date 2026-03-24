@@ -16,6 +16,7 @@ import {
 	useDeleteTemplate,
 } from '../hooks/use-templates';
 
+import { t } from '../translations';
 import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
@@ -58,16 +59,16 @@ export function GalleryGrid() {
 	const reorderTemplates = useReorderTemplates(type);
 	const deleteTemplate = useDeleteTemplate();
 
-	const filteredGallery = galleryTemplates.filter((t: GalleryTemplate) =>
-		matchesFilters(t, filters),
+	const filteredGallery = galleryTemplates.filter((tmpl: GalleryTemplate) =>
+		matchesFilters(tmpl, filters),
 	);
 
 	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
 
 	// Find the template being previewed
 	const previewTemplate = previewId !== null
-		? (templates.find((t: AnyTemplate) => t.id === previewId) ??
-			galleryTemplates.find((t: GalleryTemplate) => t.key === previewId))
+		? (templates.find((tmpl: AnyTemplate) => tmpl.id === previewId) ??
+			galleryTemplates.find((tmpl: GalleryTemplate) => tmpl.key === previewId))
 		: null;
 
 	const previewIsGallery = previewTemplate ? 'key' in previewTemplate : false;
@@ -77,17 +78,17 @@ export function GalleryGrid() {
 
 	const handleToggle = (id: number | string) => {
 		if (typeof id === 'string') {
-			const vt = templates.find((t): t is VirtualTemplate => t.is_virtual && t.id === id);
+			const vt = templates.find((tmpl): tmpl is VirtualTemplate => tmpl.is_virtual && tmpl.id === id);
 			if (vt) {
 				const isCurrentlyDisabled = 'is_disabled' in vt && vt.is_disabled;
 				toggleVirtualTemplate.mutate({ id, disabled: !isCurrentlyDisabled });
 			}
 		} else {
-			const t = templates.find((tmpl): tmpl is Template => !tmpl.is_virtual && tmpl.id === id);
-			if (t) {
+			const found = templates.find((tmpl): tmpl is Template => !tmpl.is_virtual && tmpl.id === id);
+			if (found) {
 				toggleTemplate.mutate({
 					id,
-					status: t.status === 'publish' ? 'draft' : 'publish',
+					status: found.status === 'publish' ? 'draft' : 'publish',
 				});
 			}
 		}
@@ -109,13 +110,13 @@ export function GalleryGrid() {
 			<section>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:mb-3">
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
-						Your Templates
+						{t('gallery.your_templates')}
 					</h2>
 					<a
 						href={`${adminUrl}/post-new.php?post_type=wcpos_template`}
 						className="page-title-action"
 					>
-						Add New Template
+						{t('gallery.add_new')}
 					</a>
 				</div>
 				<TemplatesTable
@@ -133,10 +134,10 @@ export function GalleryGrid() {
 			{galleryTemplates.length > 0 && (
 				<section>
 					<h2 className="wcpos:text-base wcpos:font-medium wcpos:text-gray-700 wcpos:m-0">
-						Template Gallery
+						{t('gallery.template_gallery')}
 					</h2>
 					<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-1 wcpos:mb-3">
-						Starter templates you can customise to match your business. Preview any template or click Customise to make it your own.
+						{t('gallery.description')}
 					</p>
 					<div className="wcpos:flex wcpos:gap-6">
 						<FilterSidebar
@@ -145,7 +146,7 @@ export function GalleryGrid() {
 							availableCategories={Array.from(
 								new Set(
 									galleryTemplates
-										.map((t) => t.category)
+										.map((tmpl) => tmpl.category)
 										.filter((c) => c.length > 0),
 								),
 							)}
@@ -156,19 +157,19 @@ export function GalleryGrid() {
 						<div className="wcpos:flex-1 wcpos:min-w-0">
 							{filteredGallery.length > 0 ? (
 								<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-									{filteredGallery.map((t: GalleryTemplate) => (
+									{filteredGallery.map((tmpl: GalleryTemplate) => (
 										<TemplateCard
-											key={t.key}
-											template={t}
+											key={tmpl.key}
+											template={tmpl}
 											isGallery
-											onPreview={() => setPreviewId(t.key)}
-											onCustomize={() => installGallery.mutate(t.key)}
+											onPreview={() => setPreviewId(tmpl.key)}
+											onCustomize={() => installGallery.mutate(tmpl.key)}
 										/>
 									))}
 								</div>
 							) : (
 								<p className="wcpos:text-sm wcpos:text-gray-400 wcpos:py-4">
-									No gallery templates match your filters.
+									{t('gallery.no_matches')}
 								</p>
 							)}
 						</div>
@@ -190,8 +191,8 @@ export function GalleryGrid() {
 					}}
 					onCustomize={() => {
 						if (!previewIsGallery) return;
-						const t = previewTemplate as GalleryTemplate;
-						installGallery.mutate(t.key);
+						const gallery = previewTemplate as GalleryTemplate;
+						installGallery.mutate(gallery.key);
 					}}
 				/>
 			)}
