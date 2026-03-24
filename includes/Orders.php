@@ -33,6 +33,7 @@ class Orders {
 	 */
 	private static $coupon_recalculation_active = false;
 
+
 	/**
 	 * Constructor.
 	 */
@@ -689,27 +690,19 @@ class Orders {
 	 * @return array Tax rates array from WC_Tax::find_rates().
 	 */
 	private static function get_tax_rates_for_item( $item, $order ): array {
-		$tax_based_on = $order->get_meta( '_woocommerce_pos_tax_based_on' );
-		if ( empty( $tax_based_on ) ) {
-			$tax_based_on = 'base';
+		// Use the order's tax location which respects all registered filters,
+		// including the Pro plugin's store address override. This ensures the
+		// subtotal filter uses the same tax rates as WC's calculate_taxes().
+		if ( method_exists( $order, 'get_tax_location' ) ) {
+			$tax_location = $order->get_tax_location();
+		} else {
+			$tax_location = array();
 		}
 
-		if ( 'billing' === $tax_based_on ) {
-			$country  = $order->get_billing_country();
-			$state    = $order->get_billing_state();
-			$postcode = $order->get_billing_postcode();
-			$city     = $order->get_billing_city();
-		} elseif ( 'shipping' === $tax_based_on ) {
-			$country  = $order->get_shipping_country();
-			$state    = $order->get_shipping_state();
-			$postcode = $order->get_shipping_postcode();
-			$city     = $order->get_shipping_city();
-		} else {
-			$country  = WC()->countries->get_base_country();
-			$state    = WC()->countries->get_base_state();
-			$postcode = WC()->countries->get_base_postcode();
-			$city     = WC()->countries->get_base_city();
-		}
+		$country  = $tax_location['country'] ?? WC()->countries->get_base_country();
+		$state    = $tax_location['state'] ?? WC()->countries->get_base_state();
+		$postcode = $tax_location['postcode'] ?? WC()->countries->get_base_postcode();
+		$city     = $tax_location['city'] ?? WC()->countries->get_base_city();
 
 		return WC_Tax::find_rates(
 			array(
