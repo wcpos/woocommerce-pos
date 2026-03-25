@@ -14,6 +14,9 @@ class POSLineItemHelper {
 	 *     @type string $price         Current price. Required.
 	 *     @type string $regular_price Regular price. Defaults to $price.
 	 *     @type string $tax_status    Tax status. Default 'taxable'.
+	 *     @type bool   $virtual       Optional. Whether the item is virtual.
+	 *     @type bool   $downloadable  Optional. Whether the item is downloadable.
+	 *     @type array  $categories    Optional. Array of category data.
 	 * }
 	 *
 	 * @return array Array with 'key' and 'value' keys.
@@ -23,15 +26,25 @@ class POSLineItemHelper {
 			$data['regular_price'] = $data['price'];
 		}
 
+		$meta_value = array(
+			'price'         => (string) ( $data['price'] ?? '0' ),
+			'regular_price' => (string) ( $data['regular_price'] ?? '0' ),
+			'tax_status'    => $data['tax_status'] ?? 'taxable',
+		);
+
+		if ( isset( $data['virtual'] ) ) {
+			$meta_value['virtual'] = (bool) $data['virtual'];
+		}
+		if ( isset( $data['downloadable'] ) ) {
+			$meta_value['downloadable'] = (bool) $data['downloadable'];
+		}
+		if ( isset( $data['categories'] ) ) {
+			$meta_value['categories'] = $data['categories'];
+		}
+
 		return array(
 			'key'   => '_woocommerce_pos_data',
-			'value' => wp_json_encode(
-				array(
-					'price'         => (string) ( $data['price'] ?? '0' ),
-					'regular_price' => (string) ( $data['regular_price'] ?? '0' ),
-					'tax_status'    => $data['tax_status'] ?? 'taxable',
-				)
-			),
+			'value' => wp_json_encode( $meta_value ),
 		);
 	}
 
@@ -45,6 +58,9 @@ class POSLineItemHelper {
 	 *     @type int    $quantity      Quantity. Default 1.
 	 *     @type string $tax_status    Tax status. Default 'taxable'.
 	 *     @type string $sku           Optional SKU.
+	 *     @type bool   $virtual       Whether the item is virtual. Default false.
+	 *     @type bool   $downloadable  Whether the item is downloadable. Default false.
+	 *     @type array  $categories    Array of category data. Default empty array.
 	 * }
 	 *
 	 * @return array Line item array for REST API request body params.
@@ -59,11 +75,29 @@ class POSLineItemHelper {
 				'quantity'      => 1,
 				'tax_status'    => 'taxable',
 				'sku'           => '',
+				'virtual'       => false,
+				'downloadable'  => false,
+				'categories'    => array(),
 			)
 		);
 
 		if ( null === $args['regular_price'] ) {
 			$args['regular_price'] = $args['price'];
+		}
+
+		$pos_meta_args = array(
+			'price'         => (string) $args['price'],
+			'regular_price' => (string) $args['regular_price'],
+			'tax_status'    => $args['tax_status'],
+		);
+		if ( $args['virtual'] ) {
+			$pos_meta_args['virtual'] = true;
+		}
+		if ( $args['downloadable'] ) {
+			$pos_meta_args['downloadable'] = true;
+		}
+		if ( ! empty( $args['categories'] ) ) {
+			$pos_meta_args['categories'] = $args['categories'];
 		}
 
 		$line_item = array(
@@ -72,13 +106,7 @@ class POSLineItemHelper {
 			'quantity'   => $args['quantity'],
 			'price'      => $args['price'],
 			'meta_data'  => array(
-				self::pos_data_meta(
-					array(
-						'price'         => (string) $args['price'],
-						'regular_price' => (string) $args['regular_price'],
-						'tax_status'    => $args['tax_status'],
-					)
-				),
+				self::pos_data_meta( $pos_meta_args ),
 			),
 		);
 
@@ -144,6 +172,9 @@ class POSLineItemHelper {
 	 *     @type string $price         Current price. Required.
 	 *     @type string $regular_price Regular price. Defaults to $price.
 	 *     @type string $tax_status    Tax status. Default 'taxable'.
+	 *     @type bool   $virtual       Optional. Whether the item is virtual.
+	 *     @type bool   $downloadable  Optional. Whether the item is downloadable.
+	 *     @type array  $categories    Optional. Array of category data.
 	 * }
 	 *
 	 * @return WC_Order_Item_Product The item with meta added.
@@ -153,16 +184,23 @@ class POSLineItemHelper {
 			$data['regular_price'] = $data['price'];
 		}
 
-		$item->add_meta_data(
-			'_woocommerce_pos_data',
-			wp_json_encode(
-				array(
-					'price'         => (string) ( $data['price'] ?? '0' ),
-					'regular_price' => (string) ( $data['regular_price'] ?? '0' ),
-					'tax_status'    => $data['tax_status'] ?? 'taxable',
-				)
-			)
+		$meta_value = array(
+			'price'         => (string) ( $data['price'] ?? '0' ),
+			'regular_price' => (string) ( $data['regular_price'] ?? '0' ),
+			'tax_status'    => $data['tax_status'] ?? 'taxable',
 		);
+
+		if ( isset( $data['virtual'] ) ) {
+			$meta_value['virtual'] = (bool) $data['virtual'];
+		}
+		if ( isset( $data['downloadable'] ) ) {
+			$meta_value['downloadable'] = (bool) $data['downloadable'];
+		}
+		if ( isset( $data['categories'] ) ) {
+			$meta_value['categories'] = $data['categories'];
+		}
+
+		$item->add_meta_data( '_woocommerce_pos_data', wp_json_encode( $meta_value ) );
 
 		return $item;
 	}
