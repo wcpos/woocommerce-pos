@@ -192,9 +192,18 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * @TODO - only need to update if there is a change
 		 */
 		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
+			// Filter out variations with no sale price to avoid $0.00 in the range.
+			$all_variation_prices = $product->get_variation_prices();
+			$sale_prices          = array_filter(
+				$all_variation_prices['sale_price'],
+				function ( $p ) {
+					return '' !== $p;
+				}
+			);
+
 			// Initialize price variables.
 			$price_array = array(
-				'price' => array(
+				'price'         => array(
 					'min' => $product->get_variation_price(),
 					'max' => $product->get_variation_price( 'max' ),
 				),
@@ -202,9 +211,9 @@ class Products_Controller extends WC_REST_Products_Controller {
 					'min' => $product->get_variation_regular_price(),
 					'max' => $product->get_variation_regular_price( 'max' ),
 				),
-				'sale_price' => array(
-					'min' => $product->get_variation_sale_price(),
-					'max' => $product->get_variation_sale_price( 'max' ),
+				'sale_price'    => array(
+					'min' => ! empty( $sale_prices ) ? min( $sale_prices ) : '',
+					'max' => ! empty( $sale_prices ) ? max( $sale_prices ) : '',
 				),
 			);
 
