@@ -924,6 +924,42 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that misc products with categories have correct category IDs.
+	 */
+	public function test_order_item_product_misc_categories(): void {
+		$order = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Categorized Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'      => '20.00',
+				'categories' => array(
+					array(
+						'id'   => 42,
+						'name' => 'Clothing',
+					),
+					array(
+						'id'   => 99,
+						'name' => 'Accessories',
+					),
+				),
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		$product = apply_filters( 'woocommerce_order_item_product', false, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertEquals( array( 42, 99 ), $product->get_category_ids(), 'Misc product should have category IDs from POS data' );
+	}
+
+	/**
 	 * Test that orders can be set to pos-open status.
 	 */
 	public function test_order_can_be_set_to_pos_open(): void {

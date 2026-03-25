@@ -275,6 +275,10 @@ class Orders {
 				if ( ! empty( $pos_data['downloadable'] ) ) {
 					$product->set_downloadable( true );
 				}
+				if ( ! empty( $pos_data['categories'] ) && is_array( $pos_data['categories'] ) ) {
+					$category_ids = array_filter( array_map( 'intval', array_column( $pos_data['categories'], 'id' ) ) );
+					$product->set_category_ids( $category_ids );
+				}
 				if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
 					$product->set_sale_price( $pos_data['price'] );
 				}
