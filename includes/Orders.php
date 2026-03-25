@@ -466,7 +466,7 @@ class Orders {
 	 * @return bool
 	 */
 	public function coupon_is_valid_for_product( bool $valid, $product, $coupon, $values ): bool {
-		if ( ! $product instanceof WC_Product || ! $coupon instanceof WC_Coupon ) {
+		if ( ! $product instanceof WC_Product ) {
 			return $valid;
 		}
 
