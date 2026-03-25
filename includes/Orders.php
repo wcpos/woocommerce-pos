@@ -492,15 +492,6 @@ class Orders {
 		}
 	}
 
-
-
-
-
-
-
-
-
-
 	/**
 	 * Register the POS order statuses.
 	 */
