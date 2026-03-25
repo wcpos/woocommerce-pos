@@ -1010,6 +1010,232 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	}
 
 	// ======================================================================
+	// Category-based coupon tests for misc products
+	// ======================================================================
+
+	/**
+	 * Test coupon with product_categories restriction applies to misc product with matching category.
+	 */
+	public function test_coupon_product_categories_applies_to_misc_product(): void {
+		$category = wp_insert_term( 'POS Clothing', 'product_cat' );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Clothing Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->set_subtotal( 20 );
+		$item->set_total( 20 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '20',
+					'regular_price' => '20',
+					'tax_status'    => 'taxable',
+					'categories'    => array(
+						array(
+							'id'   => $category['term_id'],
+							'name' => 'POS Clothing',
+						),
+					),
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'cat-coupon',
+			'publish',
+			array(
+				'discount_type'      => 'percent',
+				'coupon_amount'      => '50',
+				'product_categories' => array( $category['term_id'] ),
+			)
+		);
+
+		$order->apply_coupon( 'cat-coupon' );
+
+		$items = $order->get_items();
+		$line  = reset( $items );
+
+		$this->assertEquals( 10, (float) $line->get_total(), 'Coupon should apply 50% discount to misc product with matching category' );
+	}
+
+	/**
+	 * Test coupon with excluded_product_categories restriction rejects misc product with matching category.
+	 */
+	public function test_coupon_excluded_product_categories_rejects_misc_product(): void {
+		$category = wp_insert_term( 'POS Excluded', 'product_cat' );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Excluded Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->set_subtotal( 20 );
+		$item->set_total( 20 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '20',
+					'regular_price' => '20',
+					'tax_status'    => 'taxable',
+					'categories'    => array(
+						array(
+							'id'   => $category['term_id'],
+							'name' => 'POS Excluded',
+						),
+					),
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'exclude-cat-coupon',
+			'publish',
+			array(
+				'discount_type'               => 'percent',
+				'coupon_amount'               => '50',
+				'exclude_product_categories' => array( $category['term_id'] ),
+			)
+		);
+
+		$order->apply_coupon( 'exclude-cat-coupon' );
+
+		$items = $order->get_items();
+		$line  = reset( $items );
+
+		$this->assertEquals( 20, (float) $line->get_total(), 'Coupon should NOT apply to misc product with excluded category' );
+	}
+
+	/**
+	 * Test coupon with product_categories restriction applies to misc product via parent category ancestry.
+	 */
+	public function test_coupon_product_categories_applies_to_misc_product_via_parent_category(): void {
+		$parent = wp_insert_term( 'POS Apparel', 'product_cat' );
+		$child  = wp_insert_term( 'POS T-Shirts', 'product_cat', array( 'parent' => $parent['term_id'] ) );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc T-Shirt' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->set_subtotal( 20 );
+		$item->set_total( 20 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '20',
+					'regular_price' => '20',
+					'tax_status'    => 'taxable',
+					'categories'    => array(
+						array(
+							'id'   => $child['term_id'],
+							'name' => 'POS T-Shirts',
+						),
+					),
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'parent-cat-coupon',
+			'publish',
+			array(
+				'discount_type'      => 'percent',
+				'coupon_amount'      => '50',
+				'product_categories' => array( $parent['term_id'] ),
+			)
+		);
+
+		$order->apply_coupon( 'parent-cat-coupon' );
+
+		$items = $order->get_items();
+		$line  = reset( $items );
+
+		$this->assertEquals( 10, (float) $line->get_total(), 'Coupon restricted to parent category should apply to misc product with child category via ancestry' );
+	}
+
+	/**
+	 * Test coupon with excluded_product_categories restriction rejects misc product via parent category ancestry.
+	 */
+	public function test_coupon_excluded_product_categories_rejects_misc_product_via_parent_category(): void {
+		$parent = wp_insert_term( 'POS Excluded Parent', 'product_cat' );
+		$child  = wp_insert_term( 'POS Excluded Child', 'product_cat', array( 'parent' => $parent['term_id'] ) );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Excluded Child Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->set_subtotal( 20 );
+		$item->set_total( 20 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '20',
+					'regular_price' => '20',
+					'tax_status'    => 'taxable',
+					'categories'    => array(
+						array(
+							'id'   => $child['term_id'],
+							'name' => 'POS Excluded Child',
+						),
+					),
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'exclude-parent-cat-coupon',
+			'publish',
+			array(
+				'discount_type'              => 'percent',
+				'coupon_amount'              => '50',
+				'exclude_product_categories' => array( $parent['term_id'] ),
+			)
+		);
+
+		$order->apply_coupon( 'exclude-parent-cat-coupon' );
+
+		$items = $order->get_items();
+		$line  = reset( $items );
+
+		$this->assertEquals( 20, (float) $line->get_total(), 'Coupon excluding parent category should NOT apply to misc product with child category via ancestry' );
+	}
+
+	// ======================================================================
 	// Helper methods
 	// ======================================================================
 
