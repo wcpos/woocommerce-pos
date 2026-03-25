@@ -209,9 +209,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 			// Apply WooCommerce filter so pricing/currency extensions can adjust the values.
 			if ( '' !== $min_sale ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
 				$min_sale = apply_filters( 'woocommerce_get_variation_sale_price', $min_sale, $product, 'min', false );
 			}
 			if ( '' !== $max_sale ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
 				$max_sale = apply_filters( 'woocommerce_get_variation_sale_price', $max_sale, $product, 'max', false );
 			}
 
