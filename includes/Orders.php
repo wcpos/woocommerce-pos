@@ -438,6 +438,11 @@ class Orders {
 				$fake_post->post_date     = '';
 				$fake_post->post_date_gmt = '';
 				wp_cache_set( $temp_id, $fake_post, 'posts' );
+
+				// Prime term cache so get_object_term_cache() returns our IDs.
+				// get_the_terms() checks this cache before querying the DB,
+				// which is how validate_coupon_product_categories sees our categories.
+				wp_cache_set( $temp_id, $category_ids, 'product_cat_relationships' );
 			}
 		}
 		if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
