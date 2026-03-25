@@ -314,7 +314,9 @@ class Templates_Controller extends WP_REST_Controller {
 		} else {
 			$enabled = TemplatesManager::get_enabled_templates( $type );
 		}
-		$active_template_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
+		$active_template_id = $store_id
+			? ( ! empty( $enabled ) ? $enabled[0]['id'] : null )
+			: TemplatesManager::get_active_template_id( $type );
 
 		// Step 2: Build full template list.
 		// When store_id is set or no filters, use the resolved enabled list directly.
@@ -367,7 +369,7 @@ class Templates_Controller extends WP_REST_Controller {
 				}
 				$args['tax_query'] = $tax_query;
 			}
-			if ( $search ) {
+			if ( null !== $search && '' !== $search ) {
 				$matching_ids     = $this->get_search_matching_template_ids( $search, $args );
 				$args['post__in'] = empty( $matching_ids ) ? array( 0 ) : $matching_ids;
 			}
