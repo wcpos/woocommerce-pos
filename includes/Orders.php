@@ -269,6 +269,12 @@ class Orders {
 				if ( isset( $pos_data['tax_status'] ) ) {
 					$product->set_tax_status( $pos_data['tax_status'] );
 				}
+				if ( ! empty( $pos_data['virtual'] ) ) {
+					$product->set_virtual( true );
+				}
+				if ( ! empty( $pos_data['downloadable'] ) ) {
+					$product->set_downloadable( true );
+				}
 				if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
 					$product->set_sale_price( $pos_data['price'] );
 				}

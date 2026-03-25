@@ -869,6 +869,61 @@ class Test_Orders extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that virtual misc products return needs_shipping = false.
+	 */
+	public function test_order_item_product_misc_virtual(): void {
+		$order = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Virtual Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'   => '10.00',
+				'virtual' => true,
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		$product = apply_filters( 'woocommerce_order_item_product', false, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertTrue( $product->is_virtual(), 'Virtual misc product should be virtual' );
+		$this->assertFalse( $product->needs_shipping(), 'Virtual misc product should not need shipping' );
+	}
+
+	/**
+	 * Test that downloadable misc products return is_downloadable = true.
+	 */
+	public function test_order_item_product_misc_downloadable(): void {
+		$order = $this->create_pos_order();
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Downloadable Misc Item' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		POSLineItemHelper::add_pos_data_to_item(
+			$item,
+			array(
+				'price'        => '5.00',
+				'downloadable' => true,
+			)
+		);
+		$item->save();
+		$order->add_item( $item );
+		$order->save();
+
+		$product = apply_filters( 'woocommerce_order_item_product', false, $item );
+
+		$this->assertInstanceOf( 'WC_Product_Simple', $product );
+		$this->assertTrue( $product->is_downloadable(), 'Downloadable misc product should be downloadable' );
+	}
+
+	/**
 	 * Test that orders can be set to pos-open status.
 	 */
 	public function test_order_can_be_set_to_pos_open(): void {
