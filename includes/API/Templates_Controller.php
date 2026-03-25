@@ -1156,39 +1156,6 @@ class Templates_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Sort templates by stored order, appending unordered templates at the end.
-	 *
-	 * @param array $templates    Templates to sort.
-	 * @param array $stored_order Ordered array of template IDs.
-	 *
-	 * @return array Sorted templates.
-	 */
-	private function sort_by_stored_order( array $templates, array $stored_order ): array {
-		// Build a position map from stored order.
-		$position_map = array();
-		foreach ( $stored_order as $index => $id ) {
-			$key                  = \is_int( $id ) ? $id : (string) $id;
-			$position_map[ $key ] = $index;
-		}
-
-		$ordered   = array();
-		$unordered = array();
-
-		foreach ( $templates as $template ) {
-			$id  = $template['id'];
-			$key = \is_int( $id ) ? $id : (string) $id;
-
-			if ( isset( $position_map[ $key ] ) ) {
-				$ordered[ $position_map[ $key ] ] = $template;
-			} else {
-				$unordered[] = $template;
-			}
-		}
-
-		ksort( $ordered );
-
-		return array_merge( array_values( $ordered ), $unordered );
-	}
 
 	/**
 	 * Get collection parameters.
