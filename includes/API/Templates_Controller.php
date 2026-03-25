@@ -306,7 +306,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$modified_after = $request->get_param( 'modified_after' );
 		$per_page       = (int) ( $request->get_param( 'per_page' ) ?? -1 );
 		$page           = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
-		$has_filters    = $search || $category || $modified_after;
+		$has_filters    = ( null !== $search && '' !== $search ) || ( null !== $category && '' !== $category ) || ( null !== $modified_after && '' !== $modified_after );
 
 		// Step 1: Resolve which templates to return.
 		if ( $store_id ) {
