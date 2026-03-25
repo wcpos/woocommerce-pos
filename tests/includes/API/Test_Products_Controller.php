@@ -863,6 +863,137 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( array( $product3->get_id() ), $ids );
 	}
 
+	/**
+	 * Variable product sale_price metadata should exclude variations without a sale price.
+	 *
+	 * When a variation has no sale_price, WC's get_variation_sale_price() returns '' which
+	 * WC internally treats as 0, producing a $0.00 min sale price. The metadata should only
+	 * include sale prices from variations that are actually on sale.
+	 */
+	public function test_variable_product_sale_price_excludes_empty(): void {
+		$product = new \WC_Product_Variable();
+		$product->set_props(
+			array(
+				'name' => 'Variable Sale Price Test',
+				'sku'  => uniqid( 'VARIABLE SALE TEST' ),
+			)
+		);
+
+		$attribute_data = ProductHelper::create_attribute( 'size', array( 'small', 'medium', 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_position( 1 );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$product->set_attributes( array( $attribute ) );
+		$product->save();
+
+		// Variation 1: on sale (regular=20, sale=15, effective price=15).
+		$variation_1 = new \WC_Product_Variation();
+		$variation_1->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'VAR SMALL' ),
+				'regular_price' => '20',
+				'sale_price'    => '15',
+			)
+		);
+		$variation_1->set_attributes( array( 'pa_size' => 'small' ) );
+		$variation_1->save();
+
+		// Variation 2: NOT on sale (regular=25, no sale_price, effective price=25).
+		$variation_2 = new \WC_Product_Variation();
+		$variation_2->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'VAR MEDIUM' ),
+				'regular_price' => '25',
+			)
+		);
+		$variation_2->set_attributes( array( 'pa_size' => 'medium' ) );
+		$variation_2->save();
+
+		// Variation 3: on sale (regular=30, sale=22, effective price=22).
+		$variation_3 = new \WC_Product_Variation();
+		$variation_3->set_props(
+			array(
+				'parent_id'     => $product->get_id(),
+				'sku'           => uniqid( 'VAR LARGE' ),
+				'regular_price' => '30',
+				'sale_price'    => '22',
+			)
+		);
+		$variation_3->set_attributes( array( 'pa_size' => 'large' ) );
+		$variation_3->save();
+
+		// Clear WC's cached price transients.
+		wc_delete_product_transients( $product->get_id() );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+
+		// Find the _woocommerce_pos_variable_prices meta.
+		$variable_prices = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$variable_prices = json_decode( $meta['value'], true );
+				break;
+			}
+		}
+
+		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
+
+		// price range: min=15 (variation 1 sale), max=25 (variation 2 regular, not on sale).
+		$this->assertEquals( '15', $variable_prices['price']['min'] );
+		$this->assertEquals( '25', $variable_prices['price']['max'] );
+
+		// regular_price range: min=20, max=30.
+		$this->assertEquals( '20', $variable_prices['regular_price']['min'] );
+		$this->assertEquals( '30', $variable_prices['regular_price']['max'] );
+
+		// sale_price range: only variations WITH a sale price (15 and 22), NOT $0.00.
+		$this->assertEquals( '15', $variable_prices['sale_price']['min'] );
+		$this->assertEquals( '22', $variable_prices['sale_price']['max'] );
+	}
+
+	/**
+	 * When no variations have sale prices, the sale_price min/max should be empty strings, not 0.
+	 */
+	public function test_variable_product_no_sale_prices(): void {
+		$product = ProductHelper::create_variation_product();
+
+		// Clear WC's cached price transients.
+		wc_delete_product_transients( $product->get_id() );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+
+		// Find the _woocommerce_pos_variable_prices meta.
+		$variable_prices = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$variable_prices = json_decode( $meta['value'], true );
+				break;
+			}
+		}
+
+		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
+
+		// sale_price min and max should be empty strings (not 0) when no variations are on sale.
+		$this->assertSame( '', $variable_prices['sale_price']['min'], 'sale_price min should be empty string when no variations are on sale.' );
+		$this->assertSame( '', $variable_prices['sale_price']['max'], 'sale_price max should be empty string when no variations are on sale.' );
+	}
+
 	public function test_uuid_is_unique(): void {
 		$uuid      = Uuid::uuid4()->toString();
 		$product1  = ProductHelper::create_simple_product();
