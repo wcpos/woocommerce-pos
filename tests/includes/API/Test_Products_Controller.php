@@ -950,16 +950,16 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
 
 		// price range: min=15 (variation 1 sale), max=25 (variation 2 regular, not on sale).
-		$this->assertEquals( '15', $variable_prices['price']['min'] );
-		$this->assertEquals( '25', $variable_prices['price']['max'] );
+		$this->assertEquals( '15.00', $variable_prices['price']['min'] );
+		$this->assertEquals( '25.00', $variable_prices['price']['max'] );
 
 		// regular_price range: min=20, max=30.
-		$this->assertEquals( '20', $variable_prices['regular_price']['min'] );
-		$this->assertEquals( '30', $variable_prices['regular_price']['max'] );
+		$this->assertEquals( '20.00', $variable_prices['regular_price']['min'] );
+		$this->assertEquals( '30.00', $variable_prices['regular_price']['max'] );
 
 		// sale_price range: only variations WITH a sale price (15 and 22), NOT $0.00.
-		$this->assertEquals( '15', $variable_prices['sale_price']['min'] );
-		$this->assertEquals( '22', $variable_prices['sale_price']['max'] );
+		$this->assertEquals( '15.00', $variable_prices['sale_price']['min'] );
+		$this->assertEquals( '22.00', $variable_prices['sale_price']['max'] );
 	}
 
 	/**
