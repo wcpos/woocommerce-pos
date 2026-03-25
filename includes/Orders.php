@@ -27,13 +27,6 @@ use WC_Tax;
  */
 class Orders {
 	/**
-	 * Whether POS coupon recalculation context is currently active.
-	 *
-	 * @var bool
-	 */
-	private static $coupon_recalculation_active = false;
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -51,7 +44,6 @@ class Orders {
 		add_filter( 'woocommerce_order_get_tax_location', array( $this, 'get_tax_location' ), 10, 2 );
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
-		add_action( 'woocommerce_order_applied_coupon', array( $this, 'before_coupon_recalculation' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 	}
 
@@ -285,8 +277,8 @@ class Orders {
 			return $product;
 		}
 
-		// For real products, only apply POS overrides during coupon recalculation.
-		if ( ! self::$coupon_recalculation_active || ! $product || empty( $pos_data_json ) ) {
+		// For real products, only apply POS overrides when pos_data exists.
+		if ( ! $product || empty( $pos_data_json ) ) {
 			return $product;
 		}
 
@@ -358,14 +350,8 @@ class Orders {
 		}
 
 		if ( $product && $product->get_id() ) {
-			/*
-			 * During coupon recalculation, order_item_product() already returns an
-			 * isolated product instance for real products. Reuse it here to avoid
-			 * a redundant second wc_get_product_object() call.
-			 */
-			if ( ! self::$coupon_recalculation_active ) {
-				$product = wc_get_product_object( $product->get_type(), $product->get_id() );
-			}
+			// Get a fresh product instance to apply POS overrides.
+			$product = wc_get_product_object( $product->get_type(), $product->get_id() );
 		} elseif ( 0 === $item->get_product_id() ) {
 			$product = new WC_Product_Simple();
 			$product->set_name( $item->get_name() );
@@ -487,9 +473,6 @@ class Orders {
 	 * @return void
 	 */
 	public function order_item_after_calculate_taxes( $item ): void {
-		// Recalculate subtotal taxes using inclusive math for tax-inclusive POS orders.
-		$this->maybe_fix_inclusive_subtotal_tax( $item );
-
 		$meta_data = $item->get_meta_data();
 
 		foreach ( $meta_data as $meta ) {
@@ -509,287 +492,14 @@ class Orders {
 		}
 	}
 
-	/**
-	 * Activate the POS subtotal filter before coupon recalculation.
-	 *
-	 * WooCommerce's recalculate_coupons() uses get_subtotal() as the base price for
-	 * coupon calculations. The POS stores the original price in subtotal and the
-	 * discounted price in _woocommerce_pos_data meta.
-	 *
-	 * This hook fires from apply_coupon() BEFORE recalculate_coupons() runs, so we
-	 * add a filter to temporarily return the POS price as the subtotal.
-	 *
-	 * For remove_coupon(), there is no "before" hook in WooCommerce core. The filter
-	 * is activated manually in Form_Handler::coupon_action() before calling
-	 * $order->remove_coupon().
-	 *
-	 * @see WC_Abstract_Order::apply_coupon()
-	 * @see WC_Abstract_Order::recalculate_coupons()
-	 *
-	 * @param \WC_Coupon        $coupon The coupon object.
-	 * @param WC_Abstract_Order $order  The order object.
-	 */
-	public function before_coupon_recalculation( $coupon, $order ): void {
-		if ( ! woocommerce_pos_is_pos_order( $order ) ) {
-			return;
-		}
-
-		self::activate_pos_subtotal_filter();
-	}
-
-	/**
-	 * Add the subtotal filter if not already active, and schedule its removal.
-	 *
-	 * The filter is active during the coupon recalculation phase so that
-	 * WC_Discounts uses the POS price as the discount base. It is removed
-	 * BEFORE calculate_totals() runs, so that:
-	 * - subtotal_tax is calculated from the stored subtotal (regular_price), not POS price
-	 * - discount_total = subtotal - total includes the POS/sale discount, not just coupon discounts
-	 *
-	 * Timeline within recalculate_coupons():
-	 *   1. activate filter (here)
-	 *   2. reset: set_total(get_subtotal()) → uses POS price ✓
-	 *   3. WC_Discounts::set_items_from_order() → uses POS price ✓
-	 *   4. apply_coupon() for each coupon → uses POS price ✓
-	 *   5. set_item_discount_amounts() → sets final totals
-	 *   6. calculate_totals(true) → woocommerce_order_before_calculate_totals fires → DEACTIVATE
-	 *   7. calculate_taxes() → uses stored subtotal (regular_price) ✓
-	 *   8. discount_total = subtotal - total → includes POS discount ✓
-	 */
-	public static function activate_pos_subtotal_filter(): void {
-		if ( has_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ) ) ) {
-			return;
-		}
-
-		self::$coupon_recalculation_active = true;
-		add_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10, 2 );
-		add_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10, 2 );
-		add_action( 'woocommerce_order_before_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10, 2 );
-	}
-
-	/**
-	 * Filter the line item subtotal to return the POS price (tax-exclusive).
-	 *
-	 * The POS stores the customer-facing price in _woocommerce_pos_data, which is
-	 * tax-inclusive when the order has prices_include_tax. WooCommerce's get_subtotal()
-	 * must always return a tax-exclusive value, so we extract tax when needed.
-	 *
-	 * @param string                $subtotal The original subtotal.
-	 * @param WC_Order_Item_Product $item     The order item.
-	 *
-	 * @return string The tax-exclusive POS price, or the original subtotal.
-	 */
-	public static function filter_pos_item_subtotal( $subtotal, $item ) {
-		$components = self::get_pos_price_components( $item );
-		if ( null === $components ) {
-			return $subtotal;
-		}
-
-		return (string) $components['subtotal'];
-	}
-
-	/**
-	 * Filter the line item subtotal tax during POS coupon recalculation.
-	 *
-	 * Returns the tax portion of the POS price for taxable items, or '0' for
-	 * tax-exempt items. This keeps subtotal and subtotal_tax consistent.
-	 *
-	 * @param string                $subtotal_tax The original subtotal tax.
-	 * @param WC_Order_Item_Product $item         The order item.
-	 *
-	 * @return string
-	 */
-	public static function filter_pos_item_subtotal_tax( $subtotal_tax, $item ) {
-		$components = self::get_pos_price_components( $item );
-		if ( null === $components ) {
-			return $subtotal_tax;
-		}
-
-		return (string) $components['subtotal_tax'];
-	}
-
-	/**
-	 * Split the POS price into tax-exclusive subtotal and tax components.
-	 *
-	 * When the order has prices_include_tax and the item is taxable, extracts
-	 * the tax from the inclusive POS price using WC_Tax::find_rates() and
-	 * WC_Tax::calc_tax() for accuracy. This avoids deriving rates from stored
-	 * values which can become inconsistent after calculate_taxes() runs.
-	 *
-	 * @param WC_Order_Item_Product|mixed $item The order item.
-	 *
-	 * @return array{subtotal: float, subtotal_tax: float}|null Components or null if not a POS item.
-	 */
-	private static function get_pos_price_components( $item ): ?array {
-		if ( ! $item instanceof WC_Order_Item_Product ) {
-			return null;
-		}
-
-		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-		if ( empty( $pos_data_json ) ) {
-			return null;
-		}
-
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) || ! isset( $pos_data['price'] ) ) {
-			return null;
-		}
-
-		$pos_price  = (float) $pos_data['price'] * $item->get_quantity();
-		$tax_status = $pos_data['tax_status'] ?? 'taxable';
-
-		// Non-taxable items (none or shipping-only): no product tax to extract.
-		if ( 'none' === $tax_status || 'shipping' === $tax_status ) {
-			return array(
-				'subtotal'     => $pos_price,
-				'subtotal_tax' => 0.0,
-			);
-		}
-
-		// Check if the order uses tax-inclusive pricing.
-		$order = $item->get_order();
-		if ( ! $order instanceof WC_Order ) {
-			return null;
-		}
-		if ( $order->get_prices_include_tax() ) {
-			// Use woocommerce_order_get_tax_location filter so pro plugin store overrides apply.
-			$tax_location = apply_filters(
-				'woocommerce_order_get_tax_location', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-				array(
-					'country'  => WC()->countries->get_base_country(),
-					'state'    => WC()->countries->get_base_state(),
-					'postcode' => WC()->countries->get_base_postcode(),
-					'city'     => WC()->countries->get_base_city(),
-				),
-				$order
-			);
-			$tax_rates    = WC_Tax::find_rates(
-				array(
-					'country'   => $tax_location['country'],
-					'state'     => $tax_location['state'],
-					'postcode'  => $tax_location['postcode'] ?? '',
-					'city'      => $tax_location['city'] ?? '',
-					'tax_class' => $item->get_tax_class(),
-				)
-			);
-
-			if ( ! empty( $tax_rates ) ) {
-				$taxes      = WC_Tax::calc_tax( $pos_price, $tax_rates, true );
-				$tax_amount = array_sum( $taxes );
-				$ex_tax     = $pos_price - $tax_amount;
-
-				return array(
-					'subtotal'     => $ex_tax,
-					'subtotal_tax' => $tax_amount,
-				);
-			}
-
-			// No tax rates found: treat as untaxed.
-			return array(
-				'subtotal'     => $pos_price,
-				'subtotal_tax' => 0.0,
-			);
-		}
-
-		// Prices exclude tax: POS price is already tax-exclusive.
-		return array(
-			'subtotal'     => $pos_price,
-			'subtotal_tax' => (float) $item->get_subtotal_tax( 'edit' ),
-		);
-	}
-
-	/**
-	 * Remove the temporary subtotal filter after coupon recalculation completes.
-	 *
-	 * @param bool              $and_taxes Whether taxes were calculated.
-	 * @param WC_Abstract_Order $order     The order object.
-	 */
-	public static function deactivate_pos_subtotal_filter( $and_taxes, $order ): void {
-		self::$coupon_recalculation_active = false;
-		remove_filter( 'woocommerce_order_item_get_subtotal', array( static::class, 'filter_pos_item_subtotal' ), 10 );
-		remove_filter( 'woocommerce_order_item_get_subtotal_tax', array( static::class, 'filter_pos_item_subtotal_tax' ), 10 );
-		remove_action( 'woocommerce_order_before_calculate_totals', array( static::class, 'deactivate_pos_subtotal_filter' ), 10 );
-	}
 
 
 
-	/**
-	 * Recalculate subtotal taxes using inclusive math for tax-inclusive POS orders.
-	 *
-	 * WC's calculate_taxes() uses exclusive math (calc_tax with false), which
-	 * gives different per-rate results than inclusive extraction when compound
-	 * rates are involved. This recalculates from the original inclusive price.
-	 *
-	 * @param \WC_Order_Item|\WC_Order_Item_Product $item The order item.
-	 */
-	protected function maybe_fix_inclusive_subtotal_tax( $item ): void {
-		if ( ! $item instanceof \WC_Order_Item_Product ) {
-			return;
-		}
 
-		$order = $item->get_order();
-		if ( ! $order instanceof WC_Order || ! woocommerce_pos_is_pos_order( $order ) || ! $order->get_prices_include_tax() ) {
-			return;
-		}
 
-		// Get the inclusive subtotal price from POS data.
-		$pos_data_json = $item->get_meta( '_woocommerce_pos_data', true );
-		if ( empty( $pos_data_json ) ) {
-			return;
-		}
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
-			return;
-		}
 
-		$tax_status = $pos_data['tax_status'] ?? 'taxable';
-		if ( 'taxable' !== $tax_status ) {
-			return;
-		}
 
-		// Subtotal uses regular_price (pre-discount), falling back to price.
-		$regular_price    = (float) ( $pos_data['regular_price'] ?? $pos_data['price'] ?? 0 );
-		$pos_price        = (float) ( $pos_data['price'] ?? 0 );
-		$inclusive_subtotal = max( $pos_price, $regular_price ) * $item->get_quantity();
 
-		if ( $inclusive_subtotal <= 0 ) {
-			return;
-		}
-
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- using WC's existing filter.
-		$tax_location = apply_filters(
-			'woocommerce_order_get_tax_location', // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-			array(
-				'country'  => WC()->countries->get_base_country(),
-				'state'    => WC()->countries->get_base_state(),
-				'postcode' => WC()->countries->get_base_postcode(),
-				'city'     => WC()->countries->get_base_city(),
-			),
-			$order
-		);
-		$tax_rates = WC_Tax::find_rates(
-			array(
-				'country'   => $tax_location['country'],
-				'state'     => $tax_location['state'],
-				'postcode'  => $tax_location['postcode'] ?? '',
-				'city'      => $tax_location['city'] ?? '',
-				'tax_class' => $item->get_tax_class(),
-			)
-		);
-
-		if ( empty( $tax_rates ) ) {
-			return;
-		}
-
-		// Recalculate using INCLUSIVE math — the correct extraction for tax-inclusive prices.
-		$subtotal_taxes = WC_Tax::calc_tax( $inclusive_subtotal, $tax_rates, true );
-
-		// Override the per-rate subtotal breakdown (keeps total taxes from calculate_taxes).
-		$existing_taxes             = $item->get_taxes();
-		$existing_taxes['subtotal'] = $subtotal_taxes;
-		$item->set_taxes( $existing_taxes );
-		// set_taxes() calls set_subtotal_tax() internally with the corrected sum.
-	}
 
 	/**
 	 * Register the POS order statuses.
