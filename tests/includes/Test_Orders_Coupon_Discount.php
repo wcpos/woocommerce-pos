@@ -59,7 +59,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 * ($18 -> $16), the coupon should calculate against $16 (the POS price),
 	 * not $18 (the original price).
 	 *
-	 * Expected: subtotal stays $18, total = $16 - 10% of $16 = $14.40
+	 * Expected: subtotal = $16 (POS price), total = $16 - 10% of $16 = $14.40
 	 */
 	public function test_pos_discount_preserved_when_coupon_applied(): void {
 		$order = $this->create_pos_order_with_discount();
@@ -78,7 +78,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item  = reset( $items );
 
 		// Subtotal should remain $18 (the original/display price) — read raw value.
-		$this->assertEquals( 18, (float) $item->get_subtotal( 'edit' ), 'Stored subtotal should remain at original price ($18)' );
+		$this->assertEquals( 16, (float) $item->get_subtotal( 'edit' ), 'Stored subtotal should be POS price ($16)' );
 
 		// Total should be $16 - 10% of $16 = $14.40.
 		$this->assertEquals( 14.40, (float) $item->get_total(), 'Total should be POS price minus coupon discount ($14.40)' );
@@ -105,11 +105,6 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		$order->apply_coupon( 'test10remove' );
 
-		// Manually activate filter before remove_coupon() — in production,
-		// Form_Handler::coupon_action() does this. WC's remove_coupon() has
-		// no "before" hook so we must activate the filter externally.
-		$this->orders->activate_pos_subtotal_filter();
-
 		$order->remove_coupon( 'test10remove' );
 
 		$items = $order->get_items();
@@ -119,7 +114,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$this->assertEquals( 16, (float) $item->get_total(), 'After coupon removal, total should return to POS price ($16)' );
 
 		// Subtotal should remain $18.
-		$this->assertEquals( 18, (float) $item->get_subtotal( 'edit' ), 'Stored subtotal should remain at original price ($18)' );
+		$this->assertEquals( 16, (float) $item->get_subtotal( 'edit' ), 'Stored subtotal should be POS price ($16)' );
 	}
 
 	// ======================================================================
@@ -227,8 +222,8 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item_a = new WC_Order_Item_Product();
 		$item_a->set_product( $product_a );
 		$item_a->set_quantity( 1 );
-		$item_a->set_subtotal( 18 );  // Original price.
-		$item_a->set_total( 16 );     // POS-discounted price.
+		$item_a->set_subtotal( 16 );  // POS price.
+		$item_a->set_total( 16 );     // Same as subtotal before coupons.
 		$item_a->add_meta_data(
 			'_woocommerce_pos_data',
 			wp_json_encode(
@@ -267,44 +262,11 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		// Item A: 10% off $16 = $1.60 discount, total = $14.40.
 		$this->assertEquals( 14.40, (float) $items[0]->get_total(), 'POS-discounted item: coupon should apply to POS price ($14.40)' );
-		$this->assertEquals( 18, (float) $items[0]->get_subtotal( 'edit' ), 'POS-discounted item: stored subtotal unchanged ($18)' );
+		$this->assertEquals( 16, (float) $items[0]->get_subtotal( 'edit' ), 'POS-discounted item: stored subtotal is POS price ($16)' );
 
 		// Item B: 10% off $20 = $2.00 discount, total = $18.00.
 		$this->assertEquals( 18, (float) $items[1]->get_total(), 'Regular item: coupon should apply to full price ($18)' );
 		$this->assertEquals( 20, (float) $items[1]->get_subtotal(), 'Regular item: subtotal unchanged ($20)' );
-	}
-
-	// ======================================================================
-	// Isolation tests: verify POS hooks don't leak into normal orders
-	// ======================================================================
-
-	/**
-	 * After applying a coupon to a POS order, the temporary subtotal filters
-	 * must be removed. If they linger, every subsequent order operation in the
-	 * same request would use POS subtotals.
-	 */
-	public function test_subtotal_filters_removed_after_pos_coupon(): void {
-		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon(
-			'cleanup10',
-			'publish',
-			array(
-				'discount_type' => 'percent',
-				'coupon_amount' => '10',
-			)
-		);
-
-		$order->apply_coupon( 'cleanup10' );
-
-		// After apply_coupon completes, the temporary filters should be gone.
-		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal', array( Orders::class, 'filter_pos_item_subtotal' ) ),
-			'Subtotal filter should be removed after coupon recalculation'
-		);
-		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal_tax', array( Orders::class, 'filter_pos_item_subtotal_tax' ) ),
-			'Subtotal tax filter should be removed after coupon recalculation'
-		);
 	}
 
 	/**
@@ -477,7 +439,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item  = reset( $items );
 
 		// The stored subtotal should be the tax-exclusive original price.
-		$this->assertEquals( 369.42, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should be tax-exclusive (€369.42)' );
+		$this->assertEquals( 369.42, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should be tax-exclusive POS price (€369.42)' );
 
 		// 10% off €447.00 incl-tax: discount = €44.70 incl-tax = €36.94 ex-tax.
 		// Line total = €369.42 - €36.94 = €332.48 ex-tax.
@@ -623,8 +585,6 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		$order->apply_coupon( 'taxremove10' );
 
-		// Manually activate filter before remove (simulates Form_Handler).
-		Orders::activate_pos_subtotal_filter();
 		$order->remove_coupon( 'taxremove10' );
 
 		$items = $order->get_items();
@@ -868,7 +828,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item = new WC_Order_Item_Product();
 		$item->set_product( $variation );
 		$item->set_quantity( 1 );
-		$item->set_subtotal( 18 );
+		$item->set_subtotal( 16 );
 		$item->set_total( 16 );
 		$item->add_meta_data(
 			'_woocommerce_pos_data',
@@ -973,8 +933,8 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item = new WC_Order_Item_Product();
 		$item->set_product( $product );
 		$item->set_quantity( 3 );
-		$item->set_subtotal( 74.97 ); // 24.99 * 3 original.
-		$item->set_total( 59.97 );    // 19.99 * 3 POS price.
+		$item->set_subtotal( 59.97 ); // 19.99 * 3 POS price.
+		$item->set_total( 59.97 );    // Same as subtotal before coupons.
 		$item->add_meta_data(
 			'_woocommerce_pos_data',
 			wp_json_encode(
@@ -1003,7 +963,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$items = $order->get_items();
 		$item  = reset( $items );
 
-		$this->assertEquals( 74.97, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should remain the original line subtotal.' );
+		$this->assertEquals( 59.97, round( (float) $item->get_subtotal( 'edit' ), 2 ), 'Stored subtotal should be POS price line subtotal.' );
 		$this->assertEquals( 53.97, round( (float) $item->get_total(), 2 ), 'Coupon math should remain stable for quantity + decimal prices.' );
 	}
 
@@ -1057,7 +1017,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 	 * Create a POS order with a single line item that has a POS discount.
 	 *
 	 * Product: regular_price = $18, POS discounted to $16.
-	 * Line item: subtotal = $18 (original), total = $16 (POS price).
+	 * Line item: subtotal = $16 (POS price), total = $16 (POS price).
 	 * Meta: _woocommerce_pos_data = {"price":"16","regular_price":"18","tax_status":"none"}
 	 *
 	 * @return WC_Order
@@ -1078,8 +1038,8 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item = new WC_Order_Item_Product();
 		$item->set_product( $product );
 		$item->set_quantity( 1 );
-		$item->set_subtotal( 18 );  // Original price (for display).
-		$item->set_total( 16 );     // POS-discounted price.
+		$item->set_subtotal( 16 );  // POS price (matches WC sale price behavior).
+		$item->set_total( 16 );     // Same as subtotal before coupons.
 		$item->add_meta_data(
 			'_woocommerce_pos_data',
 			wp_json_encode(
@@ -1127,7 +1087,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$order->set_prices_include_tax( true );
 
 		// WC stores the tax-exclusive amount as subtotal.
-		$subtotal_ex_tax = wc_get_price_excluding_tax( $product, array( 'price' => (float) $pos_regular_price ) );
+		$subtotal_ex_tax = wc_get_price_excluding_tax( $product, array( 'price' => (float) $pos_price ) );
 		$total_ex_tax    = wc_get_price_excluding_tax( $product, array( 'price' => (float) $pos_price ) );
 
 		$item = new WC_Order_Item_Product();
@@ -1182,7 +1142,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$item = new WC_Order_Item_Product();
 		$item->set_product( $product );
 		$item->set_quantity( 1 );
-		$item->set_subtotal( (float) $pos_regular_price );
+		$item->set_subtotal( (float) $pos_price );
 		$item->set_total( (float) $pos_price );
 		$item->add_meta_data(
 			'_woocommerce_pos_data',
