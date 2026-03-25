@@ -41,9 +41,13 @@ class Orders {
 	/**
 	 * Counter for generating unique temporary product IDs.
 	 *
+	 * Initialized with a random offset per request to avoid collisions when
+	 * a persistent object cache backend (Redis/Memcached) is active and
+	 * concurrent requests prime the same cache groups.
+	 *
 	 * @var int
 	 */
-	private static $temp_id_counter = PHP_INT_MAX;
+	private static $temp_id_counter = 0;
 
 	/**
 	 * Constructor.
@@ -421,6 +425,11 @@ class Orders {
 			// our categories. get_the_terms() requires get_post() to succeed
 			// and checks the object term cache before querying the DB.
 			if ( 0 === $product->get_id() && ! empty( $category_ids ) ) {
+				if ( 0 === self::$temp_id_counter ) {
+					// Use a random offset so concurrent requests don't collide
+					// when a persistent object cache is active.
+					self::$temp_id_counter = PHP_INT_MAX - wp_rand( 0, 999999 );
+				}
 				$temp_id = self::$temp_id_counter--;
 				$product->set_id( $temp_id );
 				self::$temp_product_categories[ $temp_id ] = $category_ids;
