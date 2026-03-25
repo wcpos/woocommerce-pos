@@ -466,7 +466,7 @@ class Orders {
 	 * @return bool
 	 */
 	public function coupon_is_valid_for_product( bool $valid, $product, $coupon, $values ): bool {
-		if ( ! $product instanceof WC_Product ) {
+		if ( ! $product instanceof WC_Product || ! $coupon instanceof WC_Coupon ) {
 			return $valid;
 		}
 
@@ -480,6 +480,12 @@ class Orders {
 		if ( empty( $product_cats ) ) {
 			return $valid;
 		}
+
+		// Include parent categories for hierarchy matching (parity with wc_get_product_cat_ids).
+		foreach ( $product_cats as $cat ) {
+			$product_cats = array_merge( $product_cats, get_ancestors( $cat, 'product_cat' ) );
+		}
+		$product_cats = array_unique( $product_cats );
 
 		// Re-evaluate product_categories restriction.
 		$coupon_cats = $coupon->get_product_categories();
@@ -495,7 +501,6 @@ class Orders {
 
 		return $valid;
 	}
-
 
 	/**
 	 * Determine whether an order item should be treated as "on sale" in coupon checks.
