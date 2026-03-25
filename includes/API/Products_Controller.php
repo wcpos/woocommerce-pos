@@ -192,9 +192,34 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * @TODO - only need to update if there is a change
 		 */
 		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
+			// Build sale_price range from only variations that are genuinely on sale.
+			// WC's get_variation_prices()['sale_price'] stores the regular price for
+			// non-sale variations, so we compare against regular_price to identify true sales.
+			$all_variation_prices = $product->get_variation_prices();
+			$sale_prices          = array();
+			foreach ( $all_variation_prices['sale_price'] as $variation_id => $sale_price ) {
+				if ( isset( $all_variation_prices['regular_price'][ $variation_id ] )
+					&& $sale_price !== $all_variation_prices['regular_price'][ $variation_id ] ) {
+					$sale_prices[ $variation_id ] = $sale_price;
+				}
+			}
+
+			$min_sale = ! empty( $sale_prices ) ? min( $sale_prices ) : '';
+			$max_sale = ! empty( $sale_prices ) ? max( $sale_prices ) : '';
+
+			// Apply WooCommerce filter so pricing/currency extensions can adjust the values.
+			if ( '' !== $min_sale ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
+				$min_sale = apply_filters( 'woocommerce_get_variation_sale_price', $min_sale, $product, 'min', false );
+			}
+			if ( '' !== $max_sale ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
+				$max_sale = apply_filters( 'woocommerce_get_variation_sale_price', $max_sale, $product, 'max', false );
+			}
+
 			// Initialize price variables.
 			$price_array = array(
-				'price' => array(
+				'price'         => array(
 					'min' => $product->get_variation_price(),
 					'max' => $product->get_variation_price( 'max' ),
 				),
@@ -202,9 +227,9 @@ class Products_Controller extends WC_REST_Products_Controller {
 					'min' => $product->get_variation_regular_price(),
 					'max' => $product->get_variation_regular_price( 'max' ),
 				),
-				'sale_price' => array(
-					'min' => $product->get_variation_sale_price(),
-					'max' => $product->get_variation_sale_price( 'max' ),
+				'sale_price'    => array(
+					'min' => $min_sale,
+					'max' => $max_sale,
 				),
 			);
 
