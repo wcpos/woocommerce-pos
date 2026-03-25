@@ -438,9 +438,6 @@ class Orders {
 				$fake_post->post_date     = '';
 				$fake_post->post_date_gmt = '';
 				wp_cache_set( $temp_id, $fake_post, 'posts' );
-
-				// Prime term cache so get_object_term_cache() returns our IDs.
-				wp_cache_set( $temp_id, $category_ids, 'product_cat_relationships' );
 			}
 		}
 		if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
@@ -490,7 +487,7 @@ class Orders {
 		// Re-evaluate product_categories restriction.
 		$coupon_cats = $coupon->get_product_categories();
 		if ( ! empty( $coupon_cats ) ) {
-			$valid = count( array_intersect( $product_cats, $coupon_cats ) ) > 0;
+			$valid = $valid && count( array_intersect( $product_cats, $coupon_cats ) ) > 0;
 		}
 
 		// Re-evaluate excluded_product_categories restriction.
