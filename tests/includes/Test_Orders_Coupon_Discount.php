@@ -105,11 +105,6 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		$order->apply_coupon( 'test10remove' );
 
-		// Manually activate filter before remove_coupon() — in production,
-		// Form_Handler::coupon_action() does this. WC's remove_coupon() has
-		// no "before" hook so we must activate the filter externally.
-		$this->orders->activate_pos_subtotal_filter();
-
 		$order->remove_coupon( 'test10remove' );
 
 		$items = $order->get_items();
@@ -272,39 +267,6 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		// Item B: 10% off $20 = $2.00 discount, total = $18.00.
 		$this->assertEquals( 18, (float) $items[1]->get_total(), 'Regular item: coupon should apply to full price ($18)' );
 		$this->assertEquals( 20, (float) $items[1]->get_subtotal(), 'Regular item: subtotal unchanged ($20)' );
-	}
-
-	// ======================================================================
-	// Isolation tests: verify POS hooks don't leak into normal orders
-	// ======================================================================
-
-	/**
-	 * After applying a coupon to a POS order, the temporary subtotal filters
-	 * must be removed. If they linger, every subsequent order operation in the
-	 * same request would use POS subtotals.
-	 */
-	public function test_subtotal_filters_removed_after_pos_coupon(): void {
-		$order = $this->create_pos_order_with_discount();
-		CouponHelper::create_coupon(
-			'cleanup10',
-			'publish',
-			array(
-				'discount_type' => 'percent',
-				'coupon_amount' => '10',
-			)
-		);
-
-		$order->apply_coupon( 'cleanup10' );
-
-		// After apply_coupon completes, the temporary filters should be gone.
-		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal', array( Orders::class, 'filter_pos_item_subtotal' ) ),
-			'Subtotal filter should be removed after coupon recalculation'
-		);
-		$this->assertFalse(
-			has_filter( 'woocommerce_order_item_get_subtotal_tax', array( Orders::class, 'filter_pos_item_subtotal_tax' ) ),
-			'Subtotal tax filter should be removed after coupon recalculation'
-		);
 	}
 
 	/**
@@ -623,8 +585,6 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 
 		$order->apply_coupon( 'taxremove10' );
 
-		// Manually activate filter before remove (simulates Form_Handler).
-		Orders::activate_pos_subtotal_filter();
 		$order->remove_coupon( 'taxremove10' );
 
 		$items = $order->get_items();

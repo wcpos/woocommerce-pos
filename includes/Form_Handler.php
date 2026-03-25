@@ -121,7 +121,6 @@ class Form_Handler {
 		} elseif ( isset( $_POST['pos_remove_coupon'] ) ) {
 			$coupon_code = sanitize_text_field( wp_unslash( $_POST['pos_remove_coupon'] ) );
 
-
 			$remove_result = $order->remove_coupon( $coupon_code );
 			if ( ! $remove_result ) {
 				wc_add_notice( __( 'Error', 'woocommerce' ) );
