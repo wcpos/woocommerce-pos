@@ -433,36 +433,27 @@ class Templates {
 	 * @return null|int|string Active template ID (int for database, string for virtual), or null.
 	 */
 	public static function get_active_template_id( string $type = 'receipt' ) {
-		$active_id = get_option( 'wcpos_active_template_' . $type, null );
+		$active_id   = get_option( 'wcpos_active_template_' . $type, null );
+		$enabled     = self::get_enabled_templates( $type );
+		$enabled_ids = array_map(
+			static function ( $template ) {
+				return (string) $template['id'];
+			},
+			$enabled
+		);
 
-		// If no explicit active template, use the default.
+		// If no explicit active template, use first from enabled list.
 		if ( null === $active_id || '' === $active_id ) {
-			$default = self::get_default_template( $type );
-			return $default ? $default['id'] : null;
+			return ! empty( $enabled ) ? $enabled[0]['id'] : null;
 		}
 
-		// Check if it's a numeric (database) ID.
-		if ( is_numeric( $active_id ) ) {
-			$template = self::get_template( (int) $active_id );
-			if ( $template ) {
-				return (int) $active_id;
-			}
-			// Template was deleted, fall back to default.
+		// Validate that the stored active template is still enabled.
+		if ( ! \in_array( (string) $active_id, $enabled_ids, true ) ) {
 			delete_option( 'wcpos_active_template_' . $type );
-			$default = self::get_default_template( $type );
-			return $default ? $default['id'] : null;
+			return ! empty( $enabled ) ? $enabled[0]['id'] : null;
 		}
 
-		// It's a virtual template ID - check if it still exists.
-		$template = self::get_virtual_template( $active_id, $type );
-		if ( $template ) {
-			return $active_id;
-		}
-
-		// Virtual template no longer exists (plugin deactivated?), fall back.
-		delete_option( 'wcpos_active_template_' . $type );
-		$default = self::get_default_template( $type );
-		return $default ? $default['id'] : null;
+		return is_numeric( $active_id ) ? (int) $active_id : $active_id;
 	}
 
 	/**

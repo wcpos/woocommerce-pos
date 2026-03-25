@@ -300,124 +300,96 @@ class Templates_Controller extends WP_REST_Controller {
 	 */
 	public function get_items( $request ) {
 		$type           = $request->get_param( 'type' ) ?? 'receipt';
-
-		$store_id = $request->get_param( 'store_id' );
-		if ( $store_id ) {
-			$resolved  = TemplatesManager::resolve_templates( (int) $store_id, $type );
-			$active_id = ! empty( $resolved ) ? $resolved[0]['id'] : null;
-			$data      = array();
-			foreach ( $resolved as $template ) {
-				$template['is_active'] = ( null !== $active_id && (string) $template['id'] === (string) $active_id );
-				$data[]                = $this->prepare_item_for_response( $template, $request );
-			}
-			return rest_ensure_response( $data );
-		}
-
+		$store_id       = $request->get_param( 'store_id' );
 		$search         = $request->get_param( 'search' );
 		$category       = $request->get_param( 'category' );
 		$modified_after = $request->get_param( 'modified_after' );
 		$per_page       = (int) ( $request->get_param( 'per_page' ) ?? -1 );
 		$page           = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
 		$has_filters    = $search || $category || $modified_after;
-		$templates      = array();
 
-		// Compute the active template ID once from the final enabled order.
-		$enabled = TemplatesManager::get_enabled_templates( $type );
+		// Step 1: Resolve which templates to return.
+		if ( $store_id ) {
+			$enabled = TemplatesManager::resolve_templates( (int) $store_id, $type );
+		} else {
+			$enabled = TemplatesManager::get_enabled_templates( $type );
+		}
 		$active_template_id = ! empty( $enabled ) ? $enabled[0]['id'] : null;
 
-		// Get virtual (filesystem) templates first, but skip when filters are active.
-		if ( ! $has_filters ) {
-			$virtual_templates = TemplatesManager::detect_filesystem_templates( $type );
-			foreach ( $virtual_templates as $template ) {
+		// Step 2: Build full template list.
+		// When store_id is set or no filters, use the resolved enabled list directly.
+		// When filters are active (search/category/modified_after), query DB with filters.
+		if ( $store_id || ! $has_filters ) {
+			$templates = array();
+			foreach ( $enabled as $template ) {
 				$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
 				$templates[]           = $this->prepare_item_for_response( $template, $request );
 			}
-		}
 
-		// Get database templates.
-		$args = array(
-			'post_type'      => 'wcpos_template',
-			'post_status'    => array( 'publish', 'draft' ),
-			'posts_per_page' => ( ! $has_filters && $per_page > 0 ) ? -1 : $per_page,
-			'paged'          => ( ! $has_filters && $per_page > 0 ) ? 1 : $page,
-			'orderby'        => 'menu_order',
-			'order'          => 'ASC',
-		);
-
-		// Type filter (always applied via tax_query).
-		$tax_query = array();
-		if ( $type ) {
-			$tax_query[] = array(
-				'taxonomy' => 'wcpos_template_type',
-				'field'    => 'slug',
-				'terms'    => $type,
-			);
-		}
-
-		// Category filter.
-		if ( $category ) {
-			$tax_query[] = array(
-				'taxonomy' => 'wcpos_template_category',
-				'field'    => 'slug',
-				'terms'    => $category,
-			);
-		}
-
-		if ( ! empty( $tax_query ) ) {
-			if ( \count( $tax_query ) > 1 ) {
-				$tax_query['relation'] = 'AND';
-			}
-			$args['tax_query'] = $tax_query;
-		}
-
-		// Search filter (title/content OR description meta).
-		if ( $search ) {
-			$matching_ids = $this->get_search_matching_template_ids( $search, $args );
-			$args['post__in'] = empty( $matching_ids ) ? array( 0 ) : $matching_ids;
-		}
-
-		// Modified after filter.
-		if ( $modified_after ) {
-			$args['date_query'] = array(
-				array(
-					'column' => 'post_modified',
-					'after'  => $modified_after,
-				),
-			);
-		}
-
-		$query = new WP_Query( $args );
-
-		$db_templates = array();
-		foreach ( $query->posts as $post ) {
-			$template = TemplatesManager::get_template( $post->ID );
-			if ( $template ) {
-				$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
-				$db_templates[]        = $this->prepare_item_for_response( $template, $request );
-			}
-		}
-
-		if ( ! $has_filters ) {
-			$all_templates = array_merge( $templates, $db_templates );
-
-			// Sort by stored order.
-			$stored_order = TemplatesManager::get_template_order( $type );
-			if ( ! empty( $stored_order ) ) {
-				$all_templates = $this->sort_by_stored_order( $all_templates, $stored_order );
-			}
-
-			$total_items = \count( $all_templates );
+			$total_items = \count( $templates );
 
 			if ( $per_page > 0 ) {
 				$offset      = ( $page - 1 ) * $per_page;
-				$templates   = \array_slice( $all_templates, $offset, $per_page );
+				$templates   = \array_slice( $templates, $offset, $per_page );
 				$total_pages = $total_items > 0 ? (int) \ceil( $total_items / $per_page ) : 1;
 			} else {
-				$templates   = $all_templates;
 				$total_pages = 1;
 			}
 		} else {
-			$templates   = $db_templates;
+			// Filtered DB query (search, category, modified_after).
+			$args = array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => array( 'publish', 'draft' ),
+				'posts_per_page' => $per_page,
+				'paged'          => $page,
+				'orderby'        => 'menu_order',
+				'order'          => 'ASC',
+			);
+
+			$tax_query = array();
+			if ( $type ) {
+				$tax_query[] = array(
+					'taxonomy' => 'wcpos_template_type',
+					'field'    => 'slug',
+					'terms'    => $type,
+				);
+			}
+			if ( $category ) {
+				$tax_query[] = array(
+					'taxonomy' => 'wcpos_template_category',
+					'field'    => 'slug',
+					'terms'    => $category,
+				);
+			}
+			if ( ! empty( $tax_query ) ) {
+				if ( \count( $tax_query ) > 1 ) {
+					$tax_query['relation'] = 'AND';
+				}
+				$args['tax_query'] = $tax_query;
+			}
+			if ( $search ) {
+				$matching_ids     = $this->get_search_matching_template_ids( $search, $args );
+				$args['post__in'] = empty( $matching_ids ) ? array( 0 ) : $matching_ids;
+			}
+			if ( $modified_after ) {
+				$args['date_query'] = array(
+					array(
+						'column' => 'post_modified',
+						'after'  => $modified_after,
+					),
+				);
+			}
+
+			$query     = new WP_Query( $args );
+			$templates = array();
+			foreach ( $query->posts as $post ) {
+				$template = TemplatesManager::get_template( $post->ID );
+				if ( $template ) {
+					$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
+					$templates[]           = $this->prepare_item_for_response( $template, $request );
+				}
+			}
+
 			$total_items = (int) $query->found_posts;
 			$total_pages = (int) max( 1, $query->max_num_pages );
 		}
