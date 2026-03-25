@@ -1077,9 +1077,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test get_items includes is_disabled for virtual templates.
+	 * Test get_items excludes disabled virtual templates.
+	 *
+	 * The unified pipeline uses get_enabled_templates() which filters out
+	 * disabled virtual templates server-side.
 	 */
-	public function test_get_items_includes_is_disabled_for_virtual(): void {
+	public function test_get_items_excludes_disabled_virtual_template(): void {
 		\WCPOS\WooCommercePOS\Templates::set_virtual_template_disabled( 'plugin-core', true );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
@@ -1096,9 +1099,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 
-		$this->assertNotNull( $core );
-		$this->assertArrayHasKey( 'is_disabled', $core );
-		$this->assertTrue( $core['is_disabled'] );
+		$this->assertNull( $core, 'Disabled virtual template should not appear in response' );
 	}
 
 	/**
