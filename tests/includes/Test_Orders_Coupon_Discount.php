@@ -1111,7 +1111,7 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 			array(
 				'discount_type'               => 'percent',
 				'coupon_amount'               => '50',
-				'excluded_product_categories' => array( $category['term_id'] ),
+				'exclude_product_categories' => array( $category['term_id'] ),
 			)
 		);
 

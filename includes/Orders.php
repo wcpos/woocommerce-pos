@@ -12,6 +12,7 @@
 namespace WCPOS\WooCommercePOS;
 
 use WC_Abstract_Order;
+use WC_Coupon;
 use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Product;
@@ -26,6 +27,24 @@ use WC_Tax;
  * - runs for all life cycles.
  */
 class Orders {
+	/**
+	 * Map of temporary product IDs to category IDs for coupon validation.
+	 *
+	 * Static because multiple Orders instances may register hooks on the same
+	 * filter (plugin init + test setUp). All instances must recognize temp IDs
+	 * assigned by any other instance to avoid invalid DB reads.
+	 *
+	 * @var array<int, int[]>
+	 */
+	private static $temp_product_categories = array();
+
+	/**
+	 * Counter for generating unique temporary product IDs.
+	 *
+	 * @var int
+	 */
+	private static $temp_id_counter = PHP_INT_MAX;
+
 	/**
 	 * Constructor.
 	 */
@@ -45,6 +64,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
+		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
 	}
 
 	/**
@@ -359,7 +379,9 @@ class Orders {
 			return $product;
 		}
 
-		if ( $product && $product->get_id() ) {
+		$is_temp_id = $product && isset( self::$temp_product_categories[ $product->get_id() ] );
+
+		if ( $product && $product->get_id() && ! $is_temp_id ) {
 			// Get a fresh product instance to apply POS overrides.
 			$product = wc_get_product_object( $product->get_type(), $product->get_id() );
 		} elseif ( 0 === $item->get_product_id() ) {
@@ -393,6 +415,33 @@ class Orders {
 		if ( ! empty( $pos_data['categories'] ) && is_array( $pos_data['categories'] ) ) {
 			$category_ids = array_filter( array_map( 'intval', array_column( $pos_data['categories'], 'id' ) ) );
 			$product->set_category_ids( $category_ids );
+
+			// Assign a temporary non-zero ID and prime WP caches so that
+			// WC's get_the_terms() (called via wc_get_product_cat_ids) finds
+			// our categories. get_the_terms() requires get_post() to succeed
+			// and checks the object term cache before querying the DB.
+			if ( 0 === $product->get_id() && ! empty( $category_ids ) ) {
+				$temp_id = self::$temp_id_counter--;
+				$product->set_id( $temp_id );
+				self::$temp_product_categories[ $temp_id ] = $category_ids;
+
+				// Prime post cache so get_post(temp_id) succeeds.
+				$fake_post                = new \stdClass();
+				$fake_post->ID            = $temp_id;
+				$fake_post->post_type     = 'product';
+				$fake_post->post_status   = 'publish';
+				$fake_post->filter        = 'raw';
+				$fake_post->post_parent   = 0;
+				$fake_post->post_title    = '';
+				$fake_post->post_content  = '';
+				$fake_post->post_excerpt  = '';
+				$fake_post->post_date     = '';
+				$fake_post->post_date_gmt = '';
+				wp_cache_set( $temp_id, $fake_post, 'posts' );
+
+				// Prime term cache so get_object_term_cache() returns our IDs.
+				wp_cache_set( $temp_id, $category_ids, 'product_cat_relationships' );
+			}
 		}
 		if ( $this->is_pos_discounted_item_on_sale( $item, $product ) && isset( $pos_data['price'] ) ) {
 			$product->set_sale_price( $pos_data['price'] );
@@ -400,6 +449,53 @@ class Orders {
 
 		return $product;
 	}
+
+	/**
+	 * Override coupon category validation for misc products.
+	 *
+	 * WooCommerce uses wc_get_product_cat_ids( $product->get_id() ) to check
+	 * product_categories and excluded_product_categories coupon restrictions.
+	 * Synthetic misc products use temporary non-zero IDs so WC's DB lookup
+	 * doesn't short-circuit. This filter re-evaluates using per-item categories.
+	 *
+	 * @param bool       $valid   Whether the coupon is valid for the product.
+	 * @param WC_Product $product Product being validated.
+	 * @param WC_Coupon  $coupon  Coupon being applied.
+	 * @param mixed      $values  Values (order item or cart item data).
+	 *
+	 * @return bool
+	 */
+	public function coupon_is_valid_for_product( bool $valid, $product, $coupon, $values ): bool {
+		if ( ! $product instanceof WC_Product ) {
+			return $valid;
+		}
+
+		// Only handle products with temp IDs assigned by build_coupon_product_context.
+		$product_id = $product->get_id();
+		if ( ! isset( self::$temp_product_categories[ $product_id ] ) ) {
+			return $valid;
+		}
+
+		$product_cats = $product->get_category_ids();
+		if ( empty( $product_cats ) ) {
+			return $valid;
+		}
+
+		// Re-evaluate product_categories restriction.
+		$coupon_cats = $coupon->get_product_categories();
+		if ( ! empty( $coupon_cats ) ) {
+			$valid = count( array_intersect( $product_cats, $coupon_cats ) ) > 0;
+		}
+
+		// Re-evaluate excluded_product_categories restriction.
+		$excluded_cats = $coupon->get_excluded_product_categories();
+		if ( ! empty( $excluded_cats ) && count( array_intersect( $product_cats, $excluded_cats ) ) > 0 ) {
+			$valid = false;
+		}
+
+		return $valid;
+	}
+
 
 	/**
 	 * Determine whether an order item should be treated as "on sale" in coupon checks.
