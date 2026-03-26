@@ -69,6 +69,7 @@ class Orders {
 		add_action( 'woocommerce_order_item_shipping_after_calculate_taxes', array( $this, 'order_item_after_calculate_taxes' ) );
 		add_filter( 'woocommerce_coupon_get_items_to_validate', array( $this, 'coupon_get_items_to_validate' ), 10, 2 );
 		add_filter( 'woocommerce_coupon_is_valid_for_product', array( $this, 'coupon_is_valid_for_product' ), 10, 4 );
+		add_action( 'woocommerce_order_after_calculate_totals', array( __CLASS__, 'cleanup_temp_caches' ), 999 );
 	}
 
 	/**
@@ -511,6 +512,22 @@ class Orders {
 		}
 
 		return $valid;
+	}
+
+	/**
+	 * Remove temporary cache entries created by build_coupon_product_context().
+	 *
+	 * Hooked to woocommerce_order_after_calculate_totals (after all coupon
+	 * validation is complete) so that persistent object cache backends
+	 * (Redis/Memcached) don't accumulate stale entries across requests.
+	 */
+	public static function cleanup_temp_caches(): void {
+		foreach ( array_keys( self::$temp_product_categories ) as $temp_id ) {
+			wp_cache_delete( $temp_id, 'posts' );
+			wp_cache_delete( $temp_id, 'product_cat_relationships' );
+		}
+		self::$temp_product_categories = array();
+		self::$temp_id_counter         = 0;
 	}
 
 	/**

@@ -44,6 +44,8 @@ tests/e2e/ui/playwright-results.xml
 !.cursor/rules
 pnpm-lock.yaml
 .worktrees/
+.claude/projects/
+.claude/worktrees/
 languages/*.l10n.php
 languages/*.mo
 docs/
