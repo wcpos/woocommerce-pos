@@ -1235,6 +1235,64 @@ class Test_Orders_Coupon_Discount extends WC_Unit_Test_Case {
 		$this->assertEquals( 20, (float) $line->get_total(), 'Coupon excluding parent category should NOT apply to misc product with child category via ancestry' );
 	}
 
+	/**
+	 * Test that temporary cache entries are cleaned up after coupon validation.
+	 */
+	public function test_temp_cache_entries_cleaned_up_after_coupon_validation(): void {
+		$category = wp_insert_term( 'POS Cache Cleanup', 'product_cat' );
+
+		$order = wc_create_order();
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->set_status( 'pos-open' );
+
+		$item = new WC_Order_Item_Product();
+		$item->set_name( 'Misc Cache Test' );
+		$item->set_quantity( 1 );
+		$item->set_product_id( 0 );
+		$item->set_subtotal( 20 );
+		$item->set_total( 20 );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => '20',
+					'regular_price' => '20',
+					'tax_status'    => 'taxable',
+					'categories'    => array(
+						array(
+							'id'   => $category['term_id'],
+							'name' => 'POS Cache Cleanup',
+						),
+					),
+				)
+			)
+		);
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		CouponHelper::create_coupon(
+			'cache-cleanup-coupon',
+			'publish',
+			array(
+				'discount_type'      => 'percent',
+				'coupon_amount'      => '50',
+				'product_categories' => array( $category['term_id'] ),
+			)
+		);
+
+		$order->apply_coupon( 'cache-cleanup-coupon' );
+
+		// After apply_coupon -> recalculate_coupons -> calculate_totals,
+		// cleanup_temp_caches should have fired and removed temp entries.
+		$reflection = new \ReflectionClass( Orders::class );
+		$prop       = $reflection->getProperty( 'temp_product_categories' );
+		$prop->setAccessible( true );
+
+		$this->assertEmpty( $prop->getValue(), 'Temporary product categories should be cleared after coupon validation' );
+	}
+
 	// ======================================================================
 	// Helper methods
 	// ======================================================================
