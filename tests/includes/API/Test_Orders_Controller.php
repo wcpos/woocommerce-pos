@@ -1315,11 +1315,13 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 2, $data['line_items'] );
 
 		// Step 2: "Delete" Product B by setting product_id to null.
+		// Only send the id for Product A (unchanged) to avoid schema validation
+		// issues with response-only fields like sku.
 		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
 		$update_request->set_body_params(
 			array(
 				'line_items' => array(
-					$data['line_items'][0], // Product A unchanged.
+					array( 'id' => $data['line_items'][0]['id'] ),
 					array(
 						'id'         => $line_item_b,
 						'product_id' => null,
