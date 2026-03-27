@@ -343,6 +343,13 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $valid_email;
 		}
 
+		// Strip deletion-marked items before WooCommerce processes the request.
+		// The POS client nulls a key field to signal deletion (e.g. product_id: null
+		// for line_items, code: null for coupon_lines). If the item was already deleted
+		// on a previous sync, its ID no longer exists on the order and WooCommerce
+		// would reject the request with "order item ID not associated with the order".
+		$this->strip_deletion_markers( $request );
+
 		// Proceed with the parent method to handle the update.
 		return parent::update_item( $request );
 	}
@@ -1130,6 +1137,61 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Strip items with deletion markers from the request before WooCommerce
+	 * processes them.
+	 *
+	 * The POS client marks items for deletion by nulling a key field:
+	 *   line_items    → product_id: null
+	 *   fee_lines     → name: null
+	 *   shipping_lines → method_id: null
+	 *   coupon_lines  → code: null
+	 *
+	 * These entries carry the original server-assigned ID so the WC REST API
+	 * knows which item to delete. However, if the deletion was already processed
+	 * in a previous sync (or was processed but the response didn't reach the
+	 * client), the ID no longer exists on the order and WooCommerce rejects
+	 * the request with "The order item ID provided is not associated with the
+	 * order."
+	 *
+	 * This method removes those stale deletion markers from the request so
+	 * WooCommerce never sees the invalid IDs.
+	 *
+	 * @param WP_REST_Request $request Request object (modified in place).
+	 */
+	protected function strip_deletion_markers( WP_REST_Request $request ): void {
+		// Map of line type → field that is null when marked for deletion.
+		$deletion_fields = array(
+			'line_items'     => 'product_id',
+			'fee_lines'      => 'name',
+			'shipping_lines' => 'method_id',
+			'coupon_lines'   => 'code',
+		);
+
+		foreach ( $deletion_fields as $line_type => $field ) {
+			$items = $request[ $line_type ] ?? null;
+			if ( ! \is_array( $items ) ) {
+				continue;
+			}
+
+			$filtered = array_values(
+				array_filter(
+					$items,
+					function ( $item ) use ( $field ) {
+						// Keep items where the deletion field is NOT null.
+						// Items without the field set are also kept (new items).
+						return ! \array_key_exists( $field, $item ) || null !== $item[ $field ];
+					}
+				)
+			);
+
+			// Only update the param if we actually removed something.
+			if ( \count( $filtered ) !== \count( $items ) ) {
+				$request->set_param( $line_type, $filtered );
+			}
+		}
 	}
 
 	/**

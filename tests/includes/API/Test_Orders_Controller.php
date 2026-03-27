@@ -1201,4 +1201,218 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			'Cashier should be able to update an order. Response: ' . wp_json_encode( $response->get_data() )
 		);
 	}
+
+	/**
+	 * Test that sending a deleted coupon line (code: null) alongside valid items
+	 * does not produce "The order item ID provided is not associated with the order".
+	 *
+	 * Reproduces the bug from order 57051 on dev-pro.wcpos.com where:
+	 * 1. A coupon was applied (got id 221486)
+	 * 2. The coupon was removed (code set to null, id preserved as deletion marker)
+	 * 3. The same coupon was re-added (new entry, no id)
+	 * 4. On sync, the deletion marker with stale id causes WC to reject the request
+	 */
+	public function test_update_order_with_deleted_coupon_line_does_not_error(): void {
+		CouponHelper::create_coupon( 'penny' );
+
+		// Step 1: Create an order with a coupon.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items'   => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Test Product',
+						'quantity'   => 1,
+						'total'      => '10',
+						'subtotal'   => '10',
+					),
+				),
+				'coupon_lines' => array(
+					array( 'code' => 'penny' ),
+				),
+			)
+		);
+
+		$response  = $this->server->dispatch( $request );
+		$data      = $response->get_data();
+		$order_id  = $data['id'];
+		$coupon_id = $data['coupon_lines'][0]['id'];
+
+		$this->assertEquals( 201, $response->get_status() );
+
+		// Step 2: Remove the coupon (code: null) and re-add it (no id).
+		// This is what the POS client sends: the old coupon with id + code:null,
+		// plus a new coupon entry without id.
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$update_request->set_body_params(
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_id,
+						'code' => null,
+					),
+					array(
+						'code' => 'penny',
+					),
+				),
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
+
+		$this->assertEquals(
+			200,
+			$update_response->get_status(),
+			'Removing and re-adding a coupon should not error. Response: ' . wp_json_encode( $update_data )
+		);
+
+		// The order should have exactly one active coupon (the re-added penny).
+		$active_coupons = array_filter(
+			$update_data['coupon_lines'],
+			function ( $cl ) {
+				return ! empty( $cl['code'] );
+			}
+		);
+		$this->assertCount( 1, $active_coupons, 'Order should have one active coupon.' );
+	}
+
+	/**
+	 * Test that sending a deleted line item (product_id: null) alongside valid
+	 * items does not cause the update to fail.
+	 */
+	public function test_update_order_with_deleted_line_item_does_not_error(): void {
+		// Step 1: Create an order with two line items.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Product A',
+						'quantity'   => 1,
+						'total'      => '10',
+						'subtotal'   => '10',
+					),
+					array(
+						'product_id' => 0,
+						'name'       => 'Product B',
+						'quantity'   => 1,
+						'total'      => '20',
+						'subtotal'   => '20',
+					),
+				),
+			)
+		);
+
+		$response    = $this->server->dispatch( $request );
+		$data        = $response->get_data();
+		$order_id    = $data['id'];
+		$line_item_b = $data['line_items'][1]['id'];
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertCount( 2, $data['line_items'] );
+
+		// Step 2: "Delete" Product B by setting product_id to null.
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$update_request->set_body_params(
+			array(
+				'line_items' => array(
+					$data['line_items'][0], // Product A unchanged.
+					array(
+						'id'         => $line_item_b,
+						'product_id' => null,
+					),
+				),
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+		$update_data     = $update_response->get_data();
+
+		$this->assertEquals(
+			200,
+			$update_response->get_status(),
+			'Deleting a line item via product_id:null should not error. Response: ' . wp_json_encode( $update_data )
+		);
+
+		// After deletion, only Product A should remain.
+		$this->assertCount( 1, $update_data['line_items'], 'Order should have one line item after deletion.' );
+	}
+
+	/**
+	 * Test that a stale deletion marker (id that was already deleted) is handled
+	 * gracefully instead of producing "order item ID not associated" error.
+	 *
+	 * This is the exact bug from order 57051: the client sends a coupon line
+	 * with code:null and an id that no longer exists on the order.
+	 */
+	public function test_update_order_with_stale_coupon_deletion_marker(): void {
+		CouponHelper::create_coupon( 'testcoupon' );
+
+		// Step 1: Create order with coupon.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items'   => array(
+					array(
+						'product_id' => 0,
+						'name'       => 'Test Product',
+						'quantity'   => 1,
+						'total'      => '10',
+						'subtotal'   => '10',
+					),
+				),
+				'coupon_lines' => array(
+					array( 'code' => 'testcoupon' ),
+				),
+			)
+		);
+
+		$response  = $this->server->dispatch( $request );
+		$data      = $response->get_data();
+		$order_id  = $data['id'];
+		$coupon_id = $data['coupon_lines'][0]['id'];
+
+		$this->assertEquals( 201, $response->get_status() );
+
+		// Step 2: Remove the coupon (first sync — should succeed).
+		$remove_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$remove_request->set_body_params(
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_id,
+						'code' => null,
+					),
+				),
+			)
+		);
+
+		$remove_response = $this->server->dispatch( $remove_request );
+		$this->assertEquals( 200, $remove_response->get_status(), 'First deletion should succeed.' );
+
+		// Step 3: Send the SAME deletion marker again (stale id).
+		// This simulates the client re-sending after a failed response or race condition.
+		$stale_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order_id );
+		$stale_request->set_body_params(
+			array(
+				'coupon_lines' => array(
+					array(
+						'id'   => $coupon_id, // This ID no longer exists on the order.
+						'code' => null,
+					),
+				),
+			)
+		);
+
+		$stale_response = $this->server->dispatch( $stale_request );
+
+		$this->assertEquals(
+			200,
+			$stale_response->get_status(),
+			'Re-sending a stale deletion marker should not error. Response: ' . wp_json_encode( $stale_response->get_data() )
+		);
+	}
 }
