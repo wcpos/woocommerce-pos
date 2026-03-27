@@ -1417,4 +1417,75 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			'Re-sending a stale deletion marker should not error. Response: ' . wp_json_encode( $stale_response->get_data() )
 		);
 	}
+
+	/**
+	 * Test that sending a deleted fee line (name: null) does not cause errors.
+	 */
+	public function test_update_order_with_deleted_fee_line_does_not_error(): void {
+		// Create an order with a fee line.
+		$order   = OrderHelper::create_order();
+		$fee     = new WC_Order_Item_Fee();
+		$fee->set_name( 'Service Fee' );
+		$fee->set_total( '5.00' );
+		$order->add_item( $fee );
+		$order->save();
+		$fee_id = $fee->get_id();
+
+		// Update: mark the fee for deletion (name: null).
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$update_request->set_body_params(
+			array(
+				'fee_lines' => array(
+					array(
+						'id'   => $fee_id,
+						'name' => null,
+					),
+				),
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+
+		$this->assertEquals(
+			200,
+			$update_response->get_status(),
+			'Deleting a fee line via name:null should not error. Response: ' . wp_json_encode( $update_response->get_data() )
+		);
+	}
+
+	/**
+	 * Test that sending a deleted shipping line (method_id: null) does not cause errors.
+	 */
+	public function test_update_order_with_deleted_shipping_line_does_not_error(): void {
+		// Create an order with a shipping line.
+		$order    = OrderHelper::create_order();
+		$shipping = new \WC_Order_Item_Shipping();
+		$shipping->set_method_id( 'flat_rate' );
+		$shipping->set_method_title( 'Flat Rate' );
+		$shipping->set_total( '10.00' );
+		$order->add_item( $shipping );
+		$order->save();
+		$shipping_id = $shipping->get_id();
+
+		// Update: mark the shipping line for deletion (method_id: null).
+		$update_request = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$update_request->set_body_params(
+			array(
+				'shipping_lines' => array(
+					array(
+						'id'        => $shipping_id,
+						'method_id' => null,
+					),
+				),
+			)
+		);
+
+		$update_response = $this->server->dispatch( $update_request );
+
+		$this->assertEquals(
+			200,
+			$update_response->get_status(),
+			'Deleting a shipping line via method_id:null should not error. Response: ' . wp_json_encode( $update_response->get_data() )
+		);
+	}
 }

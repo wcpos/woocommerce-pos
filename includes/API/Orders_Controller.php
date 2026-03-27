@@ -1180,6 +1180,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				array_filter(
 					$items,
 					function ( $item ) use ( $field ) {
+						// Keep malformed entries and let WooCommerce validation handle them.
+						if ( ! \is_array( $item ) ) {
+							return true;
+						}
+
 						// Keep items where the deletion field is NOT null.
 						// Items without the field set are also kept (new items).
 						return ! \array_key_exists( $field, $item ) || null !== $item[ $field ];
