@@ -3,6 +3,7 @@ import * as React from 'react';
 import AllUsersView from './all-users-view';
 import MySessionsView from './my-sessions-view';
 import Notice from '../../components/notice';
+import { ListSkeleton } from '../../components/skeleton';
 import { Button } from '../../components/ui';
 import { t } from '../../translations';
 
@@ -34,18 +35,7 @@ function Sessions() {
 			</div>
 
 			{/* View content with Suspense */}
-			<React.Suspense
-				fallback={
-					<div className="wcpos:flex wcpos:justify-center wcpos:items-center wcpos:p-8">
-						<div className="wcpos:text-center">
-							<div className="wcpos:inline-block wcpos:animate-spin wcpos:rounded-full wcpos:h-8 wcpos:w-8 wcpos:border-4 wcpos:border-gray-200 wcpos:border-t-wp-admin-theme-color" />
-							<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-600">
-								{t('sessions.loading')}
-							</p>
-						</div>
-					</div>
-				}
-			>
+			<React.Suspense fallback={<ListSkeleton rows={4} />}>
 				{viewMode === 'my' ? <MySessionsView /> : <AllUsersView />}
 			</React.Suspense>
 		</div>

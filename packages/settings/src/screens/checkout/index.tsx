@@ -6,6 +6,7 @@ import Gateways from './gateways';
 import Error from '../../components/error';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
+import { ListSkeleton } from '../../components/skeleton';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
@@ -123,7 +124,7 @@ function Checkout() {
 				<h2 className="wcpos:text-base">{t('checkout.gateways')}</h2>
 				<p>{t('checkout.gateways_description')}</p>
 				<ErrorBoundary FallbackComponent={Error}>
-					<React.Suspense fallback={null}>
+					<React.Suspense fallback={<ListSkeleton rows={3} />}>
 						<Gateways />
 					</React.Suspense>
 				</ErrorBoundary>
