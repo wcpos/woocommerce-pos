@@ -13,6 +13,22 @@ export const ADMIN_USER = {
  */
 export const test = base.extend<{ adminPage: Page }>({
 	adminPage: async ({ page }, use) => {
+		// Populate browser-side error buffer so specs can read window.__console_errors
+		await page.addInitScript(() => {
+			(window as any).__console_errors = [];
+			const push = (msg: unknown) => {
+				(window as any).__console_errors.push(String(msg));
+			};
+			window.addEventListener('error', (event) => {
+				push(event.error?.message ?? event.message);
+			});
+			const originalConsoleError = console.error;
+			console.error = (...args: unknown[]) => {
+				push(args.map(String).join(' '));
+				originalConsoleError(...args);
+			};
+		});
+
 		// Capture console errors for debugging
 		page.on('console', (msg) => {
 			if (msg.type() === 'error') {
