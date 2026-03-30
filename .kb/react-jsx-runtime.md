@@ -1,40 +1,40 @@
-# React JSX Runtime in WordPress Plugins
+# React Version in WordPress Plugins
 
-## The Problem
+## The Rule
 
-WordPress bundles React 18 as `window.React`. Our Vite builds externalize React to use this global. However, `@vitejs/plugin-react` defaults to `jsxRuntime: 'automatic'`, which compiles JSX using `react/jsx-runtime` from whatever React version is in `node_modules`.
+**Always pin React to the same major version that WordPress ships.** As of WordPress 6.9, that's React 18.
 
-If `node_modules` has React 19 (or any version different from WordPress's bundled one), the build output uses React 19's `jsx()` factory, which produces elements with a different internal `$$typeof` symbol. At runtime, WordPress's React 18 renderer doesn't recognize these elements and throws:
+```json
+"react": "18.3.1",
+"react-dom": "18.3.1"
+```
+
+## Why This Matters
+
+WordPress bundles React 18 as `window.React`. Our Vite builds externalize React to this global — the built JS doesn't include React, it uses WordPress's copy at runtime.
+
+However, dependencies like `@headlessui/react`, `@tanstack/react-router`, and `react-error-boundary` are **not** externalized. They get bundled into our JS. When `pnpm install` puts React 19 in `node_modules`, these dependencies compile their JSX against React 19's `jsx-runtime`. At runtime, React 18 (from WordPress) can't render these elements:
 
 > Objects are not valid as a React child (found: object with keys {$$typeof, type, key, ref, props})
 
-## The Fix
+This error is silent at build time — everything compiles fine. It only crashes at runtime.
 
-Use the **classic JSX runtime** in all Vite configs for packages that externalize React:
+## What To Do
 
-```ts
-react({
-  jsxRuntime: 'classic',
-})
-```
-
-This compiles JSX to `React.createElement()` calls, which go through the externalized `globalThis.React` at runtime — always matching WordPress's bundled version.
-
-## Why Not the Automatic Runtime?
-
-The automatic runtime (`react/jsx-runtime`) is imported at build time from `node_modules`. Since our `pnpm-lock.yaml` is gitignored, CI resolves packages fresh each run. If `pnpm install` resolves a different React version than WordPress ships, the build silently produces incompatible JSX elements. There's no error at build time — it only crashes at runtime.
-
-The classic runtime avoids this entirely because `React.createElement` is resolved at runtime through the externalized global, not at build time through `node_modules`.
-
-## When This Applies
-
-Any package in the monorepo that:
-1. Uses `@vitejs/plugin-react`
-2. Externalizes React to `globalThis.React` (i.e., uses WordPress's bundled React)
-3. Builds as an IIFE loaded in the WordPress admin
-
-Currently: `packages/settings`, `packages/template-editor`
+1. Pin `react` and `react-dom` to match WordPress's version (currently 18.3.1)
+2. Pin `@types/react` and `@types/react-dom` to match (^18.x)
+3. Since `pnpm-lock.yaml` is gitignored, CI resolves fresh each run — pinning is the only way to guarantee the right version
 
 ## When WordPress Upgrades React
 
-When WordPress ships React 19+, the classic runtime will still work — `React.createElement` exists in all React versions. If you want to switch to the automatic runtime later, you'd need to also externalize `react/jsx-runtime` and map it to WordPress's bundled JSX runtime module.
+When WordPress ships React 19, update the pins across all packages:
+- `packages/settings/package.json`
+- `packages/template-editor/package.json`
+- Any other package that uses React
+
+## Applies To
+
+Any package in the monorepo that:
+1. Externalizes React to `globalThis.React` (uses WordPress's bundled copy)
+2. Bundles third-party React components (headless UI, tanstack, etc.)
+3. Builds as an IIFE loaded in the WordPress admin

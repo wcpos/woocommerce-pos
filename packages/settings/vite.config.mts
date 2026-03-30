@@ -51,9 +51,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react({
-        jsxRuntime: 'classic',
-      }),
+      react(),
       tailwindcss(),
       svgr({ include: '**/*.svg' }),
       fixCjsExternals(),
