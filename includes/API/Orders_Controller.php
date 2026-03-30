@@ -146,6 +146,61 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Delete a single order.
+	 *
+	 * WooCommerce core does not restore stock when orders are trashed or deleted.
+	 * This override restores stock on successful deletion.
+	 *
+	 * @see https://github.com/woocommerce/woocommerce/issues/26716
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function delete_item( $request ) {
+		$order_id = (int) $request['id'];
+		$order    = wc_get_order( $order_id );
+
+		if ( ! $order ) {
+			return parent::delete_item( $request );
+		}
+
+		/**
+		 * Filter whether to restore stock when an order is deleted via the POS API.
+		 *
+		 * @since 1.9.0
+		 *
+		 * @param bool $restore_stock Whether to restore stock. Default true.
+		 * @param int  $order_id      The order ID being deleted.
+		 */
+		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', true, $order_id );
+		$force         = (bool) $request->get_param( 'force' );
+
+		// Force-delete permanently removes the order, so restore stock beforehand.
+		if ( $restore_stock && $force ) {
+			wc_maybe_increase_stock_levels( $order_id );
+		}
+
+		$response = parent::delete_item( $request );
+
+		if ( is_wp_error( $response ) ) {
+			// Rollback pre-restore on force-delete failure.
+			if ( $restore_stock && $force ) {
+				wc_maybe_reduce_stock_levels( $order_id );
+			}
+
+			return $response;
+		}
+
+		// Trash path: order still exists, so restore stock after confirmed success.
+		if ( $restore_stock && ! $force ) {
+			wc_maybe_increase_stock_levels( $order_id );
+		}
+
+		return $response;
+	}
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
