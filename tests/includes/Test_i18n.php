@@ -50,6 +50,11 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 		delete_transient( 'wcpos_i18n_woocommerce-pos-pro_active_path' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_nl_NL' );
 		delete_transient( 'wcpos_i18n_woocommerce-pos_ja' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_ja' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_nl_NL' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_de_DE' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_da_DK' );
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_fr_FR' );
 	}
 
 	/**
@@ -1374,5 +1379,82 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 
 		$file = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
 		$this->assertFileDoesNotExist( $file, 'Download without return statement should not be saved' );
+	}
+
+	/**
+	 * Test that download lock transient prevents concurrent downloads.
+	 *
+	 * @covers ::load_translations
+	 */
+	public function test_download_lock_prevents_concurrent_downloads(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'ja';
+			}
+		);
+
+		// Simulate another request already downloading this locale.
+		set_transient( 'wcpos_i18n_woocommerce-pos_downloading_ja', true, 30 );
+
+		$this->http_responder = function ( $request, $url ) {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => "<?php\nreturn array('messages' => array());",
+			);
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		// No HTTP requests should have been made — the lock prevented download.
+		$cdn_requests = array_filter(
+			$this->http_requests,
+			function ( $r ) {
+				return false !== strpos( $r['url'], 'cdn.jsdelivr.net' );
+			}
+		);
+		$this->assertCount( 0, $cdn_requests, 'Download lock should prevent HTTP requests' );
+
+		// Clean up.
+		delete_transient( 'wcpos_i18n_woocommerce-pos_downloading_ja' );
+	}
+
+	/**
+	 * Test that download lock is set before download and cleared after.
+	 *
+	 * @covers ::load_translations
+	 */
+	public function test_download_lock_is_set_and_cleared(): void {
+		add_filter(
+			'locale',
+			function () {
+				return 'nl_NL';
+			}
+		);
+
+		$lock_was_set = false;
+		$this->http_responder = function ( $request, $url ) use ( &$lock_was_set ) {
+			if ( false !== strpos( $url, 'cdn.jsdelivr.net' ) ) {
+				// Check if lock is set during the download.
+				if ( get_transient( 'wcpos_i18n_woocommerce-pos_downloading_nl_NL' ) ) {
+					$lock_was_set = true;
+				}
+
+				return array(
+					'response' => array( 'code' => 200 ),
+					'body'     => "<?php\nreturn array('messages' => array());",
+				);
+			}
+
+			return false;
+		};
+
+		$i18n = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+
+		$this->assertTrue( $lock_was_set, 'Download lock should be set during HTTP request' );
+		$this->assertFalse(
+			get_transient( 'wcpos_i18n_woocommerce-pos_downloading_nl_NL' ),
+			'Download lock should be cleared after download completes'
+		);
 	}
 }
