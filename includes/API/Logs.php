@@ -120,9 +120,21 @@ class Logs extends WP_REST_Controller {
 	}
 
 	/**
+	 * Maximum number of log entries to parse from files to prevent memory exhaustion.
+	 */
+	const MAX_FILE_ENTRIES = 10000;
+
+	/**
 	 * Parse log entries from file-based handler.
 	 *
 	 * Scans wc-logs/ for woocommerce-pos-*.log files and parses each line.
+	 * Reads files line-by-line to avoid loading entire files into memory.
+	 * Processes newest files first and caps at MAX_FILE_ENTRIES total.
+	 *
+	 * Note: within each file, lines are read top-to-bottom (oldest first).
+	 * If the cap is hit mid-file, the newest entries in that file are lost.
+	 * The final result is sorted by timestamp, so ordering is still correct
+	 * for the entries that are returned.
 	 *
 	 * @return array<int, array{timestamp: string, level: string, message: string, context: string}>
 	 */
@@ -134,21 +146,40 @@ class Logs extends WP_REST_Controller {
 			return array();
 		}
 
+		// Sort files by modification time descending so newest logs are processed first.
+		usort(
+			$files,
+			function ( $a, $b ) {
+				return filemtime( $b ) - filemtime( $a );
+			}
+		);
+
 		$entries = array();
+		$count   = 0;
 
 		foreach ( $files as $file ) {
-			$contents = file_get_contents( $file );
-			if ( false === $contents ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Reading local log files.
+			$handle = fopen( $file, 'r' );
+			if ( ! $handle ) {
 				continue;
 			}
 
-			$lines = explode( "\n", trim( $contents ) );
-			foreach ( $lines as $line ) {
+			while ( false !== ( $line = fgets( $handle ) ) ) { // phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
 				$entry = $this->parse_log_line( $line );
 				if ( $entry ) {
 					$entries[] = $entry;
+					++$count;
+
+					if ( $count >= self::MAX_FILE_ENTRIES ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+						fclose( $handle );
+						break 2;
+					}
 				}
 			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			fclose( $handle );
 		}
 
 		// Sort by timestamp descending (newest first).
@@ -213,7 +244,7 @@ class Logs extends WP_REST_Controller {
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is safe prefix, $where is prepared above.
-		$sql = "SELECT timestamp, level, message FROM {$table} {$where} ORDER BY timestamp DESC";
+		$sql = "SELECT timestamp, level, message FROM {$table} {$where} ORDER BY timestamp DESC LIMIT 10000";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is safely constructed above with $wpdb->prepare().
 		$results = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -352,32 +383,142 @@ class Logs extends WP_REST_Controller {
 		$last_viewed_ts = $last_viewed ? strtotime( $last_viewed ) : null;
 
 		$instance = new self();
-		$entries  = ( 'database' === $instance->get_handler_type() )
-			? $instance->get_db_entries()
-			: $instance->get_file_entries();
+
+		if ( 'database' === $instance->get_handler_type() ) {
+			return $instance->get_db_unread_counts( $last_viewed_ts );
+		}
+
+		return $instance->get_file_unread_counts( $last_viewed_ts );
+	}
+
+	/**
+	 * Count unread errors/warnings from database handler using SQL aggregation.
+	 *
+	 * @param int|null $last_viewed_ts Unix timestamp of last viewed, or null if never viewed.
+	 *
+	 * @return array{error: int, warning: int}
+	 */
+	private function get_db_unread_counts( ?int $last_viewed_ts ): array {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'woocommerce_log';
+
+		// Check table exists.
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( ! $table_exists ) {
+			return array(
+				'error' => 0,
+				'warning' => 0,
+			);
+		}
+
+		// Warning level = 400, error/critical/emergency/alert = 500-800.
+		$where = $wpdb->prepare( 'WHERE source = %s AND level >= %d', 'woocommerce-pos', 400 );
+
+		if ( $last_viewed_ts ) {
+			$last_viewed_date = gmdate( 'Y-m-d H:i:s', $last_viewed_ts );
+			$where           .= $wpdb->prepare( ' AND timestamp > %s', $last_viewed_date );
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is safe prefix, $where is prepared above.
+		$sql = "SELECT level, COUNT(*) as cnt FROM {$table} {$where} GROUP BY level";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is safely constructed above with $wpdb->prepare().
+		$results = $wpdb->get_results( $sql, ARRAY_A );
 
 		$counts = array(
-			'error'   => 0,
+			'error' => 0,
 			'warning' => 0,
 		);
 
-		foreach ( $entries as $entry ) {
-			if ( ! in_array( $entry['level'], array( 'error', 'warning', 'critical', 'emergency', 'alert' ), true ) ) {
+		foreach ( $results as $row ) {
+			$severity = (int) $row['level'];
+			// Warning = 400, everything above is error-class.
+			if ( 400 === $severity ) {
+				$counts['warning'] += (int) $row['cnt'];
+			} else {
+				$counts['error'] += (int) $row['cnt'];
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
+	 * Count unread errors/warnings from file-based handler by streaming.
+	 *
+	 * Reads log files line-by-line without loading all entries into memory.
+	 *
+	 * @param int|null $last_viewed_ts Unix timestamp of last viewed, or null if never viewed.
+	 *
+	 * @return array{error: int, warning: int}
+	 */
+	private function get_file_unread_counts( ?int $last_viewed_ts ): array {
+		$log_dir = trailingslashit( wp_upload_dir()['basedir'] ) . 'wc-logs/';
+		$files   = glob( $log_dir . 'woocommerce-pos-*.log' );
+
+		$counts       = array(
+			'error' => 0,
+			'warning' => 0,
+		);
+		$error_levels = array( 'error', 'critical', 'emergency', 'alert' );
+
+		if ( empty( $files ) ) {
+			return $counts;
+		}
+
+		// Sort files newest-first so the cap preserves recent entries.
+		usort(
+			$files,
+			function ( $a, $b ) {
+				return filemtime( $b ) - filemtime( $a );
+			}
+		);
+
+		$matched = 0;
+
+		foreach ( $files as $file ) {
+			// Skip files older than last_viewed based on modification time.
+			if ( $last_viewed_ts && filemtime( $file ) <= $last_viewed_ts ) {
 				continue;
 			}
 
-			// If no last_viewed, all entries are "unread".
-			// Use strtotime() to normalize ISO 8601 and MySQL datetime formats.
-			$entry_ts = strtotime( $entry['timestamp'] );
-			if ( $last_viewed_ts && $entry_ts && $entry_ts <= $last_viewed_ts ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Reading local log files.
+			$handle = fopen( $file, 'r' );
+			if ( ! $handle ) {
 				continue;
 			}
 
-			$level_key = in_array( $entry['level'], array( 'error', 'critical', 'emergency', 'alert' ), true )
-				? 'error'
-				: 'warning';
+			while ( false !== ( $line = fgets( $handle ) ) ) { // phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
+				$line = trim( $line );
+				if ( '' === $line ) {
+					continue;
+				}
 
-			++$counts[ $level_key ];
+				// Quick regex to extract just timestamp and level without full parsing.
+				if ( ! preg_match( '/^(\S+)\s+(EMERGENCY|ALERT|CRITICAL|ERROR|WARNING)\s/i', $line, $matches ) ) {
+					continue;
+				}
+
+				$entry_level = strtolower( $matches[2] );
+				$entry_ts    = strtotime( $matches[1] );
+
+				if ( $last_viewed_ts && $entry_ts && $entry_ts <= $last_viewed_ts ) {
+					continue;
+				}
+
+				$level_key = in_array( $entry_level, $error_levels, true ) ? 'error' : 'warning';
+				++$counts[ $level_key ];
+
+				++$matched;
+				if ( $matched >= self::MAX_FILE_ENTRIES ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					fclose( $handle );
+					break 2;
+				}
+			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			fclose( $handle );
 		}
 
 		return $counts;

@@ -26,6 +26,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	private const CDN_BASE_URL = 'https://cdn.jsdelivr.net/gh/wcpos/translations@%s/translations/php/%s/%s-%s.l10n.php';
 	private const MISSING_LOCALE_CACHE_TTL = DAY_IN_SECONDS;
 	private const WRITE_FAILED_CACHE_TTL = HOUR_IN_SECONDS;
+	private const DOWNLOAD_LOCK_TTL = 30;
 
 	/**
 	 * Text domain for the plugin.
@@ -139,41 +140,59 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return;
 		}
 
-		$last_candidate_index = count( $locale_candidates ) - 1;
-		$all_candidates_404   = true;
-		foreach ( $locale_candidates as $index => $candidate_locale ) {
-			$file       = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
-			$downloaded = $this->download_translation( $candidate_locale, $file, $index < $last_candidate_index );
-
-			if ( $downloaded ) {
-				// Recompute file path — download_translation() may have switched to fallback path.
-				$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
-				set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
-				delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
-				delete_transient( $this->get_write_failed_transient_key() );
-				$this->load_translation_file( $candidate_locale, $file );
-
-				return;
+		// Prevent thundering herd: if another request is already downloading, skip.
+		$download_lock_key = $this->get_download_lock_transient_key( $requested_locale );
+		if ( get_transient( $download_lock_key ) ) {
+			if ( $stale_file && $stale_locale ) {
+				$this->load_translation_file( $stale_locale, $stale_file );
 			}
-
-			if ( 404 !== $this->last_download_status_code ) {
-				$all_candidates_404 = false;
-			}
-		}
-
-		if ( $all_candidates_404 ) {
-			set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
-		} elseif ( $this->last_write_failed ) {
-			set_transient( $this->get_write_failed_transient_key(), $this->version, self::WRITE_FAILED_CACHE_TTL );
-		}
-
-		if ( $stale_file && $stale_locale ) {
-			$this->load_translation_file( $stale_locale, $stale_file );
 
 			return;
 		}
 
-		Logger::log( sprintf( 'i18n: No translation file available for %s (%s)', $this->text_domain, $requested_locale ) );
+		// Acquire download lock before attempting HTTP requests.
+		set_transient( $download_lock_key, true, self::DOWNLOAD_LOCK_TTL );
+
+		try {
+			$last_candidate_index = count( $locale_candidates ) - 1;
+			$all_candidates_404   = true;
+			foreach ( $locale_candidates as $index => $candidate_locale ) {
+				$file       = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
+				$downloaded = $this->download_translation( $candidate_locale, $file, $index < $last_candidate_index );
+
+				if ( $downloaded ) {
+					// Recompute file path — download_translation() may have switched to fallback path.
+					$file = $this->languages_path . $this->text_domain . '-' . $candidate_locale . '.l10n.php';
+					set_transient( $this->transient_key . '_' . $candidate_locale, $this->version, WEEK_IN_SECONDS );
+					delete_transient( $this->get_missing_locale_transient_key( $requested_locale ) );
+					delete_transient( $this->get_write_failed_transient_key() );
+					$this->load_translation_file( $candidate_locale, $file );
+
+					return;
+				}
+
+				if ( 404 !== $this->last_download_status_code ) {
+					$all_candidates_404 = false;
+				}
+			}
+
+			if ( $all_candidates_404 ) {
+				set_transient( $this->get_missing_locale_transient_key( $requested_locale ), $this->version, self::MISSING_LOCALE_CACHE_TTL );
+			} elseif ( $this->last_write_failed ) {
+				set_transient( $this->get_write_failed_transient_key(), $this->version, self::WRITE_FAILED_CACHE_TTL );
+			}
+
+			if ( $stale_file && $stale_locale ) {
+				$this->load_translation_file( $stale_locale, $stale_file );
+
+				return;
+			}
+
+			Logger::log( sprintf( 'i18n: No translation file available for %s (%s)', $this->text_domain, $requested_locale ) );
+		} finally {
+			// Release download lock — runs even if an exception is thrown.
+			delete_transient( $download_lock_key );
+		}
 	}
 
 	/**
@@ -254,6 +273,17 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 	 */
 	protected function get_write_failed_transient_key(): string {
 		return $this->transient_key . '_write_failed';
+	}
+
+	/**
+	 * Build the transient key used for download-in-progress locking.
+	 *
+	 * @param string $locale Requested locale.
+	 *
+	 * @return string
+	 */
+	protected function get_download_lock_transient_key( string $locale ): string {
+		return $this->transient_key . '_downloading_' . $locale;
 	}
 
 	/**
