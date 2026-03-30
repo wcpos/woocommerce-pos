@@ -7,6 +7,14 @@ import { Footer } from './footer';
 import { NavSidebar } from './nav-sidebar';
 import ErrorFallback from '../components/error';
 import Notice from '../components/notice';
+import {
+	FormSkeleton,
+	CardGridSkeleton,
+	ListSkeleton,
+	AccessSkeleton,
+	SessionsSkeleton,
+	LicenseSkeleton,
+} from '../components/skeleton';
 import useNotices from '../hooks/use-notices';
 import { t } from '../translations';
 
@@ -15,8 +23,19 @@ const pageTitles: Record<string, string> = {
 	'/checkout': 'common.checkout',
 	'/access': 'common.access',
 	'/sessions': 'sessions.sessions',
+	'/extensions': 'common.extensions',
 	'/logs': 'common.logs',
 	'/license': 'common.license',
+};
+
+const pageSkeletons: Record<string, React.ReactNode> = {
+	'/general': <FormSkeleton rows={5} />,
+	'/checkout': <FormSkeleton rows={4} />,
+	'/access': <AccessSkeleton />,
+	'/sessions': <SessionsSkeleton />,
+	'/extensions': <CardGridSkeleton cards={4} />,
+	'/logs': <ListSkeleton rows={8} />,
+	'/license': <LicenseSkeleton />,
 };
 
 export function RootLayout() {
@@ -70,7 +89,9 @@ export function RootLayout() {
 					)}
 
 					<ErrorBoundary FallbackComponent={ErrorFallback}>
-						<React.Suspense fallback={null}>
+						<React.Suspense
+							fallback={pageSkeletons[location.pathname] || <FormSkeleton />}
+						>
 							<Outlet />
 						</React.Suspense>
 					</ErrorBoundary>
