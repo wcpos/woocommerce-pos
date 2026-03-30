@@ -588,22 +588,10 @@ class Single_Template {
 		$template = TemplatesManager::get_template( $post->ID );
 		$engine   = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
 
-		// Get sample receipt data — real order if available, mock fallback.
-		$last_order  = $this->get_last_pos_order();
-		$sample_data = null;
-		if ( $last_order ) {
-			$builder     = new \WCPOS\WooCommercePOS\Services\Receipt_Data_Builder();
-			$sample_data = $this->sanitize_preview_data( $builder->build( $last_order ) );
-		}
-		if ( ! $sample_data ) {
-			$sample_data = \WCPOS\WooCommercePOS\Services\Receipt_Data_Schema::get_mock_receipt_data();
-		}
+		// Get sample receipt data from the preview builder.
+		$sample_data = ( new \WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder() )->build();
 
-		// Build preview URL for PHP templates.
 		$preview_url = '';
-		if ( $last_order ) {
-			$preview_url = $this->get_receipt_preview_url( $last_order, $post->ID );
-		}
 
 		$paper_width = get_post_meta( $post->ID, '_template_paper_width', true );
 
@@ -675,93 +663,6 @@ class Single_Template {
 			</div>
 			<?php
 		}
-	}
-
-	/**
-	 * Strip PII from receipt data before sending to the client-side preview.
-	 *
-	 * Replaces real customer names, addresses, and cashier names with
-	 * placeholder values so the template preview works without leaking
-	 * sensitive data into the page source.
-	 *
-	 * @param array $data Receipt data from Receipt_Data_Builder::build().
-	 *
-	 * @return array Sanitized data safe for client-side use.
-	 */
-	private function sanitize_preview_data( array $data ): array {
-		$empty_address = array(
-			'first_name' => '',
-			'last_name'  => '',
-			'company'    => '',
-			'address_1'  => '',
-			'address_2'  => '',
-			'city'       => '',
-			'state'      => '',
-			'postcode'   => '',
-			'country'    => '',
-			'email'      => '',
-			'phone'      => '',
-		);
-
-		// Redact customer PII.
-		if ( isset( $data['customer'] ) && \is_array( $data['customer'] ) ) {
-			$data['customer']['name']             = __( 'Sample Customer', 'woocommerce-pos' );
-			$data['customer']['billing_address']  = $empty_address;
-			$data['customer']['shipping_address'] = $empty_address;
-			$data['customer']['tax_id']           = '';
-		}
-
-		// Redact cashier name.
-		if ( isset( $data['cashier'] ) && \is_array( $data['cashier'] ) ) {
-			$data['cashier']['name'] = __( 'Sample Cashier', 'woocommerce-pos' );
-		}
-
-		return $data;
-	}
-
-	/**
-	 * Get the last POS order.
-	 * Compatible with both traditional posts and HPOS.
-	 *
-	 * @return null|\WC_Order Order object or null if not found.
-	 */
-	private function get_last_pos_order(): ?\WC_Order {
-		// Get recent orders and check each one for POS origin.
-		// This approach works with both legacy and HPOS storage.
-		$args = array(
-			'limit'   => 20, // Check the last 20 orders to find a POS one.
-			'orderby' => 'date',
-			'order'   => 'DESC',
-			'status'  => array( 'completed', 'processing', 'on-hold', 'pending' ),
-		);
-
-		$orders = wc_get_orders( $args );
-
-		foreach ( $orders as $order ) {
-			if ( \wcpos_is_pos_order( $order ) ) {
-				return $order;
-			}
-		}
-
-		return null;
-	}
-
-	/**
-	 * Get receipt preview URL for an order.
-	 *
-	 * @param \WC_Order $order       Order object.
-	 * @param int       $template_id Template ID to preview.
-	 *
-	 * @return string Receipt URL.
-	 */
-	private function get_receipt_preview_url( \WC_Order $order, int $template_id ): string {
-		return add_query_arg(
-			array(
-				'key'                    => $order->get_order_key(),
-				'wcpos_preview_template' => $template_id,
-			),
-			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
-		);
 	}
 
 	/**
