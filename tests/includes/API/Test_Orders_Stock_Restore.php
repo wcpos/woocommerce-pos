@@ -20,13 +20,21 @@ use WCPOS\WooCommercePOS\API\Orders_Controller;
  */
 class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Previous value of the woocommerce_manage_stock option.
+	 *
+	 * @var string
+	 */
+	private $previous_manage_stock_option;
+
+	/**
 	 * Set up test.
 	 */
 	public function setup(): void {
 		parent::setUp();
 		$this->endpoint = new Orders_Controller();
 
-		// Enable stock management globally.
+		// Enable stock management globally, preserving the original value.
+		$this->previous_manage_stock_option = get_option( 'woocommerce_manage_stock', 'no' );
 		update_option( 'woocommerce_manage_stock', 'yes' );
 	}
 
@@ -34,6 +42,7 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 	 * Tear down test.
 	 */
 	public function tearDown(): void {
+		update_option( 'woocommerce_manage_stock', $this->previous_manage_stock_option );
 		parent::tearDown();
 	}
 
@@ -127,32 +136,36 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 		// Disable via filter.
 		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_false' );
 
-		$product = ProductHelper::create_simple_product(
-			array(
-				'manage_stock'  => true,
-				'stock_quantity' => 10,
-				'regular_price' => 10,
-				'price'         => 10,
-			)
-		);
+		try {
+			$product = ProductHelper::create_simple_product(
+				array(
+					'manage_stock'  => true,
+					'stock_quantity' => 10,
+					'regular_price' => 10,
+					'price'         => 10,
+				)
+			);
 
-		$order = OrderHelper::create_order( array( 'product' => $product ) );
-		$order->set_status( 'completed' );
-		$order->save();
+			$order = OrderHelper::create_order( array( 'product' => $product ) );
+			$order->set_status( 'completed' );
+			$order->save();
 
-		wc_maybe_reduce_stock_levels( $order->get_id() );
+			wc_maybe_reduce_stock_levels( $order->get_id() );
 
-		$product = wc_get_product( $product->get_id() );
-		$this->assertEquals( 6, $product->get_stock_quantity() );
+			$product = wc_get_product( $product->get_id() );
+			$this->assertEquals( 6, $product->get_stock_quantity() );
 
-		// Delete the order via the POS API.
-		$request  = $this->wp_rest_delete_request( '/wcpos/v1/orders/' . $order->get_id() );
-		$response = $this->server->dispatch( $request );
-		$this->assertEquals( 200, $response->get_status() );
+			// Delete the order via the POS API.
+			$request  = $this->wp_rest_delete_request( '/wcpos/v1/orders/' . $order->get_id() );
+			$response = $this->server->dispatch( $request );
+			$this->assertEquals( 200, $response->get_status() );
 
-		// Stock should NOT be restored.
-		$product = wc_get_product( $product->get_id() );
-		$this->assertEquals( 6, $product->get_stock_quantity() );
+			// Stock should NOT be restored.
+			$product = wc_get_product( $product->get_id() );
+			$this->assertEquals( 6, $product->get_stock_quantity() );
+		} finally {
+			remove_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_false' );
+		}
 	}
 
 	/**
