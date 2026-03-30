@@ -111,11 +111,12 @@ class Test_Update_1_9_0 extends WP_UnitTestCase {
 			return $dirs;
 		};
 		add_filter( 'upload_dir', $filter );
-
-		// Should not throw or error.
-		include __DIR__ . '/../../../includes/updates/update-1.9.0.php';
-
-		remove_filter( 'upload_dir', $filter );
+		try {
+			// Should not throw or error.
+			include __DIR__ . '/../../../includes/updates/update-1.9.0.php';
+		} finally {
+			remove_filter( 'upload_dir', $filter );
+		}
 
 		// If we get here without error, the test passes.
 		$this->assertTrue( true );

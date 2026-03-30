@@ -466,7 +466,15 @@ class Logs extends WP_REST_Controller {
 			return $counts;
 		}
 
-		$lines_processed = 0;
+		// Sort files newest-first so the cap preserves recent entries.
+		usort(
+			$files,
+			function ( $a, $b ) {
+				return filemtime( $b ) - filemtime( $a );
+			}
+		);
+
+		$matched = 0;
 
 		foreach ( $files as $file ) {
 			// Skip files older than last_viewed based on modification time.
@@ -486,13 +494,6 @@ class Logs extends WP_REST_Controller {
 					continue;
 				}
 
-				++$lines_processed;
-				if ( $lines_processed >= self::MAX_FILE_ENTRIES ) {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-					fclose( $handle );
-					break 2;
-				}
-
 				// Quick regex to extract just timestamp and level without full parsing.
 				if ( ! preg_match( '/^(\S+)\s+(EMERGENCY|ALERT|CRITICAL|ERROR|WARNING)\s/i', $line, $matches ) ) {
 					continue;
@@ -507,6 +508,13 @@ class Logs extends WP_REST_Controller {
 
 				$level_key = in_array( $entry_level, $error_levels, true ) ? 'error' : 'warning';
 				++$counts[ $level_key ];
+
+				++$matched;
+				if ( $matched >= self::MAX_FILE_ENTRIES ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					fclose( $handle );
+					break 2;
+				}
 			}
 
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
