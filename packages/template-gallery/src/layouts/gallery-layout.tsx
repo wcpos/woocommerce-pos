@@ -2,16 +2,9 @@ import * as React from 'react';
 import { Outlet } from '@tanstack/react-router';
 import { ErrorBoundary } from 'react-error-boundary';
 
+import { GalleryGridSkeleton } from '../components/skeleton';
 import { TypeTabs } from '../components/type-tabs';
 import { t } from '../translations';
-
-function LoadingFallback() {
-	return (
-		<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:py-16">
-			<div className="wcpos:text-gray-400 wcpos:text-sm">{t('layout.loading')}</div>
-		</div>
-	);
-}
 
 function ErrorFallback({
 	error,
@@ -60,7 +53,7 @@ export function GalleryLayout() {
 			</div>
 
 			<ErrorBoundary FallbackComponent={ErrorFallback}>
-				<React.Suspense fallback={<LoadingFallback />}>
+				<React.Suspense fallback={<GalleryGridSkeleton />}>
 					<Outlet />
 				</React.Suspense>
 			</ErrorBoundary>
