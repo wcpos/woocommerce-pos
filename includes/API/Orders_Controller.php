@@ -159,19 +159,22 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 */
 	public function delete_item( $request ) {
 		$order_id = (int) $request['id'];
+		$order    = wc_get_order( $order_id );
 
-		/**
-		 * Filter whether to restore stock when an order is deleted via the POS API.
-		 *
-		 * @since 1.9.0
-		 *
-		 * @param bool $restore_stock Whether to restore stock. Default true.
-		 * @param int  $order_id      The order ID being deleted.
-		 */
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', true, $order_id );
+		if ( $order ) {
+			/**
+			 * Filter whether to restore stock when an order is deleted via the POS API.
+			 *
+			 * @since 1.9.0
+			 *
+			 * @param bool $restore_stock Whether to restore stock. Default true.
+			 * @param int  $order_id      The order ID being deleted.
+			 */
+			$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', true, $order_id );
 
-		if ( $restore_stock ) {
-			wc_maybe_increase_stock_levels( $order_id );
+			if ( $restore_stock ) {
+				wc_maybe_increase_stock_levels( $order_id );
+			}
 		}
 
 		return parent::delete_item( $request );

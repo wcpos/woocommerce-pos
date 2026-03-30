@@ -183,4 +183,45 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 		$product = wc_get_product( $product->get_id() );
 		$this->assertEquals( 10, $product->get_stock_quantity() );
 	}
+
+	/**
+	 * Test that stock is not double-restored when an order is trashed then force-deleted.
+	 */
+	public function test_stock_not_double_restored_on_trash_then_force_delete(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'  => true,
+				'stock_quantity' => 10,
+				'regular_price' => 10,
+				'price'         => 10,
+			)
+		);
+
+		$order = OrderHelper::create_order( array( 'product' => $product ) );
+		$order->set_status( 'completed' );
+		$order->save();
+
+		// Reduce stock as WooCommerce would on payment complete.
+		wc_maybe_reduce_stock_levels( $order->get_id() );
+
+		$product = wc_get_product( $product->get_id() );
+		$this->assertEquals( 6, $product->get_stock_quantity() );
+
+		// First: trash the order — stock should be restored to 10.
+		$request  = $this->wp_rest_delete_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$product = wc_get_product( $product->get_id() );
+		$this->assertEquals( 10, $product->get_stock_quantity() );
+
+		// Second: force-delete the trashed order — stock should stay at 10, not go to 14.
+		$request = $this->wp_rest_delete_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$request->set_param( 'force', true );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$product = wc_get_product( $product->get_id() );
+		$this->assertEquals( 10, $product->get_stock_quantity() );
+	}
 }
