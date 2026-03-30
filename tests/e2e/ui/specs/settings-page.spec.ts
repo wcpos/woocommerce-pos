@@ -20,23 +20,7 @@ test.describe('Settings Page', () => {
 	test('Navigation sidebar is visible', async ({ adminPage }) => {
 		// Wait for React app to render the aside nav
 		const nav = adminPage.locator('aside');
-
-		// Debug: dump page state if aside isn't immediately found
-		try {
-			await expect(nav).toBeVisible({ timeout: 5000 });
-		} catch {
-			const settingsDiv = adminPage.locator('#woocommerce-pos-settings');
-			const innerHTML = await settingsDiv.innerHTML().catch(() => 'NOT FOUND');
-			console.log('=== DEBUG: #woocommerce-pos-settings innerHTML ===');
-			console.log(innerHTML.substring(0, 2000));
-			console.log('=== DEBUG: Console errors ===');
-			const logs = await adminPage.evaluate(() => {
-				return (window as any).__console_errors || [];
-			});
-			console.log(JSON.stringify(logs));
-			// Now wait with original timeout
-			await expect(nav).toBeVisible({ timeout: 10000 });
-		}
+		await expect(nav).toBeVisible({ timeout: 15000 });
 
 		// All five nav links should be present
 		await expect(nav.getByText('General')).toBeVisible();
