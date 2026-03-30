@@ -19,13 +19,12 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 
 	return (
 		<aside
-			aria-hidden={!isOpen}
 			className={[
 				'wcpos:w-56 wcpos:shrink-0 wcpos:border-r wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col wcpos:transition-[margin] wcpos:duration-300 wcpos:ease-in-out',
 				'wcpos:lg:ml-0',
 				isOpen
 					? 'wcpos:ml-0'
-					: 'wcpos:-ml-56 wcpos:pointer-events-none wcpos:invisible wcpos:lg:visible wcpos:lg:pointer-events-auto',
+					: 'wcpos:-ml-56 wcpos:max-lg:pointer-events-none wcpos:max-lg:invisible',
 			].join(' ')}
 		>
 			{/* Logo + title */}
