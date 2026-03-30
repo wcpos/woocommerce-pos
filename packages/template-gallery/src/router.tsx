@@ -17,19 +17,19 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/',
-	loader: async () => {
-		await Promise.all([
-			queryClient.ensureQueryData({
-				queryKey: ['templates', 'receipt'],
-				queryFn: () =>
-					apiFetch({ path: 'wcpos/v1/templates?wcpos=1&type=receipt', method: 'GET' }),
-			}),
-			queryClient.ensureQueryData({
-				queryKey: ['gallery-templates', 'receipt'],
-				queryFn: () =>
-					apiFetch({ path: 'wcpos/v1/templates/gallery?wcpos=1&type=receipt', method: 'GET' }),
-			}),
-		]);
+	loader: () => {
+		queryClient.prefetchQuery({
+			queryKey: ['templates', 'receipt'],
+			queryFn: () =>
+				apiFetch({ path: 'wcpos/v1/templates?wcpos=1&type=receipt', method: 'GET' }),
+			retry: 1,
+		});
+		queryClient.prefetchQuery({
+			queryKey: ['gallery-templates', 'receipt'],
+			queryFn: () =>
+				apiFetch({ path: 'wcpos/v1/templates/gallery?wcpos=1&type=receipt', method: 'GET' }),
+			retry: 1,
+		});
 	},
 	component: GalleryGrid,
 });
