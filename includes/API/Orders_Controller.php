@@ -146,6 +146,29 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	}
 
 	/**
+	 * Delete a single order.
+	 *
+	 * WooCommerce core does not restore stock when orders are trashed or deleted.
+	 * This override restores stock before deletion when the setting is enabled.
+	 *
+	 * @see https://github.com/woocommerce/woocommerce/issues/26716
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function delete_item( $request ) {
+		$restore_stock = woocommerce_pos_get_settings( 'general', 'restore_stock_on_delete' );
+
+		if ( $restore_stock ) {
+			$order_id = (int) $request['id'];
+			wc_maybe_increase_stock_levels( $order_id );
+		}
+
+		return parent::delete_item( $request );
+	}
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
