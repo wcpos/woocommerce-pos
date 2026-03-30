@@ -131,6 +131,11 @@ class Logs extends WP_REST_Controller {
 	 * Reads files line-by-line to avoid loading entire files into memory.
 	 * Processes newest files first and caps at MAX_FILE_ENTRIES total.
 	 *
+	 * Note: within each file, lines are read top-to-bottom (oldest first).
+	 * If the cap is hit mid-file, the newest entries in that file are lost.
+	 * The final result is sorted by timestamp, so ordering is still correct
+	 * for the entries that are returned.
+	 *
 	 * @return array<int, array{timestamp: string, level: string, message: string, context: string}>
 	 */
 	private function get_file_entries(): array {
@@ -461,6 +466,8 @@ class Logs extends WP_REST_Controller {
 			return $counts;
 		}
 
+		$lines_processed = 0;
+
 		foreach ( $files as $file ) {
 			// Skip files older than last_viewed based on modification time.
 			if ( $last_viewed_ts && filemtime( $file ) <= $last_viewed_ts ) {
@@ -477,6 +484,13 @@ class Logs extends WP_REST_Controller {
 				$line = trim( $line );
 				if ( '' === $line ) {
 					continue;
+				}
+
+				++$lines_processed;
+				if ( $lines_processed >= self::MAX_FILE_ENTRIES ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+					fclose( $handle );
+					break 2;
 				}
 
 				// Quick regex to extract just timestamp and level without full parsing.

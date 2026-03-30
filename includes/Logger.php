@@ -39,6 +39,13 @@ class Logger {
 	private static ?string $last_message_hash = null;
 
 	/**
+	 * Log level of the last deduplicated message, so flush writes at the correct level.
+	 *
+	 * @var string|null
+	 */
+	private static ?string $last_message_level = null;
+
+	/**
 	 * Number of consecutive duplicate messages suppressed.
 	 *
 	 * @var int
@@ -102,8 +109,9 @@ class Logger {
 		self::flush_repeat_count();
 
 		// Now log the new message.
-		self::$last_message_hash = $hash;
-		self::$repeat_count      = 0;
+		self::$last_message_hash  = $hash;
+		self::$last_message_level = self::$log_level;
+		self::$repeat_count       = 0;
 
 		$full_message = $message;
 		if ( '' !== $context_string ) {
@@ -121,9 +129,14 @@ class Logger {
 	 */
 	public static function flush_repeat_count(): void {
 		if ( self::$repeat_count > 0 ) {
+			$saved_level     = self::$log_level;
+			self::$log_level = self::$last_message_level ?? 'info';
+
 			self::write_log(
 				sprintf( 'Previous message repeated %d more time(s)', self::$repeat_count )
 			);
+
+			self::$log_level  = $saved_level;
 			self::$repeat_count = 0;
 		}
 	}
@@ -135,6 +148,7 @@ class Logger {
 	 */
 	public static function reset_dedup_state(): void {
 		self::$last_message_hash   = null;
+		self::$last_message_level  = null;
 		self::$repeat_count        = 0;
 		self::$shutdown_registered = false;
 	}
