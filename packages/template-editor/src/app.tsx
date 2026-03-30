@@ -76,6 +76,7 @@ export function App({ config }: AppProps) {
 			orders={preview.orders}
 			ordersLoading={preview.ordersLoading}
 			dataLoading={preview.dataLoading}
+			error={preview.error}
 			onSelectSource={preview.selectSource}
 			onRequestOrders={preview.fetchOrders}
 		/>

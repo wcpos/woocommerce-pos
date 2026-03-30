@@ -7,6 +7,7 @@ interface PreviewSourcePickerProps {
 	orders: OrderSummary[];
 	ordersLoading: boolean;
 	dataLoading: boolean;
+	error: string | null;
 	onSelectSource: (source: 'sample' | 'order', orderId?: number) => void;
 	onRequestOrders: () => void;
 }
@@ -16,6 +17,7 @@ export function PreviewSourcePicker({
 	orders,
 	ordersLoading,
 	dataLoading,
+	error,
 	onSelectSource,
 	onRequestOrders,
 }: PreviewSourcePickerProps) {
@@ -61,6 +63,26 @@ export function PreviewSourcePicker({
 						<span className="wcpos:text-xs wcpos:text-gray-500">
 							{t('editor.loading_orders')}
 						</span>
+					) : error && orders.length === 0 ? (
+						<>
+							<span className="wcpos:text-xs wcpos:text-red-500">{error}</span>
+							<button
+								type="button"
+								onClick={() => {
+									onRequestOrders();
+								}}
+								className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline wcpos:cursor-pointer"
+							>
+								{t('editor.retry')}
+							</button>
+							<button
+								type="button"
+								onClick={() => setExpanded(false)}
+								className="wcpos:text-xs wcpos:text-gray-500 hover:wcpos:underline wcpos:cursor-pointer"
+							>
+								{t('editor.cancel')}
+							</button>
+						</>
 					) : orders.length === 0 ? (
 						<span className="wcpos:text-xs wcpos:text-gray-500">
 							{t('editor.no_pos_orders')}

@@ -32,12 +32,13 @@ export function usePreviewData(
 	});
 
 	const ordersFetched = useRef(false);
+	const previewAbortRef = useRef<AbortController | null>(null);
 
 	const fetchOrders = useCallback(async () => {
 		if (ordersFetched.current) return;
 		ordersFetched.current = true;
 
-		setState((prev) => ({ ...prev, ordersLoading: true }));
+		setState((prev) => ({ ...prev, ordersLoading: true, error: null }));
 
 		try {
 			const orders = await apiFetch<OrderSummary[]>({
@@ -56,6 +57,12 @@ export function usePreviewData(
 
 	const selectSource = useCallback(
 		(source: 'sample' | 'order', orderId?: number) => {
+			// Abort any in-flight preview request.
+			if (previewAbortRef.current) {
+				previewAbortRef.current.abort();
+				previewAbortRef.current = null;
+			}
+
 			if (source === 'sample') {
 				setState((prev) => ({
 					...prev,
@@ -69,12 +76,17 @@ export function usePreviewData(
 
 			if (!orderId) return;
 
+			const controller = new AbortController();
+			previewAbortRef.current = controller;
+
 			setState((prev) => ({ ...prev, source: 'order', dataLoading: true, error: null }));
 
 			apiFetch<{ receipt_data?: Record<string, unknown> }>({
 				path: `wcpos/v1/templates/${templateId}/preview?order_id=${orderId}&wcpos=1`,
+				signal: controller.signal,
 			})
 				.then((response) => {
+					if (controller.signal.aborted) return;
 					const data = response.receipt_data ?? response;
 					setState((prev) => ({
 						...prev,
@@ -82,7 +94,8 @@ export function usePreviewData(
 						dataLoading: false,
 					}));
 				})
-				.catch(() => {
+				.catch((err: Error) => {
+					if (err.name === 'AbortError') return;
 					setState((prev) => ({
 						...prev,
 						data: sampleData,

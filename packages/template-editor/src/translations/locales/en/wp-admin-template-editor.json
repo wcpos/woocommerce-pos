@@ -17,6 +17,8 @@
 	"editor.loading_orders": "Loading orders…",
 	"editor.no_pos_orders": "No POS orders found",
 	"editor.loading_data": "Loading…",
+	"editor.retry": "Retry",
+	"editor.cancel": "Cancel",
 	"editor.search_fields_placeholder": "Search fields...",
 	"editor.search_fields_label": "Search fields",
 	"editor.elements": "Elements",

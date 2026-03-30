@@ -530,16 +530,29 @@ class Preview_Receipt_Builder {
 		/* translators: %s: discount percentage */
 		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
 
-		// Distribute discount proportionally across line items.
-		foreach ( $lines as &$line ) {
+		// Distribute discount proportionally across line items with remainder correction.
+		$sum_discount_excl = 0.0;
+		$sum_discount_incl = 0.0;
+		$last_index        = count( $lines ) - 1;
+
+		foreach ( $lines as $i => &$line ) {
 			if ( $lines_total_excl > 0 ) {
 				$share = $line['line_subtotal_excl'] / $lines_total_excl;
 			} else {
 				$share = 1.0 / count( $lines );
 			}
 
-			$line['discounts_excl'] = round( $discount_excl * $share, 2 );
-			$line['discounts_incl'] = round( $discount_incl * $share, 2 );
+			if ( $i < $last_index ) {
+				$line['discounts_excl'] = round( $discount_excl * $share, 2 );
+				$line['discounts_incl'] = round( $discount_incl * $share, 2 );
+				$sum_discount_excl     += $line['discounts_excl'];
+				$sum_discount_incl     += $line['discounts_incl'];
+			} else {
+				// Assign remainder to last item so distributed totals match exactly.
+				$line['discounts_excl'] = round( $discount_excl - $sum_discount_excl, 2 );
+				$line['discounts_incl'] = round( $discount_incl - $sum_discount_incl, 2 );
+			}
+
 			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], 2 );
 			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], 2 );
 		}

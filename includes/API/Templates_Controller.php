@@ -188,7 +188,18 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 6. GET /templates/{id} (regex).
+		// 6. GET /templates/preview-orders — list recent POS orders for preview picker.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/preview-orders',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_preview_orders' ),
+				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
+			)
+		);
+
+		// 7. GET /templates/{id} (regex). Must come after all fixed-path routes.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
@@ -206,7 +217,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 7. PATCH /templates/{id} (regex).
+		// 8. PATCH /templates/{id} (regex).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
@@ -232,7 +243,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 8. POST /templates/{id}/copy (regex).
+		// 9. POST /templates/{id}/copy (regex).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)/copy',
@@ -247,17 +258,6 @@ class Templates_Controller extends WP_REST_Controller {
 						'required'    => true,
 					),
 				),
-			)
-		);
-
-		// 9. GET /templates/preview-orders — list recent POS orders for preview picker.
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/preview-orders',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_preview_orders' ),
-				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
 			)
 		);
 
@@ -286,7 +286,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 11. DELETE /templates/{id} (regex).
+		// 11. DELETE /templates/{id} (regex). Must come after all {id}/sub-path routes.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',

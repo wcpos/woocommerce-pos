@@ -875,6 +875,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_preview_returns_url_with_order_id(): void {
 		$post_id = $this->create_template( 'Preview Template' );
+		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
 		$order   = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
