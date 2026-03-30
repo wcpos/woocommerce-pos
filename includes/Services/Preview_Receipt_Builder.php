@@ -41,6 +41,107 @@ class Preview_Receipt_Builder {
 	const MIN_LINES = 2;
 
 	/**
+	 * Sample customer data keyed by ISO 3166-1 alpha-2 country code.
+	 *
+	 * Each entry provides first_name, last_name, address_1, address_2, email,
+	 * and phone fields. City, state, postcode, and country are filled from the
+	 * store's WooCommerce settings at runtime. The 'US' entry is the fallback
+	 * used for any country not listed here.
+	 *
+	 * @var array<string, array<string, string>>
+	 */
+	const SAMPLE_CUSTOMERS = array(
+		'US' => array(
+			'first_name' => 'Sarah',
+			'last_name'  => 'Johnson',
+			'address_1'  => '456 Oak Avenue',
+			'address_2'  => 'Suite 200',
+			'email'      => 'sarah.johnson@example.com',
+			'phone'      => '(555) 987-6543',
+		),
+		'GB' => array(
+			'first_name' => 'James',
+			'last_name'  => 'Smith',
+			'address_1'  => '12 Baker Street',
+			'address_2'  => 'Flat 3',
+			'email'      => 'james.smith@example.co.uk',
+			'phone'      => '07700 900123',
+		),
+		'DE' => array(
+			'first_name' => 'Anna',
+			'last_name'  => 'Mueller',
+			'address_1'  => 'Hauptstraße 42',
+			'address_2'  => '',
+			'email'      => 'anna.mueller@example.de',
+			'phone'      => '030 12345678',
+		),
+		'FR' => array(
+			'first_name' => 'Marie',
+			'last_name'  => 'Dupont',
+			'address_1'  => '15 Rue de Rivoli',
+			'address_2'  => 'Apt 4B',
+			'email'      => 'marie.dupont@example.fr',
+			'phone'      => '01 23 45 67 89',
+		),
+		'AU' => array(
+			'first_name' => 'Liam',
+			'last_name'  => 'Wilson',
+			'address_1'  => '88 George Street',
+			'address_2'  => '',
+			'email'      => 'liam.wilson@example.com.au',
+			'phone'      => '02 9876 5432',
+		),
+		'JP' => array(
+			'first_name' => 'Yuki',
+			'last_name'  => 'Tanaka',
+			'address_1'  => '1-2-3 Shibuya',
+			'address_2'  => '',
+			'email'      => 'yuki.tanaka@example.jp',
+			'phone'      => '03-1234-5678',
+		),
+		'NL' => array(
+			'first_name' => 'Lars',
+			'last_name'  => 'de Vries',
+			'address_1'  => 'Keizersgracht 123',
+			'address_2'  => '',
+			'email'      => 'lars.devries@example.nl',
+			'phone'      => '020 123 4567',
+		),
+		'ES' => array(
+			'first_name' => 'Carmen',
+			'last_name'  => 'García',
+			'address_1'  => 'Calle Mayor 7',
+			'address_2'  => '',
+			'email'      => 'carmen.garcia@example.es',
+			'phone'      => '91 234 56 78',
+		),
+		'IT' => array(
+			'first_name' => 'Marco',
+			'last_name'  => 'Rossi',
+			'address_1'  => 'Via Roma 55',
+			'address_2'  => '',
+			'email'      => 'marco.rossi@example.it',
+			'phone'      => '06 1234 5678',
+		),
+		'CA' => array(
+			'first_name' => 'Emma',
+			'last_name'  => 'Brown',
+			'address_1'  => '200 Bay Street',
+			'address_2'  => 'Unit 1500',
+			'email'      => 'emma.brown@example.ca',
+			'phone'      => '(416) 555-0123',
+		),
+		'NZ' => array(
+			'first_name' => 'Oliver',
+			'last_name'  => 'Taylor',
+			'address_1'  => '42 Lambton Quay',
+			'address_2'  => '',
+			'email'      => 'oliver.taylor@example.co.nz',
+			'phone'      => '04 123 4567',
+		),
+	);
+
+	/**
 	 * Fallback product definitions when the catalog is empty.
 	 *
 	 * @var array[]
@@ -171,35 +272,7 @@ class Preview_Receipt_Builder {
 
 		$cashier = $this->get_cashier();
 
-		$customer = array(
-			'id'               => 42,
-			'name'             => 'Sarah Johnson',
-			'billing_address'  => array(
-				'first_name' => 'Sarah',
-				'last_name'  => 'Johnson',
-				'company'    => '',
-				'address_1'  => '456 Oak Avenue',
-				'address_2'  => 'Suite 200',
-				'city'       => 'Springfield',
-				'state'      => 'IL',
-				'postcode'   => '62701',
-				'country'    => 'US',
-				'email'      => 'sarah.johnson@example.com',
-				'phone'      => '(555) 987-6543',
-			),
-			'shipping_address' => array(
-				'first_name' => 'Sarah',
-				'last_name'  => 'Johnson',
-				'company'    => '',
-				'address_1'  => '456 Oak Avenue',
-				'address_2'  => 'Suite 200',
-				'city'       => 'Springfield',
-				'state'      => 'IL',
-				'postcode'   => '62701',
-				'country'    => 'US',
-			),
-			'tax_id'           => '',
-		);
+		$customer = $this->get_customer();
 
 		$fees = array(
 			array(
@@ -390,6 +463,62 @@ class Preview_Receipt_Builder {
 		return array(
 			'id'   => 0,
 			'name' => 'Jane Smith',
+		);
+	}
+
+	/**
+	 * Build a locale-aware sample customer using the store's country settings.
+	 *
+	 * Reads woocommerce_default_country (format "CC" or "CC:SS") to select a
+	 * matching entry from SAMPLE_CUSTOMERS, falling back to the US entry for
+	 * unknown countries. City, state, postcode, and country are filled from
+	 * the store's WooCommerce settings so the preview reflects real store data.
+	 *
+	 * @return array Customer data with id, name, billing_address, shipping_address, and tax_id.
+	 */
+	private function get_customer(): array {
+		$raw     = get_option( 'woocommerce_default_country', 'US' );
+		$parts   = explode( ':', $raw );
+		$country = $parts[0] ?? 'US';
+		$state   = $parts[1] ?? '';
+
+		$sample = self::SAMPLE_CUSTOMERS[ $country ] ?? self::SAMPLE_CUSTOMERS['US'];
+
+		$city     = get_option( 'woocommerce_store_city', '' );
+		$postcode = get_option( 'woocommerce_store_postcode', '' );
+
+		$billing = array(
+			'first_name' => $sample['first_name'],
+			'last_name'  => $sample['last_name'],
+			'company'    => '',
+			'address_1'  => $sample['address_1'],
+			'address_2'  => $sample['address_2'],
+			'city'       => $city,
+			'state'      => $state,
+			'postcode'   => $postcode,
+			'country'    => $country,
+			'email'      => $sample['email'],
+			'phone'      => $sample['phone'],
+		);
+
+		$shipping = array(
+			'first_name' => $sample['first_name'],
+			'last_name'  => $sample['last_name'],
+			'company'    => '',
+			'address_1'  => $sample['address_1'],
+			'address_2'  => $sample['address_2'],
+			'city'       => $city,
+			'state'      => $state,
+			'postcode'   => $postcode,
+			'country'    => $country,
+		);
+
+		return array(
+			'id'               => 42,
+			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
+			'billing_address'  => $billing,
+			'shipping_address' => $shipping,
+			'tax_id'           => '',
 		);
 	}
 

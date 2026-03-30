@@ -221,4 +221,56 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertGreaterThanOrEqual( $payment['amount'], $payment['tendered'], 'Tendered should be at least the payment amount' );
 		$this->assertEqualsWithDelta( $payment['tendered'] - $payment['amount'], $payment['change'], 0.01, 'Change should equal tendered minus amount' );
 	}
+
+	/**
+	 * Test that customer address uses store country/city.
+	 *
+	 * @covers ::build
+	 */
+	public function test_customer_uses_store_location(): void {
+		$original_country  = get_option( 'woocommerce_default_country' );
+		$original_city     = get_option( 'woocommerce_store_city' );
+		$original_postcode = get_option( 'woocommerce_store_postcode' );
+
+		try {
+			update_option( 'woocommerce_default_country', 'DE:BE' );
+			update_option( 'woocommerce_store_city', 'Berlin' );
+			update_option( 'woocommerce_store_postcode', '10115' );
+
+			$data    = $this->builder->build();
+			$billing = $data['customer']['billing_address'];
+
+			$this->assertEquals( 'DE', $billing['country'] );
+			$this->assertEquals( 'Berlin', $billing['city'] );
+			$this->assertEquals( '10115', $billing['postcode'] );
+			// German sample customer name.
+			$this->assertEquals( 'Anna', $billing['first_name'] );
+			$this->assertEquals( 'Mueller', $billing['last_name'] );
+		} finally {
+			update_option( 'woocommerce_default_country', $original_country );
+			update_option( 'woocommerce_store_city', $original_city );
+			update_option( 'woocommerce_store_postcode', $original_postcode );
+		}
+	}
+
+	/**
+	 * Test that unknown country falls back to US sample customer.
+	 *
+	 * @covers ::build
+	 */
+	public function test_customer_falls_back_to_us_for_unknown_country(): void {
+		$original_country = get_option( 'woocommerce_default_country' );
+
+		try {
+			update_option( 'woocommerce_default_country', 'ZZ' );
+
+			$data    = $this->builder->build();
+			$billing = $data['customer']['billing_address'];
+
+			$this->assertEquals( 'ZZ', $billing['country'] );
+			$this->assertEquals( 'Sarah', $billing['first_name'] );
+		} finally {
+			update_option( 'woocommerce_default_country', $original_country );
+		}
+	}
 }
