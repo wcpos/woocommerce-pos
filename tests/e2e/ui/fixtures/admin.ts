@@ -13,15 +13,25 @@ export const ADMIN_USER = {
  */
 export const test = base.extend<{ adminPage: Page }>({
 	adminPage: async ({ page }, use) => {
+		// Capture console errors for debugging
+		page.on('console', (msg) => {
+			if (msg.type() === 'error') {
+				console.log(`[BROWSER ERROR] ${msg.text()}`);
+			}
+		});
+		page.on('pageerror', (err) => {
+			console.log(`[PAGE ERROR] ${err.message}`);
+		});
+
 		// Login to WordPress admin
 		await page.goto('/wp-login.php');
 		await page.fill('#user_login', ADMIN_USER.username);
 		await page.fill('#user_pass', ADMIN_USER.password);
 		await page.click('#wp-submit');
-		
+
 		// Wait for dashboard to load
 		await page.waitForURL(/\/wp-admin\//);
-		
+
 		await use(page);
 	},
 });
