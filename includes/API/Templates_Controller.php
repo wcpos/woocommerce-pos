@@ -276,10 +276,11 @@ class Templates_Controller extends WP_REST_Controller {
 						'required'    => true,
 					),
 					'order_id' => array(
-						'description' => __( 'Order ID to use for preview data. Omit for sample data.', 'woocommerce-pos' ),
-						'type'        => 'integer',
-						'required'    => false,
-						'default'     => 0,
+						'description'       => __( 'Order ID to use for preview data. Omit for sample data.', 'woocommerce-pos' ),
+						'type'              => 'integer',
+						'required'          => false,
+						'default'           => 0,
+						'sanitize_callback' => 'absint',
 					),
 				),
 			)
@@ -905,8 +906,22 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Non-thermal with a real order: return an iframe preview URL.
+		// Non-thermal with a real order.
 		if ( $order ) {
+			if ( 'logicless' === $engine ) {
+				// Logicless templates render client-side — return receipt data like thermal.
+				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+
+				return rest_ensure_response(
+					array(
+						'receipt_data' => $formatted_data,
+						'order_id'     => $order_id,
+						'template_id'  => $id,
+					)
+				);
+			}
+
+			// Legacy-php needs a server-side iframe URL.
 			$order_key   = $order->get_order_key();
 			$preview_url = add_query_arg(
 				array(

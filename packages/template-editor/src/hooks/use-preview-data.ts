@@ -45,6 +45,7 @@ export function usePreviewData(
 			});
 			setState((prev) => ({ ...prev, orders, ordersLoading: false }));
 		} catch {
+			ordersFetched.current = false; // Allow retry on failure.
 			setState((prev) => ({
 				...prev,
 				ordersLoading: false,
