@@ -36,7 +36,6 @@ class Settings {
 			'default_customer_is_cashier' => false,
 			'barcode_field'               => '_sku',
 			'generate_username'           => true,
-			'restore_stock_on_delete'     => true,
 		),
 		'checkout' => array(
 			'receipt_default_mode' => 'fiscal',

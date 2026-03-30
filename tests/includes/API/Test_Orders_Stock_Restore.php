@@ -121,17 +121,11 @@ class Test_Orders_Stock_Restore extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that stock is NOT restored when the setting is disabled.
+	 * Test that stock is NOT restored when the filter returns false.
 	 */
-	public function test_stock_not_restored_when_setting_disabled(): void {
-		// Disable the setting.
-		add_filter(
-			'woocommerce_pos_general_settings',
-			function ( $settings ) {
-				$settings['restore_stock_on_delete'] = false;
-				return $settings;
-			}
-		);
+	public function test_stock_not_restored_when_filter_disabled(): void {
+		// Disable via filter.
+		add_filter( 'woocommerce_pos_restore_stock_on_delete', '__return_false' );
 
 		$product = ProductHelper::create_simple_product(
 			array(
