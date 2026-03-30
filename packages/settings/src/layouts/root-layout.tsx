@@ -23,6 +23,7 @@ const pageTitles: Record<string, string> = {
 	'/checkout': 'common.checkout',
 	'/access': 'common.access',
 	'/sessions': 'sessions.sessions',
+	'/extensions': 'common.extensions',
 	'/logs': 'common.logs',
 	'/license': 'common.license',
 };
