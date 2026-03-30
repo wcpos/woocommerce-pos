@@ -254,6 +254,28 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that Pro fields get placeholder values when not configured.
+	 *
+	 * @covers ::build
+	 */
+	public function test_pro_fields_have_placeholders_when_empty(): void {
+		// Without Pro, these fields are normally empty/null.
+		$data  = $this->builder->build();
+		$store = $data['store'];
+
+		// All Pro fields should be non-null strings in preview.
+		$this->assertIsString( $store['opening_hours'] );
+		$this->assertIsString( $store['personal_notes'] );
+		$this->assertIsString( $store['policies_and_conditions'] );
+		$this->assertIsString( $store['footer_imprint'] );
+
+		$this->assertNotEmpty( $store['opening_hours'] );
+		$this->assertNotEmpty( $store['personal_notes'] );
+		$this->assertNotEmpty( $store['policies_and_conditions'] );
+		$this->assertNotEmpty( $store['footer_imprint'] );
+	}
+
+	/**
 	 * Test that unknown country falls back to US sample customer.
 	 *
 	 * @covers ::build

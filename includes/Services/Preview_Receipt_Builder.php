@@ -405,10 +405,18 @@ class Preview_Receipt_Builder {
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
 		$store['logo']                    = ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
-		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours ) ? $opening_hours : null;
-		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes ) ? $personal_notes : null;
-		$store['policies_and_conditions'] = ( null !== $policies_and_conditions && '' !== $policies_and_conditions ) ? $policies_and_conditions : null;
-		$store['footer_imprint']          = ( null !== $footer_imprint && '' !== $footer_imprint ) ? $footer_imprint : null;
+		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours )
+			? $opening_hours
+			: __( 'Mon–Fri 9:00 AM – 6:00 PM, Sat 10:00 AM – 4:00 PM', 'woocommerce-pos' );
+		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
+			? $personal_notes
+			: __( 'Thank you for shopping with us! We appreciate your business.', 'woocommerce-pos' );
+		$store['policies_and_conditions'] = ( null !== $policies_and_conditions && '' !== $policies_and_conditions )
+			? $policies_and_conditions
+			: __( 'Returns accepted within 30 days with original receipt. Items must be unused and in original packaging.', 'woocommerce-pos' );
+		$store['footer_imprint']          = ( null !== $footer_imprint && '' !== $footer_imprint )
+			? $footer_imprint
+			: __( 'Thank you for your purchase!', 'woocommerce-pos' );
 
 		return $store;
 	}
