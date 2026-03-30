@@ -10,7 +10,6 @@
 		"test:watch": "vitest"
 	},
 	"dependencies": {
-		"@wcpos/i18n": "workspace:*",
 		"@codemirror/autocomplete": "^6.18.6",
 		"@codemirror/commands": "^6.10.2",
 		"@codemirror/lang-html": "^6.4.9",
@@ -19,6 +18,8 @@
 		"@codemirror/search": "^6.5.10",
 		"@codemirror/state": "^6.5.2",
 		"@codemirror/view": "^6.36.5",
+		"@wcpos/i18n": "workspace:*",
+		"@wordpress/api-fetch": "^7.39.0",
 		"codemirror": "^6.0.1",
 		"mustache": "^4.2.0",
 		"react": "19.2.4",

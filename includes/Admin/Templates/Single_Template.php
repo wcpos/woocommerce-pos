@@ -565,7 +565,7 @@ class Single_Template {
 		wp_enqueue_script(
 			'wcpos-template-editor',
 			PLUGIN_URL . $dir . '/js/template-editor.js',
-			array( 'react', 'react-dom' ),
+			array( 'react', 'react-dom', 'wp-api-fetch' ),
 			PLUGIN_VERSION,
 			true
 		);
