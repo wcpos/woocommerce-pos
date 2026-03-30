@@ -34,6 +34,7 @@ const settingsLoader = (id: string) => () => {
 	queryClient.prefetchQuery({
 		queryKey: [id],
 		queryFn: () => apiFetch({ path: `wcpos/v1/settings/${id}?wcpos=1`, method: 'GET' }),
+		retry: 1,
 	});
 };
 
@@ -72,6 +73,7 @@ const extensionsRoute = createRoute({
 		queryClient.prefetchQuery({
 			queryKey: ['extensions'],
 			queryFn: () => apiFetch({ path: 'wcpos/v1/extensions?wcpos=1', method: 'GET' }),
+			retry: 1,
 		});
 	},
 	component: ExtensionsPage,

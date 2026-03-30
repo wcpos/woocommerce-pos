@@ -26,7 +26,7 @@ export function Skeleton({ className, width, height }: SkeletonProps) {
  */
 export function FormSkeleton({ rows = 5 }: { rows?: number }) {
 	return (
-		<div className="wcpos:pb-4 wcpos:mb-4">
+		<div className="wcpos:pb-4 wcpos:mb-4" role="status" aria-label="Loading">
 			<div className="wcpos:space-y-0">
 				{Array.from({ length: rows }).map((_, i) => (
 					<div
@@ -58,7 +58,7 @@ export function FormSkeleton({ rows = 5 }: { rows?: number }) {
  */
 export function CardGridSkeleton({ cards = 4 }: { cards?: number }) {
 	return (
-		<div>
+		<div role="status" aria-label="Loading">
 			{/* Search bar skeleton */}
 			<div className="wcpos:mb-4">
 				<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />
@@ -97,7 +97,7 @@ export function CardGridSkeleton({ cards = 4 }: { cards?: number }) {
  */
 export function ListSkeleton({ rows = 8 }: { rows?: number }) {
 	return (
-		<div>
+		<div role="status" aria-label="Loading">
 			{/* Filter bar */}
 			<div className="wcpos:flex wcpos:gap-2 wcpos:mb-4">
 				{Array.from({ length: 3 }).map((_, i) => (
@@ -126,7 +126,7 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
  */
 export function AccessSkeleton() {
 	return (
-		<>
+		<div role="status" aria-label="Loading">
 			<div className="wcpos:p-4">
 				<Skeleton className="wcpos:h-10 wcpos:w-full wcpos:rounded-md" />
 			</div>
@@ -152,7 +152,7 @@ export function AccessSkeleton() {
 					</div>
 				</div>
 			</div>
-		</>
+		</div>
 	);
 }
 
@@ -161,7 +161,7 @@ export function AccessSkeleton() {
  */
 export function SessionsSkeleton() {
 	return (
-		<div className="wcpos:p-4">
+		<div className="wcpos:p-4" role="status" aria-label="Loading">
 			<Skeleton className="wcpos:h-10 wcpos:w-full wcpos:rounded-md wcpos:mb-3" />
 			<div className="wcpos:mb-3 wcpos:flex wcpos:gap-2">
 				<Skeleton className="wcpos:h-8 wcpos:rounded" width="90px" />
@@ -191,7 +191,7 @@ export function SessionsSkeleton() {
  */
 export function LicenseSkeleton() {
 	return (
-		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4">
+		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4" role="status" aria-label="Loading">
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Skeleton className="wcpos:h-4" width="90px" />
 			</div>
