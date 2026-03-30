@@ -235,12 +235,27 @@ class Preview_Receipt_Builder {
 		$shipping_label    = __( 'Flat Rate Shipping', 'woocommerce-pos' );
 
 		// Discount: 10% of line items excl total.
-		$discount_rate      = 10.0;
-		$discount_excl      = round( $lines_total_excl * $discount_rate / 100, 2 );
-		$discount_tax       = round( $discount_excl * $tax_rate / 100, 2 );
-		$discount_incl      = $discount_excl + $discount_tax;
+		$discount_rate  = 10.0;
+		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, 2 );
+		$discount_tax   = round( $discount_excl * $tax_rate / 100, 2 );
+		$discount_incl  = $discount_excl + $discount_tax;
 		/* translators: %s: discount percentage */
-		$discount_label     = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+
+		// Distribute discount proportionally across line items.
+		foreach ( $lines as &$line ) {
+			if ( $lines_total_excl > 0 ) {
+				$share = $line['line_subtotal_excl'] / $lines_total_excl;
+			} else {
+				$share = 1.0 / count( $lines );
+			}
+
+			$line['discounts_excl'] = round( $discount_excl * $share, 2 );
+			$line['discounts_incl'] = round( $discount_incl * $share, 2 );
+			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], 2 );
+			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], 2 );
+		}
+		unset( $line );
 
 		// Totals.
 		$subtotal_excl = $lines_total_excl;

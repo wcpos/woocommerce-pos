@@ -276,6 +276,39 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that line-item discounts are populated proportionally.
+	 *
+	 * @covers ::build
+	 */
+	public function test_line_items_have_proportional_discounts(): void {
+		$data = $this->builder->build();
+
+		$total_line_discounts_excl = 0.0;
+		foreach ( $data['lines'] as $line ) {
+			$this->assertArrayHasKey( 'discounts_excl', $line );
+			$this->assertGreaterThan( 0.0, $line['discounts_excl'], 'Each line should have a non-zero discount' );
+
+			// line_total should equal line_subtotal minus discount.
+			$this->assertEqualsWithDelta(
+				$line['line_subtotal_excl'] - $line['discounts_excl'],
+				$line['line_total_excl'],
+				0.02,
+				'line_total_excl should be line_subtotal_excl - discounts_excl'
+			);
+
+			$total_line_discounts_excl += $line['discounts_excl'];
+		}
+
+		// Sum of per-line discounts should match order-level discount.
+		$this->assertEqualsWithDelta(
+			$data['totals']['discount_total_excl'],
+			$total_line_discounts_excl,
+			0.02,
+			'Sum of line discounts should match order discount total'
+		);
+	}
+
+	/**
 	 * Test that unknown country falls back to US sample customer.
 	 *
 	 * @covers ::build
