@@ -1,13 +1,15 @@
 import { useMustachePreview } from '../hooks/use-mustache-preview';
 import { t } from '../translations';
+import type { ReactNode } from 'react';
 
 interface LivePreviewProps {
 	content: string;
 	sampleData: Record<string, unknown>;
 	previewUrl: string;
+	sourcePicker?: ReactNode;
 }
 
-export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProps) {
+export function LivePreview({ content, sampleData, previewUrl, sourcePicker }: LivePreviewProps) {
 	const renderedHtml = useMustachePreview(content, sampleData);
 
 	const srcdoc = `<!DOCTYPE html>
@@ -22,16 +24,19 @@ export function LivePreview({ content, sampleData, previewUrl }: LivePreviewProp
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
 					{t('editor.preview')}
 				</span>
-				{previewUrl && (
-					<a
-						href={previewUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline"
-					>
-						{t('editor.open_in_tab')}
-					</a>
-				)}
+				<div className="wcpos:flex wcpos:items-center wcpos:gap-3">
+					{sourcePicker}
+					{previewUrl && (
+						<a
+							href={previewUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline"
+						>
+							{t('editor.open_in_tab')}
+						</a>
+					)}
+				</div>
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
 				<iframe

@@ -18,6 +18,7 @@ const externalGlobals: Record<string, string> = {
 	'react': 'globalThis.React',
 	'react-dom': 'globalThis.ReactDOM',
 	'react-dom/client': 'globalThis.ReactDOM',
+	'@wordpress/api-fetch': 'globalThis.wp.apiFetch',
 };
 
 function fixCjsExternals(): Plugin {

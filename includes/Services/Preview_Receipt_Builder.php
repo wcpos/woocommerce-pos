@@ -41,6 +41,395 @@ class Preview_Receipt_Builder {
 	const MIN_LINES = 2;
 
 	/**
+	 * Sample customer data keyed by ISO 3166-1 alpha-2 country code.
+	 *
+	 * Each entry provides first_name, last_name, address_1, address_2, email,
+	 * and phone fields. City, state, postcode, and country are filled from the
+	 * store's WooCommerce settings at runtime. The 'US' entry is the fallback
+	 * used for any country not listed here.
+	 *
+	 * @var array<string, array<string, string>>
+	 */
+	const SAMPLE_CUSTOMERS = array(
+		'US' => array(
+			'first_name' => 'Sarah',
+			'last_name'  => 'Johnson',
+			'address_1'  => '456 Oak Avenue',
+			'address_2'  => 'Suite 200',
+			'email'      => 'sarah.johnson@example.com',
+			'phone'      => '(555) 987-6543',
+		),
+		'GB' => array(
+			'first_name' => 'James',
+			'last_name'  => 'Smith',
+			'address_1'  => '12 Baker Street',
+			'address_2'  => 'Flat 3',
+			'email'      => 'james.smith@example.co.uk',
+			'phone'      => '07700 900123',
+		),
+		'DE' => array(
+			'first_name' => 'Anna',
+			'last_name'  => 'Mueller',
+			'address_1'  => 'Hauptstraße 42',
+			'address_2'  => '',
+			'email'      => 'anna.mueller@example.de',
+			'phone'      => '030 12345678',
+		),
+		'FR' => array(
+			'first_name' => 'Marie',
+			'last_name'  => 'Dupont',
+			'address_1'  => '15 Rue de Rivoli',
+			'address_2'  => 'Apt 4B',
+			'email'      => 'marie.dupont@example.fr',
+			'phone'      => '01 23 45 67 89',
+		),
+		'AU' => array(
+			'first_name' => 'Liam',
+			'last_name'  => 'Wilson',
+			'address_1'  => '88 George Street',
+			'address_2'  => '',
+			'email'      => 'liam.wilson@example.com.au',
+			'phone'      => '02 9876 5432',
+		),
+		'JP' => array(
+			'first_name' => 'Yuki',
+			'last_name'  => 'Tanaka',
+			'address_1'  => '1-2-3 Shibuya',
+			'address_2'  => '',
+			'email'      => 'yuki.tanaka@example.jp',
+			'phone'      => '03-1234-5678',
+		),
+		'NL' => array(
+			'first_name' => 'Lars',
+			'last_name'  => 'de Vries',
+			'address_1'  => 'Keizersgracht 123',
+			'address_2'  => '',
+			'email'      => 'lars.devries@example.nl',
+			'phone'      => '020 123 4567',
+		),
+		'ES' => array(
+			'first_name' => 'Carmen',
+			'last_name'  => 'García',
+			'address_1'  => 'Calle Mayor 7',
+			'address_2'  => '',
+			'email'      => 'carmen.garcia@example.es',
+			'phone'      => '91 234 56 78',
+		),
+		'IT' => array(
+			'first_name' => 'Marco',
+			'last_name'  => 'Rossi',
+			'address_1'  => 'Via Roma 55',
+			'address_2'  => '',
+			'email'      => 'marco.rossi@example.it',
+			'phone'      => '06 1234 5678',
+		),
+		'CA' => array(
+			'first_name' => 'Emma',
+			'last_name'  => 'Brown',
+			'address_1'  => '200 Bay Street',
+			'address_2'  => 'Unit 1500',
+			'email'      => 'emma.brown@example.ca',
+			'phone'      => '(416) 555-0123',
+		),
+		'NZ' => array(
+			'first_name' => 'Oliver',
+			'last_name'  => 'Taylor',
+			'address_1'  => '42 Lambton Quay',
+			'address_2'  => '',
+			'email'      => 'oliver.taylor@example.co.nz',
+			'phone'      => '04 123 4567',
+		),
+		'IN' => array(
+			'first_name' => 'Priya',
+			'last_name'  => 'Sharma',
+			'address_1'  => '14 MG Road',
+			'address_2'  => '',
+			'email'      => 'priya.sharma@example.in',
+			'phone'      => '98765 43210',
+		),
+		'BR' => array(
+			'first_name' => 'Ana',
+			'last_name'  => 'Silva',
+			'address_1'  => 'Rua Augusta 1200',
+			'address_2'  => 'Apto 42',
+			'email'      => 'ana.silva@example.com.br',
+			'phone'      => '(11) 98765-4321',
+		),
+		'MX' => array(
+			'first_name' => 'Sofía',
+			'last_name'  => 'Hernández',
+			'address_1'  => 'Av. Reforma 222',
+			'address_2'  => 'Piso 3',
+			'email'      => 'sofia.hernandez@example.com.mx',
+			'phone'      => '55 1234 5678',
+		),
+		'SE' => array(
+			'first_name' => 'Erik',
+			'last_name'  => 'Lindqvist',
+			'address_1'  => 'Drottninggatan 50',
+			'address_2'  => '',
+			'email'      => 'erik.lindqvist@example.se',
+			'phone'      => '08-123 456 78',
+		),
+		'NO' => array(
+			'first_name' => 'Ingrid',
+			'last_name'  => 'Hansen',
+			'address_1'  => 'Karl Johans gate 10',
+			'address_2'  => '',
+			'email'      => 'ingrid.hansen@example.no',
+			'phone'      => '22 12 34 56',
+		),
+		'DK' => array(
+			'first_name' => 'Mads',
+			'last_name'  => 'Nielsen',
+			'address_1'  => 'Strøget 28',
+			'address_2'  => '',
+			'email'      => 'mads.nielsen@example.dk',
+			'phone'      => '33 12 34 56',
+		),
+		'FI' => array(
+			'first_name' => 'Aino',
+			'last_name'  => 'Virtanen',
+			'address_1'  => 'Mannerheimintie 15',
+			'address_2'  => '',
+			'email'      => 'aino.virtanen@example.fi',
+			'phone'      => '09 123 4567',
+		),
+		'BE' => array(
+			'first_name' => 'Lucas',
+			'last_name'  => 'Peeters',
+			'address_1'  => 'Meir 48',
+			'address_2'  => '',
+			'email'      => 'lucas.peeters@example.be',
+			'phone'      => '03 123 45 67',
+		),
+		'AT' => array(
+			'first_name' => 'Katharina',
+			'last_name'  => 'Gruber',
+			'address_1'  => 'Kärntner Straße 21',
+			'address_2'  => '',
+			'email'      => 'katharina.gruber@example.at',
+			'phone'      => '01 234 5678',
+		),
+		'CH' => array(
+			'first_name' => 'Lukas',
+			'last_name'  => 'Meier',
+			'address_1'  => 'Bahnhofstrasse 30',
+			'address_2'  => '',
+			'email'      => 'lukas.meier@example.ch',
+			'phone'      => '044 123 45 67',
+		),
+		'PT' => array(
+			'first_name' => 'Maria',
+			'last_name'  => 'Santos',
+			'address_1'  => 'Rua Augusta 85',
+			'address_2'  => '',
+			'email'      => 'maria.santos@example.pt',
+			'phone'      => '21 123 4567',
+		),
+		'PL' => array(
+			'first_name' => 'Katarzyna',
+			'last_name'  => 'Nowak',
+			'address_1'  => 'ul. Marszałkowska 12',
+			'address_2'  => '',
+			'email'      => 'katarzyna.nowak@example.pl',
+			'phone'      => '22 123 45 67',
+		),
+		'CZ' => array(
+			'first_name' => 'Tereza',
+			'last_name'  => 'Nováková',
+			'address_1'  => 'Václavské náměstí 30',
+			'address_2'  => '',
+			'email'      => 'tereza.novakova@example.cz',
+			'phone'      => '221 234 567',
+		),
+		'IE' => array(
+			'first_name' => 'Aoife',
+			'last_name'  => 'Murphy',
+			'address_1'  => '22 Grafton Street',
+			'address_2'  => '',
+			'email'      => 'aoife.murphy@example.ie',
+			'phone'      => '01 234 5678',
+		),
+		'ZA' => array(
+			'first_name' => 'Thandiwe',
+			'last_name'  => 'Ndlovu',
+			'address_1'  => '100 Long Street',
+			'address_2'  => '',
+			'email'      => 'thandiwe.ndlovu@example.co.za',
+			'phone'      => '021 123 4567',
+		),
+		'SG' => array(
+			'first_name' => 'Wei Lin',
+			'last_name'  => 'Tan',
+			'address_1'  => '1 Raffles Place',
+			'address_2'  => '#08-01',
+			'email'      => 'weilin.tan@example.sg',
+			'phone'      => '6123 4567',
+		),
+		'HK' => array(
+			'first_name' => 'Wing',
+			'last_name'  => 'Chan',
+			'address_1'  => '88 Queens Road Central',
+			'address_2'  => 'Flat 12A',
+			'email'      => 'wing.chan@example.hk',
+			'phone'      => '2123 4567',
+		),
+		'KR' => array(
+			'first_name' => 'Jimin',
+			'last_name'  => 'Park',
+			'address_1'  => '25 Gangnam-daero',
+			'address_2'  => '',
+			'email'      => 'jimin.park@example.kr',
+			'phone'      => '02-1234-5678',
+		),
+		'MY' => array(
+			'first_name' => 'Nurul',
+			'last_name'  => 'Ahmad',
+			'address_1'  => 'Jalan Bukit Bintang 55',
+			'address_2'  => '',
+			'email'      => 'nurul.ahmad@example.my',
+			'phone'      => '03-1234 5678',
+		),
+		'TH' => array(
+			'first_name' => 'Siriporn',
+			'last_name'  => 'Suksawat',
+			'address_1'  => '99 Sukhumvit Road',
+			'address_2'  => '',
+			'email'      => 'siriporn.s@example.co.th',
+			'phone'      => '02 123 4567',
+		),
+		'PH' => array(
+			'first_name' => 'Maria',
+			'last_name'  => 'Reyes',
+			'address_1'  => '123 Ayala Avenue',
+			'address_2'  => '',
+			'email'      => 'maria.reyes@example.ph',
+			'phone'      => '02 8123 4567',
+		),
+		'AE' => array(
+			'first_name' => 'Fatima',
+			'last_name'  => 'Al Maktoum',
+			'address_1'  => 'Sheikh Zayed Road',
+			'address_2'  => 'Tower 1, Office 501',
+			'email'      => 'fatima.m@example.ae',
+			'phone'      => '04 123 4567',
+		),
+		'SA' => array(
+			'first_name' => 'Nora',
+			'last_name'  => 'Al-Rashid',
+			'address_1'  => 'King Fahd Road',
+			'address_2'  => '',
+			'email'      => 'nora.alrashid@example.sa',
+			'phone'      => '011 234 5678',
+		),
+		'IL' => array(
+			'first_name' => 'Noa',
+			'last_name'  => 'Cohen',
+			'address_1'  => 'Rothschild Blvd 40',
+			'address_2'  => '',
+			'email'      => 'noa.cohen@example.co.il',
+			'phone'      => '03-123-4567',
+		),
+		'TR' => array(
+			'first_name' => 'Elif',
+			'last_name'  => 'Yılmaz',
+			'address_1'  => 'İstiklal Caddesi 45',
+			'address_2'  => '',
+			'email'      => 'elif.yilmaz@example.com.tr',
+			'phone'      => '0212 123 4567',
+		),
+		'RU' => array(
+			'first_name' => 'Anastasia',
+			'last_name'  => 'Ivanova',
+			'address_1'  => 'Tverskaya Ulitsa 12',
+			'address_2'  => 'Kv. 5',
+			'email'      => 'anastasia.ivanova@example.ru',
+			'phone'      => '+7 495 123-45-67',
+		),
+		'GR' => array(
+			'first_name' => 'Eleni',
+			'last_name'  => 'Papadopoulos',
+			'address_1'  => 'Ermou 25',
+			'address_2'  => '',
+			'email'      => 'eleni.p@example.gr',
+			'phone'      => '210 123 4567',
+		),
+		'RO' => array(
+			'first_name' => 'Andreea',
+			'last_name'  => 'Popescu',
+			'address_1'  => 'Calea Victoriei 100',
+			'address_2'  => '',
+			'email'      => 'andreea.popescu@example.ro',
+			'phone'      => '021 123 4567',
+		),
+		'HU' => array(
+			'first_name' => 'Anna',
+			'last_name'  => 'Szabó',
+			'address_1'  => 'Andrássy út 60',
+			'address_2'  => '',
+			'email'      => 'anna.szabo@example.hu',
+			'phone'      => '1 234 5678',
+		),
+		'ID' => array(
+			'first_name' => 'Siti',
+			'last_name'  => 'Rahayu',
+			'address_1'  => 'Jl. Sudirman No. 52',
+			'address_2'  => '',
+			'email'      => 'siti.rahayu@example.co.id',
+			'phone'      => '021-1234567',
+		),
+		'TW' => array(
+			'first_name' => 'Mei-Ling',
+			'last_name'  => 'Chen',
+			'address_1'  => 'Zhongxiao East Road Sec 4, No 12',
+			'address_2'  => '3F',
+			'email'      => 'meiling.chen@example.tw',
+			'phone'      => '02-2771-1234',
+		),
+		'CN' => array(
+			'first_name' => 'Xiao',
+			'last_name'  => 'Wang',
+			'address_1'  => 'Nanjing Road 200',
+			'address_2'  => '',
+			'email'      => 'xiao.wang@example.cn',
+			'phone'      => '021-6234-5678',
+		),
+		'VN' => array(
+			'first_name' => 'Linh',
+			'last_name'  => 'Nguyen',
+			'address_1'  => '45 Le Loi Street',
+			'address_2'  => '',
+			'email'      => 'linh.nguyen@example.vn',
+			'phone'      => '028 1234 5678',
+		),
+		'AR' => array(
+			'first_name' => 'Valentina',
+			'last_name'  => 'Fernández',
+			'address_1'  => 'Av. Corrientes 1234',
+			'address_2'  => 'Piso 5',
+			'email'      => 'valentina.f@example.com.ar',
+			'phone'      => '11 1234-5678',
+		),
+		'CO' => array(
+			'first_name' => 'Camila',
+			'last_name'  => 'Rodríguez',
+			'address_1'  => 'Carrera 7 No. 71-52',
+			'address_2'  => '',
+			'email'      => 'camila.r@example.co',
+			'phone'      => '601 234 5678',
+		),
+		'CL' => array(
+			'first_name' => 'Catalina',
+			'last_name'  => 'Muñoz',
+			'address_1'  => 'Av. Providencia 1200',
+			'address_2'  => 'Of. 301',
+			'email'      => 'catalina.munoz@example.cl',
+			'phone'      => '2 2345 6789',
+		),
+	);
+
+	/**
 	 * Fallback product definitions when the catalog is empty.
 	 *
 	 * @var array[]
@@ -134,12 +523,40 @@ class Preview_Receipt_Builder {
 		$shipping_label    = __( 'Flat Rate Shipping', 'woocommerce-pos' );
 
 		// Discount: 10% of line items excl total.
-		$discount_rate      = 10.0;
-		$discount_excl      = round( $lines_total_excl * $discount_rate / 100, 2 );
-		$discount_tax       = round( $discount_excl * $tax_rate / 100, 2 );
-		$discount_incl      = $discount_excl + $discount_tax;
+		$discount_rate  = 10.0;
+		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, 2 );
+		$discount_tax   = round( $discount_excl * $tax_rate / 100, 2 );
+		$discount_incl  = $discount_excl + $discount_tax;
 		/* translators: %s: discount percentage */
-		$discount_label     = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+
+		// Distribute discount proportionally across line items with remainder correction.
+		$sum_discount_excl = 0.0;
+		$sum_discount_incl = 0.0;
+		$last_index        = count( $lines ) - 1;
+
+		foreach ( $lines as $i => &$line ) {
+			if ( $lines_total_excl > 0 ) {
+				$share = $line['line_subtotal_excl'] / $lines_total_excl;
+			} else {
+				$share = 1.0 / count( $lines );
+			}
+
+			if ( $i < $last_index ) {
+				$line['discounts_excl'] = round( $discount_excl * $share, 2 );
+				$line['discounts_incl'] = round( $discount_incl * $share, 2 );
+				$sum_discount_excl     += $line['discounts_excl'];
+				$sum_discount_incl     += $line['discounts_incl'];
+			} else {
+				// Assign remainder to last item so distributed totals match exactly.
+				$line['discounts_excl'] = round( $discount_excl - $sum_discount_excl, 2 );
+				$line['discounts_incl'] = round( $discount_incl - $sum_discount_incl, 2 );
+			}
+
+			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], 2 );
+			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], 2 );
+		}
+		unset( $line );
 
 		// Totals.
 		$subtotal_excl = $lines_total_excl;
@@ -171,35 +588,7 @@ class Preview_Receipt_Builder {
 
 		$cashier = $this->get_cashier();
 
-		$customer = array(
-			'id'               => 42,
-			'name'             => 'Sarah Johnson',
-			'billing_address'  => array(
-				'first_name' => 'Sarah',
-				'last_name'  => 'Johnson',
-				'company'    => '',
-				'address_1'  => '456 Oak Avenue',
-				'address_2'  => 'Suite 200',
-				'city'       => 'Springfield',
-				'state'      => 'IL',
-				'postcode'   => '62701',
-				'country'    => 'US',
-				'email'      => 'sarah.johnson@example.com',
-				'phone'      => '(555) 987-6543',
-			),
-			'shipping_address' => array(
-				'first_name' => 'Sarah',
-				'last_name'  => 'Johnson',
-				'company'    => '',
-				'address_1'  => '456 Oak Avenue',
-				'address_2'  => 'Suite 200',
-				'city'       => 'Springfield',
-				'state'      => 'IL',
-				'postcode'   => '62701',
-				'country'    => 'US',
-			),
-			'tax_id'           => '',
-		);
+		$customer = $this->get_customer();
 
 		$fees = array(
 			array(
@@ -332,10 +721,18 @@ class Preview_Receipt_Builder {
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
 		$store['logo']                    = ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
-		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours ) ? $opening_hours : null;
-		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes ) ? $personal_notes : null;
-		$store['policies_and_conditions'] = ( null !== $policies_and_conditions && '' !== $policies_and_conditions ) ? $policies_and_conditions : null;
-		$store['footer_imprint']          = ( null !== $footer_imprint && '' !== $footer_imprint ) ? $footer_imprint : null;
+		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours )
+			? $opening_hours
+			: __( 'Mon–Fri 9:00 AM – 6:00 PM, Sat 10:00 AM – 4:00 PM', 'woocommerce-pos' );
+		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
+			? $personal_notes
+			: __( 'Thank you for shopping with us! We appreciate your business.', 'woocommerce-pos' );
+		$store['policies_and_conditions'] = ( null !== $policies_and_conditions && '' !== $policies_and_conditions )
+			? $policies_and_conditions
+			: __( 'Returns accepted within 30 days with original receipt. Items must be unused and in original packaging.', 'woocommerce-pos' );
+		$store['footer_imprint']          = ( null !== $footer_imprint && '' !== $footer_imprint )
+			? $footer_imprint
+			: __( 'Thank you for your purchase!', 'woocommerce-pos' );
 
 		return $store;
 	}
@@ -390,6 +787,62 @@ class Preview_Receipt_Builder {
 		return array(
 			'id'   => 0,
 			'name' => 'Jane Smith',
+		);
+	}
+
+	/**
+	 * Build a locale-aware sample customer using the store's country settings.
+	 *
+	 * Reads woocommerce_default_country (format "CC" or "CC:SS") to select a
+	 * matching entry from SAMPLE_CUSTOMERS, falling back to the US entry for
+	 * unknown countries. City, state, postcode, and country are filled from
+	 * the store's WooCommerce settings so the preview reflects real store data.
+	 *
+	 * @return array Customer data with id, name, billing_address, shipping_address, and tax_id.
+	 */
+	private function get_customer(): array {
+		$raw     = get_option( 'woocommerce_default_country', 'US' );
+		$parts   = explode( ':', $raw );
+		$country = $parts[0] ?? 'US';
+		$state   = $parts[1] ?? '';
+
+		$sample = self::SAMPLE_CUSTOMERS[ $country ] ?? self::SAMPLE_CUSTOMERS['US'];
+
+		$city     = get_option( 'woocommerce_store_city', '' );
+		$postcode = get_option( 'woocommerce_store_postcode', '' );
+
+		$billing = array(
+			'first_name' => $sample['first_name'],
+			'last_name'  => $sample['last_name'],
+			'company'    => '',
+			'address_1'  => $sample['address_1'],
+			'address_2'  => $sample['address_2'],
+			'city'       => $city,
+			'state'      => $state,
+			'postcode'   => $postcode,
+			'country'    => $country,
+			'email'      => $sample['email'],
+			'phone'      => $sample['phone'],
+		);
+
+		$shipping = array(
+			'first_name' => $sample['first_name'],
+			'last_name'  => $sample['last_name'],
+			'company'    => '',
+			'address_1'  => $sample['address_1'],
+			'address_2'  => $sample['address_2'],
+			'city'       => $city,
+			'state'      => $state,
+			'postcode'   => $postcode,
+			'country'    => $country,
+		);
+
+		return array(
+			'id'               => 42,
+			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
+			'billing_address'  => $billing,
+			'shipping_address' => $shipping,
+			'tax_id'           => '',
 		);
 	}
 

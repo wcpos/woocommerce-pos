@@ -188,7 +188,18 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 6. GET /templates/{id} (regex).
+		// 6. GET /templates/preview-orders — list recent POS orders for preview picker.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/preview-orders',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_preview_orders' ),
+				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
+			)
+		);
+
+		// 7. GET /templates/{id} (regex). Must come after all fixed-path routes.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
@@ -206,7 +217,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 7. PATCH /templates/{id} (regex).
+		// 8. PATCH /templates/{id} (regex).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
@@ -232,7 +243,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 8. POST /templates/{id}/copy (regex).
+		// 9. POST /templates/{id}/copy (regex).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)/copy',
@@ -250,7 +261,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 9. GET /templates/{id}/preview (regex).
+		// 10. GET /templates/{id}/preview (regex).
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\w-]+)/preview',
@@ -259,16 +270,23 @@ class Templates_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'preview_item' ),
 				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
 				'args'                => array(
-					'id' => array(
+					'id'       => array(
 						'description' => __( 'Template ID to preview.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
+					),
+					'order_id' => array(
+						'description'       => __( 'Order ID to use for preview data. Omit for sample data.', 'woocommerce-pos' ),
+						'type'              => 'integer',
+						'required'          => false,
+						'default'           => 0,
+						'sanitize_callback' => 'absint',
 					),
 				),
 			)
 		);
 
-		// 10. DELETE /templates/{id} (regex).
+		// 11. DELETE /templates/{id} (regex). Must come after all {id}/sub-path routes.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
@@ -843,33 +861,29 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Find a recent POS order for preview data.
-		$order_query = new \WC_Order_Query(
-			array(
-				'limit'      => 1,
-				'orderby'    => 'date',
-				'order'      => 'DESC',
-				'created_via' => 'woocommerce-pos',
-				'return'     => 'ids',
-			)
-		);
+		// Build receipt data: real order if order_id provided, otherwise sample data.
+		$order_id = (int) $request->get_param( 'order_id' );
+		$order    = null;
 
-		$order_ids = $order_query->get_orders();
-		if ( empty( $order_ids ) ) {
-			$fallback_query = new \WC_Order_Query(
-				array(
-					'limit'   => 1,
-					'orderby' => 'date',
-					'order'   => 'DESC',
-					'return'  => 'ids',
-				)
-			);
-			$order_ids      = $fallback_query->get_orders();
+		if ( $order_id > 0 ) {
+			$order = wc_get_order( $order_id );
+			if ( ! $order || ! \wcpos_is_pos_order( $order ) ) {
+				return new WP_Error(
+					'wcpos_invalid_order',
+					__( 'Order not found or is not a POS order.', 'woocommerce-pos' ),
+					array( 'status' => 404 )
+				);
+			}
 		}
 
-		$order_id  = ! empty( $order_ids ) ? (int) $order_ids[0] : 0;
-		$order     = $order_id ? wc_get_order( $order_id ) : null;
-		$order_key = $order ? $order->get_order_key() : '';
+		if ( $order ) {
+			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		} else {
+			$receipt_data = ( new Preview_Receipt_Builder() )->build();
+		}
+
+		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
+		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 		// Determine engine.
 		$engine = $template['engine'] ?? 'legacy-php';
@@ -877,15 +891,6 @@ class Templates_Controller extends WP_REST_Controller {
 		// Thermal templates return raw content + data for client-side rendering.
 		if ( 'thermal' === $engine ) {
 			$content = $template['content'] ?? '';
-
-			if ( $order ) {
-				$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
-			} else {
-				$receipt_data = ( new Preview_Receipt_Builder() )->build();
-			}
-
-			$currency       = $receipt_data['meta']['currency'] ?? 'USD';
-			$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 			// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
 			$formatted_data['t'] = true;
@@ -901,8 +906,24 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Non-thermal with a real order: return an iframe preview URL.
+		// Non-thermal with a real order.
 		if ( $order ) {
+			if ( 'logicless' === $engine ) {
+				// Logicless templates render client-side — return receipt data like thermal.
+				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+				$formatted_data['t']               = true;
+
+				return rest_ensure_response(
+					array(
+						'receipt_data' => $formatted_data,
+						'order_id'     => $order_id,
+						'template_id'  => $id,
+					)
+				);
+			}
+
+			// Legacy-php needs a server-side iframe URL.
+			$order_key   = $order->get_order_key();
 			$preview_url = add_query_arg(
 				array(
 					'key'                    => $order_key,
@@ -920,12 +941,7 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Non-thermal without an order: render server-side with preview data.
-		$receipt_data   = ( new Preview_Receipt_Builder() )->build();
-		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
-		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
-
-		// Add boolean helpers for array sections so templates can gate wrappers.
+		// Non-thermal with sample data: render server-side.
 		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
 		$banner = $this->get_preview_banner_html();
@@ -942,11 +958,11 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Legacy-php and other engines cannot be rendered server-side without a real order.
+		// Legacy-php without a real order.
 		return rest_ensure_response(
 			array(
 				'preview_html' => $banner . '<div style="padding: 40px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #666;">'
-					. esc_html__( 'Create a POS order to preview this template.', 'woocommerce-pos' )
+					. esc_html__( 'Select a real order from Order History to preview PHP templates.', 'woocommerce-pos' )
 					. '</div>',
 				'order_id'     => 0,
 				'template_id'  => $id,
@@ -1382,6 +1398,38 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Get a list of recent POS orders for the preview order picker.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response Response with array of order summaries.
+	 */
+	public function get_preview_orders( $request ) {
+		$orders = wc_get_orders(
+			array(
+				'limit'        => 20,
+				'orderby'      => 'date',
+				'order'        => 'DESC',
+				'status'       => array( 'completed', 'processing', 'on-hold', 'pending' ),
+				'created_via'  => 'woocommerce-pos',
+			)
+		);
+
+		$result = array();
+		foreach ( $orders as $order ) {
+			$result[] = array(
+				'id'            => $order->get_id(),
+				'number'        => $order->get_order_number(),
+				'date'          => $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d H:i' ) : '',
+				'customer_name' => trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
+				'total'         => wp_strip_all_tags( $order->get_formatted_order_total() ),
+			);
+		}
+
+		return rest_ensure_response( $result );
 	}
 
 	/**

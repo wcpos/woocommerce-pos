@@ -852,15 +852,36 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	// ---- Task 9: Preview tests ----
 
 	/**
-	 * Test preview returns a URL.
+	 * Test preview returns sample data when no order_id is provided.
 	 */
-	public function test_preview_returns_url(): void {
+	public function test_preview_returns_sample_data_without_order_id(): void {
 		$post_id = $this->create_template( 'Preview Template' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertArrayHasKey( 'order_id', $data );
+		$this->assertEquals( 0, $data['order_id'] );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test preview returns a URL when order_id is provided.
+	 */
+	public function test_preview_returns_url_with_order_id(): void {
+		$post_id = $this->create_template( 'Preview Template' );
+		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
 		$order   = OrderHelper::create_order();
 		$order->set_created_via( 'woocommerce-pos' );
 		$order->save();
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$request->set_param( 'order_id', $order->get_id() );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -882,30 +903,36 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test preview returns a URL for a gallery template key.
+	 * Test preview returns sample data for a gallery template key.
 	 */
-	public function test_preview_returns_url_for_gallery_template(): void {
+	public function test_preview_returns_data_for_gallery_template(): void {
 		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
 		if ( empty( $gallery ) ) {
 			$this->markTestSkipped( 'No gallery templates available.' );
 		}
 
-		$order = OrderHelper::create_order();
-		$order->set_created_via( 'woocommerce-pos' );
-		$order->save();
+		// Find a non-thermal gallery template (logicless or legacy-php).
+		$target = null;
+		foreach ( $gallery as $t ) {
+			if ( 'thermal' !== ( $t['engine'] ?? '' ) ) {
+				$target = $t;
+				break;
+			}
+		}
+		if ( ! $target ) {
+			$this->markTestSkipped( 'No non-thermal gallery templates available.' );
+		}
 
-		$gallery_key = $gallery[0]['key'];
+		$gallery_key = $target['key'];
 		$request     = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $gallery_key . '/preview' );
 		$response    = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertArrayHasKey( 'preview_url', $data );
-		$this->assertStringContainsString( 'wcpos_preview_template=' . $gallery_key, $data['preview_url'] );
+		// Without order_id, non-thermal templates return preview_html (sample data).
+		$this->assertArrayHasKey( 'preview_html', $data );
 		$this->assertEquals( $gallery_key, $data['template_id'] );
-
-		wp_delete_post( $order->get_id(), true );
 	}
 
 	/**

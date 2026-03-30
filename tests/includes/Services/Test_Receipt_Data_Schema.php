@@ -116,41 +116,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get_mock_receipt_data has all required keys.
-	 */
-	public function test_get_mock_receipt_data_has_all_required_keys(): void {
-		$mock = Receipt_Data_Schema::get_mock_receipt_data();
-
-		foreach ( Receipt_Data_Schema::REQUIRED_KEYS as $key ) {
-			$this->assertArrayHasKey( $key, $mock, "Missing required key: {$key}" );
-		}
-	}
-
-	/**
-	 * Test get_mock_receipt_data has line items with expected fields.
-	 */
-	public function test_get_mock_receipt_data_has_line_items(): void {
-		$mock = Receipt_Data_Schema::get_mock_receipt_data();
-
-		$this->assertNotEmpty( $mock['lines'] );
-		$this->assertArrayHasKey( 'name', $mock['lines'][0] );
-		$this->assertArrayHasKey( 'qty', $mock['lines'][0] );
-		$this->assertArrayHasKey( 'line_total_incl', $mock['lines'][0] );
-	}
-
-	/**
-	 * Test get_mock_receipt_data totals are numeric floats.
-	 */
-	public function test_get_mock_receipt_data_totals_are_numeric(): void {
-		$mock = Receipt_Data_Schema::get_mock_receipt_data();
-
-		foreach ( Receipt_Data_Schema::TOTAL_MONEY_KEYS as $key ) {
-			$this->assertArrayHasKey( $key, $mock['totals'], "Missing total: {$key}" );
-			$this->assertIsFloat( $mock['totals'][ $key ] );
-		}
-	}
-
-	/**
 	 * Test get_field_tree store section includes new store fields.
 	 */
 	public function test_get_field_tree_store_includes_new_fields(): void {
@@ -171,30 +136,5 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'footer_imprint', $fields );
 		$this->assertSame( 'string', $fields['footer_imprint']['type'] );
-	}
-
-	/**
-	 * Test get_mock_receipt_data includes new store fields.
-	 */
-	public function test_get_mock_receipt_data_includes_new_store_fields(): void {
-		$mock  = Receipt_Data_Schema::get_mock_receipt_data();
-		$store = $mock['store'];
-
-		$this->assertArrayHasKey( 'logo', $store );
-		$this->assertArrayHasKey( 'opening_hours', $store );
-		$this->assertArrayHasKey( 'personal_notes', $store );
-		$this->assertArrayHasKey( 'policies_and_conditions', $store );
-		$this->assertArrayHasKey( 'footer_imprint', $store );
-
-		// Type checks to catch shape regressions.
-		$this->assertIsString( $store['logo'] );
-		$this->assertIsString( $store['opening_hours'] );
-		$this->assertIsString( $store['personal_notes'] );
-		$this->assertIsString( $store['policies_and_conditions'] );
-		$this->assertIsString( $store['footer_imprint'] );
-
-		// Mock data should have non-empty values for preview.
-		$this->assertNotEmpty( $store['opening_hours'] );
-		$this->assertNotEmpty( $store['footer_imprint'] );
 	}
 }

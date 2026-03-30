@@ -221,4 +221,111 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertGreaterThanOrEqual( $payment['amount'], $payment['tendered'], 'Tendered should be at least the payment amount' );
 		$this->assertEqualsWithDelta( $payment['tendered'] - $payment['amount'], $payment['change'], 0.01, 'Change should equal tendered minus amount' );
 	}
+
+	/**
+	 * Test that customer address uses store country/city.
+	 *
+	 * @covers ::build
+	 */
+	public function test_customer_uses_store_location(): void {
+		$original_country  = get_option( 'woocommerce_default_country' );
+		$original_city     = get_option( 'woocommerce_store_city' );
+		$original_postcode = get_option( 'woocommerce_store_postcode' );
+
+		try {
+			update_option( 'woocommerce_default_country', 'DE:BE' );
+			update_option( 'woocommerce_store_city', 'Berlin' );
+			update_option( 'woocommerce_store_postcode', '10115' );
+
+			$data    = $this->builder->build();
+			$billing = $data['customer']['billing_address'];
+
+			$this->assertEquals( 'DE', $billing['country'] );
+			$this->assertEquals( 'Berlin', $billing['city'] );
+			$this->assertEquals( '10115', $billing['postcode'] );
+			// German sample customer name.
+			$this->assertEquals( 'Anna', $billing['first_name'] );
+			$this->assertEquals( 'Mueller', $billing['last_name'] );
+		} finally {
+			update_option( 'woocommerce_default_country', $original_country );
+			update_option( 'woocommerce_store_city', $original_city );
+			update_option( 'woocommerce_store_postcode', $original_postcode );
+		}
+	}
+
+	/**
+	 * Test that Pro fields get placeholder values when not configured.
+	 *
+	 * @covers ::build
+	 */
+	public function test_pro_fields_have_placeholders_when_empty(): void {
+		// Without Pro, these fields are normally empty/null.
+		$data  = $this->builder->build();
+		$store = $data['store'];
+
+		// All Pro fields should be non-null strings in preview.
+		$this->assertIsString( $store['opening_hours'] );
+		$this->assertIsString( $store['personal_notes'] );
+		$this->assertIsString( $store['policies_and_conditions'] );
+		$this->assertIsString( $store['footer_imprint'] );
+
+		$this->assertNotEmpty( $store['opening_hours'] );
+		$this->assertNotEmpty( $store['personal_notes'] );
+		$this->assertNotEmpty( $store['policies_and_conditions'] );
+		$this->assertNotEmpty( $store['footer_imprint'] );
+	}
+
+	/**
+	 * Test that line-item discounts are populated proportionally.
+	 *
+	 * @covers ::build
+	 */
+	public function test_line_items_have_proportional_discounts(): void {
+		$data = $this->builder->build();
+
+		$total_line_discounts_excl = 0.0;
+		foreach ( $data['lines'] as $line ) {
+			$this->assertArrayHasKey( 'discounts_excl', $line );
+			$this->assertGreaterThan( 0.0, $line['discounts_excl'], 'Each line should have a non-zero discount' );
+
+			// line_total should equal line_subtotal minus discount.
+			$this->assertEqualsWithDelta(
+				$line['line_subtotal_excl'] - $line['discounts_excl'],
+				$line['line_total_excl'],
+				0.02,
+				'line_total_excl should be line_subtotal_excl - discounts_excl'
+			);
+
+			$total_line_discounts_excl += $line['discounts_excl'];
+		}
+
+		// Sum of per-line discounts should match order-level discount.
+		$this->assertEqualsWithDelta(
+			$data['totals']['discount_total_excl'],
+			$total_line_discounts_excl,
+			0.02,
+			'Sum of line discounts should match order discount total'
+		);
+	}
+
+	/**
+	 * Test that unknown country falls back to US sample customer.
+	 *
+	 * @covers ::build
+	 */
+	public function test_customer_falls_back_to_us_for_unknown_country(): void {
+		$original_country = get_option( 'woocommerce_default_country' );
+
+		try {
+			update_option( 'woocommerce_default_country', 'ZZ' );
+
+			$data    = $this->builder->build();
+			$billing = $data['customer']['billing_address'];
+
+			$this->assertEquals( 'ZZ', $billing['country'] );
+			$this->assertEquals( 'Sarah', $billing['first_name'] );
+		} finally {
+			update_option( 'woocommerce_default_country', $original_country );
+		}
+	}
 }
