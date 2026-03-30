@@ -1,12 +1,14 @@
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
+import type { ReactNode } from 'react';
 
 interface ThermalPreviewProps {
 	content: string;
 	sampleData: Record<string, unknown>;
+	sourcePicker?: ReactNode;
 }
 
-export function ThermalPreview({ content, sampleData }: ThermalPreviewProps) {
+export function ThermalPreview({ content, sampleData, sourcePicker }: ThermalPreviewProps) {
 	const renderedHtml = useThermalPreview(content, sampleData);
 
 	const srcdoc = `<!DOCTYPE html>
@@ -21,6 +23,7 @@ export function ThermalPreview({ content, sampleData }: ThermalPreviewProps) {
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
 					{t('editor.thermal_preview')}
 				</span>
+				{sourcePicker}
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
 				<iframe

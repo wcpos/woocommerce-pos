@@ -4,7 +4,9 @@ import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
 import { PhpPreview } from './components/php-preview';
 import { ThermalPreview } from './components/thermal-preview';
+import { PreviewSourcePicker } from './components/preview-source-picker';
 import { useContentSync } from './hooks/use-content-sync';
+import { usePreviewData } from './hooks/use-preview-data';
 import { t } from './translations';
 import type { EditorConfig } from './types';
 
@@ -44,6 +46,7 @@ export function App({ config }: AppProps) {
 	const [content, setContent] = useState(config.postContent);
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
+	const preview = usePreviewData(config.sampleData, config.templateId);
 
 	// Sync raw content to the hidden textarea on mount so the form always
 	// submits the correct value — even when the user saves without editing.
@@ -67,6 +70,17 @@ export function App({ config }: AppProps) {
 
 	const showFieldPicker = config.engine === 'logicless' || config.engine === 'thermal';
 
+	const previewSourcePicker = (
+		<PreviewSourcePicker
+			source={preview.source}
+			orders={preview.orders}
+			ordersLoading={preview.ordersLoading}
+			dataLoading={preview.dataLoading}
+			onSelectSource={preview.selectSource}
+			onRequestOrders={preview.fetchOrders}
+		/>
+	);
+
 	return (
 		<>
 			<TemplateInfoBar engine={config.engine} paperWidth={config.paperWidth} />
@@ -89,12 +103,17 @@ export function App({ config }: AppProps) {
 
 			<div className="wcpos:mt-4">
 				{config.engine === 'thermal' ? (
-					<ThermalPreview content={content} sampleData={config.sampleData} />
+					<ThermalPreview
+						content={content}
+						sampleData={preview.data}
+						sourcePicker={previewSourcePicker}
+					/>
 				) : config.engine === 'logicless' ? (
 					<LivePreview
 						content={content}
-						sampleData={config.sampleData}
+						sampleData={preview.data}
 						previewUrl={config.previewUrl}
+						sourcePicker={previewSourcePicker}
 					/>
 				) : (
 					<PhpPreview previewUrl={config.previewUrl} />
