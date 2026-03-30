@@ -911,6 +911,7 @@ class Templates_Controller extends WP_REST_Controller {
 			if ( 'logicless' === $engine ) {
 				// Logicless templates render client-side — return receipt data like thermal.
 				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
+				$formatted_data['t']               = true;
 
 				return rest_ensure_response(
 					array(
