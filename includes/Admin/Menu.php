@@ -14,6 +14,7 @@ use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -279,7 +280,7 @@ class Menu {
 			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s }; wcpos.translationVersion = %s;',
 			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) ),
 			wp_json_encode( untrailingslashit( admin_url() ) ),
-			wp_json_encode( PLUGIN_VERSION )
+			wp_json_encode( TRANSLATION_VERSION )
 		);
 	}
 

@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures/admin';
 test.describe('Settings Navigation', () => {
 	test.beforeEach(async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings');
-		await adminPage.waitForLoadState('networkidle');
+		await adminPage.waitForLoadState('domcontentloaded');
 		// Wait for the React app sidebar to render
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 	});
@@ -47,7 +47,7 @@ test.describe('Settings Navigation', () => {
 
 	test('deep linking via hash URL works', async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings#/checkout');
-		await adminPage.waitForLoadState('networkidle');
+		await adminPage.waitForLoadState('domcontentloaded');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 
 		const checkoutLink = adminPage.locator('aside a[href$="#/checkout"]');
@@ -56,7 +56,7 @@ test.describe('Settings Navigation', () => {
 
 	test('deep linking to access page works', async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings#/access');
-		await adminPage.waitForLoadState('networkidle');
+		await adminPage.waitForLoadState('domcontentloaded');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 
 		const accessLink = adminPage.locator('aside a[href$="#/access"]');

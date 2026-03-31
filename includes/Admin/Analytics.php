@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -42,7 +43,7 @@ class Analytics {
 		// Inject translation version for i18next.
 		wp_add_inline_script(
 			'wp-hooks',
-			'window.wcpos = window.wcpos || {}; window.wcpos.translationVersion = "' . esc_js( VERSION ) . '";',
+			'window.wcpos = window.wcpos || {}; window.wcpos.translationVersion = "' . esc_js( TRANSLATION_VERSION ) . '";',
 			'before'
 		);
 

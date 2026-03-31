@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures/admin';
 test.describe('Extension Registry', () => {
 	test.beforeEach(async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings');
-		await adminPage.waitForLoadState('networkidle');
+		await adminPage.waitForLoadState('domcontentloaded');
 		await expect(adminPage.locator('aside')).toBeVisible({ timeout: 15000 });
 	});
 
