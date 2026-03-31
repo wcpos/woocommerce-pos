@@ -3,7 +3,8 @@ import { test, expect } from '../fixtures/admin';
 test.describe('Settings Page', () => {
 	test.beforeEach(async ({ adminPage }) => {
 		await adminPage.goto('/wp-admin/admin.php?page=woocommerce-pos-settings');
-		await adminPage.waitForLoadState('networkidle');
+		await adminPage.waitForLoadState('domcontentloaded');
+		await expect(adminPage.locator('#woocommerce-pos-settings')).toBeVisible({ timeout: 15000 });
 	});
 
 	test('Settings page loads without PHP errors', async ({ adminPage }) => {
