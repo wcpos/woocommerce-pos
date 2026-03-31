@@ -14,6 +14,7 @@ namespace WCPOS\WooCommercePOS\Admin\Templates;
 
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
 /**
@@ -612,7 +613,7 @@ class Single_Template {
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.translationVersion = %s; var wcposTemplateEditor = %s;',
-			wp_json_encode( PLUGIN_VERSION ),
+			wp_json_encode( TRANSLATION_VERSION ),
 			$encoded_config
 		);
 	}
