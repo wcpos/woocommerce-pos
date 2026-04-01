@@ -546,8 +546,19 @@ class Receipt_Data_Schema {
 						'label' => __( 'Reprint Count', 'woocommerce-pos' ),
 					),
 					'extra_fields'      => array(
-						'type'  => 'array',
-						'label' => __( 'Extra Fields', 'woocommerce-pos' ),
+						'type'     => 'array',
+						'label'    => __( 'Extra Fields', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label' => array(
+								'type'  => 'string',
+								'label' => __( 'Label', 'woocommerce-pos' ),
+							),
+							'value' => array(
+								'type'  => 'string',
+								'label' => __( 'Value', 'woocommerce-pos' ),
+							),
+						),
 					),
 				),
 			),
