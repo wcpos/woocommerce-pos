@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { renderThermalPreview } from '../lib/thermal-renderer';
+import { renderThermalPreview } from '@wcpos/thermal-utils';
 
 export function useThermalPreview(
 	template: string,
