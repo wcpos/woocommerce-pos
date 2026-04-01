@@ -19,6 +19,7 @@ export interface EditorConfig {
 	templateId: number;
 	previewUrl: string;
 	postContent: string;
+	hasPosOrders: boolean;
 }
 
 declare global {
