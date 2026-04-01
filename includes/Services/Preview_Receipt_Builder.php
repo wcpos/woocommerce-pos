@@ -671,16 +671,16 @@ class Preview_Receipt_Builder {
 			'tax_agency_code'   => 'SAMPLE',
 			'signed_at'         => gmdate( 'Y-m-d\TH:i:s\Z' ),
 			'signature_excerpt' => 'A1B2',
-			'document_label'    => 'Tax Receipt',
+			'document_label'    => __( 'Tax Receipt', 'woocommerce-pos' ),
 			'is_reprint'        => false,
 			'reprint_count'     => 0,
 			'extra_fields'      => array(
 				array(
-					'label' => 'Tax ID',
+					'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					'value' => 'XX-1234567',
 				),
 				array(
-					'label' => 'Auth Code',
+					'label' => __( 'Auth Code', 'woocommerce-pos' ),
 					'value' => 'ABC-789',
 				),
 			),
