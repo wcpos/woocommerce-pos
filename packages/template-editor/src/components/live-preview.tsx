@@ -1,15 +1,17 @@
 import { useMustachePreview } from '../hooks/use-mustache-preview';
 import { t } from '../translations';
+import { PreviewSkeleton } from './preview-skeleton';
 import type { ReactNode } from 'react';
 
 interface LivePreviewProps {
 	content: string;
 	sampleData: Record<string, unknown>;
 	previewUrl: string;
+	loading?: boolean;
 	sourcePicker?: ReactNode;
 }
 
-export function LivePreview({ content, sampleData, previewUrl, sourcePicker }: LivePreviewProps) {
+export function LivePreview({ content, sampleData, previewUrl, loading, sourcePicker }: LivePreviewProps) {
 	const renderedHtml = useMustachePreview(content, sampleData);
 
 	const srcdoc = `<!DOCTYPE html>
@@ -39,12 +41,16 @@ export function LivePreview({ content, sampleData, previewUrl, sourcePicker }: L
 				</div>
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
-				<iframe
-					srcDoc={srcdoc}
-					sandbox="allow-same-origin"
-					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
-					title={t('editor.template_preview')}
-				/>
+				{loading ? (
+					<PreviewSkeleton style={{ width: '100%', maxWidth: 400, minHeight: 400 }} />
+				) : (
+					<iframe
+						srcDoc={srcdoc}
+						sandbox="allow-same-origin"
+						style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
+						title={t('editor.template_preview')}
+					/>
+				)}
 			</div>
 		</div>
 	);

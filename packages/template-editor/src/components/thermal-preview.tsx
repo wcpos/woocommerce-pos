@@ -1,14 +1,16 @@
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
+import { PreviewSkeleton } from './preview-skeleton';
 import type { ReactNode } from 'react';
 
 interface ThermalPreviewProps {
 	content: string;
 	sampleData: Record<string, unknown>;
+	loading?: boolean;
 	sourcePicker?: ReactNode;
 }
 
-export function ThermalPreview({ content, sampleData, sourcePicker }: ThermalPreviewProps) {
+export function ThermalPreview({ content, sampleData, loading, sourcePicker }: ThermalPreviewProps) {
 	const renderedHtml = useThermalPreview(content, sampleData);
 
 	const srcdoc = `<!DOCTYPE html>
@@ -26,18 +28,22 @@ export function ThermalPreview({ content, sampleData, sourcePicker }: ThermalPre
 				{sourcePicker}
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
-				<iframe
-					srcDoc={srcdoc}
-					sandbox="allow-same-origin"
-					style={{
-						width: '100%',
-						maxWidth: 420,
-						border: 'none',
-						background: '#f5f5f5',
-						minHeight: 400,
-					}}
-					title={t('editor.thermal_template_preview')}
-				/>
+				{loading ? (
+					<PreviewSkeleton style={{ width: '100%', maxWidth: 420, minHeight: 400 }} />
+				) : (
+					<iframe
+						srcDoc={srcdoc}
+						sandbox="allow-same-origin"
+						style={{
+							width: '100%',
+							maxWidth: 420,
+							border: 'none',
+							background: '#f5f5f5',
+							minHeight: 400,
+						}}
+						title={t('editor.thermal_template_preview')}
+					/>
+				)}
 			</div>
 		</div>
 	);

@@ -1,23 +1,31 @@
+import type { CSSProperties } from 'react';
 import { t } from '../translations';
 
 interface PreviewToggleProps {
 	source: 'sample' | 'order';
-	loading: boolean;
 	disabled: boolean;
 	onToggle: (source: 'sample' | 'order') => void;
 }
 
-function pillClass(isActive: boolean, isDisabled: boolean): string {
+const base = 'wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors';
+
+function pillProps(isActive: boolean, isDisabled: boolean): { className: string; style?: CSSProperties } {
 	if (isActive) {
-		return 'wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors wcpos:bg-indigo-500 wcpos:text-white';
+		return {
+			className: `${base} wcpos:text-white`,
+			style: { backgroundColor: 'var(--wp-admin-theme-color, #007cba)' },
+		};
 	}
 	if (isDisabled) {
-		return 'wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors wcpos:text-slate-300 wcpos:cursor-not-allowed';
+		return { className: `${base} wcpos:text-slate-300 wcpos:cursor-not-allowed` };
 	}
-	return 'wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors wcpos:text-slate-500 wcpos:cursor-pointer';
+	return { className: `${base} wcpos:text-slate-500 wcpos:cursor-pointer` };
 }
 
-export function PreviewToggle({ source, loading, disabled, onToggle }: PreviewToggleProps) {
+export function PreviewToggle({ source, disabled, onToggle }: PreviewToggleProps) {
+	const sampleProps = pillProps(source === 'sample', false);
+	const orderProps = pillProps(source === 'order', disabled);
+
 	return (
 		<div
 			className="wcpos:flex wcpos:bg-slate-100 wcpos:rounded wcpos:border wcpos:border-slate-200 wcpos:overflow-hidden"
@@ -28,7 +36,8 @@ export function PreviewToggle({ source, loading, disabled, onToggle }: PreviewTo
 				type="button"
 				role="radio"
 				aria-checked={source === 'sample'}
-				className={pillClass(source === 'sample', false)}
+				className={sampleProps.className}
+				style={sampleProps.style}
 				onClick={() => onToggle('sample')}
 			>
 				{t('editor.sample_data')}
@@ -39,12 +48,13 @@ export function PreviewToggle({ source, loading, disabled, onToggle }: PreviewTo
 				aria-checked={source === 'order'}
 				aria-disabled={disabled || undefined}
 				aria-label={disabled ? `${t('editor.order')} — ${t('editor.no_pos_orders')}` : undefined}
-				className={pillClass(source === 'order', disabled)}
+				className={orderProps.className}
+				style={orderProps.style}
 				onClick={() => !disabled && onToggle('order')}
 				disabled={disabled}
 				title={disabled ? t('editor.no_pos_orders') : undefined}
 			>
-				{loading ? t('editor.loading_data') : t('editor.order')}
+				{t('editor.order')}
 			</button>
 		</div>
 	);
