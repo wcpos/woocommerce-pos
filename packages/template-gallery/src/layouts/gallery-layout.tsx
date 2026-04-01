@@ -39,7 +39,7 @@ export function GalleryLayout() {
 				<h1 className="wcpos:text-2xl wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0">
 					{t('layout.title')}
 				</h1>
-				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2 wcpos:max-w-2xl">
+				<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mt-2">
 					{t('layout.description')}{' '}
 					<a
 						href="https://docs.wcpos.com/templates/receipt-templates"
