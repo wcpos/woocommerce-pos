@@ -525,9 +525,29 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Tax Agency Code', 'woocommerce-pos' ),
 					),
-					'signed_at'       => array(
+					'signed_at'         => array(
 						'type'  => 'string',
 						'label' => __( 'Signed At', 'woocommerce-pos' ),
+					),
+					'signature_excerpt' => array(
+						'type'  => 'string',
+						'label' => __( 'Signature Excerpt', 'woocommerce-pos' ),
+					),
+					'document_label'    => array(
+						'type'  => 'string',
+						'label' => __( 'Document Label', 'woocommerce-pos' ),
+					),
+					'is_reprint'        => array(
+						'type'  => 'boolean',
+						'label' => __( 'Is Reprint', 'woocommerce-pos' ),
+					),
+					'reprint_count'     => array(
+						'type'  => 'number',
+						'label' => __( 'Reprint Count', 'woocommerce-pos' ),
+					),
+					'extra_fields'      => array(
+						'type'  => 'array',
+						'label' => __( 'Extra Fields', 'woocommerce-pos' ),
 					),
 				),
 			),
