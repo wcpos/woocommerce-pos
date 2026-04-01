@@ -328,4 +328,57 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			update_option( 'woocommerce_default_country', $original_country );
 		}
 	}
+
+	/**
+	 * Test that build() returns fiscal section with all expected fields.
+	 *
+	 * @covers ::build
+	 */
+	public function test_build_returns_fiscal_with_all_fields(): void {
+		$data   = $this->builder->build();
+		$fiscal = $data['fiscal'];
+
+		// Existing fields.
+		$this->assertArrayHasKey( 'immutable_id', $fiscal );
+		$this->assertArrayHasKey( 'receipt_number', $fiscal );
+		$this->assertArrayHasKey( 'sequence', $fiscal );
+		$this->assertArrayHasKey( 'hash', $fiscal );
+		$this->assertArrayHasKey( 'qr_payload', $fiscal );
+		$this->assertArrayHasKey( 'tax_agency_code', $fiscal );
+		$this->assertArrayHasKey( 'signed_at', $fiscal );
+
+		// New fields.
+		$this->assertArrayHasKey( 'signature_excerpt', $fiscal );
+		$this->assertArrayHasKey( 'document_label', $fiscal );
+		$this->assertArrayHasKey( 'is_reprint', $fiscal );
+		$this->assertArrayHasKey( 'reprint_count', $fiscal );
+		$this->assertArrayHasKey( 'extra_fields', $fiscal );
+
+		// Preview should have sample data (non-empty).
+		$this->assertNotEmpty( $fiscal['signature_excerpt'] );
+		$this->assertNotEmpty( $fiscal['document_label'] );
+		$this->assertNotEmpty( $fiscal['qr_payload'] );
+		$this->assertNotEmpty( $fiscal['receipt_number'] );
+		$this->assertIsArray( $fiscal['extra_fields'] );
+		$this->assertNotEmpty( $fiscal['extra_fields'] );
+		$this->assertFalse( $fiscal['is_reprint'] );
+		$this->assertSame( 0, $fiscal['reprint_count'] );
+	}
+
+	/**
+	 * Test that fiscal extra_fields have label and value keys.
+	 *
+	 * @covers ::build
+	 */
+	public function test_fiscal_extra_fields_have_label_and_value(): void {
+		$data         = $this->builder->build();
+		$extra_fields = $data['fiscal']['extra_fields'];
+
+		foreach ( $extra_fields as $field ) {
+			$this->assertArrayHasKey( 'label', $field );
+			$this->assertArrayHasKey( 'value', $field );
+			$this->assertIsString( $field['label'] );
+			$this->assertIsString( $field['value'] );
+		}
+	}
 }

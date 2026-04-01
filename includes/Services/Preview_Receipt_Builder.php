@@ -663,13 +663,27 @@ class Preview_Receipt_Builder {
 		);
 
 		$fiscal = array(
-			'immutable_id'    => '',
-			'receipt_number'  => '',
-			'sequence'        => null,
-			'hash'            => '',
-			'qr_payload'      => '',
-			'tax_agency_code' => '',
-			'signed_at'       => '',
+			'immutable_id'      => '12345:42',
+			'receipt_number'    => '00042',
+			'sequence'          => 42,
+			'hash'              => 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2',
+			'qr_payload'        => 'https://example.com/verify?id=SAMPLE-001',
+			'tax_agency_code'   => 'SAMPLE',
+			'signed_at'         => gmdate( 'Y-m-d\TH:i:s\Z' ),
+			'signature_excerpt' => 'A1B2',
+			'document_label'    => 'Tax Receipt',
+			'is_reprint'        => false,
+			'reprint_count'     => 0,
+			'extra_fields'      => array(
+				array(
+					'label' => 'Tax ID',
+					'value' => 'XX-1234567',
+				),
+				array(
+					'label' => 'Auth Code',
+					'value' => 'ABC-789',
+				),
+			),
 		);
 
 		return array(
