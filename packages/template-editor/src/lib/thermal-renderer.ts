@@ -5,6 +5,7 @@
  * When @wcpos/printer is published to npm, replace this with an import from that package.
  */
 import Mustache from 'mustache';
+import { generateBarcodeSvg } from './generate-barcode-svg';
 
 // -- AST Types --
 
@@ -303,9 +304,9 @@ function renderNode(node: ThermalNode): string {
 			}
 			return '<hr style="border: none; border-top: 1px dashed #000; margin: 4px 0" />';
 		case 'barcode':
-			return `<div style="text-align: center; padding: 8px 0"><div style="background: repeating-linear-gradient(90deg, #000 0px, #000 2px, #fff 2px, #fff 4px); height: ${node.height}px; margin: 0 auto; width: 80%"></div><div style="font-size: 11px; margin-top: 4px">${escapeHtml(node.value)}</div></div>`;
+			return generateBarcodeSvg(node.value, { type: (node.barcodeType as 'qr' | 'code128' | 'ean13' | 'code39') ?? 'code128', height: node.height / 4 });
 		case 'qrcode':
-			return `<div style="text-align: center; padding: 8px 0"><div style="width: ${node.size * 25}px; height: ${node.size * 25}px; border: 1px solid #000; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #999">QR</div></div>`;
+			return generateBarcodeSvg(node.value, { type: 'qr', scale: node.size });
 		case 'image':
 			return `<div style="text-align: center; padding: 8px 0"><img src="${escapeHtml(node.src)}" style="max-width: ${node.width}px; height: auto" /></div>`;
 		case 'cut':
