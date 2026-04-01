@@ -276,11 +276,10 @@ class Templates_Controller extends WP_REST_Controller {
 						'required'    => true,
 					),
 					'order_id' => array(
-						'description'       => __( 'Order ID to use for preview data. Omit for sample data.', 'woocommerce-pos' ),
-						'type'              => 'integer',
-						'required'          => false,
-						'default'           => 0,
-						'sanitize_callback' => 'absint',
+						'description' => __( 'Order ID or "latest" for most recent POS order. Omit for sample data.', 'woocommerce-pos' ),
+						'type'        => array( 'integer', 'string' ),
+						'required'    => false,
+						'default'     => 0,
 					),
 				),
 			)
@@ -862,11 +861,27 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		// Build receipt data: real order if order_id provided, otherwise sample data.
-		$order_id = (int) $request->get_param( 'order_id' );
-		$order    = null;
+		$raw_order_id = $request->get_param( 'order_id' );
+		$order        = null;
+		$order_id     = 0;
 
-		if ( $order_id > 0 ) {
-			$order = wc_get_order( $order_id );
+		if ( 'latest' === $raw_order_id ) {
+			$latest = wc_get_orders(
+				array(
+					'limit'       => 1,
+					'orderby'     => 'date',
+					'order'       => 'DESC',
+					'status'      => array( 'completed', 'processing', 'on-hold', 'pending' ),
+					'created_via' => 'woocommerce-pos',
+				)
+			);
+			if ( ! empty( $latest ) ) {
+				$order    = $latest[0];
+				$order_id = $order->get_id();
+			}
+		} elseif ( (int) $raw_order_id > 0 ) {
+			$order_id = (int) $raw_order_id;
+			$order    = wc_get_order( $order_id );
 			if ( ! $order || ! \wcpos_is_pos_order( $order ) ) {
 				return new WP_Error(
 					'wcpos_invalid_order',
