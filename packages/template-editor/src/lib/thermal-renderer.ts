@@ -304,6 +304,7 @@ function renderNode(node: ThermalNode): string {
 			}
 			return '<hr style="border: none; border-top: 1px dashed #000; margin: 4px 0" />';
 		case 'barcode':
+			// node.height is in screen pixels (default 40); bwip-js height is in mm, so divide by 4.
 			return generateBarcodeSvg(node.value, { type: node.barcodeType ?? 'code128', height: node.height / 4 });
 		case 'qrcode':
 			return generateBarcodeSvg(node.value, { type: 'qr', scale: node.size });

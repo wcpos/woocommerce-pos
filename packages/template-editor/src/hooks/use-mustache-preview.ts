@@ -19,7 +19,7 @@ function processBarcodeMarkers(html: string): string {
 	}
 
 	markers.forEach((el) => {
-		const type = (el.getAttribute('data-barcode') || 'qr') as 'qr' | 'code128' | 'ean13' | 'code39';
+		const type = el.getAttribute('data-barcode') || 'qr';
 		const value = el.getAttribute('data-value') || '';
 		if (value) {
 			el.innerHTML = generateBarcodeSvg(value, { type });
