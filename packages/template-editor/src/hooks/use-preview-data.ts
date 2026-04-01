@@ -18,7 +18,6 @@ export function usePreviewData(
 	});
 
 	const abortRef = useRef<AbortController | null>(null);
-	const orderCacheRef = useRef<Record<string, unknown> | null>(null);
 
 	const selectSource = useCallback(
 		(source: 'sample' | 'order') => {
@@ -29,12 +28,6 @@ export function usePreviewData(
 
 			if (source === 'sample') {
 				setState({ source: 'sample', data: sampleData, loading: false });
-				return;
-			}
-
-			// Return cached order data if available.
-			if (orderCacheRef.current) {
-				setState({ source: 'order', data: orderCacheRef.current, loading: false });
 				return;
 			}
 
@@ -50,7 +43,6 @@ export function usePreviewData(
 				.then((response) => {
 					if (controller.signal.aborted) return;
 					const data = (response.receipt_data ?? response) as Record<string, unknown>;
-					orderCacheRef.current = data;
 					setState({ source: 'order', data, loading: false });
 				})
 				.catch((err: Error) => {
