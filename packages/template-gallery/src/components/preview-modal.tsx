@@ -58,8 +58,8 @@ export function PreviewModal({
 	onActivate,
 	onCustomize,
 }: PreviewModalProps) {
-	const [source, setSource] = React.useState<'sample' | 'order'>('sample');
 	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
+	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
 	const orderId = source === 'order' ? 'latest' : undefined;
 	const { data: preview, isLoading, isFetching, isError } = usePreview(templateId, orderId);
 	const dialogRef = React.useRef<HTMLDivElement>(null);
