@@ -13,25 +13,21 @@ import type { EditorConfig } from './types';
 function TemplateInfoBar({ engine, paperWidth }: { engine: string; paperWidth: string | null }) {
 	let icon: string;
 	let text: string;
-	let bgClass: string;
 
 	if (engine === 'thermal') {
 		icon = '\uD83D\uDDA8\uFE0F'; // printer emoji
 		const size = paperWidth === '58mm' ? '58mm' : '80mm';
 		text = t('editor.info_thermal', { size });
-		bgClass = 'wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800';
 	} else if (engine === 'legacy-php') {
 		icon = '\uD83D\uDDA5\uFE0F'; // monitor emoji
 		text = t('editor.info_legacy_php');
-		bgClass = 'wcpos:bg-amber-50 wcpos:border-amber-200 wcpos:text-amber-800';
 	} else {
 		icon = '\uD83D\uDDA5\uFE0F'; // monitor emoji
 		text = t('editor.info_browser');
-		bgClass = 'wcpos:bg-gray-50 wcpos:border-gray-200 wcpos:text-gray-700';
 	}
 
 	return (
-		<div className={`wcpos:flex wcpos:items-start wcpos:gap-2 wcpos:px-3 wcpos:py-2 wcpos:rounded wcpos:border wcpos:text-sm wcpos:mb-4 ${bgClass}`}>
+		<div className="wcpos:flex wcpos:items-start wcpos:gap-2 wcpos:rounded-md wcpos:border wcpos:border-l-4 wcpos:px-3 wcpos:py-2.5 wcpos:text-sm wcpos:mb-4 wcpos:bg-blue-50 wcpos:border-blue-200 wcpos:text-blue-800 wcpos:border-l-blue-500">
 			<span className="wcpos:shrink-0">{icon}</span>
 			<span>{text}</span>
 		</div>
