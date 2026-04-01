@@ -501,33 +501,64 @@ class Receipt_Data_Schema {
 			'fiscal'      => array(
 				'label'  => __( 'Fiscal', 'woocommerce-pos' ),
 				'fields' => array(
-					'immutable_id'    => array(
+					'immutable_id'      => array(
 						'type'  => 'string',
 						'label' => __( 'Immutable ID', 'woocommerce-pos' ),
 					),
-					'receipt_number'  => array(
+					'receipt_number'    => array(
 						'type'  => 'string',
 						'label' => __( 'Receipt Number', 'woocommerce-pos' ),
 					),
-					'sequence'        => array(
+					'sequence'          => array(
 						'type'  => 'number',
 						'label' => __( 'Sequence', 'woocommerce-pos' ),
 					),
-					'hash'            => array(
+					'hash'              => array(
 						'type'  => 'string',
 						'label' => __( 'Hash', 'woocommerce-pos' ),
 					),
-					'qr_payload'      => array(
+					'qr_payload'        => array(
 						'type'  => 'string',
 						'label' => __( 'QR Payload', 'woocommerce-pos' ),
 					),
-					'tax_agency_code' => array(
+					'tax_agency_code'   => array(
 						'type'  => 'string',
 						'label' => __( 'Tax Agency Code', 'woocommerce-pos' ),
 					),
-					'signed_at'       => array(
+					'signed_at'         => array(
 						'type'  => 'string',
 						'label' => __( 'Signed At', 'woocommerce-pos' ),
+					),
+					'signature_excerpt' => array(
+						'type'  => 'string',
+						'label' => __( 'Signature Excerpt', 'woocommerce-pos' ),
+					),
+					'document_label'    => array(
+						'type'  => 'string',
+						'label' => __( 'Document Label', 'woocommerce-pos' ),
+					),
+					'is_reprint'        => array(
+						'type'  => 'boolean',
+						'label' => __( 'Is Reprint', 'woocommerce-pos' ),
+					),
+					'reprint_count'     => array(
+						'type'  => 'number',
+						'label' => __( 'Reprint Count', 'woocommerce-pos' ),
+					),
+					'extra_fields'      => array(
+						'type'     => 'array',
+						'label'    => __( 'Extra Fields', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label' => array(
+								'type'  => 'string',
+								'label' => __( 'Label', 'woocommerce-pos' ),
+							),
+							'value' => array(
+								'type'  => 'string',
+								'label' => __( 'Value', 'woocommerce-pos' ),
+							),
+						),
 					),
 				),
 			),

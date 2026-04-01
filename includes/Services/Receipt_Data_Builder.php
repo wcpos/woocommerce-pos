@@ -199,13 +199,18 @@ class Receipt_Data_Builder {
 		);
 
 		$fiscal = array(
-			'immutable_id'     => '',
-			'receipt_number'   => '',
-			'sequence'         => null,
-			'hash'             => '',
-			'qr_payload'       => '',
-			'tax_agency_code'  => '',
-			'signed_at'        => '',
+			'immutable_id'      => '',
+			'receipt_number'    => '',
+			'sequence'          => null,
+			'hash'              => '',
+			'qr_payload'        => '',
+			'tax_agency_code'   => '',
+			'signed_at'         => '',
+			'signature_excerpt' => '',
+			'document_label'    => '',
+			'is_reprint'        => false,
+			'reprint_count'     => 0,
+			'extra_fields'      => array(),
 		);
 
 		return array(

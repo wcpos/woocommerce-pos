@@ -116,6 +116,34 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_field_tree fiscal section includes new fiscal fields.
+	 */
+	public function test_get_field_tree_fiscal_includes_new_fields(): void {
+		$tree   = Receipt_Data_Schema::get_field_tree();
+		$fields = $tree['fiscal']['fields'];
+
+		// Existing fields still present.
+		$this->assertArrayHasKey( 'immutable_id', $fields );
+		$this->assertArrayHasKey( 'qr_payload', $fields );
+
+		// New fields.
+		$this->assertArrayHasKey( 'signature_excerpt', $fields );
+		$this->assertSame( 'string', $fields['signature_excerpt']['type'] );
+
+		$this->assertArrayHasKey( 'document_label', $fields );
+		$this->assertSame( 'string', $fields['document_label']['type'] );
+
+		$this->assertArrayHasKey( 'is_reprint', $fields );
+		$this->assertSame( 'boolean', $fields['is_reprint']['type'] );
+
+		$this->assertArrayHasKey( 'reprint_count', $fields );
+		$this->assertSame( 'number', $fields['reprint_count']['type'] );
+
+		$this->assertArrayHasKey( 'extra_fields', $fields );
+		$this->assertSame( 'array', $fields['extra_fields']['type'] );
+	}
+
+	/**
 	 * Test get_field_tree store section includes new store fields.
 	 */
 	public function test_get_field_tree_store_includes_new_fields(): void {

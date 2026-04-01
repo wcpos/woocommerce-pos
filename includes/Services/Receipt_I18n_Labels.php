@@ -103,6 +103,12 @@ class Receipt_I18n_Labels {
 
 			// Thermal / kitchen.
 			'kitchen'                => __( 'KITCHEN', 'woocommerce-pos' ),
+
+			// Fiscal.
+			'signature'              => __( 'Signature', 'woocommerce-pos' ),
+			'document_type'          => __( 'Document Type', 'woocommerce-pos' ),
+			'copy'                   => __( 'Copy', 'woocommerce-pos' ),
+			'copy_number'            => __( 'Copy No.', 'woocommerce-pos' ),
 		);
 	}
 
