@@ -3,6 +3,7 @@ import * as React from 'react';
 import { usePreview } from '../hooks/use-preview';
 import { renderThermalPreview } from '../lib/thermal-renderer';
 import { t } from '../translations';
+import { PreviewToggle } from './preview-toggle';
 
 interface PreviewModalProps {
 	templateId: number | string;
@@ -14,20 +15,14 @@ interface PreviewModalProps {
 	onCustomize?: () => void;
 }
 
-function getPreviewBannerHtml(): string {
-	return `<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">${t('modal.preview_banner')}</div>`;
-}
-
 function ThermalPreviewContent({
 	templateContent,
 	receiptData,
 	templateName,
-	isSampleData,
 }: {
 	templateContent: string;
 	receiptData: Record<string, unknown>;
 	templateName: string;
-	isSampleData: boolean;
 }) {
 	const html = React.useMemo(() => {
 		try {
@@ -37,12 +32,10 @@ function ThermalPreviewContent({
 		}
 	}, [templateContent, receiptData]);
 
-	const banner = isSampleData ? getPreviewBannerHtml() : '';
-
 	const srcdoc = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;flex-direction:column;align-items:center;">${banner}${html}</body>
+<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;flex-direction:column;align-items:center;">${html}</body>
 </html>`;
 
 	return (
@@ -65,11 +58,21 @@ export function PreviewModal({
 	onActivate,
 	onCustomize,
 }: PreviewModalProps) {
-	const { data: preview, isLoading } = usePreview(templateId);
+	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
+	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
+	const orderId = source === 'order' ? 'latest' : undefined;
+	const { data: preview, isLoading, isFetching, isError } = usePreview(templateId, orderId);
 	const dialogRef = React.useRef<HTMLDivElement>(null);
 	const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 	const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
 	const titleId = React.useId();
+
+	// Revert to sample if order fetch fails
+	React.useEffect(() => {
+		if (isError && source === 'order') {
+			setSource('sample');
+		}
+	}, [isError, source]);
 
 	React.useEffect(() => {
 		previousFocusedElementRef.current = document.activeElement instanceof HTMLElement
@@ -151,20 +154,27 @@ export function PreviewModal({
 							</p>
 						)}
 					</div>
-					<button
-						ref={closeButtonRef}
-						type="button"
-						onClick={onClose}
-						className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-2xl wcpos:leading-none wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1"
-						aria-label={t('modal.close')}
-					>
-						&times;
-					</button>
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
+						<PreviewToggle
+							source={source}
+							disabled={!hasPosOrders}
+							onToggle={setSource}
+						/>
+						<button
+							ref={closeButtonRef}
+							type="button"
+							onClick={onClose}
+							className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-2xl wcpos:leading-none wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:p-1"
+							aria-label={t('modal.close')}
+						>
+							&times;
+						</button>
+					</div>
 				</div>
 
 				{/* Preview iframe */}
 				<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:p-4 wcpos:bg-gray-50">
-					{isLoading ? (
+					{isFetching ? (
 						<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:h-64">
 							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
 						</div>
@@ -173,7 +183,6 @@ export function PreviewModal({
 							templateContent={preview.template_content}
 							receiptData={preview.receipt_data}
 							templateName={templateName}
-							isSampleData={!preview.order_id}
 						/>
 					) : preview?.preview_html ? (
 						<iframe

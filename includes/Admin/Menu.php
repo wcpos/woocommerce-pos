@@ -277,9 +277,19 @@ class Menu {
 	 */
 	private function gallery_inline_script(): string {
 		return \sprintf(
-			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s }; wcpos.translationVersion = %s;',
+			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s }; wcpos.translationVersion = %s;',
 			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) ),
 			wp_json_encode( untrailingslashit( admin_url() ) ),
+			wp_json_encode(
+				(bool) wc_get_orders(
+					array(
+						'limit'       => 1,
+						'return'      => 'ids',
+						'status'      => array( 'completed', 'processing', 'on-hold', 'pending' ),
+						'created_via' => 'woocommerce-pos',
+					)
+				)
+			),
 			wp_json_encode( TRANSLATION_VERSION )
 		);
 	}

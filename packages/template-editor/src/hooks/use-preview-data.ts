@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import apiFetch from '@wordpress/api-fetch';
 
 interface PreviewDataState {
@@ -10,11 +10,13 @@ interface PreviewDataState {
 export function usePreviewData(
 	sampleData: Record<string, unknown>,
 	templateId: number,
+	hasPosOrders: boolean,
 ) {
+	const defaultSource = hasPosOrders ? 'order' : 'sample';
 	const [state, setState] = useState<PreviewDataState>({
-		source: 'sample',
+		source: defaultSource,
 		data: sampleData,
-		loading: false,
+		loading: hasPosOrders,
 	});
 
 	const abortRef = useRef<AbortController | null>(null);
@@ -53,6 +55,15 @@ export function usePreviewData(
 		},
 		[sampleData, templateId],
 	);
+
+	// Auto-fetch order data on mount when POS orders exist.
+	const mountedRef = useRef(false);
+	useEffect(() => {
+		if (!mountedRef.current && hasPosOrders) {
+			mountedRef.current = true;
+			selectSource('order');
+		}
+	}, [hasPosOrders, selectSource]);
 
 	return {
 		source: state.source,

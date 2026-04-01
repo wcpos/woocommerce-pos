@@ -46,7 +46,7 @@ export function App({ config }: AppProps) {
 	const [content, setContent] = useState(config.postContent);
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
-	const preview = usePreviewData(config.sampleData, config.templateId);
+	const preview = usePreviewData(config.sampleData, config.templateId, config.hasPosOrders);
 
 	useEffect(() => {
 		syncContent(config.postContent);

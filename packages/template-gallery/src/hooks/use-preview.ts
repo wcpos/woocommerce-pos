@@ -3,7 +3,7 @@ import apiFetch from '@wordpress/api-fetch';
 
 import type { PreviewResponse } from '../types';
 
-export function usePreview(templateId: number | string | null, orderId?: number) {
+export function usePreview(templateId: number | string | null, orderId?: number | string) {
 	const hasTemplateId = templateId !== undefined && templateId !== null;
 
 	return useQuery({
