@@ -913,17 +913,24 @@ class Templates_Controller extends WP_REST_Controller {
 		// Non-thermal with a real order.
 		if ( $order ) {
 			if ( 'logicless' === $engine ) {
-				// Logicless templates render client-side — return receipt data like thermal.
+				// Server-render HTML for gallery/store-edit, keep receipt_data for the editor.
 				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 				$formatted_data['t']               = true;
 
-				return rest_ensure_response(
-					array(
-						'receipt_data' => $formatted_data,
-						'order_id'     => $order_id,
-						'template_id'  => $id,
-					)
+				$response = array(
+					'receipt_data' => $formatted_data,
+					'order_id'     => $order_id,
+					'template_id'  => $id,
 				);
+
+				try {
+					$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
+				} catch ( \Mustache\Exception\SyntaxException $e ) {
+					// Malformed template — still return receipt_data so the editor can render.
+					unset( $e );
+				}
+
+				return rest_ensure_response( $response );
 			}
 
 			// Legacy-php needs a server-side iframe URL.
