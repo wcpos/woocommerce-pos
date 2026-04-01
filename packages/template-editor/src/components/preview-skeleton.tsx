@@ -9,7 +9,6 @@ export function PreviewSkeleton({ style }: PreviewSkeletonProps) {
 	return (
 		<div
 			style={{
-				...style,
 				background: '#fff',
 				border: '1px solid #ddd',
 				display: 'flex',
@@ -17,14 +16,15 @@ export function PreviewSkeleton({ style }: PreviewSkeletonProps) {
 				alignItems: 'center',
 				justifyContent: 'center',
 				gap: 12,
+				...style,
 			}}
 		>
 			<svg
+				className="wcpos:animate-spin"
 				width="24"
 				height="24"
 				viewBox="0 0 24 24"
 				fill="none"
-				style={{ animation: 'spin 1s linear infinite' }}
 			>
 				<circle cx="12" cy="12" r="10" stroke="#e5e7eb" strokeWidth="3" />
 				<path
@@ -37,7 +37,6 @@ export function PreviewSkeleton({ style }: PreviewSkeletonProps) {
 			<span className="wcpos:text-xs wcpos:text-gray-400">
 				{t('editor.loading_data')}
 			</span>
-			<style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
 		</div>
 	);
 }
