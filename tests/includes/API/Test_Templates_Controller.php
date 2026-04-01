@@ -1008,6 +1008,55 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1234, $data['receipt_data']['meta']['order_id'] );
 	}
 
+	/**
+	 * Test preview resolves "latest" to the most recent POS order.
+	 */
+	public function test_preview_resolves_latest_order_id(): void {
+		$post_id = $this->create_template( 'Preview Template' );
+		update_post_meta( $post_id, '_template_engine', 'thermal' );
+
+		$order = OrderHelper::create_order( array( 'total' => 50 ) );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+			$request->set_param( 'order_id', 'latest' );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+
+			$data = $response->get_data();
+			$this->assertGreaterThan( 0, $data['order_id'] );
+			$this->assertArrayHasKey( 'receipt_data', $data );
+		} finally {
+			wp_delete_post( $post_id, true );
+			wp_delete_post( $order->get_id(), true );
+		}
+	}
+
+	/**
+	 * Test preview with "latest" falls back to sample data when no POS orders exist.
+	 */
+	public function test_preview_latest_falls_back_to_sample_when_no_orders(): void {
+		$post_id = $this->create_template( 'Preview Template' );
+		update_post_meta( $post_id, '_template_engine', 'thermal' );
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+			$request->set_param( 'order_id', 'latest' );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+
+			$data = $response->get_data();
+			$this->assertEquals( 0, $data['order_id'] );
+			$this->assertArrayHasKey( 'receipt_data', $data );
+		} finally {
+			wp_delete_post( $post_id, true );
+		}
+	}
+
 	// ---- DELETE tests ----
 
 	/**

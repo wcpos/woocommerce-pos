@@ -603,7 +603,15 @@ class Single_Template {
 			'paperWidth'  => $paper_width ? $paper_width : null,
 			'templateId'  => $post->ID,
 			'previewUrl'  => $preview_url,
-			'postContent' => $post->post_content,
+			'postContent'  => $post->post_content,
+			'hasPosOrders' => (bool) wc_get_orders(
+				array(
+					'limit'       => 1,
+					'return'      => 'ids',
+					'status'      => array( 'completed', 'processing', 'on-hold', 'pending' ),
+					'created_via' => 'woocommerce-pos',
+				)
+			),
 		);
 
 		$encoded_config = wp_json_encode( $config );
