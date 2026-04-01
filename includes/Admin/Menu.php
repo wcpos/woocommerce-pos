@@ -50,6 +50,7 @@ class Menu {
 			$this->register_pos_admin();
 			add_filter( 'custom_menu_order', '__return_true' );
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
+			add_filter( 'parent_file', array( $this, 'highlight_templates_menu' ) );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
 		}
@@ -311,5 +312,24 @@ class Menu {
 			wp_safe_redirect( admin_url( 'admin.php?page=wcpos-templates' ) );
 			exit;
 		}
+	}
+
+	/**
+	 * Keep the POS menu expanded and Templates submenu highlighted when editing a template.
+	 *
+	 * @param string $parent_file The parent file.
+	 *
+	 * @return string
+	 */
+	public function highlight_templates_menu( $parent_file ) {
+		global $current_screen, $submenu_file;
+
+		if ( isset( $current_screen->post_type ) && 'wcpos_template' === $current_screen->post_type ) {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$submenu_file = 'wcpos-templates';
+			$parent_file  = PLUGIN_NAME;
+		}
+
+		return $parent_file;
 	}
 }
