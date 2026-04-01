@@ -188,18 +188,7 @@ class Templates_Controller extends WP_REST_Controller {
 			)
 		);
 
-		// 6. GET /templates/preview-orders — list recent POS orders for preview picker.
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/preview-orders',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( $this, 'get_preview_orders' ),
-				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
-			)
-		);
-
-		// 7. GET /templates/{id} (regex). Must come after all fixed-path routes.
+		// 6. GET /templates/{id} (regex). Must come after all fixed-path routes.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\w-]+)',
@@ -1413,38 +1402,6 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		return true;
-	}
-
-	/**
-	 * Get a list of recent POS orders for the preview order picker.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 *
-	 * @return WP_REST_Response Response with array of order summaries.
-	 */
-	public function get_preview_orders( $request ) {
-		$orders = wc_get_orders(
-			array(
-				'limit'        => 20,
-				'orderby'      => 'date',
-				'order'        => 'DESC',
-				'status'       => array( 'completed', 'processing', 'on-hold', 'pending' ),
-				'created_via'  => 'woocommerce-pos',
-			)
-		);
-
-		$result = array();
-		foreach ( $orders as $order ) {
-			$result[] = array(
-				'id'            => $order->get_id(),
-				'number'        => $order->get_order_number(),
-				'date'          => $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d H:i' ) : '',
-				'customer_name' => trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() ),
-				'total'         => wp_strip_all_tags( $order->get_formatted_order_total() ),
-			);
-		}
-
-		return rest_ensure_response( $result );
 	}
 
 	/**
