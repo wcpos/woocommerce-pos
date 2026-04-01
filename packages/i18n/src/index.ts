@@ -84,7 +84,8 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 					defaultVersion: translationVersion,
 				},
 				{
-					loadPath: `https://cdn.jsdelivr.net/gh/wcpos/translations@${translationVersion}/translations/js/{lng}/${project}/{ns}.json`,
+					loadPath: (lngs: string[], namespaces: string[]) =>
+					`https://cdn.jsdelivr.net/gh/wcpos/translations@${translationVersion}/translations/js/${lngs[0]}/${project}/${namespaces[0]}.json`,
 				},
 			],
 		},

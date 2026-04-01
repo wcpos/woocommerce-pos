@@ -38,7 +38,7 @@ function formatLabel(slug: string): string {
 function RadioGroup({ label, name, value, options, onChange }: RadioGroupProps) {
 	return (
 		<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
-			<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0">
+			<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0 wcpos:pb-2">
 				{label}
 			</legend>
 			{options.map((option) => (
@@ -141,7 +141,7 @@ export function FilterSidebar({
 
 			{/* Categories */}
 			<fieldset className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:border-0 wcpos:p-0 wcpos:m-0">
-				<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0">
+				<legend className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wide wcpos:p-0 wcpos:pb-2">
 					{t('filter.category')}
 				</legend>
 				{availableCategories.map((cat) => (
