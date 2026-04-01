@@ -68,7 +68,6 @@ export function App({ config }: AppProps) {
 	const previewToggle = (
 		<PreviewToggle
 			source={preview.source}
-			loading={preview.loading}
 			disabled={!config.hasPosOrders}
 			onToggle={preview.selectSource}
 		/>
@@ -99,12 +98,14 @@ export function App({ config }: AppProps) {
 					<ThermalPreview
 						content={content}
 						sampleData={preview.data}
+						loading={preview.loading}
 						sourcePicker={previewToggle}
 					/>
 				) : config.engine === 'logicless' ? (
 					<LivePreview
 						content={content}
 						sampleData={preview.data}
+						loading={preview.loading}
 						previewUrl={config.previewUrl}
 						sourcePicker={previewToggle}
 					/>
