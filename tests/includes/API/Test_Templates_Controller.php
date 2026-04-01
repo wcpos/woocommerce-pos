@@ -936,6 +936,48 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test preview returns server-rendered HTML for logicless template with a real order.
+	 *
+	 * Regression test for #726: logicless order preview used to return raw receipt_data
+	 * without preview_html, causing "No preview available" in the gallery modal.
+	 */
+	public function test_preview_returns_html_for_logicless_template_with_order(): void {
+		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
+
+		$logicless = null;
+		foreach ( $gallery as $t ) {
+			if ( 'logicless' === ( $t['engine'] ?? '' ) ) {
+				$logicless = $t;
+				break;
+			}
+		}
+
+		if ( ! $logicless ) {
+			$this->markTestSkipped( 'No logicless gallery templates available.' );
+		}
+
+		$order = OrderHelper::create_order( array( 'total' => 50 ) );
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $logicless['key'] . '/preview' );
+			$request->set_param( 'order_id', $order->get_id() );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+
+			$data = $response->get_data();
+			$this->assertArrayHasKey( 'preview_html', $data, 'Logicless order preview must return preview_html' );
+			$this->assertArrayNotHasKey( 'receipt_data', $data, 'Logicless order preview must not return raw receipt_data' );
+			$this->assertEquals( $order->get_id(), $data['order_id'] );
+			$this->assertEquals( $logicless['key'], $data['template_id'] );
+		} finally {
+			wp_delete_post( $order->get_id(), true );
+		}
+	}
+
+	/**
 	 * Test preview returns thermal data for thermal gallery template.
 	 */
 	public function test_preview_returns_thermal_data_for_thermal_template(): void {
