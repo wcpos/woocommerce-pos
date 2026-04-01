@@ -113,6 +113,18 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_labels includes fiscal label keys.
+	 */
+	public function test_get_labels_includes_fiscal_keys(): void {
+		$labels = Receipt_I18n_Labels::get_labels();
+
+		$this->assertArrayHasKey( 'signature', $labels );
+		$this->assertArrayHasKey( 'document_type', $labels );
+		$this->assertArrayHasKey( 'copy', $labels );
+		$this->assertArrayHasKey( 'copy_number', $labels );
+	}
+
+	/**
 	 * Test translate_interpolated_phrases handles multiple occurrences.
 	 */
 	public function test_translate_interpolated_phrases_handles_multiple_occurrences(): void {
