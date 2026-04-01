@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Mustache from 'mustache';
-import { generateBarcodeSvg } from '../lib/generate-barcode-svg';
+import { generateBarcodeSvg } from '@wcpos/thermal-utils';
 
 /**
  * Post-process rendered HTML to replace data-barcode marker elements

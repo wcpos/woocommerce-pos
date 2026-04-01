@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { usePreview } from '../hooks/use-preview';
-import { renderThermalPreview } from '../lib/thermal-renderer';
+import { renderThermalPreview } from '@wcpos/thermal-utils';
 import { t } from '../translations';
 import { PreviewToggle } from './preview-toggle';
 

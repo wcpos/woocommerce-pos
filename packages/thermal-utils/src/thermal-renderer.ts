@@ -1,8 +1,6 @@
 /**
- * Self-contained thermal XML template -> HTML preview renderer.
- *
- * This is a copy of the pure rendering functions from @wcpos/printer/src/renderer/.
- * When @wcpos/printer is published to npm, replace this with an import from that package.
+ * Thermal rendering utilities shared between template-editor and template-gallery.
+ * Originally derived from @wcpos/printer/src/renderer/.
  */
 import Mustache from 'mustache';
 import { generateBarcodeSvg } from './generate-barcode-svg';
@@ -268,7 +266,8 @@ function escapeHtml(str: string): string {
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
+		.replace(/'/g, '&#39;')
+		.replace(/\//g, '&#x2F;');
 }
 
 function renderNodes(nodes: ThermalNode[]): string {
