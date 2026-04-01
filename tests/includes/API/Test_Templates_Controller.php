@@ -969,7 +969,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 			$data = $response->get_data();
 			$this->assertArrayHasKey( 'preview_html', $data, 'Logicless order preview must return preview_html' );
-			$this->assertArrayNotHasKey( 'receipt_data', $data, 'Logicless order preview must not return raw receipt_data' );
+			$this->assertArrayHasKey( 'receipt_data', $data, 'Logicless order preview must return receipt_data for editor' );
 			$this->assertEquals( $order->get_id(), $data['order_id'] );
 			$this->assertEquals( $logicless['key'], $data['template_id'] );
 		} finally {
