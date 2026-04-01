@@ -67,6 +67,7 @@ class Template_Router {
 		$this->add_rewrite_rules();
 
 		add_filter( 'option_rewrite_rules', array( $this, 'rewrite_rules' ), 1 );
+		add_action( 'wp', array( $this, 'maybe_set_checkout_context' ), 1 );
 		add_action( 'template_redirect', array( $this, 'template_redirect' ), 1 );
 
 		// Priority 999 to ensure this filter runs after any other plugins that may hijack the order received url.
@@ -80,6 +81,25 @@ class Template_Router {
 	 */
 	public static function get_auth_url(): string {
 		return home_url( self::AUTH_PATH . '/' );
+	}
+
+	/**
+	 * Set checkout context early so payment gateways can detect the page.
+	 *
+	 * Many payment plugins (e.g. PayPal) check is_checkout() and is_checkout_pay_page()
+	 * during the 'wp' action to decide whether to enqueue their assets. Our POS checkout
+	 * uses custom rewrite rules, so WooCommerce doesn't recognize it as a checkout page
+	 * by default. Adding the woocommerce_is_checkout filter here (before plugins run
+	 * their checks) ensures is_checkout_pay_page() returns true for our payment template.
+	 *
+	 * @return void
+	 */
+	public function maybe_set_checkout_context(): void {
+		global $wp;
+
+		if ( isset( $wp->query_vars['order-pay'] ) && woocommerce_pos_request( 'query_var' ) ) {
+			add_filter( 'woocommerce_is_checkout', '__return_true' );
+		}
 	}
 
 	/**
