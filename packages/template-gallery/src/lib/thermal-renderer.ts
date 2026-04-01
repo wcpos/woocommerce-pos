@@ -304,7 +304,7 @@ function renderNode(node: ThermalNode): string {
 			}
 			return '<hr style="border: none; border-top: 1px dashed #000; margin: 4px 0" />';
 		case 'barcode':
-			return generateBarcodeSvg(node.value, { type: (node.barcodeType as 'qr' | 'code128' | 'ean13' | 'code39') ?? 'code128', height: node.height / 4 });
+			return generateBarcodeSvg(node.value, { type: node.barcodeType ?? 'code128', height: node.height / 4 });
 		case 'qrcode':
 			return generateBarcodeSvg(node.value, { type: 'qr', scale: node.size });
 		case 'image':

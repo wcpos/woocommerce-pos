@@ -7,17 +7,17 @@
  */
 import * as bwipjs from 'bwip-js';
 
-type BarcodeType = 'qr' | 'code128' | 'ean13' | 'code39';
-
-const BCID_MAP: Record<BarcodeType, string> = {
+/**
+ * Map of short aliases to bwip-js barcode IDs.
+ * Unknown types are passed through to bwip-js directly,
+ * so any symbology bwip-js supports will work.
+ */
+const BCID_ALIASES: Record<string, string> = {
 	qr: 'qrcode',
-	code128: 'code128',
-	ean13: 'ean13',
-	code39: 'code39',
 };
 
 interface BarcodeOptions {
-	type?: BarcodeType;
+	type?: string;
 	scale?: number;
 	height?: number;
 }
@@ -32,7 +32,7 @@ export function generateBarcodeSvg(
 		return '';
 	}
 
-	const bcid = BCID_MAP[type] ?? 'qrcode';
+	const bcid = BCID_ALIASES[type] ?? type;
 
 	try {
 		const svg = bwipjs.toSVG({
@@ -40,7 +40,7 @@ export function generateBarcodeSvg(
 			text: value,
 			scale,
 			height,
-			includetext: type !== 'qr',
+			includetext: bcid !== 'qrcode',
 		});
 		return `<div style="text-align: center; padding: 8px 0">${svg}</div>`;
 	} catch (error) {
