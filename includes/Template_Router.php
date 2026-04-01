@@ -97,7 +97,7 @@ class Template_Router {
 	public function maybe_set_checkout_context(): void {
 		global $wp;
 
-		if ( isset( $wp->query_vars['order-pay'] ) && woocommerce_pos_request( 'query_var' ) ) {
+		if ( isset( $wp->query_vars['order-pay'] ) && $wp->matched_rule === $this->pos_checkout_regex ) {
 			add_filter( 'woocommerce_is_checkout', '__return_true' );
 		}
 	}
