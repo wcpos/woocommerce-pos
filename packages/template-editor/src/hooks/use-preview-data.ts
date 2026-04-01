@@ -1,21 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import apiFetch from '@wordpress/api-fetch';
 
-export interface OrderSummary {
-	id: number;
-	number: string;
-	date: string;
-	customer_name: string;
-	total: string;
-}
-
 interface PreviewDataState {
 	source: 'sample' | 'order';
 	data: Record<string, unknown>;
-	orders: OrderSummary[];
-	ordersLoading: boolean;
-	dataLoading: boolean;
-	error: string | null;
+	loading: boolean;
 }
 
 export function usePreviewData(
@@ -25,92 +14,58 @@ export function usePreviewData(
 	const [state, setState] = useState<PreviewDataState>({
 		source: 'sample',
 		data: sampleData,
-		orders: [],
-		ordersLoading: false,
-		dataLoading: false,
-		error: null,
+		loading: false,
 	});
 
-	const ordersFetched = useRef(false);
-	const previewAbortRef = useRef<AbortController | null>(null);
-
-	const fetchOrders = useCallback(async () => {
-		if (ordersFetched.current) return;
-		ordersFetched.current = true;
-
-		setState((prev) => ({ ...prev, ordersLoading: true, error: null }));
-
-		try {
-			const orders = await apiFetch<OrderSummary[]>({
-				path: 'wcpos/v1/templates/preview-orders?wcpos=1',
-			});
-			setState((prev) => ({ ...prev, orders, ordersLoading: false }));
-		} catch {
-			ordersFetched.current = false; // Allow retry on failure.
-			setState((prev) => ({
-				...prev,
-				ordersLoading: false,
-				error: 'Failed to load orders',
-			}));
-		}
-	}, []);
+	const abortRef = useRef<AbortController | null>(null);
+	const orderCacheRef = useRef<Record<string, unknown> | null>(null);
 
 	const selectSource = useCallback(
-		(source: 'sample' | 'order', orderId?: number) => {
-			// Abort any in-flight preview request.
-			if (previewAbortRef.current) {
-				previewAbortRef.current.abort();
-				previewAbortRef.current = null;
+		(source: 'sample' | 'order') => {
+			if (abortRef.current) {
+				abortRef.current.abort();
+				abortRef.current = null;
 			}
 
 			if (source === 'sample') {
-				setState((prev) => ({
-					...prev,
-					source: 'sample',
-					data: sampleData,
-					error: null,
-					dataLoading: false,
-				}));
+				setState({ source: 'sample', data: sampleData, loading: false });
 				return;
 			}
 
-			if (!orderId) return;
+			// Return cached order data if available.
+			if (orderCacheRef.current) {
+				setState({ source: 'order', data: orderCacheRef.current, loading: false });
+				return;
+			}
 
 			const controller = new AbortController();
-			previewAbortRef.current = controller;
+			abortRef.current = controller;
 
-			setState((prev) => ({ ...prev, source: 'order', dataLoading: true, error: null }));
+			setState((prev) => ({ ...prev, source: 'order', loading: true }));
 
 			apiFetch<{ receipt_data?: Record<string, unknown> }>({
-				path: `wcpos/v1/templates/${templateId}/preview?order_id=${orderId}&wcpos=1`,
+				path: `wcpos/v1/templates/${templateId}/preview?order_id=latest&wcpos=1`,
 				signal: controller.signal,
 			})
 				.then((response) => {
 					if (controller.signal.aborted) return;
-					const data = response.receipt_data ?? response;
-					setState((prev) => ({
-						...prev,
-						data: data as Record<string, unknown>,
-						dataLoading: false,
-					}));
+					const data = (response.receipt_data ?? response) as Record<string, unknown>;
+					orderCacheRef.current = data;
+					setState({ source: 'order', data, loading: false });
 				})
 				.catch((err: Error) => {
 					if (err.name === 'AbortError') return;
-					setState((prev) => ({
-						...prev,
-						data: sampleData,
-						source: 'sample',
-						dataLoading: false,
-						error: 'Failed to load order data',
-					}));
+					// Revert to sample on failure.
+					setState({ source: 'sample', data: sampleData, loading: false });
 				});
 		},
 		[sampleData, templateId],
 	);
 
 	return {
-		...state,
-		fetchOrders,
+		source: state.source,
+		data: state.data,
+		loading: state.loading,
 		selectSource,
 	};
 }
