@@ -237,6 +237,11 @@ class Settings extends WP_REST_Controller {
 					return \is_bool( $param );
 				},
 			),
+			'restore_stock_on_delete' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
 		);
 	}
 

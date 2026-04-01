@@ -165,15 +165,17 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return parent::delete_item( $request );
 		}
 
+		$setting = woocommerce_pos_get_settings( 'general', 'restore_stock_on_delete' );
+
 		/**
 		 * Filter whether to restore stock when an order is deleted via the POS API.
 		 *
 		 * @since 1.9.0
 		 *
-		 * @param bool $restore_stock Whether to restore stock. Default true.
+		 * @param bool $restore_stock Whether to restore stock. Default from settings.
 		 * @param int  $order_id      The order ID being deleted.
 		 */
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', true, $order_id );
+		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', (bool) $setting, $order_id );
 		$force         = (bool) $request->get_param( 'force' );
 
 		// Force-delete permanently removes the order, so restore stock beforehand.

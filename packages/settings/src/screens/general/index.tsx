@@ -19,6 +19,7 @@ export interface GeneralSettingsProps {
 	default_customer: number;
 	default_customer_is_cashier: boolean;
 	barcode_field: string;
+	restore_stock_on_delete: boolean;
 }
 
 function General() {
@@ -99,6 +100,17 @@ function General() {
 							}}
 						/>
 					</React.Suspense>
+				</Label>
+			</FormRow>
+			<FormRow>
+				<Label tip={t('settings.restore_stock_on_delete_tip')}>
+					<Toggle
+						checked={!!data?.restore_stock_on_delete}
+						onChange={(restore_stock_on_delete: boolean) => {
+							mutate({ restore_stock_on_delete });
+						}}
+						label={t('settings.restore_stock_on_delete')}
+					/>
 				</Label>
 			</FormRow>
 		</FormSection>
