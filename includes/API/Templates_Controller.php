@@ -913,13 +913,14 @@ class Templates_Controller extends WP_REST_Controller {
 		// Non-thermal with a real order.
 		if ( $order ) {
 			if ( 'logicless' === $engine ) {
-				// Logicless templates render client-side — return receipt data like thermal.
+				// Server-render the HTML so the gallery/store-edit preview can display it.
 				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 				$formatted_data['t']               = true;
+				$html                              = $this->render_logicless_preview( $template, $formatted_data );
 
 				return rest_ensure_response(
 					array(
-						'receipt_data' => $formatted_data,
+						'preview_html' => $html,
 						'order_id'     => $order_id,
 						'template_id'  => $id,
 					)
