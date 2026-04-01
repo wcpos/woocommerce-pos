@@ -95,6 +95,7 @@ class Template_Router {
 	 * @return void
 	 */
 	public function maybe_set_checkout_context(): void {
+		/** @var \WP $wp */
 		global $wp;
 
 		if ( isset( $wp->query_vars['order-pay'] ) && $wp->matched_rule === $this->pos_checkout_regex ) {
