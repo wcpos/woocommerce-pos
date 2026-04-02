@@ -206,4 +206,140 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'policies_and_conditions', $store );
 		$this->assertArrayHasKey( 'footer_imprint', $store );
 	}
+
+	/**
+	 * Test site logo fallback is exposed when not explicitly disabled.
+	 */
+	public function test_build_uses_site_logo_when_available_and_not_opted_out(): void {
+		$order    = OrderHelper::create_order();
+		$store_id = $this->factory->post->create();
+		$logo_url = 'https://example.com/site-logo.png';
+		$logo_id  = 987654;
+
+		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
+			if ( $logo_id !== (int) $id ) {
+				return $out;
+			}
+
+			return array( $logo_url, 320, 120, true );
+		};
+
+		$store_filter = static function () use ( $store_id, $logo_url ) {
+			return new class( $store_id, $logo_url ) {
+				private int $id;
+				private string $logo_url;
+
+				public function __construct( int $id, string $logo_url ) {
+					$this->id       = $id;
+					$this->logo_url = $logo_url;
+				}
+
+				public function get_id(): int {
+					return $this->id;
+				}
+
+				public function get_logo_image_src( $size = 'full' ): array {
+					return array( $this->logo_url, 320, 120, true );
+				}
+
+				public function get_opening_hours(): string {
+					return '';
+				}
+
+				public function get_personal_notes(): string {
+					return '';
+				}
+
+				public function get_policies_and_conditions(): string {
+					return '';
+				}
+
+				public function get_footer_imprint(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			set_theme_mod( 'custom_logo', $logo_id );
+			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$payload = $this->builder->build( $order, 'live' );
+			$this->assertSame( $logo_url, $payload['store']['logo'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
+			remove_theme_mod( 'custom_logo' );
+		}
+	}
+
+	/**
+	 * Test site logo fallback is hidden when store opts out.
+	 */
+	public function test_build_hides_site_logo_when_store_opts_out(): void {
+		$order    = OrderHelper::create_order();
+		$store_id = $this->factory->post->create();
+		$logo_url = 'https://example.com/site-logo-optout.png';
+		$logo_id  = 987655;
+
+		update_post_meta( $store_id, '_use_site_logo', 'no' );
+
+		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
+			if ( $logo_id !== (int) $id ) {
+				return $out;
+			}
+
+			return array( $logo_url, 320, 120, true );
+		};
+
+		$store_filter = static function () use ( $store_id, $logo_url ) {
+			return new class( $store_id, $logo_url ) {
+				private int $id;
+				private string $logo_url;
+
+				public function __construct( int $id, string $logo_url ) {
+					$this->id       = $id;
+					$this->logo_url = $logo_url;
+				}
+
+				public function get_id(): int {
+					return $this->id;
+				}
+
+				public function get_logo_image_src( $size = 'full' ): array {
+					return array( $this->logo_url, 320, 120, true );
+				}
+
+				public function get_opening_hours(): string {
+					return '';
+				}
+
+				public function get_personal_notes(): string {
+					return '';
+				}
+
+				public function get_policies_and_conditions(): string {
+					return '';
+				}
+
+				public function get_footer_imprint(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			set_theme_mod( 'custom_logo', $logo_id );
+			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$payload = $this->builder->build( $order, 'live' );
+			$this->assertNull( $payload['store']['logo'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
+			remove_theme_mod( 'custom_logo' );
+		}
+	}
 }

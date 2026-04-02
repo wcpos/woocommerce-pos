@@ -729,12 +729,13 @@ class Preview_Receipt_Builder {
 
 		$pos_store               = wcpos_get_store();
 		$logo_src                = $pos_store->get_logo_image_src( 'full' );
+		$logo_url                = ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
 		$opening_hours           = $pos_store->get_opening_hours();
 		$personal_notes          = $pos_store->get_personal_notes();
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
-		$store['logo']                    = ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
+		$store['logo']                    = $this->filter_site_logo_fallback( $pos_store, $logo_url );
 		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours )
 			? $opening_hours
 			: __( 'Mon–Fri 9:00 AM – 6:00 PM, Sat 10:00 AM – 4:00 PM', 'woocommerce-pos' );
@@ -749,6 +750,44 @@ class Preview_Receipt_Builder {
 			: __( 'Thank you for your purchase!', 'woocommerce-pos' );
 
 		return $store;
+	}
+
+	/**
+	 * Hide site-logo fallback when the active POS store explicitly opts out.
+	 *
+	 * @param object      $pos_store Active POS store object.
+	 * @param string|null $logo_url  Resolved store logo URL.
+	 *
+	 * @return string|null
+	 */
+	private function filter_site_logo_fallback( $pos_store, ?string $logo_url ): ?string {
+		if ( empty( $logo_url ) ) {
+			return null;
+		}
+
+		$store_id      = method_exists( $pos_store, 'get_id' ) ? (int) $pos_store->get_id() : 0;
+		$use_site_logo = true;
+		if ( $store_id > 0 ) {
+			$use_site_logo = 'no' !== get_post_meta( $store_id, '_use_site_logo', true );
+		}
+
+		if ( $use_site_logo ) {
+			return $logo_url;
+		}
+
+		$custom_logo_id = (int) get_theme_mod( 'custom_logo' );
+		if ( $custom_logo_id <= 0 ) {
+			return $logo_url;
+		}
+
+		$site_logo_src = wp_get_attachment_image_src( $custom_logo_id, 'full' );
+		$site_logo_url = ( is_array( $site_logo_src ) && ! empty( $site_logo_src[0] ) ) ? $site_logo_src[0] : null;
+
+		if ( $site_logo_url && $site_logo_url === $logo_url ) {
+			return null;
+		}
+
+		return $logo_url;
 	}
 
 	/**
