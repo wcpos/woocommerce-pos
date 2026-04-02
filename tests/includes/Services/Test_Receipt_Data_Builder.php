@@ -224,22 +224,20 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			return array( $logo_url, 320, 120, true );
 		};
 
-		$store_filter = static function () use ( $store_id, $logo_url ) {
-			return new class( $store_id, $logo_url ) {
+		$store_filter = static function () use ( $store_id ) {
+			return new class( $store_id ) {
 				private int $id;
-				private string $logo_url;
 
-				public function __construct( int $id, string $logo_url ) {
-					$this->id       = $id;
-					$this->logo_url = $logo_url;
+				public function __construct( int $id ) {
+					$this->id = $id;
 				}
 
 				public function get_id(): int {
 					return $this->id;
 				}
 
-				public function get_logo_image_src( $size = 'full' ): array {
-					return array( $this->logo_url, 320, 120, true );
+				public function get_logo_image_src( $size = 'full' ) {
+					return false;
 				}
 
 				public function get_opening_hours(): string {
@@ -293,6 +291,73 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			return array( $logo_url, 320, 120, true );
 		};
 
+		$store_filter = static function () use ( $store_id ) {
+			return new class( $store_id ) {
+				private int $id;
+
+				public function __construct( int $id ) {
+					$this->id = $id;
+				}
+
+				public function get_id(): int {
+					return $this->id;
+				}
+
+				public function get_logo_image_src( $size = 'full' ) {
+					return false;
+				}
+
+				public function get_opening_hours(): string {
+					return '';
+				}
+
+				public function get_personal_notes(): string {
+					return '';
+				}
+
+				public function get_policies_and_conditions(): string {
+					return '';
+				}
+
+				public function get_footer_imprint(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			set_theme_mod( 'custom_logo', $logo_id );
+			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$payload = $this->builder->build( $order, 'live' );
+			$this->assertNull( $payload['store']['logo'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
+			remove_theme_mod( 'custom_logo' );
+		}
+	}
+
+	/**
+	 * Test explicit store logo is preserved when site logo is disabled.
+	 */
+	public function test_build_preserves_explicit_logo_when_site_logo_is_disabled(): void {
+		$order    = OrderHelper::create_order();
+		$store_id = $this->factory->post->create();
+		$logo_url = 'https://example.com/same-logo.png';
+		$logo_id  = 987656;
+
+		update_post_meta( $store_id, '_use_site_logo', 'no' );
+
+		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
+			if ( $logo_id !== (int) $id ) {
+				return $out;
+			}
+
+			return array( $logo_url, 320, 120, true );
+		};
+
 		$store_filter = static function () use ( $store_id, $logo_url ) {
 			return new class( $store_id, $logo_url ) {
 				private int $id;
@@ -335,7 +400,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			add_filter( 'woocommerce_pos_get_store', $store_filter );
 
 			$payload = $this->builder->build( $order, 'live' );
-			$this->assertNull( $payload['store']['logo'] );
+			$this->assertSame( $logo_url, $payload['store']['logo'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
