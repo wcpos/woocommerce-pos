@@ -35,6 +35,8 @@
 	"settings.use_cashier_account": "Use cashier account",
 	"settings.barcode_field": "Barcode Field",
 	"settings.barcode_field_tip": "Product meta field to be used as barcode, eg: _sku or _barcode",
+	"settings.products_section_title": "Products",
+	"settings.customers_section_title": "Customers",
 	"settings.restore_stock_on_delete": "Restore stock on order delete",
 	"settings.restore_stock_on_delete_tip": "Automatically restore product stock when POS orders are trashed or deleted",
 	"settings.need_help": "Need help?",
