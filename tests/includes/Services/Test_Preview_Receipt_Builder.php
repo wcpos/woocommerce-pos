@@ -230,9 +230,14 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	public function test_preview_preserves_explicit_logo_when_site_logo_is_disabled(): void {
 		$store_id = $this->factory->post->create();
 		$logo_url = 'https://example.com/preview-same-logo.png';
-		$logo_id  = 987658;
+		$logo_id  = $this->factory->post->create(
+			array(
+				'post_type' => 'attachment',
+			)
+		);
 
 		update_post_meta( $store_id, '_use_site_logo', 'no' );
+		update_post_meta( $store_id, '_thumbnail_id', $logo_id );
 
 		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
 			if ( $logo_id !== (int) $id ) {
@@ -242,22 +247,20 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			return array( $logo_url, 320, 120, true );
 		};
 
-		$store_filter = static function () use ( $store_id, $logo_url ) {
-			return new class( $store_id, $logo_url ) {
+		$store_filter = static function () use ( $store_id ) {
+			return new class( $store_id ) {
 				private int $id;
-				private string $logo_url;
 
-				public function __construct( int $id, string $logo_url ) {
-					$this->id       = $id;
-					$this->logo_url = $logo_url;
+				public function __construct( int $id ) {
+					$this->id = $id;
 				}
 
 				public function get_id(): int {
 					return $this->id;
 				}
 
-				public function get_logo_image_src( $size = 'full' ): array {
-					return array( $this->logo_url, 320, 120, true );
+				public function get_logo_image_src( $size = 'full' ) {
+					return false;
 				}
 
 				public function get_opening_hours(): string {

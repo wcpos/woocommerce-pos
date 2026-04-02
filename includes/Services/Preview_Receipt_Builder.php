@@ -764,7 +764,7 @@ class Preview_Receipt_Builder {
 			$use_site_logo = 'no' !== get_post_meta( $store_id, '_use_site_logo', true );
 		}
 
-		$explicit_logo_url = $this->get_explicit_store_logo_url( $pos_store );
+		$explicit_logo_url = $this->get_explicit_store_logo_url( $store_id );
 		if ( null !== $explicit_logo_url ) {
 			return $explicit_logo_url;
 		}
@@ -777,19 +777,23 @@ class Preview_Receipt_Builder {
 	}
 
 	/**
-	 * Get explicit store logo URL from the POS store object.
+	 * Get explicit store logo URL from the store post thumbnail.
 	 *
-	 * @param object $pos_store Active POS store object.
+	 * @param int $store_id Active POS store ID.
 	 *
 	 * @return string|null
 	 */
-	private function get_explicit_store_logo_url( $pos_store ): ?string {
-		// In free, Abstracts\Store only exposes site-logo fallback.
-		if ( $pos_store instanceof \WCPOS\WooCommercePOS\Abstracts\Store ) {
+	private function get_explicit_store_logo_url( int $store_id ): ?string {
+		if ( $store_id <= 0 ) {
 			return null;
 		}
 
-		$logo_src = method_exists( $pos_store, 'get_logo_image_src' ) ? $pos_store->get_logo_image_src( 'full' ) : false;
+		$thumbnail_id = (int) get_post_thumbnail_id( $store_id );
+		if ( $thumbnail_id <= 0 ) {
+			return null;
+		}
+
+		$logo_src = wp_get_attachment_image_src( $thumbnail_id, 'full' );
 
 		return ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
 	}
