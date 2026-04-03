@@ -161,7 +161,6 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 
 		$request = $this->wc_rest_get_request( '/wc/v3/orders' );
 		$request->set_param( 'status', array( 'any' ) );
-		$request->set_param( 'created_via', array( 'checkout' ) );
 		$request->set_param( 'search', 'Filter' );
 		$request->set_param( '_fields', array( 'id', 'date_modified_gmt' ) );
 		$request->set_param( 'pos_cashier', 123 );
