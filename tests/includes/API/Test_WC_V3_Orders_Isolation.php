@@ -1,42 +1,32 @@
 <?php
+/**
+ * Tests for WC REST API v3 orders endpoint isolation.
+ *
+ * Verifies that plain wc/v3 order responses remain unmodified
+ * when the WCPOS plugin is active.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\API
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Tests\API\Traits\WC_REST_Order_Helpers;
 use WP_REST_Request;
-use WC_Order;
 
 /**
+ * Class Test_WC_V3_Orders_Isolation
+ *
  * @internal
  *
  * @coversNothing
  */
 class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
-	/**
-	 * Helper to create a plain wc/v3 GET request.
-	 */
-	private function wc_rest_get_request( string $path ): WP_REST_Request {
-		$request = new WP_REST_Request();
-		$request->set_method( 'GET' );
-		$request->set_route( $path );
-
-		return $request;
-	}
+	use WC_REST_Order_Helpers;
 
 	/**
-	 * Helper to create an order and set created_via before saving.
+	 * Verify that listing orders with status=any returns all orders unmodified.
 	 */
-	private function create_order_with_created_via( string $created_via, array $args = array() ): WC_Order {
-		$order = OrderHelper::create_order( $args );
-
-		if ( method_exists( $order, 'set_created_via' ) ) {
-			$order->set_created_via( $created_via );
-			$order->save();
-		}
-
-		return $order;
-	}
-
 	public function test_wc_v3_orders_list_status_any_is_unmodified(): void {
 		$pending_order   = OrderHelper::create_order( array( 'status' => 'pending' ) );
 		$completed_order = OrderHelper::create_order( array( 'status' => 'completed' ) );
@@ -59,6 +49,9 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Verify that searching orders by billing name returns matching results unmodified.
+	 */
 	public function test_wc_v3_orders_list_search_is_unmodified(): void {
 		$matching_order = OrderHelper::create_order();
 		$matching_order->set_billing_first_name( 'John' );
@@ -78,11 +71,14 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'John', $data[0]['billing']['first_name'] );
 	}
 
+	/**
+	 * Verify that _fields projection returns only the requested fields.
+	 */
 	public function test_wc_v3_orders_list_fields_projection_is_unmodified(): void {
 		$order = OrderHelper::create_order();
 
 		$request = $this->wc_rest_get_request( '/wc/v3/orders' );
-		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'per_page', 100 );
 		$request->set_param( '_fields', array( 'id', 'date_modified_gmt' ) );
 
 		$response = $this->server->dispatch( $request );
@@ -96,7 +92,16 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $order->get_id(), $order_data['id'] );
 	}
 
+	/**
+	 * Verify that the created_via collection parameter filters orders correctly.
+	 *
+	 * The created_via collection parameter was added in WC 9.6.
+	 */
 	public function test_wc_v3_orders_list_created_via_filter_is_not_rewritten(): void {
+		if ( version_compare( WC_VERSION, '9.6', '<' ) ) {
+			$this->markTestSkipped( 'created_via collection parameter requires WC 9.6+.' );
+		}
+
 		$checkout_order = $this->create_order_with_created_via( 'checkout' );
 		$this->create_order_with_created_via( 'rest-api' );
 
@@ -112,6 +117,9 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertSame( 'checkout', $data[0]['created_via'] );
 	}
 
+	/**
+	 * Verify that _fields projection works for a single order endpoint.
+	 */
 	public function test_wc_v3_single_order_with_fields_projection_is_unmodified(): void {
 		$order = OrderHelper::create_order();
 
@@ -126,6 +134,9 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( $order->get_id(), $data['id'] );
 	}
 
+	/**
+	 * Verify that WCPOS payment and receipt links are not included in wc/v3 responses.
+	 */
 	public function test_wc_v3_orders_list_does_not_include_wcpos_payment_or_receipt_links(): void {
 		OrderHelper::create_order();
 		OrderHelper::create_order();
@@ -145,6 +156,9 @@ class Test_WC_V3_Orders_Isolation extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	/**
+	 * Verify that WCPOS-specific query params do not trigger meta_query rewrites on wc/v3.
+	 */
 	public function test_wc_v3_orders_list_request_does_not_trigger_wcpos_query_rewrites(): void {
 		$matching_order = OrderHelper::create_order();
 		$matching_order->set_billing_first_name( 'Filter' );

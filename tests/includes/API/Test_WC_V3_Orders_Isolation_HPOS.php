@@ -1,45 +1,33 @@
 <?php
+/**
+ * Tests for WC REST API v3 orders endpoint isolation under HPOS.
+ *
+ * Verifies that plain wc/v3 order responses remain unmodified
+ * when the WCPOS plugin is active and HPOS is enabled.
+ *
+ * @package WCPOS\WooCommercePOS\Tests\API
+ */
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
-use WC_Order;
-use WP_REST_Request;
+use WCPOS\WooCommercePOS\Tests\API\Traits\WC_REST_Order_Helpers;
 
 /**
+ * Class Test_WC_V3_Orders_Isolation_HPOS
+ *
  * @internal
  *
  * @coversNothing
  */
 class Test_WC_V3_Orders_Isolation_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 	use HPOSToggleTrait;
+	use WC_REST_Order_Helpers;
 
 	/**
-	 * Helper to create a plain wc/v3 GET request.
+	 * Set up the test environment with HPOS enabled.
 	 */
-	private function wc_rest_get_request( string $path ): WP_REST_Request {
-		$request = new WP_REST_Request();
-		$request->set_method( 'GET' );
-		$request->set_route( $path );
-
-		return $request;
-	}
-
-	/**
-	 * Helper to create an order and set created_via before saving.
-	 */
-	private function create_order_with_created_via( string $created_via, array $args = array() ): WC_Order {
-		$order = OrderHelper::create_order( $args );
-
-		if ( method_exists( $order, 'set_created_via' ) ) {
-			$order->set_created_via( $created_via );
-			$order->save();
-		}
-
-		return $order;
-	}
-
 	public function setUp(): void {
 		parent::setUp();
 
@@ -48,6 +36,9 @@ class Test_WC_V3_Orders_Isolation_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->toggle_cot_feature_and_usage( true );
 	}
 
+	/**
+	 * Tear down the test environment and disable HPOS.
+	 */
 	public function tearDown(): void {
 		$this->toggle_cot_feature_and_usage( false );
 		$this->clean_up_cot_setup();
@@ -56,6 +47,9 @@ class Test_WC_V3_Orders_Isolation_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Verify that listing orders with status=any returns all orders unmodified under HPOS.
+	 */
 	public function test_wc_v3_orders_list_status_any_is_unmodified_hpos(): void {
 		$pending_order   = OrderHelper::create_order( array( 'status' => 'pending' ) );
 		$completed_order = OrderHelper::create_order( array( 'status' => 'completed' ) );
@@ -74,7 +68,16 @@ class Test_WC_V3_Orders_Isolation_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Verify that the created_via collection parameter filters orders correctly under HPOS.
+	 *
+	 * The created_via collection parameter was added in WC 9.6.
+	 */
 	public function test_wc_v3_orders_list_created_via_filter_is_not_rewritten_hpos(): void {
+		if ( version_compare( WC_VERSION, '9.6', '<' ) ) {
+			$this->markTestSkipped( 'created_via collection parameter requires WC 9.6+.' );
+		}
+
 		$checkout_order = $this->create_order_with_created_via( 'checkout' );
 		$this->create_order_with_created_via( 'rest-api' );
 
@@ -90,6 +93,9 @@ class Test_WC_V3_Orders_Isolation_HPOS extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertSame( 'checkout', $data[0]['created_via'] );
 	}
 
+	/**
+	 * Verify that WCPOS payment and receipt links are not included in wc/v3 HPOS responses.
+	 */
 	public function test_wc_v3_orders_list_does_not_include_wcpos_payment_or_receipt_links_hpos(): void {
 		OrderHelper::create_order();
 		OrderHelper::create_order();
