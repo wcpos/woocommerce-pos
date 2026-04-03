@@ -211,9 +211,9 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->markTestSkipped( 'woocommerce_log table does not exist.' );
 		}
 
-		$this->insert_db_log_entry( 'error', 'DB error message', 'woocommerce-pos' );
-		$this->insert_db_log_entry( 'warning', 'DB warning message', 'woocommerce-pos' );
-		$this->insert_db_log_entry( 'info', 'Other source message', 'other-plugin' );
+		$this->insert_db_log_entry( 'error', 'DB error message', 'woocommerce-pos', '2026-02-11 10:00:00' );
+		$this->insert_db_log_entry( 'warning', 'DB warning message', 'woocommerce-pos', '2026-02-11 09:00:00' );
+		$this->insert_db_log_entry( 'info', 'Other source message', 'other-plugin', '2026-02-11 11:00:00' );
 
 		// Force DB handler detection.
 		add_filter(
@@ -230,6 +230,8 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertCount( 2, $data['entries'] );
 		$this->assertEquals( 'error', $data['entries'][0]['level'] );
 		$this->assertEquals( 'DB error message', $data['entries'][0]['message'] );
+		$this->assertEquals( 'warning', $data['entries'][1]['level'] );
+		$this->assertEquals( 'DB warning message', $data['entries'][1]['message'] );
 
 		remove_all_filters( 'woocommerce_pos_log_handler_type' );
 	}
@@ -291,15 +293,16 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 	 *
 	 * @param string $level   Log level.
 	 * @param string $message Log message.
-	 * @param string $source  Log source.
+	 * @param string      $source    Log source.
+	 * @param string|null $timestamp Optional UTC timestamp in MySQL datetime format.
 	 */
-	private function insert_db_log_entry( string $level, string $message, string $source ): void {
+	private function insert_db_log_entry( string $level, string $message, string $source, ?string $timestamp = null ): void {
 		global $wpdb;
 
 		$wpdb->insert(
 			$wpdb->prefix . 'woocommerce_log',
 			array(
-				'timestamp' => current_time( 'mysql', true ),
+				'timestamp' => $timestamp ?? current_time( 'mysql', true ),
 				'level'     => \WC_Log_Levels::get_level_severity( $level ),
 				'message'   => $message,
 				'source'    => $source,

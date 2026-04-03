@@ -228,9 +228,15 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 * @covers ::build
 	 */
 	public function test_preview_preserves_explicit_logo_when_site_logo_is_disabled(): void {
-		$store_id = $this->factory->post->create();
-		$logo_url = 'https://example.com/preview-same-logo.png';
-		$logo_id  = $this->factory->post->create(
+		$store_id      = $this->factory->post->create();
+		$logo_url      = 'https://example.com/preview-store-logo.png';
+		$logo_id       = $this->factory->post->create(
+			array(
+				'post_type' => 'attachment',
+			)
+		);
+		$site_logo_url = 'https://example.com/preview-site-logo-disabled.png';
+		$site_logo_id  = $this->factory->post->create(
 			array(
 				'post_type' => 'attachment',
 			)
@@ -239,12 +245,16 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		update_post_meta( $store_id, '_use_site_logo', 'no' );
 		update_post_meta( $store_id, '_thumbnail_id', $logo_id );
 
-		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
-			if ( $logo_id !== (int) $id ) {
+		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url, $site_logo_id, $site_logo_url ) {
+			if ( $logo_id === (int) $id ) {
+				return array( $logo_url, 320, 120, true );
+			}
+
+			if ( $site_logo_id !== (int) $id ) {
 				return $out;
 			}
 
-			return array( $logo_url, 320, 120, true );
+			return array( $site_logo_url, 320, 120, true );
 		};
 
 		$store_filter = static function () use ( $store_id ) {
@@ -282,7 +292,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		};
 
 		try {
-			set_theme_mod( 'custom_logo', $logo_id );
+			set_theme_mod( 'custom_logo', $site_logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
 			add_filter( 'woocommerce_pos_get_store', $store_filter );
 
