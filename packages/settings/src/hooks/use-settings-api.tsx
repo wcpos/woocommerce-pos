@@ -53,16 +53,16 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 			});
 			return { previousSettings };
 		},
-		onError: (error, variables, context) => {
+		onSettled: (data, error, variables, context) => {
 			const errorMessage = get(error, 'message');
-			setNotice({ type: 'error', message: errorMessage });
-			addSnackbar({ message: errorMessage, id, status: 'error' });
-			// rollback data
-			queryClient.setQueryData([id], context?.previousSettings);
-		},
-		onSuccess: (data) => {
+			if (errorMessage) {
+				setNotice({ type: 'error', message: errorMessage });
+				addSnackbar({ message: errorMessage, id, status: 'error' });
+				// rollback data
+				return queryClient.setQueryData([id], context?.previousSettings);
+			}
 			addSnackbar({ message: 'Saved', id, status: 'success' });
-			queryClient.setQueryData([id], data);
+			return queryClient.setQueryData([id], data);
 		},
 	});
 
