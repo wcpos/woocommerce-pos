@@ -157,9 +157,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_first_name(): void {
 		// Create some customers.
-		$customer1 = CustomerHelper::create_customer( array( 'first_name' => 'Alice' ) );
-		$customer2 = CustomerHelper::create_customer( array( 'first_name' => 'Zara' ) );
-		$customer3 = CustomerHelper::create_customer( array( 'first_name' => 'Bob' ) );
+		CustomerHelper::create_customer( array( 'first_name' => 'Alice' ) );
+		CustomerHelper::create_customer( array( 'first_name' => 'Zara' ) );
+		CustomerHelper::create_customer( array( 'first_name' => 'Bob' ) );
 
 		// Order by 'first_name' ascending.
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
@@ -194,9 +194,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_last_name(): void {
 		// Create some customers.
-		$customer1 = CustomerHelper::create_customer( array( 'last_name' => 'Anderson' ) );
-		$customer2 = CustomerHelper::create_customer( array( 'last_name' => 'Thompson' ) );
-		$customer3 = CustomerHelper::create_customer( array( 'last_name' => 'Martinez' ) );
+		CustomerHelper::create_customer( array( 'last_name' => 'Anderson' ) );
+		CustomerHelper::create_customer( array( 'last_name' => 'Thompson' ) );
+		CustomerHelper::create_customer( array( 'last_name' => 'Martinez' ) );
 
 		// Order by 'last_name' ascending.
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
@@ -231,9 +231,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_email(): void {
 		// Create some customers.
-		$customer1 = CustomerHelper::create_customer( array( 'email' => 'john.doe@example.com' ) );
-		$customer2 = CustomerHelper::create_customer( array( 'email' => 'sarah.smith@sample.com' ) );
-		$customer3 = CustomerHelper::create_customer( array( 'email' => 'alex.miller@demo.net' ) );
+		CustomerHelper::create_customer( array( 'email' => 'john.doe@example.com' ) );
+		CustomerHelper::create_customer( array( 'email' => 'sarah.smith@sample.com' ) );
+		CustomerHelper::create_customer( array( 'email' => 'alex.miller@demo.net' ) );
 
 		// Order by 'email' ascending.
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
@@ -280,9 +280,9 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_orderby_username(): void {
 		// Create some customers.
-		$customer1 = CustomerHelper::create_customer( array( 'username' => 'alpha' ) );
-		$customer2 = CustomerHelper::create_customer( array( 'username' => 'zeta' ) );
-		$customer3 = CustomerHelper::create_customer( array( 'username' => 'beta' ) );
+		CustomerHelper::create_customer( array( 'username' => 'alpha' ) );
+		CustomerHelper::create_customer( array( 'username' => 'zeta' ) );
+		CustomerHelper::create_customer( array( 'username' => 'beta' ) );
 
 		// Order by 'username' ascending.
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
@@ -447,46 +447,65 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test that generate_username = true auto-generates a username from the email address.
-	 * The POS should force username generation regardless of the store setting.
+	 * Test that generate_username = true auto-generates a username from the email address,
+	 * overriding the WooCommerce store setting when it is set to the opposite value.
 	 */
 	public function test_create_customer_generates_username_from_email(): void {
-		update_option( 'woocommerce_pos_settings_general', array( 'generate_username' => true ) );
+		$prev_pos     = get_option( 'woocommerce_pos_settings_general', array() );
+		$prev_wc      = get_option( 'woocommerce_registration_generate_username' );
+		try {
+			update_option( 'woocommerce_pos_settings_general', array( 'generate_username' => true ) );
+			// Set the WC store option to 'no' so the POS override is the only reason generation works.
+			update_option( 'woocommerce_registration_generate_username', 'no' );
 
-		$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
-		$request->set_body_params(
-			array(
-				'email'    => 'jane.smith@example.com',
-				'password' => '',
-			)
-		);
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
+			$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
+			$request->set_body_params(
+				array(
+					'email'    => 'jane.smith@example.com',
+					'password' => '',
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
 
-		$this->assertEquals( 201, $response->get_status() );
-		// Username should be derived from the email local-part.
-		$this->assertStringStartsWith( 'jane', $data['username'] );
+			$this->assertEquals( 201, $response->get_status() );
+			// Username should be derived from the email local-part.
+			$this->assertStringStartsWith( 'jane', $data['username'] );
+		} finally {
+			update_option( 'woocommerce_pos_settings_general', $prev_pos );
+			update_option( 'woocommerce_registration_generate_username', $prev_wc );
+		}
 	}
 
 	/**
-	 * Test that generate_username = false allows an explicit username to be used.
+	 * Test that generate_username = false allows an explicit username to be used,
+	 * even when the WooCommerce store setting would auto-generate one.
 	 */
 	public function test_create_customer_uses_explicit_username_when_generate_disabled(): void {
-		update_option( 'woocommerce_pos_settings_general', array( 'generate_username' => false ) );
+		$prev_pos = get_option( 'woocommerce_pos_settings_general', array() );
+		$prev_wc  = get_option( 'woocommerce_registration_generate_username' );
+		try {
+			update_option( 'woocommerce_pos_settings_general', array( 'generate_username' => false ) );
+			// Set the WC store option to 'yes' to confirm the POS does not force it.
+			update_option( 'woocommerce_registration_generate_username', 'yes' );
 
-		$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
-		$request->set_body_params(
-			array(
-				'email'    => 'bob.jones@example.com',
-				'username' => 'bob.jones',
-				'password' => '',
-			)
-		);
-		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
+			$request = $this->wp_rest_post_request( '/wcpos/v1/customers' );
+			$request->set_body_params(
+				array(
+					'email'    => 'bob.jones@example.com',
+					'username' => 'bob.jones',
+					'password' => '',
+				)
+			);
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
 
-		$this->assertEquals( 201, $response->get_status() );
-		$this->assertEquals( 'bob.jones', $data['username'] );
+			$this->assertEquals( 201, $response->get_status() );
+			$this->assertEquals( 'bob.jones', $data['username'] );
+		} finally {
+			update_option( 'woocommerce_pos_settings_general', $prev_pos );
+			update_option( 'woocommerce_registration_generate_username', $prev_wc );
+		}
 	}
 
 	/**

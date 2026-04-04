@@ -250,11 +250,13 @@ class Settings {
 		 */
 		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
 
+		global $wpdb;
+
 		$success = update_option( static::$db_prefix . $id, $settings, false );
 
-		// update_option() returns false both when the value is unchanged and on failure.
-		// If the option already exists in the DB, the value was simply unchanged — treat as success.
-		if ( ! $success && false === get_option( static::$db_prefix . $id, false ) ) {
+		// update_option() returns false both when the value is unchanged and on actual DB failure.
+		// Use $wpdb->last_error to distinguish the two: a non-empty error means a real write failure.
+		if ( ! $success && ! empty( $wpdb->last_error ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
 				// translators: %s: Settings group id, ie: 'general' or 'checkout'.
