@@ -190,7 +190,8 @@ class Frontend {
 		/**
 		 * Add path to worker scripts.
 		 */
-		$idb_worker = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
+		$idb_worker  = PLUGIN_URL . 'assets/js/indexeddb.worker.js';
+		$opfs_worker = PLUGIN_URL . 'assets/js/opfs.worker.js';
 
 		// getScript helper and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
@@ -223,6 +224,7 @@ class Frontend {
     }
 
     var idbWorker = '{$idb_worker}';
+    var opfsWorker = '{$opfs_worker}';
     var initialProps = {$initial_props};
     var cdnBaseUrl = '{$cdn_base_url}';
 	var baseUrl = '{$wcpos_base_path}';
