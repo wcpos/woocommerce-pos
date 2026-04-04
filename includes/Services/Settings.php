@@ -250,15 +250,16 @@ class Settings {
 		 */
 		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
 
-		$option_name = static::$db_prefix . $id;
-		$success     = update_option( $option_name, $settings, false );
+		$option_name    = static::$db_prefix . $id;
+		$previous_value = get_option( $option_name, null );
+		$success        = update_option( $option_name, $settings, false );
 
 		if ( ! $success ) {
 			// update_option() returns false both when the value is unchanged (no DB write) and on
-			// actual failure. Compare the stored value to what we tried to save to tell them apart.
-			$current_value = get_option( $option_name, null );
-			$is_noop       = null !== $current_value
-				&& maybe_serialize( $current_value ) === maybe_serialize( $settings );
+			// actual failure. Use the value read *before* the write attempt to avoid a post-write
+			// race: a concurrent request could change the option between our write and a re-read.
+			$is_noop = null !== $previous_value
+				&& maybe_serialize( $previous_value ) === maybe_serialize( $settings );
 
 			if ( ! $is_noop ) {
 				return new WP_Error(
