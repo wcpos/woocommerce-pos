@@ -250,19 +250,24 @@ class Settings {
 		 */
 		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
 
-		global $wpdb;
+		$option_name = static::$db_prefix . $id;
+		$success     = update_option( $option_name, $settings, false );
 
-		$success = update_option( static::$db_prefix . $id, $settings, false );
+		if ( ! $success ) {
+			// update_option() returns false both when the value is unchanged (no DB write) and on
+			// actual failure. Compare the stored value to what we tried to save to tell them apart.
+			$current_value = get_option( $option_name, null );
+			$is_noop       = null !== $current_value
+				&& maybe_serialize( $current_value ) === maybe_serialize( $settings );
 
-		// update_option() returns false both when the value is unchanged and on actual DB failure.
-		// Use $wpdb->last_error to distinguish the two: a non-empty error means a real write failure.
-		if ( ! $success && ! empty( $wpdb->last_error ) ) {
-			return new WP_Error(
-				'woocommerce_pos_settings_error',
-				// translators: %s: Settings group id, ie: 'general' or 'checkout'.
-				\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
-				array( 'status' => 400 )
-			);
+			if ( ! $is_noop ) {
+				return new WP_Error(
+					'woocommerce_pos_settings_error',
+					// translators: %s: Settings group id, ie: 'general' or 'checkout'.
+					\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
+					array( 'status' => 400 )
+				);
+			}
 		}
 
 		$saved_settings = $this->get_settings( $id );
