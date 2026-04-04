@@ -202,6 +202,20 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		);
 
+		/*
+		 * Optionally generate a username from the customer's email address.
+		 * Reads the POS 'generate_username' general setting and overrides the
+		 * store-level 'woocommerce_registration_generate_username' option so the
+		 * POS behaviour is independent of the online-checkout setting.
+		 */
+		$generate_username = wcpos_get_settings( 'general', 'generate_username' );
+		add_filter(
+			'pre_option_woocommerce_registration_generate_username',
+			function () use ( $generate_username ) {
+				return $generate_username ? 'yes' : 'no';
+			}
+		);
+
 		// Proceed with the parent method to handle the creation.
 		return parent::create_item( $request );
 	}
