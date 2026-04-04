@@ -252,9 +252,20 @@ class Settings {
 
 		$success = update_option( static::$db_prefix . $id, $settings, false );
 
-		if ( $success ) {
-			$saved_settings = $this->get_settings( $id );
+		// update_option() returns false both when the value is unchanged and on failure.
+		// If the option already exists in the DB, the value was simply unchanged — treat as success.
+		if ( ! $success && false === get_option( static::$db_prefix . $id, false ) ) {
+			return new WP_Error(
+				'woocommerce_pos_settings_error',
+				// translators: %s: Settings group id, ie: 'general' or 'checkout'.
+				\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
+				array( 'status' => 400 )
+			);
+		}
 
+		$saved_settings = $this->get_settings( $id );
+
+		if ( $success ) {
 			/*
 			 * Fires after settings for a specific section are successfully saved.
 			 *
@@ -266,16 +277,9 @@ class Settings {
 			 * @param string $id             The ID of the settings section that was saved.
 			 */
 			do_action( "woocommerce_pos_saved_{$id}_settings", $saved_settings, $id );
-
-			return $saved_settings;
 		}
 
-		return new WP_Error(
-			'woocommerce_pos_settings_error',
-			// translators: %s: Settings group id, ie: 'general' or 'checkout'.
-			\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
-			array( 'status' => 400 )
-		);
+		return $saved_settings;
 	}
 
 	/**

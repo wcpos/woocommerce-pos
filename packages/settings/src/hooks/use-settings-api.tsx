@@ -39,15 +39,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				path: endpoint,
 				method: 'POST',
 				data,
-			}).catch((err) => {
-				console.error(err);
-				return err;
 			});
-
-			// if we have an error response, set the notice
-			if (response?.code && response?.message) {
-				setNotice({ type: 'error', message: response?.message });
-			}
 
 			return response;
 		},
@@ -61,16 +53,16 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 			});
 			return { previousSettings };
 		},
-		onSettled: (data, error, variables, context) => {
+		onError: (error, variables, context) => {
 			const errorMessage = get(error, 'message');
-			if (errorMessage) {
-				setNotice({ type: 'error', message: errorMessage });
-				addSnackbar({ message: errorMessage, id, status: 'error' });
-				// rollback data
-				return queryClient.setQueryData([id], context?.previousSettings);
-			}
+			setNotice({ type: 'error', message: errorMessage });
+			addSnackbar({ message: errorMessage, id, status: 'error' });
+			// rollback data
+			queryClient.setQueryData([id], context?.previousSettings);
+		},
+		onSuccess: (data) => {
 			addSnackbar({ message: 'Saved', id, status: 'success' });
-			return queryClient.setQueryData([id], data);
+			queryClient.setQueryData([id], data);
 		},
 	});
 
