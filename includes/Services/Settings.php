@@ -250,11 +250,30 @@ class Settings {
 		 */
 		$settings = apply_filters( "woocommerce_pos_pre_save_{$id}_settings", $settings, $id );
 
-		$success = update_option( static::$db_prefix . $id, $settings, false );
+		$option_name    = static::$db_prefix . $id;
+		$previous_value = get_option( $option_name, null );
+		$success        = update_option( $option_name, $settings, false );
+
+		if ( ! $success ) {
+			// update_option() returns false both when the value is unchanged (no DB write) and on
+			// actual failure. Use the value read *before* the write attempt to avoid a post-write
+			// race: a concurrent request could change the option between our write and a re-read.
+			$is_noop = null !== $previous_value
+				&& maybe_serialize( $previous_value ) === maybe_serialize( $settings );
+
+			if ( ! $is_noop ) {
+				return new WP_Error(
+					'woocommerce_pos_settings_error',
+					// translators: %s: Settings group id, ie: 'general' or 'checkout'.
+					\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		$saved_settings = $this->get_settings( $id );
 
 		if ( $success ) {
-			$saved_settings = $this->get_settings( $id );
-
 			/*
 			 * Fires after settings for a specific section are successfully saved.
 			 *
@@ -266,16 +285,9 @@ class Settings {
 			 * @param string $id             The ID of the settings section that was saved.
 			 */
 			do_action( "woocommerce_pos_saved_{$id}_settings", $saved_settings, $id );
-
-			return $saved_settings;
 		}
 
-		return new WP_Error(
-			'woocommerce_pos_settings_error',
-			// translators: %s: Settings group id, ie: 'general' or 'checkout'.
-			\sprintf( __( 'Can not save settings with id %s', 'woocommerce-pos' ), $id ),
-			array( 'status' => 400 )
-		);
+		return $saved_settings;
 	}
 
 	/**

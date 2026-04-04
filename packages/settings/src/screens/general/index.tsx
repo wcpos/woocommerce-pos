@@ -50,6 +50,17 @@ function General() {
 						/>
 					</Label>
 				</FormRow>
+				<FormRow>
+					<Label tip={t('settings.restore_stock_on_delete_tip')}>
+						<Toggle
+							checked={!!data?.restore_stock_on_delete}
+							onChange={(restore_stock_on_delete: boolean) => {
+								mutate({ restore_stock_on_delete });
+							}}
+							label={t('settings.restore_stock_on_delete')}
+						/>
+					</Label>
+				</FormRow>
 				<FormRow label={t('settings.barcode_field')}>
 					<Label tip={t('settings.barcode_field_tip')}>
 						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
@@ -62,19 +73,17 @@ function General() {
 						</React.Suspense>
 					</Label>
 				</FormRow>
-				<FormRow>
-					<Label tip={t('settings.restore_stock_on_delete_tip')}>
-						<Toggle
-							checked={!!data?.restore_stock_on_delete}
-							onChange={(restore_stock_on_delete: boolean) => {
-								mutate({ restore_stock_on_delete });
-							}}
-							label={t('settings.restore_stock_on_delete')}
-						/>
-					</Label>
-				</FormRow>
 			</FormSection>
 			<FormSection title={t('settings.customers_section_title')}>
+				<FormRow>
+					<Toggle
+						checked={!!data?.generate_username}
+						onChange={(generate_username: boolean) => {
+							mutate({ generate_username });
+						}}
+						label={t('settings.generate_username')}
+					/>
+				</FormRow>
 				<FormRow label={t('settings.default_customer')}>
 					<Label tip={t('settings.default_customer_tip')}>
 						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
@@ -96,15 +105,6 @@ function General() {
 							}}
 						/>
 					</div>
-				</FormRow>
-				<FormRow>
-					<Toggle
-						checked={!!data?.generate_username}
-						onChange={(generate_username: boolean) => {
-							mutate({ generate_username });
-						}}
-						label={t('settings.generate_username')}
-					/>
 				</FormRow>
 			</FormSection>
 		</>

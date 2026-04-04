@@ -39,15 +39,7 @@ const useSettingsApi = (id: PlaceholderKeys) => {
 				path: endpoint,
 				method: 'POST',
 				data,
-			}).catch((err) => {
-				console.error(err);
-				return err;
 			});
-
-			// if we have an error response, set the notice
-			if (response?.code && response?.message) {
-				setNotice({ type: 'error', message: response?.message });
-			}
 
 			return response;
 		},

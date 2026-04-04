@@ -109,6 +109,28 @@ class Test_Settings_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that saving the same settings twice (rapid-click scenario) succeeds
+	 * and does not return a WP_Error.
+	 *
+	 * Update_option() returns false when the value is unchanged, which happened
+	 * when two requests arrived within the same second and shared the same
+	 * date_modified_gmt timestamp.
+	 */
+	public function test_save_settings_same_value_twice_succeeds(): void {
+		$settings = array( 'pos_only_products' => true );
+
+		// First save — creates the option.
+		$result1 = $this->settings->save_settings( 'general', $settings );
+		$this->assertIsArray( $result1 );
+
+		// Second save with the same values — update_option returns false (unchanged).
+		// Should still return settings array, not WP_Error.
+		$result2 = $this->settings->save_settings( 'general', $settings );
+		$this->assertIsArray( $result2 );
+		$this->assertNotInstanceOf( WP_Error::class, $result2 );
+	}
+
+	/**
 	 * Checkout.
 	 */
 	public function test_get_checkout_default_settings(): void {
