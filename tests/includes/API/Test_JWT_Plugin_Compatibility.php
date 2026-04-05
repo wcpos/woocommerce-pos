@@ -126,8 +126,14 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		// Place the token in $_SERVER so WCPOS's get_auth_header() finds it.
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
-		// Reset current user — authentication must come from the Bearer token.
-		wp_set_current_user( 0 );
+		// Simulate a fresh unauthenticated request. We must set $current_user to
+		// null (not use wp_set_current_user(0)) because wp_set_current_user(0)
+		// caches a WP_User(0) object, which causes _wp_get_current_user() to
+		// return early and skip the determine_current_user filter entirely.
+		// Setting it to null forces WordPress to re-run the filter chain when
+		// current_user_can() is first called inside rest_pre_dispatch.
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
@@ -151,7 +157,8 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		// Use a token that is not valid for WCPOS (neither JWT plugin nor WCPOS can validate it).
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer this.is.not.a.valid.token'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
-		wp_set_current_user( 0 );
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
@@ -214,7 +221,8 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
 
-		wp_set_current_user( 0 );
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
