@@ -173,6 +173,10 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Non-JWT auth errors from other plugins must not be cleared just because a
 	 * WCPOS Bearer token is valid.
+	 *
+	 * Note: rest_authentication_errors is only triggered from serve_request(), not
+	 * dispatch(). We therefore test it directly via apply_filters() rather than
+	 * through a full HTTP dispatch cycle.
 	 */
 	public function test_non_jwt_auth_errors_are_not_cleared_when_wcpos_auth_succeeds(): void {
 		$non_jwt_error = new WP_Error(
@@ -181,6 +185,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 			array( 'status' => 403 )
 		);
 
+		// Plugin at priority 10 always returns the maintenance error.
 		$this->sim_auth_errors_cb = function ( $error ) use ( $non_jwt_error ) {
 			if ( ! empty( $error ) ) {
 				return $error;
@@ -189,20 +194,28 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		};
 		add_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
 
+		// Generate a valid WCPOS token and place it in the server superglobal.
 		$user         = get_user_by( 'id', $this->user );
 		$auth_service = Auth::instance();
 		$access_token = $auth_service->generate_access_token( $user );
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 
-		wp_set_current_user( 0 );
+		// Trigger determine_current_user so WCPOS sets $authenticated_via_wcpos = true
+		// on the API instance (simulating what happens earlier in a real request).
+		apply_filters( 'determine_current_user', false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
-		$response = $this->server->dispatch( $request );
+		// Now run rest_authentication_errors — the non-JWT error must survive.
+		$result = apply_filters( 'rest_authentication_errors', null ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
 
-		$this->assertEquals(
-			403,
-			$response->get_status(),
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
 			'Non-JWT auth errors must not be cleared by WCPOS token authentication'
+		);
+		$this->assertSame(
+			'maintenance_mode_lock',
+			$result->get_error_code(),
+			'The non-JWT maintenance_mode_lock error should be passed through unchanged'
 		);
 	}
 

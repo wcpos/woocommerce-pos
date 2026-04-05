@@ -276,9 +276,12 @@ class API {
 		// through. This covers the case where determine_current_user was skipped
 		// (WC #26847) or where the JWT plugin ran at a higher priority.
 		if ( ! empty( $errors ) ) {
-			$is_jwt_plugin_error = is_wp_error( $errors ) && 0 === strpos( (string) $errors->get_error_code(), 'jwt_auth_' );
+			// Only clear errors that originate from JWT authentication plugins. Errors
+			// from other mechanisms (maintenance locks, IP restrictions, etc.) should
+			// be passed through even when the WCPOS Bearer token is valid.
+			$is_jwt_plugin_error = is_wp_error( $errors ) && 0 === strpos( $errors->get_error_code(), 'jwt_auth_' );
 
-			if ( ! $this->authenticated_via_wcpos ) {
+			if ( $is_jwt_plugin_error && ! $this->authenticated_via_wcpos ) {
 				$user_id = $this->authenticate( false );
 				if ( $user_id && ! is_wp_error( $user_id ) ) {
 					wp_set_current_user( $user_id );
@@ -286,14 +289,8 @@ class API {
 				}
 			}
 
-			// Clear the earlier error only for known JWT-plugin conflict errors, and
-			// only after confirming this request still validates with WCPOS auth.
 			if ( $this->authenticated_via_wcpos && $is_jwt_plugin_error ) {
-				$user_id = $this->authenticate( false );
-				if ( $user_id && ! is_wp_error( $user_id ) ) {
-					wp_set_current_user( $user_id );
-					return null;
-				}
+				return null;
 			}
 
 			return $errors;
