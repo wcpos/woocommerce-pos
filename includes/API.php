@@ -222,9 +222,13 @@ class API {
 	 * validate a Bearer token. We treat that the same as false so we can still
 	 * authenticate the request with our own JWT.
 	 *
+	 * Note: this filter may not be called at all when WordPress has already cached
+	 * the current user (WooCommerce issue #26847). The rest_authentication_errors
+	 * fallback below handles that scenario.
+	 *
 	 * @param false|int|\WP_Error $user_id User ID if one has been determined, false otherwise.
 	 *
-	 * @return false|int|\WP_Error
+	 * @return false|int
 	 */
 	public function determine_current_user( $user_id ) {
 		$this->is_auth_checked = true;
@@ -250,29 +254,43 @@ class API {
 	}
 
 	/**
-	 * It's possible that the determine_current_user filter above is not called
-	 * https://github.com/woocommerce/woocommerce/issues/26847.
+	 * Handles two distinct failure modes:
 	 *
-	 * We need to make sure our authentication runs in that case.
+	 * 1. WooCommerce issue #26847: determine_current_user may not be called when
+	 *    WordPress has already cached the current user. We attempt auth here as a
+	 *    fallback.
 	 *
-	 * Additionally, when a third-party JWT plugin is active it may return a
-	 * WP_Error here because it tried to validate our Bearer token with its own
-	 * secret and failed. If WCPOS already authenticated the request successfully
-	 * (via determine_current_user), we clear that stale error so it does not
-	 * block the request.
+	 * 2. JWT plugin conflict: a third-party JWT plugin (e.g. jwt-authentication-for-wp-rest-api)
+	 *    sees our Bearer token, fails to validate it with its own secret, and returns
+	 *    a WP_Error via rest_authentication_errors at priority 10. We run at priority 50
+	 *    and attempt our own Bearer-token validation. If it succeeds, we clear the
+	 *    stale error — our authentication wins.
 	 *
 	 * @param mixed $errors Authentication errors.
 	 *
 	 * @return mixed
 	 */
 	public function rest_authentication_errors( $errors ) {
+		// If there is already an error from a previous filter (e.g. a JWT plugin that
+		// rejected our Bearer token), attempt WCPOS authentication before passing it
+		// through. This covers the case where determine_current_user was skipped
+		// (WC #26847) or where the JWT plugin ran at a higher priority.
 		if ( ! empty( $errors ) ) {
-			// If WCPOS already validated this request's Bearer token, a third-party
-			// JWT plugin may have left a WP_Error because it could not validate the
-			// same token with its own secret. Clear it — our authentication wins.
+			if ( ! $this->authenticated_via_wcpos ) {
+				$user_id = $this->authenticate( false );
+				if ( $user_id && ! is_wp_error( $user_id ) ) {
+					wp_set_current_user( $user_id );
+					$this->authenticated_via_wcpos = true;
+				}
+			}
+
+			// Clear the earlier error only when we have confirmed this is a valid
+			// WCPOS-authenticated request. The error came from a plugin that tried
+			// to validate our Bearer token with a different secret.
 			if ( $this->authenticated_via_wcpos ) {
 				return null;
 			}
+
 			return $errors;
 		}
 

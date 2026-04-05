@@ -34,9 +34,34 @@ use WP_Error;
  */
 class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Tear down: always clean up the Authorization header.
+	 * Closure registered on determine_current_user during the test, kept so
+	 * tearDown can remove it explicitly.
+	 *
+	 * @var callable|null
+	 */
+	private $sim_determine_cb = null;
+
+	/**
+	 * Closure registered on rest_authentication_errors during the test, kept
+	 * so tearDown can remove it explicitly.
+	 *
+	 * @var callable|null
+	 */
+	private $sim_auth_errors_cb = null;
+
+	/**
+	 * Tear down: remove any filters added by the simulation and clean up the
+	 * Authorization header so state does not leak between tests.
 	 */
 	public function tearDown(): void {
+		if ( null !== $this->sim_determine_cb ) {
+			remove_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
+			$this->sim_determine_cb = null;
+		}
+		if ( null !== $this->sim_auth_errors_cb ) {
+			remove_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
+			$this->sim_auth_errors_cb = null;
+		}
 		unset( $_SERVER['HTTP_AUTHORIZATION'] );
 		parent::tearDown();
 	}
@@ -51,37 +76,31 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	private function simulate_conflicting_jwt_plugin( WP_Error &$stored_error ): void {
 		// Priority 10: JWT plugin intercepts Bearer token, fails validation,
 		// stores error for later, returns $user_id unchanged (false).
-		add_filter(
-			'determine_current_user',
-			function ( $user_id ) use ( &$stored_error ) {
-				$auth = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) ) : '';
-				if ( str_starts_with( $auth, 'Bearer ' ) ) {
-					$stored_error = new WP_Error(
-						'jwt_auth_bad_config',
-						'[jwt_auth] The Secret Key is not configured.',
-						array( 'status' => 403 )
-					);
-				}
-				return $user_id;
-			},
-			10
-		);
+		$this->sim_determine_cb = function ( $user_id ) use ( &$stored_error ) {
+			$auth = isset( $_SERVER['HTTP_AUTHORIZATION'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) ) : '';
+			if ( 0 === strpos( $auth, 'Bearer ' ) ) {
+				$stored_error = new WP_Error(
+					'jwt_auth_bad_config',
+					'[jwt_auth] The Secret Key is not configured.',
+					array( 'status' => 403 )
+				);
+			}
+			return $user_id;
+		};
+		add_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
 
 		// Default priority 10: JWT plugin returns its stored error,
 		// which blocks the request before WCPOS gets a chance to clear it.
-		add_filter(
-			'rest_authentication_errors',
-			function ( $error ) use ( &$stored_error ) {
-				if ( ! empty( $error ) ) {
-					return $error;
-				}
-				if ( ! empty( $stored_error ) ) {
-					return $stored_error;
-				}
+		$this->sim_auth_errors_cb = function ( $error ) use ( &$stored_error ) {
+			if ( ! empty( $error ) ) {
 				return $error;
-			},
-			10
-		);
+			}
+			if ( ! empty( $stored_error ) ) {
+				return $stored_error;
+			}
+			return $error;
+		};
+		add_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
 	}
 
 	/**
@@ -95,7 +114,7 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	 * the user in determine_current_user.
 	 */
 	public function test_wcpos_bearer_token_works_when_third_party_jwt_plugin_active(): void {
-		$jwt_plugin_error = new WP_Error(); // placeholder.; will be replaced.
+		$jwt_plugin_error = new WP_Error(); // placeholder; will be replaced.
 
 		$this->simulate_conflicting_jwt_plugin( $jwt_plugin_error );
 
@@ -137,10 +156,10 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertNotEquals(
-			200,
+		$this->assertEquals(
+			403,
 			$response->get_status(),
-			'An invalid Bearer token should not grant access even when a JWT plugin is active'
+			'An invalid Bearer token should be rejected with 403 even when a JWT plugin is active'
 		);
 	}
 
