@@ -209,13 +209,10 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		// Subscriber has no access_woocommerce_pos capability.
 
 		// Simulate the JWT plugin successfully authenticating a user with its own token.
-		add_filter(
-			'determine_current_user',
-			function () use ( $subscriber ) {
-				return $subscriber; // JWT plugin validated its own token, returns user_id.
-			},
-			10
-		);
+		$this->sim_determine_cb = function () use ( $subscriber ) {
+			return $subscriber; // JWT plugin validated its own token, returns user_id.
+		};
+		add_filter( 'determine_current_user', $this->sim_determine_cb, 10 );
 
 		wp_set_current_user( 0 );
 
