@@ -164,6 +164,42 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Non-JWT auth errors from other plugins must not be cleared just because a
+	 * WCPOS Bearer token is valid.
+	 */
+	public function test_non_jwt_auth_errors_are_not_cleared_when_wcpos_auth_succeeds(): void {
+		$non_jwt_error = new WP_Error(
+			'maintenance_mode_lock',
+			'Maintenance lock active.',
+			array( 'status' => 403 )
+		);
+
+		$this->sim_auth_errors_cb = function ( $error ) use ( $non_jwt_error ) {
+			if ( ! empty( $error ) ) {
+				return $error;
+			}
+			return $non_jwt_error;
+		};
+		add_filter( 'rest_authentication_errors', $this->sim_auth_errors_cb, 10 );
+
+		$user         = get_user_by( 'id', $this->user );
+		$auth_service = Auth::instance();
+		$access_token = $auth_service->generate_access_token( $user );
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		wp_set_current_user( 0 );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals(
+			403,
+			$response->get_status(),
+			'Non-JWT auth errors must not be cleared by WCPOS token authentication'
+		);
+	}
+
+	/**
 	 * A third-party app user authenticated via the JWT plugin (using that
 	 * plugin's own token) who lacks access_woocommerce_pos should be blocked
 	 * from POS endpoints — the capability gate must still apply.
