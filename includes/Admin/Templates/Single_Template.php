@@ -487,12 +487,12 @@ class Single_Template {
 			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
-		// Engine and paper size are only settable on new templates (auto-drafts).
-		// Once saved, the engine is locked — changing it would break the template content.
-		$is_new = 'auto-draft' === $post->post_status;
-
-		if ( $is_new ) {
-			// Save engine and derive output_type + language.
+		// Engine and paper size are only settable on new templates (first save).
+		// Once the engine meta exists the engine is locked — changing it would
+		// break the template content. We check metadata_exists rather than
+		// post_status because save_post fires after WordPress has already
+		// transitioned auto-draft → draft/publish.
+		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
 			if ( isset( $_POST['wcpos_template_engine'] ) ) {
 				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
 				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
@@ -506,10 +506,12 @@ class Single_Template {
 					update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $engine ] );
 				}
 			} else {
-				// Default for new templates with no engine selected.
-				update_post_meta( $post_id, '_template_engine', 'logicless' );
+				// Existing posts with no stored engine (pre-date this feature)
+				// default to legacy-php so old PHP templates are not reclassified.
+				// New auto-drafts will have the engine POSTed from the form above.
+				update_post_meta( $post_id, '_template_engine', 'legacy-php' );
 				update_post_meta( $post_id, '_template_output_type', 'html' );
-				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP['logicless'] );
+				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP['legacy-php'] );
 			}
 
 			// Save paper width — only relevant for thermal engine.
@@ -520,12 +522,6 @@ class Single_Template {
 					update_post_meta( $post_id, '_template_paper_width', $paper_width );
 				}
 			}
-		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			// Existing posts with no stored engine (pre-date this feature) default to
-			// legacy-php so old PHP templates are never silently reclassified.
-			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
-			update_post_meta( $post_id, '_template_output_type', 'html' );
-			update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP['legacy-php'] );
 		}
 
 		// Save raw content for offline-capable engines only. Legacy-php templates
