@@ -144,7 +144,7 @@ export function PreviewModal({
 			>
 				{/* Header */}
 				<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:p-4 wcpos:border-b wcpos:border-gray-200">
-					<div>
+					<div className="wcpos:min-w-0">
 						<h2 id={titleId} className="wcpos:text-lg wcpos:font-semibold wcpos:m-0">
 							{templateName}
 						</h2>
@@ -154,7 +154,7 @@ export function PreviewModal({
 							</p>
 						)}
 					</div>
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:shrink-0">
 						<PreviewToggle
 							source={source}
 							disabled={!hasPosOrders}

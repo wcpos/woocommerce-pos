@@ -10,7 +10,90 @@ import { usePreviewData } from './hooks/use-preview-data';
 import { t } from './translations';
 import type { EditorConfig } from './types';
 
-function TemplateInfoBar({ engine, paperWidth }: { engine: string; paperWidth: string | null }) {
+const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
+	logicless: `<div style="font-family: Arial, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 380px; margin: 0 auto;">
+
+  <h1 style="font-size: 16px; text-align: center; margin: 0 0 4px;">{{store.name}}</h1>
+  <p style="text-align: center; margin: 0 0 16px; color: #666; font-size: 11px;">{{store.address_lines.0}}</p>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 0 0 12px;">
+
+  <p style="margin: 0 0 12px; font-size: 11px; color: #666;">
+    Order #{{meta.order_number}} &mdash; {{meta.created_at_local}}
+  </p>
+
+  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+    {{#lines}}
+    <tr>
+      <td style="padding: 3px 0;">{{name}} &times;{{qty}}</td>
+      <td style="padding: 3px 0; text-align: right;">{{line_total_incl}}</td>
+    </tr>
+    {{/lines}}
+  </table>
+
+  <hr style="border: none; border-top: 1px solid #ddd; margin: 0 0 12px;">
+
+  <table style="width: 100%;">
+    <tr>
+      <td><strong>Total</strong></td>
+      <td style="text-align: right;"><strong>{{totals.total_incl}}</strong></td>
+    </tr>
+  </table>
+
+  <p style="text-align: center; margin: 20px 0 0; font-size: 11px; color: #666;">Thank you for your purchase!</p>
+</div>`,
+
+	thermal: `<receipt paper-width="48">
+  <align mode="center">
+    <bold><size width="2" height="2">{{store.name}}</size></bold>
+    <text>{{store.address_lines.0}}</text>
+  </align>
+  <line />
+  <row>
+    <col width="24">Order #{{meta.order_number}}</col>
+    <col width="24" align="right">{{meta.created_at_local}}</col>
+  </row>
+  <line />
+  {{#lines}}
+  <row>
+    <col width="24">{{name}} x{{qty}}</col>
+    <col width="24" align="right">{{line_total_incl}}</col>
+  </row>
+  {{/lines}}
+  <line />
+  <row>
+    <col width="24"><bold>Total</bold></col>
+    <col width="24" align="right"><bold>{{totals.total_incl}}</bold></col>
+  </row>
+  <feed lines="3" />
+  <cut />
+</receipt>`,
+
+	'legacy-php': `<?php
+/**
+ * Custom Receipt Template
+ *
+ * @var WC_Order $order The WooCommerce order object.
+ */
+?>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt</title>
+</head>
+<body style="font-family: Arial, sans-serif; font-size: 13px; padding: 24px; max-width: 380px; margin: 0 auto;">
+  <h1><?php echo esc_html( get_bloginfo( 'name' ) ); ?></h1>
+  <p>Order #<?php echo esc_html( $order->get_order_number() ); ?></p>
+</body>
+</html>`,
+};
+
+function getDefaultDoc(postContent: string, engine: EditorConfig['engine']): string {
+	return postContent || STARTER_SHELLS[engine];
+}
+
+function TemplateInfoBar({ engine, paperWidth }: { engine: EditorConfig['engine']; paperWidth: string | null }) {
 	let icon: string;
 	let text: string;
 	let bgClass: string;
@@ -43,16 +126,57 @@ interface AppProps {
 }
 
 export function App({ config }: AppProps) {
-	const [content, setContent] = useState(config.postContent);
+	const defaultDoc = getDefaultDoc(config.postContent, config.engine);
+
+	const [engine, setEngine] = useState(config.engine);
+	// initialDoc drives CodeMirror reinit (via useEffect deps in use-codemirror).
+	// Only update this when you want to reset the editor to new content + language.
+	const [initialDoc, setInitialDoc] = useState(defaultDoc);
+	const [content, setContent] = useState(defaultDoc);
+
+	// Keep a ref so the engine-change handler can read current content without
+	// a stale closure, and without putting content in the effect deps.
+	const contentRef = useRef(defaultDoc);
+
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
 	const preview = usePreviewData(config.sampleData, config.templateId, config.hasPosOrders);
 
+	// Sync initial content to the hidden WP textarea on mount.
+	// Use a stable ref so this effect has no deps other than the stable syncContent.
+	const defaultDocRef = useRef(defaultDoc);
 	useEffect(() => {
-		syncContent(config.postContent);
-	}, [syncContent, config.postContent]);
+		syncContent(defaultDocRef.current);
+	}, [syncContent]);
+
+	// Listen for engine changes dispatched by the PHP metabox select
+	// (see Single_Template.php — dispatches wcposEngineChange on <select> change).
+	useEffect(() => {
+		const handler = (e: Event) => {
+			const detail = (e as CustomEvent<{ engine: string }>).detail;
+			// Guard: ignore unknown engine values that are not in STARTER_SHELLS.
+			if (!(detail.engine in STARTER_SHELLS)) return;
+			const newEngine = detail.engine as EditorConfig['engine'];
+
+			const currentContent = contentRef.current;
+			// Only replace with a starter shell if the editor still holds the old
+			// starter (or is empty). Preserve real work the user has already typed.
+			const isStarterOrEmpty = currentContent === '' || currentContent === STARTER_SHELLS[engine];
+			const nextDoc = isStarterOrEmpty ? STARTER_SHELLS[newEngine] : currentContent;
+
+			setEngine(newEngine);
+			setInitialDoc(nextDoc); // triggers CodeMirror reinit with new language + content
+			setContent(nextDoc);
+			contentRef.current = nextDoc;
+			syncContent(nextDoc);
+		};
+
+		window.addEventListener('wcposEngineChange', handler);
+		return () => window.removeEventListener('wcposEngineChange', handler);
+	}, [engine, syncContent]);
 
 	const handleChange = useCallback((newContent: string) => {
+		contentRef.current = newContent;
 		setContent(newContent);
 		syncContent(newContent);
 	}, [syncContent]);
@@ -63,7 +187,7 @@ export function App({ config }: AppProps) {
 		}
 	}, []);
 
-	const showFieldPicker = config.engine === 'logicless' || config.engine === 'thermal';
+	const showFieldPicker = engine === 'logicless' || engine === 'thermal';
 
 	const previewToggle = (
 		<PreviewToggle
@@ -75,33 +199,33 @@ export function App({ config }: AppProps) {
 
 	return (
 		<>
-			<TemplateInfoBar engine={config.engine} paperWidth={config.paperWidth} />
+			<TemplateInfoBar engine={engine} paperWidth={config.paperWidth} />
 			<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4">
 				{showFieldPicker && (
 					<FieldPicker
 						schema={config.fieldSchema}
-						engine={config.engine}
+						engine={engine}
 						onInsertField={handleInsertField}
 					/>
 				)}
 
 				<CodeEditor
-					initialDoc={config.postContent}
-					engine={config.engine}
+					initialDoc={initialDoc}
+					engine={engine}
 					onChange={handleChange}
 					onInsertRef={insertRef}
 				/>
 			</div>
 
 			<div className="wcpos:mt-4">
-				{config.engine === 'thermal' ? (
+				{engine === 'thermal' ? (
 					<ThermalPreview
 						content={content}
 						sampleData={preview.data}
 						loading={preview.loading}
 						sourcePicker={previewToggle}
 					/>
-				) : config.engine === 'logicless' ? (
+				) : engine === 'logicless' ? (
 					<LivePreview
 						content={content}
 						sampleData={preview.data}

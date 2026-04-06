@@ -12,7 +12,7 @@ import { mustacheOverlay } from '../codemirror/mustache-language';
 
 interface UseCodemirrorOptions {
 	initialDoc: string;
-	engine: 'logicless' | 'legacy-php';
+	engine: 'logicless' | 'legacy-php' | 'thermal';
 	onChange: (content: string) => void;
 }
 
@@ -25,9 +25,9 @@ export function useCodemirror({ initialDoc, engine, onChange }: UseCodemirrorOpt
 	useEffect(() => {
 		if (!containerRef.current) return;
 
-		const languageExtension = engine === 'logicless'
-			? [html(), mustacheOverlay]
-			: [php()];
+		const languageExtension = engine === 'legacy-php'
+			? [php()]
+			: [html(), mustacheOverlay];
 
 		const state = EditorState.create({
 			doc: initialDoc,
