@@ -1007,9 +1007,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 			$data = $response->get_data();
 			$this->assertEquals( 'thermal', $data['engine'] );
-			$this->assertArrayHasKey( 'template_content', $data );
+			$this->assertArrayHasKey( 'preview_html', $data );
 			$this->assertArrayHasKey( 'receipt_data', $data );
-			$this->assertStringContainsString( '<receipt', $data['template_content'] );
+			$this->assertStringContainsString( '<!DOCTYPE html>', $data['preview_html'] );
 			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields should be pre-formatted strings.
@@ -1044,7 +1044,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $response->get_data();
 		$this->assertEquals( 'thermal', $data['engine'] );
-		$this->assertArrayHasKey( 'template_content', $data );
+		$this->assertArrayHasKey( 'preview_html', $data );
 		$this->assertArrayHasKey( 'receipt_data', $data );
 		// Mock data has order_id 1234.
 		$this->assertEquals( 1234, $data['receipt_data']['meta']['order_id'] );
