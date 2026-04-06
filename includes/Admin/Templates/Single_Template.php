@@ -188,7 +188,7 @@ class Single_Template {
 		wp_nonce_field( 'wcpos_template_settings', 'wcpos_template_settings_nonce' );
 
 		$template    = TemplatesManager::get_template( $post->ID );
-		$engine      = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+		$engine      = $template ? ( $template['engine'] ?? 'logicless' ) : 'logicless';
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
 
@@ -251,6 +251,7 @@ class Single_Template {
 					if (descEl) {
 						descEl.textContent = descriptions[val] || '';
 					}
+					window.dispatchEvent(new CustomEvent('wcposEngineChange', { detail: { engine: val } }));
 				});
 			}
 		})();
@@ -473,9 +474,9 @@ class Single_Template {
 				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $engine ] );
 			}
 		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+			update_post_meta( $post_id, '_template_engine', 'logicless' );
 			update_post_meta( $post_id, '_template_output_type', 'html' );
-			update_post_meta( $post_id, '_template_language', 'php' );
+			update_post_meta( $post_id, '_template_language', 'html' );
 		}
 
 		// Save raw content for offline-capable engines only. Legacy-php templates
@@ -587,7 +588,7 @@ class Single_Template {
 	 */
 	private function get_editor_inline_script( \WP_Post $post ): string {
 		$template = TemplatesManager::get_template( $post->ID );
-		$engine   = $template ? ( $template['engine'] ?? 'legacy-php' ) : 'legacy-php';
+		$engine   = $template ? ( $template['engine'] ?? 'logicless' ) : 'logicless';
 
 		// Get sample receipt data from the preview builder.
 		$sample_data = ( new \WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder() )->build();
