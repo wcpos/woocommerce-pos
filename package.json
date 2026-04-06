@@ -51,7 +51,7 @@
   "pnpm": {
     "overrides": {
       "@wordpress/upload-media": "0.24.0",
-      "@asamuzakjp/css-color": "5.0.1"
+      "lru-cache": "10.4.3"
     }
   },
   "packageManager": "pnpm@10.8.0"
