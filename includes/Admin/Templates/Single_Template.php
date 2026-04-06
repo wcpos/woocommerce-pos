@@ -211,8 +211,9 @@ class Single_Template {
 		$engine      = self::get_editor_engine( $post );
 		$paper_width = $template ? ( $template['paper_width'] ?? '' ) : '';
 		$is_premade  = $template && ! empty( $template['is_premade'] );
+		$is_new      = 'auto-draft' === $post->post_status;
 
-		$disabled = $is_premade ? 'disabled="disabled"' : '';
+		$disabled = ! $is_new ? 'disabled="disabled"' : '';
 
 		$engines = self::get_engine_options();
 
@@ -240,7 +241,7 @@ class Single_Template {
 
 		<!-- Paper Size — only visible for thermal engine -->
 		<?php
-		$paper_disabled = $is_premade || 'thermal' !== $engine ? 'disabled="disabled"' : '';
+		$paper_disabled = ! $is_new || 'thermal' !== $engine ? 'disabled="disabled"' : '';
 		?>
 		<p id="wcpos-paper-size-field" style="<?php echo 'thermal' !== $engine ? 'display:none;' : ''; ?>">
 			<label><strong><?php esc_html_e( 'Paper Size', 'woocommerce-pos' ); ?></strong></label>
@@ -250,7 +251,7 @@ class Single_Template {
 			</select>
 		</p>
 
-		<?php if ( ! $is_premade ) : ?>
+		<?php if ( $is_new ) : ?>
 		<script>
 		(function() {
 			var engineSelect = document.getElementById('wcpos-template-engine');
@@ -486,26 +487,41 @@ class Single_Template {
 			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
-		// Save engine and derive output_type + language.
-		if ( isset( $_POST['wcpos_template_engine'] ) ) {
-			$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
-			if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
-				update_post_meta( $post_id, '_template_engine', $engine );
+		// Engine and paper size are only settable on new templates (first save).
+		// Once the engine meta exists the engine is locked — changing it would
+		// break the template content. We check metadata_exists rather than
+		// post_status because save_post fires after WordPress has already
+		// transitioned auto-draft → draft/publish.
+		if ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
+			if ( isset( $_POST['wcpos_template_engine'] ) ) {
+				$engine = sanitize_text_field( wp_unslash( $_POST['wcpos_template_engine'] ) );
+				if ( \in_array( $engine, array_keys( self::get_engine_options() ), true ) ) {
+					update_post_meta( $post_id, '_template_engine', $engine );
 
-				// Derive output_type from engine.
-				$output_type = 'thermal' === $engine ? 'escpos' : 'html';
-				update_post_meta( $post_id, '_template_output_type', $output_type );
+					// Derive output_type from engine.
+					$output_type = 'thermal' === $engine ? 'escpos' : 'html';
+					update_post_meta( $post_id, '_template_output_type', $output_type );
 
-				// Derive language from engine.
-				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $engine ] );
+					// Derive language from engine.
+					update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $engine ] );
+				}
+			} else {
+				// Existing posts with no stored engine (pre-date this feature)
+				// default to legacy-php so old PHP templates are not reclassified.
+				// New auto-drafts will have the engine POSTed from the form above.
+				update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+				update_post_meta( $post_id, '_template_output_type', 'html' );
+				update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP['legacy-php'] );
 			}
-		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
-			// New auto-drafts default to logicless; existing posts with no engine meta
-			// keep legacy-php so old PHP templates are not silently reclassified.
-			$default_engine = 'auto-draft' === $post->post_status ? 'logicless' : 'legacy-php';
-			update_post_meta( $post_id, '_template_engine', $default_engine );
-			update_post_meta( $post_id, '_template_output_type', 'html' );
-			update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $default_engine ] );
+
+			// Save paper width — only relevant for thermal engine.
+			$saved_engine = get_post_meta( $post_id, '_template_engine', true );
+			if ( 'thermal' === $saved_engine && isset( $_POST['wcpos_template_paper_width'] ) ) {
+				$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
+				if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
+					update_post_meta( $post_id, '_template_paper_width', $paper_width );
+				}
+			}
 		}
 
 		// Save raw content for offline-capable engines only. Legacy-php templates
@@ -513,16 +529,6 @@ class Single_Template {
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
 		if ( \in_array( $saved_engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			$this->save_raw_content( $post_id );
-		}
-
-		// Save paper width — only relevant for thermal engine.
-		if ( 'thermal' === $saved_engine && isset( $_POST['wcpos_template_paper_width'] ) ) {
-			$paper_width = sanitize_text_field( wp_unslash( $_POST['wcpos_template_paper_width'] ) );
-			if ( \in_array( $paper_width, array( '80mm', '58mm' ), true ) ) {
-				update_post_meta( $post_id, '_template_paper_width', $paper_width );
-			}
-		} elseif ( 'thermal' !== $saved_engine ) {
-			delete_post_meta( $post_id, '_template_paper_width' );
 		}
 	}
 
