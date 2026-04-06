@@ -182,7 +182,7 @@ $separator = str_repeat( '-', 42 );
 		<?php endif; ?>
 	<?php endforeach; ?>
 
-	<?php $customer_note = ! empty( $receipt_data['meta']['customer_note'] ) ? $receipt_data['meta']['customer_note'] : ( $order ? $order->get_customer_note() : '' ); ?>
+	<?php $customer_note = $receipt_data['meta']['customer_note'] ?? ''; ?>
 	<?php if ( $customer_note ) : ?>
 		<div class="sep"><?php echo esc_html( $separator ); ?></div>
 		<div class="small">

@@ -971,7 +971,7 @@ class Templates_Controller extends WP_REST_Controller {
 		try {
 			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
 			$html = ob_get_clean();
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			ob_end_clean();
 			Logger::log( 'error', 'Legacy PHP sample-data preview failed: ' . $e->getMessage() );
 			$html = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
@@ -1018,7 +1018,7 @@ class Templates_Controller extends WP_REST_Controller {
 		try {
 			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
 			return ob_get_clean();
-		} catch ( \Exception $e ) {
+		} catch ( \Throwable $e ) {
 			ob_end_clean();
 			Logger::log( 'error', 'Thermal HTML preview failed: ' . $e->getMessage() );
 			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
