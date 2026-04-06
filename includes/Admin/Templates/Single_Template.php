@@ -498,7 +498,7 @@ class Single_Template {
 			// keep legacy-php so old PHP templates are not silently reclassified.
 			$default_engine = 'auto-draft' === $post->post_status ? 'logicless' : 'legacy-php';
 			update_post_meta( $post_id, '_template_engine', $default_engine );
-			update_post_meta( $post_id, '_template_output_type', 'thermal' === $default_engine ? 'escpos' : 'html' );
+			update_post_meta( $post_id, '_template_output_type', 'html' );
 			update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP[ $default_engine ] );
 		}
 
