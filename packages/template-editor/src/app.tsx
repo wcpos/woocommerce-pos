@@ -198,7 +198,7 @@ export function App({ config }: AppProps) {
 
 		window.addEventListener('wcposEngineChange', handler);
 		return () => window.removeEventListener('wcposEngineChange', handler);
-	}, [engine, syncContent]);
+	}, [syncContent]);
 
 	// Listen for paper width changes dispatched by the PHP metabox select
 	// (see Single_Template.php — dispatches wcposPaperWidthChange on <select> change).
