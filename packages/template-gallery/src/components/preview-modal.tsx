@@ -186,7 +186,7 @@ export function PreviewModal({
 						/>
 					) : preview?.preview_html ? (
 						<iframe
-							srcDoc={preview.preview_html.trimStart().startsWith('<!DOCTYPE') || preview.preview_html.trimStart().startsWith('<html')
+							srcDoc={(() => { const h = preview.preview_html.trimStart().toLowerCase(); return h.startsWith('<!doctype') || h.startsWith('<html'); })()
 								? preview.preview_html
 								: `<!DOCTYPE html>
 <html>
