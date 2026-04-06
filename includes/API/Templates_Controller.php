@@ -898,11 +898,12 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( 'thermal' === $engine ) {
 			return rest_ensure_response(
 				array(
-					'engine'       => 'thermal',
-					'preview_html' => $this->render_thermal_html_preview( $receipt_data ),
-					'receipt_data' => $formatted_data,
-					'order_id'     => $order_id,
-					'template_id'  => $id,
+					'engine'           => 'thermal',
+					'preview_html'     => $this->render_thermal_html_preview( $receipt_data ),
+					'template_content' => $template['content'] ?? '',
+					'receipt_data'     => $formatted_data,
+					'order_id'         => $order_id,
+					'template_id'      => $id,
 				)
 			);
 		}
