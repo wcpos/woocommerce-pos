@@ -20,12 +20,8 @@ assets/js/*
 !assets/js/README.md
 !assets/js/indexeddb.worker.js
 !assets/js/opfs.worker.js
-!assets/js/template-gallery.js
-!assets/js/template-editor.js
 assets/css/*
 !assets/css/README.md
-!assets/css/template-gallery.css
-!assets/css/template-editor.css
 assets/asset-manifest.json
 assets/static
 assets/report.html
