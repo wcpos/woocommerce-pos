@@ -196,7 +196,7 @@ class Frontend {
 		// getScript helper and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
 		echo "<script>
-    function getScript(source, callback) {
+    function getScript(source, callback, onError) {
         var script = document.createElement('script');
         script.async = true;
         script.onload = script.onreadystatechange = function(_, isAbort) {
@@ -205,6 +205,10 @@ class Frontend {
                 script = undefined;
                 if (!isAbort && callback) setTimeout(callback, 0);
             }
+        };
+        script.onerror = function() {
+            script.onload = script.onreadystatechange = null;
+            if (onError) onError(new Error('Failed to load script: ' + source));
         };
         script.src = source;
         document.head.appendChild(script);
@@ -236,27 +240,33 @@ class Frontend {
 		window.fetch(request)
 				.then(function(response) { return response.json(); })
 				.then(function(data) {
-						var bundle = data.fileMetadata.web.bundle;
-						var bundleUrl = cdnBaseUrl + bundle;
+						// v1 metadata uses 'bundles' array (metro runtime, common, entry)
+						// v0 fallback uses single 'bundle' string
+						var webMeta = (data && data.fileMetadata && data.fileMetadata.web) || {};
+						var bundles = Array.isArray(webMeta.bundles)
+								? webMeta.bundles.filter(Boolean)
+								: (webMeta.bundle ? [webMeta.bundle] : []);
 
-						// Check if CSS file is specified in the manifest
+						if (!bundles.length) {
+								throw new Error('No JavaScript bundles declared in metadata.json');
+						}
+
+						function loadBundles(index) {
+								if (index >= bundles.length) return;
+								var source = cdnBaseUrl + bundles[index];
+								getScript(source, function() {
+										loadBundles(index + 1);
+								}, function(error) {
+										console.error(error.message);
+								});
+						}
+
 						if (data.fileMetadata.web.css) {
-								var cssFile = data.fileMetadata.web.css;
-								var cssUrl = cdnBaseUrl + cssFile;
-
-								// Load CSS first
-								loadCSS(cssUrl, function() {
-										console.log('CSS loaded');
-										// Load JavaScript after CSS is loaded
-										getScript(bundleUrl, function() {
-												console.log('JavaScript bundle loaded');
-										});
+								loadCSS(cdnBaseUrl + data.fileMetadata.web.css, function() {
+										loadBundles(0);
 								});
 						} else {
-								// If no CSS file, load JavaScript immediately
-								getScript(bundleUrl, function() {
-										console.log('JavaScript bundle loaded');
-								});
+								loadBundles(0);
 						}
 				})
 				.catch(function(error) {
