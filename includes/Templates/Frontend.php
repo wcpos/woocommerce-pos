@@ -196,7 +196,7 @@ class Frontend {
 		// getScript helper and initialProps.
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inline JavaScript for POS frontend
 		echo "<script>
-    function getScript(source, callback) {
+    function getScript(source, callback, onError) {
         var script = document.createElement('script');
         script.async = true;
         script.onload = script.onreadystatechange = function(_, isAbort) {
@@ -205,6 +205,10 @@ class Frontend {
                 script = undefined;
                 if (!isAbort && callback) setTimeout(callback, 0);
             }
+        };
+        script.onerror = function() {
+            script.onload = script.onreadystatechange = null;
+            if (onError) onError(new Error('Failed to load script: ' + source));
         };
         script.src = source;
         document.head.appendChild(script);
@@ -238,12 +242,22 @@ class Frontend {
 				.then(function(data) {
 						// v1 metadata uses 'bundles' array (metro runtime, common, entry)
 						// v0 fallback uses single 'bundle' string
-						var bundles = data.fileMetadata.web.bundles || [data.fileMetadata.web.bundle];
+						var webMeta = (data && data.fileMetadata && data.fileMetadata.web) || {};
+						var bundles = Array.isArray(webMeta.bundles)
+								? webMeta.bundles.filter(Boolean)
+								: (webMeta.bundle ? [webMeta.bundle] : []);
+
+						if (!bundles.length) {
+								throw new Error('No JavaScript bundles declared in metadata.json');
+						}
 
 						function loadBundles(index) {
 								if (index >= bundles.length) return;
-								getScript(cdnBaseUrl + bundles[index], function() {
+								var source = cdnBaseUrl + bundles[index];
+								getScript(source, function() {
 										loadBundles(index + 1);
+								}, function(error) {
+										console.error(error.message);
 								});
 						}
 
