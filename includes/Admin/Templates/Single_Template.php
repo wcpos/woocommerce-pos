@@ -487,10 +487,9 @@ class Single_Template {
 			wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		}
 
-		// Engine and paper size are only settable on new templates.
+		// Engine and paper size are only settable on new templates (auto-drafts).
 		// Once saved, the engine is locked — changing it would break the template content.
-		$existing_engine = get_post_meta( $post_id, '_template_engine', true );
-		$is_new          = empty( $existing_engine );
+		$is_new = 'auto-draft' === $post->post_status;
 
 		if ( $is_new ) {
 			// Save engine and derive output_type + language.
@@ -521,6 +520,12 @@ class Single_Template {
 					update_post_meta( $post_id, '_template_paper_width', $paper_width );
 				}
 			}
+		} elseif ( ! metadata_exists( 'post', $post_id, '_template_engine' ) ) {
+			// Existing posts with no stored engine (pre-date this feature) default to
+			// legacy-php so old PHP templates are never silently reclassified.
+			update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+			update_post_meta( $post_id, '_template_output_type', 'html' );
+			update_post_meta( $post_id, '_template_language', self::ENGINE_LANGUAGE_MAP['legacy-php'] );
 		}
 
 		// Save raw content for offline-capable engines only. Legacy-php templates
