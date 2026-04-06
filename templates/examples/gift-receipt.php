@@ -15,6 +15,8 @@
  * @package WCPOS\WooCommercePOS
  */
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals -- Template files use short variable names by convention.
+
 if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -115,10 +117,11 @@ $lines = $receipt_data['lines'];
 		<?php endforeach; ?>
 	</ul>
 
-	<?php if ( $order->get_customer_note() ) : ?>
+	<?php $customer_note = $receipt_data['meta']['customer_note'] ?? ( $order ? $order->get_customer_note() : '' ); ?>
+	<?php if ( $customer_note ) : ?>
 		<div class="gift-message">
 			<div class="gift-message-label"><?php esc_html_e( 'A message for you', 'woocommerce-pos' ); ?></div>
-			<?php echo esc_html( $order->get_customer_note() ); ?>
+			<?php echo esc_html( $customer_note ); ?>
 		</div>
 	<?php endif; ?>
 

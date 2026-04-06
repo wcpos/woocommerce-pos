@@ -16,6 +16,9 @@
  * @package WCPOS\WooCommercePOS
  */
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals -- Template files use short variable names by convention.
+// phpcs:disable WordPress.WP.GlobalVariablesOverride -- $tax is a local loop variable, not the WP global.
+
 if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -179,11 +182,12 @@ $separator = str_repeat( '-', 42 );
 		<?php endif; ?>
 	<?php endforeach; ?>
 
-	<?php if ( $order->get_customer_note() ) : ?>
+	<?php $customer_note = $receipt_data['meta']['customer_note'] ?? ''; ?>
+	<?php if ( $customer_note ) : ?>
 		<div class="sep"><?php echo esc_html( $separator ); ?></div>
 		<div class="small">
 			<span class="bold"><?php esc_html_e( 'Note:', 'woocommerce-pos' ); ?></span>
-			<?php echo esc_html( $order->get_customer_note() ); ?>
+			<?php echo esc_html( $customer_note ); ?>
 		</div>
 	<?php endif; ?>
 
