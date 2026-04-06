@@ -274,6 +274,12 @@ class Single_Template {
 					window.dispatchEvent(new CustomEvent('wcposEngineChange', { detail: { engine: val } }));
 				});
 			}
+
+			if (paperSelect) {
+				paperSelect.addEventListener('change', function() {
+					window.dispatchEvent(new CustomEvent('wcposPaperWidthChange', { detail: { paperWidth: this.value } }));
+				});
+			}
 		})();
 		</script>
 		<?php endif; ?>

@@ -10,6 +10,41 @@ import { usePreviewData } from './hooks/use-preview-data';
 import { t } from './translations';
 import type { EditorConfig } from './types';
 
+const PAPER_WIDTH_CHARS: Record<string, number> = {
+	'80mm': 48,
+	'58mm': 32,
+};
+
+function getThermalStarterShell(paperWidth: string): string {
+	const chars = PAPER_WIDTH_CHARS[paperWidth] ?? 48;
+	const half = Math.floor(chars / 2);
+	return `<receipt paper-width="${chars}">
+  <align mode="center">
+    <bold><size width="2" height="2">{{store.name}}</size></bold>
+    <text>{{store.address_lines.0}}</text>
+  </align>
+  <line />
+  <row>
+    <col width="${half}">Order #{{meta.order_number}}</col>
+    <col width="${half}" align="right">{{meta.created_at_local}}</col>
+  </row>
+  <line />
+  {{#lines}}
+  <row>
+    <col width="${half}">{{name}} x{{qty}}</col>
+    <col width="${half}" align="right">{{line_total_incl}}</col>
+  </row>
+  {{/lines}}
+  <line />
+  <row>
+    <col width="${half}"><bold>Total</bold></col>
+    <col width="${half}" align="right"><bold>{{totals.total_incl}}</bold></col>
+  </row>
+  <feed lines="3" />
+  <cut />
+</receipt>`;
+}
+
 const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
 	logicless: `<div style="font-family: Arial, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 380px; margin: 0 auto;">
 
@@ -43,31 +78,7 @@ const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
   <p style="text-align: center; margin: 20px 0 0; font-size: 11px; color: #666;">Thank you for your purchase!</p>
 </div>`,
 
-	thermal: `<receipt paper-width="48">
-  <align mode="center">
-    <bold><size width="2" height="2">{{store.name}}</size></bold>
-    <text>{{store.address_lines.0}}</text>
-  </align>
-  <line />
-  <row>
-    <col width="24">Order #{{meta.order_number}}</col>
-    <col width="24" align="right">{{meta.created_at_local}}</col>
-  </row>
-  <line />
-  {{#lines}}
-  <row>
-    <col width="24">{{name}} x{{qty}}</col>
-    <col width="24" align="right">{{line_total_incl}}</col>
-  </row>
-  {{/lines}}
-  <line />
-  <row>
-    <col width="24"><bold>Total</bold></col>
-    <col width="24" align="right"><bold>{{totals.total_incl}}</bold></col>
-  </row>
-  <feed lines="3" />
-  <cut />
-</receipt>`,
+	thermal: getThermalStarterShell('80mm'),
 
 	'legacy-php': `<?php
 /**
@@ -129,6 +140,7 @@ export function App({ config }: AppProps) {
 	const defaultDoc = getDefaultDoc(config.postContent, config.engine);
 
 	const [engine, setEngine] = useState(config.engine);
+	const [paperWidth, setPaperWidth] = useState(config.paperWidth ?? '80mm');
 	// initialDoc drives CodeMirror reinit (via useEffect deps in use-codemirror).
 	// Only update this when you want to reset the editor to new content + language.
 	const [initialDoc, setInitialDoc] = useState(defaultDoc);
@@ -175,6 +187,38 @@ export function App({ config }: AppProps) {
 		return () => window.removeEventListener('wcposEngineChange', handler);
 	}, [engine, syncContent]);
 
+	// Listen for paper width changes dispatched by the PHP metabox select
+	// (see Single_Template.php — dispatches wcposPaperWidthChange on <select> change).
+	useEffect(() => {
+		const handler = (e: Event) => {
+			const detail = (e as CustomEvent<{ paperWidth: string }>).detail;
+			const newPaperWidth = detail.paperWidth;
+
+			const currentContent = contentRef.current;
+			// If the editor still holds a thermal starter shell, replace it with the
+			// correct starter for the new paper width (updates paper-width and col widths).
+			// Otherwise, only update the paper-width attribute so the preview reflects the
+			// new width without discarding any custom content.
+			const isStarterShell = currentContent === getThermalStarterShell(paperWidth);
+			let nextDoc: string;
+			if (isStarterShell) {
+				nextDoc = getThermalStarterShell(newPaperWidth);
+			} else {
+				const newChars = PAPER_WIDTH_CHARS[newPaperWidth] ?? 48;
+				nextDoc = currentContent.replace(/paper-width="\d+"/, `paper-width="${newChars}"`);
+			}
+
+			setPaperWidth(newPaperWidth);
+			setInitialDoc(nextDoc); // triggers CodeMirror reinit with new content
+			setContent(nextDoc);
+			contentRef.current = nextDoc;
+			syncContent(nextDoc);
+		};
+
+		window.addEventListener('wcposPaperWidthChange', handler);
+		return () => window.removeEventListener('wcposPaperWidthChange', handler);
+	}, [paperWidth, syncContent]);
+
 	const handleChange = useCallback((newContent: string) => {
 		contentRef.current = newContent;
 		setContent(newContent);
@@ -199,7 +243,7 @@ export function App({ config }: AppProps) {
 
 	return (
 		<>
-			<TemplateInfoBar engine={engine} paperWidth={config.paperWidth} />
+			<TemplateInfoBar engine={engine} paperWidth={paperWidth} />
 			<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4">
 				{showFieldPicker && (
 					<FieldPicker
