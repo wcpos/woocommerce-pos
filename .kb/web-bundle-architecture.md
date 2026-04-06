@@ -4,7 +4,7 @@ The POS frontend is a React Native (Expo) app bundled by Metro for web. It is **
 
 ## Build Pipeline
 
-```
+```text
 apps/web/scripts/build.js
   -> runs `npx expo export` from apps/main (Metro bundler)
   -> post-processes JS: replaces baseUrl placeholders with window.cdnBaseUrl / window.baseUrl
@@ -17,7 +17,7 @@ apps/web/scripts/build.js
 
 `Frontend.php` (`includes/Templates/Frontend.php`) renders the POS page:
 
-1. Sets inline JS variables: `window.initialProps`, `window.cdnBaseUrl`, `window.baseUrl`
+1. Sets inline JS variables: `initialProps`, `cdnBaseUrl`, `baseUrl` (declared as `var` in global scope)
 2. Fetches `metadata.json` from CDN
 3. Reads `fileMetadata.web.bundles` array (v1) or falls back to single `bundle` string (v0)
 4. Chain-loads all bundles in order via `getScript()` (sequential, not parallel)
