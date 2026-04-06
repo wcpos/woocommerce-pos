@@ -173,10 +173,20 @@ export function App({ config }: AppProps) {
 			const newEngine = detail.engine as EditorConfig['engine'];
 
 			const currentContent = contentRef.current;
+			// Resolve the current starter, taking paper width into account for thermal.
+			const currentStarter =
+				engineRef.current === 'thermal'
+					? getThermalStarterShell(paperWidthRef.current)
+					: STARTER_SHELLS[engineRef.current];
+			// Resolve the next starter the same way so thermal always respects paperWidthRef.
+			const nextStarter =
+				newEngine === 'thermal'
+					? getThermalStarterShell(paperWidthRef.current)
+					: STARTER_SHELLS[newEngine];
 			// Only replace with a starter shell if the editor still holds the old
 			// starter (or is empty). Preserve real work the user has already typed.
-			const isStarterOrEmpty = currentContent === '' || currentContent === STARTER_SHELLS[engine];
-			const nextDoc = isStarterOrEmpty ? STARTER_SHELLS[newEngine] : currentContent;
+			const isStarterOrEmpty = currentContent === '' || currentContent === currentStarter;
+			const nextDoc = isStarterOrEmpty ? nextStarter : currentContent;
 
 			engineRef.current = newEngine;
 			setEngine(newEngine);
@@ -212,7 +222,10 @@ export function App({ config }: AppProps) {
 				nextDoc = getThermalStarterShell(newPaperWidth);
 			} else {
 				const newChars = PAPER_WIDTH_CHARS[newPaperWidth] ?? 48;
-				nextDoc = currentContent.replace(/paper-width="\d+"/g, `paper-width="${newChars}"`);
+				nextDoc = currentContent.replace(
+					/paper-width\s*=\s*(['"])\d+\1/g,
+					(_match, quote) => `paper-width=${quote}${newChars}${quote}`,
+				);
 			}
 
 			paperWidthRef.current = newPaperWidth;
