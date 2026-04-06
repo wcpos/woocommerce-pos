@@ -186,7 +186,9 @@ export function PreviewModal({
 						/>
 					) : preview?.preview_html ? (
 						<iframe
-							srcDoc={`<!DOCTYPE html>
+							srcDoc={(() => { const h = preview.preview_html.trimStart().toLowerCase(); return h.startsWith('<!doctype') || h.startsWith('<html'); })()
+								? preview.preview_html
+								: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${preview.preview_html}</body>
