@@ -89,6 +89,10 @@ const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
 </html>`,
 };
 
+function getDefaultDoc(postContent: string, engine: EditorConfig['engine']): string {
+	return postContent || STARTER_SHELLS[engine];
+}
+
 function TemplateInfoBar({ engine, paperWidth }: { engine: EditorConfig['engine']; paperWidth: string | null }) {
 	let icon: string;
 	let text: string;
@@ -122,38 +126,49 @@ interface AppProps {
 }
 
 export function App({ config }: AppProps) {
-	const getDefaultDoc = (eng: EditorConfig['engine']) =>
-		config.postContent || STARTER_SHELLS[eng];
+	const defaultDoc = getDefaultDoc(config.postContent, config.engine);
 
 	const [engine, setEngine] = useState(config.engine);
-	const [initialDoc, setInitialDoc] = useState(() => getDefaultDoc(config.engine));
-	const [content, setContent] = useState(() => getDefaultDoc(config.engine));
+	// initialDoc drives CodeMirror reinit (via useEffect deps in use-codemirror).
+	// Only update this when you want to reset the editor to new content + language.
+	const [initialDoc, setInitialDoc] = useState(defaultDoc);
+	const [content, setContent] = useState(defaultDoc);
+
+	// Keep a ref so the engine-change handler can read current content without
+	// a stale closure, and without putting content in the effect deps.
+	const contentRef = useRef(defaultDoc);
 
 	const insertRef = useRef<((text: string) => void) | null>(null);
 	const syncContent = useContentSync();
 	const preview = usePreviewData(config.sampleData, config.templateId, config.hasPosOrders);
 
-	// Sync initial content to the hidden textarea on mount.
+	// Sync initial content to the hidden WP textarea on mount.
+	// Use a stable ref so this effect has no deps other than the stable syncContent.
+	const defaultDocRef = useRef(defaultDoc);
 	useEffect(() => {
-		syncContent(getDefaultDoc(config.engine));
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+		syncContent(defaultDocRef.current);
+	}, [syncContent]);
 
-	// Listen for engine changes dispatched by the PHP metabox select.
+	// Listen for engine changes dispatched by the PHP metabox select
+	// (see Single_Template.php — dispatches wcposEngineChange on <select> change).
 	useEffect(() => {
 		const handler = (e: Event) => {
-			const newEngine = (e as CustomEvent<{ engine: EditorConfig['engine'] }>).detail.engine;
-			setEngine(newEngine);
+			const detail = (e as CustomEvent<{ engine: string }>).detail;
+			// Guard: ignore unknown engine values that are not in STARTER_SHELLS.
+			if (!(detail.engine in STARTER_SHELLS)) return;
+			const newEngine = detail.engine as EditorConfig['engine'];
 
-			// Only replace content if it is still the starter shell (or empty) —
-			// don't wipe real work the user has already typed.
-			setContent(prev => {
-				const isStarterOrEmpty = prev === '' || prev === STARTER_SHELLS[engine];
-				const nextDoc = isStarterOrEmpty ? STARTER_SHELLS[newEngine] : prev;
-				setInitialDoc(nextDoc); // triggers CodeMirror reinit with new language + content
-				syncContent(nextDoc);
-				return nextDoc;
-			});
+			const currentContent = contentRef.current;
+			// Only replace with a starter shell if the editor still holds the old
+			// starter (or is empty). Preserve real work the user has already typed.
+			const isStarterOrEmpty = currentContent === '' || currentContent === STARTER_SHELLS[engine];
+			const nextDoc = isStarterOrEmpty ? STARTER_SHELLS[newEngine] : currentContent;
+
+			setEngine(newEngine);
+			setInitialDoc(nextDoc); // triggers CodeMirror reinit with new language + content
+			setContent(nextDoc);
+			contentRef.current = nextDoc;
+			syncContent(nextDoc);
 		};
 
 		window.addEventListener('wcposEngineChange', handler);
@@ -161,6 +176,7 @@ export function App({ config }: AppProps) {
 	}, [engine, syncContent]);
 
 	const handleChange = useCallback((newContent: string) => {
+		contentRef.current = newContent;
 		setContent(newContent);
 		syncContent(newContent);
 	}, [syncContent]);
