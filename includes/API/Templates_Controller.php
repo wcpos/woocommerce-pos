@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WP_Error;
 use WP_Query;
 use WP_REST_Controller;
@@ -892,20 +893,16 @@ class Templates_Controller extends WP_REST_Controller {
 		// Determine engine.
 		$engine = $template['engine'] ?? 'legacy-php';
 
-		// Thermal templates return raw content + data for client-side rendering.
+		// Thermal (ESC/POS) templates: render an HTML approximation using the bundled thermal template.
+		// The ESC/POS XML cannot be displayed in a browser, so we render receipt_data as HTML instead.
 		if ( 'thermal' === $engine ) {
-			$content = $template['content'] ?? '';
-
-			// Safety net for unresolved {{#t}}...{{/t}} markers in gallery templates.
-			$formatted_data['t'] = true;
-
 			return rest_ensure_response(
 				array(
-					'engine'           => 'thermal',
-					'template_content' => $content,
-					'receipt_data'     => $formatted_data,
-					'order_id'         => $order_id,
-					'template_id'      => $id,
+					'engine'       => 'thermal',
+					'preview_html' => $this->render_thermal_html_preview( $receipt_data ),
+					'receipt_data' => $formatted_data,
+					'order_id'     => $order_id,
+					'template_id'  => $id,
 				)
 			);
 		}
@@ -918,6 +915,7 @@ class Templates_Controller extends WP_REST_Controller {
 				$formatted_data['t']               = true;
 
 				$response = array(
+					'engine'       => 'logicless',
 					'receipt_data' => $formatted_data,
 					'order_id'     => $order_id,
 					'template_id'  => $id,
@@ -945,6 +943,7 @@ class Templates_Controller extends WP_REST_Controller {
 
 			return rest_ensure_response(
 				array(
+					'engine'      => 'legacy-php',
 					'preview_url' => $preview_url,
 					'order_id'    => $order_id,
 					'template_id' => $id,
@@ -952,29 +951,38 @@ class Templates_Controller extends WP_REST_Controller {
 			);
 		}
 
-		// Non-thermal with sample data: render server-side.
+		// Sample data (no real order): render server-side for all engines.
 		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
-		$banner = $this->get_preview_banner_html();
-
 		if ( 'logicless' === $engine ) {
-			$html = $this->render_logicless_preview( $template, $formatted_data );
-
 			return rest_ensure_response(
 				array(
-					'preview_html' => $banner . $html,
+					'engine'       => 'logicless',
+					'preview_html' => $this->render_logicless_preview( $template, $formatted_data ),
 					'order_id'     => 0,
 					'template_id'  => $id,
 				)
 			);
 		}
 
-		// Legacy-php without a real order.
+		// Legacy-php: render server-side with raw (unformatted) receipt_data so the template
+		// can use wc_price() and other WC formatting functions as expected.
+		ob_start();
+		try {
+			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
+			$html = ob_get_clean();
+		} catch ( \Exception $e ) {
+			ob_end_clean();
+			Logger::log( 'error', 'Legacy PHP sample-data preview failed: ' . $e->getMessage() );
+			$html = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
+				. esc_html__( 'Preview failed. Check the template for PHP errors.', 'woocommerce-pos' )
+				. '</div>';
+		}
+
 		return rest_ensure_response(
 			array(
-				'preview_html' => $banner . '<div style="padding: 40px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #666;">'
-					. esc_html__( 'Select a real order from Order History to preview PHP templates.', 'woocommerce-pos' )
-					. '</div>',
+				'engine'       => 'legacy-php',
+				'preview_html' => $html,
 				'order_id'     => 0,
 				'template_id'  => $id,
 			)
@@ -982,14 +990,41 @@ class Templates_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Build the preview banner HTML for sample receipt previews.
+	 * Render an HTML approximation of a thermal receipt for browser preview.
 	 *
-	 * @return string Banner HTML markup.
+	 * ESC/POS thermal templates cannot be rendered in a browser, so we use the
+	 * bundled thermal-receipt.php example to produce a narrow HTML receipt from
+	 * the same receipt_data payload.
+	 *
+	 * @param array $receipt_data Raw (unformatted) canonical receipt payload.
+	 *
+	 * @return string HTML string.
 	 */
-	private function get_preview_banner_html(): string {
-		$text = esc_html__( 'Preview — Sample receipt with demo data', 'woocommerce-pos' );
+	private function render_thermal_html_preview( array $receipt_data ): string {
+		$thermal_php_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/thermal-receipt.php';
 
-		return '<div style="background: #f59e0b; color: #fff; text-align: center; padding: 6px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px;">' . $text . '</div>';
+		if ( ! file_exists( $thermal_php_path ) ) {
+			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666;">'
+				. esc_html__( 'Thermal preview unavailable.', 'woocommerce-pos' )
+				. '</div>';
+		}
+
+		$template = array(
+			'engine'    => 'legacy-php',
+			'file_path' => $thermal_php_path,
+		);
+
+		ob_start();
+		try {
+			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
+			return ob_get_clean();
+		} catch ( \Exception $e ) {
+			ob_end_clean();
+			Logger::log( 'error', 'Thermal HTML preview failed: ' . $e->getMessage() );
+			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
+				. esc_html__( 'Thermal preview failed.', 'woocommerce-pos' )
+				. '</div>';
+		}
 	}
 
 	/**
