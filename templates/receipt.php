@@ -4,10 +4,25 @@
  *
  * This template can be overridden by copying it to yourtheme/woocommerce-pos/receipt.php.
  * HOWEVER, this is not recommended , don't be surprised if your POS breaks
+ *
+ * @package WCPOS\WooCommercePOS
  */
+
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals -- Template files use short variable names by convention.
+// phpcs:disable WordPress.WP.GlobalVariablesOverride -- $tax is a local loop variable, not the WP global.
+// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Legacy template inline comments.
 
 if ( ! \defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly
+}
+
+// This legacy template requires a real WC_Abstract_Order object to render.
+// When $order is null (sample-data preview), output a placeholder and stop.
+if ( ! $order ) {
+	echo '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#888;">'
+		. esc_html__( 'This legacy template requires a real order. Switch to "Order" mode above to preview.', 'woocommerce-pos' )
+		. '</div>';
+	return;
 }
 ?>
 	<!DOCTYPE html>

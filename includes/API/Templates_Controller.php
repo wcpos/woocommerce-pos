@@ -955,14 +955,21 @@ class Templates_Controller extends WP_REST_Controller {
 		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
 		if ( 'logicless' === $engine ) {
-			return rest_ensure_response(
-				array(
-					'engine'       => 'logicless',
-					'preview_html' => $this->render_logicless_preview( $template, $formatted_data ),
-					'order_id'     => 0,
-					'template_id'  => $id,
-				)
+			$response = array(
+				'engine'      => 'logicless',
+				'order_id'    => 0,
+				'template_id' => $id,
 			);
+
+			try {
+				$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
+			} catch ( \Mustache\Exception\SyntaxException $e ) {
+				$response['preview_html'] = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
+					. esc_html__( 'Mustache template syntax error. Check your template.', 'woocommerce-pos' )
+					. '</div>';
+			}
+
+			return rest_ensure_response( $response );
 		}
 
 		// Legacy-php: render server-side with raw (unformatted) receipt_data so the template
