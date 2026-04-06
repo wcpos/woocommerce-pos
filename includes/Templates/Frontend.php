@@ -236,27 +236,23 @@ class Frontend {
 		window.fetch(request)
 				.then(function(response) { return response.json(); })
 				.then(function(data) {
-						var bundle = data.fileMetadata.web.bundle;
-						var bundleUrl = cdnBaseUrl + bundle;
+						// v1 metadata uses 'bundles' array (metro runtime, common, entry)
+						// v0 fallback uses single 'bundle' string
+						var bundles = data.fileMetadata.web.bundles || [data.fileMetadata.web.bundle];
 
-						// Check if CSS file is specified in the manifest
+						function loadBundles(index) {
+								if (index >= bundles.length) return;
+								getScript(cdnBaseUrl + bundles[index], function() {
+										loadBundles(index + 1);
+								});
+						}
+
 						if (data.fileMetadata.web.css) {
-								var cssFile = data.fileMetadata.web.css;
-								var cssUrl = cdnBaseUrl + cssFile;
-
-								// Load CSS first
-								loadCSS(cssUrl, function() {
-										console.log('CSS loaded');
-										// Load JavaScript after CSS is loaded
-										getScript(bundleUrl, function() {
-												console.log('JavaScript bundle loaded');
-										});
+								loadCSS(cdnBaseUrl + data.fileMetadata.web.css, function() {
+										loadBundles(0);
 								});
 						} else {
-								// If no CSS file, load JavaScript immediately
-								getScript(bundleUrl, function() {
-										console.log('JavaScript bundle loaded');
-								});
+								loadBundles(0);
 						}
 				})
 				.catch(function(error) {
