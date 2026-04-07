@@ -1201,4 +1201,45 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 			'Cashier should be able to update an order. Response: ' . wp_json_encode( $response->get_data() )
 		);
 	}
+
+	/**
+	 * Line item image IDs should be returned as integers, not strings.
+	 *
+	 * WooCommerce core's get_image_id() returns a string, so we need to cast it.
+	 */
+	public function test_line_item_image_id_is_integer(): void {
+		// Create a fake attachment to use as the product image.
+		$attachment_id = wp_insert_attachment(
+			array(
+				'post_title'     => 'Test image',
+				'post_mime_type' => 'image/jpeg',
+				'post_status'    => 'inherit',
+			)
+		);
+
+		// Create a product with that image.
+		$product = ProductHelper::create_simple_product();
+		$product->set_image_id( $attachment_id );
+		$product->save();
+
+		// Create an order with the product.
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product->get_id(),
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status(), 'Response: ' . wp_json_encode( $data ) );
+		$this->assertIsInt( $data['line_items'][0]['image']['id'], 'Line item image ID should be an integer, got: ' . gettype( $data['line_items'][0]['image']['id'] ) );
+		$this->assertEquals( $attachment_id, $data['line_items'][0]['image']['id'] );
+	}
 }
