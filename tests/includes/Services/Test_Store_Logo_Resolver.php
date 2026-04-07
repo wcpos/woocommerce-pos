@@ -19,22 +19,14 @@ use WC_REST_Unit_Test_Case;
  */
 class Test_Store_Logo_Resolver extends WC_REST_Unit_Test_Case {
 	/**
-	 * Test that site logo is returned when store has not opted out.
+	 * Create a minimal POS store stub with only get_id().
+	 *
+	 * @param int $store_id Post ID for the store.
+	 *
+	 * @return object
 	 */
-	public function test_resolve_returns_site_logo_when_not_opted_out(): void {
-		$store_id = $this->factory->post->create();
-		$logo_url = 'https://example.com/site-logo.png';
-		$logo_id  = 987654;
-
-		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
-			if ( $logo_id !== (int) $id ) {
-				return $out;
-			}
-
-			return array( $logo_url, 320, 120, true );
-		};
-
-		$pos_store = new class( $store_id ) {
+	private function create_store_stub( int $store_id ): object {
+		return new class( $store_id ) {
 			/**
 			 * Store ID.
 			 *
@@ -60,12 +52,29 @@ class Test_Store_Logo_Resolver extends WC_REST_Unit_Test_Case {
 				return $this->id;
 			}
 		};
+	}
+
+	/**
+	 * Test that site logo is returned when store has not opted out.
+	 */
+	public function test_resolve_returns_site_logo_when_not_opted_out(): void {
+		$store_id = $this->factory->post->create();
+		$logo_url = 'https://example.com/site-logo.png';
+		$logo_id  = 987654;
+
+		$image_downsize_filter = static function ( $out, $id ) use ( $logo_id, $logo_url ) {
+			if ( $logo_id !== (int) $id ) {
+				return $out;
+			}
+
+			return array( $logo_url, 320, 120, true );
+		};
 
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
 
-			$this->assertSame( $logo_url, Store_Logo_Resolver::resolve( $pos_store ) );
+			$this->assertSame( $logo_url, Store_Logo_Resolver::resolve( $this->create_store_stub( $store_id ) ) );
 		} finally {
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
@@ -89,38 +98,11 @@ class Test_Store_Logo_Resolver extends WC_REST_Unit_Test_Case {
 			return array( 'https://example.com/hidden.png', 320, 120, true );
 		};
 
-		$pos_store = new class( $store_id ) {
-			/**
-			 * Store ID.
-			 *
-			 * @var int
-			 */
-			private int $id;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param int $id Store ID.
-			 */
-			public function __construct( int $id ) {
-				$this->id = $id;
-			}
-
-			/**
-			 * Get store ID.
-			 *
-			 * @return int
-			 */
-			public function get_id(): int {
-				return $this->id;
-			}
-		};
-
 		try {
 			set_theme_mod( 'custom_logo', $logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
 
-			$this->assertNull( Store_Logo_Resolver::resolve( $pos_store ) );
+			$this->assertNull( Store_Logo_Resolver::resolve( $this->create_store_stub( $store_id ) ) );
 		} finally {
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
@@ -150,38 +132,11 @@ class Test_Store_Logo_Resolver extends WC_REST_Unit_Test_Case {
 			return $out;
 		};
 
-		$pos_store = new class( $store_id ) {
-			/**
-			 * Store ID.
-			 *
-			 * @var int
-			 */
-			private int $id;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param int $id Store ID.
-			 */
-			public function __construct( int $id ) {
-				$this->id = $id;
-			}
-
-			/**
-			 * Get store ID.
-			 *
-			 * @return int
-			 */
-			public function get_id(): int {
-				return $this->id;
-			}
-		};
-
 		try {
 			set_theme_mod( 'custom_logo', $site_logo_id );
 			add_filter( 'image_downsize', $image_downsize_filter, 10, 3 );
 
-			$this->assertSame( $store_logo_url, Store_Logo_Resolver::resolve( $pos_store ) );
+			$this->assertSame( $store_logo_url, Store_Logo_Resolver::resolve( $this->create_store_stub( $store_id ) ) );
 		} finally {
 			remove_filter( 'image_downsize', $image_downsize_filter, 10 );
 			remove_theme_mod( 'custom_logo' );
@@ -194,34 +149,7 @@ class Test_Store_Logo_Resolver extends WC_REST_Unit_Test_Case {
 	public function test_resolve_returns_null_when_no_logos(): void {
 		$store_id = $this->factory->post->create();
 
-		$pos_store = new class( $store_id ) {
-			/**
-			 * Store ID.
-			 *
-			 * @var int
-			 */
-			private int $id;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param int $id Store ID.
-			 */
-			public function __construct( int $id ) {
-				$this->id = $id;
-			}
-
-			/**
-			 * Get store ID.
-			 *
-			 * @return int
-			 */
-			public function get_id(): int {
-				return $this->id;
-			}
-		};
-
 		remove_theme_mod( 'custom_logo' );
-		$this->assertNull( Store_Logo_Resolver::resolve( $pos_store ) );
+		$this->assertNull( Store_Logo_Resolver::resolve( $this->create_store_stub( $store_id ) ) );
 	}
 }
