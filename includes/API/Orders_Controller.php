@@ -802,6 +802,16 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
+		// WC core's get_image_id() returns a string; cast line item image IDs to int.
+		if ( isset( $data['line_items'] ) && \is_array( $data['line_items'] ) ) {
+			foreach ( $data['line_items'] as &$item ) {
+				if ( isset( $item['image']['id'] ) ) {
+					$item['image']['id'] = (int) $item['image']['id'];
+				}
+			}
+			unset( $item );
+		}
+
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
 
