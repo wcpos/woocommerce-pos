@@ -138,7 +138,7 @@ export function PreviewModal({
 			<div
 				ref={dialogRef}
 				tabIndex={-1}
-				className="wcpos:bg-white wcpos:rounded-lg wcpos:shadow-xl wcpos:max-w-3xl wcpos:w-full wcpos:max-h-[90vh] wcpos:flex wcpos:flex-col wcpos:m-4"
+				className="wcpos:bg-white wcpos:rounded-lg wcpos:shadow-xl wcpos:max-w-3xl wcpos:w-full wcpos:h-[90vh] wcpos:flex wcpos:flex-col wcpos:m-4"
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Header */}
@@ -174,7 +174,7 @@ export function PreviewModal({
 				{/* Preview iframe */}
 				<div className="wcpos:flex-1 wcpos:min-h-0 wcpos:flex wcpos:flex-col wcpos:p-4 wcpos:bg-gray-50">
 					{isFetching ? (
-						<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:h-64">
+						<div className="wcpos:flex wcpos:flex-1 wcpos:items-center wcpos:justify-center">
 							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
 						</div>
 					) : preview?.engine === 'thermal' && preview.template_content && preview.receipt_data ? (
