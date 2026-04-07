@@ -42,8 +42,7 @@ function ThermalPreviewContent({
 		<iframe
 			srcDoc={srcdoc}
 			title={t('modal.preview_title', { templateName })}
-			className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-			style={{ height: '600px' }}
+			className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 			sandbox="allow-same-origin"
 		/>
 	);
@@ -173,7 +172,7 @@ export function PreviewModal({
 				</div>
 
 				{/* Preview iframe */}
-				<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:p-4 wcpos:bg-gray-50">
+				<div className="wcpos:flex-1 wcpos:min-h-0 wcpos:flex wcpos:flex-col wcpos:p-4 wcpos:bg-gray-50">
 					{isFetching ? (
 						<div className="wcpos:flex wcpos:items-center wcpos:justify-center wcpos:h-64">
 							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
@@ -194,16 +193,14 @@ export function PreviewModal({
 <body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${preview.preview_html}</body>
 </html>`}
 							title={t('modal.preview_title', { templateName })}
-							className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-							style={{ height: '600px' }}
+							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							sandbox="allow-same-origin"
 						/>
 					) : preview?.preview_url ? (
 						<iframe
 							src={preview.preview_url}
 							title={t('modal.preview_title', { templateName })}
-							className="wcpos:w-full wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-							style={{ height: '600px' }}
+							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							sandbox="allow-scripts"
 						/>
 					) : (
