@@ -733,7 +733,7 @@ class Preview_Receipt_Builder {
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
-		$store['logo']                    = $this->get_store_logo( $pos_store );
+		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
 		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours )
 			? $opening_hours
 			: __( 'Mon–Fri 9:00 AM – 6:00 PM, Sat 10:00 AM – 4:00 PM', 'woocommerce-pos' );
@@ -748,70 +748,6 @@ class Preview_Receipt_Builder {
 			: __( 'Thank you for your purchase!', 'woocommerce-pos' );
 
 		return $store;
-	}
-
-	/**
-	 * Resolve the logo using explicit-store-logo precedence then optional site fallback.
-	 *
-	 * @param object $pos_store Active POS store object.
-	 *
-	 * @return string|null
-	 */
-	private function get_store_logo( $pos_store ): ?string {
-		$store_id      = method_exists( $pos_store, 'get_id' ) ? (int) $pos_store->get_id() : 0;
-		$use_site_logo = true;
-		if ( $store_id > 0 ) {
-			$use_site_logo = 'no' !== get_post_meta( $store_id, '_use_site_logo', true );
-		}
-
-		$explicit_logo_url = $this->get_explicit_store_logo_url( $store_id );
-		if ( null !== $explicit_logo_url ) {
-			return $explicit_logo_url;
-		}
-
-		if ( ! $use_site_logo ) {
-			return null;
-		}
-
-		return $this->get_site_logo_url();
-	}
-
-	/**
-	 * Get explicit store logo URL from the store post thumbnail.
-	 *
-	 * @param int $store_id Active POS store ID.
-	 *
-	 * @return string|null
-	 */
-	private function get_explicit_store_logo_url( int $store_id ): ?string {
-		if ( $store_id <= 0 ) {
-			return null;
-		}
-
-		$thumbnail_id = (int) get_post_thumbnail_id( $store_id );
-		if ( $thumbnail_id <= 0 ) {
-			return null;
-		}
-
-		$logo_src = wp_get_attachment_image_src( $thumbnail_id, 'full' );
-
-		return ( is_array( $logo_src ) && ! empty( $logo_src[0] ) ) ? $logo_src[0] : null;
-	}
-
-	/**
-	 * Get the WordPress site logo URL.
-	 *
-	 * @return string|null
-	 */
-	private function get_site_logo_url(): ?string {
-		$custom_logo_id = (int) get_theme_mod( 'custom_logo' );
-		if ( $custom_logo_id <= 0 ) {
-			return null;
-		}
-
-		$site_logo_src = wp_get_attachment_image_src( $custom_logo_id, 'full' );
-
-		return ( is_array( $site_logo_src ) && ! empty( $site_logo_src[0] ) ) ? $site_logo_src[0] : null;
 	}
 
 	/**
