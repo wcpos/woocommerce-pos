@@ -7,7 +7,7 @@ WordPress plugin providing the server-side foundation for WCPOS.
 This repo includes the WCPOS wiki as a submodule at `.wiki/`. Pull latest before reading:
 
 ```bash
-git submodule update --remote .wiki
+git submodule update --init --remote .wiki
 ```
 
 Relevant wiki pages:
