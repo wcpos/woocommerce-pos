@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file is no longer maintained. See .wiki/ for current content. -->
 # WCPOS — User Personas
 
 Quick reference for making UX and code decisions. For full audience profiles

@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file is no longer maintained. See .wiki/ for current content. -->
 # Understanding `_woocommerce_pos_data`
 
 ## What is it?
