@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file is no longer maintained. See .wiki/ for current content. -->
 # Postmortem: i18n Translation Download Spam (March 2026)
 
 ## What Happened

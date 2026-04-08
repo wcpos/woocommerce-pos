@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file is no longer maintained. See .wiki/ for current content. -->
 # React Version in WordPress Plugins
 
 ## The Rule

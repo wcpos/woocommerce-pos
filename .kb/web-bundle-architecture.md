@@ -1,3 +1,4 @@
+<!-- DEPRECATED: This file is no longer maintained. See .wiki/ for current content. -->
 # Web Bundle Architecture
 
 The POS frontend is a React Native (Expo) app bundled by Metro for web. It is **not** served via Expo's generated `index.html`. Instead, it's rendered by the WordPress plugin's `Frontend.php`.
