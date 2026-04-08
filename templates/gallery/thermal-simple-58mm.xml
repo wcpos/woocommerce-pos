@@ -10,6 +10,12 @@
   <line />
   {{#lines}}
   <text>{{name}}</text>
+  {{#discounts}}
+  <row>
+    <col width="16">x{{qty}} @ {{unit_subtotal_incl}}</col>
+    <col width="16" align="right">-{{discounts_incl}}</col>
+  </row>
+  {{/discounts}}
   <row>
     <col width="6">x{{qty}}</col>
     <col width="10">@ {{unit_price_incl}}</col>
@@ -41,14 +47,10 @@
   {{/discounts}}
   {{#tax_summary}}
   <row>
-    <col width="16">{{label}}</col>
+    <col width="16">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
     <col width="16" align="right">{{tax_amount}}</col>
   </row>
   {{/tax_summary}}
-  <row>
-    <col width="16">{{i18n.tax}}</col>
-    <col width="16" align="right">{{totals.tax_total}}</col>
-  </row>
   <line style="double" />
   <row>
     <col width="16"><bold>{{i18n.total}}</bold></col>

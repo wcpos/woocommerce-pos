@@ -40,11 +40,14 @@ class Receipt_Data_Schema {
 	 * Money keys that must be present in totals.
 	 */
 	const TOTAL_MONEY_KEYS = array(
+		'subtotal',
 		'subtotal_incl',
 		'subtotal_excl',
+		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
+		'grand_total',
 		'grand_total_incl',
 		'grand_total_excl',
 		'paid_total',
@@ -61,9 +64,11 @@ class Receipt_Data_Schema {
 	const ZERO_FALSY_MONEY_FIELDS = array(
 		'change',
 		'tendered',
+		'discounts',
 		'discounts_incl',
 		'discounts_excl',
 		'change_total',
+		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
 	);
@@ -75,7 +80,15 @@ class Receipt_Data_Schema {
 	 * Matched against the last segment of dot-path keys during substitution.
 	 */
 	const MONEY_FIELDS = array(
-		// Line items.
+		// Line items (display).
+		'unit_subtotal',
+		'unit_price',
+		'line_subtotal',
+		'discounts',
+		'line_total',
+		// Line items (explicit incl/excl).
+		'unit_subtotal_incl',
+		'unit_subtotal_excl',
 		'unit_price_incl',
 		'unit_price_excl',
 		'line_subtotal_incl',
@@ -85,9 +98,14 @@ class Receipt_Data_Schema {
 		'line_total_incl',
 		'line_total_excl',
 		// Fees, shipping, discounts (shared names).
+		'total',
 		'total_incl',
 		'total_excl',
-		// Totals.
+		// Totals (display).
+		'subtotal',
+		'discount_total',
+		'grand_total',
+		// Totals (explicit incl/excl).
 		'subtotal_incl',
 		'subtotal_excl',
 		'discount_total_incl',
@@ -305,6 +323,22 @@ class Receipt_Data_Schema {
 						'type'  => 'number',
 						'label' => __( 'Quantity', 'woocommerce-pos' ),
 					),
+					'unit_subtotal'      => array(
+						'type'  => 'money',
+						'label' => __( 'Unit Subtotal', 'woocommerce-pos' ),
+					),
+					'unit_subtotal_incl' => array(
+						'type'  => 'money',
+						'label' => __( 'Unit Subtotal (incl tax)', 'woocommerce-pos' ),
+					),
+					'unit_subtotal_excl' => array(
+						'type'  => 'money',
+						'label' => __( 'Unit Subtotal (excl tax)', 'woocommerce-pos' ),
+					),
+					'unit_price'         => array(
+						'type'  => 'money',
+						'label' => __( 'Unit Price', 'woocommerce-pos' ),
+					),
 					'unit_price_incl'    => array(
 						'type'  => 'money',
 						'label' => __( 'Unit Price (incl tax)', 'woocommerce-pos' ),
@@ -312,6 +346,10 @@ class Receipt_Data_Schema {
 					'unit_price_excl'    => array(
 						'type'  => 'money',
 						'label' => __( 'Unit Price (excl tax)', 'woocommerce-pos' ),
+					),
+					'line_subtotal'      => array(
+						'type'  => 'money',
+						'label' => __( 'Subtotal', 'woocommerce-pos' ),
 					),
 					'line_subtotal_incl' => array(
 						'type'  => 'money',
@@ -321,6 +359,10 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
 					),
+					'discounts'          => array(
+						'type'  => 'money',
+						'label' => __( 'Discounts', 'woocommerce-pos' ),
+					),
 					'discounts_incl'     => array(
 						'type'  => 'money',
 						'label' => __( 'Discounts (incl tax)', 'woocommerce-pos' ),
@@ -328,6 +370,10 @@ class Receipt_Data_Schema {
 					'discounts_excl'     => array(
 						'type'  => 'money',
 						'label' => __( 'Discounts (excl tax)', 'woocommerce-pos' ),
+					),
+					'line_total'         => array(
+						'type'  => 'money',
+						'label' => __( 'Line Total', 'woocommerce-pos' ),
 					),
 					'line_total_incl'    => array(
 						'type'  => 'money',
@@ -341,6 +387,10 @@ class Receipt_Data_Schema {
 						'type'  => 'array',
 						'label' => __( 'Line Taxes', 'woocommerce-pos' ),
 					),
+					'meta'               => array(
+						'type'  => 'array',
+						'label' => __( 'Item Meta', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'fees'        => array(
@@ -350,6 +400,10 @@ class Receipt_Data_Schema {
 					'label'      => array(
 						'type'  => 'string',
 						'label' => __( 'Fee Label', 'woocommerce-pos' ),
+					),
+					'total'      => array(
+						'type'  => 'money',
+						'label' => __( 'Total', 'woocommerce-pos' ),
 					),
 					'total_incl' => array(
 						'type'  => 'money',
@@ -369,6 +423,10 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Shipping Label', 'woocommerce-pos' ),
 					),
+					'total'      => array(
+						'type'  => 'money',
+						'label' => __( 'Total', 'woocommerce-pos' ),
+					),
 					'total_incl' => array(
 						'type'  => 'money',
 						'label' => __( 'Total (incl tax)', 'woocommerce-pos' ),
@@ -387,6 +445,10 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Discount Label', 'woocommerce-pos' ),
 					),
+					'total'      => array(
+						'type'  => 'money',
+						'label' => __( 'Total', 'woocommerce-pos' ),
+					),
 					'total_incl' => array(
 						'type'  => 'money',
 						'label' => __( 'Total (incl tax)', 'woocommerce-pos' ),
@@ -400,6 +462,10 @@ class Receipt_Data_Schema {
 			'totals'      => array(
 				'label'  => __( 'Totals', 'woocommerce-pos' ),
 				'fields' => array(
+					'subtotal'            => array(
+						'type'  => 'money',
+						'label' => __( 'Subtotal', 'woocommerce-pos' ),
+					),
 					'subtotal_incl'       => array(
 						'type'  => 'money',
 						'label' => __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
@@ -407,6 +473,10 @@ class Receipt_Data_Schema {
 					'subtotal_excl'       => array(
 						'type'  => 'money',
 						'label' => __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
+					),
+					'discount_total'      => array(
+						'type'  => 'money',
+						'label' => __( 'Discount Total', 'woocommerce-pos' ),
 					),
 					'discount_total_incl' => array(
 						'type'  => 'money',
@@ -419,6 +489,10 @@ class Receipt_Data_Schema {
 					'tax_total'           => array(
 						'type'  => 'money',
 						'label' => __( 'Tax Total', 'woocommerce-pos' ),
+					),
+					'grand_total'         => array(
+						'type'  => 'money',
+						'label' => __( 'Grand Total', 'woocommerce-pos' ),
 					),
 					'grand_total_incl'    => array(
 						'type'  => 'money',

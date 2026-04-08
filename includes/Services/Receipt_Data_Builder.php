@@ -22,6 +22,8 @@ class Receipt_Data_Builder {
 	 * @return array
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live' ): array {
+		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
+
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
 			'mode'             => $mode,
@@ -106,33 +108,58 @@ class Receipt_Data_Builder {
 			if ( $qty <= 0 ) {
 				$qty = 0.0;
 			}
-			$unit_price_incl = $qty > 0 ? $line_total_incl / $qty : 0.0;
-			$unit_price_excl = $qty > 0 ? $line_total_excl / $qty : 0.0;
+			$dp                 = wc_get_price_decimals();
+			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $dp ) : 0.0;
+			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $dp ) : 0.0;
+			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $dp ) : 0.0;
+			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $dp ) : 0.0;
+
+			$item_meta      = array();
+			$formatted_meta = $item->get_formatted_meta_data( '', true );
+			foreach ( $formatted_meta as $meta_entry ) {
+				$item_meta[] = array(
+					'key'   => wp_strip_all_tags( $meta_entry->display_key ),
+					'value' => wp_strip_all_tags( $meta_entry->display_value ),
+				);
+			}
+
+			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
+			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );
 
 			$lines[] = array(
-				'key'               => (string) $item_id,
-				'sku'               => $item->get_product() ? $item->get_product()->get_sku() : '',
-				'name'              => $item->get_name(),
-				'qty'               => $qty,
-				'unit_price_incl'   => $unit_price_incl,
-				'unit_price_excl'   => $unit_price_excl,
+				'key'                => (string) $item_id,
+				'sku'                => $item->get_product() ? $item->get_product()->get_sku() : '',
+				'name'               => $item->get_name(),
+				'qty'                => $qty,
+				'unit_subtotal'      => $display_incl ? $unit_subtotal_incl : $unit_subtotal_excl,
+				'unit_subtotal_incl' => $unit_subtotal_incl,
+				'unit_subtotal_excl' => $unit_subtotal_excl,
+				'unit_price'         => $display_incl ? $unit_price_incl : $unit_price_excl,
+				'unit_price_incl'    => $unit_price_incl,
+				'unit_price_excl'    => $unit_price_excl,
+				'line_subtotal'      => $display_incl ? $line_subtotal_incl : $line_subtotal_excl,
 				'line_subtotal_incl' => $line_subtotal_incl,
 				'line_subtotal_excl' => $line_subtotal_excl,
-				'discounts_incl'    => max( 0, $line_subtotal_incl - $line_total_incl ),
-				'discounts_excl'    => max( 0, $line_subtotal_excl - $line_total_excl ),
-				'line_total_incl'   => $line_total_incl,
-				'line_total_excl'   => $line_total_excl,
-				'taxes'             => $this->get_line_taxes( $item ),
+				'discounts'          => $display_incl ? $discounts_incl : $discounts_excl,
+				'discounts_incl'     => $discounts_incl,
+				'discounts_excl'     => $discounts_excl,
+				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
+				'line_total_incl'    => $line_total_incl,
+				'line_total_excl'    => $line_total_excl,
+				'taxes'              => $this->get_line_taxes( $item ),
+				'meta'               => $item_meta,
 			);
 		}
 
 		$shipping_total_excl = (float) $order->get_shipping_total();
 		$shipping_total_tax  = (float) $order->get_shipping_tax();
 		$shipping            = array();
+		$shipping_total_incl = $shipping_total_excl + $shipping_total_tax;
 		if ( $shipping_total_excl > 0 || $shipping_total_tax > 0 ) {
 			$shipping[] = array(
 				'label'      => __( 'Shipping', 'woocommerce-pos' ),
-				'total_incl' => $shipping_total_excl + $shipping_total_tax,
+				'total'      => $display_incl ? $shipping_total_incl : $shipping_total_excl,
+				'total_incl' => $shipping_total_incl,
 				'total_excl' => $shipping_total_excl,
 			);
 		}
@@ -141,39 +168,47 @@ class Receipt_Data_Builder {
 		foreach ( $order->get_fees() as $fee ) {
 			$fee_total_excl = (float) $fee->get_total();
 			$fee_total_tax  = (float) $fee->get_total_tax();
+			$fee_total_incl = $fee_total_excl + $fee_total_tax;
 			$fees[]         = array(
 				'label'      => $fee->get_name(),
-				'total_incl' => $fee_total_excl + $fee_total_tax,
+				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
+				'total_incl' => $fee_total_incl,
 				'total_excl' => $fee_total_excl,
 			);
 		}
 
 		$discount_total_excl = (float) $order->get_discount_total();
 		$discount_total_tax  = (float) $order->get_discount_tax();
+		$discount_total_incl = $discount_total_excl + $discount_total_tax;
 		$discounts           = array();
 		if ( $discount_total_excl > 0 || $discount_total_tax > 0 ) {
 			$discounts[] = array(
 				'label'      => __( 'Discount', 'woocommerce-pos' ),
-				'total_incl' => $discount_total_excl + $discount_total_tax,
+				'total'      => $display_incl ? $discount_total_incl : $discount_total_excl,
+				'total_incl' => $discount_total_incl,
 				'total_excl' => $discount_total_excl,
 			);
 		}
 
-		$subtotal_excl = (float) $order->get_subtotal();
-		$subtotal_tax  = (float) $order->get_cart_tax();
-		$subtotal_incl = $subtotal_excl + $subtotal_tax;
+		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
+		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
 
 		$tax_total = (float) $order->get_total_tax();
 		$total     = (float) $order->get_total();
 
+		$grand_total_excl = $total - $tax_total;
+
 		$totals = array(
+			'subtotal'             => $display_incl ? $subtotal_incl : $subtotal_excl,
 			'subtotal_incl'        => $subtotal_incl,
 			'subtotal_excl'        => $subtotal_excl,
-			'discount_total_incl'  => $discount_total_excl + $discount_total_tax,
+			'discount_total'       => $display_incl ? $discount_total_incl : $discount_total_excl,
+			'discount_total_incl'  => $discount_total_incl,
 			'discount_total_excl'  => $discount_total_excl,
 			'tax_total'            => $tax_total,
+			'grand_total'          => $display_incl ? $total : $grand_total_excl,
 			'grand_total_incl'     => $total,
-			'grand_total_excl'     => $total - $tax_total,
+			'grand_total_excl'     => $grand_total_excl,
 			'paid_total'           => $total,
 			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
 		);

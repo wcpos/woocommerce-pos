@@ -15,6 +15,9 @@
  * @package WCPOS\WooCommercePOS
  */
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals -- Template files use short variable names by convention.
+// phpcs:disable WordPress.WP.GlobalVariablesOverride -- $tax is a local loop variable, not the WP global.
+
 if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -136,7 +139,12 @@ $money = function ( float $amount ) use ( $currency ): string {
 		<?php if ( 'hidden' !== $hints['display_tax'] && $totals['tax_total'] > 0 ) : ?>
 			<?php foreach ( $receipt_data['tax_summary'] as $tax ) : ?>
 				<tr>
-					<td><?php echo esc_html( $tax['label'] ); ?></td>
+					<td>
+						<?php echo esc_html( $tax['label'] ); ?>
+						<?php if ( ! empty( $tax['rate'] ) ) : ?>
+							(<?php echo esc_html( $tax['rate'] ); ?>%)
+						<?php endif; ?>
+					</td>
 					<td><?php echo esc_html( $money( $tax['tax_amount'] ) ); ?></td>
 				</tr>
 			<?php endforeach; ?>

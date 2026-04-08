@@ -57,7 +57,7 @@ and the payment method used for the refund.
 
 	{{#tax_summary}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">{{label}}</span>
+		<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
 		<span>{{tax_amount}}</span>
 	</div>
 	{{/tax_summary}}
