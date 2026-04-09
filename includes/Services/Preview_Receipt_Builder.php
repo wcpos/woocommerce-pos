@@ -926,8 +926,8 @@ class Preview_Receipt_Builder {
 				$meta = array();
 
 				if ( $product->is_type( 'variable' ) ) {
-					// Use the first available variation's attributes.
-					$children = $product->get_children();
+					// Use the first visible variation's attributes (excludes hidden/disabled).
+					$children = $product->get_visible_children();
 					if ( ! empty( $children ) ) {
 						$variation = wc_get_product( $children[0] );
 						if ( $variation instanceof \WC_Product_Variation ) {
