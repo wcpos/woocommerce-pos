@@ -938,8 +938,8 @@ class Preview_Receipt_Builder {
 									$label    = wc_attribute_label( $taxonomy, $variation );
 									$value    = $variation->get_attribute( $taxonomy );
 									$meta[]   = array(
-										'key'   => $label,
-										'value' => '' !== $value ? $value : $attr_value,
+										'key'   => wp_strip_all_tags( $label ),
+										'value' => wp_strip_all_tags( '' !== $value ? $value : $attr_value ),
 									);
 								}
 							}
