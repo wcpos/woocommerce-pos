@@ -934,10 +934,12 @@ class Preview_Receipt_Builder {
 							$product = $variation;
 							foreach ( $variation->get_variation_attributes() as $attr_key => $attr_value ) {
 								if ( '' !== $attr_value ) {
-									$label  = wc_attribute_label( str_replace( 'attribute_', '', $attr_key ), $variation );
-									$meta[] = array(
+									$taxonomy = str_replace( 'attribute_', '', $attr_key );
+									$label    = wc_attribute_label( $taxonomy, $variation );
+									$value    = $variation->get_attribute( $taxonomy );
+									$meta[]   = array(
 										'key'   => $label,
-										'value' => $attr_value,
+										'value' => '' !== $value ? $value : $attr_value,
 									);
 								}
 							}
