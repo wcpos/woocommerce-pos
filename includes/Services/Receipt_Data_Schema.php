@@ -97,7 +97,7 @@ class Receipt_Data_Schema {
 		'discounts_excl',
 		'line_total_incl',
 		'line_total_excl',
-		// Fees, shipping, discounts (shared names).
+		// Fees, shipping, discounts (shared names — only used in these array contexts).
 		'total',
 		'total_incl',
 		'total_excl',

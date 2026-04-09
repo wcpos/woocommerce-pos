@@ -121,12 +121,12 @@ $separator = str_repeat( '-', 42 );
 		<div class="item-name"><?php echo esc_html( $line['name'] ); ?></div>
 		<div class="item-detail">
 			<span>
-				<?php echo esc_html( $line['qty'] ); ?> x <?php echo esc_html( $money( $line['unit_price'] ?? $line['unit_price_incl'] ) ); ?>
+				<?php echo esc_html( $line['qty'] ); ?> x <?php echo esc_html( $money( $line['unit_price'] ) ); ?>
 				<?php if ( ! empty( $line['sku'] ) ) : ?>
 					(<?php echo esc_html( $line['sku'] ); ?>)
 				<?php endif; ?>
 			</span>
-			<span><?php echo esc_html( $money( $line['line_total'] ?? $line['line_total_incl'] ) ); ?></span>
+			<span><?php echo esc_html( $money( $line['line_total'] ) ); ?></span>
 		</div>
 	<?php endforeach; ?>
 
@@ -134,13 +134,13 @@ $separator = str_repeat( '-', 42 );
 
 	<div class="row">
 		<span class="label"><?php esc_html_e( 'Subtotal', 'woocommerce-pos' ); ?></span>
-		<span class="value"><?php echo esc_html( $money( $totals['subtotal'] ?? $totals['subtotal_incl'] ) ); ?></span>
+		<span class="value"><?php echo esc_html( $money( $totals['subtotal'] ) ); ?></span>
 	</div>
 
 	<?php if ( ( $totals['discount_total_incl'] ?? 0 ) > 0 ) : ?>
 		<div class="row">
 			<span class="label"><?php esc_html_e( 'Discount', 'woocommerce-pos' ); ?></span>
-			<span class="value">-<?php echo esc_html( $money( $totals['discount_total'] ?? $totals['discount_total_incl'] ) ); ?></span>
+			<span class="value">-<?php echo esc_html( $money( $totals['discount_total'] ) ); ?></span>
 		</div>
 	<?php endif; ?>
 
@@ -160,7 +160,7 @@ $separator = str_repeat( '-', 42 );
 
 	<div class="total-row">
 		<span><?php esc_html_e( 'TOTAL', 'woocommerce-pos' ); ?></span>
-		<span><?php echo esc_html( $money( $totals['grand_total'] ?? $totals['grand_total_incl'] ) ); ?></span>
+		<span><?php echo esc_html( $money( $totals['grand_total'] ) ); ?></span>
 	</div>
 
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>

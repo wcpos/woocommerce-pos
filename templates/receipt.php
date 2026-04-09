@@ -7,7 +7,7 @@
  *
  * Available variables (always set before this file is included):
  *   $receipt_data — Array with all receipt information (store, meta, lines, totals, etc.)
- *   $order        — WC_Abstract_Order object
+ *   $order        — WC_Abstract_Order object (may be null in preview mode)
  *
  * See the WCPOS documentation for the full $receipt_data structure.
  *
