@@ -184,6 +184,7 @@ class Receipt_Data_Builder {
 		if ( $discount_total_excl > 0 || $discount_total_tax > 0 ) {
 			$discounts[] = array(
 				'label'      => __( 'Discount', 'woocommerce-pos' ),
+				'codes'      => implode( ', ', $order->get_coupon_codes() ),
 				'total'      => $display_incl ? $discount_total_incl : $discount_total_excl,
 				'total_incl' => $discount_total_incl,
 				'total_excl' => $discount_total_excl,
