@@ -439,16 +439,33 @@ class Preview_Receipt_Builder {
 			'name'  => 'Premium Widget',
 			'price' => 29.99,
 			'sku'   => 'WIDGET-001',
+			'meta'  => array(
+				array(
+					'key'   => 'Size',
+					'value' => 'Large',
+				),
+				array(
+					'key'   => 'Color',
+					'value' => 'Midnight Blue',
+				),
+			),
 		),
 		array(
 			'name'  => 'Standard Gadget',
 			'price' => 15.50,
 			'sku'   => 'GADGET-002',
+			'meta'  => array(
+				array(
+					'key'   => 'Material',
+					'value' => 'Stainless Steel',
+				),
+			),
 		),
 		array(
 			'name'  => 'Deluxe Component',
 			'price' => 42.00,
 			'sku'   => 'COMP-003',
+			'meta'  => array(),
 		),
 	);
 
@@ -515,7 +532,7 @@ class Preview_Receipt_Builder {
 				'line_total_incl'    => $line_total_incl,
 				'line_total_excl'    => $line_total_excl,
 				'taxes'              => array(),
-				'meta'               => array(),
+				'meta'               => $product['meta'] ?? array(),
 			);
 
 			$lines_total_excl += $line_total_excl;
@@ -906,6 +923,28 @@ class Preview_Receipt_Builder {
 
 		if ( ! empty( $products ) ) {
 			foreach ( $products as $product ) {
+				$meta = array();
+
+				if ( $product->is_type( 'variable' ) ) {
+					// Use the first available variation's attributes.
+					$children = $product->get_children();
+					if ( ! empty( $children ) ) {
+						$variation = wc_get_product( $children[0] );
+						if ( $variation instanceof \WC_Product_Variation ) {
+							$product = $variation;
+							foreach ( $variation->get_variation_attributes() as $attr_key => $attr_value ) {
+								if ( '' !== $attr_value ) {
+									$label  = wc_attribute_label( str_replace( 'attribute_', '', $attr_key ), $variation );
+									$meta[] = array(
+										'key'   => $label,
+										'value' => $attr_value,
+									);
+								}
+							}
+						}
+					}
+				}
+
 				$price = (float) $product->get_price();
 				if ( $price <= 0 ) {
 					$price = 19.99;
@@ -915,6 +954,7 @@ class Preview_Receipt_Builder {
 					'name'  => $product->get_name(),
 					'price' => $price,
 					'sku'   => $product->get_sku() ? $product->get_sku() : '',
+					'meta'  => $meta,
 				);
 			}
 		}
