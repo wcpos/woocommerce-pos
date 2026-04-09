@@ -569,8 +569,8 @@ class Preview_Receipt_Builder {
 			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], $dp );
 			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], $dp );
 			$line['line_total']      = $display_incl ? $line['line_total_incl'] : $line['line_total_excl'];
-			$line['unit_price_incl'] = $line['qty'] > 0 ? round( $line['line_total_incl'] / $line['qty'], $dp ) : 0.0;
-			$line['unit_price_excl'] = $line['qty'] > 0 ? round( $line['line_total_excl'] / $line['qty'], $dp ) : 0.0;
+			$line['unit_price_incl'] = round( $line['line_total_incl'] / $line['qty'], $dp );
+			$line['unit_price_excl'] = round( $line['line_total_excl'] / $line['qty'], $dp );
 			$line['unit_price']      = $display_incl ? $line['unit_price_incl'] : $line['unit_price_excl'];
 		}
 		unset( $line );
