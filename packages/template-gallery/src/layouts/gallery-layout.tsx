@@ -4,6 +4,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 
 import { GalleryGridSkeleton } from '../components/skeleton';
 import { TypeTabs } from '../components/type-tabs';
+import { getErrorMessage } from '../get-error-message';
 import { t } from '../translations';
 
 function ErrorFallback({
@@ -13,7 +14,7 @@ function ErrorFallback({
 	error: unknown;
 	resetErrorBoundary: () => void;
 }) {
-	const errorMessage = error instanceof Error ? error.message : String(error);
+	const errorMessage = getErrorMessage(error);
 
 	return (
 		<div className="wcpos:p-6 wcpos:text-center">

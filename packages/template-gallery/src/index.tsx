@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 
 import { SnackbarProvider } from './components/snackbar';
+import { getErrorMessage } from './get-error-message';
 import { queryClient } from './query-client';
 import { router } from './router';
 
@@ -15,7 +16,7 @@ function Root() {
 			fallbackRender={({ error }) => (
 				<div className="wcpos:p-6 wcpos:text-red-600">
 					<h2>Template Gallery failed to load</h2>
-					<pre>{error instanceof Error ? error.message : String(error)}</pre>
+					<pre>{getErrorMessage(error)}</pre>
 				</div>
 			)}
 		>
