@@ -185,7 +185,7 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 			<td>
 				<?php echo esc_html( $discount['label'] ?? __( 'Discount', 'woocommerce' ) ); ?>
 				<?php if ( ! empty( $discount['codes'] ) ) : ?>
-					(<?php echo esc_html( implode( ', ', $discount['codes'] ) ); ?>)
+					(<?php echo esc_html( $discount['codes'] ); ?>)
 				<?php endif; ?>
 			</td>
 			<td>-<?php echo wp_kses_post( wc_price( $discount['total'] ?? 0, $currency_args ) ); ?></td>
