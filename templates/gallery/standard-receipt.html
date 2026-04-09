@@ -107,7 +107,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 		{{#tax_summary}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{label}}</span>
+			<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
 			<span>{{tax_amount}}</span>
 		</div>
 		{{/tax_summary}}

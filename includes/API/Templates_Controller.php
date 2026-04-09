@@ -1009,7 +1009,7 @@ class Templates_Controller extends WP_REST_Controller {
 	 * @return string HTML string.
 	 */
 	private function render_thermal_html_preview( array $receipt_data ): string {
-		$thermal_php_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/thermal-receipt.php';
+		$thermal_php_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/thermal-receipt.php';
 
 		if ( ! file_exists( $thermal_php_path ) ) {
 			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666;">'

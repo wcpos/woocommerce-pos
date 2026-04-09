@@ -280,7 +280,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$order        = OrderHelper::create_order();
 		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 
-		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/simple-receipt.html';
+		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/simple-receipt.html';
 		$this->assertFileExists( $template_path );
 
 		$template = array(

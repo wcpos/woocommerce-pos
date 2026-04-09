@@ -461,14 +461,16 @@ class Preview_Receipt_Builder {
 	 * @return array Complete receipt data array.
 	 */
 	public function build(): array {
-		$currency   = get_option( 'woocommerce_currency', 'USD' );
-		$tax_config = $this->get_tax_config();
-		$tax_rate   = $tax_config['rate'];
-		$tax_label  = $tax_config['label'];
-		$tax_code   = $tax_config['code'];
+		$currency     = get_option( 'woocommerce_currency', 'USD' );
+		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
+		$tax_config   = $this->get_tax_config();
+		$tax_rate     = $tax_config['rate'];
+		$tax_label    = $tax_config['label'];
+		$tax_code     = $tax_config['code'];
 
 		$raw_products       = $this->get_products();
 		$prices_include_tax = wc_prices_include_tax();
+		$dp                 = wc_get_price_decimals();
 
 		// Build line items.
 		$lines            = array();
@@ -487,23 +489,33 @@ class Preview_Receipt_Builder {
 				$unit_incl = $base_price * ( 1 + $tax_rate / 100 );
 			}
 
-			$line_total_incl = round( $unit_incl * $qty, 2 );
-			$line_total_excl = round( $unit_excl * $qty, 2 );
+			$line_total_incl = round( $unit_incl * $qty, $dp );
+			$line_total_excl = round( $unit_excl * $qty, $dp );
+
+			$unit_price_rounded = round( $display_incl ? $unit_incl : $unit_excl, $dp );
 
 			$lines[] = array(
 				'key'                => (string) ( $index + 1 ),
 				'sku'                => $product['sku'],
 				'name'               => $product['name'],
 				'qty'                => (float) $qty,
-				'unit_price_incl'    => round( $unit_incl, 2 ),
-				'unit_price_excl'    => round( $unit_excl, 2 ),
+				'unit_subtotal'      => $unit_price_rounded,
+				'unit_subtotal_incl' => round( $unit_incl, $dp ),
+				'unit_subtotal_excl' => round( $unit_excl, $dp ),
+				'unit_price'         => $unit_price_rounded,
+				'unit_price_incl'    => round( $unit_incl, $dp ),
+				'unit_price_excl'    => round( $unit_excl, $dp ),
+				'line_subtotal'      => $display_incl ? $line_total_incl : $line_total_excl,
 				'line_subtotal_incl' => $line_total_incl,
 				'line_subtotal_excl' => $line_total_excl,
+				'discounts'          => 0.0,
 				'discounts_incl'     => 0.0,
 				'discounts_excl'     => 0.0,
+				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
 				'line_total_incl'    => $line_total_incl,
 				'line_total_excl'    => $line_total_excl,
 				'taxes'              => array(),
+				'meta'               => array(),
 			);
 
 			$lines_total_excl += $line_total_excl;
@@ -512,20 +524,20 @@ class Preview_Receipt_Builder {
 
 		// Fee (excl tax).
 		$fee_excl      = 2.50;
-		$fee_tax       = round( $fee_excl * $tax_rate / 100, 2 );
+		$fee_tax       = round( $fee_excl * $tax_rate / 100, $dp );
 		$fee_incl      = $fee_excl + $fee_tax;
 		$fee_label     = __( 'Gift Wrapping', 'woocommerce-pos' );
 
 		// Shipping (excl tax).
 		$shipping_excl     = 10.00;
-		$shipping_tax      = round( $shipping_excl * $tax_rate / 100, 2 );
+		$shipping_tax      = round( $shipping_excl * $tax_rate / 100, $dp );
 		$shipping_incl     = $shipping_excl + $shipping_tax;
 		$shipping_label    = __( 'Flat Rate Shipping', 'woocommerce-pos' );
 
 		// Discount: 10% of line items excl total.
 		$discount_rate  = 10.0;
-		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, 2 );
-		$discount_tax   = round( $discount_excl * $tax_rate / 100, 2 );
+		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, $dp );
+		$discount_tax   = round( $discount_excl * $tax_rate / 100, $dp );
 		$discount_incl  = $discount_excl + $discount_tax;
 		/* translators: %s: discount percentage */
 		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
@@ -543,18 +555,23 @@ class Preview_Receipt_Builder {
 			}
 
 			if ( $i < $last_index ) {
-				$line['discounts_excl'] = round( $discount_excl * $share, 2 );
-				$line['discounts_incl'] = round( $discount_incl * $share, 2 );
+				$line['discounts_excl'] = round( $discount_excl * $share, $dp );
+				$line['discounts_incl'] = round( $discount_incl * $share, $dp );
 				$sum_discount_excl     += $line['discounts_excl'];
 				$sum_discount_incl     += $line['discounts_incl'];
 			} else {
 				// Assign remainder to last item so distributed totals match exactly.
-				$line['discounts_excl'] = round( $discount_excl - $sum_discount_excl, 2 );
-				$line['discounts_incl'] = round( $discount_incl - $sum_discount_incl, 2 );
+				$line['discounts_excl'] = round( $discount_excl - $sum_discount_excl, $dp );
+				$line['discounts_incl'] = round( $discount_incl - $sum_discount_incl, $dp );
 			}
 
-			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], 2 );
-			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], 2 );
+			$line['discounts']       = $display_incl ? $line['discounts_incl'] : $line['discounts_excl'];
+			$line['line_total_excl'] = round( $line['line_subtotal_excl'] - $line['discounts_excl'], $dp );
+			$line['line_total_incl'] = round( $line['line_subtotal_incl'] - $line['discounts_incl'], $dp );
+			$line['line_total']      = $display_incl ? $line['line_total_incl'] : $line['line_total_excl'];
+			$line['unit_price_incl'] = round( $line['line_total_incl'] / $line['qty'], $dp );
+			$line['unit_price_excl'] = round( $line['line_total_excl'] / $line['qty'], $dp );
+			$line['unit_price']      = $display_incl ? $line['unit_price_incl'] : $line['unit_price_excl'];
 		}
 		unset( $line );
 
@@ -564,14 +581,14 @@ class Preview_Receipt_Builder {
 
 		// Taxable base: line items - discount + shipping + fee (all excl).
 		$taxable_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
-		$total_tax    = round( $taxable_excl * $tax_rate / 100, 2 );
+		$total_tax    = round( $taxable_excl * $tax_rate / 100, $dp );
 
 		$grand_total_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
 		$grand_total_incl = $grand_total_excl + $total_tax;
 
 		// Payment: cash rounded up to nearest 5.
 		$tendered     = (float) ( ceil( $grand_total_incl / 5 ) * 5 );
-		$change_total = round( $tendered - $grand_total_incl, 2 );
+		$change_total = round( $tendered - $grand_total_incl, $dp );
 
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
@@ -593,6 +610,7 @@ class Preview_Receipt_Builder {
 		$fees = array(
 			array(
 				'label'      => $fee_label,
+				'total'      => $display_incl ? $fee_incl : $fee_excl,
 				'total_incl' => $fee_incl,
 				'total_excl' => $fee_excl,
 			),
@@ -601,6 +619,7 @@ class Preview_Receipt_Builder {
 		$shipping = array(
 			array(
 				'label'      => $shipping_label,
+				'total'      => $display_incl ? $shipping_incl : $shipping_excl,
 				'total_incl' => $shipping_incl,
 				'total_excl' => $shipping_excl,
 			),
@@ -609,17 +628,21 @@ class Preview_Receipt_Builder {
 		$discounts = array(
 			array(
 				'label'      => $discount_label,
+				'total'      => $display_incl ? $discount_incl : $discount_excl,
 				'total_incl' => $discount_incl,
 				'total_excl' => $discount_excl,
 			),
 		);
 
 		$totals = array(
+			'subtotal'            => $display_incl ? $subtotal_incl : $subtotal_excl,
 			'subtotal_incl'       => $subtotal_incl,
 			'subtotal_excl'       => $subtotal_excl,
+			'discount_total'      => $display_incl ? $discount_incl : $discount_excl,
 			'discount_total_incl' => $discount_incl,
 			'discount_total_excl' => $discount_excl,
 			'tax_total'           => $total_tax,
+			'grand_total'         => $display_incl ? $grand_total_incl : $grand_total_excl,
 			'grand_total_incl'    => $grand_total_incl,
 			'grand_total_excl'    => $grand_total_excl,
 			'paid_total'          => $grand_total_incl,

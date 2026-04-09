@@ -801,7 +801,7 @@ class Templates {
 	 * @return array Array of starter template definitions.
 	 */
 	public static function get_starter_templates(): array {
-		$examples_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/examples/';
+		$examples_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
 
 		$starters = array(
 			'minimal-receipt'  => array(

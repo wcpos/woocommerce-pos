@@ -69,7 +69,7 @@ All styles are inline (wp_kses_post strips <style> tags).
 		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{i18n.subtotal}} {{totals.subtotal_incl}}</div>
 
 		{{#tax_summary}}
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} {{tax_amount}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}}{{#rate}} ({{rate}}%){{/rate}} {{tax_amount}}</div>
 		{{/tax_summary}}
 
 		<!-- Spacer -->

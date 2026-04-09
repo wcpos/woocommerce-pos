@@ -79,7 +79,7 @@ Includes validity placeholder and terms.
 
 			{{#tax_summary}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-				<span style="color: #555;">{{label}}</span>
+				<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
 				<span>{{tax_amount}}</span>
 			</div>
 			{{/tax_summary}}

@@ -40,6 +40,12 @@
   {{#sku}}
   <text>SKU: {{sku}}</text>
   {{/sku}}
+  {{#discounts}}
+  <row>
+    <col width="24">@ {{unit_subtotal_incl}}</col>
+    <col width="24" align="right">-{{discounts_incl}}</col>
+  </row>
+  {{/discounts}}
   <row>
     <col width="24">@ {{unit_price_incl}}</col>
     <col width="8" align="right">{{qty}}</col>
@@ -77,14 +83,10 @@
   <line />
   {{#tax_summary}}
   <row>
-    <col width="24">{{label}}</col>
+    <col width="24">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
     <col width="24" align="right">{{tax_amount}}</col>
   </row>
   {{/tax_summary}}
-  <row>
-    <col width="24">{{i18n.total_tax}}</col>
-    <col width="24" align="right">{{totals.tax_total}}</col>
-  </row>
   <line style="double" />
   <row>
     <col width="24"><bold><size width="2">{{i18n.total}}</size></bold></col>
