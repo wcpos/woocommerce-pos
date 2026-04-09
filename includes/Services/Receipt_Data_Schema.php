@@ -14,7 +14,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Current schema version.
 	 */
-	const VERSION = '1.0.0';
+	const VERSION = '1.1.0';
 
 	/**
 	 * Top-level keys required in a receipt payload.

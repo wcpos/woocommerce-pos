@@ -115,7 +115,7 @@ class Receipt_Data_Builder {
 			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $dp ) : 0.0;
 
 			$item_meta      = array();
-			$formatted_meta = $item->get_formatted_meta_data( '', true );
+			$formatted_meta = $item->get_formatted_meta_data( '_', true );
 			foreach ( $formatted_meta as $meta_entry ) {
 				$item_meta[] = array(
 					'key'   => wp_strip_all_tags( $meta_entry->display_key ),
