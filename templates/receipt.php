@@ -107,7 +107,11 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 		</tr>
 		<tr>
 			<td><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></td>
-			<td><?php echo esc_html( $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? '' ); ?></td>
+			<?php
+			$receipt_date_str = $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? '';
+			$receipt_ts       = strtotime( $receipt_date_str );
+			?>
+			<td><?php echo esc_html( false !== $receipt_ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $receipt_ts ) : $receipt_date_str ); ?></td>
 		</tr>
 		<?php if ( ! empty( $receipt_data['cashier']['name'] ) ) : ?>
 			<tr>
