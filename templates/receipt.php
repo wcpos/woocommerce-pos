@@ -96,6 +96,11 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 	<?php if ( ! empty( $receipt_data['store']['tax_id'] ) ) : ?>
 		<p><?php printf( /* translators: %s: tax ID */ esc_html__( 'Tax ID: %s', 'woocommerce-pos' ), esc_html( $receipt_data['store']['tax_id'] ) ); ?></p>
 	<?php endif; ?>
+
+	<?php // Pro feature: opening_hours is available when using the WCPOS Pro Stores add-on. ?>
+	<?php if ( ! empty( $receipt_data['store']['opening_hours'] ) ) : ?>
+		<p><?php echo esc_html( $receipt_data['store']['opening_hours'] ); ?></p>
+	<?php endif; ?>
 </div>
 
 <!-- Order Meta -->
@@ -177,7 +182,12 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 
 	<?php foreach ( $receipt_data['discounts'] as $discount ) : ?>
 		<tr>
-			<td><?php echo esc_html( $discount['label'] ?? __( 'Discount', 'woocommerce' ) ); ?></td>
+			<td>
+				<?php echo esc_html( $discount['label'] ?? __( 'Discount', 'woocommerce' ) ); ?>
+				<?php if ( ! empty( $discount['codes'] ) ) : ?>
+					(<?php echo esc_html( implode( ', ', $discount['codes'] ) ); ?>)
+				<?php endif; ?>
+			</td>
 			<td>-<?php echo wp_kses_post( wc_price( $discount['total'] ?? 0, $currency_args ) ); ?></td>
 		</tr>
 	<?php endforeach; ?>
@@ -312,6 +322,7 @@ $has_shipping  = ! empty( array_filter( $shipping_addr ) );
 <?php endif; ?>
 
 <!-- Footer -->
+<?php // Pro feature: personal_notes, policies_and_conditions, and footer_imprint are available when using the WCPOS Pro Stores add-on. ?>
 <?php if ( ! empty( $receipt_data['store']['personal_notes'] ) ) : ?>
 	<div class="footer">
 		<p><?php echo wp_kses_post( nl2br( $receipt_data['store']['personal_notes'] ) ); ?></p>

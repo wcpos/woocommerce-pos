@@ -445,6 +445,11 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Discount Label', 'woocommerce-pos' ),
 					),
+					'codes'      => array(
+						'type'     => 'array',
+						'label'    => __( 'Coupon Codes', 'woocommerce-pos' ),
+						'is_array' => true,
+					),
 					'total'      => array(
 						'type'  => 'money',
 						'label' => __( 'Total', 'woocommerce-pos' ),
