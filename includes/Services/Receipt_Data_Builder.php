@@ -180,12 +180,11 @@ class Receipt_Data_Builder {
 		$discount_total_excl = (float) $order->get_discount_total();
 		$discount_total_tax  = (float) $order->get_discount_tax();
 		$discount_total_incl = $discount_total_excl + $discount_total_tax;
-		$coupon_codes        = $order->get_coupon_codes();
 		$discounts           = array();
 		if ( $discount_total_excl > 0 || $discount_total_tax > 0 ) {
 			$discounts[] = array(
 				'label'      => __( 'Discount', 'woocommerce-pos' ),
-				'codes'      => $coupon_codes,
+				'codes'      => $order->get_coupon_codes(),
 				'total'      => $display_incl ? $discount_total_incl : $discount_total_excl,
 				'total_incl' => $discount_total_incl,
 				'total_excl' => $discount_total_excl,
