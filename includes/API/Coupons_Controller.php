@@ -253,6 +253,8 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		// Re-index to ensure sequential keys.
 		$uuid_values = array_values( $uuid_values );
 
+		$did_prune_duplicates = false;
+
 		// If more than one UUID exists, keep the first and delete the rest.
 		if ( count( $uuid_values ) > 1 ) {
 			$first_uuid_key = key( $uuids );
@@ -263,6 +265,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 				$uuid_meta_row = $uuid_meta->get_data();
 				if ( isset( $uuid_meta_row['id'] ) ) {
 					$coupon->delete_meta_data_by_mid( (int) $uuid_meta_row['id'] );
+					$did_prune_duplicates = true;
 				}
 			}
 			$first_uuid  = reset( $uuids );
@@ -275,6 +278,9 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 
 		if ( $should_update_uuid ) {
 			$coupon->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
+		}
+
+		if ( $did_prune_duplicates || $should_update_uuid ) {
 			$coupon->save_meta_data();
 		}
 	}
