@@ -10,6 +10,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Abstracts\Store;
+
 /**
  * Preview_Receipt_Builder class.
  *
@@ -487,7 +489,11 @@ class Preview_Receipt_Builder {
 	 * @return array Complete receipt data array.
 	 */
 	public function build( $pos_store = null ): array {
-		$this->pos_store = $pos_store ?? wcpos_get_store();
+		$resolved_store = null === $pos_store ? wcpos_get_store() : $pos_store;
+		if ( ! \is_object( $resolved_store ) ) {
+			$resolved_store = wcpos_get_store();
+		}
+		$this->pos_store = \is_object( $resolved_store ) ? $resolved_store : new Store();
 		$currency     = get_option( 'woocommerce_currency', 'USD' );
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 		$tax_config   = $this->get_tax_config();
@@ -762,28 +768,37 @@ class Preview_Receipt_Builder {
 	 */
 	private function get_store_info(): array {
 		$pos_store = $this->pos_store;
+		$store_name      = (string) $this->get_store_value( $pos_store, 'get_name', '' );
+		$store_address   = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
+		$store_address_2 = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
+		$store_city      = (string) $this->get_store_value( $pos_store, 'get_store_city', '' );
+		$store_postcode  = (string) $this->get_store_value( $pos_store, 'get_store_postcode', '' );
+		$store_country   = (string) $this->get_store_value( $pos_store, 'get_store_country', '' );
+		$store_state     = (string) $this->get_store_value( $pos_store, 'get_store_state', '' );
+		$store_phone     = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
+		$store_email     = (string) $this->get_store_value( $pos_store, 'get_email', '' );
 
 		$store = array(
-			'name'          => $pos_store->get_name() ? $pos_store->get_name() : get_bloginfo( 'name' ),
+			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
 			'address_lines' => array_values(
 				array_filter(
 					array(
-						$pos_store->get_store_address(),
-						$pos_store->get_store_address_2(),
-						trim( $pos_store->get_store_city() . ' ' . $pos_store->get_store_postcode() ),
-						$this->format_country_state( $pos_store->get_store_country(), $pos_store->get_store_state() ),
+						$store_address,
+						$store_address_2,
+						trim( $store_city . ' ' . $store_postcode ),
+						$this->format_country_state( $store_country, $store_state ),
 					)
 				)
 			),
 			'tax_id'        => get_option( 'woocommerce_store_tax_number', '' ),
-			'phone'         => $pos_store->get_phone(),
-			'email'         => $pos_store->get_email(),
+			'phone'         => $store_phone,
+			'email'         => $store_email,
 		);
 
-		$opening_hours_raw       = $pos_store->get_opening_hours();
-		$personal_notes          = $pos_store->get_personal_notes();
-		$policies_and_conditions = $pos_store->get_policies_and_conditions();
-		$footer_imprint          = $pos_store->get_footer_imprint();
+		$opening_hours_raw       = $this->get_store_value( $pos_store, 'get_opening_hours', array() );
+		$personal_notes          = (string) $this->get_store_value( $pos_store, 'get_personal_notes', '' );
+		$policies_and_conditions = (string) $this->get_store_value( $pos_store, 'get_policies_and_conditions', '' );
+		$footer_imprint          = (string) $this->get_store_value( $pos_store, 'get_footer_imprint', '' );
 
 		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
 			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
@@ -809,7 +824,7 @@ class Preview_Receipt_Builder {
 			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
 		}
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
-		$opening_hours_notes              = method_exists( $pos_store, 'get_opening_hours_notes' ) ? $pos_store->get_opening_hours_notes() : '';
+		$opening_hours_notes              = (string) $this->get_store_value( $pos_store, 'get_opening_hours_notes', '' );
 		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
 			? $personal_notes
@@ -849,6 +864,23 @@ class Preview_Receipt_Builder {
 		}
 
 		return $country_name;
+	}
+
+	/**
+	 * Safely read a value from a POS store object.
+	 *
+	 * @param mixed  $pos_store Store object.
+	 * @param string $getter    Getter method name.
+	 * @param mixed  $fallback  Fallback value.
+	 *
+	 * @return mixed
+	 */
+	private function get_store_value( $pos_store, string $getter, $fallback ) {
+		if ( ! \is_object( $pos_store ) || ! method_exists( $pos_store, $getter ) ) {
+			return $fallback;
+		}
+
+		return $pos_store->{$getter}();
 	}
 
 	/**

@@ -103,7 +103,9 @@ class Receipt {
 			 * Check for custom template first.
 			 */
 			$custom_template = $this->get_custom_template();
-			$receipt_data    = $this->get_receipt_data( $order, 'live' );
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$is_preview      = isset( $_GET['wcpos_preview_template'] ) && current_user_can( 'manage_woocommerce_pos' );
+			$receipt_data    = $this->get_receipt_data( $order, $is_preview ? 'preview' : 'live' );
 
 			// Start output buffering and register shutdown handler for fatal errors.
 			self::$rendering = true;
@@ -343,9 +345,13 @@ class Receipt {
 	 * @return array
 	 */
 	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
+		$mode = 'fiscal' === $mode ? 'live' : $mode;
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$store_id  = isset( $_GET['store_id'] ) ? (int) $_GET['store_id'] : 0;
+		$store_id  = 'preview' === $mode && isset( $_GET['store_id'] ) ? (int) $_GET['store_id'] : 0;
 		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id ) : null;
+		if ( $store_id > 0 && ! \is_object( $pos_store ) ) {
+			$pos_store = null;
+		}
 
 		return ( new Receipt_Data_Builder() )->build( $order, $mode, $pos_store );
 	}

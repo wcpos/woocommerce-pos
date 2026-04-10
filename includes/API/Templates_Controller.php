@@ -887,12 +887,23 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$store_id  = (int) $request->get_param( 'store_id' );
-		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id ) : wcpos_get_store();
+		$store_id          = (int) $request->get_param( 'store_id' );
+		$request_pos_store = null;
+		if ( $store_id > 0 ) {
+			$request_pos_store = wcpos_get_store( $store_id );
+			if ( ! \is_object( $request_pos_store ) ) {
+				return new WP_Error(
+					'wcpos_invalid_store',
+					__( 'Store not found.', 'woocommerce-pos' ),
+					array( 'status' => 404 )
+				);
+			}
+		}
 
 		if ( $order ) {
-			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $pos_store );
+			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
+			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
 			$receipt_data = ( new Preview_Receipt_Builder() )->build( $pos_store );
 		}
 
