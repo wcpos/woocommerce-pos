@@ -18,8 +18,6 @@ use Ramsey\Uuid\Uuid;
 use WC_Coupon;
 use WC_Meta_Data;
 use WC_REST_Coupons_Controller;
-use WCPOS\WooCommercePOS\API\Traits\WCPOS_REST_API;
-use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
 use WP_REST_Request;
@@ -33,8 +31,8 @@ use WP_REST_Response;
  * optimised bulk-ID queries).
  */
 class Coupons_Controller extends WC_REST_Coupons_Controller {
-	use Uuid_Handler;
-	use WCPOS_REST_API;
+	use Traits\Uuid_Handler;
+	use Traits\WCPOS_REST_API;
 
 	/**
 	 * Endpoint namespace.
