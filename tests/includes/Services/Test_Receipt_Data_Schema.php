@@ -156,6 +156,15 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'opening_hours', $fields );
 		$this->assertSame( 'string', $fields['opening_hours']['type'] );
 
+		$this->assertArrayHasKey( 'opening_hours_vertical', $fields );
+		$this->assertSame( 'string', $fields['opening_hours_vertical']['type'] );
+
+		$this->assertArrayHasKey( 'opening_hours_inline', $fields );
+		$this->assertSame( 'string', $fields['opening_hours_inline']['type'] );
+
+		$this->assertArrayHasKey( 'opening_hours_notes', $fields );
+		$this->assertSame( 'string', $fields['opening_hours_notes']['type'] );
+
 		$this->assertArrayHasKey( 'personal_notes', $fields );
 		$this->assertSame( 'string', $fields['personal_notes']['type'] );
 
@@ -164,5 +173,23 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'footer_imprint', $fields );
 		$this->assertSame( 'string', $fields['footer_imprint']['type'] );
+	}
+
+	/**
+	 * Test get_mock_receipt_data includes new store fields.
+	 */
+	public function test_get_mock_receipt_data_includes_new_store_fields(): void {
+		$data  = Receipt_Data_Schema::get_mock_receipt_data();
+		$store = $data['store'];
+
+		$this->assertArrayHasKey( 'opening_hours', $store );
+		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
+		$this->assertArrayHasKey( 'opening_hours_inline', $store );
+		$this->assertArrayHasKey( 'opening_hours_notes', $store );
+		$this->assertIsString( $store['opening_hours_vertical'] );
+		$this->assertIsString( $store['opening_hours_inline'] );
+		$this->assertIsString( $store['opening_hours_notes'] );
+		$this->assertNotEmpty( $store['opening_hours_vertical'] );
+		$this->assertNotEmpty( $store['opening_hours_inline'] );
 	}
 }

@@ -251,6 +251,18 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Opening Hours', 'woocommerce-pos' ),
 					),
+					'opening_hours_vertical' => array(
+						'type'  => 'string',
+						'label' => __( 'Opening Hours (Vertical)', 'woocommerce-pos' ),
+					),
+					'opening_hours_inline'   => array(
+						'type'  => 'string',
+						'label' => __( 'Opening Hours (Inline)', 'woocommerce-pos' ),
+					),
+					'opening_hours_notes'    => array(
+						'type'  => 'string',
+						'label' => __( 'Opening Hours Notes', 'woocommerce-pos' ),
+					),
 					'personal_notes'          => array(
 						'type'  => 'string',
 						'label' => __( 'Personal Notes', 'woocommerce-pos' ),
@@ -670,6 +682,48 @@ class Receipt_Data_Schema {
 						'label' => __( 'Total', 'woocommerce-pos' ),
 					),
 				),
+			),
+		);
+	}
+
+	/**
+	 * Get mock receipt data for template preview.
+	 *
+	 * Returns a representative receipt payload with realistic values
+	 * for use in the template editor preview and tests.
+	 *
+	 * @return array Mock receipt data.
+	 */
+	public static function get_mock_receipt_data(): array {
+		return array(
+			'meta'    => array(
+				'schema_version'   => self::VERSION,
+				'mode'             => 'sale',
+				'order_id'         => 1001,
+				'order_number'     => '#1001',
+				'created_at_gmt'   => '2024-01-15T10:30:00Z',
+				'created_at_local' => '2024-01-15 10:30:00',
+				'currency'         => 'USD',
+				'customer_note'    => '',
+			),
+			'store'   => array(
+				'name'                    => 'My Store',
+				'address_lines'           => array( '123 Main St', 'Anytown, CA 90210' ),
+				'tax_id'                  => '12-3456789',
+				'phone'                   => '+1 (555) 123-4567',
+				'email'                   => 'hello@mystore.com',
+				'logo'                    => 'https://example.com/logo.png',
+				'opening_hours'           => "Mon\u{2013}Fri 9:00 AM \u{2013} 5:00 PM\nSat 10:00 AM \u{2013} 4:00 PM\nSun Closed",
+				'opening_hours_vertical'  => "Mon 9:00 AM \u{2013} 5:00 PM\nTue 9:00 AM \u{2013} 5:00 PM\nWed 9:00 AM \u{2013} 5:00 PM\nThu 9:00 AM \u{2013} 5:00 PM\nFri 9:00 AM \u{2013} 5:00 PM\nSat 10:00 AM \u{2013} 4:00 PM\nSun Closed",
+				'opening_hours_inline'    => "Mon\u{2013}Fri 9:00 AM \u{2013} 5:00 PM, Sat 10:00 AM \u{2013} 4:00 PM, Sun Closed",
+				'opening_hours_notes'     => 'Closed on public holidays',
+				'personal_notes'          => '',
+				'policies_and_conditions' => '',
+				'footer_imprint'          => '',
+			),
+			'cashier' => array(
+				'id'   => 1,
+				'name' => 'Admin',
 			),
 		);
 	}
