@@ -193,7 +193,7 @@ if [[ -n "$WP_RC_VERSION" ]]; then
     --arg wc  "$WC_STABLE" \
     --arg wp_core "$wp_rc_core" \
     --arg wc_url  "$wc_stable_url" \
-    --argjson experimental false \
+    --argjson experimental true \
     --arg source "wp-rc-detected" \
     '{php: $php, wp: $wp, wc: $wc, wp_core: $wp_core, wc_url: $wc_url, experimental: $experimental, source: $source}')
 
@@ -260,7 +260,7 @@ if [[ -n "$WC_RC_VERSION" ]]; then
     --arg wc  "$WC_RC_VERSION" \
     --arg wp_core "$wp_stable_core" \
     --arg wc_url  "$wc_rc_url" \
-    --argjson experimental false \
+    --argjson experimental true \
     --arg source "wc-rc-detected" \
     '{php: $php, wp: $wp, wc: $wc, wp_core: $wp_core, wc_url: $wc_url, experimental: $experimental, source: $source}')
 
@@ -282,7 +282,7 @@ entry=$(jq -n \
   --argjson wp_core "null" \
   --argjson experimental true \
   --arg source "latest" \
-  '{php: $php, wp: "latest", wc: "latest", wp_core: $wp_core, wc_url: "latest", experimental: $experimental, source: $source}')
+  '{php: $php, wp: "latest", wc: "latest", wp_core: $wp_core, wc_url: "https://downloads.wordpress.org/plugin/woocommerce.zip", experimental: $experimental, source: $source}')
 
 ENTRIES=$(echo "$ENTRIES" | jq --argjson e "$entry" '. + [$e]')
 
