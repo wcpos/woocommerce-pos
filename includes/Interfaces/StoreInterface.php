@@ -300,7 +300,7 @@ interface StoreInterface {
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
 	 *
-	 * @return string
+	 * @return array
 	 */
 	public function get_opening_hours( $context = 'view' );
 

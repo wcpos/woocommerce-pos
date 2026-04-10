@@ -243,8 +243,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 					return false;
 				}
 
-				public function get_opening_hours(): string {
-					return '';
+				public function get_opening_hours(): array {
+					return array();
 				}
 
 				public function get_personal_notes(): string {
@@ -310,8 +310,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 					return false;
 				}
 
-				public function get_opening_hours(): string {
-					return '';
+				public function get_opening_hours(): array {
+					return array();
 				}
 
 				public function get_personal_notes(): string {
@@ -392,8 +392,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 					return false;
 				}
 
-				public function get_opening_hours(): string {
-					return '';
+				public function get_opening_hours(): array {
+					return array();
 				}
 
 				public function get_personal_notes(): string {

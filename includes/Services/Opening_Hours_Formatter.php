@@ -136,6 +136,15 @@ class Opening_Hours_Formatter {
 			return __( 'Closed', 'woocommerce-pos' );
 		}
 
+		// Drop trailing unpaired element to ensure open/close pairs.
+		if ( count( $slots ) % 2 !== 0 ) {
+			array_pop( $slots );
+		}
+
+		if ( empty( $slots ) ) {
+			return __( 'Closed', 'woocommerce-pos' );
+		}
+
 		$ranges = array();
 		for ( $i = 0; $i < count( $slots ) - 1; $i += 2 ) {
 			$open     = self::format_time( $slots[ $i ] );
@@ -153,7 +162,12 @@ class Opening_Hours_Formatter {
 	 * @return string Formatted time (e.g. "9:00 AM" or "09:00").
 	 */
 	private static function format_time( string $time ): string {
-		$timestamp   = strtotime( '2000-01-01 ' . $time );
+		$timestamp = strtotime( '2000-01-01 ' . $time );
+
+		if ( false === $timestamp ) {
+			return $time;
+		}
+
 		$time_format = get_option( 'time_format', 'g:i A' );
 
 		return date_i18n( $time_format, $timestamp );
