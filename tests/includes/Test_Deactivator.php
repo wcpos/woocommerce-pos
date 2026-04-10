@@ -62,13 +62,23 @@ class Test_Deactivator extends WP_UnitTestCase {
 			'Precondition failed: administrator should have manage_woocommerce_pos before deactivation'
 		);
 
+		// Regression: cashier may also acquire manage_woocommerce_pos (e.g. via
+		// manual grant). Verify the deactivator strips it even though the activator
+		// never assigns it to this role.
+		$cashier = get_role( 'cashier' );
+		$this->assertNotNull( $cashier, 'Precondition failed: cashier role should exist' );
+		$cashier->add_cap( 'manage_woocommerce_pos' );
+
 		$this->run_single_deactivate();
+
+		$this->assertFalse(
+			get_role( 'cashier' )->has_cap( 'manage_woocommerce_pos' ),
+			'cashier should NOT have manage_woocommerce_pos after deactivation'
+		);
 
 		foreach ( self::ROLE_CAPS as $role_slug => $caps ) {
 			$role = get_role( $role_slug );
-			if ( ! $role ) {
-				continue;
-			}
+			$this->assertNotNull( $role, "Expected role '$role_slug' to exist" );
 
 			foreach ( $caps as $cap ) {
 				$this->assertFalse(
@@ -103,9 +113,7 @@ class Test_Deactivator extends WP_UnitTestCase {
 
 		foreach ( self::ROLE_CAPS as $role_slug => $caps ) {
 			$role = get_role( $role_slug );
-			if ( ! $role ) {
-				continue;
-			}
+			$this->assertNotNull( $role, "Expected role '$role_slug' to exist" );
 
 			foreach ( $caps as $cap ) {
 				$this->assertTrue(
@@ -131,9 +139,7 @@ class Test_Deactivator extends WP_UnitTestCase {
 
 		foreach ( self::ROLE_CAPS as $role_slug => $caps ) {
 			$role = get_role( $role_slug );
-			if ( ! $role ) {
-				continue;
-			}
+			$this->assertNotNull( $role, "Expected role '$role_slug' to exist" );
 
 			foreach ( $caps as $cap ) {
 				$this->assertTrue(
@@ -182,9 +188,7 @@ class Test_Deactivator extends WP_UnitTestCase {
 
 		foreach ( self::ROLE_CAPS as $role_slug => $caps ) {
 			$role = get_role( $role_slug );
-			if ( ! $role ) {
-				continue;
-			}
+			$this->assertNotNull( $role, "Expected role '$role_slug' to exist" );
 
 			foreach ( $caps as $cap ) {
 				$this->assertTrue(
