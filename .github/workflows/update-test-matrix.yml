@@ -2,12 +2,16 @@ name: Update Test Matrix
 
 on:
   schedule:
-    # Run weekly on Monday at 9am UTC
-    - cron: '0 9 * * 1'
+    # Run daily at 9am UTC
+    - cron: '0 9 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  check-versions:
+  check-and-update:
     name: Check for Version Updates
     runs-on: ubuntu-latest
 
@@ -15,150 +19,190 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Get current matrix versions
+      - name: Read current pinned versions
         id: current
         run: |
-          echo "php_stable=$(jq -r '.php.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
-          echo "wp_stable=$(jq -r '.wordpress.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
-          echo "wc_stable=$(jq -r '.woocommerce.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
-          echo "wp_previous=$(jq -r '.wordpress.previous' .github/test-matrix.json)" >> $GITHUB_OUTPUT
-          echo "wc_previous=$(jq -r '.woocommerce.previous' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "wp=$(jq -r '.wordpress.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "wc=$(jq -r '.woocommerce.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "wp_min=$(jq -r '.wordpress.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "wc_min=$(jq -r '.woocommerce.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
 
-      - name: Get latest WordPress version
-        id: wp-latest
+      - name: Get latest stable WordPress
+        id: wp
         run: |
-          WP_LATEST=$(curl -s https://api.wordpress.org/core/version-check/1.7/ | jq -r '.offers[0].version')
-          echo "version=$WP_LATEST" >> $GITHUB_OUTPUT
-          echo "Latest WordPress: $WP_LATEST"
+          WP_LATEST=$(curl -sf https://api.wordpress.org/core/version-check/1.7/ \
+            | jq -r '.offers[] | select(.response == "upgrade" or .response == "latest") | .version' \
+            | sort -V | tail -1)
+          echo "stable=$WP_LATEST" >> $GITHUB_OUTPUT
+          echo "Latest stable WP: $WP_LATEST"
 
-      - name: Get latest WooCommerce version
-        id: wc-latest
+      - name: Get latest stable WooCommerce
+        id: wc
         run: |
-          WC_LATEST=$(curl -s https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&slug=woocommerce | jq -r '.version')
-          echo "version=$WC_LATEST" >> $GITHUB_OUTPUT
-          echo "Latest WooCommerce: $WC_LATEST"
+          WC_LATEST=$(curl -sf "https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=woocommerce" \
+            | jq -r '.version')
+          echo "stable=$WC_LATEST" >> $GITHUB_OUTPUT
+          echo "Latest stable WC: $WC_LATEST"
 
-      - name: Get latest PHP version
-        id: php-latest
+      - name: Check for RC/beta activity
+        id: rc
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Get latest stable PHP 8.x version
-          PHP_LATEST=$(curl -s https://www.php.net/releases/index.php?json | jq -r 'to_entries | map(select(.key | startswith("8"))) | .[0].key')
-          echo "version=$PHP_LATEST" >> $GITHUB_OUTPUT
-          echo "Latest PHP 8.x: $PHP_LATEST"
-
-      - name: Compare versions and create summary
-        id: compare
-        run: |
-          UPDATES_NEEDED=""
-          
-          # Check WordPress
-          if [ "${{ steps.current.outputs.wp_stable }}" != "${{ steps.wp-latest.outputs.version }}" ]; then
-            # Check if latest is a new major/minor (not just patch)
-            CURRENT_MINOR=$(echo "${{ steps.current.outputs.wp_stable }}" | cut -d. -f1,2)
-            LATEST_MINOR=$(echo "${{ steps.wp-latest.outputs.version }}" | cut -d. -f1,2)
-            if [ "$CURRENT_MINOR" != "$LATEST_MINOR" ]; then
-              UPDATES_NEEDED="${UPDATES_NEEDED}- **WordPress**: ${{ steps.current.outputs.wp_stable }} → ${{ steps.wp-latest.outputs.version }}\n"
-            fi
+          # WordPress RC
+          WP_RC=$(curl -sf "https://api.wordpress.org/core/version-check/1.7/?channel=rc" \
+            | jq -r '.offers[] | select(.response == "development") | .version // ""' \
+            2>/dev/null || echo "")
+          # Skip alpha builds
+          if echo "$WP_RC" | grep -q "alpha"; then
+            WP_RC=""
           fi
-          
-          # Check WooCommerce
-          if [ "${{ steps.current.outputs.wc_stable }}" != "${{ steps.wc-latest.outputs.version }}" ]; then
-            CURRENT_MINOR=$(echo "${{ steps.current.outputs.wc_stable }}" | cut -d. -f1,2)
-            LATEST_MINOR=$(echo "${{ steps.wc-latest.outputs.version }}" | cut -d. -f1,2)
-            if [ "$CURRENT_MINOR" != "$LATEST_MINOR" ]; then
-              UPDATES_NEEDED="${UPDATES_NEEDED}- **WooCommerce**: ${{ steps.current.outputs.wc_stable }} → ${{ steps.wc-latest.outputs.version }}\n"
+          echo "wp_rc=${WP_RC:-none}" >> $GITHUB_OUTPUT
+
+          # WooCommerce RC/beta
+          WC_RC=$(curl -sf \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/woocommerce/woocommerce/releases" \
+            | jq -r '[.[] | select(.prerelease == true) | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+-(rc|beta)"; "i")) | .tag_name][0] // ""' \
+            2>/dev/null || echo "")
+          echo "wc_rc=${WC_RC:-none}" >> $GITHUB_OUTPUT
+
+      - name: Determine updates needed
+        id: updates
+        run: |
+          CHANGES=""
+          CURRENT_WP="${{ steps.current.outputs.wp }}"
+          LATEST_WP="${{ steps.wp.outputs.stable }}"
+          CURRENT_WC="${{ steps.current.outputs.wc }}"
+          LATEST_WC="${{ steps.wc.outputs.stable }}"
+
+          # Validate that all versions are non-empty semver-like strings
+          for var_name in CURRENT_WP LATEST_WP CURRENT_WC LATEST_WC; do
+            val="${!var_name}"
+            if [ -z "$val" ] || ! echo "$val" | grep -qE '^[0-9]+\.[0-9]+'; then
+              echo "::error::$var_name is empty or not a valid version: '$val'"
+              exit 1
             fi
+          done
+
+          # Compare WP major.minor
+          CURRENT_WP_MINOR=$(echo "$CURRENT_WP" | cut -d. -f1,2)
+          LATEST_WP_MINOR=$(echo "$LATEST_WP" | cut -d. -f1,2)
+
+          if [ "$CURRENT_WP_MINOR" != "$LATEST_WP_MINOR" ]; then
+            CHANGES="${CHANGES}wp-major "
+            echo "WP major/minor update: $CURRENT_WP -> $LATEST_WP"
+          elif [ "$CURRENT_WP" != "$LATEST_WP" ]; then
+            CHANGES="${CHANGES}wp-patch "
+            echo "WP patch update: $CURRENT_WP -> $LATEST_WP"
           fi
-          
-          if [ -n "$UPDATES_NEEDED" ]; then
-            echo "updates_available=true" >> $GITHUB_OUTPUT
-            echo -e "updates<<EOF\n${UPDATES_NEEDED}EOF" >> $GITHUB_OUTPUT
+
+          # Compare WC major.minor
+          CURRENT_WC_MINOR=$(echo "$CURRENT_WC" | cut -d. -f1,2)
+          LATEST_WC_MINOR=$(echo "$LATEST_WC" | cut -d. -f1,2)
+
+          if [ "$CURRENT_WC_MINOR" != "$LATEST_WC_MINOR" ]; then
+            CHANGES="${CHANGES}wc-major "
+            echo "WC major/minor update: $CURRENT_WC -> $LATEST_WC"
+          elif [ "$CURRENT_WC" != "$LATEST_WC" ]; then
+            CHANGES="${CHANGES}wc-patch "
+            echo "WC patch update: $CURRENT_WC -> $LATEST_WC"
+          fi
+
+          if [ -z "$CHANGES" ]; then
+            echo "No updates needed"
+            echo "needed=false" >> $GITHUB_OUTPUT
           else
-            echo "updates_available=false" >> $GITHUB_OUTPUT
+            echo "Updates needed: $CHANGES"
+            echo "needed=true" >> $GITHUB_OUTPUT
+            echo "changes=$CHANGES" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create issue for updates
-        if: steps.compare.outputs.updates_available == 'true'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      - name: Update test-matrix.json
+        if: steps.updates.outputs.needed == 'true'
+        run: |
+          LATEST_WP="${{ steps.wp.outputs.stable }}"
+          LATEST_WC="${{ steps.wc.outputs.stable }}"
+          CURRENT_WP="${{ steps.current.outputs.wp }}"
+          CURRENT_WC="${{ steps.current.outputs.wc }}"
+          CHANGES="${{ steps.updates.outputs.changes }}"
+
+          if echo "$CHANGES" | grep -q "wp-major"; then
+            # Rotate WP: current stable becomes minimum, latest becomes stable
+            jq --arg min "$CURRENT_WP" --arg stable "$LATEST_WP" \
+              '.wordpress.minimum = $min | .wordpress.stable = $stable' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          elif echo "$CHANGES" | grep -q "wp-patch"; then
+            jq --arg stable "$LATEST_WP" \
+              '.wordpress.stable = $stable' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          fi
+
+          if echo "$CHANGES" | grep -q "wc-major"; then
+            # Rotate WC: current stable becomes minimum, latest becomes stable
+            jq --arg min "$CURRENT_WC" --arg stable "$LATEST_WC" \
+              '.woocommerce.minimum = $min | .woocommerce.stable = $stable' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          elif echo "$CHANGES" | grep -q "wc-patch"; then
+            jq --arg stable "$LATEST_WC" \
+              '.woocommerce.stable = $stable' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          fi
+
+          # Update lastUpdated
+          jq --arg date "$(date +%Y-%m-%d)" \
+            '.lastUpdated = $date' \
+            .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+
+          echo "Updated test-matrix.json:"
+          cat .github/test-matrix.json
+
+      - name: Create Pull Request
+        if: steps.updates.outputs.needed == 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
         with:
-          script: |
-            const title = '🔄 Test Matrix Version Updates Available';
-            const body = `## New Versions Detected
-            
-            The following updates are available for the test matrix:
-            
-            ${{ steps.compare.outputs.updates }}
-            
-            ### Current Matrix Configuration
-            - PHP: ${{ steps.current.outputs.php_stable }} (stable)
-            - WordPress: ${{ steps.current.outputs.wp_stable }} (stable)
-            - WooCommerce: ${{ steps.current.outputs.wc_stable }} (stable)
-            
-            ### Latest Versions
-            - WordPress: ${{ steps.wp-latest.outputs.version }}
-            - WooCommerce: ${{ steps.wc-latest.outputs.version }}
-            - PHP 8.x: ${{ steps.php-latest.outputs.version }}
-            
-            ### Action Required
-            1. Review the [WooCommerce compatibility requirements](https://woocommerce.com/document/update-php-wordpress/)
-            2. Update \`.github/test-matrix.json\` with new versions
-            3. Update \`.github/workflows/tests.yml\` matrix configuration
-            
-            ### Compatibility Notes
-            - WooCommerce 10.x requires WordPress 6.8+
-            - WooCommerce 9.x requires WordPress 6.6+
-            
+          token: ${{ github.token }}
+          commit-message: "chore: update test matrix versions"
+          branch: auto/update-test-matrix
+          delete-branch: true
+          title: "chore: update test matrix versions"
+          body: |
+            ## Automated Test Matrix Update
+
+            Detected version changes:
+
+            | Dependency | Previous | Current |
+            |---|---|---|
+            | WordPress | ${{ steps.current.outputs.wp }} | ${{ steps.wp.outputs.stable }} |
+            | WooCommerce | ${{ steps.current.outputs.wc }} | ${{ steps.wc.outputs.stable }} |
+
+            ### Active Pre-releases (tested automatically as experimental)
+            - WordPress RC: ${{ steps.rc.outputs.wp_rc }}
+            - WooCommerce RC/beta: ${{ steps.rc.outputs.wc_rc }}
+
             ---
-            *This issue was automatically created by the [Update Test Matrix workflow](../../actions/workflows/update-test-matrix.yml).*`;
-            
-            // Check if similar issue already exists
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'dependencies,ci'
-            });
-            
-            const existingIssue = issues.data.find(i => i.title.includes('Test Matrix Version Updates'));
-            
-            if (existingIssue) {
-              // Update existing issue
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existingIssue.number,
-                body: `## Weekly Check Update\n\n${body}`
-              });
-              console.log(`Updated existing issue #${existingIssue.number}`);
-            } else {
-              // Create new issue
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: title,
-                body: body,
-                labels: ['dependencies', 'ci']
-              });
-              console.log('Created new issue for version updates');
-            }
+            *Auto-generated by [update-test-matrix](${{ github.server_url }}/${{ github.repository }}/actions/workflows/update-test-matrix.yml) workflow.*
+          labels: |
+            dependencies
+            ci
 
       - name: Summary
         run: |
           echo "## Version Check Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Current Matrix" >> $GITHUB_STEP_SUMMARY
-          echo "- PHP: ${{ steps.current.outputs.php_stable }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WordPress: ${{ steps.current.outputs.wp_stable }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WooCommerce: ${{ steps.current.outputs.wc_stable }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Pinned Versions" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency | Pinned | Latest Stable |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| WordPress | ${{ steps.current.outputs.wp }} | ${{ steps.wp.outputs.stable }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| WooCommerce | ${{ steps.current.outputs.wc }} | ${{ steps.wc.outputs.stable }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Latest Available" >> $GITHUB_STEP_SUMMARY
-          echo "- PHP 8.x: ${{ steps.php-latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WordPress: ${{ steps.wp-latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- WooCommerce: ${{ steps.wc-latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "### Active Pre-releases (auto-detected at test time)" >> $GITHUB_STEP_SUMMARY
+          echo "- WordPress: ${{ steps.rc.outputs.wp_rc }}" >> $GITHUB_STEP_SUMMARY
+          echo "- WooCommerce: ${{ steps.rc.outputs.wc_rc }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.compare.outputs.updates_available }}" = "true" ]; then
-            echo "### ⚠️ Updates Available" >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.compare.outputs.updates }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.updates.outputs.needed }}" = "true" ]; then
+            echo "### PR opened to update pinned versions" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### ✅ Matrix is up to date" >> $GITHUB_STEP_SUMMARY
+            echo "### Pinned versions are up to date" >> $GITHUB_STEP_SUMMARY
           fi
