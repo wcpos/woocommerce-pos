@@ -206,9 +206,10 @@ jobs:
         run: |
           mkdir -p /tmp/wc-plugin
           echo "Downloading WooCommerce from: ${{ steps.versions.outputs.wc_url }}"
-          curl -sL "${{ steps.versions.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
+          curl -sfL "${{ steps.versions.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
           unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
           rm /tmp/wc-plugin/woocommerce.zip
+          ls -la /tmp/wc-plugin/woocommerce/
           echo "WooCommerce downloaded and extracted successfully"
 
       - name: Configure wp-env with latest versions
@@ -266,6 +267,9 @@ jobs:
     needs: smoke-test
     if: needs.smoke-test.result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
 
+    permissions:
+      contents: read
+
     outputs:
       matrix: ${{ steps.matrix.outputs.result }}
 
@@ -278,8 +282,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          MATRIX=$(.github/scripts/generate-matrix.sh)
-          echo "result=$MATRIX" >> $GITHUB_OUTPUT
+          MATRIX="$(.github/scripts/generate-matrix.sh)"
+          echo "result=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Generated matrix:"
           echo "$MATRIX" | jq .
 
@@ -352,7 +356,7 @@ jobs:
           WC_URL='${{ matrix.wc_url }}'
           mkdir -p /tmp/wc-plugin
           echo "Downloading WooCommerce from: $WC_URL"
-          curl -sL "$WC_URL" -o /tmp/wc-plugin/woocommerce.zip
+          curl -sfL "$WC_URL" -o /tmp/wc-plugin/woocommerce.zip
           unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
           rm /tmp/wc-plugin/woocommerce.zip
           ls -la /tmp/wc-plugin/woocommerce/
@@ -468,9 +472,10 @@ jobs:
         run: |
           mkdir -p /tmp/wc-plugin
           echo "Downloading WooCommerce from: ${{ needs.smoke-test.outputs.wc_url }}"
-          curl -sL "${{ needs.smoke-test.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
+          curl -sfL "${{ needs.smoke-test.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
           unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
           rm /tmp/wc-plugin/woocommerce.zip
+          ls -la /tmp/wc-plugin/woocommerce/
           echo "WooCommerce downloaded and extracted successfully"
 
       - name: Configure wp-env with latest versions

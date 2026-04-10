@@ -77,6 +77,15 @@ jobs:
           CURRENT_WC="${{ steps.current.outputs.wc }}"
           LATEST_WC="${{ steps.wc.outputs.stable }}"
 
+          # Validate that all versions are non-empty semver-like strings
+          for var_name in CURRENT_WP LATEST_WP CURRENT_WC LATEST_WC; do
+            val="${!var_name}"
+            if [ -z "$val" ] || ! echo "$val" | grep -qE '^[0-9]+\.[0-9]+'; then
+              echo "::error::$var_name is empty or not a valid version: '$val'"
+              exit 1
+            fi
+          done
+
           # Compare WP major.minor
           CURRENT_WP_MINOR=$(echo "$CURRENT_WP" | cut -d. -f1,2)
           LATEST_WP_MINOR=$(echo "$LATEST_WP" | cut -d. -f1,2)
