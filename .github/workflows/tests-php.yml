@@ -202,6 +202,15 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress
 
+      - name: Download WooCommerce
+        run: |
+          mkdir -p /tmp/wc-plugin
+          echo "Downloading WooCommerce from: ${{ steps.versions.outputs.wc_url }}"
+          curl -sL "${{ steps.versions.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
+          unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
+          rm /tmp/wc-plugin/woocommerce.zip
+          echo "WooCommerce downloaded and extracted successfully"
+
       - name: Configure wp-env with latest versions
         run: |
           # Use latest stable versions (null = latest WordPress)
@@ -210,7 +219,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "${{ steps.versions.outputs.wc_url }}",
+              "/tmp/wc-plugin/woocommerce",
               "."
             ],
             "config": {
@@ -338,6 +347,17 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress
 
+      - name: Download WooCommerce
+        run: |
+          WC_URL='${{ matrix.wc_url }}'
+          mkdir -p /tmp/wc-plugin
+          echo "Downloading WooCommerce from: $WC_URL"
+          curl -sL "$WC_URL" -o /tmp/wc-plugin/woocommerce.zip
+          unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
+          rm /tmp/wc-plugin/woocommerce.zip
+          ls -la /tmp/wc-plugin/woocommerce/
+          echo "WooCommerce downloaded and extracted successfully"
+
       - name: Configure wp-env for matrix versions
         run: |
           # wp_core is either null (JSON null), a GitHub ref, or a zip URL
@@ -355,7 +375,7 @@ jobs:
             "core": $WP_CORE_JSON,
             "phpVersion": "${{ matrix.php }}",
             "plugins": [
-              "${{ matrix.wc_url }}",
+              "/tmp/wc-plugin/woocommerce",
               "."
             ],
             "config": {
@@ -444,6 +464,15 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --prefer-dist --no-progress
 
+      - name: Download WooCommerce
+        run: |
+          mkdir -p /tmp/wc-plugin
+          echo "Downloading WooCommerce from: ${{ needs.smoke-test.outputs.wc_url }}"
+          curl -sL "${{ needs.smoke-test.outputs.wc_url }}" -o /tmp/wc-plugin/woocommerce.zip
+          unzip -qo /tmp/wc-plugin/woocommerce.zip -d /tmp/wc-plugin/
+          rm /tmp/wc-plugin/woocommerce.zip
+          echo "WooCommerce downloaded and extracted successfully"
+
       - name: Configure wp-env with latest versions
         run: |
           cat > .wp-env.json << 'EOF'
@@ -451,7 +480,7 @@ jobs:
             "core": null,
             "phpVersion": "8.2",
             "plugins": [
-              "${{ needs.smoke-test.outputs.wc_url }}",
+              "/tmp/wc-plugin/woocommerce",
               "."
             ],
             "config": {
