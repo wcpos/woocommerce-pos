@@ -72,7 +72,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'url'                         => '',
 		'phone'                       => '',
 		'email'                       => '',
-		'opening_hours'               => '',
+		'opening_hours'               => array(),
 		'personal_notes'              => '',
 		'policies_and_conditions'     => '',
 		'footer_imprint'              => '',
@@ -461,7 +461,7 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'url', \home_url() );
 		$this->set_prop( 'phone', '' ); // No WooCommerce equivalent.
 		$this->set_prop( 'email', \get_option( 'woocommerce_email_from_address', \get_option( 'admin_email' ) ) );
-		$this->set_prop( 'opening_hours', '' );
+		$this->set_prop( 'opening_hours', array() );
 		$this->set_prop( 'personal_notes', '' );
 		$this->set_prop( 'policies_and_conditions', '' );
 		$this->set_prop( 'footer_imprint', '' );
