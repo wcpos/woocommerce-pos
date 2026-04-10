@@ -37,7 +37,7 @@ All styles are inline because wp_kses_post strips <style> tags.
 			<span style="flex-shrink: 0; text-align: right;">#{{meta.order_number}}</span>
 		</div>
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-			<span style="flex: 1;">{{i18n.date}}</span>
+			<span style="flex: 1;">{{i18n.order_date}}</span>
 			<span style="flex-shrink: 0; text-align: right;">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
 		</div>
 		{{#cashier.name}}
