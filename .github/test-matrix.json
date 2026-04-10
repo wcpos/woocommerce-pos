@@ -1,27 +1,30 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Test matrix configuration for WCPOS CI. Update these versions when new releases are available.",
-  "lastUpdated": "2026-01-29",
+  "description": "Pinned test matrix versions. Updated automatically by update-test-matrix.yml workflow.",
+  "lastUpdated": "2026-04-10",
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
-    "experimental": "8.4",
-    "comment": "Trimmed to floor (7.4) + mainstream (8.2) + edge (8.4). Middle versions add little signal — breakpoints are 7.4→8.0 and 8.2→8.4."
+    "experimental": "8.4"
   },
   "wordpress": {
-    "previous": "6.7",
-    "stable": "6.9",
-    "comment": "WP 6.8 is the minimum for WC 10.4.x. WP 6.9 is current stable."
+    "minimum": "6.7",
+    "stable": "6.9"
   },
   "woocommerce": {
-    "previous": "9.5.2",
-    "stable": "10.4.3",
-    "comment": "WC 9.5.x requires WP >= 6.6. WC 10.4.x requires WP >= 6.8."
+    "minimum": "9.5.2",
+    "stable": "10.6.2"
   },
+  "matrix": [
+    { "php": "7.4", "wp": "minimum", "wc": "minimum" },
+    { "php": "7.4", "wp": "stable",  "wc": "stable" },
+    { "php": "8.2", "wp": "minimum", "wc": "minimum" },
+    { "php": "8.2", "wp": "stable",  "wc": "stable" },
+    { "php": "experimental", "wp": "stable", "wc": "stable", "experimental": true }
+  ],
   "compatibility": {
-    "rules": [
-      "WooCommerce 10.4.x requires WordPress 6.8+",
-      "WooCommerce 9.5.x requires WordPress 6.6+",
+    "notes": [
+      "WooCommerce 10.x requires WordPress 6.8+",
+      "WooCommerce 9.x requires WordPress 6.6+",
       "Plugin requires PHP >= 7.4"
     ]
   },
