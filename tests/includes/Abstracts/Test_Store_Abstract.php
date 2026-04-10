@@ -64,6 +64,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'phone',
 			'email',
 			'opening_hours',
+			'opening_hours_notes',
 			'personal_notes',
 			'policies_and_conditions',
 			'footer_imprint',
