@@ -53,13 +53,22 @@ class Receipt_Data_Builder {
 		);
 
 		$pos_store               = wcpos_get_store();
-		$opening_hours           = $pos_store->get_opening_hours();
+		$opening_hours_raw       = $pos_store->get_opening_hours();
 		$personal_notes          = $pos_store->get_personal_notes();
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
-		$store['opening_hours']           = $opening_hours ? $opening_hours : null;
+		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
+		} else {
+			$store['opening_hours']          = null;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
+		}
+		$store['opening_hours_notes']     = method_exists( $pos_store, 'get_opening_hours_notes' ) ? ( $pos_store->get_opening_hours_notes() ?: null ) : null;
 		$store['personal_notes']          = $personal_notes ? $personal_notes : null;
 		$store['policies_and_conditions'] = $policies_and_conditions ? $policies_and_conditions : null;
 		$store['footer_imprint']          = $footer_imprint ? $footer_imprint : null;

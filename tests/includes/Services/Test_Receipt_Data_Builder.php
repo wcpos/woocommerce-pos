@@ -202,6 +202,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$this->assertArrayHasKey( 'logo', $store );
 		$this->assertArrayHasKey( 'opening_hours', $store );
+		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
+		$this->assertArrayHasKey( 'opening_hours_inline', $store );
+		$this->assertArrayHasKey( 'opening_hours_notes', $store );
 		$this->assertArrayHasKey( 'personal_notes', $store );
 		$this->assertArrayHasKey( 'policies_and_conditions', $store );
 		$this->assertArrayHasKey( 'footer_imprint', $store );
