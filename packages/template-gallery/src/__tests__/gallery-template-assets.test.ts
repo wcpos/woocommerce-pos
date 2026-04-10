@@ -18,6 +18,8 @@ describe('gallery template assets', () => {
 			engine: string;
 			type: string;
 			category: string;
+			output_type: string;
+			version: number;
 		};
 		const html = fs.readFileSync(htmlPath, 'utf8');
 
@@ -25,6 +27,8 @@ describe('gallery template assets', () => {
 		expect(metadata.engine).toBe('logicless');
 		expect(metadata.type).toBe('receipt');
 		expect(metadata.category).toBe('receipt');
+		expect(metadata.output_type).toBe('html');
+		expect(metadata.version).toBe(1);
 		expect(html).toContain('font-family: monospace');
 		expect(html).toContain('{{store.name}}');
 	});

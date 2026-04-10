@@ -56,13 +56,13 @@ All styles are inline because wp_kses_post strips <style> tags.
 		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
 
 		{{#lines}}
-		<div style="font-weight: 700;">{{name}}</div>
+		<div style="font-weight: 700; overflow-wrap: anywhere; word-break: break-word;">{{name}}</div>
 		<div style="display: flex; justify-content: space-between; color: #444; font-size: 11px; padding-left: 8px; margin-bottom: 4px;">
-			<span>
+			<span style="flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: break-word;">
 				{{qty}} x {{unit_price_incl}}
 				{{#sku}} ({{sku}}){{/sku}}
 			</span>
-			<span>{{line_total_incl}}</span>
+			<span style="flex-shrink: 0; margin-left: 8px; white-space: nowrap;">{{line_total_incl}}</span>
 		</div>
 		{{/lines}}
 
