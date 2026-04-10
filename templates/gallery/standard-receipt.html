@@ -31,6 +31,9 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{#store.phone}}
 		<div style="font-size: 12px; color: #666; margin-top: 2px;">{{store.phone}}</div>
 		{{/store.phone}}
+		{{#store.opening_hours}}
+		<div style="font-size: 11px; color: #666; margin-top: 4px; white-space: pre-line;">{{store.opening_hours}}</div>
+		{{/store.opening_hours}}
 	</div>
 
 	<!-- Divider -->

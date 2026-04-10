@@ -769,15 +769,37 @@ class Preview_Receipt_Builder {
 		);
 
 		$pos_store               = wcpos_get_store();
-		$opening_hours           = $pos_store->get_opening_hours();
+		$opening_hours_raw       = $pos_store->get_opening_hours();
 		$personal_notes          = $pos_store->get_personal_notes();
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
+		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
+		} elseif ( \is_string( $opening_hours_raw ) && '' !== trim( $opening_hours_raw ) ) {
+			$store['opening_hours']          = $opening_hours_raw;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
+		} else {
+			// Sample hours for preview when none configured.
+			$opening_hours_raw = array(
+				'0' => array( '09:00', '17:00' ),
+				'1' => array( '09:00', '17:00' ),
+				'2' => array( '09:00', '17:00' ),
+				'3' => array( '09:00', '17:00' ),
+				'4' => array( '09:00', '17:00' ),
+				'5' => array( '10:00', '16:00' ),
+				'6' => array(),
+			);
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
+		}
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
-		$store['opening_hours']           = ( null !== $opening_hours && '' !== $opening_hours )
-			? $opening_hours
-			: __( 'Mon–Fri 9:00 AM – 6:00 PM, Sat 10:00 AM – 4:00 PM', 'woocommerce-pos' );
+		$opening_hours_notes              = method_exists( $pos_store, 'get_opening_hours_notes' ) ? $pos_store->get_opening_hours_notes() : '';
+		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
 			? $personal_notes
 			: __( 'Thank you for shopping with us! We appreciate your business.', 'woocommerce-pos' );

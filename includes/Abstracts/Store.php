@@ -72,7 +72,8 @@ class Store extends \WC_Data implements StoreInterface {
 		'url'                         => '',
 		'phone'                       => '',
 		'email'                       => '',
-		'opening_hours'               => '',
+		'opening_hours'               => array(),
+		'opening_hours_notes'         => '',
 		'personal_notes'              => '',
 		'policies_and_conditions'     => '',
 		'footer_imprint'              => '',
@@ -461,7 +462,8 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'url', \home_url() );
 		$this->set_prop( 'phone', '' ); // No WooCommerce equivalent.
 		$this->set_prop( 'email', \get_option( 'woocommerce_email_from_address', \get_option( 'admin_email' ) ) );
-		$this->set_prop( 'opening_hours', '' );
+		$this->set_prop( 'opening_hours', array() );
+		$this->set_prop( 'opening_hours_notes', '' );
 		$this->set_prop( 'personal_notes', '' );
 		$this->set_prop( 'policies_and_conditions', '' );
 		$this->set_prop( 'footer_imprint', '' );
@@ -501,10 +503,20 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store opening hours.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return string
+	 * @return array|string
 	 */
 	public function get_opening_hours( $context = 'view' ) {
 		return $this->get_prop( 'opening_hours', $context );
+	}
+
+	/**
+	 * Get Store opening hours notes.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_opening_hours_notes( $context = 'view' ) {
+		return $this->get_prop( 'opening_hours_notes', $context );
 	}
 
 	/**
