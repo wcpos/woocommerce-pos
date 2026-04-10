@@ -790,7 +790,7 @@ class Preview_Receipt_Builder {
 		$store['opening_hours']           = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
 		$store['opening_hours_vertical']  = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
 		$store['opening_hours_inline']    = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
-		$store['opening_hours_notes']     = method_exists( $pos_store, 'get_opening_hours_notes' ) ? ( $pos_store->get_opening_hours_notes() ?: null ) : null;
+		$store['opening_hours_notes']     = $pos_store->get_opening_hours_notes() ?: null;
 		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
 			? $personal_notes
 			: __( 'Thank you for shopping with us! We appreciate your business.', 'woocommerce-pos' );
