@@ -503,7 +503,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Get Store opening hours.
 	 *
 	 * @param  string $context What the value is for. Valid values are view and edit.
-	 * @return string
+	 * @return array|string
 	 */
 	public function get_opening_hours( $context = 'view' ) {
 		return $this->get_prop( 'opening_hours', $context );

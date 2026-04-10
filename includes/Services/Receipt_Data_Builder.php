@@ -63,12 +63,17 @@ class Receipt_Data_Builder {
 			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
 			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
 			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
+		} elseif ( \is_string( $opening_hours_raw ) && '' !== trim( $opening_hours_raw ) ) {
+			$store['opening_hours']          = $opening_hours_raw;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
 		} else {
 			$store['opening_hours']          = null;
 			$store['opening_hours_vertical'] = null;
 			$store['opening_hours_inline']   = null;
 		}
-		$store['opening_hours_notes']     = $pos_store->get_opening_hours_notes() ?: null;
+		$opening_hours_notes              = method_exists( $pos_store, 'get_opening_hours_notes' ) ? $pos_store->get_opening_hours_notes() : '';
+		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = $personal_notes ? $personal_notes : null;
 		$store['policies_and_conditions'] = $policies_and_conditions ? $policies_and_conditions : null;
 		$store['footer_imprint']          = $footer_imprint ? $footer_imprint : null;

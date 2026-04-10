@@ -145,8 +145,9 @@ class Opening_Hours_Formatter {
 			return __( 'Closed', 'woocommerce-pos' );
 		}
 
-		$ranges = array();
-		for ( $i = 0; $i < count( $slots ) - 1; $i += 2 ) {
+		$ranges     = array();
+		$slot_count = count( $slots );
+		for ( $i = 0; $i < $slot_count - 1; $i += 2 ) {
 			$open     = self::format_time( $slots[ $i ] );
 			$close    = self::format_time( $slots[ $i + 1 ] );
 			$ranges[] = $open . " \u{2013} " . $close;

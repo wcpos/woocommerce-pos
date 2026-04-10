@@ -211,6 +211,54 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test legacy string opening hours remain available in live receipt payloads.
+	 */
+	public function test_build_preserves_legacy_string_opening_hours_without_notes_getter(): void {
+		$order        = OrderHelper::create_order();
+		$legacy_hours = 'Mon-Fri 09:00-17:00';
+
+		$store_filter = static function () use ( $legacy_hours ) {
+			return new class( $legacy_hours ) {
+				private string $legacy_hours;
+
+				public function __construct( string $legacy_hours ) {
+					$this->legacy_hours = $legacy_hours;
+				}
+
+				public function get_opening_hours(): string {
+					return $this->legacy_hours;
+				}
+
+				public function get_personal_notes(): string {
+					return '';
+				}
+
+				public function get_policies_and_conditions(): string {
+					return '';
+				}
+
+				public function get_footer_imprint(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$payload = $this->builder->build( $order, 'live' );
+			$store   = $payload['store'];
+
+			$this->assertSame( $legacy_hours, $store['opening_hours'] );
+			$this->assertNull( $store['opening_hours_vertical'] );
+			$this->assertNull( $store['opening_hours_inline'] );
+			$this->assertNull( $store['opening_hours_notes'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+		}
+	}
+
+	/**
 	 * Test site logo fallback is exposed when not explicitly disabled.
 	 */
 	public function test_build_uses_site_logo_when_available_and_not_opted_out(): void {

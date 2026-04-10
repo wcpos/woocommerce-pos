@@ -774,7 +774,15 @@ class Preview_Receipt_Builder {
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
 		$footer_imprint          = $pos_store->get_footer_imprint();
 
-		if ( empty( $opening_hours_raw ) || ! \is_array( $opening_hours_raw ) ) {
+		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
+		} elseif ( \is_string( $opening_hours_raw ) && '' !== trim( $opening_hours_raw ) ) {
+			$store['opening_hours']          = $opening_hours_raw;
+			$store['opening_hours_vertical'] = null;
+			$store['opening_hours_inline']   = null;
+		} else {
 			// Sample hours for preview when none configured.
 			$opening_hours_raw = array(
 				'0' => array( '09:00', '17:00' ),
@@ -785,12 +793,13 @@ class Preview_Receipt_Builder {
 				'5' => array( '10:00', '16:00' ),
 				'6' => array(),
 			);
+			$store['opening_hours']          = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
+			$store['opening_hours_vertical'] = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
+			$store['opening_hours_inline']   = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
 		}
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
-		$store['opening_hours']           = Opening_Hours_Formatter::format_compact( $opening_hours_raw );
-		$store['opening_hours_vertical']  = Opening_Hours_Formatter::format_vertical( $opening_hours_raw );
-		$store['opening_hours_inline']    = Opening_Hours_Formatter::format_inline( $opening_hours_raw );
-		$store['opening_hours_notes']     = $pos_store->get_opening_hours_notes() ?: null;
+		$opening_hours_notes              = method_exists( $pos_store, 'get_opening_hours_notes' ) ? $pos_store->get_opening_hours_notes() : '';
+		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = ( null !== $personal_notes && '' !== $personal_notes )
 			? $personal_notes
 			: __( 'Thank you for shopping with us! We appreciate your business.', 'woocommerce-pos' );
