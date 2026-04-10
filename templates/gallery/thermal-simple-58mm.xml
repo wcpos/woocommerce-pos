@@ -9,7 +9,7 @@
   <text>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</text>
   <line />
   {{#lines}}
-  <text>{{name}}</text>
+  <bold>{{name}}</bold>
   {{#discounts}}
   <row>
     <col width="16">x{{qty}} @ {{unit_subtotal_incl}}</col>

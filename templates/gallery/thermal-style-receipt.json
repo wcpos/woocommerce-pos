@@ -1,0 +1,10 @@
+{
+    "key": "thermal-style-receipt",
+    "title": "Thermal Style Receipt",
+    "description": "Browser receipt template inspired by thermal printer layouts, with bold hierarchy and compact monospace styling.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "version": 1
+}

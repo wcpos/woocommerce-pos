@@ -36,7 +36,7 @@
   </row>
   <line />
   {{#lines}}
-  <text>{{name}}</text>
+  <bold>{{name}}</bold>
   {{#sku}}
   <text>SKU: {{sku}}</text>
   {{/sku}}

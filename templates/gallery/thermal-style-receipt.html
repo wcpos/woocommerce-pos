@@ -1,0 +1,144 @@
+<!--
+Thermal Style Receipt — browser template inspired by a bold thermal layout.
+
+Uses the logicless template engine with section blocks:
+  {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+  {{^key}}...{{/key}}  — show block when value is empty/falsy
+  {{.}}                — current value (for arrays of strings)
+  {{key.path}}         — dot-path placeholder substitution
+
+Money fields are auto-formatted as currency.
+All styles are inline because wp_kses_post strips <style> tags.
+-->
+<div style="box-sizing: border-box; font-family: monospace, 'Courier New', Courier; font-size: 12px; line-height: 1.4; color: #000; background: #f5f5f5; padding: 24px;">
+	<div style="width: 72mm; max-width: 100%; margin: 0 auto; background: #fff; padding: 4mm; box-shadow: 0 1px 2px rgba(0,0,0,.08);">
+		<div style="text-align: center; font-size: 16px; font-weight: 700; margin-bottom: 6px;">
+			{{store.name}}
+		</div>
+
+		{{#store.address_lines}}
+		<div style="text-align: center; font-size: 10px; color: #555;">{{.}}</div>
+		{{/store.address_lines}}
+
+		{{#store.phone}}
+		<div style="text-align: center; font-size: 10px; color: #555;">{{store.phone}}</div>
+		{{/store.phone}}
+
+		{{#store.opening_hours}}
+		<div style="text-align: center; font-size: 10px; color: #555; white-space: pre-line; margin-top: 4px;">{{store.opening_hours}}</div>
+		{{/store.opening_hours}}
+
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+
+		<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{i18n.receipt}}</div>
+
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{i18n.order}}</span>
+			<span style="flex-shrink: 0; text-align: right;">#{{meta.order_number}}</span>
+		</div>
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{i18n.date}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
+		</div>
+		{{#cashier.name}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{i18n.cashier}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{cashier.name}}</span>
+		</div>
+		{{/cashier.name}}
+		{{#customer.name}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{i18n.customer}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{customer.name}}</span>
+		</div>
+		{{/customer.name}}
+
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+
+		{{#lines}}
+		<div style="font-weight: 700;">{{name}}</div>
+		<div style="display: flex; justify-content: space-between; color: #444; font-size: 11px; padding-left: 8px; margin-bottom: 4px;">
+			<span>
+				{{qty}} x {{unit_price_incl}}
+				{{#sku}} ({{sku}}){{/sku}}
+			</span>
+			<span>{{line_total_incl}}</span>
+		</div>
+		{{/lines}}
+
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{i18n.subtotal}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{totals.subtotal_incl}}</span>
+		</div>
+
+		{{#discounts}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{label}}</span>
+			<span style="flex-shrink: 0; text-align: right;">-{{total_incl}}</span>
+		</div>
+		{{/discounts}}
+
+		{{#shipping}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{label}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{total_incl}}</span>
+		</div>
+		{{/shipping}}
+
+		{{#fees}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{label}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{total_incl}}</span>
+		</div>
+		{{/fees}}
+
+		{{#tax_summary}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{tax_amount}}</span>
+		</div>
+		{{/tax_summary}}
+
+		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; border-top: 2px solid #000; margin-top: 4px; padding-top: 4px;">
+			<span>{{i18n.total}}</span>
+			<span>{{totals.grand_total_incl}}</span>
+		</div>
+
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+
+		{{#payments}}
+		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+			<span style="flex: 1;">{{method_title}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{amount}}</span>
+		</div>
+		{{#tendered}}
+		<div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
+			<span style="flex: 1;">&nbsp;&nbsp;{{i18n.tendered}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{tendered}}</span>
+		</div>
+		{{/tendered}}
+		{{#change}}
+		<div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
+			<span style="flex: 1;">&nbsp;&nbsp;{{i18n.change}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{change}}</span>
+		</div>
+		{{/change}}
+		{{/payments}}
+
+		{{#meta.customer_note}}
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+		<div style="font-size: 10px; color: #555;">
+			<span style="font-weight: 700;">{{i18n.customer_note}}:</span>
+			{{meta.customer_note}}
+		</div>
+		{{/meta.customer_note}}
+
+		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
+
+		<div style="text-align: center; font-size: 10px; color: #555;">
+			{{i18n.thank_you_purchase}}
+		</div>
+	</div>
+</div>

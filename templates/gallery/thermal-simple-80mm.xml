@@ -11,7 +11,7 @@
   </row>
   <line />
   {{#lines}}
-  <text>{{name}}</text>
+  <bold>{{name}}</bold>
   {{#discounts}}
   <row>
     <col width="24">x{{qty}} @ {{unit_subtotal_incl}}</col>
