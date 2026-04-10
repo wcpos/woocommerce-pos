@@ -211,8 +211,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		// the shared maybe_add_post_uuid() from Uuid_Handler.
 		$this->maybe_add_coupon_uuid( $coupon );
 
-		// Make sure we parse the meta data before returning the response.
-		$coupon->save_meta_data();
+		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $coupon );
 
 		// Estimate response size and log if excessive.
@@ -276,6 +275,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 
 		if ( $should_update_uuid ) {
 			$coupon->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
+			$coupon->save_meta_data();
 		}
 	}
 
