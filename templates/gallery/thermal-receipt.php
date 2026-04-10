@@ -100,6 +100,10 @@ $separator = str_repeat( '-', 42 );
 		</div>
 	<?php endif; ?>
 
+	<?php if ( ! empty( $store['opening_hours'] ) ) : ?>
+		<div class="center small"><?php echo esc_html( $store['opening_hours'] ); ?></div>
+	<?php endif; ?>
+
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>
 
 	<div class="center bold mb"><?php esc_html_e( 'SALES RECEIPT', 'woocommerce-pos' ); ?></div>

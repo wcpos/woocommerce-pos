@@ -27,6 +27,9 @@ payment details with tendered/change.
 			{{#store.tax_id}}
 			<div style="font-size: 12px; color: #666;">Tax ID: {{store.tax_id}}</div>
 			{{/store.tax_id}}
+			{{#store.opening_hours}}
+			<div style="font-size: 11px; color: #666; margin-top: 4px; white-space: pre-line;">{{store.opening_hours}}</div>
+			{{/store.opening_hours}}
 		</div>
 		<div style="text-align: right;">
 			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.receipt}}</div>

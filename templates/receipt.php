@@ -97,9 +97,8 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 		<p><?php printf( /* translators: %s: tax ID */ esc_html__( 'Tax ID: %s', 'woocommerce-pos' ), esc_html( $receipt_data['store']['tax_id'] ) ); ?></p>
 	<?php endif; ?>
 
-	<?php // Pro feature: opening_hours is available when using the WCPOS Pro Stores add-on. ?>
 	<?php if ( ! empty( $receipt_data['store']['opening_hours'] ) ) : ?>
-		<p><?php echo esc_html( $receipt_data['store']['opening_hours'] ); ?></p>
+		<p><?php echo wp_kses_post( nl2br( esc_html( $receipt_data['store']['opening_hours'] ) ) ); ?></p>
 	<?php endif; ?>
 </div>
 
