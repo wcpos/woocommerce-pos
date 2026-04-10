@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Abstracts\Store;
 use WC_Abstract_Order;
 
 /**
@@ -39,6 +40,9 @@ class Receipt_Data_Builder {
 		if ( null === $pos_store ) {
 			$order_store_id = (int) $order->get_meta( '_pos_store' );
 			$pos_store      = $order_store_id > 0 ? wcpos_get_store( $order_store_id ) : wcpos_get_store();
+		}
+		if ( false === $pos_store ) {
+			$pos_store = new Store();
 		}
 
 		$store = array(
