@@ -265,9 +265,15 @@ class Templates_Controller extends WP_REST_Controller {
 						'type'        => 'string',
 						'required'    => true,
 					),
-					'order_id' => array(
+					'order_id'  => array(
 						'description' => __( 'Order ID or "latest" for most recent POS order. Omit for sample data.', 'woocommerce-pos' ),
 						'type'        => array( 'integer', 'string' ),
+						'required'    => false,
+						'default'     => 0,
+					),
+					'store_id'  => array(
+						'description' => __( 'POS store ID for store-specific data.', 'woocommerce-pos' ),
+						'type'        => 'integer',
 						'required'    => false,
 						'default'     => 0,
 					),
@@ -881,10 +887,24 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 		}
 
+		$store_id          = (int) $request->get_param( 'store_id' );
+		$request_pos_store = null;
+		if ( $store_id > 0 ) {
+			$request_pos_store = wcpos_get_store( $store_id );
+			if ( ! \is_object( $request_pos_store ) ) {
+				return new WP_Error(
+					'wcpos_invalid_store',
+					__( 'Store not found.', 'woocommerce-pos' ),
+					array( 'status' => 404 )
+				);
+			}
+		}
+
 		if ( $order ) {
-			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
-			$receipt_data = ( new Preview_Receipt_Builder() )->build();
+			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
+			$receipt_data = ( new Preview_Receipt_Builder() )->build( $pos_store );
 		}
 
 		$currency       = $receipt_data['meta']['currency'] ?? 'USD';
@@ -933,12 +953,16 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 
 			// Legacy-php needs a server-side iframe URL.
-			$order_key   = $order->get_order_key();
+			$order_key      = $order->get_order_key();
+			$preview_params = array(
+				'key'                    => $order_key,
+				'wcpos_preview_template' => $id,
+			);
+			if ( $store_id > 0 ) {
+				$preview_params['store_id'] = $store_id;
+			}
 			$preview_url = add_query_arg(
-				array(
-					'key'                    => $order_key,
-					'wcpos_preview_template' => $id,
-				),
+				$preview_params,
 				get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
 			);
 

@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Abstracts\Store;
 use WC_Abstract_Order;
 
 /**
@@ -16,12 +17,13 @@ class Receipt_Data_Builder {
 	/**
 	 * Build a canonical receipt payload.
 	 *
-	 * @param WC_Abstract_Order $order Receipt order.
-	 * @param string            $mode  Receipt mode.
+	 * @param WC_Abstract_Order $order     Receipt order.
+	 * @param string            $mode      Receipt mode.
+	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
 	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live' ): array {
+	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 
 		$meta = array(
@@ -35,28 +37,47 @@ class Receipt_Data_Builder {
 			'customer_note'    => $order->get_customer_note(),
 		);
 
+		if ( null === $pos_store ) {
+			$order_store_id = (int) $order->get_meta( '_pos_store' );
+			$pos_store      = $order_store_id > 0 ? wcpos_get_store( $order_store_id ) : wcpos_get_store();
+		}
+		if ( ! \is_object( $pos_store ) ) {
+			$pos_store = wcpos_get_store();
+		}
+		if ( ! \is_object( $pos_store ) ) {
+			$pos_store = new Store();
+		}
+		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
+		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
+		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
+		$store_city            = (string) $this->get_store_value( $pos_store, 'get_store_city', '' );
+		$store_postcode        = (string) $this->get_store_value( $pos_store, 'get_store_postcode', '' );
+		$store_country         = (string) $this->get_store_value( $pos_store, 'get_store_country', '' );
+		$store_state           = (string) $this->get_store_value( $pos_store, 'get_store_state', '' );
+		$store_phone           = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
+		$store_email           = (string) $this->get_store_value( $pos_store, 'get_email', '' );
+
 		$store = array(
-			'name'          => get_bloginfo( 'name' ),
+			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
 			'address_lines' => array_values(
 				array_filter(
 					array(
-						get_option( 'woocommerce_store_address', '' ),
-						get_option( 'woocommerce_store_address_2', '' ),
-						trim( get_option( 'woocommerce_store_city', '' ) . ' ' . get_option( 'woocommerce_store_postcode', '' ) ),
-						$this->get_store_country_state(),
+						$store_address,
+						$store_address_2,
+						trim( $store_city . ' ' . $store_postcode ),
+						$this->format_country_state( $store_country, $store_state ),
 					)
 				)
 			),
 			'tax_id'        => get_option( 'woocommerce_store_tax_number', '' ),
-			'phone'         => get_option( 'woocommerce_store_phone', '' ),
-			'email'         => get_option( 'admin_email', '' ),
+			'phone'         => $store_phone,
+			'email'         => $store_email,
 		);
 
-		$pos_store               = wcpos_get_store();
-		$opening_hours_raw       = $pos_store->get_opening_hours();
-		$personal_notes          = $pos_store->get_personal_notes();
-		$policies_and_conditions = $pos_store->get_policies_and_conditions();
-		$footer_imprint          = $pos_store->get_footer_imprint();
+		$opening_hours_raw       = $this->get_store_value( $pos_store, 'get_opening_hours', array() );
+		$personal_notes          = (string) $this->get_store_value( $pos_store, 'get_personal_notes', '' );
+		$policies_and_conditions = (string) $this->get_store_value( $pos_store, 'get_policies_and_conditions', '' );
+		$footer_imprint          = (string) $this->get_store_value( $pos_store, 'get_footer_imprint', '' );
 
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
 		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
@@ -72,7 +93,7 @@ class Receipt_Data_Builder {
 			$store['opening_hours_vertical'] = null;
 			$store['opening_hours_inline']   = null;
 		}
-		$opening_hours_notes              = method_exists( $pos_store, 'get_opening_hours_notes' ) ? $pos_store->get_opening_hours_notes() : '';
+		$opening_hours_notes              = (string) $this->get_store_value( $pos_store, 'get_opening_hours_notes', '' );
 		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = $personal_notes ? $personal_notes : null;
 		$store['policies_and_conditions'] = $policies_and_conditions ? $policies_and_conditions : null;
@@ -314,22 +335,19 @@ class Receipt_Data_Builder {
 	}
 
 	/**
-	 * Get formatted store country/state string.
+	 * Format country and state codes into display names.
 	 *
-	 * The woocommerce_default_country option stores "CC:SS" (e.g. "US:AL").
-	 * This converts it to display names like "Alabama, United States (US)".
+	 * Converts codes like "US" / "AL" to "Alabama, United States (US)".
+	 *
+	 * @param string $country Country code.
+	 * @param string $state   State code.
 	 *
 	 * @return string
 	 */
-	private function get_store_country_state(): string {
-		$raw = get_option( 'woocommerce_default_country', '' );
-		if ( '' === $raw ) {
+	private function format_country_state( string $country, string $state ): string {
+		if ( '' === $country ) {
 			return '';
 		}
-
-		$parts   = explode( ':', $raw );
-		$country = $parts[0] ?? '';
-		$state   = $parts[1] ?? '';
 
 		$country_name = WC()->countries->get_countries()[ $country ] ?? $country;
 
@@ -341,6 +359,23 @@ class Receipt_Data_Builder {
 		}
 
 		return $country_name;
+	}
+
+	/**
+	 * Safely read a value from a POS store object.
+	 *
+	 * @param mixed  $pos_store Store object.
+	 * @param string $getter    Getter method name.
+	 * @param mixed  $fallback  Fallback value.
+	 *
+	 * @return mixed
+	 */
+	private function get_store_value( $pos_store, string $getter, $fallback ) {
+		if ( ! \is_object( $pos_store ) || ! method_exists( $pos_store, $getter ) ) {
+			return $fallback;
+		}
+
+		return $pos_store->{$getter}();
 	}
 
 	/**
