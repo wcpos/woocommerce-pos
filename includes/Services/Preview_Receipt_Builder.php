@@ -20,6 +20,13 @@ namespace WCPOS\WooCommercePOS\Services;
 class Preview_Receipt_Builder {
 
 	/**
+	 * POS store object used to populate store fields.
+	 *
+	 * @var object
+	 */
+	private $pos_store;
+
+	/**
 	 * Fallback tax rate percentage when no WooCommerce tax rates are configured.
 	 *
 	 * @var float
@@ -475,9 +482,12 @@ class Preview_Receipt_Builder {
 	 * Returns an array matching the receipt data schema with all sections
 	 * populated using the store's real settings, products, and tax rates.
 	 *
+	 * @param object|null $pos_store POS store object. Falls back to default store.
+	 *
 	 * @return array Complete receipt data array.
 	 */
-	public function build(): array {
+	public function build( $pos_store = null ): array {
+		$this->pos_store = $pos_store ?? wcpos_get_store();
 		$currency     = get_option( 'woocommerce_currency', 'USD' );
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 		$tax_config   = $this->get_tax_config();
@@ -746,29 +756,30 @@ class Preview_Receipt_Builder {
 	}
 
 	/**
-	 * Get store information from WooCommerce options.
+	 * Get store information from the POS store object.
 	 *
 	 * @return array Store data with name, address, branding, and policy fields.
 	 */
 	private function get_store_info(): array {
+		$pos_store = $this->pos_store;
+
 		$store = array(
-			'name'          => get_bloginfo( 'name' ),
+			'name'          => $pos_store->get_name() ? $pos_store->get_name() : get_bloginfo( 'name' ),
 			'address_lines' => array_values(
 				array_filter(
 					array(
-						get_option( 'woocommerce_store_address', '' ),
-						get_option( 'woocommerce_store_address_2', '' ),
-						trim( get_option( 'woocommerce_store_city', '' ) . ' ' . get_option( 'woocommerce_store_postcode', '' ) ),
-						$this->get_store_country_state(),
+						$pos_store->get_store_address(),
+						$pos_store->get_store_address_2(),
+						trim( $pos_store->get_store_city() . ' ' . $pos_store->get_store_postcode() ),
+						$this->format_country_state( $pos_store->get_store_country(), $pos_store->get_store_state() ),
 					)
 				)
 			),
 			'tax_id'        => get_option( 'woocommerce_store_tax_number', '' ),
-			'phone'         => get_option( 'woocommerce_store_phone', '' ),
-			'email'         => get_option( 'admin_email', '' ),
+			'phone'         => $pos_store->get_phone(),
+			'email'         => $pos_store->get_email(),
 		);
 
-		$pos_store               = wcpos_get_store();
 		$opening_hours_raw       = $pos_store->get_opening_hours();
 		$personal_notes          = $pos_store->get_personal_notes();
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
@@ -814,22 +825,19 @@ class Preview_Receipt_Builder {
 	}
 
 	/**
-	 * Get formatted store country/state string.
+	 * Format country and state codes into display names.
 	 *
-	 * The woocommerce_default_country option stores "CC:SS" (e.g. "US:AL").
-	 * This converts it to display names like "Alabama, United States (US)".
+	 * Converts codes like "US" / "AL" to "Alabama, United States (US)".
 	 *
-	 * @return string Formatted country/state string, or empty string if not set.
+	 * @param string $country Country code.
+	 * @param string $state   State code.
+	 *
+	 * @return string
 	 */
-	private function get_store_country_state(): string {
-		$raw = get_option( 'woocommerce_default_country', '' );
-		if ( '' === $raw ) {
+	private function format_country_state( string $country, string $state ): string {
+		if ( '' === $country ) {
 			return '';
 		}
-
-		$parts   = explode( ':', $raw );
-		$country = $parts[0] ?? '';
-		$state   = $parts[1] ?? '';
 
 		$country_name = WC()->countries->get_countries()[ $country ] ?? $country;
 

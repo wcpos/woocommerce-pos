@@ -12,9 +12,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Exception;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
-use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
-use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 
 /**
@@ -105,8 +103,7 @@ class Receipt {
 			 * Check for custom template first.
 			 */
 			$custom_template = $this->get_custom_template();
-			$receipt_mode    = $this->resolve_receipt_mode();
-			$receipt_data    = $this->get_receipt_data( $order, $receipt_mode );
+			$receipt_data    = $this->get_receipt_data( $order, 'live' );
 
 			// Start output buffering and register shutdown handler for fatal errors.
 			self::$rendering = true;
@@ -338,17 +335,6 @@ class Receipt {
 	}
 
 	/**
-	 * Resolve receipt mode from request and settings.
-	 *
-	 * @return string
-	 */
-	private function resolve_receipt_mode(): string {
-		$requested_mode = isset( $_GET['mode'] ) ? sanitize_text_field( wp_unslash( $_GET['mode'] ) ) : null;
-
-		return Receipt_Snapshot_Store::instance()->resolve_mode( $requested_mode );
-	}
-
-	/**
 	 * Get receipt data payload for the selected mode.
 	 *
 	 * @param \WC_Abstract_Order $order Order object.
@@ -357,22 +343,11 @@ class Receipt {
 	 * @return array
 	 */
 	private function get_receipt_data( \WC_Abstract_Order $order, string $mode ): array {
-		$snapshot_store = Receipt_Snapshot_Store::instance();
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$store_id  = isset( $_GET['store_id'] ) ? (int) $_GET['store_id'] : 0;
+		$pos_store = $store_id > 0 ? wcpos_get_store( $store_id ) : null;
 
-		if ( 'fiscal' === $mode ) {
-			$snapshot = $snapshot_store->get_snapshot( $order->get_id() );
-			if ( $snapshot ) {
-				// Backfill i18n labels for pre-upgrade snapshots that lack them.
-				if ( ! isset( $snapshot['i18n'] ) ) {
-					$snapshot['i18n'] = Receipt_I18n_Labels::get_labels();
-				}
-				return $snapshot;
-			}
-
-			$mode = 'live';
-		}
-
-		return ( new Receipt_Data_Builder() )->build( $order, $mode );
+		return ( new Receipt_Data_Builder() )->build( $order, $mode, $pos_store );
 	}
 
 	/**

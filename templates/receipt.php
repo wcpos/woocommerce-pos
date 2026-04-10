@@ -166,7 +166,12 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 						<?php echo wp_kses_post( wc_price( $line['unit_price'] ?? 0, $currency_args ) ); ?>
 					<?php endif; ?>
 				</td>
-				<td><?php echo wp_kses_post( wc_price( $line['line_total'] ?? 0, $currency_args ) ); ?></td>
+				<td>
+						<?php if ( $has_discount ) : ?>
+							<del><?php echo wp_kses_post( wc_price( $line['line_subtotal'] ?? 0, $currency_args ) ); ?></del>
+						<?php endif; ?>
+						<?php echo wp_kses_post( wc_price( $line['line_total'] ?? 0, $currency_args ) ); ?>
+					</td>
 			</tr>
 		<?php endforeach; ?>
 	</tbody>
@@ -210,6 +215,12 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 	$tax_total   = $receipt_data['totals']['tax_total'] ?? 0;
 	?>
 	<?php if ( 'hidden' !== $display_tax && ! empty( $tax_total ) ) : ?>
+		<?php
+		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
+		$tax_suffix   = $display_incl
+			? __( 'incl.', 'woocommerce-pos' )
+			: __( 'excl.', 'woocommerce-pos' );
+		?>
 		<?php foreach ( $receipt_data['tax_summary'] as $tax ) : ?>
 			<tr>
 				<td>
@@ -217,6 +228,7 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 					<?php if ( ! empty( $tax['rate'] ) ) : ?>
 						(<?php echo esc_html( $tax['rate'] ); ?>%)
 					<?php endif; ?>
+					<small>(<?php echo esc_html( $tax_suffix ); ?>)</small>
 				</td>
 				<td><?php echo wp_kses_post( wc_price( $tax['tax_amount'] ?? 0, $currency_args ) ); ?></td>
 			</tr>

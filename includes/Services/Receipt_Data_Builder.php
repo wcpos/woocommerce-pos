@@ -16,12 +16,13 @@ class Receipt_Data_Builder {
 	/**
 	 * Build a canonical receipt payload.
 	 *
-	 * @param WC_Abstract_Order $order Receipt order.
-	 * @param string            $mode  Receipt mode.
+	 * @param WC_Abstract_Order $order     Receipt order.
+	 * @param string            $mode      Receipt mode.
+	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
 	 */
-	public function build( WC_Abstract_Order $order, string $mode = 'live' ): array {
+	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 
 		$meta = array(
@@ -35,24 +36,28 @@ class Receipt_Data_Builder {
 			'customer_note'    => $order->get_customer_note(),
 		);
 
+		if ( null === $pos_store ) {
+			$order_store_id = (int) $order->get_meta( '_pos_store' );
+			$pos_store      = $order_store_id > 0 ? wcpos_get_store( $order_store_id ) : wcpos_get_store();
+		}
+
 		$store = array(
-			'name'          => get_bloginfo( 'name' ),
+			'name'          => $pos_store->get_name() ? $pos_store->get_name() : get_bloginfo( 'name' ),
 			'address_lines' => array_values(
 				array_filter(
 					array(
-						get_option( 'woocommerce_store_address', '' ),
-						get_option( 'woocommerce_store_address_2', '' ),
-						trim( get_option( 'woocommerce_store_city', '' ) . ' ' . get_option( 'woocommerce_store_postcode', '' ) ),
-						$this->get_store_country_state(),
+						$pos_store->get_store_address(),
+						$pos_store->get_store_address_2(),
+						trim( $pos_store->get_store_city() . ' ' . $pos_store->get_store_postcode() ),
+						$this->format_country_state( $pos_store->get_store_country(), $pos_store->get_store_state() ),
 					)
 				)
 			),
 			'tax_id'        => get_option( 'woocommerce_store_tax_number', '' ),
-			'phone'         => get_option( 'woocommerce_store_phone', '' ),
-			'email'         => get_option( 'admin_email', '' ),
+			'phone'         => $pos_store->get_phone(),
+			'email'         => $pos_store->get_email(),
 		);
 
-		$pos_store               = wcpos_get_store();
 		$opening_hours_raw       = $pos_store->get_opening_hours();
 		$personal_notes          = $pos_store->get_personal_notes();
 		$policies_and_conditions = $pos_store->get_policies_and_conditions();
@@ -314,22 +319,19 @@ class Receipt_Data_Builder {
 	}
 
 	/**
-	 * Get formatted store country/state string.
+	 * Format country and state codes into display names.
 	 *
-	 * The woocommerce_default_country option stores "CC:SS" (e.g. "US:AL").
-	 * This converts it to display names like "Alabama, United States (US)".
+	 * Converts codes like "US" / "AL" to "Alabama, United States (US)".
+	 *
+	 * @param string $country Country code.
+	 * @param string $state   State code.
 	 *
 	 * @return string
 	 */
-	private function get_store_country_state(): string {
-		$raw = get_option( 'woocommerce_default_country', '' );
-		if ( '' === $raw ) {
+	private function format_country_state( string $country, string $state ): string {
+		if ( '' === $country ) {
 			return '';
 		}
-
-		$parts   = explode( ':', $raw );
-		$country = $parts[0] ?? '';
-		$state   = $parts[1] ?? '';
 
 		$country_name = WC()->countries->get_countries()[ $country ] ?? $country;
 
