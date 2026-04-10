@@ -78,11 +78,10 @@ class Deactivator {
 	}
 
 	/**
-	 * Remove default pos capabilities to administrator and
-	 * shop_manager roles.
+	 * Remove POS capabilities from all roles that received them during activation.
 	 */
 	private static function remove_pos_capability(): void {
-		$roles = array( 'administrator', 'shop_manager' );
+		$roles = array( 'administrator', 'shop_manager', 'cashier' );
 		$caps  = array( 'manage_woocommerce_pos', 'access_woocommerce_pos' );
 		foreach ( $roles as $slug ) {
 			$role = get_role( $slug );
