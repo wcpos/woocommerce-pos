@@ -251,40 +251,39 @@ jobs:
           path: phpunit.xml
           retention-days: 7
 
-  test-matrix:
-    name: Test (PHP ${{ matrix.php }}, WP ${{ matrix.wp }}, WC ${{ matrix.wc }})
+  generate-matrix:
+    name: Generate Test Matrix
     runs-on: ubuntu-latest
     needs: smoke-test
     if: needs.smoke-test.result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.result }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Generate matrix
+        id: matrix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MATRIX=$(.github/scripts/generate-matrix.sh)
+          echo "result=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  test-matrix:
+    name: "Test (PHP ${{ matrix.php }}, WP ${{ matrix.wp }}, WC ${{ matrix.wc }})${{ matrix.source != 'pinned' && format(' [{0}]', matrix.source) || '' }}"
+    runs-on: ubuntu-latest
+    needs: generate-matrix
+    if: needs.generate-matrix.result == 'success'
     continue-on-error: ${{ matrix.experimental || false }}
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - php: '7.4'
-            wp: '6.7'
-            wc: '9.5.2'
-          - php: '7.4'
-            wp: '6.9'
-            wc: '10.4.3'
-          - php: '8.2'
-            wp: '6.7'
-            wc: '9.5.2'
-          - php: '8.2'
-            wp: '6.8'
-            wc: '10.4.3'
-          - php: '8.2'
-            wp: '6.9'
-            wc: '9.5.2'
-          - php: '8.4'
-            wp: '6.9'
-            wc: '10.4.3'
-            experimental: true
-          - php: '8.4'
-            wp: 'latest'
-            wc: 'latest'
-            experimental: true
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
 
     steps:
       - name: Checkout code
@@ -341,24 +340,22 @@ jobs:
 
       - name: Configure wp-env for matrix versions
         run: |
-          if [ "${{ matrix.wp }}" = "latest" ]; then
-            WP_CORE="null"
-          else
-            WP_CORE="\"WordPress/WordPress#${{ matrix.wp }}\""
-          fi
+          # wp_core is either null (JSON null), a GitHub ref, or a zip URL
+          WP_CORE='${{ matrix.wp_core }}'
 
-          if [ "${{ matrix.wc }}" = "latest" ]; then
-            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.zip"
+          # Build the JSON value for "core"
+          if [ "$WP_CORE" = "" ] || [ "$WP_CORE" = "null" ]; then
+            WP_CORE_JSON="null"
           else
-            WC_URL="https://downloads.wordpress.org/plugin/woocommerce.${{ matrix.wc }}.zip"
+            WP_CORE_JSON="\"$WP_CORE\""
           fi
 
           cat > .wp-env.json << EOF
           {
-            "core": $WP_CORE,
+            "core": $WP_CORE_JSON,
             "phpVersion": "${{ matrix.php }}",
             "plugins": [
-              "$WC_URL",
+              "${{ matrix.wc_url }}",
               "."
             ],
             "config": {
@@ -372,6 +369,7 @@ jobs:
           }
           EOF
           echo "Testing with WP ${{ matrix.wp }}, WC ${{ matrix.wc }}, PHP ${{ matrix.php }}"
+          echo "wp-env core: $WP_CORE"
           cat .wp-env.json
 
       - name: Start WordPress Environment
