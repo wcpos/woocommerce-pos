@@ -109,7 +109,7 @@ function Extensions() {
 					{t('extensions.no_results', 'No extensions found.')}
 				</p>
 			) : (
-				<div className="wcpos:grid wcpos:grid-cols-1 wcpos:sm:grid-cols-2 wcpos:gap-4">
+				<div className="wcpos:grid wcpos:grid-cols-1 wcpos:gap-3">
 					{filtered.map((ext) => (
 						<ExtensionCard key={ext.slug} extension={ext} />
 					))}
