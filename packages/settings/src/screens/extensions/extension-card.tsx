@@ -20,7 +20,7 @@ function FallbackIcon() {
 			fill="none"
 			stroke="currentColor"
 			strokeWidth={1.5}
-			className="wcpos:w-16 wcpos:h-16 wcpos:text-gray-400"
+			className="wcpos:w-12 wcpos:h-12 wcpos:text-gray-400"
 		>
 			<path
 				strokeLinecap="round"
@@ -123,36 +123,43 @@ function VersionLine({ extension }: { extension: Extension }) {
 }
 
 /**
- * Status badge and action button for the extension (free plugin fallback).
+ * Status badge shown in the card body header.
  */
-function StatusAction({ extension }: { extension: Extension }) {
-	const { status, installed_version, latest_version } = extension;
-
+function StatusBadge({ status }: { status: Extension['status'] }) {
 	switch (status) {
 		case 'active':
 			return (
-				<span className="wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-green-50 wcpos:px-2 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:text-green-700">
+				<span className="wcpos:inline-flex wcpos:items-center wcpos:gap-1 wcpos:rounded-full wcpos:bg-green-50 wcpos:px-2 wcpos:py-0.5 wcpos:text-xs wcpos:font-medium wcpos:text-green-700">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="wcpos:h-3 wcpos:w-3">
+						<path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+					</svg>
 					{t('extensions.active', 'Active')}
 				</span>
 			);
-
+		case 'update_available':
+			return (
+				<span className="wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-yellow-100 wcpos:px-2 wcpos:py-0.5 wcpos:text-xs wcpos:font-medium wcpos:text-yellow-800">
+					{t('extensions.update_available', 'Update available')}
+				</span>
+			);
 		case 'inactive':
 			return (
-				<span className="wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-gray-100 wcpos:px-2 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:text-gray-600">
+				<span className="wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-gray-100 wcpos:px-2 wcpos:py-0.5 wcpos:text-xs wcpos:font-medium wcpos:text-gray-600">
 					{t('extensions.inactive', 'Inactive')}
 				</span>
 			);
-
-		case 'update_available':
-			return (
-				<span className="wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-yellow-50 wcpos:px-2 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:text-yellow-700">
-					{installed_version} &rarr; {latest_version}
-				</span>
-			);
-
-		case 'not_installed':
 		default:
-			return (
+			return null;
+	}
+}
+
+/**
+ * Footer action for the extension (free plugin fallback).
+ */
+function FooterAction({ extension }: { extension: Extension }) {
+	if (extension.status === 'not_installed') {
+		return (
+			<div className="wcpos:flex wcpos:items-center wcpos:justify-end">
 				<Tooltip text={t('extensions.requires_pro', 'Requires Pro to install')}>
 					<span>
 						<Button variant="secondary" disabled>
@@ -160,70 +167,102 @@ function StatusAction({ extension }: { extension: Extension }) {
 						</Button>
 					</span>
 				</Tooltip>
-			);
+			</div>
+		);
 	}
+	return null;
 }
 
 /**
- * Checks for a registered action component before falling back to the static status badge.
+ * Returns a registered Pro action component, or null if Pro is not active.
  */
-function ActionSlotOrFallback({ extension }: { extension: Extension }) {
-	const ActionSlot = (window as any).wcpos?.settings?.getComponent?.('extensions.action');
+function getActionSlot(): React.ComponentType<{ extension: Extension }> | null {
+	return (window as any).wcpos?.settings?.getComponent?.('extensions.action') ?? null;
+}
+
+/**
+ * Card footer: renders Pro action bar, free-plugin fallback, or nothing.
+ */
+function CardFooter({ extension }: { extension: Extension }) {
+	const ActionSlot = getActionSlot();
+
+	// Pro plugin controls whether/when to render footer chrome.
 	if (ActionSlot) {
 		return <ActionSlot extension={extension} />;
 	}
-	return <StatusAction extension={extension} />;
+
+	// Free plugin: only show footer for not-installed extensions.
+	if (extension.status === 'not_installed') {
+		return (
+			<div className="wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:px-4 wcpos:py-2.5">
+				<FooterAction extension={extension} />
+			</div>
+		);
+	}
+
+	return null;
 }
 
 function ExtensionCard({ extension }: ExtensionCardProps) {
-	return (
-		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:p-4 wcpos:flex wcpos:gap-4">
-			{/* Icon zone */}
-			<div className="wcpos:shrink-0 wcpos:flex wcpos:items-start">
-				{extension.icon ? (
-					<img
-						src={extension.icon}
-						alt={extension.name}
-						className="wcpos:w-16 wcpos:h-16 wcpos:rounded"
-					/>
-				) : (
-					<FallbackIcon />
-				)}
-			</div>
+	const rawCategory = (extension.category || '').trim();
+	const displayCategory = rawCategory
+		? rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1)
+		: null;
 
-			{/* Content zone */}
-			<div className="wcpos:flex-1 wcpos:min-w-0">
-				<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
-					{extension.name}
-				</h3>
-				<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:mt-0.5">
-					<VersionLine extension={extension} />
-					{extension.homepage && isGitHubUrl(extension.homepage) && (
-						<a
-							href={extension.homepage}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:transition-colors"
-							aria-label={`${extension.name} on GitHub`}
-						>
-							<GitHubIcon />
-						</a>
+	return (
+		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden">
+			{/* Card body */}
+			<div className="wcpos:p-4 wcpos:flex wcpos:gap-4">
+				{/* Icon */}
+				<div className="wcpos:shrink-0 wcpos:flex wcpos:items-start">
+					{extension.icon ? (
+						<img
+							src={extension.icon}
+							alt={extension.name}
+							className="wcpos:w-12 wcpos:h-12 wcpos:rounded"
+						/>
+					) : (
+						<FallbackIcon />
 					)}
 				</div>
 
-				<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-500 wcpos:line-clamp-2">
-					{extension.description}
-				</p>
+				{/* Content */}
+				<div className="wcpos:flex-1 wcpos:min-w-0">
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
+						<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
+							{extension.name}
+						</h3>
+						<StatusBadge status={extension.status} />
+					</div>
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:mt-0.5">
+						<VersionLine extension={extension} />
+						{extension.homepage && isGitHubUrl(extension.homepage) && (
+							<a
+								href={extension.homepage}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:transition-colors"
+								aria-label={`${extension.name} on GitHub`}
+							>
+								<GitHubIcon />
+							</a>
+						)}
+						{displayCategory && (
+							<>
+								<span className="wcpos:w-0.5 wcpos:h-0.5 wcpos:rounded-full wcpos:bg-gray-300" />
+								<span className="wcpos:text-xs wcpos:text-gray-500">{displayCategory}</span>
+							</>
+						)}
+					</div>
 
-				<span className="wcpos:mt-2 wcpos:inline-flex wcpos:items-center wcpos:rounded-full wcpos:bg-gray-100 wcpos:px-2 wcpos:py-0.5 wcpos:text-xs wcpos:text-gray-600">
-					{extension.category}
-				</span>
+					<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-500">
+						{extension.description}
+					</p>
+				</div>
 			</div>
 
-			{/* Action zone */}
-			<div className="wcpos:shrink-0 wcpos:flex wcpos:items-start">
-				<ActionSlotOrFallback extension={extension} />
-			</div>
+			{/* Card footer */}
+			<CardFooter extension={extension} />
 		</div>
 	);
 }
