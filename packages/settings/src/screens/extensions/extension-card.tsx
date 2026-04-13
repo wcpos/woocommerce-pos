@@ -186,13 +186,9 @@ function getActionSlot(): React.ComponentType<{ extension: Extension }> | null {
 function CardFooter({ extension }: { extension: Extension }) {
 	const ActionSlot = getActionSlot();
 
-	// Pro plugin provides the full action bar (auto-update toggle + buttons).
+	// Pro plugin controls whether/when to render footer chrome.
 	if (ActionSlot) {
-		return (
-			<div className="wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:px-4 wcpos:py-2.5">
-				<ActionSlot extension={extension} />
-			</div>
-		);
+		return <ActionSlot extension={extension} />;
 	}
 
 	// Free plugin: only show footer for not-installed extensions.
@@ -208,6 +204,11 @@ function CardFooter({ extension }: { extension: Extension }) {
 }
 
 function ExtensionCard({ extension }: ExtensionCardProps) {
+	const rawCategory = (extension.category || '').trim();
+	const displayCategory = rawCategory
+		? rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1)
+		: null;
+
 	return (
 		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden">
 			{/* Card body */}
@@ -246,8 +247,12 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 								<GitHubIcon />
 							</a>
 						)}
-						<span className="wcpos:w-0.5 wcpos:h-0.5 wcpos:rounded-full wcpos:bg-gray-300" />
-						<span className="wcpos:text-xs wcpos:text-gray-500">{extension.category}</span>
+						{displayCategory && (
+							<>
+								<span className="wcpos:w-0.5 wcpos:h-0.5 wcpos:rounded-full wcpos:bg-gray-300" />
+								<span className="wcpos:text-xs wcpos:text-gray-500">{displayCategory}</span>
+							</>
+						)}
 					</div>
 
 					<p className="wcpos:mt-2 wcpos:text-sm wcpos:text-gray-500">
