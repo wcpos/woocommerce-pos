@@ -157,6 +157,10 @@ class Extensions {
 				$entry['installed_version'] = $local_version;
 				$entry['plugin_file']       = $plugin_file;
 				$entry['auto_update']       = \in_array( $plugin_file, $auto_updates, true );
+
+				if ( $has_update ) {
+					$entry['has_update'] = true;
+				}
 			}
 
 			$entry['status'] = $status;

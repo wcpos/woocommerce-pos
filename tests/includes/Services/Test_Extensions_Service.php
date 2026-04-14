@@ -165,6 +165,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		$this->assertEquals( 'active', $extensions[0]['status'] );
 		$this->assertArrayHasKey( 'installed_version', $extensions[0] );
 		$this->assertArrayHasKey( 'plugin_file', $extensions[0] );
+		$this->assertArrayNotHasKey( 'has_update', $extensions[0] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
 	}
@@ -188,13 +189,15 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $extensions );
 		$this->assertEquals( 'update_available', $extensions[0]['status'] );
+		$this->assertArrayHasKey( 'has_update', $extensions[0] );
+		$this->assertTrue( $extensions[0]['has_update'] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
 	}
 
 	/**
 	 * Test inactive status for inactive plugin even with newer remote version.
-	 * Only active plugins should show update_available.
+	 * Only active plugins should show update_available, but has_update should be set.
 	 */
 	public function test_status_inactive_for_inactive_outdated_plugin(): void {
 		update_option( 'active_plugins', array() );
@@ -212,6 +215,8 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $extensions );
 		$this->assertEquals( 'inactive', $extensions[0]['status'] );
+		$this->assertArrayHasKey( 'has_update', $extensions[0] );
+		$this->assertTrue( $extensions[0]['has_update'] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
 	}

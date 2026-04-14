@@ -31,6 +31,8 @@ export interface Extension {
 	status: 'not_installed' | 'inactive' | 'active' | 'update_available';
 	installed_version?: string;
 	plugin_file?: string;
+	has_update?: boolean;
+	auto_update?: boolean;
 }
 
 function Extensions() {
