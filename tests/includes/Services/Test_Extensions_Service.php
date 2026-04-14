@@ -193,9 +193,10 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test update_available status for inactive plugin with newer remote version.
+	 * Test inactive status for inactive plugin even with newer remote version.
+	 * Only active plugins should show update_available.
 	 */
-	public function test_status_update_available_for_inactive_outdated_plugin(): void {
+	public function test_status_inactive_for_inactive_outdated_plugin(): void {
 		update_option( 'active_plugins', array() );
 
 		$this->mock_catalog_data = array(
@@ -210,7 +211,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		$extensions = $this->service->get_extensions();
 
 		$this->assertCount( 1, $extensions );
-		$this->assertEquals( 'update_available', $extensions[0]['status'] );
+		$this->assertEquals( 'inactive', $extensions[0]['status'] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
 	}
