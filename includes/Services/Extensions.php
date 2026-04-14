@@ -160,6 +160,11 @@ class Extensions {
 			}
 
 			$entry['status'] = $status;
+
+			if ( $plugin_file && $has_update ) {
+				$entry['has_update'] = true;
+			}
+
 			$extensions[]    = $entry;
 		}
 
