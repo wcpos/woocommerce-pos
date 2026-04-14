@@ -189,6 +189,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $extensions );
 		$this->assertEquals( 'update_available', $extensions[0]['status'] );
+		$this->assertArrayHasKey( 'has_update', $extensions[0] );
 		$this->assertTrue( $extensions[0]['has_update'] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
@@ -214,6 +215,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $extensions );
 		$this->assertEquals( 'inactive', $extensions[0]['status'] );
+		$this->assertArrayHasKey( 'has_update', $extensions[0] );
 		$this->assertTrue( $extensions[0]['has_update'] );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
