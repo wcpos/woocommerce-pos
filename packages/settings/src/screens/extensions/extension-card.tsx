@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Button, Tooltip } from '../../components/ui';
+import { Tooltip } from '../../components/ui';
 import { t } from '../../translations';
 
 import type { Extension } from './index';
@@ -82,7 +82,7 @@ function releaseUrl(homepage: string, version: string): string | null {
 function VersionLine({ extension }: { extension: Extension }) {
 	const { homepage, installed_version, latest_version, status } = extension;
 
-	if (status === 'update_available' && installed_version) {
+	if ((status === 'update_available' || extension.has_update) && installed_version) {
 		const currentUrl = releaseUrl(homepage, installed_version);
 		const updateUrl = releaseUrl(homepage, latest_version);
 		return (
@@ -162,9 +162,13 @@ function FooterAction({ extension }: { extension: Extension }) {
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-end">
 				<Tooltip text={t('extensions.requires_pro', 'Requires Pro to install')}>
 					<span>
-						<Button variant="secondary" disabled>
+						<button
+							type="button"
+							disabled
+							className="wcpos:inline-flex wcpos:items-center wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-3 wcpos:py-1.5 wcpos:text-xs wcpos:font-medium wcpos:text-gray-700 disabled:wcpos:opacity-60 disabled:wcpos:cursor-not-allowed"
+						>
 							{t('extensions.install', 'Install')}
-						</Button>
+						</button>
 					</span>
 				</Tooltip>
 			</div>
@@ -186,9 +190,13 @@ function getActionSlot(): React.ComponentType<{ extension: Extension }> | null {
 function CardFooter({ extension }: { extension: Extension }) {
 	const ActionSlot = getActionSlot();
 
-	// Pro plugin controls whether/when to render footer chrome.
+	// Pro plugin provides the action controls; we wrap in footer chrome.
 	if (ActionSlot) {
-		return <ActionSlot extension={extension} />;
+		return (
+			<div className="wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:px-4 wcpos:py-2.5">
+				<ActionSlot extension={extension} />
+			</div>
+		);
 	}
 
 	// Free plugin: only show footer for not-installed extensions.
@@ -210,9 +218,9 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 		: null;
 
 	return (
-		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden">
+		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden wcpos:flex wcpos:flex-col">
 			{/* Card body */}
-			<div className="wcpos:p-4 wcpos:flex wcpos:gap-4">
+			<div className="wcpos:p-4 wcpos:flex wcpos:gap-4 wcpos:flex-1">
 				{/* Icon */}
 				<div className="wcpos:shrink-0 wcpos:flex wcpos:items-start">
 					{extension.icon ? (
