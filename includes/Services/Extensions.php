@@ -146,7 +146,7 @@ class Extensions {
 
 				$has_update = $remote_version && version_compare( $local_version, $remote_version, '<' );
 
-				if ( $has_update ) {
+				if ( $has_update && $is_active ) {
 					$status = 'update_available';
 				} elseif ( $is_active ) {
 					$status = 'active';
