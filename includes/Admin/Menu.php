@@ -278,10 +278,17 @@ class Menu {
 
 		$profile = new Landing_Profile();
 		$data    = $profile->get_landing_data();
-		$encoded = wp_json_encode( $data );
+		$encoded = wp_json_encode(
+			$data,
+			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+		);
 
 		if ( false === $encoded ) {
-			return '';
+			$error_message = \function_exists( 'json_last_error_msg' ) ? json_last_error_msg() : 'Unknown JSON encoding error';
+
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( \sprintf( 'WCPOS landing profile JSON encoding failed: %s', $error_message ) );
+			$encoded = '{}';
 		}
 
 		return \sprintf(
@@ -327,10 +334,12 @@ class Menu {
 	 * Generate the inline script for gallery data.
 	 */
 	private function gallery_inline_script(): string {
+		$json_encode_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.templateGallery = { isProActive: %s, adminUrl: %s, hasPosOrders: %s }; wcpos.translationVersion = %s;',
-			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ) ),
-			wp_json_encode( untrailingslashit( admin_url() ) ),
+			wp_json_encode( class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ), $json_encode_flags ),
+			wp_json_encode( untrailingslashit( admin_url() ), $json_encode_flags ),
 			wp_json_encode(
 				(bool) wc_get_orders(
 					array(
@@ -339,9 +348,10 @@ class Menu {
 						'status'      => array( 'completed', 'processing', 'on-hold', 'pending' ),
 						'created_via' => 'woocommerce-pos',
 					)
-				)
+				),
+				$json_encode_flags
 			),
-			wp_json_encode( TRANSLATION_VERSION )
+			wp_json_encode( TRANSLATION_VERSION, $json_encode_flags )
 		);
 	}
 
