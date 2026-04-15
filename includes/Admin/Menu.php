@@ -215,8 +215,8 @@ class Menu {
 
 			// Enqueue the landing page CSS from CDN.
 			wp_enqueue_style(
-				'wcpos-landing',
-				$url . 'css/landing.css',
+				'wcpos-welcome',
+				$url . 'css/welcome.css',
 				array(),
 				PLUGIN_VERSION
 			);
@@ -227,8 +227,8 @@ class Menu {
 
 			// Enqueue the landing page JS from CDN, with React and lodash as dependencies.
 			wp_enqueue_script(
-				'wcpos-landing',
-				$url . 'js/landing.js',
+				'wcpos-welcome',
+				$url . 'js/welcome.js',
 				array(
 					'react',
 					'react-dom',
@@ -241,7 +241,7 @@ class Menu {
 
 			$landing_inline_script = $this->landing_inline_script();
 			if ( '' !== $landing_inline_script ) {
-				wp_add_inline_script( 'wcpos-landing', $landing_inline_script, 'before' );
+				wp_add_inline_script( 'wcpos-welcome', $landing_inline_script, 'before' );
 			}
 		}
 	}
