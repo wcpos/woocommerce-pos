@@ -54,6 +54,8 @@ export function Button({
 		>
 			{loading && (
 				<svg
+					aria-hidden="true"
+					focusable="false"
 					className="wcpos:mr-2 wcpos:h-4 wcpos:w-4 wcpos:animate-spin"
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
