@@ -17,10 +17,10 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantClasses: Record<CanonicalButtonVariant, string> = {
 	primary:
-		'wcpos:bg-wp-admin-theme-color wcpos:text-white hover:wcpos:bg-wp-admin-theme-color-darker-10 focus:wcpos:ring-wp-admin-theme-color',
+		'wcpos:bg-wp-admin-theme-color wcpos:text-white wcpos:hover:bg-wp-admin-theme-color-darker-10 wcpos:focus:ring-wp-admin-theme-color',
 	secondary:
-		'wcpos:bg-white wcpos:text-gray-700 wcpos:border wcpos:border-gray-300 hover:wcpos:bg-gray-50 focus:wcpos:ring-wp-admin-theme-color',
-	destructive: 'wcpos:bg-red-600 wcpos:text-white hover:wcpos:bg-red-700 focus:wcpos:ring-red-500',
+		'wcpos:bg-white wcpos:text-gray-700 wcpos:border wcpos:border-gray-300 wcpos:hover:bg-gray-50 wcpos:focus:ring-wp-admin-theme-color',
+	destructive: 'wcpos:bg-red-600 wcpos:text-white wcpos:hover:bg-red-700 wcpos:focus:ring-red-500',
 };
 
 function normalizeVariant(variant: ButtonVariant): CanonicalButtonVariant {
@@ -45,7 +45,7 @@ export function Button({
 			disabled={isDisabled}
 			className={classNames(
 				'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',
-				'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-offset-2',
+				'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-2',
 				variantClasses[normalizedVariant],
 				isDisabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
 				className

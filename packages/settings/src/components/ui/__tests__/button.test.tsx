@@ -77,12 +77,16 @@ describe('Button', () => {
 		render(<Button variant="primary">Primary</Button>);
 		const button = screen.getByRole('button');
 		expect(button.className).toContain('wcpos:bg-wp-admin-theme-color');
+		expect(button.className).toContain('wcpos:hover:bg-wp-admin-theme-color-darker-10');
+		expect(button.className).toContain('wcpos:focus:ring-wp-admin-theme-color');
 	});
 
 	it('applies destructive variant class', () => {
 		render(<Button variant="destructive">Delete</Button>);
 		const button = screen.getByRole('button');
 		expect(button.className).toContain('wcpos:bg-red-600');
+		expect(button.className).toContain('wcpos:hover:bg-red-700');
+		expect(button.className).toContain('wcpos:focus:ring-red-500');
 	});
 
 	it('keeps danger as a deprecated alias for destructive', () => {
