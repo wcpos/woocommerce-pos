@@ -185,6 +185,7 @@ For the initial Button extraction:
   - variants apply expected static classes
 - Run `pnpm --filter=@wcpos/settings test`.
 - Run targeted lint for changed settings files: `pnpm --filter=@wcpos/settings lint -- src/components/ui/button.tsx src/components/ui/__tests__/button.test.tsx`.
+  - Note: Full-package lint may fail due to pre-existing issues unrelated to this change; use the targeted scope above for verification.
 - Run `pnpm --filter=@wcpos/settings build`.
 
 For follow-up migrations, run the relevant package's test, lint, and build commands.
