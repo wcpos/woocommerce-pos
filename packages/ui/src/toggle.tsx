@@ -22,6 +22,11 @@ export function Toggle({
 	const generatedId = React.useId();
 	const labelId = label ? `${generatedId}-label` : undefined;
 	const descriptionId = description ? `${generatedId}-description` : undefined;
+	const handleToggle = React.useCallback(() => {
+		if (!disabled) {
+			onChange(!checked);
+		}
+	}, [checked, disabled, onChange]);
 
 	return (
 		<div
@@ -37,7 +42,7 @@ export function Toggle({
 				aria-labelledby={labelId}
 				aria-describedby={descriptionId}
 				disabled={disabled}
-				onClick={() => onChange(!checked)}
+				onClick={handleToggle}
 				className={classNames(
 					'wcpos:relative wcpos:inline-flex wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:ring-offset-2',
 					checked ? 'wcpos:bg-wp-admin-theme-color' : 'wcpos:bg-gray-200',
@@ -54,7 +59,7 @@ export function Toggle({
 				/>
 			</button>
 			{label && (
-				<div>
+				<div onClick={handleToggle}>
 					<label
 						id={labelId}
 						className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900 wcpos:cursor-pointer"

@@ -6,6 +6,7 @@ export interface ModalProps {
 	open: boolean;
 	onClose: (value: boolean) => void;
 	title?: string;
+	'aria-label'?: string;
 	description?: string;
 	children: React.ReactNode;
 	className?: string;
@@ -15,6 +16,7 @@ export function Modal({
 	open,
 	onClose,
 	title,
+	'aria-label': ariaLabel,
 	description,
 	children,
 	className,
@@ -54,6 +56,7 @@ export function Modal({
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby={title ? titleId : undefined}
+					aria-label={!title ? ariaLabel : undefined}
 					aria-describedby={description ? descriptionId : undefined}
 					onClick={(event) => event.stopPropagation()}
 					className={classNames(

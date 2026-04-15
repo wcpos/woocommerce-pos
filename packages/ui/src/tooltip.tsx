@@ -48,6 +48,7 @@ export function Tooltip({ text, children, className }: TooltipProps) {
 				onFocus={show}
 				onBlur={hide}
 				aria-describedby={visible ? tooltipId : undefined}
+				tabIndex={0}
 			>
 				{children}
 			</span>

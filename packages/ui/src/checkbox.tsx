@@ -9,7 +9,7 @@ export interface CheckboxProps extends Omit<
 	label?: string;
 }
 
-export function Checkbox({ label, className, id, ...props }: CheckboxProps) {
+export function Checkbox({ label, className, id, disabled, ...props }: CheckboxProps) {
 	const generatedId = React.useId();
 	const inputId = id || generatedId;
 
@@ -25,10 +25,11 @@ export function Checkbox({ label, className, id, ...props }: CheckboxProps) {
 				type="checkbox"
 				className={classNames(
 					'wcpos:h-4 wcpos:w-4 wcpos:rounded wcpos:border-gray-300 wcpos:text-wp-admin-theme-color wcpos:focus:ring-wp-admin-theme-color',
-					props.disabled
+					disabled
 						? 'wcpos:opacity-50 wcpos:cursor-not-allowed'
 						: 'wcpos:cursor-pointer'
 				)}
+				disabled={disabled}
 				{...props}
 			/>
 			{label && (
@@ -36,7 +37,7 @@ export function Checkbox({ label, className, id, ...props }: CheckboxProps) {
 					htmlFor={inputId}
 					className={classNames(
 						'wcpos:text-sm wcpos:text-gray-700',
-						props.disabled
+						disabled
 							? 'wcpos:opacity-50 wcpos:cursor-not-allowed'
 							: 'wcpos:cursor-pointer'
 					)}

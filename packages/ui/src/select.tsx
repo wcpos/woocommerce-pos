@@ -45,7 +45,11 @@ export function Select({
 			)}
 			{...props}
 		>
-			{placeholder && <option value="">{placeholder}</option>}
+			{placeholder && (
+				<option value="" disabled>
+					{placeholder}
+				</option>
+			)}
 			{options.map((option) => (
 				<option key={String(option.value)} value={String(option.value)}>
 					{option.label}

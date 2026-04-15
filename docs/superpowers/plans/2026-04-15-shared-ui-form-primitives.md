@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add shared primitive coverage
+## Task 1: Add shared primitive coverage
 
 **Files:**
 - Create: `packages/settings/src/components/ui/__tests__/shared-form-controls.test.tsx`
@@ -25,7 +25,7 @@ Run: `pnpm --filter=@wcpos/settings test -- src/components/ui/__tests__/shared-f
 
 Expected: FAIL because those exports do not exist yet.
 
-### Task 2: Implement shared primitives in `packages/ui`
+## Task 2: Implement shared primitives in `packages/ui`
 
 **Files:**
 - Create: `packages/ui/src/toggle.tsx`
@@ -52,7 +52,7 @@ pnpm exec tsc -p packages/ui/tsconfig.json --noEmit
 
 Expected: PASS.
 
-### Task 3: Convert settings local components to shims
+## Task 3: Convert settings local components to shims
 
 **Files:**
 - Modify: `packages/settings/src/components/ui/toggle.tsx`
@@ -79,7 +79,7 @@ cd packages/settings && ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint 
 
 Expected: targeted changed-file lint may only include existing ESLintRCWarning; tests/build pass.
 
-### Task 4: Convert Pro wrappers and expand preview
+## Task 4: Convert Pro wrappers and expand preview
 
 **Files:**
 - Modify: `packages/store-edit/src/components/ui/text-input.tsx`

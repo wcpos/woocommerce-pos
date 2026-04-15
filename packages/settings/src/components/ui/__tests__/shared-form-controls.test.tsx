@@ -23,6 +23,15 @@ describe('shared form controls from @wcpos/ui', () => {
 		expect(onChange).toHaveBeenCalledWith(true);
 	});
 
+	it('toggles when clicking the toggle label text', () => {
+		const onChange = vi.fn();
+		render(<Toggle checked={false} onChange={onChange} label="Enable feature" />);
+
+		fireEvent.click(screen.getByText('Enable feature'));
+
+		expect(onChange).toHaveBeenCalledWith(true);
+	});
+
 	it('renders a checkbox with label and disabled cursor classes', () => {
 		render(<Checkbox label="Accept" disabled />);
 
@@ -31,7 +40,7 @@ describe('shared form controls from @wcpos/ui', () => {
 		expect(checkbox.className).toContain('wcpos:cursor-not-allowed');
 	});
 
-	it('renders text inputs and text areas with error classes', () => {
+	it('renders text inputs and text areas with visual and ARIA error states', () => {
 		render(
 			<>
 				<TextInput aria-label="Name" error />
@@ -45,6 +54,8 @@ describe('shared form controls from @wcpos/ui', () => {
 		expect(screen.getByRole('textbox', { name: 'Notes' }).className).toContain(
 			'wcpos:border-red-300'
 		);
+		expect(screen.getByRole('textbox', { name: 'Name' })).toHaveAttribute('aria-invalid', 'true');
+		expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveAttribute('aria-invalid', 'true');
 	});
 
 	it('renders a select and returns the selected option object', () => {
@@ -68,6 +79,21 @@ describe('shared form controls from @wcpos/ui', () => {
 		});
 
 		expect(onChange).toHaveBeenCalledWith(options[1]);
+	});
+
+	it('renders a disabled select placeholder so it cannot be re-selected', () => {
+		const options: OptionProps[] = [{ value: 'draft', label: 'Draft' }];
+		render(
+			<Select
+				aria-label="Status"
+				value=""
+				options={options}
+				onChange={() => {}}
+				placeholder="Choose status"
+			/>
+		);
+
+		expect(screen.getByRole('option', { name: 'Choose status' })).toBeDisabled();
 	});
 
 	it('renders modal content only when open', () => {
@@ -102,6 +128,16 @@ describe('shared form controls from @wcpos/ui', () => {
 		expect(onClose).toHaveBeenCalledWith(false);
 	});
 
+	it('supports an accessible modal name without a visible title', () => {
+		render(
+			<Modal open onClose={() => {}} aria-label="Shared modal">
+				<p>Modal content</p>
+			</Modal>
+		);
+
+		expect(screen.getByRole('dialog', { name: 'Shared modal' })).toBeInTheDocument();
+	});
+
 	it('shows tooltip text on hover', () => {
 		render(
 			<Tooltip text="Helpful tip">
@@ -110,6 +146,17 @@ describe('shared form controls from @wcpos/ui', () => {
 		);
 
 		fireEvent.mouseEnter(screen.getByRole('button', { name: 'Info' }));
+
+		expect(screen.getByRole('tooltip')).toHaveTextContent('Helpful tip');
+	});
+
+	it('shows tooltip text when non-interactive content receives focus', () => {
+		render(<Tooltip text="Helpful tip">Info</Tooltip>);
+
+		const trigger = screen.getByText('Info');
+
+		expect(trigger).toHaveAttribute('tabIndex', '0');
+		fireEvent.focus(trigger);
 
 		expect(screen.getByRole('tooltip')).toHaveTextContent('Helpful tip');
 	});

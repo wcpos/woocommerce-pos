@@ -11,6 +11,7 @@ export const TextArea = React.forwardRef<HTMLTextAreaElement, TextAreaProps>(
 		return (
 			<textarea
 				ref={ref}
+				aria-invalid={error || undefined}
 				className={classNames(
 					'wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:px-2.5 wcpos:py-1.5 wcpos:text-sm wcpos:shadow-xs',
 					'wcpos:transition-colors wcpos:duration-150',
