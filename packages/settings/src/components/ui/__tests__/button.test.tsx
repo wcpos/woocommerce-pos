@@ -89,6 +89,35 @@ describe('Button', () => {
 		expect(button.className).toContain('wcpos:focus:ring-red-500');
 	});
 
+	it('applies outline variant class', () => {
+		render(<Button variant="outline">Outline</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:bg-transparent');
+		expect(button.className).toContain('wcpos:text-wp-admin-theme-color');
+		expect(button.className).toContain('wcpos:border-wp-admin-theme-color');
+		expect(button.className).toContain('wcpos:hover:bg-wp-admin-theme-color-lightest');
+	});
+
+	it('applies ghost variant class', () => {
+		render(<Button variant="ghost">Ghost</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:bg-transparent');
+		expect(button.className).toContain('wcpos:text-gray-700');
+		expect(button.className).toContain('wcpos:hover:bg-gray-100');
+	});
+
+	it('applies text variant class', () => {
+		render(<Button variant="text">Text</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:bg-transparent');
+		expect(button.className).toContain('wcpos:text-wp-admin-theme-color');
+		expect(button.className).toContain('wcpos:px-0');
+		expect(button.className).toContain('wcpos:py-0');
+		expect(button.className).toContain('wcpos:hover:underline');
+		expect(button.className).not.toContain('wcpos:px-4');
+		expect(button.className).not.toContain('wcpos:py-2');
+	});
+
 	it('keeps danger as a deprecated alias for destructive', () => {
 		render(<Button variant="danger">Delete</Button>);
 		const button = screen.getByRole('button');
