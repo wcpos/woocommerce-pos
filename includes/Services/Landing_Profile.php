@@ -48,6 +48,7 @@ class Landing_Profile {
 	 */
 	public function get_landing_data(): array {
 		return array(
+			'schema_version' => 1,
 			'profile'        => $this->get_profile(),
 			'posthog'        => $this->get_posthog_config(),
 			'updates_server' => $this->get_updates_server_config(),
@@ -170,9 +171,12 @@ class Landing_Profile {
 	 * @return array
 	 */
 	private function compute_metrics(): array {
-		// Set install timestamp on first call (add_option is a no-op if it exists).
-		add_option( 'woocommerce_pos_installed_at', time() );
-		$installed_at = (int) get_option( 'woocommerce_pos_installed_at' );
+		$installed_at = get_option( 'woocommerce_pos_installed_at' );
+		if ( false === $installed_at ) {
+			$installed_at = time();
+			add_option( 'woocommerce_pos_installed_at', $installed_at );
+		}
+		$installed_at = (int) $installed_at;
 
 		return array(
 			'days_since_install' => max( 0, (int) floor( ( time() - $installed_at ) / DAY_IN_SECONDS ) ),
@@ -196,9 +200,13 @@ class Landing_Profile {
 
 		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
 			return (int) $wpdb->get_var(
-				"SELECT COUNT(*) FROM {$wpdb->prefix}wc_orders
-				WHERE created_via = 'woocommerce-pos'
-				AND status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')"
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->prefix}wc_orders
+					WHERE type = 'shop_order'
+					AND created_via = %s
+					AND status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')",
+					'woocommerce-pos'
+				)
 			);
 		}
 
@@ -206,7 +214,8 @@ class Landing_Profile {
 			$wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-				WHERE pm.meta_key = '_created_via'
+				WHERE p.post_type = 'shop_order'
+				AND pm.meta_key = '_created_via'
 				AND pm.meta_value = %s
 				AND p.post_status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')",
 				'woocommerce-pos'
