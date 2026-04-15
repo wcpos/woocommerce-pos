@@ -3,6 +3,7 @@ import * as React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { Button as UiButton } from '@wcpos/ui';
+
 import { Button } from '../button';
 
 describe('Button', () => {
