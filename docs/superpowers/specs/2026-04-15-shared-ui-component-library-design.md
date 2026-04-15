@@ -30,9 +30,12 @@ The free plugin already has workspace packages such as `@wcpos/i18n` and `@wcpos
 
 Current UI duplication includes:
 
-- `packages/settings/src/components/ui/button.tsx`
 - `packages/store-edit/src/components/ui/button.tsx` (Pro package)
 - Repeated raw `<button>` class lists in `packages/template-editor` and `packages/template-gallery`
+
+Resolved/redirected in this phase:
+
+- `packages/settings/src/components/ui/button.tsx` (temporary re-export shim to `@wcpos/ui`)
 
 The relevant packages use Tailwind v4 with the `wcpos` prefix. Some entrypoints also use the Tailwind `important` import option to compete with WordPress admin CSS.
 
