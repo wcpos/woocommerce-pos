@@ -1,4 +1,5 @@
 @import "tailwindcss" prefix(wcpos) important;
+@source "../../ui/src";
 /* @config "../tailwind.config.js"; */
 
 @theme {
