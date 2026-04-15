@@ -17,14 +17,27 @@ describe('Button', () => {
 		expect(onClick).toHaveBeenCalledOnce();
 	});
 
+	it('uses a pointer cursor when enabled', () => {
+		render(<Button>Click</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:cursor-pointer');
+		expect(button.className).not.toContain('wcpos:cursor-not-allowed');
+	});
+
 	it('disables when disabled prop is true', () => {
 		render(<Button disabled>Click</Button>);
-		expect(screen.getByRole('button')).toBeDisabled();
+		const button = screen.getByRole('button');
+		expect(button).toBeDisabled();
+		expect(button.className).toContain('wcpos:cursor-not-allowed');
+		expect(button.className).not.toContain('wcpos:cursor-pointer');
 	});
 
 	it('disables when loading prop is true', () => {
 		render(<Button loading>Saving</Button>);
-		expect(screen.getByRole('button')).toBeDisabled();
+		const button = screen.getByRole('button');
+		expect(button).toBeDisabled();
+		expect(button.className).toContain('wcpos:cursor-not-allowed');
+		expect(button.className).not.toContain('wcpos:cursor-pointer');
 	});
 
 	it('shows a spinner when loading', () => {
@@ -58,6 +71,12 @@ describe('Button', () => {
 
 	it('applies destructive variant class', () => {
 		render(<Button variant="destructive">Delete</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:bg-red-600');
+	});
+
+	it('keeps danger as a deprecated alias for destructive', () => {
+		render(<Button variant="danger">Delete</Button>);
 		const button = screen.getByRole('button');
 		expect(button.className).toContain('wcpos:bg-red-600');
 	});
