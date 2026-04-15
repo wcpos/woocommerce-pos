@@ -278,10 +278,15 @@ class Menu {
 
 		$profile = new Landing_Profile();
 		$data    = $profile->get_landing_data();
+		$encoded = wp_json_encode( $data );
+
+		if ( false === $encoded ) {
+			return '';
+		}
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.landing = %s;',
-			wp_json_encode( $data )
+			$encoded
 		);
 	}
 
