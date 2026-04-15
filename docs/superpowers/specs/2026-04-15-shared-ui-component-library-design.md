@@ -75,7 +75,11 @@ The shared `Button` component will use static, fully spelled-out Tailwind classe
 API:
 
 ```ts
-type ButtonVariant = 'primary' | 'secondary' | 'destructive';
+type ButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'destructive'
+  | /** `@deprecated` Use 'destructive' instead. */ 'danger';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
