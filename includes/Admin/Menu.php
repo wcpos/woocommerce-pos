@@ -239,7 +239,10 @@ class Menu {
 				true
 			);
 
-			wp_add_inline_script( 'wcpos-landing', $this->landing_inline_script(), 'before' );
+			$landing_inline_script = $this->landing_inline_script();
+			if ( '' !== $landing_inline_script ) {
+				wp_add_inline_script( 'wcpos-landing', $landing_inline_script, 'before' );
+			}
 		}
 	}
 
@@ -249,9 +252,30 @@ class Menu {
 	 * Passes store profile, PostHog config, and updates server config
 	 * to the landing page React app via window.wcpos.landing.
 	 *
+	 * Landing profile data is disabled by default and can be enabled via:
+	 * - Option: `wcpos_enable_landing_profile`
+	 * - Filter: `woocommerce_pos_allow_landing_profile`
+	 *
 	 * @return string
 	 */
 	private function landing_inline_script(): string {
+		$option_enabled = wp_validate_boolean( get_option( 'wcpos_enable_landing_profile', false ) );
+
+		/**
+		 * Filters whether landing profile payload is exposed to the client.
+		 *
+		 * @since 1.9.0
+		 *
+		 * @param bool $allow Whether to allow the landing profile payload.
+		 */
+		$allow_landing_profile = wp_validate_boolean(
+			apply_filters( 'woocommerce_pos_allow_landing_profile', $option_enabled )
+		);
+
+		if ( ! $allow_landing_profile ) {
+			return '';
+		}
+
 		$profile = new Landing_Profile();
 		$data    = $profile->get_landing_data();
 

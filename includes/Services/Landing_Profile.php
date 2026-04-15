@@ -273,6 +273,6 @@ class Landing_Profile {
 			}
 		}
 
-		return array_filter( $active );
+		return array_values( array_filter( $active ) );
 	}
 }
