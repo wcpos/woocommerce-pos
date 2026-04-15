@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
+use WCPOS\WooCommercePOS\Services\Landing_Profile;
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
@@ -237,7 +238,27 @@ class Menu {
 				PLUGIN_VERSION,
 				true
 			);
+
+			wp_add_inline_script( 'wcpos-landing', $this->landing_inline_script(), 'before' );
 		}
+	}
+
+	/**
+	 * Generate the inline script for landing page data.
+	 *
+	 * Passes store profile, PostHog config, and updates server config
+	 * to the landing page React app via window.wcpos.landing.
+	 *
+	 * @return string
+	 */
+	private function landing_inline_script(): string {
+		$profile = new Landing_Profile();
+		$data    = $profile->get_landing_data();
+
+		return \sprintf(
+			'var wcpos = wcpos || {}; wcpos.landing = %s;',
+			wp_json_encode( $data )
+		);
 	}
 
 	/**
