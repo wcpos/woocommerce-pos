@@ -427,10 +427,10 @@ Expected: PASS. Vite should build `@wcpos/settings` without Tailwind `@source` e
 Run:
 
 ```bash
-rg "cursor:pointer|cursor: pointer|cursor-not-allowed|cursor-pointer" assets/css build/css
+rg --no-ignore "cursor:pointer|cursor: pointer|cursor-not-allowed|cursor-pointer" assets/css/settings.css
 ```
 
-Expected: output includes generated cursor styles for the settings bundle. The exact output may be minified, but it must include cursor styling generated from `wcpos:cursor-pointer` and `wcpos:cursor-not-allowed`.
+Expected: output includes generated cursor styles for the settings bundle. The exact output may be minified, but it must include cursor styling generated from `wcpos:cursor-pointer` and `wcpos:cursor-not-allowed`. Use `--no-ignore` because generated assets under `assets/css` are ignored by git.
 
 - [ ] **Step 4: Commit the Tailwind source registration**
 
