@@ -6,6 +6,9 @@ export type ButtonVariant =
 	| 'primary'
 	| 'secondary'
 	| 'destructive'
+	| 'outline'
+	| 'ghost'
+	| 'text'
 	| /** @deprecated Use 'destructive' instead. */ 'danger';
 
 type CanonicalButtonVariant = Exclude<ButtonVariant, 'danger'>;
@@ -21,6 +24,10 @@ const variantClasses: Record<CanonicalButtonVariant, string> = {
 	secondary:
 		'wcpos:bg-white wcpos:text-gray-700 wcpos:border wcpos:border-gray-300 wcpos:hover:bg-gray-50 wcpos:focus:ring-wp-admin-theme-color',
 	destructive: 'wcpos:bg-red-600 wcpos:text-white wcpos:hover:bg-red-700 wcpos:focus:ring-red-500',
+	outline:
+		'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:border wcpos:border-wp-admin-theme-color wcpos:hover:bg-wp-admin-theme-color-lightest wcpos:focus:ring-wp-admin-theme-color',
+	ghost: 'wcpos:bg-transparent wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:focus:ring-wp-admin-theme-color',
+	text: 'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:focus:ring-wp-admin-theme-color',
 };
 
 function normalizeVariant(variant: ButtonVariant): CanonicalButtonVariant {
@@ -38,14 +45,16 @@ export function Button({
 }: ButtonProps) {
 	const isDisabled = disabled || loading;
 	const normalizedVariant = normalizeVariant(variant);
+	const sizeClasses = normalizedVariant === 'text' ? 'wcpos:px-0 wcpos:py-0' : 'wcpos:px-4 wcpos:py-2';
 
 	return (
 		<button
 			type={type}
 			disabled={isDisabled}
 			className={classNames(
-				'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',
+				'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:text-sm wcpos:font-medium wcpos:transition-colors wcpos:duration-150',
 				'wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-offset-2',
+				sizeClasses,
 				variantClasses[normalizedVariant],
 				isDisabled ? 'wcpos:opacity-50 wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
 				className
