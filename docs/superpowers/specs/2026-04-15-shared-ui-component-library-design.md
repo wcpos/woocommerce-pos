@@ -20,9 +20,9 @@ The first component to extract is `Button`, because the settings Button currentl
 ## Non-goals
 
 - Do not create a separately distributed npm package in this phase.
-- Do not introduce a full design system, Storybook, or visual documentation site in this phase.
-- Do not replace all raw buttons across all packages in the first implementation step.
-- Do not ship a standalone `@wcpos/ui` CSS bundle initially.
+- Defer introducing a full design system, Storybook, or visual documentation site in this phase.
+- Replace raw buttons incrementally rather than across all packages in the first implementation step.
+- Postpone shipping a standalone `@wcpos/ui` CSS bundle initially.
 
 ## Current context
 
@@ -184,7 +184,7 @@ For the initial Button extraction:
   - disabled/loading state includes `wcpos:cursor-not-allowed`
   - variants apply expected static classes
 - Run `pnpm --filter=@wcpos/settings test`.
-- Run `pnpm --filter=@wcpos/settings lint`.
+- Run targeted lint for changed settings files: `pnpm --filter=@wcpos/settings lint -- src/components/ui/button.tsx src/components/ui/__tests__/button.test.tsx`.
 - Run `pnpm --filter=@wcpos/settings build`.
 
 For follow-up migrations, run the relevant package's test, lint, and build commands.
