@@ -2,7 +2,11 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'destructive' | 'danger';
+export type ButtonVariant =
+	| 'primary'
+	| 'secondary'
+	| 'destructive'
+	| /** @deprecated Use 'destructive' instead. */ 'danger';
 
 type CanonicalButtonVariant = Exclude<ButtonVariant, 'danger'>;
 
@@ -58,6 +62,7 @@ export function Button({
 					<circle
 						className="wcpos:opacity-25"
 						cx="12"
+						cy="12"
 						r="10"
 						stroke="currentColor"
 						strokeWidth="4"

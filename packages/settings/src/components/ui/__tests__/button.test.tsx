@@ -46,6 +46,14 @@ describe('Button', () => {
 		expect(svg).toBeInTheDocument();
 	});
 
+	it('keeps spinner circle geometry', () => {
+		const { container } = render(<Button loading>Saving</Button>);
+		const circle = container.querySelector('svg circle');
+		expect(circle).toBeInTheDocument();
+		expect(circle).toHaveAttribute('cx', '12');
+		expect(circle).toHaveAttribute('cy', '12');
+	});
+
 	it('does not show a spinner when not loading', () => {
 		const { container } = render(<Button>Save</Button>);
 		const svg = container.querySelector('svg');
