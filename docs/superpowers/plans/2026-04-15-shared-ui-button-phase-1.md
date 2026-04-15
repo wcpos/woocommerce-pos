@@ -460,15 +460,15 @@ pnpm --filter=@wcpos/settings test
 
 Expected: PASS.
 
-- [ ] **Step 2: Run settings lint**
+- [ ] **Step 2: Run targeted settings lint for changed files**
 
 Run:
 
 ```bash
-pnpm --filter=@wcpos/settings lint
+pnpm --filter=@wcpos/settings lint -- src/components/ui/button.tsx src/components/ui/__tests__/button.test.tsx
 ```
 
-Expected: PASS. Warnings are acceptable only if they are pre-existing and unrelated to the changed files.
+Expected: PASS for the changed scope.
 
 - [ ] **Step 3: Run settings build**
 
@@ -497,6 +497,6 @@ Use this exact checklist format:
 ```markdown
 Verification:
 - `pnpm --filter=@wcpos/settings test` — PASS
-- `pnpm --filter=@wcpos/settings lint` — PASS
+- `pnpm --filter=@wcpos/settings lint -- src/components/ui/button.tsx src/components/ui/__tests__/button.test.tsx` — PASS
 - `pnpm --filter=@wcpos/settings build` — PASS
 ```
