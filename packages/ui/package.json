@@ -8,5 +8,8 @@
 	},
 	"peerDependencies": {
 		"react": "^18.0.0"
+	},
+	"devDependencies": {
+		"@types/react": "18.3.28"
 	}
 }

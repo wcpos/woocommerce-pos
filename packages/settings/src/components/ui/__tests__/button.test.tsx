@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { render, screen, fireEvent } from '@testing-library/react';
 
+import { Button as UiButton } from '@wcpos/ui';
 import { Button } from '../button';
 
 describe('Button', () => {
@@ -97,5 +98,10 @@ describe('Button', () => {
 	it('accepts custom type prop', () => {
 		render(<Button type="submit">Submit</Button>);
 		expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
+	});
+
+	it('renders Button from @wcpos/ui', () => {
+		render(<UiButton>Package Button</UiButton>);
+		expect(screen.getByRole('button')).toHaveTextContent('Package Button');
 	});
 });
