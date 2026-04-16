@@ -221,6 +221,8 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertSame( '$identify', $payload['event'] );
 		$this->assertSame( array( 'role' => 'shop_manager' ), $payload['properties']['$set'] );
 		$this->assertSame( array( 'first_seen_at' => '2026-04-16' ), $payload['properties']['$set_once'] );
+		// $identify is a reserved event — no auto $groups binding.
+		$this->assertArrayNotHasKey( '$groups', $payload['properties'] );
 	}
 
 	/**
@@ -242,6 +244,33 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertSame( 'site', $payload['properties']['$group_type'] );
 		$this->assertSame( 'site-xyz', $payload['properties']['$group_key'] );
 		$this->assertSame( array( 'product_count' => 42 ), $payload['properties']['$group_set'] );
+		// $groupidentify is a reserved event — no auto $groups binding
+		// that could cross-link the event to an unrelated group.
+		$this->assertArrayNotHasKey( '$groups', $payload['properties'] );
+	}
+
+	/**
+	 * Missing user/site UUIDs are lazily provisioned by the getters so
+	 * admin-only installs (where the POS frontend has never loaded)
+	 * still produce identifiable events.
+	 */
+	public function test_getters_lazily_provision_missing_uuids(): void {
+		delete_option( 'woocommerce_pos_uuid' );
+		$user_id = $this->factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$analytics = Analytics::instance();
+		$user_uuid = $analytics->get_distinct_id();
+		$site_uuid = $analytics->get_site_id();
+
+		$this->assertNotEmpty( $user_uuid );
+		$this->assertNotEmpty( $site_uuid );
+		$this->assertSame( $user_uuid, get_user_meta( $user_id, '_woocommerce_pos_uuid', true ) );
+		$this->assertSame( $site_uuid, get_option( 'woocommerce_pos_uuid' ) );
+
+		// Second call returns the same value (idempotent).
+		$this->assertSame( $user_uuid, $analytics->get_distinct_id() );
+		$this->assertSame( $site_uuid, $analytics->get_site_id() );
 	}
 
 	/**
@@ -281,5 +310,33 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertSame( 'https://ph.example.com', Analytics::instance()->get_host() );
 
 		remove_filter( 'woocommerce_pos_posthog_host', $cb );
+	}
+
+	/**
+	 * The WCPOS_POSTHOG_TOKEN constant overrides the default token.
+	 *
+	 * Runs in an isolated process so the constant definition does not
+	 * leak into subsequent tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_constant_overrides_token(): void {
+		\define( 'WCPOS_POSTHOG_TOKEN', 'phc_from_constant' );
+
+		$this->assertSame( 'phc_from_constant', Analytics::instance()->get_token() );
+	}
+
+	/**
+	 * The WCPOS_POSTHOG_HOST constant overrides the default host and is
+	 * still untrailingslashed when emitted.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_constant_overrides_host_and_strips_trailing_slash(): void {
+		\define( 'WCPOS_POSTHOG_HOST', 'https://ph.example.test/' );
+
+		$this->assertSame( 'https://ph.example.test', Analytics::instance()->get_host() );
 	}
 }

@@ -266,15 +266,23 @@ class Menu {
 	 */
 	private function posthog_inline_script(): string {
 		$analytics = Analytics::instance();
+		$noop_stub = '(function(){var w=window.wcpos=window.wcpos||{};w.posthog={capture:function(){},identify:function(){},group:function(){},register:function(){},reset:function(){},opt_in_capturing:function(){},opt_out_capturing:function(){}};})();';
 
 		if ( ! $analytics->is_enabled() ) {
-			return '(function(){var w=window.wcpos=window.wcpos||{};w.posthog={capture:function(){},identify:function(){},group:function(){},register:function(){},reset:function(){},opt_in_capturing:function(){},opt_out_capturing:function(){}};})();';
+			return $noop_stub;
 		}
 
 		$token   = wp_json_encode( $analytics->get_token() );
 		$host    = wp_json_encode( $analytics->get_host() );
 		$site_id = wp_json_encode( $analytics->get_site_id() );
 		$user_id = wp_json_encode( $analytics->get_distinct_id() );
+
+		// If any value fails to encode (e.g. malformed UTF-8 coming
+		// from a filter override), fall back to the no-op stub rather
+		// than emitting `posthog.init(, { api_host: , ... })`.
+		if ( false === $token || false === $host || false === $site_id || false === $user_id ) {
+			return $noop_stub;
+		}
 
 		// phpcs:disable Generic.Files.LineLength.TooLong -- PostHog snippet is a single line by design.
 		$snippet = <<<JS

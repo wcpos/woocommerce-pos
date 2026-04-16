@@ -15,6 +15,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use Ramsey\Uuid\Uuid;
 use WP_User;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -148,15 +149,25 @@ class Analytics {
 			return false;
 		}
 
+		$merged_properties = array_merge( $this->get_default_properties(), $properties );
+
+		// PostHog reserves $identify / $groupidentify for person / group
+		// definitions. Auto-attaching a $groups binding to those would
+		// either duplicate the event's own $group_type/$group_key or
+		// incorrectly cross-link them to an unrelated group, so only
+		// attach $groups to regular events.
+		if ( ! $this->is_reserved_event( $event ) ) {
+			$site_id = $this->get_site_id();
+			if ( '' !== $site_id ) {
+				$merged_properties['$groups'] = array( 'site' => $site_id );
+			}
+		}
+
 		$payload = array(
 			'api_key'     => $this->get_token(),
 			'event'       => $event,
 			'distinct_id' => $distinct_id,
-			'properties'  => array_merge(
-				$this->get_default_properties(),
-				$properties,
-				array( '$groups' => array( 'site' => $this->get_site_id() ) )
-			),
+			'properties'  => $merged_properties,
 			'timestamp'   => gmdate( 'c' ),
 		);
 
@@ -258,9 +269,13 @@ class Analytics {
 	/**
 	 * Get the distinct ID for the current user.
 	 *
-	 * Returns the user's POS UUID meta, which is stable across sessions
-	 * and devices. Empty string if no user is logged in or no UUID has
-	 * been assigned.
+	 * Returns the user's POS UUID meta, lazily provisioning it if
+	 * missing. This matches the existing pattern in
+	 * `Templates\Frontend` for users who load the POS frontend, and
+	 * ensures analytics events from the WP admin (where `Frontend` is
+	 * never loaded) still have a stable `distinct_id`.
+	 *
+	 * Empty string when no user is logged in.
 	 */
 	public function get_distinct_id(): string {
 		$user = wp_get_current_user();
@@ -269,17 +284,41 @@ class Analytics {
 		}
 
 		$uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
+		if ( \is_string( $uuid ) && '' !== $uuid ) {
+			return $uuid;
+		}
 
-		return \is_string( $uuid ) ? $uuid : '';
+		$uuid = Uuid::uuid4()->toString();
+		update_user_meta( $user->ID, '_woocommerce_pos_uuid', $uuid );
+
+		return $uuid;
 	}
 
 	/**
 	 * Get the site UUID used as the `site` group key.
+	 *
+	 * Lazily provisions the site UUID if missing so admin-only
+	 * installs (fresh plugin activation, no POS frontend load yet)
+	 * still have a stable site identifier for grouping.
 	 */
 	public function get_site_id(): string {
 		$uuid = get_option( 'woocommerce_pos_uuid', '' );
+		if ( \is_string( $uuid ) && '' !== $uuid ) {
+			return $uuid;
+		}
 
-		return \is_string( $uuid ) ? $uuid : '';
+		$uuid = Uuid::uuid4()->toString();
+		update_option( 'woocommerce_pos_uuid', $uuid );
+
+		return $uuid;
+	}
+
+	/**
+	 * Whether the given event name is a PostHog-reserved identifier
+	 * event that should not have a `$groups` binding auto-attached.
+	 */
+	private function is_reserved_event( string $event ): bool {
+		return '$identify' === $event || '$groupidentify' === $event;
 	}
 
 	/**
