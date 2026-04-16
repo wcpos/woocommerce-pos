@@ -2,9 +2,10 @@
 /**
  * Landing page profile service.
  *
- * Gathers store metrics and configuration for the landing page React app,
- * enabling personalised A/B testing via PostHog and customer profiling
- * via the updates server.
+ * Gathers store metrics and configuration for the landing page React app.
+ * Data is split into two tiers:
+ * - Functional data (locale, version): always available, no consent needed
+ * - Profile data (store metrics, UUIDs): requires explicit user consent
  *
  * @package WCPOS\WooCommercePOS\Services
  */
@@ -42,21 +43,37 @@ class Landing_Profile {
 	const UPDATES_SERVER_URL = 'https://updates.wcpos.com';
 
 	/**
-	 * Get all landing page data (profile + service config).
+	 * Get functional data that is always available (no consent required).
+	 *
+	 * Used for translations, feature gating, and schema versioning.
 	 *
 	 * @return array
 	 */
-	public function get_landing_data(): array {
+	public function get_functional_data(): array {
 		return array(
-			'schema_version' => 1,
+			'schema_version'  => 1,
+			'locale'          => get_locale(),
+			'plugin_version'  => PLUGIN_VERSION,
+			'pro_active'      => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+		);
+	}
+
+	/**
+	 * Get consent-gated data (store profile + service config).
+	 *
+	 * Only sent when the user has explicitly allowed tracking.
+	 *
+	 * @return array
+	 */
+	public function get_consented_data(): array {
+		return array(
 			'profile'        => $this->get_profile(),
-			'posthog'        => $this->get_posthog_config(),
 			'updates_server' => $this->get_updates_server_config(),
 		);
 	}
 
 	/**
-	 * Get the store profile.
+	 * Get the store profile (consent-gated fields only).
 	 *
 	 * Merges cached expensive metrics with cheap/user-specific fields
 	 * that are computed fresh on every call.
@@ -70,57 +87,14 @@ class Landing_Profile {
 		return array_merge(
 			$cached,
 			array(
-				'locale'         => get_locale(),
-				'wc_version'     => WC()->version,
-				'plugin_version' => PLUGIN_VERSION,
-				'pro_active'     => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
-				'php_version'    => PHP_VERSION,
-				'site_uuid'      => get_option( 'woocommerce_pos_uuid', '' ),
-				'user_uuid'      => get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ),
-				'user_role'      => ! empty( $user->roles ) ? $user->roles[0] : '',
-				'wc_currency'    => get_woocommerce_currency(),
-				'wc_country'     => WC()->countries->get_base_country(),
+				'wc_version'  => WC()->version,
+				'php_version' => PHP_VERSION,
+				'site_uuid'   => get_option( 'woocommerce_pos_uuid', '' ),
+				'user_uuid'   => get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ),
+				'user_role'   => ! empty( $user->roles ) ? $user->roles[0] : '',
+				'wc_currency' => get_woocommerce_currency(),
+				'wc_country'  => WC()->countries->get_base_country(),
 			)
-		);
-	}
-
-	/**
-	 * Get PostHog configuration.
-	 *
-	 * Credentials are stored in wp_options and overridable via filters.
-	 * Ships empty — must be configured. The React app skips PostHog
-	 * initialization if api_key is empty.
-	 *
-	 * @return array
-	 */
-	public function get_posthog_config(): array {
-		/**
-		 * Filters the PostHog API host URL.
-		 *
-		 * @since 1.9.0
-		 *
-		 * @param string $api_host The PostHog API host URL.
-		 */
-		$api_host = apply_filters(
-			'woocommerce_pos_posthog_api_host',
-			get_option( 'woocommerce_pos_posthog_api_host', '' )
-		);
-
-		/**
-		 * Filters the PostHog project API key.
-		 *
-		 * @since 1.9.0
-		 *
-		 * @param string $api_key The PostHog project API key.
-		 */
-		$api_key = apply_filters(
-			'woocommerce_pos_posthog_api_key',
-			get_option( 'woocommerce_pos_posthog_api_key', '' )
-		);
-
-		return array(
-			'api_host' => $api_host,
-			'api_key'  => $api_key,
 		);
 	}
 

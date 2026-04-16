@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Admin\Menu;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Extensions;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
@@ -267,6 +268,9 @@ class Init {
 	 */
 	private function init_admin(): void {
 		if ( is_admin() ) {
+			// Register AJAX handler before the branch so it's available during AJAX requests.
+			add_action( 'wp_ajax_wcpos_tracking_consent', array( Menu::class, 'handle_tracking_consent_ajax' ) );
+
 			if ( \defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 				new AJAX();
 			} else {

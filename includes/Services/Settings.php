@@ -92,7 +92,8 @@ class Settings {
 			),
 		),
 		'tools' => array(
-			'use_jwt_as_param' => false,
+			'use_jwt_as_param'  => false,
+			'tracking_consent'  => 'undecided',
 		),
 		'visibility' => array(
 			'products' => array(
