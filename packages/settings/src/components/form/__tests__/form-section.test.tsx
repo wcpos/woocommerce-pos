@@ -75,6 +75,29 @@ describe('FormSection', () => {
 		expect(screen.getByText('Count: 3')).toBeInTheDocument();
 	});
 
+	it('renders headerRight when value is the number 0', () => {
+		// Regression: a truthy check on headerRight previously hid numeric 0
+		// (e.g. a "0 selected" count), even though React renders 0 as "0".
+		render(
+			<FormSection title="Selected" headerRight={0}>
+				<p>Content</p>
+			</FormSection>
+		);
+		expect(screen.getByText('Selected')).toBeInTheDocument();
+		expect(screen.getByText('0')).toBeInTheDocument();
+	});
+
+	it('does not render the header wrapper when headerRight is false', () => {
+		const { container } = render(
+			<FormSection headerRight={false}>
+				<p>Content</p>
+			</FormSection>
+		);
+		// No title/description and headerRight=false → header should be omitted entirely.
+		expect(container.querySelector('h3')).not.toBeInTheDocument();
+		expect(container.textContent).toBe('Content');
+	});
+
 	it('applies divider classes when divider prop is true', () => {
 		const { container } = render(
 			<FormSection divider title="Section">

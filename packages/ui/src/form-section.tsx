@@ -28,7 +28,10 @@ export function FormSection({
 	className,
 }: FormSectionProps) {
 	const hasHeading = Boolean(title || description);
-	const showHeader = hasHeading || Boolean(headerRight);
+	// Treat any renderable ReactNode as present — including numeric `0` (e.g. a "0 selected" count).
+	// Only null/undefined/false are skipped, since React renders all three as nothing.
+	const hasHeaderRight = headerRight !== null && headerRight !== undefined && headerRight !== false;
+	const showHeader = hasHeading || hasHeaderRight;
 
 	return (
 		<div
@@ -41,7 +44,7 @@ export function FormSection({
 				<div
 					className={classNames(
 						'wcpos:mb-3',
-						headerRight &&
+						hasHeaderRight &&
 							classNames(
 								'wcpos:flex wcpos:items-center',
 								hasHeading ? 'wcpos:justify-between' : 'wcpos:justify-end'
@@ -67,7 +70,7 @@ export function FormSection({
 							)}
 						</div>
 					)}
-					{headerRight && <div className="wcpos:flex-shrink-0">{headerRight}</div>}
+					{hasHeaderRight && <div className="wcpos:flex-shrink-0">{headerRight}</div>}
 				</div>
 			)}
 			<div>{children}</div>
