@@ -6,8 +6,8 @@
   </align>
   <line />
   <row>
-    <col width="24">{{meta.order_number}}</col>
-    <col width="24" align="right">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</col>
+    <col width="24">{{order.number}}</col>
+    <col width="24" align="right">{{order.created.datetime}}</col>
   </row>
   <line />
   {{#lines}}
@@ -79,7 +79,7 @@
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
-    <barcode type="code128" height="60">{{meta.order_number}}</barcode>
+    <barcode type="code128" height="60">{{order.number}}</barcode>
   </align>
   <feed lines="1" />
   <align mode="center">

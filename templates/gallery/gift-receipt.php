@@ -22,7 +22,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 }
 
 $store = $receipt_data['store'];
-$meta  = $receipt_data['meta'];
+$order_data = $receipt_data['order'] ?? array();
 $lines = $receipt_data['lines'];
 ?>
 <!DOCTYPE html>
@@ -117,7 +117,7 @@ $lines = $receipt_data['lines'];
 		<?php endforeach; ?>
 	</ul>
 
-	<?php $customer_note = $receipt_data['meta']['customer_note'] ?? ( $order ? $order->get_customer_note() : '' ); ?>
+	<?php $customer_note = $order_data['customer_note'] ?? $receipt_data['meta']['customer_note'] ?? ( $order ? $order->get_customer_note() : '' ); ?>
 	<?php if ( $customer_note ) : ?>
 		<div class="gift-message">
 			<div class="gift-message-label"><?php esc_html_e( 'A message for you', 'woocommerce-pos' ); ?></div>
@@ -125,10 +125,12 @@ $lines = $receipt_data['lines'];
 		</div>
 	<?php endif; ?>
 
+	<?php $order_number = $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+	<?php $created_at = $order_data['created']['date_long'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 	<div class="meta">
-		<?php echo esc_html( wp_date( 'F j, Y', strtotime( $meta['created_at_gmt'] ) ) ); ?>
+		<?php echo esc_html( $created_at ); ?>
 		&middot;
-		#<?php echo esc_html( $meta['order_number'] ); ?>
+		#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?>
 	</div>
 
 </body>

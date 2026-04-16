@@ -14,12 +14,14 @@ class Receipt_Data_Schema {
 	/**
 	 * Current schema version.
 	 */
-	const VERSION = '1.1.0';
+	const VERSION = '1.2.0';
 
 	/**
 	 * Top-level keys required in a receipt payload.
 	 */
 	const REQUIRED_KEYS = array(
+		'receipt',
+		'order',
 		'meta',
 		'store',
 		'cashier',
@@ -183,42 +185,51 @@ class Receipt_Data_Schema {
 	 */
 	public static function get_field_tree(): array {
 		return array(
-			'meta'        => array(
-				'label'  => __( 'Order Meta', 'woocommerce-pos' ),
+			'receipt'     => array(
+				'label'  => __( 'Receipt', 'woocommerce-pos' ),
 				'fields' => array(
-					'schema_version'   => array(
-						'type'  => 'string',
-						'label' => __( 'Schema Version', 'woocommerce-pos' ),
-					),
 					'mode'             => array(
 						'type'  => 'string',
 						'label' => __( 'Mode', 'woocommerce-pos' ),
 					),
-					'order_id'         => array(
+				),
+			),
+			'receipt.printed' => array(
+				'label'  => __( 'Receipt Printed', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			),
+			'order'       => array(
+				'label'  => __( 'Order', 'woocommerce-pos' ),
+				'fields' => array(
+					'id'           => array(
 						'type'  => 'number',
 						'label' => __( 'Order ID', 'woocommerce-pos' ),
 					),
-					'order_number'     => array(
+					'number'       => array(
 						'type'  => 'string',
 						'label' => __( 'Order Number', 'woocommerce-pos' ),
 					),
-					'created_at_gmt'   => array(
-						'type'  => 'string',
-						'label' => __( 'Date/Time (GMT)', 'woocommerce-pos' ),
-					),
-					'created_at_local' => array(
-						'type'  => 'string',
-						'label' => __( 'Date/Time (Local)', 'woocommerce-pos' ),
-					),
-					'currency'         => array(
+					'currency'     => array(
 						'type'  => 'string',
 						'label' => __( 'Currency', 'woocommerce-pos' ),
 					),
-					'customer_note'    => array(
+					'customer_note' => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Note', 'woocommerce-pos' ),
 					),
 				),
+			),
+			'order.created' => array(
+				'label'  => __( 'Order Created', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			),
+			'order.paid' => array(
+				'label'  => __( 'Order Paid', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			),
+			'order.completed' => array(
+				'label'  => __( 'Order Completed', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
 			),
 			'store'       => array(
 				'label'  => __( 'Store', 'woocommerce-pos' ),
@@ -687,6 +698,92 @@ class Receipt_Data_Schema {
 	}
 
 	/**
+	 * Get field metadata for a semantic date section.
+	 *
+	 * @return array<string, array{type: string, label: string}>
+	 */
+	private static function get_date_field_tree_fields(): array {
+		return array(
+			'datetime'       => array(
+				'type'  => 'string',
+				'label' => __( 'Date & Time', 'woocommerce-pos' ),
+			),
+			'date'           => array(
+				'type'  => 'string',
+				'label' => __( 'Date', 'woocommerce-pos' ),
+			),
+			'time'           => array(
+				'type'  => 'string',
+				'label' => __( 'Time', 'woocommerce-pos' ),
+			),
+			'datetime_short' => array(
+				'type'  => 'string',
+				'label' => __( 'Short Date & Time', 'woocommerce-pos' ),
+			),
+			'datetime_long'  => array(
+				'type'  => 'string',
+				'label' => __( 'Long Date & Time', 'woocommerce-pos' ),
+			),
+			'datetime_full'  => array(
+				'type'  => 'string',
+				'label' => __( 'Full Date & Time', 'woocommerce-pos' ),
+			),
+			'date_short'     => array(
+				'type'  => 'string',
+				'label' => __( 'Short Date', 'woocommerce-pos' ),
+			),
+			'date_long'      => array(
+				'type'  => 'string',
+				'label' => __( 'Long Date', 'woocommerce-pos' ),
+			),
+			'date_full'      => array(
+				'type'  => 'string',
+				'label' => __( 'Full Date', 'woocommerce-pos' ),
+			),
+			'date_ymd'       => array(
+				'type'  => 'string',
+				'label' => __( 'YYYY-MM-DD', 'woocommerce-pos' ),
+			),
+			'date_dmy'       => array(
+				'type'  => 'string',
+				'label' => __( 'DD/MM/YYYY', 'woocommerce-pos' ),
+			),
+			'date_mdy'       => array(
+				'type'  => 'string',
+				'label' => __( 'MM/DD/YYYY', 'woocommerce-pos' ),
+			),
+			'weekday_short'  => array(
+				'type'  => 'string',
+				'label' => __( 'Weekday Short', 'woocommerce-pos' ),
+			),
+			'weekday_long'   => array(
+				'type'  => 'string',
+				'label' => __( 'Weekday Long', 'woocommerce-pos' ),
+			),
+			'day'            => array(
+				'type'  => 'string',
+				'label' => __( 'Day', 'woocommerce-pos' ),
+			),
+			'month'          => array(
+				'type'  => 'string',
+				'label' => __( 'Month Number', 'woocommerce-pos' ),
+			),
+			'month_short'    => array(
+				'type'  => 'string',
+				'label' => __( 'Month Short', 'woocommerce-pos' ),
+			),
+			'month_long'     => array(
+				'type'  => 'string',
+				'label' => __( 'Month Long', 'woocommerce-pos' ),
+			),
+			'year'           => array(
+				'type'  => 'string',
+				'label' => __( 'Year', 'woocommerce-pos' ),
+			),
+		);
+	}
+
+	/**
 	 * Get mock receipt data for template preview.
 	 *
 	 * Returns a representative receipt payload with realistic values
@@ -695,7 +792,25 @@ class Receipt_Data_Schema {
 	 * @return array Mock receipt data.
 	 */
 	public static function get_mock_receipt_data(): array {
+		$created   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:30:00 UTC' ) );
+		$paid      = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:35:00 UTC' ) );
+		$completed = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:42:00 UTC' ) );
+		$printed   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:45:00 UTC' ) );
+
 		return array(
+			'receipt' => array(
+				'mode'    => 'sale',
+				'printed' => $printed,
+			),
+			'order'   => array(
+				'id'            => 1001,
+				'number'        => '1001',
+				'currency'      => 'USD',
+				'customer_note' => '',
+				'created'       => $created,
+				'paid'          => $paid,
+				'completed'     => $completed,
+			),
 			'meta'    => array(
 				'schema_version'   => self::VERSION,
 				'mode'             => 'sale',

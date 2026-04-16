@@ -211,6 +211,53 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test semantic receipt and order sections include rich date data.
+	 */
+	public function test_build_includes_semantic_receipt_and_order_date_sections(): void {
+		$order   = wc_get_order( OrderHelper::create_order() );
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'receipt', $payload );
+		$this->assertArrayHasKey( 'order', $payload );
+		$this->assertSame( 'live', $payload['receipt']['mode'] );
+		$this->assertSame( (string) $order->get_order_number(), $payload['order']['number'] );
+		$this->assertSame( (string) $order->get_currency(), $payload['order']['currency'] );
+		$this->assertSame( (string) $order->get_customer_note(), $payload['order']['customer_note'] );
+
+		foreach ( array( 'created', 'paid', 'completed' ) as $field ) {
+			$this->assertArrayHasKey( $field, $payload['order'] );
+			$this->assertArrayHasKey( 'datetime_full', $payload['order'][ $field ] );
+			$this->assertArrayHasKey( 'date_ymd', $payload['order'][ $field ] );
+			$this->assertArrayHasKey( 'weekday_short', $payload['order'][ $field ] );
+		}
+
+		$this->assertNotSame( '', $payload['order']['created']['datetime'] );
+
+		$this->assertArrayHasKey( 'printed', $payload['receipt'] );
+		$this->assertArrayHasKey( 'datetime', $payload['receipt']['printed'] );
+		$this->assertArrayHasKey( 'datetime_full', $payload['receipt']['printed'] );
+		$this->assertArrayHasKey( 'date_mdy', $payload['receipt']['printed'] );
+		$this->assertArrayHasKey( 'month_long', $payload['receipt']['printed'] );
+	}
+
+	/**
+	 * Test missing paid and completed dates return blank display fields.
+	 */
+	public function test_build_blanks_missing_paid_and_completed_dates(): void {
+		$order = wc_create_order();
+		$order->set_currency( 'USD' );
+		$order->set_customer_note( 'No payment yet' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( '', $payload['order']['paid']['datetime'] );
+		$this->assertSame( '', $payload['order']['paid']['date_long'] );
+		$this->assertSame( '', $payload['order']['completed']['datetime'] );
+		$this->assertSame( '', $payload['order']['completed']['weekday_long'] );
+	}
+
+	/**
 	 * Test legacy string opening hours remain available in live receipt payloads.
 	 */
 	public function test_build_preserves_legacy_string_opening_hours_without_notes_getter(): void {

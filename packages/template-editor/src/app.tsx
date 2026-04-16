@@ -25,8 +25,8 @@ function getThermalStarterShell(paperWidth: string): string {
   </align>
   <line />
   <row>
-    <col width="${half}">Order #{{meta.order_number}}</col>
-    <col width="${half}" align="right">{{meta.created_at_local}}</col>
+    <col width="${half}">Order #{{order.number}}</col>
+    <col width="${half}" align="right">{{order.created.datetime}}</col>
   </row>
   <line />
   {{#lines}}
@@ -54,7 +54,7 @@ const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
   <hr style="border: none; border-top: 1px solid #ddd; margin: 0 0 12px;">
 
   <p style="margin: 0 0 12px; font-size: 11px; color: #666;">
-    Order #{{meta.order_number}} &mdash; {{meta.created_at_local}}
+    Order #{{order.number}} &mdash; {{order.created.datetime}}
   </p>
 
   <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">

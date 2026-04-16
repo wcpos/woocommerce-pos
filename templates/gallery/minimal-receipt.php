@@ -23,13 +23,13 @@ if ( ! \defined( 'ABSPATH' ) ) {
 }
 
 $store    = $receipt_data['store'];
-$meta     = $receipt_data['meta'];
+$order_data = $receipt_data['order'] ?? array();
 $cashier  = $receipt_data['cashier'];
 $lines    = $receipt_data['lines'];
 $totals   = $receipt_data['totals'];
 $payments = $receipt_data['payments'];
 $hints    = $receipt_data['presentation_hints'];
-$currency = $meta['currency'];
+$currency = $order_data['currency'] ?? $receipt_data['meta']['currency'] ?? get_woocommerce_currency();
 
 /**
  * Helper — format a number as currency using the order's currency.
@@ -82,13 +82,15 @@ $money = function ( float $amount ) use ( $currency ): string {
 
 	<hr class="divider">
 
+	<?php $order_number = $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+	<?php $created_at = $order_data['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 	<div class="meta-row">
 		<span><?php esc_html_e( 'Order', 'woocommerce-pos' ); ?></span>
-		<span>#<?php echo esc_html( $meta['order_number'] ); ?></span>
+		<span>#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span>
 	</div>
 	<div class="meta-row">
 		<span><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span>
-		<span><?php echo esc_html( wp_date( 'M j, Y g:i a', strtotime( $meta['created_at_local'] ?? $meta['created_at_gmt'] ) ) ); ?></span>
+		<span><?php echo esc_html( $created_at ); ?></span>
 	</div>
 	<?php if ( ! empty( $cashier['name'] ) ) : ?>
 		<div class="meta-row">

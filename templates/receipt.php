@@ -21,7 +21,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_woocommerce_currency() );
+$currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? $receipt_data['meta']['currency'] ?? get_woocommerce_currency() );
 ?>
 <!DOCTYPE html>
 <html <?php language_attributes(); ?>>
@@ -107,15 +107,13 @@ $currency_args = array( 'currency' => $receipt_data['meta']['currency'] ?? get_w
 	<table>
 		<tr>
 			<td><?php esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></td>
-			<td><?php echo esc_html( $receipt_data['meta']['order_number'] ?? '' ); ?></td>
+			<?php $order_number = $receipt_data['order']['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+			<td><?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></td>
 		</tr>
 		<tr>
 			<td><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></td>
-			<?php
-			$receipt_date_str = $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? '';
-			$receipt_ts       = strtotime( $receipt_date_str );
-			?>
-			<td><?php echo esc_html( false !== $receipt_ts ? wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $receipt_ts ) : $receipt_date_str ); ?></td>
+			<?php $created_at = $receipt_data['order']['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
+			<td><?php echo esc_html( $created_at ); ?></td>
 		</tr>
 		<?php if ( ! empty( $receipt_data['cashier']['name'] ) ) : ?>
 			<tr>
@@ -325,10 +323,11 @@ $has_shipping  = ! empty( array_filter( $shipping_addr ) );
 <?php endif; ?>
 
 <!-- Notes -->
-<?php if ( ! empty( $receipt_data['meta']['customer_note'] ) ) : ?>
+<?php $customer_note = ! empty( $receipt_data['order']['customer_note'] ) ? $receipt_data['order']['customer_note'] : ( $receipt_data['meta']['customer_note'] ?? '' ); ?>
+<?php if ( '' !== $customer_note ) : ?>
 	<div class="notes">
 		<h3><?php esc_html_e( 'Customer Notes', 'woocommerce' ); ?></h3>
-		<p><?php echo wp_kses_post( nl2br( $receipt_data['meta']['customer_note'] ) ); ?></p>
+		<p><?php echo wp_kses_post( nl2br( $customer_note ) ); ?></p>
 	</div>
 <?php endif; ?>
 

@@ -21,8 +21,8 @@ Shipping address prominent for warehouse use.
 		<div style="text-align: right;">
 			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.packing_slip}}</div>
 			<div style="font-size: 12px; margin-top: 8px; color: #666;">
-				<div>Order #{{meta.order_number}}</div>
-				<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
+				<div>Order #{{order.number}}</div>
+				<div>{{order.created.datetime}}</div>
 			</div>
 		</div>
 	</div>
@@ -63,15 +63,15 @@ Shipping address prominent for warehouse use.
 		</tbody>
 	</table>
 
-	{{#meta.customer_note}}
+	{{#order.customer_note}}
 	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px;">
 		<div style="font-weight: 600; margin-bottom: 4px;">{{i18n.customer_note}}:</div>
-		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
+		<div style="white-space: pre-wrap;">{{order.customer_note}}</div>
 	</div>
-	{{/meta.customer_note}}
+	{{/order.customer_note}}
 
 	<div style="margin-top: 32px; text-align: center; font-size: 11px; color: #999;">
-		Order #{{meta.order_number}} &middot; {{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}
+		Order #{{order.number}} &middot; {{order.created.datetime}}
 	</div>
 
 </div>

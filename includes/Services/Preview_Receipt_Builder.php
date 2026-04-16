@@ -634,6 +634,26 @@ class Preview_Receipt_Builder {
 			'customer_note'    => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
 		);
 
+		$created_timestamp   = strtotime( '2024-01-15 10:30:00 UTC' );
+		$paid_timestamp      = strtotime( '2024-01-15 10:35:00 UTC' );
+		$completed_timestamp = strtotime( '2024-01-15 10:42:00 UTC' );
+		$printed_timestamp   = strtotime( '2024-01-15 10:45:00 UTC' );
+
+		$receipt = array(
+			'mode'    => 'preview',
+			'printed' => Receipt_Date_Formatter::from_timestamp( $printed_timestamp, wp_timezone() ),
+		);
+
+		$order = array(
+			'id'            => 1234,
+			'number'        => '1234',
+			'currency'      => $currency,
+			'customer_note' => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
+			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, wp_timezone() ),
+			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, wp_timezone() ),
+			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, wp_timezone() ),
+		);
+
 		$store = $this->get_store_info();
 
 		$cashier = $this->get_cashier();
@@ -744,6 +764,8 @@ class Preview_Receipt_Builder {
 		);
 
 		return array(
+			'receipt'            => $receipt,
+			'order'              => $order,
 			'meta'               => $meta,
 			'store'              => $store,
 			'cashier'            => $cashier,

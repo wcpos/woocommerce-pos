@@ -71,7 +71,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'meta', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'fiscal' );
+		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'fiscal' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -90,7 +90,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
 
-		$scalar_sections = array( 'meta', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
+		$scalar_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
 		foreach ( $scalar_sections as $section ) {
 			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
 		}
@@ -191,5 +191,21 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertIsString( $store['opening_hours_notes'] );
 		$this->assertNotEmpty( $store['opening_hours_vertical'] );
 		$this->assertNotEmpty( $store['opening_hours_inline'] );
+	}
+
+	/**
+	 * Test field tree exposes practical date format options for each semantic date section.
+	 */
+	public function test_get_field_tree_exposes_practical_date_format_options(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		foreach ( array( 'order.created', 'order.paid', 'order.completed', 'receipt.printed' ) as $section ) {
+			$fields = $tree[ $section ]['fields'];
+
+			foreach ( array( 'datetime', 'datetime_full', 'date', 'date_long', 'date_ymd', 'date_dmy', 'date_mdy', 'weekday_short', 'weekday_long', 'month_short', 'month_long', 'year' ) as $field ) {
+				$this->assertArrayHasKey( $field, $fields, "{$section} missing {$field}" );
+				$this->assertSame( 'string', $fields[ $field ]['type'] );
+			}
+		}
 	}
 }

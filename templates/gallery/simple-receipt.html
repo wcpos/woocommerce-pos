@@ -34,11 +34,11 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 		<span style="color: #555;">Order</span>
-		<span>#{{meta.order_number}}</span>
+		<span>#{{order.number}}</span>
 	</div>
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 		<span style="color: #555;">Date</span>
-		<span>{{meta.created_at_gmt}}</span>
+		<span>{{order.created.datetime}}</span>
 	</div>
 	{{#cashier.name}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">

@@ -11,12 +11,12 @@ function getElements() {
 		{
 			key: 'barcode',
 			label: t('element.barcode'),
-			snippet: '<barcode type="code128" height="60">{{meta.order_number}}</barcode>',
+			snippet: '<barcode type="code128" height="60">{{order.number}}</barcode>',
 		},
 		{
 			key: 'qrcode',
 			label: t('element.qr_code'),
-			snippet: '<qrcode size="4">{{meta.order_number}}</qrcode>',
+			snippet: '<qrcode size="4">{{order.number}}</qrcode>',
 		},
 		{
 			key: 'line-single',

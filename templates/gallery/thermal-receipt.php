@@ -25,13 +25,14 @@ if ( ! \defined( 'ABSPATH' ) ) {
 
 $store    = $receipt_data['store'];
 $meta     = $receipt_data['meta'];
+$order_data = $receipt_data['order'] ?? array();
 $cashier  = $receipt_data['cashier'];
 $customer = $receipt_data['customer'];
 $lines    = $receipt_data['lines'];
 $totals   = $receipt_data['totals'];
 $payments = $receipt_data['payments'];
 $hints    = $receipt_data['presentation_hints'];
-$currency = $meta['currency'];
+$currency = $order_data['currency'] ?? $meta['currency'] ?? get_woocommerce_currency();
 
 $money = function ( float $amount ) use ( $currency ): string {
 	return html_entity_decode( wp_strip_all_tags( wc_price( $amount, array( 'currency' => $currency ) ) ) );
@@ -108,8 +109,10 @@ $separator = str_repeat( '-', 42 );
 
 	<div class="center bold mb"><?php esc_html_e( 'SALES RECEIPT', 'woocommerce-pos' ); ?></div>
 
-	<div class="row"><span class="label"><?php esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $meta['order_number'] ); ?></span></div>
-	<div class="row"><span class="label"><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( wp_date( 'Y-m-d H:i', strtotime( $meta['created_at_local'] ?? $meta['created_at_gmt'] ) ) ); ?></span></div>
+	<?php $order_number = $order_data['number'] ?? $meta['order_number'] ?? ''; ?>
+	<?php $created_at = $order_data['created']['datetime'] ?? $meta['created_at_local'] ?? $meta['created_at_gmt'] ?? ''; ?>
+	<div class="row"><span class="label"><?php esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span></div>
+	<div class="row"><span class="label"><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $created_at ); ?></span></div>
 
 	<?php if ( ! empty( $cashier['name'] ) ) : ?>
 		<div class="row"><span class="label"><?php esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $cashier['name'] ); ?></span></div>
@@ -186,7 +189,7 @@ $separator = str_repeat( '-', 42 );
 		<?php endif; ?>
 	<?php endforeach; ?>
 
-	<?php $customer_note = $receipt_data['meta']['customer_note'] ?? ''; ?>
+	<?php $customer_note = $order_data['customer_note'] ?? $receipt_data['meta']['customer_note'] ?? ''; ?>
 	<?php if ( $customer_note ) : ?>
 		<div class="sep"><?php echo esc_html( $separator ); ?></div>
 		<div class="small">
