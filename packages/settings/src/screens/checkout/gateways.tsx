@@ -131,6 +131,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap">{item.id}</td>
 			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-center">
 				<Toggle
+					aria-label={item.title}
 					checked={item.enabled}
 					onChange={() => {
 						mutate({

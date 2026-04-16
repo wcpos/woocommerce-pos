@@ -2,15 +2,17 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-export interface ToggleProps {
+type ToggleA11yProps =
+	| { label: string; 'aria-label'?: never }
+	| { label?: undefined; 'aria-label': string };
+
+export type ToggleProps = {
 	checked: boolean;
 	onChange: (checked: boolean) => void;
-	label?: string;
 	description?: string;
 	disabled?: boolean;
 	className?: string;
-	'aria-label'?: string;
-}
+} & ToggleA11yProps;
 
 export function Toggle({
 	checked,
