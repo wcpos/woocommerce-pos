@@ -219,7 +219,7 @@ class Menu {
 		if ( $hook_suffix === $this->toplevel_screen_id ) {
 			$is_development = isset( $_ENV['DEVELOPMENT'] )
 			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
-			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing@v2/assets/';
+			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing@2/assets/';
 
 			// Enqueue the landing page CSS from CDN.
 			wp_enqueue_style(
