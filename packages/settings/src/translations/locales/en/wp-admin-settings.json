@@ -42,6 +42,8 @@
 	"settings.need_help": "Need help?",
 	"settings.authorize_via_url_param": "Authorize via URL param",
 	"settings.authorize_via_url_param_tip": "Some servers disable the Authorization header, this will use a URL param instead",
+	"settings.allow_anonymous_usage_data": "Allow anonymous usage data",
+	"settings.allow_anonymous_usage_data_tip": "Share anonymous usage data to help improve WooCommerce POS. No personal or customer data is collected.",
 	"checkout.order_status": "Order Status",
 	"checkout.admin_emails": "Admin emails",
 	"checkout.admin_emails_tip": "WooCommerce admin notification emails for POS orders",
