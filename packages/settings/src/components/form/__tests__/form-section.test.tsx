@@ -52,4 +52,57 @@ describe('FormSection', () => {
 		const headingContainer = headings.parentElement;
 		expect(headingContainer?.querySelector('p')).not.toBeInTheDocument();
 	});
+
+	it('renders headerRight content alongside the title', () => {
+		render(
+			<FormSection
+				title="Authorized Users"
+				headerRight={<button type="button">Reset</button>}
+			>
+				<p>Content</p>
+			</FormSection>
+		);
+		expect(screen.getByText('Authorized Users')).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument();
+	});
+
+	it('renders headerRight without a title or description', () => {
+		render(
+			<FormSection headerRight={<span>Count: 3</span>}>
+				<p>Content</p>
+			</FormSection>
+		);
+		expect(screen.getByText('Count: 3')).toBeInTheDocument();
+	});
+
+	it('applies divider classes when divider prop is true', () => {
+		const { container } = render(
+			<FormSection divider title="Section">
+				<p>Content</p>
+			</FormSection>
+		);
+		const wrapper = container.firstChild as HTMLElement;
+		expect(wrapper.className).toContain('wcpos:border-b');
+		expect(wrapper.className).toContain('wcpos:pb-6');
+	});
+
+	it('does not apply divider classes by default', () => {
+		const { container } = render(
+			<FormSection title="Section">
+				<p>Content</p>
+			</FormSection>
+		);
+		const wrapper = container.firstChild as HTMLElement;
+		expect(wrapper.className).not.toContain('wcpos:border-b');
+	});
+
+	it('applies wcpos:m-0 to the title heading', () => {
+		render(
+			<FormSection title="Heading">
+				<p>Content</p>
+			</FormSection>
+		);
+		const heading = screen.getByText('Heading');
+		expect(heading.className).toContain('wcpos:m-0');
+	});
 });
