@@ -8,9 +8,7 @@ interface SnackbarContextValue {
 	addSnackbar: (snackbar: AddSnackbarInput) => void;
 }
 
-export const SnackbarContext = React.createContext<SnackbarContextValue>({
-	addSnackbar: () => {},
-});
+export const SnackbarContext = React.createContext<SnackbarContextValue | null>(null);
 
 interface SnackbarProviderProps {
 	children: React.ReactNode;
@@ -55,7 +53,12 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 	return (
 		<SnackbarContext.Provider value={{ addSnackbar }}>
 			<div className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
-				<div className="wcpos:absolute wcpos:top-0 wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden">
+				<div
+					className="wcpos:absolute wcpos:top-0 wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden"
+					role="status"
+					aria-live="polite"
+					aria-atomic="true"
+				>
 					{snackbars.map((snackbar) => (
 						<Snackbar
 							onRemove={() => removeSnackbar(snackbar.id)}

@@ -265,7 +265,7 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 				</div>
 			</Card.Body>
 
-			{footerContent && <Card.Footer>{footerContent}</Card.Footer>}
+			{footerContent != null && <Card.Footer>{footerContent}</Card.Footer>}
 		</Card>
 	);
 }

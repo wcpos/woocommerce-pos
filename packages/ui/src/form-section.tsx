@@ -12,11 +12,20 @@ export interface FormSectionProps {
 export function FormSection({ title, description, children, className }: FormSectionProps) {
 	return (
 		<div className={classNames('wcpos:pb-4 wcpos:mb-4', className)}>
-			{title && (
+			{(title || description) && (
 				<div className="wcpos:mb-3">
-					<h3 className="wcpos:text-base wcpos:font-semibold wcpos:text-gray-900">{title}</h3>
+					{title && (
+						<h3 className="wcpos:text-base wcpos:font-semibold wcpos:text-gray-900">{title}</h3>
+					)}
 					{description && (
-						<p className="wcpos:mt-1 wcpos:text-sm wcpos:text-gray-500">{description}</p>
+						<p
+							className={classNames(
+								'wcpos:text-sm wcpos:text-gray-500',
+								title && 'wcpos:mt-1'
+							)}
+						>
+							{description}
+						</p>
 					)}
 				</div>
 			)}

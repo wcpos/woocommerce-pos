@@ -60,7 +60,7 @@ export function Notice({
 			)}
 		>
 			<div className="wcpos:flex-1">{children}</div>
-			{isDismissible && (
+			{isDismissible && onRemove && (
 				<button
 					type="button"
 					aria-label={dismissLabel}
