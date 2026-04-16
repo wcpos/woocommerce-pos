@@ -9,6 +9,7 @@ export interface ToggleProps {
 	description?: string;
 	disabled?: boolean;
 	className?: string;
+	'aria-label'?: string;
 }
 
 export function Toggle({
@@ -18,6 +19,7 @@ export function Toggle({
 	description,
 	disabled,
 	className,
+	'aria-label': ariaLabel,
 }: ToggleProps) {
 	const generatedId = React.useId();
 	const labelId = label ? `${generatedId}-label` : undefined;
@@ -39,6 +41,7 @@ export function Toggle({
 				type="button"
 				role="switch"
 				aria-checked={checked}
+				aria-label={!label ? ariaLabel : undefined}
 				aria-labelledby={labelId}
 				aria-describedby={descriptionId}
 				disabled={disabled}
