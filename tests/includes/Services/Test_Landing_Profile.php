@@ -100,7 +100,6 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 		);
 
 		$order->set_created_via( $created_via );
-		$order->set_status( $status );
 		$order->save();
 
 		$this->order_ids[] = $order->get_id();
