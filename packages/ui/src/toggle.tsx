@@ -2,14 +2,17 @@ import * as React from 'react';
 
 import classNames from 'classnames';
 
-export interface ToggleProps {
+type ToggleA11yProps =
+	| { label: string; 'aria-label'?: never }
+	| { label?: undefined; 'aria-label': string };
+
+export type ToggleProps = {
 	checked: boolean;
 	onChange: (checked: boolean) => void;
-	label?: string;
 	description?: string;
 	disabled?: boolean;
 	className?: string;
-}
+} & ToggleA11yProps;
 
 export function Toggle({
 	checked,
@@ -18,6 +21,7 @@ export function Toggle({
 	description,
 	disabled,
 	className,
+	'aria-label': ariaLabel,
 }: ToggleProps) {
 	const generatedId = React.useId();
 	const labelId = label ? `${generatedId}-label` : undefined;
@@ -39,6 +43,7 @@ export function Toggle({
 				type="button"
 				role="switch"
 				aria-checked={checked}
+				aria-label={!label ? ariaLabel : undefined}
 				aria-labelledby={labelId}
 				aria-describedby={descriptionId}
 				disabled={disabled}

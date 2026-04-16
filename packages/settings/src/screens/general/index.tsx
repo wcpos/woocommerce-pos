@@ -3,6 +3,7 @@ import * as React from 'react';
 import { isString, isNumber } from 'lodash';
 
 import BarcodeSelect from './barcode-select';
+import PrivacyInfoModal from './privacy-info-modal';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
@@ -25,6 +26,7 @@ export interface GeneralSettingsProps {
 
 function General() {
 	const { data, mutate } = useSettingsApi('general');
+	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
 
 	return (
 		<>
@@ -108,18 +110,31 @@ function General() {
 					</div>
 				</FormRow>
 			</FormSection>
-			<FormSection title={t('settings.privacy_section_title')}>
-				<FormRow>
+			<div className="wcpos:pb-4 wcpos:mb-4">
+				<div className="wcpos:mb-2 wcpos:flex wcpos:items-center wcpos:justify-between wcpos:gap-3">
+					<h3 className="wcpos:text-base wcpos:font-semibold wcpos:text-gray-900">
+						{t('settings.privacy_section_title')}
+					</h3>
 					<Toggle
+						aria-label={t('settings.allow_anonymous_usage_data')}
 						checked={data?.tracking_consent === 'allowed'}
 						onChange={(enabled: boolean) => {
 							mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
 						}}
-						label={t('settings.allow_anonymous_usage_data')}
-						description={t('settings.allow_anonymous_usage_data_tip')}
 					/>
-				</FormRow>
-			</FormSection>
+				</div>
+				<p className="wcpos:text-sm wcpos:text-gray-500">
+					{t('settings.allow_anonymous_usage_data_tip')}{' '}
+					<button
+						type="button"
+						onClick={() => setPrivacyInfoOpen(true)}
+						className="wcpos:underline wcpos:text-wp-admin-theme-color wcpos:cursor-pointer wcpos:bg-transparent wcpos:border-0 wcpos:p-0"
+					>
+						{t('settings.privacy_learn_more')}
+					</button>
+				</p>
+			</div>
+			<PrivacyInfoModal open={privacyInfoOpen} onClose={() => setPrivacyInfoOpen(false)} />
 		</>
 	);
 }

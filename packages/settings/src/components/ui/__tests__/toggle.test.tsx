@@ -6,25 +6,25 @@ import { Toggle } from '../toggle';
 
 describe('Toggle', () => {
 	it('renders as a switch', () => {
-		render(<Toggle checked={false} onChange={() => {}} />);
+		render(<Toggle checked={false} onChange={() => {}} aria-label="Test toggle" />);
 		expect(screen.getByRole('switch')).toBeInTheDocument();
 	});
 
 	it('calls onChange when clicked', () => {
 		const onChange = vi.fn();
-		render(<Toggle checked={false} onChange={onChange} />);
+		render(<Toggle checked={false} onChange={onChange} aria-label="Test toggle" />);
 		fireEvent.click(screen.getByRole('switch'));
 		expect(onChange).toHaveBeenCalledWith(true);
 	});
 
 	it('reflects checked state', () => {
-		render(<Toggle checked onChange={() => {}} />);
+		render(<Toggle checked onChange={() => {}} aria-label="Test toggle" />);
 		const switchEl = screen.getByRole('switch');
 		expect(switchEl).toHaveAttribute('aria-checked', 'true');
 	});
 
 	it('reflects unchecked state', () => {
-		render(<Toggle checked={false} onChange={() => {}} />);
+		render(<Toggle checked={false} onChange={() => {}} aria-label="Test toggle" />);
 		const switchEl = screen.getByRole('switch');
 		expect(switchEl).toHaveAttribute('aria-checked', 'false');
 	});
@@ -48,7 +48,7 @@ describe('Toggle', () => {
 
 	it('disables the switch when disabled prop is true', () => {
 		const onChange = vi.fn();
-		render(<Toggle checked={false} onChange={onChange} disabled />);
+		render(<Toggle checked={false} onChange={onChange} disabled aria-label="Test toggle" />);
 		const switchEl = screen.getByRole('switch');
 		expect(switchEl).toBeDisabled();
 	});
