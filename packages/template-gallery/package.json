@@ -16,6 +16,7 @@
 		"@tanstack/react-router": "^1.159.5",
 		"@wcpos/i18n": "workspace:*",
 		"@wcpos/thermal-utils": "workspace:*",
+		"@wcpos/ui": "workspace:*",
 		"@wordpress/api-fetch": "^7.39.0",
 		"@wordpress/url": "^4.39.0",
 		"classnames": "^2.5.1",

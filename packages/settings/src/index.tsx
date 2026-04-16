@@ -4,8 +4,9 @@ import { RouterProvider } from '@tanstack/react-router';
 import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 
+import { SnackbarProvider } from '@wcpos/ui';
+
 import ErrorFallback from './components/error';
-import { SnackbarProvider } from './components/snackbar';
 import { NoticesProvider } from './hooks/use-notices';
 import { queryClient } from './query-client';
 import { router } from './router';

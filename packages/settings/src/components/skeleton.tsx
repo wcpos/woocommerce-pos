@@ -1,25 +1,6 @@
-import classNames from 'classnames';
+import { Skeleton } from '@wcpos/ui';
 
-interface SkeletonProps {
-	className?: string;
-	width?: string;
-	height?: string;
-}
-
-/**
- * Base skeleton pulse element — a rounded gray bar that animates.
- */
-export function Skeleton({ className, width, height }: SkeletonProps) {
-	return (
-		<div
-			className={classNames(
-				'wcpos:animate-pulse wcpos:rounded wcpos:bg-gray-200',
-				className
-			)}
-			style={{ width, height }}
-		/>
-	);
-}
+export { Skeleton };
 
 /**
  * A skeleton that mimics a FormSection with several FormRow items.

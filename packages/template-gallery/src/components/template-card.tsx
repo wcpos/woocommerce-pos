@@ -1,5 +1,7 @@
 import classnames from 'classnames';
 
+import { Card } from '@wcpos/ui';
+
 import { TemplateTags } from './template-tags';
 import { t } from '../translations';
 import type { AnyTemplate, GalleryTemplate } from '../types';
@@ -36,15 +38,8 @@ export function TemplateCard(props: TemplateCardProps) {
 	const isActive = !isGallery && 'status' in template && template.status === 'publish';
 
 	return (
-		<div
-			className={classnames(
-				'wcpos:bg-white wcpos:border wcpos:rounded-lg wcpos:overflow-hidden wcpos:flex wcpos:flex-col',
-				isActive
-					? 'wcpos:border-wp-admin-theme-color wcpos:ring-1 wcpos:ring-wp-admin-theme-color'
-					: 'wcpos:border-gray-200',
-			)}
-		>
-			{/* Thumbnail area */}
+		<Card active={isActive}>
+			{/* Thumbnail area — flush to card edges */}
 			<button
 				type="button"
 				onClick={onPreview}
@@ -53,8 +48,7 @@ export function TemplateCard(props: TemplateCardProps) {
 				<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
 			</button>
 
-			{/* Card body */}
-			<div className="wcpos:p-3 wcpos:flex-1 wcpos:flex wcpos:flex-col wcpos:gap-2">
+			<Card.Body className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:p-3">
 				<div className="wcpos:flex wcpos:items-start wcpos:justify-between wcpos:gap-2">
 					<h3 className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900 wcpos:m-0 wcpos:leading-tight">
 						{name}
@@ -86,35 +80,34 @@ export function TemplateCard(props: TemplateCardProps) {
 
 				{/* Tags */}
 				<TemplateTags template={template} />
+			</Card.Body>
 
-				{/* Actions */}
-				<div className="wcpos:flex wcpos:gap-2 wcpos:mt-auto wcpos:pt-1">
+			<Card.Footer className="wcpos:flex wcpos:gap-3">
+				<button
+					type="button"
+					onClick={onPreview}
+					className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+				>
+					{t('common.preview')}
+				</button>
+				{isGallery ? (
 					<button
 						type="button"
-						onClick={onPreview}
+						onClick={props.onCustomize}
 						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
 					>
-						{t('common.preview')}
+						{t('common.customize')}
 					</button>
-					{isGallery ? (
-						<button
-							type="button"
-							onClick={props.onCustomize}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-						>
-							{t('common.customize')}
-						</button>
-					) : (
-						<button
-							type="button"
-							onClick={props.onEdit}
-							className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-						>
-							{t('common.edit')}
-						</button>
-					)}
-				</div>
-			</div>
-		</div>
+				) : (
+					<button
+						type="button"
+						onClick={props.onEdit}
+						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+					>
+						{t('common.edit')}
+					</button>
+				)}
+			</Card.Footer>
+		</Card>
 	);
 }

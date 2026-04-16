@@ -1,7 +1,7 @@
 import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
-import { useSnackbar } from '../components/snackbar';
+import { useSnackbar } from '@wcpos/ui';
 import { t } from '../translations';
 
 import type { GalleryTemplate, Template } from '../types';

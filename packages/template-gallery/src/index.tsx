@@ -3,7 +3,8 @@ import { RouterProvider } from '@tanstack/react-router';
 import { createRoot } from 'react-dom/client';
 import { ErrorBoundary } from 'react-error-boundary';
 
-import { SnackbarProvider } from './components/snackbar';
+import { SnackbarProvider } from '@wcpos/ui';
+
 import { getErrorMessage } from './get-error-message';
 import { queryClient } from './query-client';
 import { router } from './router';
