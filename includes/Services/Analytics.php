@@ -316,6 +316,8 @@ class Analytics {
 	/**
 	 * Whether the given event name is a PostHog-reserved identifier
 	 * event that should not have a `$groups` binding auto-attached.
+	 *
+	 * @param string $event Event name.
 	 */
 	private function is_reserved_event( string $event ): bool {
 		return '$identify' === $event || '$groupidentify' === $event;
