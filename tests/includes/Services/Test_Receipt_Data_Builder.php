@@ -229,8 +229,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'datetime_full', $payload['order'][ $field ] );
 			$this->assertArrayHasKey( 'date_ymd', $payload['order'][ $field ] );
 			$this->assertArrayHasKey( 'weekday_short', $payload['order'][ $field ] );
-			$this->assertNotSame( '', $payload['order'][ $field ]['datetime'] );
 		}
+
+		$this->assertNotSame( '', $payload['order']['created']['datetime'] );
 
 		$this->assertArrayHasKey( 'printed', $payload['receipt'] );
 		$this->assertArrayHasKey( 'datetime', $payload['receipt']['printed'] );

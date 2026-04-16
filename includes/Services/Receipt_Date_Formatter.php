@@ -137,29 +137,14 @@ class Receipt_Date_Formatter {
 	 * @return string
 	 */
 	private static function format_style( DateTimeInterface $date, DateTimeZone $timezone, string $locale, int $date_style, int $time_style, string $fallback_pattern ): string {
-		$timezone_name = $timezone->getName();
-		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
-			return self::format_fallback( $date, $fallback_pattern );
-		}
-
-		if ( class_exists( IntlDateFormatter::class ) ) {
-			try {
-				$formatter = new IntlDateFormatter(
-					$locale,
-					$date_style,
-					$time_style,
-					$timezone_name
-				);
-				$formatted = $formatter->format( $date );
-				if ( false !== $formatted ) {
-					return (string) $formatted;
-				}
-			} catch ( \Throwable $error ) {
-				return self::format_fallback( $date, $fallback_pattern );
+		return self::run_intl_with_fallback(
+			$date,
+			$timezone,
+			$fallback_pattern,
+			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style ) {
+				return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
 			}
-		}
-
-		return self::format_fallback( $date, $fallback_pattern );
+		);
 	}
 
 	/**
@@ -174,6 +159,27 @@ class Receipt_Date_Formatter {
 	 * @return string
 	 */
 	private static function format_pattern( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $pattern, string $fallback_pattern ): string {
+		return self::run_intl_with_fallback(
+			$date,
+			$timezone,
+			$fallback_pattern,
+			static function ( string $timezone_name ) use ( $locale, $pattern ) {
+				return new IntlDateFormatter( $locale, self::INTL_NONE, self::INTL_NONE, $timezone_name, null, $pattern );
+			}
+		);
+	}
+
+	/**
+	 * Run an IntlDateFormatter with fixed-offset timezone guard and fallback.
+	 *
+	 * @param DateTimeInterface $date             Date to format.
+	 * @param DateTimeZone      $timezone         Date timezone.
+	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
+	 * @param callable          $make_formatter   Callback receiving timezone name, returns IntlDateFormatter.
+	 *
+	 * @return string
+	 */
+	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $fallback_pattern, callable $make_formatter ): string {
 		$timezone_name = $timezone->getName();
 		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
 			return self::format_fallback( $date, $fallback_pattern );
@@ -181,14 +187,7 @@ class Receipt_Date_Formatter {
 
 		if ( class_exists( IntlDateFormatter::class ) ) {
 			try {
-				$formatter = new IntlDateFormatter(
-					$locale,
-					self::INTL_NONE,
-					self::INTL_NONE,
-					$timezone_name,
-					null,
-					$pattern
-				);
+				$formatter = $make_formatter( $timezone_name );
 				$formatted = $formatter->format( $date );
 				if ( false !== $formatted ) {
 					return (string) $formatted;
