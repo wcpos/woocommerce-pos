@@ -174,11 +174,11 @@ class Landing_Profile {
 		global $wpdb;
 
 		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
-			/** @phpstan-ignore-next-line */
+			/* @phpstan-ignore-next-line */
 			$orders_table = method_exists( OrdersTableDataStore::class, 'get_orders_table_name' )
 				? OrdersTableDataStore::get_orders_table_name()
 				: $wpdb->prefix . 'wc_orders';
-			/** @phpstan-ignore-next-line */
+			/* @phpstan-ignore-next-line */
 			$op_table     = method_exists( OrdersTableDataStore::class, 'get_operational_data_table_name' )
 				? OrdersTableDataStore::get_operational_data_table_name()
 				: $wpdb->prefix . 'wc_order_operational_data';
