@@ -270,6 +270,8 @@ class Init {
 		if ( is_admin() ) {
 			// Register AJAX handler before the branch so it's available during AJAX requests.
 			add_action( 'wp_ajax_wcpos_tracking_consent', array( Menu::class, 'handle_tracking_consent_ajax' ) );
+			add_action( 'wp_ajax_wcpos_track_upgrade_click_ajax', array( Menu::class, 'handle_upgrade_click_ajax' ) );
+			add_action( 'admin_post_wcpos_track_upgrade_click', array( Menu::class, 'handle_upgrade_click_redirect' ) );
 
 			if ( \defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 				new AJAX();

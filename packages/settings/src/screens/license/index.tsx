@@ -7,6 +7,13 @@ import Label from '../../components/label';
 import Notice from '../../components/notice';
 import { Button } from '../../components/ui';
 import useNotices from '../../hooks/use-notices';
+import {
+	captureLicenseActivationAttempted,
+	captureLicenseActivationFailed,
+	captureLicenseActivationSucceeded,
+	captureUpgradeCtaClicked,
+	captureUpgradeCtaViewed,
+} from '../../lib/analytics';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t, Trans } from '../../translations';
 
@@ -38,6 +45,10 @@ function License() {
 	const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => setKey(event.target.value);
 
 	const handleActivation = async (deactivate = false) => {
+		if (!deactivate) {
+			captureLicenseActivationAttempted();
+		}
+
 		const url = addQueryArgs('https://wcpos.com', {
 			'wc-api': 'am-software-api',
 			request: deactivate ? 'deactivation' : 'activation',
@@ -55,15 +66,30 @@ function License() {
 		})
 			.then((res) => res.json())
 			.catch((err) => {
+				if (!deactivate) {
+					captureLicenseActivationFailed(err);
+				}
 				setNotice({ type: 'error', message: err.message });
+
+				return null;
 			});
 
+		if (!response) {
+			return;
+		}
+
 		if (!response.success) {
+			if (!deactivate) {
+				captureLicenseActivationFailed(response);
+			}
 			setNotice({ type: 'error', message: response.error });
 		} else {
 			if (deactivate) {
 				setKey('');
 			} else {
+				captureLicenseActivationSucceeded(
+					isString(response?.license_tier) ? response.license_tier : undefined
+				);
 				const confetti = get(window, 'confetti') as unknown as () => void;
 				if (confetti) {
 					confetti();
@@ -77,10 +103,20 @@ function License() {
 		}
 	};
 
+	React.useEffect(() => {
+		if (!data?.instance) {
+			captureUpgradeCtaViewed('license_screen_card');
+			captureUpgradeCtaViewed('license_screen_link');
+		}
+	}, [data?.instance]);
+
 	if (!data?.instance) {
 		return (
 			<div className="wcpos:flex wcpos:flex-col wcpos:items-center wcpos:gap-6 wcpos:px-4 wcpos:py-8 wcpos:max-w-md wcpos:mx-auto">
-				<a href="https://wcpos.com/pro">
+				<a
+					href="https://wcpos.com/pro"
+					onClick={() => captureUpgradeCtaClicked('license_screen_card', 'https://wcpos.com/pro')}
+				>
 					<img
 						src="https://wcpos.com/wp-content/uploads/2025/07/wcpos-pro-icon.png"
 						alt="WCPOS Pro"
@@ -93,6 +129,7 @@ function License() {
 					<a
 						href="https://wcpos.com/pro"
 						className="wcpos:inline-block wcpos:font-medium wcpos:text-[color:var(--wp-admin-theme-color)] hover:wcpos:underline"
+						onClick={() => captureUpgradeCtaClicked('license_screen_link', 'https://wcpos.com/pro')}
 					>
 						{t('common.upgrade_to_pro')} &rarr;
 					</a>

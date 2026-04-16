@@ -6,6 +6,7 @@ import apiFetch from '@wordpress/api-fetch';
 import ExtensionCard from './extension-card';
 import { setUpdateExtensionsCount } from './use-update-extensions-count';
 import Notice from '../../components/notice';
+import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import { t } from '../../translations';
 
 /**
@@ -51,6 +52,12 @@ function Extensions() {
 		setUpdateExtensionsCount(updateCount);
 	}, [extensions]);
 
+	React.useEffect(() => {
+		if (!isPro) {
+			captureUpgradeCtaViewed('extensions_screen');
+		}
+	}, [isPro]);
+
 	const categories = React.useMemo(() => {
 		const cats = new Set(extensions.map((ext) => ext.category || 'other'));
 		return ['all', ...Array.from(cats).sort()];
@@ -73,7 +80,14 @@ function Extensions() {
 		<div>
 			{!isPro && (
 				<Notice status="info" isDismissible={false} className="wcpos:mb-4">
-					{t('extensions.upgrade_to_pro', 'Upgrade to Pro to install and manage extensions.')}
+					{t('extensions.upgrade_to_pro', 'Upgrade to Pro to install and manage extensions.')}{' '}
+					<a
+						href="https://wcpos.com/pro"
+						onClick={() => captureUpgradeCtaClicked('extensions_screen', 'https://wcpos.com/pro')}
+					>
+						{t('common.upgrade_to_pro')}
+					</a>
+					.
 				</Notice>
 			)}
 

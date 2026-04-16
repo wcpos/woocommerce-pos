@@ -13,6 +13,7 @@
 namespace WCPOS\WooCommercePOS\Admin\Products;
 
 use WCPOS\WooCommercePOS\Registry;
+use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Post;
 
@@ -36,20 +37,12 @@ class Single_Product {
 	private $options;
 
 	/**
-	 * Link to upgrade to Pro.
-	 *
-	 * @var string
-	 */
-	private $pro_link = '';
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		Registry::get_instance()->set( static::class, $this );
 
 		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-		$this->pro_link      = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 
 		// visibility options.
 		$this->options = array(
@@ -96,13 +89,20 @@ class Single_Product {
 	 * Add store price fields to the product edit page.
 	 */
 	public function add_store_price_fields(): void {
+		Analytics::instance()->capture(
+			'upgrade_cta_viewed',
+			array(
+				'placement' => 'product_edit_price',
+			)
+		);
+
 		woocommerce_wp_checkbox(
 			array(
 				'id'                => '',
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->pro_link,
+				'description'       => __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_price' ),
 				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
@@ -112,7 +112,12 @@ class Single_Product {
 	 * Add store tax fields to the product edit page.
 	 */
 	public function add_store_tax_fields(): void {
-		$link = '<a href="https://wcpos.com/pro">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
+		Analytics::instance()->capture(
+			'upgrade_cta_viewed',
+			array(
+				'placement' => 'product_edit_tax',
+			)
+		);
 
 		woocommerce_wp_checkbox(
 			array(
@@ -120,7 +125,7 @@ class Single_Product {
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->pro_link,
+				'description'       => __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_tax' ),
 				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
@@ -172,7 +177,7 @@ class Single_Product {
 	 */
 	public function add_variations_store_price_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo esc_html__( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->pro_link );
+		echo esc_html__( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_price' ) );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
@@ -186,9 +191,20 @@ class Single_Product {
 	 */
 	public function add_variations_store_tax_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo esc_html__( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->pro_link );
+		echo esc_html__( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_tax' ) );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
+	}
+
+	/**
+	 * Build a tracked upgrade link for a product-edit upsell placement.
+	 *
+	 * @param string $placement Stable CTA placement identifier.
+	 *
+	 * @return string
+	 */
+	private function get_pro_link( string $placement ): string {
+		return '<a href="https://wcpos.com/pro" data-wcpos-upgrade-placement="' . esc_attr( $placement ) . '">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 	}
 
 	/**
