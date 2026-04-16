@@ -56,8 +56,6 @@ class Menu {
 			add_action( 'admin_notices', array( $this, 'maybe_show_tracking_consent_notice' ) );
 		}
 
-		add_action( 'wp_ajax_wcpos_tracking_consent', array( $this, 'handle_tracking_consent_ajax' ) );
-
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
 
@@ -338,7 +336,14 @@ class Menu {
 					var xhr = new XMLHttpRequest();
 					xhr.open('POST', ajaxurl);
 					xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-					xhr.onload = function() { notice.remove(); };
+					xhr.onload = function() {
+						if (xhr.status >= 200 && xhr.status < 300) {
+							try {
+								var res = JSON.parse(xhr.responseText);
+								if (res && res.success) { notice.remove(); }
+							} catch (e) {}
+						}
+					};
 					xhr.send(
 						'action=wcpos_tracking_consent' +
 						'&consent=' + encodeURIComponent(btn.dataset.consent) +
@@ -353,8 +358,11 @@ class Menu {
 
 	/**
 	 * AJAX handler for tracking consent notice.
+	 *
+	 * Static so it can be registered from Init::init_admin() before
+	 * the AJAX/Admin class branching.
 	 */
-	public function handle_tracking_consent_ajax(): void {
+	public static function handle_tracking_consent_ajax(): void {
 		check_ajax_referer( 'wcpos_tracking_consent' );
 
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
@@ -367,9 +375,14 @@ class Menu {
 		}
 
 		$settings = woocommerce_pos_get_settings( 'tools' );
-		if ( \is_array( $settings ) ) {
-			$settings['tracking_consent'] = $consent;
-			SettingsService::instance()->save_settings( 'tools', $settings );
+		if ( ! \is_array( $settings ) ) {
+			wp_send_json_error( 'Unable to load tools settings', 500 );
+		}
+
+		$settings['tracking_consent'] = $consent;
+		$result                       = SettingsService::instance()->save_settings( 'tools', $settings );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message(), 500 );
 		}
 
 		wp_send_json_success();
