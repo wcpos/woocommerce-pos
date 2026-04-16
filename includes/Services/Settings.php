@@ -37,6 +37,7 @@ class Settings {
 			'barcode_field'               => '_sku',
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
+			'tracking_consent'            => 'undecided',
 		),
 		'checkout' => array(
 			'receipt_default_mode' => 'fiscal',
@@ -92,8 +93,7 @@ class Settings {
 			),
 		),
 		'tools' => array(
-			'use_jwt_as_param'  => false,
-			'tracking_consent'  => 'undecided',
+			'use_jwt_as_param' => false,
 		),
 		'visibility' => array(
 			'products' => array(
@@ -299,6 +299,16 @@ class Settings {
 	public function get_general_settings(): array {
 		$default_settings = self::$default_settings['general'];
 		$settings         = get_option( self::$db_prefix . 'general', array() );
+
+		// Migrate tracking_consent from the legacy `tools` option if it was set there
+		// before being moved to `general`. Only applies when the general option has no
+		// value yet, so an explicit general-level choice always wins.
+		if ( ! \array_key_exists( 'tracking_consent', $settings ) ) {
+			$legacy_tools = get_option( self::$db_prefix . 'tools', array() );
+			if ( \is_array( $legacy_tools ) && \array_key_exists( 'tracking_consent', $legacy_tools ) ) {
+				$settings['tracking_consent'] = $legacy_tools['tracking_consent'];
+			}
+		}
 
 		// if the key does not exist in db settings, use the default settings.
 		foreach ( $default_settings as $key => $value ) {

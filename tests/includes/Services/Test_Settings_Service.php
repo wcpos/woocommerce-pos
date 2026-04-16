@@ -91,6 +91,77 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertFalse( $settings['default_customer_is_cashier'] );
 		$this->assertEquals( 0, $settings['default_customer'] );
 		$this->assertEquals( '_sku', $settings['barcode_field'] );
+		$this->assertEquals( 'undecided', $settings['tracking_consent'] );
+	}
+
+	/**
+	 * Test that tracking_consent is migrated from the legacy `tools` option
+	 * when the `general` option has no value for it yet.
+	 */
+	public function test_tracking_consent_migrates_from_legacy_tools_option(): void {
+		// Simulate a pre-move install: consent stored under `tools`, none in `general`.
+		delete_option( 'woocommerce_pos_settings_general' );
+		update_option(
+			'woocommerce_pos_settings_tools',
+			array(
+				'use_jwt_as_param' => false,
+				'tracking_consent' => 'allowed',
+			)
+		);
+
+		$settings = $this->settings->get_general_settings();
+
+		$this->assertEquals( 'allowed', $settings['tracking_consent'] );
+	}
+
+	/**
+	 * Test that an explicit general-level tracking_consent value wins over
+	 * any legacy value still present in the `tools` option.
+	 */
+	public function test_tracking_consent_general_value_wins_over_legacy(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'tracking_consent' => 'denied',
+			)
+		);
+		update_option(
+			'woocommerce_pos_settings_tools',
+			array(
+				'tracking_consent' => 'allowed',
+			)
+		);
+
+		$settings = $this->settings->get_general_settings();
+
+		$this->assertEquals( 'denied', $settings['tracking_consent'] );
+	}
+
+	/**
+	 * Regression: the consent AJAX handler reads the full general settings,
+	 * sets `tracking_consent`, and writes the whole array back. Verify that
+	 * pattern preserves unrelated general fields the user has customised.
+	 */
+	public function test_ajax_consent_save_preserves_other_general_fields(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'pos_only_products' => true,
+				'decimal_qty'       => true,
+				'barcode_field'     => '_custom_barcode',
+			)
+		);
+
+		// Mirror the handler flow: read full settings, mutate one key, save back.
+		$settings                     = $this->settings->get_general_settings();
+		$settings['tracking_consent'] = 'allowed';
+		$result                       = $this->settings->save_settings( 'general', $settings );
+
+		$this->assertIsArray( $result );
+		$this->assertEquals( 'allowed', $result['tracking_consent'] );
+		$this->assertTrue( $result['pos_only_products'] );
+		$this->assertTrue( $result['decimal_qty'] );
+		$this->assertEquals( '_custom_barcode', $result['barcode_field'] );
 	}
 
 	/**
