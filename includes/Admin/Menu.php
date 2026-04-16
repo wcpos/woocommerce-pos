@@ -322,7 +322,9 @@ class Menu {
 						'Allow WooCommerce POS to collect anonymous usage data to help improve the product. No personal or customer data is collected. You can change this anytime in %s.',
 						'woocommerce-pos'
 					),
-					'<a href="' . esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings' ) ) . '">POS &gt; Settings &gt; Tools</a>'
+					'<a href="' . esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings' ) ) . '">' .
+					esc_html__( 'POS > Settings > Tools', 'woocommerce-pos' ) .
+					'</a>'
 				);
 				?>
 			</p>
