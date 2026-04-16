@@ -18,6 +18,31 @@ use WC_DateTime;
  */
 class Receipt_Date_Formatter {
 	/**
+	 * Canonical list of date field keys returned by every formatting method.
+	 */
+	private const DATE_FIELDS = array(
+		'datetime',
+		'date',
+		'time',
+		'datetime_short',
+		'datetime_long',
+		'datetime_full',
+		'date_short',
+		'date_long',
+		'date_full',
+		'date_ymd',
+		'date_dmy',
+		'date_mdy',
+		'weekday_short',
+		'weekday_long',
+		'day',
+		'month',
+		'month_short',
+		'month_long',
+		'year',
+	);
+
+	/**
 	 * Intl full style fallback value.
 	 */
 	private const INTL_FULL = 0;
@@ -101,27 +126,7 @@ class Receipt_Date_Formatter {
 	 * @return array<string, string>
 	 */
 	public static function empty(): array {
-		return array(
-			'datetime'       => '',
-			'date'           => '',
-			'time'           => '',
-			'datetime_short' => '',
-			'datetime_long'  => '',
-			'datetime_full'  => '',
-			'date_short'     => '',
-			'date_long'      => '',
-			'date_full'      => '',
-			'date_ymd'       => '',
-			'date_dmy'       => '',
-			'date_mdy'       => '',
-			'weekday_short'  => '',
-			'weekday_long'   => '',
-			'day'            => '',
-			'month'          => '',
-			'month_short'    => '',
-			'month_long'     => '',
-			'year'           => '',
-		);
+		return array_fill_keys( self::DATE_FIELDS, '' );
 	}
 
 	/**
