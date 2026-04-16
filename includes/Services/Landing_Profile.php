@@ -35,6 +35,20 @@ class Landing_Profile {
 	const CACHE_TTL = HOUR_IN_SECONDS;
 
 	/**
+	 * Default PostHog project API key.
+	 *
+	 * @var string
+	 */
+	const POSTHOG_API_KEY = 'phc_BhTJzZ7fXMqcD4MiaUJQsQqPkEpu94yoSAthXFBWemvd';
+
+	/**
+	 * Default PostHog API host (reverse proxy).
+	 *
+	 * @var string
+	 */
+	const POSTHOG_API_HOST = 'https://ph.wcpos.com';
+
+	/**
 	 * Default updates server base URL.
 	 *
 	 * @var string
@@ -87,9 +101,9 @@ class Landing_Profile {
 	/**
 	 * Get PostHog configuration.
 	 *
-	 * Credentials are stored in wp_options and overridable via filters.
-	 * Ships empty — must be configured. The React app skips PostHog
-	 * initialization if api_key is empty.
+	 * Ships with sensible defaults so every install gets PostHog
+	 * without manual setup. Overridable via wp_options or filters.
+	 * The React app skips PostHog init if api_key is empty.
 	 *
 	 * @return array
 	 */
@@ -103,7 +117,7 @@ class Landing_Profile {
 		 */
 		$api_host = apply_filters(
 			'woocommerce_pos_posthog_api_host',
-			get_option( 'woocommerce_pos_posthog_api_host', '' )
+			get_option( 'woocommerce_pos_posthog_api_host', self::POSTHOG_API_HOST )
 		);
 
 		/**
@@ -115,7 +129,7 @@ class Landing_Profile {
 		 */
 		$api_key = apply_filters(
 			'woocommerce_pos_posthog_api_key',
-			get_option( 'woocommerce_pos_posthog_api_key', '' )
+			get_option( 'woocommerce_pos_posthog_api_key', self::POSTHOG_API_KEY )
 		);
 
 		return array(
