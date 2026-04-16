@@ -61,9 +61,12 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 				>
 					{snackbars.map((snackbar) => (
 						<Snackbar
-							onRemove={() => removeSnackbar(snackbar.id)}
 							key={snackbar.id}
 							{...snackbar}
+							onRemove={() => {
+								snackbar.onRemove?.();
+								removeSnackbar(snackbar.id);
+							}}
 						/>
 					))}
 				</div>
