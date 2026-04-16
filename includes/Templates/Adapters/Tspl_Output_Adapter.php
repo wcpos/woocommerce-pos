@@ -27,7 +27,7 @@ class Tspl_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$print_qr      = isset( $context['print_qr'] ) ? (bool) $context['print_qr'] : false;
 		$print_barcode = isset( $context['print_barcode'] ) ? (bool) $context['print_barcode'] : true;
 
-		$order_number = isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '';
+		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : ( isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '' );
 		$total        = isset( $receipt_data['totals']['grand_total_incl'] ) ? (float) $receipt_data['totals']['grand_total_incl'] : 0;
 		$store_name   = isset( $receipt_data['store']['name'] ) ? (string) $receipt_data['store']['name'] : get_bloginfo( 'name' );
 		$qr_payload   = isset( $receipt_data['fiscal']['qr_payload'] ) ? (string) $receipt_data['fiscal']['qr_payload'] : '';

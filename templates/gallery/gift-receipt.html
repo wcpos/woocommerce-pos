@@ -23,12 +23,12 @@ as a gift message. Includes order reference for returns.
 	</div>
 	{{/lines}}
 
-	{{#meta.customer_note}}
+	{{#order.customer_note}}
 	<div style="margin: 24px 0; padding: 20px; background: #faf8f5; border: 1px dotted #d4c8b8; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
 		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">{{i18n.a_message_for_you}}</div>
-		{{meta.customer_note}}
+		{{order.customer_note}}
 	</div>
-	{{/meta.customer_note}}
+	{{/order.customer_note}}
 
 	{{#store.personal_notes}}
 	<div style="text-align: center; margin-top: 16px; font-size: 12px; color: #888; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
@@ -43,7 +43,7 @@ as a gift message. Includes order reference for returns.
 		{{^store.footer_imprint}}
 		<div style="margin-bottom: 8px;">{{i18n.gift_return_policy}}</div>
 		{{/store.footer_imprint}}
-		<div>{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}} &middot; #{{meta.order_number}}</div>
+		<div>{{order.created.datetime}} &middot; #{{order.number}}</div>
 	</div>
 
 </div>

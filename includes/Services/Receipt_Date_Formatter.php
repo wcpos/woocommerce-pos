@@ -1,0 +1,233 @@
+<?php
+/**
+ * Receipt date formatter.
+ *
+ * @package WCPOS\WooCommercePOS\Services
+ */
+
+namespace WCPOS\WooCommercePOS\Services;
+
+use DateTimeImmutable;
+use DateTimeInterface;
+use DateTimeZone;
+use IntlDateFormatter;
+use WC_DateTime;
+
+/**
+ * Receipt_Date_Formatter class.
+ */
+class Receipt_Date_Formatter {
+	/**
+	 * Intl full style fallback value.
+	 */
+	private const INTL_FULL = 0;
+
+	/**
+	 * Intl long style fallback value.
+	 */
+	private const INTL_LONG = 1;
+
+	/**
+	 * Intl medium style fallback value.
+	 */
+	private const INTL_MEDIUM = 2;
+
+	/**
+	 * Intl short style fallback value.
+	 */
+	private const INTL_SHORT = 3;
+
+	/**
+	 * Intl none style fallback value.
+	 */
+	private const INTL_NONE = -1;
+
+	/**
+	 * Build all practical display formats for a WooCommerce date.
+	 *
+	 * @param WC_DateTime|null $date   WooCommerce date.
+	 * @param string|null      $locale Optional locale override.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function from_wc_datetime( ?WC_DateTime $date, ?string $locale = null ): array {
+		if ( ! $date ) {
+			return self::empty();
+		}
+
+		return self::from_timestamp( $date->getTimestamp(), $date->getTimezone(), $locale );
+	}
+
+	/**
+	 * Build all practical display formats for a timestamp.
+	 *
+	 * @param int               $timestamp Unix timestamp.
+	 * @param DateTimeZone|null $timezone  Optional timezone override.
+	 * @param string|null       $locale    Optional locale override.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function from_timestamp( int $timestamp, ?DateTimeZone $timezone = null, ?string $locale = null ): array {
+		$timezone = $timezone ? $timezone : self::get_default_timezone();
+		$locale   = $locale ? $locale : self::get_default_locale();
+		$date     = ( new DateTimeImmutable( '@' . $timestamp ) )->setTimezone( $timezone );
+
+		return array(
+			'datetime'       => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_SHORT, 'M j, Y g:i A' ),
+			'date'           => self::format_style( $date, $timezone, $locale, self::INTL_MEDIUM, self::INTL_NONE, 'M j, Y' ),
+			'time'           => self::format_style( $date, $timezone, $locale, self::INTL_NONE, self::INTL_SHORT, 'g:i A' ),
+			'datetime_short' => self::format_style( $date, $timezone, $locale, self::INTL_SHORT, self::INTL_SHORT, 'n/j/y g:i A' ),
+			'datetime_long'  => self::format_style( $date, $timezone, $locale, self::INTL_LONG, self::INTL_SHORT, 'F j, Y g:i A' ),
+			'datetime_full'  => self::format_style( $date, $timezone, $locale, self::INTL_FULL, self::INTL_SHORT, 'l, F j, Y g:i A' ),
+			'date_short'     => self::format_style( $date, $timezone, $locale, self::INTL_SHORT, self::INTL_NONE, 'n/j/y' ),
+			'date_long'      => self::format_style( $date, $timezone, $locale, self::INTL_LONG, self::INTL_NONE, 'F j, Y' ),
+			'date_full'      => self::format_style( $date, $timezone, $locale, self::INTL_FULL, self::INTL_NONE, 'l, F j, Y' ),
+			'date_ymd'       => self::format_pattern( $date, $timezone, $locale, 'yyyy-MM-dd', 'Y-m-d' ),
+			'date_dmy'       => self::format_pattern( $date, $timezone, $locale, 'dd/MM/yyyy', 'd/m/Y' ),
+			'date_mdy'       => self::format_pattern( $date, $timezone, $locale, 'MM/dd/yyyy', 'm/d/Y' ),
+			'weekday_short'  => self::format_pattern( $date, $timezone, $locale, 'EEE', 'D' ),
+			'weekday_long'   => self::format_pattern( $date, $timezone, $locale, 'EEEE', 'l' ),
+			'day'            => self::format_pattern( $date, $timezone, $locale, 'dd', 'd' ),
+			'month'          => self::format_pattern( $date, $timezone, $locale, 'MM', 'm' ),
+			'month_short'    => self::format_pattern( $date, $timezone, $locale, 'MMM', 'M' ),
+			'month_long'     => self::format_pattern( $date, $timezone, $locale, 'MMMM', 'F' ),
+			'year'           => self::format_pattern( $date, $timezone, $locale, 'yyyy', 'Y' ),
+		);
+	}
+
+	/**
+	 * Build an empty date structure.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function empty(): array {
+		return array(
+			'datetime'       => '',
+			'date'           => '',
+			'time'           => '',
+			'datetime_short' => '',
+			'datetime_long'  => '',
+			'datetime_full'  => '',
+			'date_short'     => '',
+			'date_long'      => '',
+			'date_full'      => '',
+			'date_ymd'       => '',
+			'date_dmy'       => '',
+			'date_mdy'       => '',
+			'weekday_short'  => '',
+			'weekday_long'   => '',
+			'day'            => '',
+			'month'          => '',
+			'month_short'    => '',
+			'month_long'     => '',
+			'year'           => '',
+		);
+	}
+
+	/**
+	 * Format using Intl styles with a sane fallback.
+	 *
+	 * @param DateTimeInterface $date             Date to format.
+	 * @param DateTimeZone      $timezone         Date timezone.
+	 * @param string            $locale           Locale code.
+	 * @param int               $date_style       Intl date style.
+	 * @param int               $time_style       Intl time style.
+	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
+	 *
+	 * @return string
+	 */
+	private static function format_style( DateTimeInterface $date, DateTimeZone $timezone, string $locale, int $date_style, int $time_style, string $fallback_pattern ): string {
+		if ( class_exists( IntlDateFormatter::class ) ) {
+			$formatter = new IntlDateFormatter(
+				$locale,
+				$date_style,
+				$time_style,
+				$timezone->getName()
+			);
+
+			if ( $formatter ) {
+				$formatted = $formatter->format( $date );
+				if ( false !== $formatted ) {
+					return (string) $formatted;
+				}
+			}
+		}
+
+		return self::format_fallback( $date, $fallback_pattern );
+	}
+
+	/**
+	 * Format using an Intl pattern with a sane fallback.
+	 *
+	 * @param DateTimeInterface $date             Date to format.
+	 * @param DateTimeZone      $timezone         Date timezone.
+	 * @param string            $locale           Locale code.
+	 * @param string            $pattern          Intl pattern.
+	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
+	 *
+	 * @return string
+	 */
+	private static function format_pattern( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $pattern, string $fallback_pattern ): string {
+		if ( class_exists( IntlDateFormatter::class ) ) {
+			$formatter = new IntlDateFormatter(
+				$locale,
+				self::INTL_NONE,
+				self::INTL_NONE,
+				$timezone->getName(),
+				null,
+				$pattern
+			);
+
+			if ( $formatter ) {
+				$formatted = $formatter->format( $date );
+				if ( false !== $formatted ) {
+					return (string) $formatted;
+				}
+			}
+		}
+
+		return self::format_fallback( $date, $fallback_pattern );
+	}
+
+	/**
+	 * Format a date when Intl is unavailable.
+	 *
+	 * @param DateTimeInterface $date    Date to format.
+	 * @param string            $pattern wp_date()/DateTime pattern.
+	 *
+	 * @return string
+	 */
+	private static function format_fallback( DateTimeInterface $date, string $pattern ): string {
+		if ( function_exists( 'wp_date' ) ) {
+			return wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() );
+		}
+
+		return $date->format( $pattern );
+	}
+
+	/**
+	 * Resolve default locale.
+	 *
+	 * @return string
+	 */
+	private static function get_default_locale(): string {
+		if ( function_exists( 'get_locale' ) ) {
+			return (string) get_locale();
+		}
+
+		return 'en_US';
+	}
+
+	/**
+	 * Resolve default timezone.
+	 *
+	 * @return DateTimeZone
+	 */
+	private static function get_default_timezone(): DateTimeZone {
+		if ( function_exists( 'wp_timezone' ) ) {
+			return wp_timezone();
+		}
+
+		return new DateTimeZone( date_default_timezone_get() );
+	}
+}

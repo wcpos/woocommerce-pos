@@ -37,6 +37,21 @@ class Receipt_Data_Builder {
 			'customer_note'    => $order->get_customer_note(),
 		);
 
+		$receipt = array(
+			'mode'    => $mode,
+			'printed' => Receipt_Date_Formatter::from_timestamp( time(), wp_timezone() ),
+		);
+
+		$order_data = array(
+			'id'            => $order->get_id(),
+			'number'        => (string) $order->get_order_number(),
+			'currency'      => (string) $order->get_currency(),
+			'customer_note' => (string) $order->get_customer_note(),
+			'created'       => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_created() ),
+			'paid'          => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_paid() ),
+			'completed'     => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_completed() ),
+		);
+
 		if ( null === $pos_store ) {
 			$order_store_id = (int) $order->get_meta( '_pos_store' );
 			$pos_store      = $order_store_id > 0 ? wcpos_get_store( $order_store_id ) : wcpos_get_store();
@@ -284,6 +299,8 @@ class Receipt_Data_Builder {
 		);
 
 		return array(
+			'receipt'            => $receipt,
+			'order'              => $order_data,
 			'meta'               => $meta,
 			'store'              => $store,
 			'cashier'            => $cashier,

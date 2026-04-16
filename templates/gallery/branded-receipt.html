@@ -34,8 +34,8 @@ payment details with tendered/change.
 		<div style="text-align: right;">
 			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.receipt}}</div>
 			<div style="font-size: 13px; margin-top: 8px;">
-				<div>#{{meta.order_number}}</div>
-				<div style="color: #666;">{{meta.created_at_gmt}}</div>
+				<div>#{{order.number}}</div>
+				<div style="color: #666;">{{order.created.datetime}}</div>
 			</div>
 			{{#cashier.name}}
 			<div style="font-size: 12px; color: #666; margin-top: 4px;">Served by {{cashier.name}}</div>

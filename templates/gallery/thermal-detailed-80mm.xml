@@ -8,11 +8,11 @@
   <line />
   <row>
     <col width="16">{{i18n.order}}:</col>
-    <col width="32" align="right">{{meta.order_number}}</col>
+    <col width="32" align="right">{{order.number}}</col>
   </row>
   <row>
     <col width="16">{{i18n.date}}:</col>
-    <col width="32" align="right">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</col>
+    <col width="32" align="right">{{order.created.datetime}}</col>
   </row>
   {{#cashier.name}}
   <row>
@@ -52,11 +52,11 @@
     <col width="16" align="right">{{line_total_incl}}</col>
   </row>
   {{/lines}}
-  {{#meta.customer_note}}
+  {{#order.customer_note}}
   <line />
   <bold><text>{{i18n.customer_note}}</text></bold>
-  <text>{{meta.customer_note}}</text>
-  {{/meta.customer_note}}
+  <text>{{order.customer_note}}</text>
+  {{/order.customer_note}}
   <line />
   <row>
     <col width="24">{{i18n.subtotal}}</col>
@@ -116,7 +116,7 @@
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
-    <barcode type="code128" height="60">{{meta.order_number}}</barcode>
+    <barcode type="code128" height="60">{{order.number}}</barcode>
   </align>
   <feed lines="1" />
   <align mode="center">

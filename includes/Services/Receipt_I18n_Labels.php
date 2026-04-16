@@ -179,10 +179,20 @@ class Receipt_I18n_Labels {
 				'format'    => __( 'Ref: %s', 'woocommerce-pos' ),
 				'variables' => array( '#{{meta.order_number}}' ),
 			),
+			'Ref: #{{order.number}}'          => array(
+				/* translators: %s: order number with # prefix */
+				'format'    => __( 'Ref: %s', 'woocommerce-pos' ),
+				'variables' => array( '#{{order.number}}' ),
+			),
 			'Order #{{meta.order_number}}'     => array(
 				/* translators: %s: order number with # prefix */
 				'format'    => __( 'Order %s', 'woocommerce-pos' ),
 				'variables' => array( '#{{meta.order_number}}' ),
+			),
+			'Order #{{order.number}}'         => array(
+				/* translators: %s: order number with # prefix */
+				'format'    => __( 'Order %s', 'woocommerce-pos' ),
+				'variables' => array( '#{{order.number}}' ),
 			),
 			'SKU: {{sku}}'                     => array(
 				/* translators: %s: product SKU */

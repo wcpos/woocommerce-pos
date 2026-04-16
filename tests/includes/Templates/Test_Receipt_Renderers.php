@@ -62,6 +62,26 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test logicless renderer can replace semantic order and receipt placeholders.
+	 */
+	public function test_logicless_renderer_replaces_semantic_date_placeholders(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$template     = array(
+			'content' => '<h1>{{order.number}}</h1><p>{{order.created.datetime_full}}</p><p>{{receipt.mode}}</p>',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
+		$this->assertStringContainsString( 'live', $output );
+		$this->assertStringNotContainsString( '{{order.created.datetime_full}}', $output );
+	}
+
+	/**
 	 * Test logicless renderer does not crash when template references an array value.
 	 */
 	public function test_logicless_renderer_handles_array_value_without_error(): void {

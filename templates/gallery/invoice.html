@@ -34,8 +34,8 @@ customer note, and payment info.
 		<div style="text-align: right;">
 			<div style="font-size: 28px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.invoice}}</div>
 			<div style="font-size: 13px; margin-top: 8px;">
-				<div>#{{meta.order_number}}</div>
-				<div style="color: #666;">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</div>
+				<div>#{{order.number}}</div>
+				<div style="color: #666;">{{order.created.datetime}}</div>
 			</div>
 		</div>
 	</div>
@@ -141,12 +141,12 @@ customer note, and payment info.
 		</div>
 	</div>
 
-	{{#meta.customer_note}}
+	{{#order.customer_note}}
 	<div style="margin-top: 24px; padding: 12px 16px; background: #fefce8; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px; color: #854d0e;">
 		<div style="font-weight: 600; margin-bottom: 4px;">{{i18n.customer_note}}:</div>
-		<div style="white-space: pre-wrap;">{{meta.customer_note}}</div>
+		<div style="white-space: pre-wrap;">{{order.customer_note}}</div>
 	</div>
-	{{/meta.customer_note}}
+	{{/order.customer_note}}
 
 	{{#store.policies_and_conditions}}
 	<div style="margin-top: 24px; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 11px; color: #666; line-height: 1.5; white-space: pre-wrap;">

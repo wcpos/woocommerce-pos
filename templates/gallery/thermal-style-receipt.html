@@ -34,11 +34,11 @@ All styles are inline because wp_kses_post strips <style> tags.
 
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{i18n.order}}</span>
-			<span style="flex-shrink: 0; text-align: right;">#{{meta.order_number}}</span>
+			<span style="flex-shrink: 0; text-align: right;">#{{order.number}}</span>
 		</div>
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{i18n.order_date}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{#meta.created_at_local}}{{meta.created_at_local}}{{/meta.created_at_local}}{{^meta.created_at_local}}{{meta.created_at_gmt}}{{/meta.created_at_local}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{order.created.datetime}}</span>
 		</div>
 		{{#cashier.name}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
@@ -127,13 +127,13 @@ All styles are inline because wp_kses_post strips <style> tags.
 		{{/change}}
 		{{/payments}}
 
-		{{#meta.customer_note}}
+		{{#order.customer_note}}
 		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
 		<div style="font-size: 10px; color: #555;">
 			<span style="font-weight: 700;">{{i18n.customer_note}}:</span>
-			{{meta.customer_note}}
+			{{order.customer_note}}
 		</div>
-		{{/meta.customer_note}}
+		{{/order.customer_note}}
 
 		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
 
