@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use const HOUR_IN_SECONDS;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
@@ -173,15 +174,27 @@ class Landing_Profile {
 		global $wpdb;
 
 		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			/* @phpstan-ignore-next-line */
+			$orders_table = method_exists( OrdersTableDataStore::class, 'get_orders_table_name' )
+				? OrdersTableDataStore::get_orders_table_name()
+				: $wpdb->prefix . 'wc_orders';
+			/* @phpstan-ignore-next-line */
+			$op_table     = method_exists( OrdersTableDataStore::class, 'get_operational_data_table_name' )
+				? OrdersTableDataStore::get_operational_data_table_name()
+				: $wpdb->prefix . 'wc_order_operational_data';
+
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			return (int) $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT COUNT(*) FROM {$wpdb->prefix}wc_orders
-					WHERE type = 'shop_order'
-					AND created_via = %s
-					AND status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')",
+					"SELECT COUNT(*) FROM {$orders_table} orders
+					INNER JOIN {$op_table} op ON op.order_id = orders.id
+					WHERE orders.type = 'shop_order'
+					AND op.created_via = %s
+					AND orders.status IN ('wc-completed', 'wc-processing', 'wc-on-hold', 'wc-pending')",
 					'woocommerce-pos'
 				)
 			);
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
 
 		return (int) $wpdb->get_var(
