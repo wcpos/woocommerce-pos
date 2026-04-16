@@ -11,9 +11,8 @@
 namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
-use const HOUR_IN_SECONDS;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
-use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
@@ -54,7 +53,10 @@ class Menu {
 			add_filter( 'parent_file', array( $this, 'highlight_templates_menu' ) );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
+			add_action( 'admin_notices', array( $this, 'maybe_show_tracking_consent_notice' ) );
 		}
+
+		add_action( 'wp_ajax_wcpos_tracking_consent', array( $this, 'handle_tracking_consent_ajax' ) );
 
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
 	}
@@ -239,55 +241,34 @@ class Menu {
 				true
 			);
 
-			$landing_inline_script = $this->landing_inline_script();
-			if ( '' !== $landing_inline_script ) {
-				wp_add_inline_script( 'wcpos-welcome', $landing_inline_script, 'before' );
-			}
+			wp_add_inline_script( 'wcpos-welcome', $this->landing_inline_script(), 'before' );
 		}
 	}
 
 	/**
 	 * Generate the inline script for landing page data.
 	 *
-	 * Passes store profile, PostHog config, and updates server config
-	 * to the landing page React app via window.wcpos.landing.
-	 *
-	 * Landing profile data is disabled by default and can be enabled via:
-	 * - Option: `wcpos_enable_landing_profile`
-	 * - Filter: `woocommerce_pos_allow_landing_profile`
+	 * Always emits functional data (locale, version, pro status).
+	 * Merges in store profile and updates-server config only when
+	 * the user has explicitly allowed tracking.
 	 *
 	 * @return string
 	 */
 	private function landing_inline_script(): string {
-		$option_enabled = wp_validate_boolean( get_option( 'wcpos_enable_landing_profile', false ) );
+		$json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+		$profile    = new Landing_Profile();
+		$data       = $profile->get_functional_data();
 
-		/**
-		 * Filters whether landing profile payload is exposed to the client.
-		 *
-		 * @since 1.9.0
-		 *
-		 * @param bool $allow Whether to allow the landing profile payload.
-		 */
-		$allow_landing_profile = wp_validate_boolean(
-			apply_filters( 'woocommerce_pos_allow_landing_profile', $option_enabled )
-		);
-
-		if ( ! $allow_landing_profile ) {
-			return '';
+		$consent = woocommerce_pos_get_settings( 'tools', 'tracking_consent' );
+		if ( 'allowed' === $consent ) {
+			$data = array_merge( $data, $profile->get_consented_data() );
 		}
 
-		$profile = new Landing_Profile();
-		$data    = $profile->get_landing_data();
-		$encoded = wp_json_encode(
-			$data,
-			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-		);
+		$encoded = wp_json_encode( $data, $json_flags );
 
 		if ( false === $encoded ) {
-			$error_message = \function_exists( 'json_last_error_msg' ) ? json_last_error_msg() : 'Unknown JSON encoding error';
-
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( \sprintf( 'WCPOS landing profile JSON encoding failed: %s', $error_message ) );
+			error_log( 'WCPOS landing data JSON encoding failed: ' . json_last_error_msg() );
 			$encoded = '{}';
 		}
 
@@ -295,6 +276,103 @@ class Menu {
 			'var wcpos = wcpos || {}; wcpos.landing = %s;',
 			$encoded
 		);
+	}
+
+	/**
+	 * Show tracking consent admin notice on POS pages.
+	 *
+	 * Displays a one-time notice asking the user to allow anonymous usage
+	 * data collection. Only shown when tracking_consent is 'undecided'.
+	 */
+	public function maybe_show_tracking_consent_notice(): void {
+		$screen = get_current_screen();
+		if ( ! $screen ) {
+			return;
+		}
+
+		$pos_screens = array(
+			$this->toplevel_screen_id,
+			$this->settings_screen_id,
+			$this->gallery_screen_id,
+		);
+		if ( ! \in_array( $screen->id, $pos_screens, true ) ) {
+			return;
+		}
+
+		$consent = woocommerce_pos_get_settings( 'tools', 'tracking_consent' );
+		if ( 'undecided' !== $consent ) {
+			return;
+		}
+
+		$nonce = wp_create_nonce( 'wcpos_tracking_consent' );
+		?>
+		<div class="notice notice-info" id="wcpos-tracking-consent-notice">
+			<p><strong><?php esc_html_e( 'Help improve WooCommerce POS', 'woocommerce-pos' ); ?></strong></p>
+			<p>
+				<?php
+				printf(
+					/* translators: %s: link to POS Settings > Tools page */
+					esc_html__(
+						'Allow WooCommerce POS to collect anonymous usage data (store size, locale, active extensions) to help prioritise features and improvements. No personal or customer data is collected. You can change this anytime in %s.',
+						'woocommerce-pos'
+					),
+					'<a href="' . esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings' ) ) . '">POS &gt; Settings &gt; Tools</a>'
+				);
+				?>
+			</p>
+			<p>
+				<button class="button button-primary wcpos-consent-btn" data-consent="allowed">
+					<?php esc_html_e( 'Allow', 'woocommerce-pos' ); ?>
+				</button>
+				<button class="button wcpos-consent-btn" data-consent="denied">
+					<?php esc_html_e( 'No thanks', 'woocommerce-pos' ); ?>
+				</button>
+			</p>
+		</div>
+		<script>
+		(function() {
+			var buttons = document.querySelectorAll('.wcpos-consent-btn');
+			buttons.forEach(function(btn) {
+				btn.addEventListener('click', function() {
+					var notice = document.getElementById('wcpos-tracking-consent-notice');
+					var xhr = new XMLHttpRequest();
+					xhr.open('POST', ajaxurl);
+					xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+					xhr.onload = function() { notice.remove(); };
+					xhr.send(
+						'action=wcpos_tracking_consent' +
+						'&consent=' + encodeURIComponent(btn.dataset.consent) +
+						'&_wpnonce=<?php echo esc_js( $nonce ); ?>'
+					);
+				});
+			});
+		})();
+		</script>
+		<?php
+	}
+
+	/**
+	 * AJAX handler for tracking consent notice.
+	 */
+	public function handle_tracking_consent_ajax(): void {
+		check_ajax_referer( 'wcpos_tracking_consent' );
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_send_json_error( 'Unauthorized', 403 );
+		}
+
+		$consent = isset( $_POST['consent'] ) ? sanitize_text_field( wp_unslash( $_POST['consent'] ) ) : '';
+		if ( ! \in_array( $consent, array( 'allowed', 'denied' ), true ) ) {
+			wp_send_json_error( 'Invalid consent value', 400 );
+		}
+
+		$settings = woocommerce_pos_get_settings( 'tools' );
+		if ( \is_array( $settings ) ) {
+			$settings['tracking_consent'] = $consent;
+			SettingsService::instance()->save_settings( 'tools', $settings );
+		}
+
+		wp_send_json_success();
 	}
 
 	/**
