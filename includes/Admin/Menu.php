@@ -264,7 +264,7 @@ class Menu {
 		$profile    = new Landing_Profile();
 		$data       = $profile->get_functional_data();
 
-		$consent = woocommerce_pos_get_settings( 'tools', 'tracking_consent' );
+		$consent = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
 		if ( 'allowed' === $consent ) {
 			$data = array_merge( $data, $profile->get_consented_data() );
 		}
@@ -305,7 +305,7 @@ class Menu {
 			return;
 		}
 
-		$consent = woocommerce_pos_get_settings( 'tools', 'tracking_consent' );
+		$consent = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
 		if ( 'undecided' !== $consent ) {
 			return;
 		}
@@ -317,13 +317,13 @@ class Menu {
 			<p>
 				<?php
 				printf(
-					/* translators: %s: link to POS Settings > Tools page */
+					/* translators: %s: link to POS Settings > General page */
 					esc_html__(
 						'Allow WooCommerce POS to collect anonymous usage data to help improve the product. No personal or customer data is collected. You can change this anytime in %s.',
 						'woocommerce-pos'
 					),
 					'<a href="' . esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings' ) ) . '">' .
-					esc_html__( 'POS > Settings > Tools', 'woocommerce-pos' ) .
+					esc_html__( 'POS > Settings > General', 'woocommerce-pos' ) .
 					'</a>'
 				);
 				?>
@@ -384,13 +384,13 @@ class Menu {
 			wp_send_json_error( 'Invalid consent value', 400 );
 		}
 
-		$settings = woocommerce_pos_get_settings( 'tools' );
+		$settings = woocommerce_pos_get_settings( 'general' );
 		if ( ! \is_array( $settings ) ) {
-			wp_send_json_error( 'Unable to load tools settings', 500 );
+			wp_send_json_error( 'Unable to load general settings', 500 );
 		}
 
 		$settings['tracking_consent'] = $consent;
-		$result                       = SettingsService::instance()->save_settings( 'tools', $settings );
+		$result                       = SettingsService::instance()->save_settings( 'general', $settings );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( $result->get_error_message(), 500 );
 		}

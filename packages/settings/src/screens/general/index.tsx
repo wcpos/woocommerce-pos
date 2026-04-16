@@ -20,6 +20,7 @@ export interface GeneralSettingsProps {
 	default_customer_is_cashier: boolean;
 	barcode_field: string;
 	restore_stock_on_delete: boolean;
+	tracking_consent: 'undecided' | 'allowed' | 'denied';
 }
 
 function General() {
@@ -105,6 +106,18 @@ function General() {
 							}}
 						/>
 					</div>
+				</FormRow>
+			</FormSection>
+			<FormSection title={t('settings.privacy_section_title')}>
+				<FormRow>
+					<Toggle
+						checked={data?.tracking_consent === 'allowed'}
+						onChange={(enabled: boolean) => {
+							mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
+						}}
+						label={t('settings.allow_anonymous_usage_data')}
+						description={t('settings.allow_anonymous_usage_data_tip')}
+					/>
 				</FormRow>
 			</FormSection>
 		</>
