@@ -64,8 +64,11 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 							key={snackbar.id}
 							{...snackbar}
 							onRemove={() => {
-								snackbar.onRemove?.();
-								removeSnackbar(snackbar.id);
+								try {
+									snackbar.onRemove?.();
+								} finally {
+									removeSnackbar(snackbar.id);
+								}
 							}}
 						/>
 					))}
