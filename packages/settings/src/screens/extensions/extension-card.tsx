@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-import { Tooltip } from '../../components/ui';
+import { Card, Tooltip } from '@wcpos/ui';
+
 import { t } from '../../translations';
 
 import type { Extension } from './index';
@@ -185,27 +186,21 @@ function getActionSlot(): React.ComponentType<{ extension: Extension }> | null {
 }
 
 /**
- * Card footer: renders Pro action bar, free-plugin fallback, or nothing.
+ * Builds the card footer contents. Returns null when no footer should be
+ * shown (so the parent can skip rendering Card.Footer entirely and avoid an
+ * empty gray bar).
  */
-function CardFooter({ extension }: { extension: Extension }) {
+function buildFooterContent(extension: Extension): React.ReactNode {
 	const ActionSlot = getActionSlot();
 
-	// Pro plugin provides the action controls; we wrap in footer chrome.
+	// Pro plugin provides the action controls.
 	if (ActionSlot) {
-		return (
-			<div className="wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:px-4 wcpos:py-2.5">
-				<ActionSlot extension={extension} />
-			</div>
-		);
+		return <ActionSlot extension={extension} />;
 	}
 
 	// Free plugin: only show footer for not-installed extensions.
 	if (extension.status === 'not_installed') {
-		return (
-			<div className="wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:px-4 wcpos:py-2.5">
-				<FooterAction extension={extension} />
-			</div>
-		);
+		return <FooterAction extension={extension} />;
 	}
 
 	return null;
@@ -217,10 +212,11 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 		? rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1)
 		: null;
 
+	const footerContent = buildFooterContent(extension);
+
 	return (
-		<div className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden wcpos:flex wcpos:flex-col">
-			{/* Card body */}
-			<div className="wcpos:p-4 wcpos:flex wcpos:gap-4 wcpos:flex-1">
+		<Card>
+			<Card.Body className="wcpos:flex wcpos:gap-4">
 				{/* Icon */}
 				<div className="wcpos:shrink-0 wcpos:flex wcpos:items-start">
 					{extension.icon ? (
@@ -267,11 +263,10 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						{extension.description}
 					</p>
 				</div>
-			</div>
+			</Card.Body>
 
-			{/* Card footer */}
-			<CardFooter extension={extension} />
-		</div>
+			{footerContent != null && <Card.Footer>{footerContent}</Card.Footer>}
+		</Card>
 	);
 }
 

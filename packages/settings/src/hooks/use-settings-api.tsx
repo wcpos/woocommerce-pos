@@ -2,7 +2,7 @@ import { useQueryClient, useSuspenseQuery, useMutation } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 import { merge, cloneDeep, get } from 'lodash';
 
-import useSnackbar from '../components/snackbar';
+import { useSnackbar } from '@wcpos/ui';
 import useNotices from '../hooks/use-notices';
 
 type PlaceholderKeys = keyof typeof placeholders;

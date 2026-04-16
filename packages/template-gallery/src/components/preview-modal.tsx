@@ -1,7 +1,9 @@
 import * as React from 'react';
 
-import { usePreview } from '../hooks/use-preview';
 import { renderThermalPreview } from '@wcpos/thermal-utils';
+import { Button } from '@wcpos/ui';
+
+import { usePreview } from '../hooks/use-preview';
 import { t } from '../translations';
 import { PreviewToggle } from './preview-toggle';
 
@@ -217,27 +219,25 @@ export function PreviewModal({
 					</div>
 					<div className="wcpos:flex wcpos:gap-2">
 						{isGallery ? (
-							<button
-								type="button"
+							<Button
+								variant="primary"
 								onClick={() => {
 									onCustomize?.();
 									onClose();
 								}}
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-white wcpos:bg-wp-admin-theme-color wcpos:border-0 wcpos:rounded wcpos:cursor-pointer hover:wcpos:bg-wp-admin-theme-color-darker-10"
 							>
 								{t('common.customize')}
-							</button>
+							</Button>
 						) : (
-							<button
-								type="button"
+							<Button
+								variant="primary"
 								onClick={() => {
 									onActivate?.();
 									onClose();
 								}}
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:font-medium wcpos:text-white wcpos:bg-wp-admin-theme-color wcpos:border-0 wcpos:rounded wcpos:cursor-pointer hover:wcpos:bg-wp-admin-theme-color-darker-10"
 							>
 								{t('common.activate')}
-							</button>
+							</Button>
 						)}
 						{preview?.preview_url && (
 							<a
