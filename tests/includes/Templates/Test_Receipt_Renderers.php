@@ -78,6 +78,8 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
 		$this->assertStringContainsString( 'live', $output );
+		$this->assertNotSame( '', $receipt_data['order']['created']['datetime_full'] );
+		$this->assertStringContainsString( $receipt_data['order']['created']['datetime_full'], $output );
 		$this->assertStringNotContainsString( '{{order.created.datetime_full}}', $output );
 	}
 

@@ -137,19 +137,25 @@ class Receipt_Date_Formatter {
 	 * @return string
 	 */
 	private static function format_style( DateTimeInterface $date, DateTimeZone $timezone, string $locale, int $date_style, int $time_style, string $fallback_pattern ): string {
-		if ( class_exists( IntlDateFormatter::class ) ) {
-			$formatter = new IntlDateFormatter(
-				$locale,
-				$date_style,
-				$time_style,
-				$timezone->getName()
-			);
+		$timezone_name = $timezone->getName();
+		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
+			return self::format_fallback( $date, $fallback_pattern );
+		}
 
-			if ( $formatter ) {
+		if ( class_exists( IntlDateFormatter::class ) ) {
+			try {
+				$formatter = new IntlDateFormatter(
+					$locale,
+					$date_style,
+					$time_style,
+					$timezone_name
+				);
 				$formatted = $formatter->format( $date );
 				if ( false !== $formatted ) {
 					return (string) $formatted;
 				}
+			} catch ( \Throwable $error ) {
+				return self::format_fallback( $date, $fallback_pattern );
 			}
 		}
 
@@ -168,25 +174,42 @@ class Receipt_Date_Formatter {
 	 * @return string
 	 */
 	private static function format_pattern( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $pattern, string $fallback_pattern ): string {
-		if ( class_exists( IntlDateFormatter::class ) ) {
-			$formatter = new IntlDateFormatter(
-				$locale,
-				self::INTL_NONE,
-				self::INTL_NONE,
-				$timezone->getName(),
-				null,
-				$pattern
-			);
+		$timezone_name = $timezone->getName();
+		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
+			return self::format_fallback( $date, $fallback_pattern );
+		}
 
-			if ( $formatter ) {
+		if ( class_exists( IntlDateFormatter::class ) ) {
+			try {
+				$formatter = new IntlDateFormatter(
+					$locale,
+					self::INTL_NONE,
+					self::INTL_NONE,
+					$timezone_name,
+					null,
+					$pattern
+				);
 				$formatted = $formatter->format( $date );
 				if ( false !== $formatted ) {
 					return (string) $formatted;
 				}
+			} catch ( \Throwable $error ) {
+				return self::format_fallback( $date, $fallback_pattern );
 			}
 		}
 
 		return self::format_fallback( $date, $fallback_pattern );
+	}
+
+	/**
+	 * Check whether a timezone name is a fixed UTC offset like +00:00.
+	 *
+	 * @param string $timezone_name Timezone name.
+	 *
+	 * @return bool
+	 */
+	private static function is_fixed_offset_timezone_name( string $timezone_name ): bool {
+		return 1 === preg_match( '/^[+-]\d{2}:\d{2}$/', $timezone_name );
 	}
 
 	/**

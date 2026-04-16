@@ -125,10 +125,12 @@ $lines = $receipt_data['lines'];
 		</div>
 	<?php endif; ?>
 
+	<?php $order_number = $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+	<?php $created_at = $order_data['created']['date_long'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 	<div class="meta">
-		<?php echo esc_html( $order_data['created']['date_long'] ?? '' ); ?>
+		<?php echo esc_html( $created_at ); ?>
 		&middot;
-		#<?php echo esc_html( $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? '' ); ?>
+		#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?>
 	</div>
 
 </body>

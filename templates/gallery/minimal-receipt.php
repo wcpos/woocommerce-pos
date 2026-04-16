@@ -82,13 +82,15 @@ $money = function ( float $amount ) use ( $currency ): string {
 
 	<hr class="divider">
 
+	<?php $order_number = $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
+	<?php $created_at = $order_data['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 	<div class="meta-row">
 		<span><?php esc_html_e( 'Order', 'woocommerce-pos' ); ?></span>
-		<span>#<?php echo esc_html( $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? '' ); ?></span>
+		<span>#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span>
 	</div>
 	<div class="meta-row">
 		<span><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span>
-		<span><?php echo esc_html( $order_data['created']['datetime'] ?? '' ); ?></span>
+		<span><?php echo esc_html( $created_at ); ?></span>
 	</div>
 	<?php if ( ! empty( $cashier['name'] ) ) : ?>
 		<div class="meta-row">
