@@ -110,19 +110,18 @@ function General() {
 					</div>
 				</FormRow>
 			</FormSection>
-			<div className="wcpos:pb-4 wcpos:mb-4">
-				<div className="wcpos:mb-2 wcpos:flex wcpos:items-center wcpos:justify-between wcpos:gap-3">
-					<h3 className="wcpos:text-base wcpos:font-semibold wcpos:text-gray-900">
-						{t('settings.privacy_section_title')}
-					</h3>
-					<Toggle
-						aria-label={t('settings.allow_anonymous_usage_data')}
-						checked={data?.tracking_consent === 'allowed'}
-						onChange={(enabled: boolean) => {
-							mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
-						}}
-					/>
-				</div>
+			<FormSection title={t('settings.privacy_section_title')}>
+				<FormRow>
+					<Label tip={t('settings.allow_anonymous_usage_data_tip')}>
+						<Toggle
+							checked={data?.tracking_consent === 'allowed'}
+							onChange={(enabled: boolean) => {
+								mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
+							}}
+							label={t('settings.allow_anonymous_usage_data')}
+						/>
+					</Label>
+				</FormRow>
 				<p className="wcpos:text-sm wcpos:text-gray-500">
 					{t('settings.allow_anonymous_usage_data_tip')}{' '}
 					<button
@@ -133,7 +132,7 @@ function General() {
 						{t('settings.privacy_learn_more')}
 					</button>
 				</p>
-			</div>
+			</FormSection>
 			<PrivacyInfoModal open={privacyInfoOpen} onClose={() => setPrivacyInfoOpen(false)} />
 		</>
 	);
