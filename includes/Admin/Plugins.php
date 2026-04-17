@@ -47,7 +47,7 @@ class Plugins {
 				)
 			);
 
-			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" data-wcpos-upgrade-placement="plugin_row_action" style="color: #d63638; font-weight: 600;">' .
+			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" rel="noopener noreferrer" data-wcpos-upgrade-placement="plugin_row_action" style="color: #d63638; font-weight: 600;">' .
 				__( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>';
 		}
 
@@ -104,7 +104,7 @@ class Plugins {
 				printf(
 					/* translators: %s: URL to My Account page */
 					esc_html__( 'WCPOS Pro is now a standalone plugin. Download the latest version from %s', 'woocommerce-pos' ),
-					'<a href="https://wcpos.com/my-account" target="_blank" style="color: #0073aa; text-decoration: underline;">wcpos.com/my-account</a>'
+					'<a href="https://wcpos.com/my-account" target="_blank" rel="noopener noreferrer" style="color: #0073aa; text-decoration: underline;">wcpos.com/my-account</a>'
 				);
 				?>
 			</p>

@@ -482,7 +482,7 @@ class List_Templates {
 					<iframe id="wcpos-preview-iframe" src="about:blank"></iframe>
 				</div>
 				<div class="wcpos-preview-modal-footer">
-					<a id="wcpos-preview-newtab" href="#" target="_blank" class="button">
+					<a id="wcpos-preview-newtab" href="#" target="_blank" rel="noopener noreferrer" class="button">
 						<?php esc_html_e( 'Open in New Tab', 'woocommerce-pos' ); ?>
 					</a>
 					<button type="button" class="button button-primary wcpos-preview-modal-close">
