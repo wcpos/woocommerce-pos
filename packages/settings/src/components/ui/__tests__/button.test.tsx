@@ -127,6 +127,13 @@ describe('Button', () => {
 		expect(button.className).not.toContain('wcpos:py-1.5');
 	});
 
+	it('applies default size padding classes', () => {
+		render(<Button>Default</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:px-3');
+		expect(button.className).toContain('wcpos:py-1.5');
+	});
+
 	it('keeps danger as a deprecated alias for destructive', () => {
 		render(<Button variant="danger">Delete</Button>);
 		const button = screen.getByRole('button');
