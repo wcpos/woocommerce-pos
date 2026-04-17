@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { useSuspenseQuery } from '@tanstack/react-query';
+import { FilterTabs } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
 import { markLogsRead } from './use-unread-log-counts';
@@ -84,25 +85,16 @@ function Logs() {
 			)}
 
 			{/* Filter bar */}
-			<div className="wcpos:flex wcpos:gap-2 wcpos:mb-4">
-				{filters.map((f) => (
-					<button
-						key={f.key}
-						onClick={() => {
-							setFilter(f.key);
-							setPage(1);
-							setExpandedIndex(null);
-						}}
-						className={`wcpos:px-3 wcpos:py-1 wcpos:rounded-full wcpos:text-sm wcpos:font-medium wcpos:transition-colors ${
-							filter === f.key
-								? 'wcpos:bg-wp-admin-theme-color wcpos:text-white'
-								: 'wcpos:bg-gray-100 wcpos:text-gray-600 hover:wcpos:bg-gray-200'
-						}`}
-					>
-						{f.label}
-					</button>
-				))}
-			</div>
+			<FilterTabs
+				className="wcpos:mb-4"
+				items={filters}
+				value={filter}
+				onChange={(nextFilter) => {
+					setFilter(nextFilter);
+					setPage(1);
+					setExpandedIndex(null);
+				}}
+			/>
 
 			{/* Entry list */}
 			{entries.length === 0 ? (

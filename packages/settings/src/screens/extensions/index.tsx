@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { useSuspenseQuery } from '@tanstack/react-query';
+import { FilterTabs } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
@@ -103,21 +104,16 @@ function Extensions() {
 			</div>
 
 			{/* Category tabs */}
-			<div className="wcpos:flex wcpos:gap-2 wcpos:mb-6 wcpos:flex-wrap">
-				{categories.map((cat) => (
-					<button
-						key={cat}
-						onClick={() => setCategory(cat)}
-						className={`wcpos:px-3 wcpos:py-1 wcpos:rounded-full wcpos:text-sm wcpos:font-medium wcpos:transition-colors ${
-							category === cat
-								? 'wcpos:bg-wp-admin-theme-color wcpos:text-white'
-								: 'wcpos:bg-gray-100 wcpos:text-gray-600 hover:wcpos:bg-gray-200'
-						}`}
-					>
-						{cat === 'all' ? t('common.all', 'All') : cat.charAt(0).toUpperCase() + cat.slice(1)}
-					</button>
-				))}
-			</div>
+			<FilterTabs
+				className="wcpos:mb-6"
+				items={categories.map((cat) => ({
+					key: cat,
+					label:
+						cat === 'all' ? t('common.all', 'All') : cat.charAt(0).toUpperCase() + cat.slice(1),
+				}))}
+				value={category}
+				onChange={setCategory}
+			/>
 
 			{/* Card grid */}
 			{filtered.length === 0 ? (
