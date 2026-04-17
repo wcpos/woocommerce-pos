@@ -123,8 +123,8 @@ describe('Button', () => {
 		expect(button.className).toContain('wcpos:px-0');
 		expect(button.className).toContain('wcpos:py-0');
 		expect(button.className).toContain('wcpos:hover:underline');
-		expect(button.className).not.toContain('wcpos:px-4');
-		expect(button.className).not.toContain('wcpos:py-2');
+		expect(button.className).not.toContain('wcpos:px-3');
+		expect(button.className).not.toContain('wcpos:py-1.5');
 	});
 
 	it('keeps danger as a deprecated alias for destructive', () => {
