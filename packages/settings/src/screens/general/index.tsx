@@ -112,14 +112,13 @@ function General() {
 			</FormSection>
 			<FormSection title={t('settings.privacy_section_title')}>
 				<FormRow>
-					<Label tip={t('settings.pos_only_products_tip')}>
+					<Label tip={t('settings.allow_anonymous_usage_data_tip')}>
 						<Toggle
 							checked={data?.tracking_consent === 'allowed'}
 							onChange={(enabled: boolean) => {
 								mutate({ tracking_consent: enabled ? 'allowed' : 'denied' });
 							}}
 							label={t('settings.allow_anonymous_usage_data')}
-							description={t('settings.allow_anonymous_usage_data_tip')}
 						/>
 					</Label>
 				</FormRow>
