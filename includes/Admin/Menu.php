@@ -60,6 +60,7 @@ class Menu {
 			add_filter( 'menu_order', array( $this, 'menu_order' ), 9, 1 );
 			add_filter( 'parent_file', array( $this, 'highlight_templates_menu' ) );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
+			add_action( 'admin_footer', array( $this, 'print_upgrade_click_tracking_script' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
 			add_action( 'admin_notices', array( $this, 'maybe_show_tracking_consent_notice' ) );
 		}
@@ -183,7 +184,18 @@ class Menu {
 		global $submenu;
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
 		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
+		$pos_submenu[0][2] = self::get_upgrade_tracking_url(
+			'menu_submenu',
+			admin_url( 'admin.php?page=' . PLUGIN_NAME )
+		);
 		$pos_submenu[1][2] = woocommerce_pos_url();
+
+		Analytics::instance()->capture(
+			'upgrade_cta_viewed',
+			array(
+				'placement' => 'menu_submenu',
+			)
+		);
 
 		/*
 		 * Fires after POS admin menus are registered.
@@ -217,6 +229,20 @@ class Menu {
 	 */
 	public function enqueue_landing_scripts_and_styles( $hook_suffix ): void {
 		if ( $hook_suffix === $this->toplevel_screen_id ) {
+			$analytics = Analytics::instance();
+			$site_id   = $analytics->get_site_id();
+
+			$analytics->capture(
+				'upgrade_cta_viewed',
+				array(
+					'placement' => 'admin_landing_banner',
+				)
+			);
+
+			if ( '' !== $site_id ) {
+				$analytics->group( 'site', $site_id, array() );
+			}
+
 			$is_development = isset( $_ENV['DEVELOPMENT'] )
 			&& wp_validate_boolean( sanitize_text_field( wp_unslash( $_ENV['DEVELOPMENT'] ) ) );
 			$url            = $is_development ? 'http://localhost:9000/' : 'https://cdn.jsdelivr.net/gh/wcpos/wp-admin-landing@2/assets/';
@@ -248,7 +274,8 @@ class Menu {
 			);
 
 			wp_add_inline_script( 'wcpos-welcome', $this->landing_inline_script(), 'before' );
-			wp_add_inline_script( 'wcpos-welcome', $this->posthog_inline_script(), 'before' );
+			wp_add_inline_script( 'wcpos-welcome', self::get_posthog_inline_script(), 'before' );
+			wp_add_inline_script( 'wcpos-welcome', $this->landing_tracking_inline_script(), 'after' );
 		}
 	}
 
@@ -264,7 +291,7 @@ class Menu {
 	 * `.capture()` etc. unconditionally without throwing — and without
 	 * any network traffic leaving the browser.
 	 */
-	private function posthog_inline_script(): string {
+	public static function get_posthog_inline_script(): string {
 		$analytics = Analytics::instance();
 		$noop_stub = '(function(){var w=window.wcpos=window.wcpos||{};w.posthog={capture:function(){},identify:function(){},group:function(){},register:function(){},reset:function(){},opt_in_capturing:function(){},opt_out_capturing:function(){}};})();';
 
@@ -307,6 +334,66 @@ JS;
 	}
 
 	/**
+	 * Build an admin-post URL that tracks an upgrade click before redirecting.
+	 *
+	 * @param string $placement   Stable CTA placement identifier.
+	 * @param string $destination Final redirect URL.
+	 *
+	 * @return string
+	 */
+	public static function get_upgrade_tracking_url( string $placement, string $destination ): string {
+		return add_query_arg(
+			array(
+				'action'      => 'wcpos_track_upgrade_click',
+				'placement'   => $placement,
+				'destination' => $destination,
+				'_wpnonce'    => wp_create_nonce( 'wcpos_track_upgrade_click' ),
+			),
+			admin_url( 'admin-post.php' )
+		);
+	}
+
+	/**
+	 * Track an upgrade click and return a safe redirect destination.
+	 *
+	 * @param string $placement   Stable CTA placement identifier.
+	 * @param string $destination Final redirect URL.
+	 *
+	 * @return string
+	 */
+	public static function track_upgrade_click( string $placement, string $destination ): string {
+		$safe_destination = self::sanitize_upgrade_destination( $destination );
+
+		Analytics::instance()->capture(
+			'upgrade_cta_clicked',
+			array(
+				'placement'   => sanitize_key( $placement ),
+				'destination' => $safe_destination,
+			)
+		);
+
+		return $safe_destination;
+	}
+
+	/**
+	 * Handle admin-post upgrade click tracking and redirect.
+	 */
+	public static function handle_upgrade_click_redirect(): void {
+		check_admin_referer( 'wcpos_track_upgrade_click' );
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'woocommerce-pos' ) );
+		}
+
+		$placement   = isset( $_GET['placement'] ) ? sanitize_text_field( wp_unslash( $_GET['placement'] ) ) : '';
+		$destination = isset( $_GET['destination'] ) ? sanitize_text_field( wp_unslash( $_GET['destination'] ) ) : '';
+		$redirect_to = self::track_upgrade_click( $placement, $destination );
+
+		wp_safe_redirect( $redirect_to );
+		exit;
+	}
+
+	/**
 	 * Generate the inline script for landing page data.
 	 *
 	 * Always emits functional data (locale, version, pro status).
@@ -337,6 +424,39 @@ JS;
 			'var wcpos = wcpos || {}; wcpos.landing = %s;',
 			$encoded
 		);
+	}
+
+	/**
+	 * Track clicks from the remote upgrade landing content.
+	 *
+	 * @return string
+	 */
+	private function landing_tracking_inline_script(): string {
+		return <<<JS
+(function() {
+	var root = document.getElementById('woocommerce-pos-upgrade');
+	if (!root) {
+		return;
+	}
+
+	document.addEventListener('click', function(event) {
+		var target = event.target;
+		if (!target || !target.closest) {
+			return;
+		}
+
+		var link = target.closest('#woocommerce-pos-upgrade a[href*="wcpos.com/pro"]');
+		if (!link || !window.wcpos || !window.wcpos.posthog || !window.wcpos.posthog.capture) {
+			return;
+		}
+
+		window.wcpos.posthog.capture('upgrade_cta_clicked', {
+			placement: 'admin_landing_banner',
+			destination: link.href
+		});
+	});
+})();
+JS;
 	}
 
 	/**
@@ -455,6 +575,65 @@ JS;
 	}
 
 	/**
+	 * Print a tiny global click tracker for PHP-rendered admin upsell links.
+	 */
+	public function print_upgrade_click_tracking_script(): void {
+		$nonce = wp_create_nonce( 'wcpos_track_upgrade_click' );
+		?>
+		<script>
+		(function() {
+			if (!window.ajaxurl) {
+				return;
+			}
+
+			document.addEventListener('click', function(event) {
+				var target = event.target;
+				if (!target || !target.closest) {
+					return;
+				}
+
+				var link = target.closest('[data-wcpos-upgrade-placement]');
+				if (!link) {
+					return;
+				}
+
+				var placement = link.getAttribute('data-wcpos-upgrade-placement');
+				var destination = link.getAttribute('href');
+				if (!placement || !destination || !window.navigator || !window.navigator.sendBeacon) {
+					return;
+				}
+
+				var data = new URLSearchParams();
+				data.set('action', 'wcpos_track_upgrade_click_ajax');
+				data.set('placement', placement);
+				data.set('destination', destination);
+				data.set('_ajax_nonce', '<?php echo esc_js( $nonce ); ?>');
+				window.navigator.sendBeacon(window.ajaxurl, data);
+			});
+		})();
+		</script>
+		<?php
+	}
+
+	/**
+	 * AJAX handler for admin upgrade click tracking.
+	 */
+	public static function handle_upgrade_click_ajax(): void {
+		check_ajax_referer( 'wcpos_track_upgrade_click' );
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_send_json_error( 'Unauthorized', 403 );
+		}
+
+		$placement   = isset( $_POST['placement'] ) ? sanitize_text_field( wp_unslash( $_POST['placement'] ) ) : '';
+		$destination = isset( $_POST['destination'] ) ? sanitize_text_field( wp_unslash( $_POST['destination'] ) ) : '';
+
+		self::track_upgrade_click( $placement, $destination );
+
+		wp_send_json_success();
+	}
+
+	/**
 	 * Render the Template Gallery SPA mount point.
 	 */
 	public function render_gallery_page(): void {
@@ -548,5 +727,32 @@ JS;
 		}
 
 		return $parent_file;
+	}
+
+	/**
+	 * Sanitize an upgrade redirect destination to trusted hosts only.
+	 *
+	 * @param string $destination Candidate destination URL.
+	 *
+	 * @return string
+	 */
+	private static function sanitize_upgrade_destination( string $destination ): string {
+		$fallback      = 'https://wcpos.com/pro';
+		$destination   = rawurldecode( $destination );
+		$parsed_url    = wp_parse_url( $destination );
+		$parsed_admin  = wp_parse_url( admin_url() );
+		$allowed_hosts = array_filter(
+			array(
+				$parsed_admin['host'] ?? '',
+				'wcpos.com',
+				'www.wcpos.com',
+			)
+		);
+
+		if ( empty( $parsed_url['host'] ) || ! \in_array( $parsed_url['host'], $allowed_hosts, true ) ) {
+			return $fallback;
+		}
+
+		return esc_url_raw( $destination );
 	}
 }

@@ -13,11 +13,27 @@ const WrappedReport = ({ Component, ...props }) => {
 		i18nPromise.then(() => setIsReady(true));
 	}, []);
 
+	React.useEffect(() => {
+		window?.wcpos?.posthog?.capture?.('upgrade_cta_viewed', {
+			placement: 'analytics_screen',
+		});
+	}, []);
+
 	return (
 		<>
 			<Notice isDismissible={false} className="woocommerce-pos-upgrade-notice">
 				{t('analytics.upgrade_prompt')}{' '}
-				<a target="_blank" rel="noopener noreferrer" href="https://wcpos.com/pro">
+				<a
+					target="_blank"
+					rel="noopener noreferrer"
+					href="https://wcpos.com/pro"
+					onClick={() =>
+						window?.wcpos?.posthog?.capture?.('upgrade_cta_clicked', {
+							placement: 'analytics_screen',
+							destination: 'https://wcpos.com/pro',
+						})
+					}
+				>
 					{t('common.upgrade_to_pro')}
 				</a>
 				.

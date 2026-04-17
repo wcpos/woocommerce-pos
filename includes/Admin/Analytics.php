@@ -57,5 +57,7 @@ class Analytics {
 			VERSION,
 			true
 		);
+
+		wp_add_inline_script( PLUGIN_NAME . '-analytics', Menu::get_posthog_inline_script(), 'before' );
 	}
 }

@@ -18,6 +18,7 @@ import OrderStatusSelect from './order-status-select';
 import DragIcon from '../../../assets/drag-icon.svg';
 import Notice from '../../components/notice';
 import { Button, Toggle } from '../../components/ui';
+import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -212,6 +213,12 @@ function Gateways() {
 		});
 	}, [gateways, mutate]);
 
+	React.useEffect(() => {
+		if (!proEnabled) {
+			captureUpgradeCtaViewed('checkout_gateways');
+		}
+	}, [proEnabled]);
+
 	const handleEditGateway = React.useCallback((item: GatewayItem) => {
 		// @ts-ignore
 		modalGateway.current = item;
@@ -226,7 +233,13 @@ function Gateways() {
 				<div className="wcpos:pb-5">
 					<Notice status="info" isDismissible={false}>
 						{t('checkout.enable_pro_gateways')}{' '}
-						<a href="https://wcpos.com/pro">{t('common.upgrade_to_pro')}</a>.
+						<a
+							href="https://wcpos.com/pro"
+							onClick={() => captureUpgradeCtaClicked('checkout_gateways', 'https://wcpos.com/pro')}
+						>
+							{t('common.upgrade_to_pro')}
+						</a>
+						.
 					</Notice>
 				</div>
 			)}

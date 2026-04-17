@@ -115,6 +115,8 @@ class Settings {
 			true
 		);
 
+		wp_add_inline_script( PLUGIN_NAME . '-settings', Menu::get_posthog_inline_script(), 'before' );
+
 		// Add inline script.
 		wp_add_inline_script( PLUGIN_NAME . '-settings', $this->inline_script(), 'before' );
 	}
