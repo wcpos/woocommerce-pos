@@ -226,7 +226,7 @@ export function PreviewModal({
 									onClose();
 								}}
 							>
-								{t('common.customize')}
+								{t('common.use_template')}
 							</Button>
 						) : (
 							<Button

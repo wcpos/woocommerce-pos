@@ -1,6 +1,6 @@
 import classnames from 'classnames';
 
-import { Card } from '@wcpos/ui';
+import { Button, Card } from '@wcpos/ui';
 
 import { TemplateTags } from './template-tags';
 import { t } from '../translations';
@@ -82,7 +82,12 @@ export function TemplateCard(props: TemplateCardProps) {
 				<TemplateTags template={template} />
 			</Card.Body>
 
-			<Card.Footer className="wcpos:flex wcpos:gap-3">
+			<Card.Footer
+				className={classnames(
+					'wcpos:flex wcpos:items-center wcpos:gap-3',
+					isGallery && 'wcpos:justify-between'
+				)}
+			>
 				<button
 					type="button"
 					onClick={onPreview}
@@ -91,13 +96,9 @@ export function TemplateCard(props: TemplateCardProps) {
 					{t('common.preview')}
 				</button>
 				{isGallery ? (
-					<button
-						type="button"
-						onClick={props.onCustomize}
-						className="wcpos:text-xs wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-					>
-						{t('common.customize')}
-					</button>
+					<Button variant="primary" onClick={props.onCustomize}>
+						{t('common.use_template')}
+					</Button>
 				) : (
 					<button
 						type="button"
