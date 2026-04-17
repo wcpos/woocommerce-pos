@@ -46,4 +46,9 @@ describe('settings analytics helper', () => {
 			reason: 'network',
 		});
 	});
+
+	it('falls back to server_error when the payload error field is not a string', () => {
+		expect(normalizeLicenseActivationFailure({ error: { code: 500 } })).toBe('server_error');
+		expect(normalizeLicenseActivationFailure({ message: 42 })).toBe('server_error');
+	});
 });

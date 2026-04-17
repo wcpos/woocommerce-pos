@@ -42,18 +42,18 @@ export function normalizeLicenseActivationFailure(
 		return 'network';
 	}
 
-	const message =
+	const rawMessage: unknown =
 		typeof input === 'string'
 			? input
 			: input instanceof Error
 				? input.message
 				: typeof input === 'object' && input
-					? ((input as Record<string, unknown>).error ??
-							(input as Record<string, unknown>).message ??
-							'') as string
+					? (input as Record<string, unknown>).error ??
+						(input as Record<string, unknown>).message ??
+						''
 					: '';
 
-	const normalized = message.toLowerCase();
+	const normalized = (typeof rawMessage === 'string' ? rawMessage : '').toLowerCase();
 
 	if (
 		normalized.includes('network') ||

@@ -345,8 +345,8 @@ JS;
 		return add_query_arg(
 			array(
 				'action'      => 'wcpos_track_upgrade_click',
-				'placement'   => rawurlencode( $placement ),
-				'destination' => rawurlencode( $destination ),
+				'placement'   => $placement,
+				'destination' => $destination,
 				'_wpnonce'    => wp_create_nonce( 'wcpos_track_upgrade_click' ),
 			),
 			admin_url( 'admin-post.php' )
