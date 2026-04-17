@@ -112,7 +112,7 @@ function General() {
 			</FormSection>
 			<FormSection title={t('settings.privacy_section_title')}>
 				<FormRow>
-					<Label tip={t('settings.allow_anonymous_usage_data_tip')}>
+					<Label>
 						<Toggle
 							checked={data?.tracking_consent === 'allowed'}
 							onChange={(enabled: boolean) => {
