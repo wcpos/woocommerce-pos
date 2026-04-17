@@ -81,10 +81,9 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 			'Expected no PostHog initialization when consent is denied.'
 		);
 		$this->assertStringContainsString(
-			'wcpos.posthog={capture:function',
+			'w.posthog={capture:function',
 			$script,
 			'Expected no-op stub with capture stub to be present when consent is denied.'
 		);
 	}
-}
 }
