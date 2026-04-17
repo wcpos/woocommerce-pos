@@ -468,10 +468,12 @@ class Test_Auth_Service extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'display_name', $result );
 		$this->assertArrayHasKey( 'first_name', $result );
 		$this->assertArrayHasKey( 'last_name', $result );
+		$this->assertArrayHasKey( 'roles', $result );
 		$this->assertArrayHasKey( 'avatar_url', $result );
 
 		$this->assertEquals( $this->test_user->ID, $result['id'] );
 		$this->assertEquals( $this->test_user->user_login, $result['username'] );
+		$this->assertSame( $this->test_user->roles, $result['roles'] );
 	}
 
 	/**

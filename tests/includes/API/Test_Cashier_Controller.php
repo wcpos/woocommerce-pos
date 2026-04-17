@@ -346,4 +346,18 @@ class Test_Cashier_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		remove_all_filters( 'woocommerce_pos_rest_prepare_cashier' );
 	}
+
+	/**
+	 * Test cashier response includes roles array.
+	 */
+	public function test_get_cashier_response_includes_roles_array(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/cashier/' . $this->user );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$user = get_user_by( 'id', $this->user );
+
+		$this->assertArrayHasKey( 'roles', $data );
+		$this->assertSame( $user->roles, $data['roles'] );
+	}
 }

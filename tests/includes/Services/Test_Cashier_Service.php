@@ -143,6 +143,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertArrayHasKey( 'email', $data );
 		$this->assertArrayHasKey( 'display_name', $data );
 		$this->assertArrayHasKey( 'nice_name', $data );
+		$this->assertArrayHasKey( 'roles', $data );
 		$this->assertArrayHasKey( 'last_access', $data );
 		$this->assertArrayHasKey( 'avatar_url', $data );
 		$this->assertArrayHasKey( 'stores', $data );
@@ -157,6 +158,7 @@ class Test_Cashier_Service extends WC_Unit_Test_Case {
 		$this->assertEquals( $this->user->ID, $data['id'] );
 		$this->assertEquals( $this->user->user_login, $data['username'] );
 		$this->assertEquals( $this->user->user_email, $data['email'] );
+		$this->assertSame( $this->user->roles, $data['roles'] );
 	}
 
 	/**
