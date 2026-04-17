@@ -7,23 +7,22 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Admin;
 
-use ReflectionMethod;
 use WCPOS\WooCommercePOS\Admin\Menu;
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_UnitTestCase;
 
 /**
+ * Verifies that the inline PostHog snippet injected on the landing page
+ * disables session recording when consent is granted, and falls back to
+ * a no-op stub when consent is denied.
+ *
  * @covers \WCPOS\WooCommercePOS\Admin\Menu
  */
 class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 	/**
-	 * Menu instance under test.
-	 *
-	 * @var Menu
+	 * Set up each test with allowed tracking consent and admin caps.
 	 */
-	private $menu;
-
 	public function setUp(): void {
 		parent::setUp();
 
@@ -35,10 +34,11 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $user_id );
 		wp_get_current_user()->add_cap( 'manage_woocommerce_pos' );
-
-		$this->menu = new Menu();
 	}
 
+	/**
+	 * Reset analytics state between tests.
+	 */
 	public function tearDown(): void {
 		Analytics::reset_instance();
 		wp_set_current_user( 0 );
@@ -46,11 +46,12 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 		parent::tearDown();
 	}
 
+	/**
+	 * When consent is allowed, the PostHog init call must include
+	 * `disable_session_recording: true`.
+	 */
 	public function test_enabled_inline_script_disables_session_recording(): void {
-		$method = new ReflectionMethod( Menu::class, 'posthog_inline_script' );
-		$method->setAccessible( true );
-
-		$script = (string) $method->invoke( $this->menu );
+		$script = Menu::get_posthog_inline_script();
 
 		$this->assertStringContainsString(
 			'disable_session_recording: true',
@@ -59,21 +60,17 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * When consent is denied, PostHog must not be initialized and the
+	 * emitted snippet should fall back to the no-op stub.
+	 */
 	public function test_disabled_inline_script_when_consent_not_allowed(): void {
-		$settings = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
 		$settings['tracking_consent'] = 'denied';
 		SettingsService::instance()->save_settings( 'general', $settings );
+		Analytics::reset_instance();
 
-		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $user_id );
-		wp_get_current_user()->add_cap( 'manage_woocommerce_pos' );
-
-		$this->menu = new Menu();
-
-		$method = new ReflectionMethod( Menu::class, 'posthog_inline_script' );
-		$method->setAccessible( true );
-
-		$script = (string) $method->invoke( $this->menu );
+		$script = Menu::get_posthog_inline_script();
 
 		$this->assertStringNotContainsString(
 			'posthog.init',
