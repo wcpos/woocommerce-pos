@@ -8,7 +8,7 @@ export interface FilterTabItem {
 	disabled?: boolean;
 }
 
-export interface FilterTabsProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface FilterTabsProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'> {
 	items: FilterTabItem[];
 	value: string;
 	onChange: (value: string) => void;
@@ -25,6 +25,7 @@ export function FilterTabs({ items, value, onChange, className, ...props }: Filt
 						key={item.key}
 						type="button"
 						disabled={item.disabled}
+						aria-pressed={isActive}
 						onClick={() => onChange(item.key)}
 						className={classNames(
 							'wcpos:px-3 wcpos:py-1 wcpos:rounded-full wcpos:text-sm wcpos:font-medium wcpos:transition-colors',
