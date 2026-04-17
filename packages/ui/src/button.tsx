@@ -8,6 +8,7 @@ export type ButtonVariant =
 	| 'destructive'
 	| 'outline'
 	| 'ghost'
+	| 'ghost-destructive'
 	| 'text'
 	| /** @deprecated Use 'destructive' instead. */ 'danger';
 
@@ -27,6 +28,8 @@ const variantClasses: Record<CanonicalButtonVariant, string> = {
 	outline:
 		'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:border wcpos:border-wp-admin-theme-color wcpos:hover:bg-wp-admin-theme-color-lightest wcpos:focus:ring-wp-admin-theme-color',
 	ghost: 'wcpos:bg-transparent wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:focus:ring-wp-admin-theme-color',
+	'ghost-destructive':
+		'wcpos:bg-transparent wcpos:text-red-600 wcpos:hover:bg-red-50 wcpos:focus:ring-red-500',
 	text: 'wcpos:bg-transparent wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:focus:ring-wp-admin-theme-color',
 };
 
@@ -45,7 +48,7 @@ export function Button({
 }: ButtonProps) {
 	const isDisabled = disabled || loading;
 	const normalizedVariant = normalizeVariant(variant);
-	const sizeClasses = normalizedVariant === 'text' ? 'wcpos:px-0 wcpos:py-0' : 'wcpos:px-4 wcpos:py-2';
+	const sizeClasses = normalizedVariant === 'text' ? 'wcpos:px-0 wcpos:py-0' : 'wcpos:px-3 wcpos:py-1.5';
 
 	return (
 		<button

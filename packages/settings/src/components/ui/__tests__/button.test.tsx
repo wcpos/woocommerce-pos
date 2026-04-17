@@ -106,6 +106,15 @@ describe('Button', () => {
 		expect(button.className).toContain('wcpos:hover:bg-gray-100');
 	});
 
+	it('applies ghost-destructive variant class', () => {
+		render(<Button variant="ghost-destructive">Delete</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:bg-transparent');
+		expect(button.className).toContain('wcpos:text-red-600');
+		expect(button.className).toContain('wcpos:hover:bg-red-50');
+		expect(button.className).toContain('wcpos:focus:ring-red-500');
+	});
+
 	it('applies text variant class', () => {
 		render(<Button variant="text">Text</Button>);
 		const button = screen.getByRole('button');
@@ -114,8 +123,15 @@ describe('Button', () => {
 		expect(button.className).toContain('wcpos:px-0');
 		expect(button.className).toContain('wcpos:py-0');
 		expect(button.className).toContain('wcpos:hover:underline');
-		expect(button.className).not.toContain('wcpos:px-4');
-		expect(button.className).not.toContain('wcpos:py-2');
+		expect(button.className).not.toContain('wcpos:px-3');
+		expect(button.className).not.toContain('wcpos:py-1.5');
+	});
+
+	it('applies default size padding classes', () => {
+		render(<Button>Default</Button>);
+		const button = screen.getByRole('button');
+		expect(button.className).toContain('wcpos:px-3');
+		expect(button.className).toContain('wcpos:py-1.5');
 	});
 
 	it('keeps danger as a deprecated alias for destructive', () => {
