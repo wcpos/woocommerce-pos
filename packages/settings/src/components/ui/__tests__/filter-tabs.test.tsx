@@ -9,6 +9,7 @@ describe('FilterTabs', () => {
 		{ key: 'all', label: 'All' },
 		{ key: 'error', label: 'Errors' },
 		{ key: 'warning', label: 'Warnings' },
+		{ key: 'disabled', label: 'Disabled', disabled: true },
 	] as const;
 
 	it('renders active and inactive tabs with button-like cursor behavior', () => {
@@ -26,5 +27,19 @@ describe('FilterTabs', () => {
 
 		fireEvent.click(inactiveTab);
 		expect(onChange).toHaveBeenCalledWith('warning');
+	});
+
+	it('does not trigger onChange for disabled tabs', () => {
+		const onChange = vi.fn();
+
+		render(<FilterTabs items={items} value="error" onChange={onChange} />);
+
+		const disabledTab = screen.getByRole('button', { name: 'Disabled' });
+
+		expect(disabledTab).toBeDisabled();
+		expect(disabledTab.className).toContain('wcpos:cursor-not-allowed');
+
+		fireEvent.click(disabledTab);
+		expect(onChange).not.toHaveBeenCalled();
 	});
 });
