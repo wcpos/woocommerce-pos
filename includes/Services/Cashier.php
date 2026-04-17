@@ -88,6 +88,7 @@ class Cashier {
 			'email'        => $user->user_email,
 			'display_name' => $user->display_name,
 			'nice_name'    => $user->user_nicename,
+			'roles'        => array_values( $user->roles ),
 			'last_access'  => $last_access ? $last_access : '',
 			'avatar_url'   => get_avatar_url( $user->ID ),
 		);
