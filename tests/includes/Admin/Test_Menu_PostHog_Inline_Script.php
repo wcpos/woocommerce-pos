@@ -58,4 +58,33 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 			'Expected the inline PostHog init config to disable session recording.'
 		);
 	}
+
+	public function test_disabled_inline_script_when_consent_not_allowed(): void {
+		$settings = (array) woocommerce_pos_get_settings( 'general' );
+		$settings['tracking_consent'] = 'denied';
+		SettingsService::instance()->save_settings( 'general', $settings );
+
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+		wp_get_current_user()->add_cap( 'manage_woocommerce_pos' );
+
+		$this->menu = new Menu();
+
+		$method = new ReflectionMethod( Menu::class, 'posthog_inline_script' );
+		$method->setAccessible( true );
+
+		$script = (string) $method->invoke( $this->menu );
+
+		$this->assertStringNotContainsString(
+			'posthog.init',
+			$script,
+			'Expected no PostHog initialization when consent is denied.'
+		);
+		$this->assertStringContainsString(
+			'wcpos.posthog={capture:function',
+			$script,
+			'Expected no-op stub with capture stub to be present when consent is denied.'
+		);
+	}
+}
 }
