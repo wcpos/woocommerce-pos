@@ -250,10 +250,10 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 							</a>
 						)}
 						{displayCategory && (
-							<>
+							<span className="wcpos:inline-flex wcpos:items-center wcpos:gap-1.5 wcpos:whitespace-nowrap">
 								<span className="wcpos:w-0.5 wcpos:h-0.5 wcpos:rounded-full wcpos:bg-gray-300" />
 								<span className="wcpos:text-xs wcpos:text-gray-500">{displayCategory}</span>
-							</>
+							</span>
 						)}
 					</div>
 
