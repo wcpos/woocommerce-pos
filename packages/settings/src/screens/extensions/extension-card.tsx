@@ -235,12 +235,8 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 					<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
 						{extension.name}
 					</h3>
-					{extension.status !== 'not_installed' && (
-						<div className="wcpos:mt-1">
-							<StatusBadge status={extension.status} />
-						</div>
-					)}
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:mt-0.5">
+					<div className="wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-x-1.5 wcpos:gap-y-1 wcpos:mt-1">
+						<StatusBadge status={extension.status} />
 						<VersionLine extension={extension} />
 						{extension.homepage && isGitHubUrl(extension.homepage) && (
 							<a
