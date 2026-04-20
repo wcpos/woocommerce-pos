@@ -232,12 +232,14 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 
 				{/* Content */}
 				<div className="wcpos:flex-1 wcpos:min-w-0">
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
-						<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
-							{extension.name}
-						</h3>
-						<StatusBadge status={extension.status} />
-					</div>
+					<h3 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
+						{extension.name}
+					</h3>
+					{extension.status !== 'not_installed' && (
+						<div className="wcpos:mt-1">
+							<StatusBadge status={extension.status} />
+						</div>
+					)}
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:mt-0.5">
 						<VersionLine extension={extension} />
 						{extension.homepage && isGitHubUrl(extension.homepage) && (
