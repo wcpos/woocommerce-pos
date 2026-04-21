@@ -4,6 +4,7 @@ import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { TemplateCard } from '../components/template-card';
 import { TemplatesTable } from '../components/active-templates-table';
+import { GALLERY_GRID_CLASS } from '../components/skeleton';
 import {
 	useGalleryTemplates,
 	useInstallGalleryTemplate,
@@ -156,7 +157,7 @@ export function GalleryGrid() {
 
 						<div className="wcpos:flex-1 wcpos:min-w-0">
 							{filteredGallery.length > 0 ? (
-								<div className="wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4">
+								<div className={GALLERY_GRID_CLASS}>
 									{filteredGallery.map((tmpl: GalleryTemplate) => (
 										<TemplateCard
 											key={tmpl.key}

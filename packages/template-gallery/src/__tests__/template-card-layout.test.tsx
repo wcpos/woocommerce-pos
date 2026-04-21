@@ -1,9 +1,62 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GalleryGridSkeleton } from '../components/skeleton';
+import { GalleryGridSkeleton, GALLERY_GRID_CLASS } from '../components/skeleton';
+import { GalleryGrid } from '../screens/gallery-grid';
 import { TemplateCard } from '../components/template-card';
 import type { GalleryTemplate } from '../types';
+
+vi.mock('../components/filter-sidebar', () => ({
+	DEFAULT_FILTERS: { search: '', categories: [], output: 'all' },
+	FilterSidebar: () => <div data-testid="filter-sidebar" />,
+}));
+
+vi.mock('../components/active-templates-table', () => ({
+	TemplatesTable: () => <div data-testid="templates-table" />,
+}));
+
+vi.mock('../components/preview-modal', () => ({
+	PreviewModal: () => null,
+}));
+
+vi.mock('../hooks/use-gallery-templates', () => ({
+	useGalleryTemplates: () => ({
+		data: [galleryTemplate],
+	}),
+	useInstallGalleryTemplate: () => ({
+		isPending: false,
+		mutate: vi.fn(),
+		variables: null,
+	}),
+}));
+
+vi.mock('../hooks/use-templates', () => ({
+	useTemplates: () => ({
+		data: [],
+	}),
+	useToggleTemplate: () => ({
+		isPending: false,
+		mutate: vi.fn(),
+		variables: null,
+	}),
+	useToggleVirtualTemplate: () => ({
+		isPending: false,
+		mutate: vi.fn(),
+		variables: null,
+	}),
+	useReorderTemplates: () => ({
+		mutate: vi.fn(),
+	}),
+	useDeleteTemplate: () => ({
+		isPending: false,
+		mutate: vi.fn(),
+		variables: null,
+	}),
+}));
+
+vi.mock('../translations', () => ({
+	t: (key: string) => key,
+}));
 
 const galleryTemplate: GalleryTemplate = {
 	key: 'branded-receipt',
@@ -21,6 +74,18 @@ const galleryTemplate: GalleryTemplate = {
 	source: 'gallery',
 	offline_capable: true,
 };
+
+beforeEach(() => {
+	(window as Window & { wcpos?: { templateGallery?: { adminUrl?: string } } }).wcpos = {
+		templateGallery: {
+			adminUrl: 'https://example.test/wp-admin',
+		},
+	};
+});
+
+afterEach(() => {
+	delete (window as Window & { wcpos?: unknown }).wcpos;
+});
 
 describe('TemplateCard gallery layout', () => {
 	it('renders the full description and keeps the primary CTA on one line', () => {
@@ -41,6 +106,12 @@ describe('TemplateCard gallery layout', () => {
 	it('uses the responsive auto-fill grid in the loading skeleton', () => {
 		const markup = renderToStaticMarkup(<GalleryGridSkeleton />);
 
-		expect(markup).toContain('wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))]');
+		expect(markup).toContain(GALLERY_GRID_CLASS);
+	});
+
+	it('uses the shared responsive auto-fill grid in the live gallery', () => {
+		const markup = renderToStaticMarkup(<GalleryGrid />);
+
+		expect(markup).toContain(GALLERY_GRID_CLASS);
 	});
 });

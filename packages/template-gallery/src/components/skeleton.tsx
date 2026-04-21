@@ -2,6 +2,8 @@ import { Skeleton } from '@wcpos/ui';
 
 export { Skeleton };
 
+export const GALLERY_GRID_CLASS = 'wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4';
+
 /**
  * Skeleton for the gallery grid page: templates table + card grid.
  */
@@ -65,7 +67,7 @@ export function GalleryGridSkeleton() {
 						</div>
 					</div>
 					{/* Card grid skeleton */}
-					<div className="wcpos:flex-1 wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4">
+					<div className={GALLERY_GRID_CLASS}>
 						{Array.from({ length: 6 }).map((_, i) => (
 							<div
 								key={i}
