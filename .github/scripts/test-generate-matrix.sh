@@ -16,7 +16,7 @@ method='GET'
 url=''
 
 for arg in "$@"; do
-  if [[ "$arg" == '--head' || ( "$arg" == -* && "$arg" == *I* ) ]]; then
+  if [[ "$arg" == '--head' || "$arg" == '-I' || "$arg" =~ ^-[A-Za-z]*I[A-Za-z]*$ ]]; then
     method='HEAD'
     continue
   fi
@@ -192,6 +192,7 @@ jq -e '[.include[] | select(.source == "latest")] | length == 0' "$duplicate_out
 jq -e '[.include[] | select(.experimental == true)] | length == 1' "$duplicate_output" >/dev/null
 jq -e '.include[] | select(.source == "wp-rc-detected") | .experimental == true' "$duplicate_output" >/dev/null
 jq -e '.include[] | select(.php == "8.4" and .wp == "6.9.4" and .wc == "10.7.0") | .experimental == false' "$duplicate_output" >/dev/null
+echo 'duplicate case: all checks passed'
 
 distinct_output=$(run_case distinct)
 
@@ -200,5 +201,6 @@ jq -e '[.include[] | select(.source == "wc-rc-detected" and .wc == "10.9.0-rc.1"
 jq -e '[.include[] | select(.source == "latest" and .experimental == false)] | length == 1' "$distinct_output" >/dev/null
 jq -e '[.include[] | select(.experimental == true)] | length == 1' "$distinct_output" >/dev/null
 jq -e '.include[] | select(.php == "8.4" and .wp == "6.9.4" and .wc == "10.7.0") | .experimental == false' "$distinct_output" >/dev/null
+echo 'distinct case: all checks passed'
 
 echo 'Matrix generator suppresses stale WooCommerce prereleases, marks only prereleases experimental, and deduplicates latest/latest rows'
