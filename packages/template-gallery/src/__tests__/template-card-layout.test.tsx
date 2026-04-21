@@ -103,15 +103,17 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain('wcpos:whitespace-nowrap');
 	});
 
-	it('uses the responsive auto-fill grid in the loading skeleton', () => {
+	it('uses the shared wrapper and grid classes in the loading skeleton', () => {
 		const markup = renderToStaticMarkup(<GalleryGridSkeleton />);
 
+		expect(markup).toContain('wcpos:flex-1 wcpos:min-w-0');
 		expect(markup).toContain(GALLERY_GRID_CLASS);
 	});
 
-	it('uses the shared responsive auto-fill grid in the live gallery', () => {
+	it('uses the shared wrapper and grid classes in the live gallery', () => {
 		const markup = renderToStaticMarkup(<GalleryGrid />);
 
+		expect(markup).toContain('wcpos:flex-1 wcpos:min-w-0');
 		expect(markup).toContain(GALLERY_GRID_CLASS);
 	});
 });
