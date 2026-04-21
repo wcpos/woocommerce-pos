@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GalleryGridSkeleton, GALLERY_GRID_CLASS } from '../components/skeleton';
+import { GalleryGridSkeleton, GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
 import { GalleryGrid } from '../screens/gallery-grid';
 import { TemplateCard } from '../components/template-card';
 import type { GalleryTemplate } from '../types';
@@ -101,19 +101,20 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain(galleryTemplate.description);
 		expect(markup).not.toContain('wcpos:line-clamp-2');
 		expect(markup).toContain('wcpos:whitespace-nowrap');
+		expect(markup).toContain('wcpos:truncate');
 	});
 
 	it('uses the shared wrapper and grid classes in the loading skeleton', () => {
 		const markup = renderToStaticMarkup(<GalleryGridSkeleton />);
 
-		expect(markup).toContain('wcpos:flex-1 wcpos:min-w-0');
+		expect(markup).toContain(GALLERY_GRID_WRAPPER_CLASS);
 		expect(markup).toContain(GALLERY_GRID_CLASS);
 	});
 
 	it('uses the shared wrapper and grid classes in the live gallery', () => {
 		const markup = renderToStaticMarkup(<GalleryGrid />);
 
-		expect(markup).toContain('wcpos:flex-1 wcpos:min-w-0');
+		expect(markup).toContain(GALLERY_GRID_WRAPPER_CLASS);
 		expect(markup).toContain(GALLERY_GRID_CLASS);
 	});
 });
