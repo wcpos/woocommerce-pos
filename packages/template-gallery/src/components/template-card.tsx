@@ -73,7 +73,7 @@ export function TemplateCard(props: TemplateCardProps) {
 				</div>
 
 				{description && (
-					<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:m-0 wcpos:line-clamp-2">
+					<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:m-0">
 						{description}
 					</p>
 				)}
@@ -85,7 +85,7 @@ export function TemplateCard(props: TemplateCardProps) {
 			<Card.Footer
 				className={classnames(
 					'wcpos:flex wcpos:items-center wcpos:gap-3',
-					isGallery && 'wcpos:justify-between'
+					isGallery && 'wcpos:justify-between',
 				)}
 			>
 				<button
@@ -96,7 +96,7 @@ export function TemplateCard(props: TemplateCardProps) {
 					{t('common.preview')}
 				</button>
 				{isGallery ? (
-					<Button variant="primary" onClick={props.onCustomize}>
+					<Button variant="primary" onClick={props.onCustomize} className="wcpos:shrink-0 wcpos:whitespace-nowrap">
 						{t('common.use_template')}
 					</Button>
 				) : (
