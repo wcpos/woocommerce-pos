@@ -2,6 +2,9 @@ import { Skeleton } from '@wcpos/ui';
 
 export { Skeleton };
 
+export const GALLERY_GRID_WRAPPER_CLASS = 'wcpos:flex-1 wcpos:min-w-0';
+export const GALLERY_GRID_CLASS = 'wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4';
+
 /**
  * Skeleton for the gallery grid page: templates table + card grid.
  */
@@ -65,24 +68,26 @@ export function GalleryGridSkeleton() {
 						</div>
 					</div>
 					{/* Card grid skeleton */}
-					<div className="wcpos:flex-1 wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
-						{Array.from({ length: 6 }).map((_, i) => (
-							<div
-								key={i}
-								className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden"
-							>
-								<Skeleton className="wcpos:aspect-[4/3] wcpos:w-full wcpos:rounded-none" />
-								<div className="wcpos:p-3 wcpos:space-y-2">
-									<Skeleton className="wcpos:h-4" width="70%" />
-									<Skeleton className="wcpos:h-3" width="90%" />
-									<Skeleton className="wcpos:h-3" width="60%" />
-									<div className="wcpos:flex wcpos:gap-1 wcpos:pt-1">
-										<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="50px" />
-										<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="60px" />
+					<div className={GALLERY_GRID_WRAPPER_CLASS}>
+						<div className={GALLERY_GRID_CLASS}>
+							{Array.from({ length: 6 }).map((_, i) => (
+								<div
+									key={i}
+									className="wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden"
+								>
+									<Skeleton className="wcpos:aspect-[4/3] wcpos:w-full wcpos:rounded-none" />
+									<div className="wcpos:p-3 wcpos:space-y-2">
+										<Skeleton className="wcpos:h-4" width="70%" />
+										<Skeleton className="wcpos:h-3" width="90%" />
+										<Skeleton className="wcpos:h-3" width="60%" />
+										<div className="wcpos:flex wcpos:gap-1 wcpos:pt-1">
+											<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="50px" />
+											<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="60px" />
+										</div>
 									</div>
 								</div>
-							</div>
-						))}
+							))}
+						</div>
 					</div>
 				</div>
 			</section>

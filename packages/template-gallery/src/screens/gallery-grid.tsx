@@ -4,6 +4,7 @@ import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
 import { TemplateCard } from '../components/template-card';
 import { TemplatesTable } from '../components/active-templates-table';
+import { GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
 import {
 	useGalleryTemplates,
 	useInstallGalleryTemplate,
@@ -154,9 +155,9 @@ export function GalleryGrid() {
 							onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
 						/>
 
-						<div className="wcpos:flex-1 wcpos:min-w-0">
+						<div className={GALLERY_GRID_WRAPPER_CLASS}>
 							{filteredGallery.length > 0 ? (
-								<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+								<div className={GALLERY_GRID_CLASS}>
 									{filteredGallery.map((tmpl: GalleryTemplate) => (
 										<TemplateCard
 											key={tmpl.key}
