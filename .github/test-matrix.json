@@ -1,6 +1,6 @@
 {
   "description": "Pinned test matrix versions. Updated automatically by update-test-matrix.yml workflow.",
-  "lastUpdated": "2026-04-10",
+  "lastUpdated": "2026-04-21",
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
@@ -8,18 +8,38 @@
   },
   "wordpress": {
     "minimum": "6.7",
-    "stable": "6.9"
+    "stable": "6.9.4"
   },
   "woocommerce": {
-    "minimum": "9.5.2",
-    "stable": "10.6.2"
+    "minimum": "10.6.2",
+    "stable": "10.7.0"
   },
   "matrix": [
-    { "php": "7.4", "wp": "minimum", "wc": "minimum" },
-    { "php": "7.4", "wp": "stable",  "wc": "stable" },
-    { "php": "8.2", "wp": "minimum", "wc": "minimum" },
-    { "php": "8.2", "wp": "stable",  "wc": "stable" },
-    { "php": "experimental", "wp": "stable", "wc": "stable" }
+    {
+      "php": "7.4",
+      "wp": "minimum",
+      "wc": "minimum"
+    },
+    {
+      "php": "7.4",
+      "wp": "stable",
+      "wc": "stable"
+    },
+    {
+      "php": "8.2",
+      "wp": "minimum",
+      "wc": "minimum"
+    },
+    {
+      "php": "8.2",
+      "wp": "stable",
+      "wc": "stable"
+    },
+    {
+      "php": "experimental",
+      "wp": "stable",
+      "wc": "stable"
+    }
   ],
   "compatibility": {
     "notes": [
@@ -32,14 +52,18 @@
     "items": [
       {
         "feature": "Tax total formatting in REST API line_items.taxes and tax_lines",
-        "affectedTests": ["Test_Order_Taxes"],
+        "affectedTests": [
+          "Test_Order_Taxes"
+        ],
         "note": "Tax totals may include trailing zeros in some WC versions. Tests compare as floats to be format-agnostic."
       },
       {
         "feature": "Product brands field in REST API",
         "addedIn": "WC 9.9.0",
         "reference": "https://github.com/woocommerce/woocommerce/pull/55945",
-        "affectedTests": ["Test_Products_Controller"],
+        "affectedTests": [
+          "Test_Products_Controller"
+        ],
         "note": "The 'brands' field was added to the product REST API schema when WooCommerce Brands was integrated into core. Tests conditionally include this field based on WC_VERSION."
       }
     ]
