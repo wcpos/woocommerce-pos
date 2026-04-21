@@ -156,7 +156,7 @@ export function GalleryGrid() {
 
 						<div className="wcpos:flex-1 wcpos:min-w-0">
 							{filteredGallery.length > 0 ? (
-								<div className="wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+								<div className="wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4">
 									{filteredGallery.map((tmpl: GalleryTemplate) => (
 										<TemplateCard
 											key={tmpl.key}

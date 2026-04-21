@@ -65,7 +65,7 @@ export function GalleryGridSkeleton() {
 						</div>
 					</div>
 					{/* Card grid skeleton */}
-					<div className="wcpos:flex-1 wcpos:grid wcpos:grid-cols-2 wcpos:sm:grid-cols-3 wcpos:gap-4">
+					<div className="wcpos:flex-1 wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4">
 						{Array.from({ length: 6 }).map((_, i) => (
 							<div
 								key={i}

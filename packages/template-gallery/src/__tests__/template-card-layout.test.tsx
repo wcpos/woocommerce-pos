@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { GalleryGridSkeleton } from '../components/skeleton';
 import { TemplateCard } from '../components/template-card';
 import type { GalleryTemplate } from '../types';
 
@@ -35,5 +36,11 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain(galleryTemplate.description);
 		expect(markup).not.toContain('wcpos:line-clamp-2');
 		expect(markup).toContain('wcpos:whitespace-nowrap');
+	});
+
+	it('uses the responsive auto-fill grid in the loading skeleton', () => {
+		const markup = renderToStaticMarkup(<GalleryGridSkeleton />);
+
+		expect(markup).toContain('wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))]');
 	});
 });
