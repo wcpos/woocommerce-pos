@@ -19,7 +19,7 @@
     { "php": "7.4", "wp": "stable",  "wc": "stable" },
     { "php": "8.2", "wp": "minimum", "wc": "minimum" },
     { "php": "8.2", "wp": "stable",  "wc": "stable" },
-    { "php": "experimental", "wp": "stable", "wc": "stable", "experimental": true }
+    { "php": "experimental", "wp": "stable", "wc": "stable" }
   ],
   "compatibility": {
     "notes": [
