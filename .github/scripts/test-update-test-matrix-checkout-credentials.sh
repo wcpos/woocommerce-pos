@@ -3,6 +3,11 @@ set -euo pipefail
 
 WORKFLOW_FILE='.github/workflows/update-test-matrix.yml'
 
+if [[ ! -f "$WORKFLOW_FILE" ]]; then
+  echo "Workflow file not found: $WORKFLOW_FILE" >&2
+  exit 1
+fi
+
 if ! awk '
   /- name: Checkout code/ { in_checkout=1; next }
   in_checkout && /^[[:space:]]*persist-credentials:[[:space:]]*false[[:space:]]*$/ { found=1 }
