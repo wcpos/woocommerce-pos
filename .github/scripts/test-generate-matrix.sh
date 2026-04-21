@@ -34,7 +34,7 @@ case "$url" in
 {"offers":[{"response":"development","version":"7.0-RC2"}]}
 JSON
         ;;
-      distinct)
+      stale-older|distinct)
         cat <<'JSON'
 {"offers":[]}
 JSON
@@ -47,7 +47,7 @@ JSON
     ;;
   'https://api.wordpress.org/core/version-check/1.7/')
     case "${CASE_NAME:-}" in
-      duplicate)
+      duplicate|stale-older)
         cat <<'JSON'
 {"offers":[{"response":"upgrade","version":"6.9.4"}]}
 JSON
@@ -70,7 +70,7 @@ JSON
 {"version":"10.7.0"}
 JSON
         ;;
-      distinct)
+      stale-older|distinct)
         cat <<'JSON'
 {"version":"10.8.0"}
 JSON
@@ -91,9 +91,18 @@ JSON
 ]
 JSON
         ;;
+      stale-older)
+        cat <<'JSON'
+[
+  {"tag_name":"10.7.0-rc.1","prerelease":true,"published_at":"2026-04-20T12:00:00Z"},
+  {"tag_name":"10.8.0","prerelease":false,"published_at":"2026-04-18T12:00:00Z"}
+]
+JSON
+        ;;
       distinct)
         cat <<'JSON'
 [
+  {"tag_name":"10.7.0-rc.1","prerelease":true,"published_at":"2026-04-21T12:00:00Z"},
   {"tag_name":"10.9.0-rc.1","prerelease":true,"published_at":"2026-04-20T12:00:00Z"},
   {"tag_name":"10.8.0","prerelease":false,"published_at":"2026-04-18T12:00:00Z"}
 ]
@@ -171,6 +180,9 @@ run_case() {
     duplicate)
       write_matrix_fixture "$matrix_path" '6.9.4' '10.7.0'
       ;;
+    stale-older)
+      write_matrix_fixture "$matrix_path" '6.9.4' '10.8.0'
+      ;;
     distinct)
       write_matrix_fixture "$matrix_path" '6.9.4' '10.7.0'
       ;;
@@ -193,6 +205,14 @@ jq -e '[.include[] | select(.experimental == true)] | length == 1' "$duplicate_o
 jq -e '.include[] | select(.source == "wp-rc-detected") | .experimental == true' "$duplicate_output" >/dev/null
 jq -e '.include[] | select(.php == "8.4" and .wp == "6.9.4" and .wc == "10.7.0") | .experimental == false' "$duplicate_output" >/dev/null
 echo 'duplicate case: all checks passed'
+
+stale_older_output=$(run_case stale-older)
+
+jq -e '.include | length == 5' "$stale_older_output" >/dev/null
+jq -e '[.include[] | select(.source == "wc-rc-detected")] | length == 0' "$stale_older_output" >/dev/null
+jq -e '[.include[] | select(.source == "latest")] | length == 0' "$stale_older_output" >/dev/null
+jq -e '[.include[] | select(.experimental == true)] | length == 0' "$stale_older_output" >/dev/null
+echo 'stale-older case: all checks passed'
 
 distinct_output=$(run_case distinct)
 

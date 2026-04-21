@@ -49,6 +49,14 @@ base_version() {
   echo "${version%%-*}"
 }
 
+version_is_not_newer() {
+  local candidate="$1"
+  local stable="$2"
+  [[ "$(printf '%s
+%s
+' "$candidate" "$stable" | sort -V | head -1)" == "$candidate" ]]
+}
+
 entry_exists() {
   local php="$1"
   local wp="$2"
@@ -283,34 +291,41 @@ fi
 wc_releases=$(curl -sf --max-time 15 "${CURL_AUTH_ARGS[@]+"${CURL_AUTH_ARGS[@]}"}" "$WC_RELEASES_URL" 2>/dev/null || true)
 
 if [[ -n "$wc_releases" ]]; then
-  # Find the latest pre-release with a tag matching semver RC/beta pattern
-  wc_prerelease=$(echo "$wc_releases" | jq -r '
+  wc_stable_reference="${WC_LATEST_STABLE:-$WC_STABLE}"
+  wc_prereleases=$(echo "$wc_releases" | jq -r '
     [.[]
     | select(.prerelease == true)
     | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+-(rc|beta)"; "i"))
     ]
     | sort_by(.published_at)
     | reverse
-    | .[0].tag_name
+    | .[].tag_name
   ' 2>/dev/null || true)
 
-  if [[ -n "$wc_prerelease" && "$wc_prerelease" != "null" ]]; then
-    log "WC: Pre-release tag detected: $wc_prerelease"
+  if [[ -n "$wc_prereleases" ]]; then
+    while IFS= read -r wc_prerelease; do
+      [[ -z "$wc_prerelease" || "$wc_prerelease" == "null" ]] && continue
 
-    # Validate the wordpress.org zip exists
-    wc_rc_zip=$(wc_zip_url "$wc_prerelease")
-    if url_exists "$wc_rc_zip"; then
+      log "WC: Pre-release tag detected: $wc_prerelease"
+
       wc_prerelease_base=$(base_version "$wc_prerelease")
-      wc_stable_reference="${WC_LATEST_STABLE:-$WC_STABLE}"
-
-      if [[ "$wc_prerelease_base" == "$wc_stable_reference" ]]; then
+      if version_is_not_newer "$wc_prerelease_base" "$wc_stable_reference"; then
         log "WC: Skipping stale pre-release $wc_prerelease because stable $wc_stable_reference is already available"
-      else
+        continue
+      fi
+
+      wc_rc_zip=$(wc_zip_url "$wc_prerelease")
+      if url_exists "$wc_rc_zip"; then
         log "WC: Zip URL validated: $wc_rc_zip"
         WC_RC_VERSION="$wc_prerelease"
+        break
       fi
-    else
+
       log "WC: Zip URL not available on wordpress.org — skipping ($wc_rc_zip)"
+    done <<< "$wc_prereleases"
+
+    if [[ -z "$WC_RC_VERSION" ]]; then
+      log "WC: No active RC/beta pre-release found"
     fi
   else
     log "WC: No RC/beta pre-release found"
