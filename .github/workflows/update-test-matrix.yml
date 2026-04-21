@@ -39,8 +39,7 @@ jobs:
       - name: Get latest stable WooCommerce
         id: wc
         run: |
-          WC_LATEST=$(curl -sf "https://api.wordpress.org/plugins/info/1.2/?action=plugin_information&request[slug]=woocommerce" \
-            | jq -r '.version')
+          WC_LATEST="$(.github/scripts/get-woocommerce-stable-version.sh)"
           echo "stable=$WC_LATEST" >> $GITHUB_OUTPUT
           echo "Latest stable WC: $WC_LATEST"
 
