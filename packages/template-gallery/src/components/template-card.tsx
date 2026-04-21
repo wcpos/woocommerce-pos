@@ -96,7 +96,7 @@ export function TemplateCard(props: TemplateCardProps) {
 					{t('common.preview')}
 				</button>
 				{isGallery ? (
-					<Button variant="primary" onClick={props.onCustomize} className="wcpos:shrink-0 wcpos:whitespace-nowrap">
+					<Button variant="primary" onClick={props.onCustomize} className="wcpos:whitespace-nowrap">
 						{t('common.use_template')}
 					</Button>
 				) : (
