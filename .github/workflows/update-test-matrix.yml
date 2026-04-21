@@ -159,11 +159,21 @@ jobs:
           echo "Updated test-matrix.json:"
           cat .github/test-matrix.json
 
+      - name: Generate GitHub App token
+        if: steps.updates.outputs.needed == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.PROJECT_BOT_APP_ID }}
+          private-key: ${{ secrets.PROJECT_BOT_PRIVATE_KEY }}
+          owner: wcpos
+          repositories: woocommerce-pos
+
       - name: Create Pull Request
         if: steps.updates.outputs.needed == 'true'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
         with:
-          token: ${{ github.token }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: update test matrix versions"
           branch: auto/update-test-matrix
           delete-branch: true
