@@ -8,6 +8,9 @@ on:
       - "**.php"
       - "composer.json"
       - "composer.lock"
+      - ".github/test-matrix.json"
+      - ".github/scripts/generate-matrix.sh"
+      - ".github/scripts/get-woocommerce-stable-version.sh"
       - ".github/workflows/tests-php.yml"
   pull_request:
     branches:
@@ -35,6 +38,9 @@ jobs:
               - '**.php'
               - 'composer.json'
               - 'composer.lock'
+              - '.github/test-matrix.json'
+              - '.github/scripts/generate-matrix.sh'
+              - '.github/scripts/get-woocommerce-stable-version.sh'
               - '.github/workflows/tests-php.yml'
 
   lint:
@@ -265,7 +271,7 @@ jobs:
     name: Generate Test Matrix
     runs-on: ubuntu-latest
     needs: smoke-test
-    if: needs.smoke-test.result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    if: needs.smoke-test.result == 'success'
 
     permissions:
       contents: read
@@ -425,7 +431,7 @@ jobs:
     name: Code Coverage (WP ${{ needs.smoke-test.outputs.wp_version }}, WC ${{ needs.smoke-test.outputs.wc_version }})
     runs-on: ubuntu-latest
     needs: smoke-test
-    if: needs.smoke-test.result == 'success' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    if: needs.smoke-test.result == 'success'
 
     steps:
       - name: Checkout code
