@@ -12,6 +12,7 @@ set -euo pipefail
 # Config
 # ---------------------------------------------------------------------------
 MATRIX_FILE="${1:-.github/test-matrix.json}"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ! -f "$MATRIX_FILE" ]]; then
   echo "::error::Matrix file not found: $MATRIX_FILE" >&2
@@ -38,6 +39,44 @@ url_exists() {
   curl -sfI --max-time 10 "$url" &>/dev/null
 }
 
+is_prerelease_version() {
+  local version="$1"
+  [[ "$version" =~ -([Rr][Cc]|[Bb]eta|[Aa]lpha) ]]
+}
+
+base_version() {
+  local version="$1"
+  echo "${version%%-*}"
+}
+
+entry_exists() {
+  local php="$1"
+  local wp="$2"
+  local wc="$3"
+
+  echo "$ENTRIES" | jq -e \
+    --arg php "$php" \
+    --arg wp "$wp" \
+    --arg wc "$wc" \
+    'any(.[]; .php == $php and .wp == $wp and .wc == $wc)' \
+    >/dev/null
+}
+
+get_wp_latest_stable() {
+  local latest_version
+
+  latest_version=$(curl -sf --max-time 15 'https://api.wordpress.org/core/version-check/1.7/' \
+    | jq -r '.offers[]? | select(.response == "upgrade" or .response == "latest") | .version' \
+    | sort -V \
+    | tail -1)
+
+  if [[ -z "$latest_version" || ! "$latest_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "$latest_version"
+}
+
 # ---------------------------------------------------------------------------
 # Read config
 # ---------------------------------------------------------------------------
@@ -58,6 +97,27 @@ WC_STABLE=$(echo "$CONFIG" | jq -r '.woocommerce.stable')
 log "PHP: minimum=$PHP_MINIMUM, stable=$PHP_STABLE, experimental=$PHP_EXPERIMENTAL"
 log "WP:  minimum=$WP_MINIMUM, stable=$WP_STABLE"
 log "WC:  minimum=$WC_MINIMUM, stable=$WC_STABLE"
+
+echo "::endgroup::" >&2
+
+# ---------------------------------------------------------------------------
+# Resolve live stable versions for duplicate/stale-release checks
+# ---------------------------------------------------------------------------
+echo "::group::Resolving live stable versions" >&2
+
+WP_LATEST_STABLE=""
+if WP_LATEST_STABLE=$(get_wp_latest_stable 2>/dev/null); then
+  log "WP: latest stable=$WP_LATEST_STABLE"
+else
+  log "WP: Could not resolve latest stable version"
+fi
+
+WC_LATEST_STABLE=""
+if WC_LATEST_STABLE=$("$SCRIPT_DIR/get-woocommerce-stable-version.sh" 2>/dev/null); then
+  log "WC: latest stable=$WC_LATEST_STABLE"
+else
+  log "WC: Could not resolve latest stable version"
+fi
 
 echo "::endgroup::" >&2
 
@@ -121,11 +181,15 @@ while IFS= read -r row; do
   php_alias=$(echo "$row" | jq -r '.php')
   wp_alias=$(echo "$row" | jq -r '.wp')
   wc_alias=$(echo "$row" | jq -r '.wc')
-  experimental=$(echo "$row" | jq -r '.experimental // false')
 
   php_ver=$(resolve_php "$php_alias")
   wp_ver=$(resolve_wp "$wp_alias")
   wc_ver=$(resolve_wc "$wc_alias")
+
+  experimental=false
+  if is_prerelease_version "$wp_ver" || is_prerelease_version "$wc_ver"; then
+    experimental=true
+  fi
 
   wp_core=$(wp_core_ref "$wp_ver")
   wc_url=$(wc_zip_url "$wc_ver")
@@ -236,8 +300,15 @@ if [[ -n "$wc_releases" ]]; then
     # Validate the wordpress.org zip exists
     wc_rc_zip=$(wc_zip_url "$wc_prerelease")
     if url_exists "$wc_rc_zip"; then
-      log "WC: Zip URL validated: $wc_rc_zip"
-      WC_RC_VERSION="$wc_prerelease"
+      wc_prerelease_base=$(base_version "$wc_prerelease")
+      wc_stable_reference="${WC_LATEST_STABLE:-$WC_STABLE}"
+
+      if [[ "$wc_prerelease_base" == "$wc_stable_reference" ]]; then
+        log "WC: Skipping stale pre-release $wc_prerelease because stable $wc_stable_reference is already available"
+      else
+        log "WC: Zip URL validated: $wc_rc_zip"
+        WC_RC_VERSION="$wc_prerelease"
+      fi
     else
       log "WC: Zip URL not available on wordpress.org — skipping ($wc_rc_zip)"
     fi
@@ -270,21 +341,25 @@ fi
 echo "::endgroup::" >&2
 
 # ---------------------------------------------------------------------------
-# Add latest/latest experimental row
+# Add latest/latest row
 # ---------------------------------------------------------------------------
 echo "::group::Adding latest/latest row" >&2
 
-log "Latest entry: php=$PHP_EXPERIMENTAL wp=latest wc=latest"
+if [[ -n "$WP_LATEST_STABLE" && -n "$WC_LATEST_STABLE" ]] && entry_exists "$PHP_EXPERIMENTAL" "$WP_LATEST_STABLE" "$WC_LATEST_STABLE"; then
+  log "Latest entry resolves to existing pinned coverage ($PHP_EXPERIMENTAL / $WP_LATEST_STABLE / $WC_LATEST_STABLE) — skipping duplicate latest/latest row"
+else
+  log "Latest entry: php=$PHP_EXPERIMENTAL wp=latest wc=latest"
 
-# wp_core=null means wp-env fetches latest automatically
-entry=$(jq -n \
-  --arg php "$PHP_EXPERIMENTAL" \
-  --argjson wp_core "null" \
-  --argjson experimental true \
-  --arg source "latest" \
-  '{php: $php, wp: "latest", wc: "latest", wp_core: $wp_core, wc_url: "https://downloads.wordpress.org/plugin/woocommerce.zip", experimental: $experimental, source: $source}')
+  # wp_core=null means wp-env fetches latest automatically
+  entry=$(jq -n \
+    --arg php "$PHP_EXPERIMENTAL" \
+    --argjson wp_core "null" \
+    --argjson experimental false \
+    --arg source "latest" \
+    '{php: $php, wp: "latest", wc: "latest", wp_core: $wp_core, wc_url: "https://downloads.wordpress.org/plugin/woocommerce.zip", experimental: $experimental, source: $source}')
 
-ENTRIES=$(echo "$ENTRIES" | jq --argjson e "$entry" '. + [$e]')
+  ENTRIES=$(echo "$ENTRIES" | jq --argjson e "$entry" '. + [$e]')
+fi
 
 echo "::endgroup::" >&2
 
