@@ -75,7 +75,7 @@ export function Toggle({
 					<label
 						id={labelId}
 						className={classNames(
-							'wcpos:cursor-pointer',
+							disabled ? 'wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
 							labelClassName ??
 								'wcpos:text-sm wcpos:font-medium wcpos:text-gray-900'
 						)}
