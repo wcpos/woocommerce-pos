@@ -46,6 +46,21 @@ class Consent {
 	public const MODAL_TRANSIENT_TTL = 600;
 
 	/**
+	 * User meta key storing the unix timestamp until which the callout
+	 * is hidden for a given user after they dismiss it with the X button.
+	 *
+	 * Dismissing does NOT record a consent decision — it only defers the
+	 * callout; once the timestamp expires (or the plugin is reactivated /
+	 * updated), the callout surfaces again.
+	 */
+	public const CALLOUT_HIDE_META = '_wcpos_consent_callout_hidden_until';
+
+	/**
+	 * "Hide for now" lifetime in seconds (7 days).
+	 */
+	public const CALLOUT_HIDE_TTL = 7 * DAY_IN_SECONDS;
+
+	/**
 	 * Hook suffixes where the inline callout + modal mount point are
 	 * allowed. The Plugins screen is the primary target (users land
 	 * here after activation) and the Dashboard is the fallback.
@@ -139,6 +154,39 @@ class Consent {
 		}
 
 		set_transient( self::MODAL_TRANSIENT, 1, self::MODAL_TRANSIENT_TTL );
+
+		// Activation/update re-surfaces the callout — clear any prior
+		// "hide for now" state for the current user so the prompt is
+		// unmissable on the next admin page load.
+		$user_id = get_current_user_id();
+		if ( $user_id ) {
+			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
+		}
+	}
+
+	/**
+	 * Whether the callout is currently hidden for the given user via a
+	 * "hide for now" dismissal. Expired entries are cleaned up opportunistically.
+	 *
+	 * @param int $user_id WP user ID.
+	 */
+	private function is_callout_hidden_for_user( $user_id ): bool {
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		$hidden_until = (int) get_user_meta( $user_id, self::CALLOUT_HIDE_META, true );
+		if ( ! $hidden_until ) {
+			return false;
+		}
+
+		if ( $hidden_until <= time() ) {
+			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
+
+			return false;
+		}
+
+		return true;
 	}
 
 	/**
@@ -214,7 +262,11 @@ class Consent {
 			return;
 		}
 
-		echo '<div id="wcpos-consent-root"></div>';
+		// WP core's common.js hoists any element matching `.notice`
+		// beneath the page H1 and gives it the standard admin-notice
+		// width/margins. The `is-dismissible` class reserves right-hand
+		// padding for the dismiss button that the React bundle renders.
+		echo '<div id="wcpos-consent-root" class="notice notice-info is-dismissible"></div>';
 	}
 
 	/**
@@ -235,6 +287,16 @@ class Consent {
 						'required' => true,
 					),
 				),
+			)
+		);
+
+		register_rest_route(
+			SHORT_NAME . '/v1',
+			'/consent/dismiss',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'dismiss_callout' ),
+				'permission_callback' => array( $this, 'permission_check' ),
 			)
 		);
 	}
@@ -276,10 +338,36 @@ class Consent {
 			return $result;
 		}
 
-		// Decision recorded — clear any pending auto-open flag.
+		// Decision recorded — clear any pending auto-open flag and any
+		// lingering "hide for now" user meta so the state is coherent.
 		delete_transient( self::MODAL_TRANSIENT );
+		$user_id = get_current_user_id();
+		if ( $user_id ) {
+			delete_user_meta( $user_id, self::CALLOUT_HIDE_META );
+		}
 
 		return new WP_REST_Response( array( 'consent' => $choice ), 200 );
+	}
+
+	/**
+	 * Hide the inline callout for the current user for self::CALLOUT_HIDE_TTL.
+	 *
+	 * Does NOT record a consent decision — tracking_consent stays
+	 * 'undecided' and the callout will re-appear after the hide window
+	 * expires or on the next plugin activation/update.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function dismiss_callout() {
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return new WP_Error( 'wcpos_consent_no_user', __( 'No current user.', 'woocommerce-pos' ), array( 'status' => 401 ) );
+		}
+
+		$hidden_until = time() + self::CALLOUT_HIDE_TTL;
+		update_user_meta( $user_id, self::CALLOUT_HIDE_META, $hidden_until );
+
+		return new WP_REST_Response( array( 'hiddenUntil' => $hidden_until ), 200 );
 	}
 
 	/**
@@ -304,6 +392,10 @@ class Consent {
 			return false;
 		}
 
+		if ( $this->is_callout_hidden_for_user( get_current_user_id() ) ) {
+			return false;
+		}
+
 		return true;
 	}
 
@@ -324,6 +416,7 @@ class Consent {
 
 		$config = array(
 			'restUrl'     => esc_url_raw( rest_url( SHORT_NAME . '/v1/consent' ) ),
+			'dismissUrl'  => esc_url_raw( rest_url( SHORT_NAME . '/v1/consent/dismiss' ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'showModal'   => $show_modal,
 			'showCallout' => true,

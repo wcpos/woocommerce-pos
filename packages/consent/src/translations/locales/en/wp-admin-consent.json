@@ -7,6 +7,7 @@
 	"consent.deny": "No thanks",
 	"consent.learn_more": "Learn what's collected",
 	"consent.dismiss": "Dismiss",
+	"consent.dismiss_notice": "Dismiss this notice.",
 	"consent.save_error": "We couldn't save your choice. Please try again.",
 	"consent.modal_includes": "Here's what that includes:",
 	"consent.modal_setup_label": "Your setup",
