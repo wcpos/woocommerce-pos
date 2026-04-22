@@ -380,8 +380,17 @@ class Logs extends WP_REST_Controller {
 					$message = substr( $message, 0, $context_pos );
 				}
 
+				// MySQL DATETIME ('YYYY-MM-DD HH:MM:SS' in GMT) is not portable
+				// ISO 8601 — Safari/WebKit rejects it in `new Date(...)`. Emit
+				// RFC3339 UTC so the frontend can parse it consistently with
+				// file-based entries.
+				$timestamp_utc = strtotime( $row['timestamp'] . ' UTC' );
+				$timestamp     = false === $timestamp_utc
+					? $row['timestamp']
+					: gmdate( 'c', $timestamp_utc );
+
 				return array(
-					'timestamp' => $row['timestamp'],
+					'timestamp' => $timestamp,
 					'level'     => $level_map[ (int) $row['level'] ] ?? 'debug',
 					'message'   => $message,
 					'context'   => $context,
@@ -518,7 +527,7 @@ class Logs extends WP_REST_Controller {
 		}
 
 		// Warning level = 400, error/critical/emergency/alert = 500-800.
-		$where = $wpdb->prepare( 'WHERE source = %s AND level >= %d', 'woocommerce-pos', 400 );
+		$where = $wpdb->prepare( 'WHERE source = %s AND level >= %d', self::CORE_SOURCE, 400 );
 
 		if ( $last_viewed_ts ) {
 			$last_viewed_date = gmdate( 'Y-m-d H:i:s', $last_viewed_ts );

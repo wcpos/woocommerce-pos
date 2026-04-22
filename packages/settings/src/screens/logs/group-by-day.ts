@@ -31,6 +31,11 @@ function isoDateInZone(d: Date, timeZone?: string): string {
 	return fmt.format(d);
 }
 
+/**
+ * Group consecutive entries sharing the same local-day key. Assumes the input
+ * is already sorted by timestamp (the REST endpoint returns DESC); unsorted
+ * input would produce duplicate groups for the same day rather than one.
+ */
 export function groupByDay<T extends LogEntryLike>(
 	entries: T[],
 	nowMs: number,

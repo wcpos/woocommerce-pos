@@ -76,6 +76,8 @@ export function FilterTabs({ items, value, onChange, className, ...props }: Filt
 					data-testid="filter-tabs-indicator"
 					aria-hidden="true"
 					className="wcpos:absolute wcpos:top-1 wcpos:bottom-1 wcpos:rounded-full wcpos:bg-wp-admin-theme-color wcpos:transition-all wcpos:duration-200 wcpos:ease-out"
+					// Offset by container's 4px (`p-1`) padding so the indicator aligns
+					// with the active tab's left edge.
 					style={{ transform: `translateX(${indicator.left - 4}px)`, width: indicator.width }}
 				/>
 			)}

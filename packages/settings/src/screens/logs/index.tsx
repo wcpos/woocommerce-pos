@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { Button, Chip, FilterTabs, TextArea } from '@wcpos/ui';
+import { Button, Chip, FilterTabs, TextArea, type ChipVariant } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
 import { formatCopyPayload, formatLocalTimestamp } from './format-copy-payload';
@@ -33,6 +33,8 @@ interface LogsResponse {
 	has_fatal_errors: boolean;
 	fatal_errors_url: string;
 	sources?: LogSource[];
+	/** Injected client-side from the `X-WP-TotalPages` response header. */
+	_totalPages?: number;
 }
 
 /** Stripe and message-tint colours per level. */
@@ -69,7 +71,7 @@ const LEVEL_HOVER: Record<string, string> = {
 	debug: 'hover:wcpos:bg-gray-50',
 };
 
-const LEVEL_CHIP: Record<string, React.ComponentProps<typeof Chip>['variant']> = {
+const LEVEL_CHIP: Record<string, ChipVariant> = {
 	emergency: 'critical',
 	alert: 'critical',
 	critical: 'critical',
@@ -219,7 +221,7 @@ function Logs() {
 		availableSources.forEach((s) => map.set(s.source, s));
 		return map;
 	}, [availableSources]);
-	const totalPages = (data as any)?._totalPages ?? 1;
+	const totalPages = data?._totalPages ?? 1;
 
 	React.useEffect(() => {
 		markLogsRead();
@@ -229,8 +231,9 @@ function Logs() {
 		setExpandedKey(null);
 	}, [entries]);
 
-	const nowMs = Date.now();
-	const groups = React.useMemo(() => groupByDay(entries, nowMs), [entries, nowMs]);
+	// `Date.now()` pinned to the entries reference — day boundaries only matter
+	// when a new fetch arrives. Recomputing on every render would defeat the memo.
+	const groups = React.useMemo(() => groupByDay(entries, Date.now()), [entries]);
 
 	const filters = [
 		{ key: 'all', label: t('common.all', 'All') },
@@ -303,10 +306,7 @@ function Logs() {
 									{dayHeaderLabel(group.label)}
 								</span>
 								<Chip variant="neutral" size="xs">
-									{t('logs.entries_count', '%d entries').replace(
-										'%d',
-										String(group.entries.length)
-									)}
+									{t('logs.entries_count', { count: group.entries.length })}
 								</Chip>
 							</div>
 							<div>
@@ -342,7 +342,7 @@ function Logs() {
 						disabled={page <= 1}
 						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
 					>
-						Previous
+						{t('common.previous', 'Previous')}
 					</button>
 					<span className="wcpos:text-sm wcpos:text-gray-600">
 						{page} / {totalPages}
@@ -355,7 +355,7 @@ function Logs() {
 						disabled={page >= totalPages}
 						className="wcpos:px-3 wcpos:py-1 wcpos:rounded wcpos:text-sm wcpos:border wcpos:border-gray-300 disabled:wcpos:opacity-50"
 					>
-						Next
+						{t('common.next', 'Next')}
 					</button>
 				</div>
 			)}
