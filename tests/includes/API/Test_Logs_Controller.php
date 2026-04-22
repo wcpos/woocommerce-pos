@@ -289,10 +289,34 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that the core source is surfaced with the WCPOS display name, not 'WooCommerce POS'.
+	 */
+	public function test_available_sources_uses_wcpos_display_name(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/logs' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertIsArray( $data['sources'] );
+
+		$core = null;
+		foreach ( $data['sources'] as $src ) {
+			if ( 'woocommerce-pos' === $src['source'] ) {
+				$core = $src;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $core, 'Core woocommerce-pos source missing from /logs response.' );
+		$this->assertSame( 'WCPOS', $core['name'] );
+		$this->assertTrue( $core['is_core'] );
+		$this->assertFalse( $core['requires_pro'] );
+	}
+
+	/**
 	 * Insert a log entry into the WC log database table.
 	 *
-	 * @param string $level   Log level.
-	 * @param string $message Log message.
+	 * @param string      $level     Log level.
+	 * @param string      $message   Log message.
 	 * @param string      $source    Log source.
 	 * @param string|null $timestamp Optional UTC timestamp in MySQL datetime format.
 	 */
