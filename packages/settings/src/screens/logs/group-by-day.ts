@@ -32,6 +32,17 @@ function isoDateInZone(d: Date, timeZone?: string): string {
 }
 
 /**
+ * Returns the calendar day before the given `YYYY-MM-DD` key. Anchors at UTC
+ * midnight and steps back one day so DST transitions in the target zone can't
+ * shift the result by ±1 calendar day.
+ */
+function previousIsoDate(iso: string): string {
+	const [y, m, d] = iso.split('-').map(Number);
+	const prev = new Date(Date.UTC(y, m - 1, d) - 24 * 60 * 60 * 1000);
+	return isoDateInZone(prev, 'UTC');
+}
+
+/**
  * Group consecutive entries sharing the same local-day key. Assumes the input
  * is already sorted by timestamp (the REST endpoint returns DESC); unsorted
  * input would produce duplicate groups for the same day rather than one.
@@ -45,7 +56,7 @@ export function groupByDay<T extends LogEntryLike>(
 
 	const { timeZone } = options;
 	const todayISO = isoDateInZone(new Date(nowMs), timeZone);
-	const yesterdayISO = isoDateInZone(new Date(nowMs - 24 * 60 * 60 * 1000), timeZone);
+	const yesterdayISO = previousIsoDate(todayISO);
 
 	const groups: DayGroup<T>[] = [];
 	let current: DayGroup<T> | null = null;

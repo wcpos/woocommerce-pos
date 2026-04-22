@@ -56,4 +56,26 @@ describe('groupByDay', () => {
 		);
 		expect(groups[0].label).toBe('today');
 	});
+
+	it('labels "yesterday" by calendar day across a DST spring-forward', () => {
+		// Sydney spring-forward: 2024-10-06 at 02:00 AEST → 03:00 AEDT
+		// (UTC+10 → UTC+11). "now" = 2024-10-07 00:30 AEDT = 2024-10-06T13:30Z.
+		// A naive nowMs - 24h lands at 2024-10-05T13:30Z = 2024-10-05 23:30 AEST,
+		// which would mislabel yesterday (Oct 6) entries with an ISO date and
+		// move the "yesterday" bucket onto Oct 5.
+		const sydneyNow = new Date('2024-10-06T13:30:00Z').getTime();
+		const groups = groupByDay(
+			[
+				// 2024-10-07 00:00 AEDT (today in Sydney)
+				entry('2024-10-06T13:00:00+00:00'),
+				// 2024-10-06 12:00 AEDT (yesterday in Sydney)
+				entry('2024-10-06T01:00:00+00:00'),
+				// 2024-10-05 20:00 AEST (two days ago in Sydney)
+				entry('2024-10-05T10:00:00+00:00'),
+			],
+			sydneyNow,
+			{ timeZone: 'Australia/Sydney' }
+		);
+		expect(groups.map((g) => g.label)).toEqual(['today', 'yesterday', '2024-10-05']);
+	});
 });
