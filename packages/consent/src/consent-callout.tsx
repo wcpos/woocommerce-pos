@@ -49,26 +49,26 @@ export function ConsentCallout({
 					{t('consent.dismiss_notice')}
 				</span>
 			</button>
-			<div className="wcpos:py-1">
-				<p className="wcpos:font-semibold wcpos:mb-1 wcpos:mt-0">
+			<div className="wcpos:py-2 wcpos:max-w-3xl">
+				<p className="wcpos:text-base wcpos:font-semibold wcpos:mb-1 wcpos:mt-0">
 					{t('consent.callout_title')}
 				</p>
-				<p className="wcpos:text-sm wcpos:mt-0 wcpos:mb-2">
+				<p className="wcpos:text-[13px] wcpos:leading-relaxed wcpos:mt-0 wcpos:mb-3 wcpos:text-gray-700">
 					{t('consent.callout_body')}{' '}
 					<button
 						type="button"
 						onClick={() => setLearnMoreOpen(true)}
-						className="wcpos:underline wcpos:cursor-pointer wcpos:bg-transparent wcpos:border-0 wcpos:p-0"
+						className="wcpos:underline wcpos:cursor-pointer wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:text-wp-admin-theme-color"
 					>
 						{t('consent.learn_more')}
 					</button>
 				</p>
 				{error && (
-					<p role="alert" className="wcpos:text-sm wcpos:mt-0 wcpos:mb-2">
+					<p role="alert" className="wcpos:text-[13px] wcpos:mt-0 wcpos:mb-3 wcpos:text-red-600">
 						{t('consent.save_error')}
 					</p>
 				)}
-				<div className="wcpos:flex wcpos:gap-2 wcpos:mb-1">
+				<div className="wcpos:flex wcpos:gap-2 wcpos:items-center">
 					<Button
 						variant="primary"
 						disabled={busy}
