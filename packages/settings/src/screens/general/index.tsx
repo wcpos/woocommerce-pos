@@ -2,8 +2,9 @@ import * as React from 'react';
 
 import { isString, isNumber } from 'lodash';
 
+import { PrivacyInfoModal } from '@wcpos/consent';
+
 import BarcodeSelect from './barcode-select';
-import PrivacyInfoModal from './privacy-info-modal';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';

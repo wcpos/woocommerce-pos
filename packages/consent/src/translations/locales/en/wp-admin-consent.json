@@ -1,0 +1,19 @@
+{
+	"consent.modal_title": "Help us make WCPOS better",
+	"consent.modal_intro": "If you're happy to, WCPOS can send us some anonymous information about how the plugin is being used. It really helps us decide what to build next.",
+	"consent.callout_title": "Help us make WCPOS better",
+	"consent.callout_body": "Can WCPOS collect anonymous usage data to help improve the product? No personal or customer data is collected. You can change this any time in POS > Settings > General.",
+	"consent.allow": "Allow",
+	"consent.deny": "No thanks",
+	"consent.learn_more": "Learn what's collected",
+	"consent.dismiss": "Dismiss",
+	"consent.save_error": "We couldn't save your choice. Please try again.",
+	"consent.modal_includes": "Here's what that includes:",
+	"consent.modal_setup_label": "Your setup",
+	"consent.modal_setup_desc": "things like your PHP and WooCommerce versions, your country, and your currency, so we know what environments to support.",
+	"consent.modal_store_label": "Your store size",
+	"consent.modal_store_desc": "roughly how many products, orders, and POS users you have, so we understand the kinds of stores using WCPOS.",
+	"consent.modal_usage_label": "How you use WCPOS",
+	"consent.modal_usage_desc": "which screens you open and which features you turn on, so we can focus on what people actually use.",
+	"consent.modal_exclusions": "We never look at customer details, order contents, prices, your site address, or anything that could identify you or your customers. You can change your mind any time."
+}

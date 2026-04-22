@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Admin\Consent;
 use const DOING_AJAX;
 
 /**
@@ -119,8 +120,22 @@ class Activator {
 			)
 		);
 
-		// set the auto redirection on next page load
-		// set_transient( 'woocommere_pos_welcome', 1, 30 );.
+		// Flag the consent pop-up for the next admin page load. Done here
+		// because the `activated_plugin` action in Admin\Consent fires
+		// inside the activation request, at which point our plugin's
+		// `plugins_loaded` callback hasn't yet instantiated Init on a
+		// fresh install.
+		//
+		// Read the option directly — woocommerce_pos_get_settings() lives in
+		// wcpos-functions.php which Init loads on `plugins_loaded`, but
+		// plugins_loaded has already fired by the time activation runs.
+		$general_settings = get_option( 'woocommerce_pos_settings_general', array() );
+		$tracking_consent = is_array( $general_settings ) && isset( $general_settings['tracking_consent'] )
+			? $general_settings['tracking_consent']
+			: 'undecided';
+		if ( 'undecided' === $tracking_consent ) {
+			set_transient( Consent::MODAL_TRANSIENT, 1, Consent::MODAL_TRANSIENT_TTL );
+		}
 	}
 
 	/**

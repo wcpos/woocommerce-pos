@@ -12,7 +12,6 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
-use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
@@ -62,7 +61,6 @@ class Menu {
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_landing_scripts_and_styles' ) );
 			add_action( 'admin_footer', array( $this, 'print_upgrade_click_tracking_script' ) );
 			add_action( 'admin_init', array( $this, 'redirect_template_list_page' ) );
-			add_action( 'admin_notices', array( $this, 'maybe_show_tracking_consent_notice' ) );
 		}
 
 		// add_filter( 'woocommerce_analytics_report_menu_items', array( $this, 'analytics_menu_items' ) );.
@@ -457,121 +455,6 @@ JS;
 	});
 })();
 JS;
-	}
-
-	/**
-	 * Show tracking consent admin notice on POS pages.
-	 *
-	 * Displays a one-time notice asking the user to allow anonymous usage
-	 * data collection. Only shown when tracking_consent is 'undecided'.
-	 */
-	public function maybe_show_tracking_consent_notice(): void {
-		$screen = get_current_screen();
-		if ( ! $screen ) {
-			return;
-		}
-
-		$pos_screens = array(
-			$this->toplevel_screen_id,
-			$this->view_pos_screen_id,
-			$this->settings_screen_id,
-			$this->gallery_screen_id,
-		);
-		if ( ! \in_array( $screen->id, $pos_screens, true ) ) {
-			return;
-		}
-
-		$consent = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
-		if ( 'undecided' !== $consent ) {
-			return;
-		}
-
-		$nonce = wp_create_nonce( 'wcpos_tracking_consent' );
-		?>
-		<div class="notice notice-info" id="wcpos-tracking-consent-notice">
-			<p><strong><?php esc_html_e( 'Help improve WooCommerce POS', 'woocommerce-pos' ); ?></strong></p>
-			<p>
-				<?php
-				printf(
-					/* translators: %s: link to POS Settings > General page */
-					esc_html__(
-						'Allow WooCommerce POS to collect anonymous usage data to help improve the product. No personal or customer data is collected. You can change this anytime in %s.',
-						'woocommerce-pos'
-					),
-					'<a href="' . esc_url( admin_url( 'admin.php?page=woocommerce-pos-settings' ) ) . '">' .
-					esc_html__( 'POS > Settings > General', 'woocommerce-pos' ) .
-					'</a>'
-				);
-				?>
-			</p>
-			<p>
-				<button class="button button-primary wcpos-consent-btn" data-consent="allowed">
-					<?php esc_html_e( 'Allow', 'woocommerce-pos' ); ?>
-				</button>
-				<button class="button wcpos-consent-btn" data-consent="denied">
-					<?php esc_html_e( 'No thanks', 'woocommerce-pos' ); ?>
-				</button>
-			</p>
-		</div>
-		<script>
-		(function() {
-			var buttons = document.querySelectorAll('.wcpos-consent-btn');
-			buttons.forEach(function(btn) {
-				btn.addEventListener('click', function() {
-					var notice = document.getElementById('wcpos-tracking-consent-notice');
-					var xhr = new XMLHttpRequest();
-					xhr.open('POST', ajaxurl);
-					xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-					xhr.onload = function() {
-						if (xhr.status >= 200 && xhr.status < 300) {
-							try {
-								var res = JSON.parse(xhr.responseText);
-								if (res && res.success) { notice.remove(); }
-							} catch (e) {}
-						}
-					};
-					xhr.send(
-						'action=wcpos_tracking_consent' +
-						'&consent=' + encodeURIComponent(btn.dataset.consent) +
-						'&_wpnonce=<?php echo esc_js( $nonce ); ?>'
-					);
-				});
-			});
-		})();
-		</script>
-		<?php
-	}
-
-	/**
-	 * AJAX handler for tracking consent notice.
-	 *
-	 * Static so it can be registered from Init::init_admin() before
-	 * the AJAX/Admin class branching.
-	 */
-	public static function handle_tracking_consent_ajax(): void {
-		check_ajax_referer( 'wcpos_tracking_consent' );
-
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			wp_send_json_error( 'Unauthorized', 403 );
-		}
-
-		$consent = isset( $_POST['consent'] ) ? sanitize_text_field( wp_unslash( $_POST['consent'] ) ) : '';
-		if ( ! \in_array( $consent, array( 'allowed', 'denied' ), true ) ) {
-			wp_send_json_error( 'Invalid consent value', 400 );
-		}
-
-		$settings = woocommerce_pos_get_settings( 'general' );
-		if ( ! \is_array( $settings ) ) {
-			wp_send_json_error( 'Unable to load general settings', 500 );
-		}
-
-		$settings['tracking_consent'] = $consent;
-		$result                       = SettingsService::instance()->save_settings( 'general', $settings );
-		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( $result->get_error_message(), 500 );
-		}
-
-		wp_send_json_success();
 	}
 
 	/**
