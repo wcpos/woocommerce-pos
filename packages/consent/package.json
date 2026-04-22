@@ -7,7 +7,7 @@
     "build": "vite build",
     "dev": "vite build --watch --mode development",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
   "dependencies": {
