@@ -107,8 +107,18 @@ class Consent {
 			return;
 		}
 
-		$plugins = isset( $data['plugins'] ) && \is_array( $data['plugins'] ) ? $data['plugins'] : array();
-		$target  = plugin_basename( PLUGIN_FILE );
+		// Normalize both upgrader payload shapes: bulk updates pass a
+		// 'plugins' array while single-plugin updates pass a scalar
+		// 'plugin' key.
+		$plugins = array();
+		if ( isset( $data['plugin'] ) && \is_string( $data['plugin'] ) ) {
+			$plugins[] = $data['plugin'];
+		}
+		if ( isset( $data['plugins'] ) && \is_array( $data['plugins'] ) ) {
+			$plugins = array_merge( $plugins, $data['plugins'] );
+		}
+
+		$target = plugin_basename( PLUGIN_FILE );
 		if ( ! \in_array( $target, $plugins, true ) ) {
 			return;
 		}

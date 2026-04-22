@@ -121,6 +121,27 @@ class Test_Consent extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Single-plugin updates (scalar 'plugin' key) also set the transient.
+	 * WP core passes the scalar shape for one-click updates, not the
+	 * bulk 'plugins' array.
+	 */
+	public function test_upgrader_process_complete_handles_scalar_plugin_payload(): void {
+		$this->consent->on_upgrader_process_complete(
+			null,
+			array(
+				'type'   => 'plugin',
+				'action' => 'update',
+				'plugin' => plugin_basename( PLUGIN_FILE ),
+			)
+		);
+
+		$this->assertNotFalse(
+			get_transient( Consent::MODAL_TRANSIENT ),
+			'Modal transient should be set for single-plugin update payloads.'
+		);
+	}
+
+	/**
 	 * Plugin updates that don't include our file must not set the transient.
 	 */
 	public function test_upgrader_process_complete_ignores_other_plugins(): void {
@@ -240,6 +261,51 @@ class Test_Consent extends WP_UnitTestCase {
 
 		$routes = rest_get_server()->get_routes();
 		$this->assertArrayHasKey( '/wcpos/v1/consent', $routes );
+	}
+
+	/**
+	 * End-to-end: an admin hitting the registered route via rest_do_request()
+	 * persists the choice. Covers route wiring, arg schema, and the
+	 * permission callback — things unit-calling save_consent() won't.
+	 */
+	public function test_rest_route_end_to_end_saves_choice(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'rest_api_init' );
+
+		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request->set_param( 'consent', 'allowed' );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			'allowed',
+			woocommerce_pos_get_settings( 'general', 'tracking_consent' )
+		);
+	}
+
+	/**
+	 * End-to-end: a non-manager hitting the REST route is rejected by the
+	 * permission callback before reaching save_consent().
+	 */
+	public function test_rest_route_end_to_end_denies_non_manager(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'rest_api_init' );
+
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $subscriber );
+
+		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request->set_param( 'consent', 'allowed' );
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 403, $response->get_status() );
+		$this->assertSame(
+			'undecided',
+			woocommerce_pos_get_settings( 'general', 'tracking_consent' ),
+			'Denied request must not persist a choice.'
+		);
 	}
 
 	/**
