@@ -189,13 +189,21 @@ class Consent {
 		if ( null === $hook_suffix ) {
 			// WP screen ids differ from hook_suffixes (e.g. 'dashboard' vs
 			// 'index.php'). Prefer $GLOBALS['hook_suffix'] which is set right
-			// before admin_notices fires, and fall back to current_screen.
+			// before admin_notices fires, and fall back to current_screen —
+			// normalizing the screen id to the hook_suffix shape so the
+			// allowlist in should_render() can match.
 			$hook_suffix = '';
 			if ( isset( $GLOBALS['hook_suffix'] ) && \is_string( $GLOBALS['hook_suffix'] ) ) {
 				$hook_suffix = $GLOBALS['hook_suffix'];
 			} else {
-				$screen      = get_current_screen();
-				$hook_suffix = $screen ? $screen->id : '';
+				$screen = get_current_screen();
+				if ( $screen ) {
+					$screen_to_hook = array(
+						'dashboard' => 'index.php',
+						'plugins'   => 'plugins.php',
+					);
+					$hook_suffix    = isset( $screen_to_hook[ $screen->id ] ) ? $screen_to_hook[ $screen->id ] : '';
+				}
 			}
 		}
 

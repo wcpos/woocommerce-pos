@@ -52,9 +52,20 @@ class Test_Consent extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Clean up transient between tests.
+	 * Clean up transient and unregister hooks between tests.
+	 *
+	 * Each test instantiates a fresh Consent which adds global callbacks;
+	 * without removing them the hooks accumulate across the class and can
+	 * make later tests order-dependent.
 	 */
 	public function tearDown(): void {
+		if ( null !== $this->consent ) {
+			remove_action( 'activated_plugin', array( $this->consent, 'on_plugin_activated' ), 10 );
+			remove_action( 'upgrader_process_complete', array( $this->consent, 'on_upgrader_process_complete' ), 10 );
+			remove_action( 'admin_enqueue_scripts', array( $this->consent, 'maybe_enqueue' ), 10 );
+			remove_action( 'admin_notices', array( $this->consent, 'maybe_render_mount_point' ), 10 );
+			remove_action( 'rest_api_init', array( $this->consent, 'register_routes' ), 10 );
+		}
 		delete_transient( Consent::MODAL_TRANSIENT );
 		parent::tearDown();
 	}
