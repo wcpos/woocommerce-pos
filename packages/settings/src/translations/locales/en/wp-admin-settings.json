@@ -124,6 +124,7 @@
 	"license.activate": "Activate",
 	"logs.copied": "Copied",
 	"logs.copy": "Copy",
+	"logs.copy_failed": "Copy failed",
 	"logs.entries_count_one": "{count} entry",
 	"logs.entries_count_other": "{count} entries",
 	"logs.errors": "Errors",

@@ -109,21 +109,30 @@ function dayHeaderLabel(label: string): string {
 }
 
 function CopyButton({ payload }: { payload: string }) {
-	const [copied, setCopied] = React.useState(false);
+	const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
 
 	const handleCopy = async () => {
 		try {
 			await navigator.clipboard.writeText(payload);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1500);
+			setStatus('copied');
 		} catch {
-			// Silently fail — fallback is the select-all-on-focus textarea behaviour.
+			// Clipboard API denied (permissions, insecure context, etc.).
+			// Surface the failure so users know to fall back to the textarea.
+			setStatus('failed');
 		}
+		setTimeout(() => setStatus('idle'), 1500);
 	};
+
+	const label =
+		status === 'copied'
+			? t('logs.copied', 'Copied')
+			: status === 'failed'
+				? t('logs.copy_failed', 'Copy failed')
+				: t('logs.copy', 'Copy');
 
 	return (
 		<Button variant="secondary" onClick={handleCopy}>
-			{copied ? t('logs.copied', 'Copied') : t('logs.copy', 'Copy')}
+			{label}
 		</Button>
 	);
 }

@@ -294,8 +294,10 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_available_sources_uses_wcpos_display_name(): void {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/logs' );
 		$response = $this->server->dispatch( $request );
-		$data     = $response->get_data();
 
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
 		$this->assertIsArray( $data['sources'] );
 
 		$core = null;

@@ -128,6 +128,8 @@ function StatusBadge({ status }: { status: Extension['status'] }) {
 							viewBox="0 0 20 20"
 							fill="currentColor"
 							className="wcpos:h-3 wcpos:w-3"
+							aria-hidden="true"
+							focusable="false"
 						>
 							<path
 								fillRule="evenodd"

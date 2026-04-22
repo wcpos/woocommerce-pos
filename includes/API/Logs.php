@@ -91,10 +91,12 @@ class Logs extends WP_REST_Controller {
 		$page          = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
 		$available     = $this->get_available_sources();
 		$allowed_slugs = array_column( $available, 'source' );
-		$raw_source    = (string) ( $request->get_param( 'source' ) ?? 'all' );
+		$raw_source    = trim( (string) ( $request->get_param( 'source' ) ?? 'all' ) );
 
-		// Resolve the requested source against the allowlist. 'all' → every allowed slug.
-		if ( 'all' === $raw_source ) {
+		// Resolve the requested source against the allowlist. Empty or 'all'
+		// means every allowed slug; a valid slug is allowed through; anything
+		// else falls back to the core source.
+		if ( '' === $raw_source || 'all' === $raw_source ) {
 			$sources = $allowed_slugs;
 		} elseif ( \in_array( $raw_source, $allowed_slugs, true ) ) {
 			$sources = array( $raw_source );
