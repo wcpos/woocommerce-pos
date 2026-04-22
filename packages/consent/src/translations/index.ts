@@ -1,0 +1,13 @@
+import { createI18nInstance, Trans } from '@wcpos/i18n';
+
+import en from './locales/en/wp-admin-consent.json';
+
+const { i18n, i18nPromise, t } = createI18nInstance({
+	namespace: 'wp-admin-consent',
+	project: 'woocommerce-pos',
+	resources: {
+		en: { 'wp-admin-consent': en },
+	},
+});
+
+export { t, Trans, i18nPromise, i18n };

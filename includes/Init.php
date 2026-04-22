@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS;
 
+use WCPOS\WooCommercePOS\Admin\Consent;
 use WCPOS\WooCommercePOS\Admin\Menu;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Extensions;
@@ -31,6 +32,12 @@ class Init {
 		// global helper functions.
 		require_once PLUGIN_PATH . 'includes/wcpos-functions.php';
 		require_once PLUGIN_PATH . 'includes/wcpos-store-functions.php';
+
+		// Tracking consent pop-up + callout. Registered here (during
+		// plugins_loaded) so its lifecycle hooks (activated_plugin,
+		// upgrader_process_complete) are in place before those actions
+		// fire on a plugin activation or update request.
+		new Consent();
 
 		// Init hooks.
 		add_action( 'init', array( $this, 'init' ) );
@@ -269,7 +276,6 @@ class Init {
 	private function init_admin(): void {
 		if ( is_admin() ) {
 			// Register AJAX handler before the branch so it's available during AJAX requests.
-			add_action( 'wp_ajax_wcpos_tracking_consent', array( Menu::class, 'handle_tracking_consent_ajax' ) );
 			add_action( 'wp_ajax_wcpos_track_upgrade_click_ajax', array( Menu::class, 'handle_upgrade_click_ajax' ) );
 			add_action( 'admin_post_wcpos_track_upgrade_click', array( Menu::class, 'handle_upgrade_click_redirect' ) );
 
