@@ -6,19 +6,32 @@ import apiFetch from '@wordpress/api-fetch';
 
 import { markLogsRead } from './use-unread-log-counts';
 import Notice from '../../components/notice';
+import { Select } from '../../components/ui';
 import { t } from '../../translations';
+
+const CORE_SOURCE = 'woocommerce-pos';
+const ALL_SOURCES = 'all';
 
 interface LogEntry {
 	timestamp: string;
 	level: string;
 	message: string;
 	context: string;
+	source?: string;
+}
+
+interface LogSource {
+	source: string;
+	name: string;
+	requires_pro: boolean;
+	is_core: boolean;
 }
 
 interface LogsResponse {
 	entries: LogEntry[];
 	has_fatal_errors: boolean;
 	fatal_errors_url: string;
+	sources?: LogSource[];
 }
 
 const LEVEL_STYLES: Record<string, string> = {
@@ -34,16 +47,18 @@ const LEVEL_STYLES: Record<string, string> = {
 
 function Logs() {
 	const [filter, setFilter] = React.useState<string>('all');
+	const [source, setSource] = React.useState<string>(CORE_SOURCE);
 	const [expandedIndex, setExpandedIndex] = React.useState<number | null>(null);
 	const [page, setPage] = React.useState(1);
 
 	const levelParam = filter === 'all' ? '' : `&level=${filter}`;
+	const sourceParam = `&source=${encodeURIComponent(source)}`;
 
 	const { data } = useSuspenseQuery<LogsResponse>({
-		queryKey: ['logs', filter, page],
+		queryKey: ['logs', filter, source, page],
 		queryFn: () =>
 			apiFetch({
-				path: `wcpos/v1/logs?wcpos=1&per_page=50&page=${page}${levelParam}`,
+				path: `wcpos/v1/logs?wcpos=1&per_page=50&page=${page}${levelParam}${sourceParam}`,
 				method: 'GET',
 				parse: false,
 			}).then(async (response: any) => {
@@ -56,6 +71,12 @@ function Logs() {
 	});
 
 	const entries = data?.entries ?? [];
+	const availableSources = data?.sources ?? [];
+	const sourceLookup = React.useMemo(() => {
+		const map = new Map<string, LogSource>();
+		availableSources.forEach((s) => map.set(s.source, s));
+		return map;
+	}, [availableSources]);
 	const totalPages = (data as any)?._totalPages ?? 1;
 
 	React.useEffect(() => {
@@ -85,16 +106,43 @@ function Logs() {
 			)}
 
 			{/* Filter bar */}
-			<FilterTabs
-				className="wcpos:mb-4"
-				items={filters}
-				value={filter}
-				onChange={(nextFilter) => {
-					setFilter(nextFilter);
-					setPage(1);
-					setExpandedIndex(null);
-				}}
-			/>
+			<div className="wcpos:mb-4 wcpos:flex wcpos:flex-wrap wcpos:items-center wcpos:gap-3">
+				<FilterTabs
+					items={filters}
+					value={filter}
+					onChange={(nextFilter) => {
+						setFilter(nextFilter);
+						setPage(1);
+						setExpandedIndex(null);
+					}}
+				/>
+				{availableSources.length > 1 && (
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-2">
+						<label
+							htmlFor="wcpos-log-source-select"
+							className="wcpos:text-sm wcpos:text-gray-600"
+						>
+							{t('logs.source', 'Source')}
+						</label>
+						<Select
+							id="wcpos-log-source-select"
+							value={source}
+							onChange={(option) => {
+								setSource(String(option.value));
+								setPage(1);
+								setExpandedIndex(null);
+							}}
+							options={[
+								{ value: ALL_SOURCES, label: t('common.all', 'All') },
+								...availableSources.map((s) => ({
+									value: s.source,
+									label: s.name,
+								})),
+							]}
+						/>
+					</div>
+				)}
+			</div>
 
 			{/* Entry list */}
 			{entries.length === 0 ? (
@@ -109,6 +157,8 @@ function Logs() {
 						const displayMessage = isExpanded
 							? entry.message
 							: entry.message.slice(0, 100) + (entry.message.length > 100 ? '...' : '');
+						const entrySourceSlug = entry.source || CORE_SOURCE;
+						const entrySource = sourceLookup.get(entrySourceSlug);
 
 						return (
 							<div
@@ -134,9 +184,21 @@ function Logs() {
 									<span className="wcpos:text-xs wcpos:text-gray-400 wcpos:shrink-0 wcpos:font-mono">
 										{entry.timestamp}
 									</span>
-									<span className="wcpos:text-sm wcpos:text-gray-700 wcpos:break-all">
+									<span className="wcpos:text-sm wcpos:text-gray-700 wcpos:break-all wcpos:flex-1">
 										{displayMessage}
 									</span>
+									{entrySource && (
+										<span className="wcpos:inline-flex wcpos:items-center wcpos:gap-1 wcpos:shrink-0">
+											<span className="wcpos:inline-flex wcpos:items-center wcpos:px-2 wcpos:py-0.5 wcpos:rounded wcpos:text-xs wcpos:font-medium wcpos:bg-gray-100 wcpos:text-gray-700">
+												{entrySource.name}
+											</span>
+											{entrySource.requires_pro && (
+												<span className="wcpos:inline-flex wcpos:items-center wcpos:px-1.5 wcpos:py-0.5 wcpos:rounded wcpos:text-[10px] wcpos:font-semibold wcpos:uppercase wcpos:bg-wp-admin-theme-color wcpos:text-white">
+													Pro
+												</span>
+											)}
+										</span>
+									)}
 								</button>
 								{isExpanded && entry.context && (
 									<div className="wcpos:mt-2 wcpos:ml-16 wcpos:p-2 wcpos:bg-gray-50 wcpos:rounded wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:whitespace-pre-wrap">

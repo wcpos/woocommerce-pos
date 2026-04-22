@@ -161,6 +161,10 @@ class Extensions {
 				if ( $has_update ) {
 					$entry['has_update'] = true;
 				}
+
+				if ( ! empty( $entry['settings_url'] ) && \is_string( $entry['settings_url'] ) ) {
+					$entry['settings_url'] = admin_url( $entry['settings_url'] );
+				}
 			}
 
 			$entry['status'] = $status;
@@ -168,6 +172,32 @@ class Extensions {
 		}
 
 		return $extensions;
+	}
+
+	/**
+	 * Get log sources declared by installed extensions.
+	 *
+	 * Returns a map of log_source => extension name for every extension in the
+	 * catalog that declares a `log_source` and is currently installed. Used by
+	 * the Logs API to allowlist source filters and surface extension logs.
+	 *
+	 * @return array<string, string>
+	 */
+	public function get_log_sources(): array {
+		$sources = array();
+
+		foreach ( $this->get_extensions() as $entry ) {
+			$log_source = $entry['log_source'] ?? '';
+			$status     = $entry['status'] ?? 'not_installed';
+
+			if ( ! \is_string( $log_source ) || '' === $log_source || 'not_installed' === $status ) {
+				continue;
+			}
+
+			$sources[ $log_source ] = $entry['name'] ?? $log_source;
+		}
+
+		return $sources;
 	}
 
 	/**

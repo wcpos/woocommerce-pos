@@ -7,6 +7,12 @@ export { Select, type SelectProps, type OptionProps } from './select';
 export { Modal, type ModalProps } from './modal';
 export { Tooltip, type TooltipProps } from './tooltip';
 export {
+	DropdownMenu,
+	DropdownMenuItem,
+	type DropdownMenuProps,
+	type DropdownMenuItemProps,
+} from './dropdown-menu';
+export {
 	Card,
 	CardBody,
 	CardFooter,

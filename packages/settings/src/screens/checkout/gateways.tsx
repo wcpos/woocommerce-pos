@@ -13,11 +13,14 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classNames from 'classnames';
 import { sortBy, keyBy } from 'lodash';
 
+import { DropdownMenu, DropdownMenuItem } from '@wcpos/ui';
+
 import GatewayModal from './gateway-modal';
 import OrderStatusSelect from './order-status-select';
 import DragIcon from '../../../assets/drag-icon.svg';
+import MoreVerticalIcon from '../../../assets/more-vertical-icon.svg';
 import Notice from '../../components/notice';
-import { Button, Toggle } from '../../components/ui';
+import { Toggle } from '../../components/ui';
 import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
@@ -162,13 +165,36 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 				/>
 			</td>
 			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-right">
-				<Button
-					variant="secondary"
-					onClick={() => onEditGateway(item)}
-					disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
+				<DropdownMenu
+					label={item.title}
+					trigger={
+						<span
+							className={classNames(
+								'wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white wcpos:px-2 wcpos:py-1.5 wcpos:text-gray-700 wcpos:hover:bg-gray-50',
+								!proEnabled &&
+									!['pos_cash', 'pos_card'].includes(item.id) &&
+									'wcpos:opacity-50 wcpos:cursor-not-allowed wcpos:pointer-events-none'
+							)}
+							aria-label={t('common.settings')}
+						>
+							<MoreVerticalIcon className="wcpos:w-4 wcpos:h-4 wcpos:fill-current" />
+						</span>
+					}
 				>
-					{t('common.settings')}
-				</Button>
+					<DropdownMenuItem
+						onSelect={() => onEditGateway(item)}
+						disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
+					>
+						{t('common.pos_settings')}
+					</DropdownMenuItem>
+					{!['pos_cash', 'pos_card'].includes(item.id) && (
+						<DropdownMenuItem
+							href={`admin.php?page=wc-settings&tab=checkout&section=${item.id}`}
+						>
+							{t('common.woocommerce_settings')}
+						</DropdownMenuItem>
+					)}
+				</DropdownMenu>
 			</td>
 		</tr>
 	);
