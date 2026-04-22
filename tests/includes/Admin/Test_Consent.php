@@ -361,6 +361,11 @@ class Test_Consent extends WP_UnitTestCase {
 	 * point div never renders when the plugin is installed in a real site.
 	 */
 	public function test_mount_point_renders_when_called_via_admin_notices_action(): void {
+		// Fire `current_screen` so other admin_notices listeners (notably
+		// WooCommerce's PageController) don't trip _doing_it_wrong when
+		// the action dispatches their callbacks alongside ours.
+		set_current_screen( 'plugins' );
+
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP's admin-header state for this test.
 		$GLOBALS['hook_suffix'] = 'plugins.php';
 
