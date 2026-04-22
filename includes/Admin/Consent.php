@@ -186,7 +186,10 @@ class Consent {
 	 * @param string|null $hook_suffix Optional hook suffix override (used by tests).
 	 */
 	public function maybe_render_mount_point( $hook_suffix = null ): void {
-		if ( null === $hook_suffix ) {
+		// WP's do_action( 'admin_notices' ) passes '' (empty string) to
+		// single-arg callbacks, bypassing the null default. Treat empty
+		// string the same as null so the lookup below still fires.
+		if ( null === $hook_suffix || '' === $hook_suffix ) {
 			// WP screen ids differ from hook_suffixes (e.g. 'dashboard' vs
 			// 'index.php'). Prefer $GLOBALS['hook_suffix'] which is set right
 			// before admin_notices fires, and fall back to current_screen —

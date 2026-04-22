@@ -354,6 +354,48 @@ class Test_Consent extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Regression: WP's do_action( 'admin_notices' ) passes '' (empty string)
+	 * to single-arg callbacks. Our method signature defaults to null, so
+	 * WP's call bypasses the null default and the method must still resolve
+	 * the hook_suffix from $GLOBALS['hook_suffix']. If it doesn't, the mount
+	 * point div never renders when the plugin is installed in a real site.
+	 */
+	public function test_mount_point_renders_when_called_via_admin_notices_action(): void {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP's admin-header state for this test.
+		$GLOBALS['hook_suffix'] = 'plugins.php';
+
+		ob_start();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'admin_notices' );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['hook_suffix'] );
+
+		$this->assertStringContainsString(
+			'id="wcpos-consent-root"',
+			$output,
+			'admin_notices action must render the mount point — WP passes empty string, not null.'
+		);
+	}
+
+	/**
+	 * Regression: explicit empty-string arg should behave the same as null —
+	 * fall back to $GLOBALS['hook_suffix'] rather than short-circuit.
+	 */
+	public function test_mount_point_renders_when_hook_suffix_is_empty_string(): void {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP's admin-header state for this test.
+		$GLOBALS['hook_suffix'] = 'plugins.php';
+
+		ob_start();
+		$this->consent->maybe_render_mount_point( '' );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['hook_suffix'] );
+
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $output );
+	}
+
+	/**
 	 * Once the user has made a decision, the mount point disappears from
 	 * the plugins screen — we stop asking.
 	 */
