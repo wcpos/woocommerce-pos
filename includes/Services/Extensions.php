@@ -161,6 +161,10 @@ class Extensions {
 				if ( $has_update ) {
 					$entry['has_update'] = true;
 				}
+
+				if ( ! empty( $entry['settings_url'] ) && \is_string( $entry['settings_url'] ) ) {
+					$entry['settings_url'] = admin_url( $entry['settings_url'] );
+				}
 			}
 
 			$entry['status'] = $status;

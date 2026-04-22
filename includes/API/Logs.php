@@ -9,6 +9,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Services\Extensions;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -39,6 +40,13 @@ class Logs extends WP_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'logs';
+
+	/**
+	 * Core log source written to by the free plugin (and Pro, which reuses it).
+	 *
+	 * @var string
+	 */
+	const CORE_SOURCE = 'woocommerce-pos';
 
 	/**
 	 * Register routes.
@@ -78,14 +86,26 @@ class Logs extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_items( $request ): WP_REST_Response {
-		$level    = $request->get_param( 'level' );
-		$per_page = max( 1, (int) ( $request->get_param( 'per_page' ) ? $request->get_param( 'per_page' ) : 50 ) );
-		$page     = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
+		$level         = $request->get_param( 'level' );
+		$per_page      = max( 1, (int) ( $request->get_param( 'per_page' ) ? $request->get_param( 'per_page' ) : 50 ) );
+		$page          = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
+		$available     = $this->get_available_sources();
+		$allowed_slugs = array_column( $available, 'source' );
+		$raw_source    = (string) ( $request->get_param( 'source' ) ?? self::CORE_SOURCE );
+
+		// Resolve the requested source against the allowlist. 'all' → every allowed slug.
+		if ( 'all' === $raw_source ) {
+			$sources = $allowed_slugs;
+		} elseif ( \in_array( $raw_source, $allowed_slugs, true ) ) {
+			$sources = array( $raw_source );
+		} else {
+			$sources = array( self::CORE_SOURCE );
+		}
 
 		if ( 'database' === $this->get_handler_type() ) {
-			$entries = $this->get_db_entries( $level );
+			$entries = $this->get_db_entries( $level, $sources );
 		} else {
-			$entries = $this->get_file_entries();
+			$entries = $this->get_file_entries( $sources );
 
 			// Filter by level if specified (DB does this in SQL).
 			if ( $level ) {
@@ -110,6 +130,7 @@ class Logs extends WP_REST_Controller {
 				'entries'          => $entries,
 				'has_fatal_errors' => $this->has_fatal_errors(),
 				'fatal_errors_url' => $this->get_fatal_errors_url(),
+				'sources'          => $available,
 			)
 		);
 
@@ -120,6 +141,52 @@ class Logs extends WP_REST_Controller {
 	}
 
 	/**
+	 * Build the list of log sources the UI may filter by.
+	 *
+	 * Always includes the core `woocommerce-pos` source. Each installed
+	 * catalog extension that declares a `log_source` adds an entry so its logs
+	 * can be inspected alongside the core plugin's.
+	 *
+	 * @return array<int, array{source: string, name: string, requires_pro: bool, is_core: bool}>
+	 */
+	private function get_available_sources(): array {
+		$sources = array(
+			array(
+				'source'       => self::CORE_SOURCE,
+				'name'         => 'WooCommerce POS',
+				'requires_pro' => false,
+				'is_core'      => true,
+			),
+		);
+
+		if ( ! class_exists( Extensions::class ) ) {
+			return $sources;
+		}
+
+		foreach ( Extensions::instance()->get_extensions() as $entry ) {
+			$log_source = $entry['log_source'] ?? '';
+			$status     = $entry['status'] ?? 'not_installed';
+
+			if ( ! \is_string( $log_source ) || '' === $log_source || 'not_installed' === $status ) {
+				continue;
+			}
+
+			if ( self::CORE_SOURCE === $log_source ) {
+				continue;
+			}
+
+			$sources[] = array(
+				'source'       => $log_source,
+				'name'         => (string) ( $entry['name'] ?? $log_source ),
+				'requires_pro' => (bool) ( $entry['requires_pro'] ?? false ),
+				'is_core'      => false,
+			);
+		}
+
+		return $sources;
+	}
+
+	/**
 	 * Maximum number of log entries to parse from files to prevent memory exhaustion.
 	 */
 	const MAX_FILE_ENTRIES = 10000;
@@ -127,20 +194,49 @@ class Logs extends WP_REST_Controller {
 	/**
 	 * Parse log entries from file-based handler.
 	 *
-	 * Scans wc-logs/ for woocommerce-pos-*.log files and parses each line.
-	 * Reads files line-by-line to avoid loading entire files into memory.
-	 * Processes newest files first and caps at MAX_FILE_ENTRIES total.
+	 * Scans wc-logs/ for {source}-*.log files per requested source and parses
+	 * each line. Reads files line-by-line to avoid loading entire files into
+	 * memory. Processes newest files first and caps at MAX_FILE_ENTRIES total.
 	 *
 	 * Note: within each file, lines are read top-to-bottom (oldest first).
 	 * If the cap is hit mid-file, the newest entries in that file are lost.
 	 * The final result is sorted by timestamp, so ordering is still correct
 	 * for the entries that are returned.
 	 *
-	 * @return array<int, array{timestamp: string, level: string, message: string, context: string}>
+	 * @param array<int, string> $sources Allowed log-source slugs (pre-validated).
+	 *
+	 * @return array<int, array{timestamp: string, level: string, message: string, context: string, source: string}>
 	 */
-	private function get_file_entries(): array {
+	private function get_file_entries( array $sources ): array {
+		if ( empty( $sources ) ) {
+			return array();
+		}
+
 		$log_dir = trailingslashit( wp_upload_dir()['basedir'] ) . 'wc-logs/';
-		$files   = glob( $log_dir . 'woocommerce-pos-*.log' );
+		$files   = array();
+
+		foreach ( $sources as $source ) {
+			// WC log filenames: {source}-YYYY-MM-DD-{hash}.log.
+			$matched = glob( $log_dir . $source . '-*.log' );
+			if ( empty( $matched ) ) {
+				continue;
+			}
+
+			// Anchor on "{source}-YYYY-MM-DD-" so we don't over-match when one
+			// source is a prefix of another (e.g. "woocommerce-pos" vs
+			// "woocommerce-pos-foo").
+			$pattern = '/^' . preg_quote( $source, '/' ) . '-\d{4}-\d{2}-\d{2}-/';
+
+			foreach ( $matched as $file ) {
+				if ( 1 !== preg_match( $pattern, basename( $file ) ) ) {
+					continue;
+				}
+				$files[] = array(
+					'path'   => $file,
+					'source' => $source,
+				);
+			}
+		}
 
 		if ( empty( $files ) ) {
 			return array();
@@ -150,7 +246,7 @@ class Logs extends WP_REST_Controller {
 		usort(
 			$files,
 			function ( $a, $b ) {
-				return filemtime( $b ) - filemtime( $a );
+				return filemtime( $b['path'] ) - filemtime( $a['path'] );
 			}
 		);
 
@@ -159,7 +255,7 @@ class Logs extends WP_REST_Controller {
 
 		foreach ( $files as $file ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Reading local log files.
-			$handle = fopen( $file, 'r' );
+			$handle = fopen( $file['path'], 'r' );
 			if ( ! $handle ) {
 				continue;
 			}
@@ -167,7 +263,8 @@ class Logs extends WP_REST_Controller {
 			while ( false !== ( $line = fgets( $handle ) ) ) { // phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
 				$entry = $this->parse_log_line( $line );
 				if ( $entry ) {
-					$entries[] = $entry;
+					$entry['source'] = $file['source'];
+					$entries[]       = $entry;
 					++$count;
 
 					if ( $count >= self::MAX_FILE_ENTRIES ) {
@@ -221,12 +318,17 @@ class Logs extends WP_REST_Controller {
 	/**
 	 * Get log entries from the database handler.
 	 *
-	 * @param string|null $level Optional level filter.
+	 * @param string|null        $level   Optional level filter.
+	 * @param array<int, string> $sources Allowed log-source slugs (pre-validated).
 	 *
 	 * @return array
 	 */
-	private function get_db_entries( ?string $level = null ): array {
+	private function get_db_entries( ?string $level, array $sources ): array {
 		global $wpdb;
+
+		if ( empty( $sources ) ) {
+			return array();
+		}
 
 		$table = $wpdb->prefix . 'woocommerce_log';
 
@@ -236,7 +338,9 @@ class Logs extends WP_REST_Controller {
 			return array();
 		}
 
-		$where = $wpdb->prepare( 'WHERE source = %s', 'woocommerce-pos' );
+		$placeholders = implode( ', ', array_fill( 0, count( $sources ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Placeholders are generated from count($sources).
+		$where = $wpdb->prepare( "WHERE source IN ({$placeholders})", ...$sources );
 
 		if ( $level ) {
 			$severity = \WC_Log_Levels::get_level_severity( $level );
@@ -244,7 +348,7 @@ class Logs extends WP_REST_Controller {
 		}
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is safe prefix, $where is prepared above.
-		$sql = "SELECT timestamp, level, message FROM {$table} {$where} ORDER BY timestamp DESC LIMIT 10000";
+		$sql = "SELECT timestamp, level, message, source FROM {$table} {$where} ORDER BY timestamp DESC LIMIT 10000";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is safely constructed above with $wpdb->prepare().
 		$results = $wpdb->get_results( $sql, ARRAY_A );
 
@@ -281,6 +385,7 @@ class Logs extends WP_REST_Controller {
 					'level'     => $level_map[ (int) $row['level'] ] ?? 'debug',
 					'message'   => $message,
 					'context'   => $context,
+					'source'    => (string) ( $row['source'] ?? self::CORE_SOURCE ),
 				);
 			},
 			$results

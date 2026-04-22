@@ -35,6 +35,8 @@ export interface Extension {
 	plugin_file?: string;
 	has_update?: boolean;
 	auto_update?: boolean;
+	settings_url?: string;
+	log_source?: string;
 }
 
 function Extensions() {
