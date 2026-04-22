@@ -12,22 +12,35 @@ export interface DayGroup<T extends LogEntryLike> {
 	entries: T[];
 }
 
-function isoDate(d: Date): string {
-	const y = d.getUTCFullYear();
-	const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${y}-${m}-${dd}`;
+export interface GroupByDayOptions {
+	/** IANA timezone (e.g. 'UTC', 'Australia/Sydney'). Defaults to the runtime's local zone. */
+	timeZone?: string;
 }
 
-export function groupByDay<T extends LogEntryLike>(entries: T[], nowMs: number): DayGroup<T>[] {
+/**
+ * Returns a `YYYY-MM-DD` date key for the given Date in the requested timezone.
+ * Uses `Intl.DateTimeFormat('en-CA')` which natively emits that shape.
+ */
+function isoDateInZone(d: Date, timeZone?: string): string {
+	const fmt = new Intl.DateTimeFormat('en-CA', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		timeZone,
+	});
+	return fmt.format(d);
+}
+
+export function groupByDay<T extends LogEntryLike>(
+	entries: T[],
+	nowMs: number,
+	options: GroupByDayOptions = {}
+): DayGroup<T>[] {
 	if (entries.length === 0) return [];
 
-	const now = new Date(nowMs);
-	const todayISO = isoDate(now);
-
-	const yesterdayDate = new Date(nowMs);
-	yesterdayDate.setUTCDate(now.getUTCDate() - 1);
-	const yesterdayISO = isoDate(yesterdayDate);
+	const { timeZone } = options;
+	const todayISO = isoDateInZone(new Date(nowMs), timeZone);
+	const yesterdayISO = isoDateInZone(new Date(nowMs - 24 * 60 * 60 * 1000), timeZone);
 
 	const groups: DayGroup<T>[] = [];
 	let current: DayGroup<T> | null = null;
@@ -38,7 +51,7 @@ export function groupByDay<T extends LogEntryLike>(entries: T[], nowMs: number):
 		if (Number.isNaN(parsed.getTime())) {
 			label = entry.timestamp;
 		} else {
-			const iso = isoDate(parsed);
+			const iso = isoDateInZone(parsed, timeZone);
 			if (iso === todayISO) label = 'today';
 			else if (iso === yesterdayISO) label = 'yesterday';
 			else label = iso;
