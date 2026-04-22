@@ -23,6 +23,7 @@ use const WCPOS\WooCommercePOS\PLUGIN_FILE;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
+use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -317,6 +318,10 @@ class Consent {
 			'showCallout' => true,
 		);
 
-		return 'var wcpos = wcpos || {}; wcpos.consent = ' . wp_json_encode( $config ) . ';';
+		return sprintf(
+			'var wcpos = wcpos || {}; wcpos.consent = %s; wcpos.translationVersion = %s;',
+			wp_json_encode( $config ),
+			wp_json_encode( TRANSLATION_VERSION )
+		);
 	}
 }
