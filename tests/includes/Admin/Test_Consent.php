@@ -354,6 +354,53 @@ class Test_Consent extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Regression: WP's do_action( 'admin_notices' ) passes '' (empty string)
+	 * to single-arg callbacks. Our method signature defaults to null, so
+	 * WP's call bypasses the null default and the method must still resolve
+	 * the hook_suffix from $GLOBALS['hook_suffix']. If it doesn't, the mount
+	 * point div never renders when the plugin is installed in a real site.
+	 */
+	public function test_mount_point_renders_when_called_via_admin_notices_action(): void {
+		// Fire `current_screen` so other admin_notices listeners (notably
+		// WooCommerce's PageController) don't trip _doing_it_wrong when
+		// the action dispatches their callbacks alongside ours.
+		set_current_screen( 'plugins' );
+
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP's admin-header state for this test.
+		$GLOBALS['hook_suffix'] = 'plugins.php';
+
+		ob_start();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'admin_notices' );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['hook_suffix'] );
+
+		$this->assertStringContainsString(
+			'id="wcpos-consent-root"',
+			$output,
+			'admin_notices action must render the mount point — WP passes empty string, not null.'
+		);
+	}
+
+	/**
+	 * Regression: explicit empty-string arg should behave the same as null —
+	 * fall back to $GLOBALS['hook_suffix'] rather than short-circuit.
+	 */
+	public function test_mount_point_renders_when_hook_suffix_is_empty_string(): void {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP's admin-header state for this test.
+		$GLOBALS['hook_suffix'] = 'plugins.php';
+
+		ob_start();
+		$this->consent->maybe_render_mount_point( '' );
+		$output = ob_get_clean();
+
+		unset( $GLOBALS['hook_suffix'] );
+
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $output );
+	}
+
+	/**
 	 * Once the user has made a decision, the mount point disappears from
 	 * the plugins screen — we stop asking.
 	 */
@@ -367,5 +414,105 @@ class Test_Consent extends WP_UnitTestCase {
 		$output = ob_get_clean();
 
 		$this->assertSame( '', $output );
+	}
+
+	/**
+	 * Dismiss endpoint persists a per-user "hide until" timestamp and
+	 * leaves tracking_consent untouched.
+	 */
+	public function test_dismiss_callout_sets_user_meta_and_leaves_consent_undecided(): void {
+		$before = time();
+
+		$response = $this->consent->dismiss_callout();
+
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertIsInt( $data['hiddenUntil'] );
+		$this->assertGreaterThanOrEqual( $before + Consent::CALLOUT_HIDE_TTL - 5, $data['hiddenUntil'] );
+
+		$stored = (int) get_user_meta( get_current_user_id(), Consent::CALLOUT_HIDE_META, true );
+		$this->assertSame( $data['hiddenUntil'], $stored );
+
+		$this->assertSame(
+			'undecided',
+			woocommerce_pos_get_settings( 'general', 'tracking_consent' ),
+			'Dismiss must not record a consent decision.'
+		);
+	}
+
+	/**
+	 * While the user's "hide for now" timestamp is active, the mount
+	 * point is not rendered even when everything else says yes.
+	 */
+	public function test_mount_point_hidden_while_dismiss_is_active(): void {
+		update_user_meta(
+			get_current_user_id(),
+			Consent::CALLOUT_HIDE_META,
+			time() + Consent::CALLOUT_HIDE_TTL
+		);
+
+		ob_start();
+		$this->consent->maybe_render_mount_point( 'plugins.php' );
+		$output = ob_get_clean();
+
+		$this->assertSame( '', $output, 'Callout must stay hidden while "hide for now" is active.' );
+	}
+
+	/**
+	 * Once the per-user "hide until" timestamp expires, the callout
+	 * renders again — and the stale meta is cleaned up opportunistically.
+	 */
+	public function test_mount_point_renders_again_after_dismiss_expires(): void {
+		$user_id = get_current_user_id();
+		update_user_meta( $user_id, Consent::CALLOUT_HIDE_META, time() - 60 );
+
+		ob_start();
+		$this->consent->maybe_render_mount_point( 'plugins.php' );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'id="wcpos-consent-root"', $output );
+		$this->assertSame(
+			'',
+			get_user_meta( $user_id, Consent::CALLOUT_HIDE_META, true ),
+			'Expired hide-for-now meta should be cleaned up.'
+		);
+	}
+
+	/**
+	 * Recording a consent decision clears any lingering "hide for now"
+	 * user meta so the user's state stays coherent.
+	 */
+	public function test_save_consent_clears_hide_for_now_meta(): void {
+		$user_id = get_current_user_id();
+		update_user_meta( $user_id, Consent::CALLOUT_HIDE_META, time() + Consent::CALLOUT_HIDE_TTL );
+
+		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request->set_param( 'consent', 'allowed' );
+
+		$response = $this->consent->save_consent( $request );
+		$this->assertInstanceOf( \WP_REST_Response::class, $response );
+
+		$this->assertSame(
+			'',
+			get_user_meta( $user_id, Consent::CALLOUT_HIDE_META, true )
+		);
+	}
+
+	/**
+	 * Plugin activation clears any pending "hide for now" so the
+	 * callout re-surfaces on the next admin page load.
+	 */
+	public function test_activation_clears_hide_for_now_meta(): void {
+		$user_id = get_current_user_id();
+		update_user_meta( $user_id, Consent::CALLOUT_HIDE_META, time() + Consent::CALLOUT_HIDE_TTL );
+
+		$this->consent->on_plugin_activated( plugin_basename( PLUGIN_FILE ) );
+
+		$this->assertSame(
+			'',
+			get_user_meta( $user_id, Consent::CALLOUT_HIDE_META, true )
+		);
 	}
 }

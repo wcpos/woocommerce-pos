@@ -1,12 +1,14 @@
 import * as React from 'react';
 
-import { Button, Notice } from '@wcpos/ui';
+import { Button } from '@wcpos/ui';
 
 import { PrivacyInfoModal } from './privacy-info-modal';
 import { t } from './translations';
 
 export interface ConsentCalloutProps {
 	onDecide: (choice: 'allowed' | 'denied') => void;
+	/** Fired when the user clicks the "X" dismiss button ("hide for now"). */
+	onDismiss: () => void;
 	/** A save is in flight — disable the action buttons. */
 	busy?: boolean;
 	/** The previous save failed — surface a retry message. */
@@ -14,17 +16,23 @@ export interface ConsentCalloutProps {
 }
 
 /**
- * Inline non-dismissible callout shown on the Plugins screen and
- * Dashboard while the user has not yet made a decision about anonymous
- * usage data.
+ * Inline callout shown on the Plugins screen and Dashboard while the
+ * user has not yet made a decision about anonymous usage data.
  *
- * The callout requires an explicit choice — pressing "No thanks" counts
- * as denial and hides the callout (and future callouts) permanently.
- * There is no standalone "dismiss for now" action; `isDismissible` on
- * the underlying Notice is false by design.
+ * Renders into the WP-native `.notice.notice-info.is-dismissible`
+ * mount point so the callout inherits core admin-notice width, margins,
+ * and placement (beneath the page H1 alongside other admin notices).
+ *
+ * Three possible user actions:
+ *  - "Allow" / "No thanks" → records a consent decision; the callout
+ *    disappears permanently.
+ *  - The "×" dismiss button → "hide for now": tracking_consent stays
+ *    `undecided`; the server stores a per-user timestamp so the
+ *    callout re-surfaces after a TTL (or on next plugin activation).
  */
 export function ConsentCallout({
 	onDecide,
+	onDismiss,
 	busy = false,
 	error = false,
 }: ConsentCalloutProps) {
@@ -32,50 +40,52 @@ export function ConsentCallout({
 
 	return (
 		<>
-			<Notice
-				status={error ? 'error' : 'info'}
-				isDismissible={false}
-				className="wcpos:my-3"
+			<button
+				type="button"
+				className="notice-dismiss"
+				disabled={busy}
+				onClick={onDismiss}
 			>
-				<div className="wcpos:flex wcpos:flex-col wcpos:gap-2">
-					<div>
-						<p className="wcpos:font-semibold wcpos:mb-1">
-							{t('consent.callout_title')}
-						</p>
-						<p className="wcpos:text-sm">
-							{t('consent.callout_body')}{' '}
-							<button
-								type="button"
-								onClick={() => setLearnMoreOpen(true)}
-								className="wcpos:underline wcpos:cursor-pointer wcpos:bg-transparent wcpos:border-0 wcpos:p-0"
-							>
-								{t('consent.learn_more')}
-							</button>
-						</p>
-						{error && (
-							<p role="alert" className="wcpos:text-sm wcpos:mt-2">
-								{t('consent.save_error')}
-							</p>
-						)}
-					</div>
-					<div className="wcpos:flex wcpos:gap-2">
-						<Button
-							variant="primary"
-							disabled={busy}
-							onClick={() => onDecide('allowed')}
-						>
-							{t('consent.allow')}
-						</Button>
-						<Button
-							variant="secondary"
-							disabled={busy}
-							onClick={() => onDecide('denied')}
-						>
-							{t('consent.deny')}
-						</Button>
-					</div>
+				<span className="screen-reader-text">
+					{t('consent.dismiss_notice')}
+				</span>
+			</button>
+			<div className="wcpos:py-2 wcpos:max-w-3xl">
+				<p className="wcpos:text-base wcpos:font-semibold wcpos:mb-1 wcpos:mt-0">
+					{t('consent.callout_title')}
+				</p>
+				<p className="wcpos:text-[13px] wcpos:leading-relaxed wcpos:mt-0 wcpos:mb-3 wcpos:text-gray-700">
+					{t('consent.callout_body')}{' '}
+					<button
+						type="button"
+						onClick={() => setLearnMoreOpen(true)}
+						className="wcpos:underline wcpos:cursor-pointer wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:text-wp-admin-theme-color"
+					>
+						{t('consent.learn_more')}
+					</button>
+				</p>
+				{error && (
+					<p role="alert" className="wcpos:text-[13px] wcpos:mt-0 wcpos:mb-3 wcpos:text-red-600">
+						{t('consent.save_error')}
+					</p>
+				)}
+				<div className="wcpos:flex wcpos:gap-2 wcpos:items-center">
+					<Button
+						variant="primary"
+						disabled={busy}
+						onClick={() => onDecide('allowed')}
+					>
+						{t('consent.allow')}
+					</Button>
+					<Button
+						variant="secondary"
+						disabled={busy}
+						onClick={() => onDecide('denied')}
+					>
+						{t('consent.deny')}
+					</Button>
 				</div>
-			</Notice>
+			</div>
 			<PrivacyInfoModal
 				open={learnMoreOpen}
 				onClose={() => setLearnMoreOpen(false)}
