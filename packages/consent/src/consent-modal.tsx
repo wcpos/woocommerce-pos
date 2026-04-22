@@ -8,6 +8,10 @@ import { t } from './translations';
 export interface ConsentModalProps {
 	open: boolean;
 	onDecide: (choice: 'allowed' | 'denied') => void;
+	/** A save is in flight — disable the action buttons. */
+	busy?: boolean;
+	/** The previous save failed — surface a retry message. */
+	error?: boolean;
 }
 
 /**
@@ -16,7 +20,7 @@ export interface ConsentModalProps {
  * not yet made a decision. Does not offer a close/dismiss button — the
  * user must explicitly choose.
  */
-export function ConsentModal({ open, onDecide }: ConsentModalProps) {
+export function ConsentModal({ open, onDecide, busy = false, error = false }: ConsentModalProps) {
 	const [learnMoreOpen, setLearnMoreOpen] = React.useState(false);
 
 	return (
@@ -30,6 +34,14 @@ export function ConsentModal({ open, onDecide }: ConsentModalProps) {
 				<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-4">
 					{t('consent.modal_intro')}
 				</p>
+				{error && (
+					<p
+						role="alert"
+						className="wcpos:text-sm wcpos:text-red-700 wcpos:mb-3"
+					>
+						{t('consent.save_error')}
+					</p>
+				)}
 				<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:gap-2 wcpos:flex-wrap">
 					<button
 						type="button"
@@ -39,10 +51,18 @@ export function ConsentModal({ open, onDecide }: ConsentModalProps) {
 						{t('consent.learn_more')}
 					</button>
 					<div className="wcpos:flex wcpos:gap-2">
-						<Button variant="secondary" onClick={() => onDecide('denied')}>
+						<Button
+							variant="secondary"
+							disabled={busy}
+							onClick={() => onDecide('denied')}
+						>
 							{t('consent.deny')}
 						</Button>
-						<Button variant="primary" onClick={() => onDecide('allowed')}>
+						<Button
+							variant="primary"
+							disabled={busy}
+							onClick={() => onDecide('allowed')}
+						>
 							{t('consent.allow')}
 						</Button>
 					</div>

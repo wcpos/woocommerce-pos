@@ -7,23 +7,33 @@ import { t } from './translations';
 
 export interface ConsentCalloutProps {
 	onDecide: (choice: 'allowed' | 'denied') => void;
+	/** A save is in flight — disable the action buttons. */
+	busy?: boolean;
+	/** The previous save failed — surface a retry message. */
+	error?: boolean;
 }
 
 /**
- * Inline dismissible callout shown on the Plugins screen and Dashboard
- * while the user has not yet made a decision about anonymous usage data.
+ * Inline non-dismissible callout shown on the Plugins screen and
+ * Dashboard while the user has not yet made a decision about anonymous
+ * usage data.
  *
- * Denying by pressing "No thanks" counts as a decision and the callout
- * (and future callouts) will stop showing. There is no standalone
- * "dismiss for now" action — we want one of the two explicit choices.
+ * The callout requires an explicit choice — pressing "No thanks" counts
+ * as denial and hides the callout (and future callouts) permanently.
+ * There is no standalone "dismiss for now" action; `isDismissible` on
+ * the underlying Notice is false by design.
  */
-export function ConsentCallout({ onDecide }: ConsentCalloutProps) {
+export function ConsentCallout({
+	onDecide,
+	busy = false,
+	error = false,
+}: ConsentCalloutProps) {
 	const [learnMoreOpen, setLearnMoreOpen] = React.useState(false);
 
 	return (
 		<>
 			<Notice
-				status="info"
+				status={error ? 'error' : 'info'}
 				isDismissible={false}
 				className="wcpos:my-3"
 			>
@@ -42,12 +52,25 @@ export function ConsentCallout({ onDecide }: ConsentCalloutProps) {
 								{t('consent.learn_more')}
 							</button>
 						</p>
+						{error && (
+							<p role="alert" className="wcpos:text-sm wcpos:mt-2">
+								{t('consent.save_error')}
+							</p>
+						)}
 					</div>
 					<div className="wcpos:flex wcpos:gap-2">
-						<Button variant="primary" onClick={() => onDecide('allowed')}>
+						<Button
+							variant="primary"
+							disabled={busy}
+							onClick={() => onDecide('allowed')}
+						>
 							{t('consent.allow')}
 						</Button>
-						<Button variant="secondary" onClick={() => onDecide('denied')}>
+						<Button
+							variant="secondary"
+							disabled={busy}
+							onClick={() => onDecide('denied')}
+						>
 							{t('consent.deny')}
 						</Button>
 					</div>

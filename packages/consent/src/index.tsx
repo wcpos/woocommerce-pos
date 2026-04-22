@@ -29,17 +29,33 @@ interface RootProps {
 function ConsentRoot({ config, initialModal, initialCallout }: RootProps) {
 	const [modalOpen, setModalOpen] = React.useState(initialModal);
 	const [calloutVisible, setCalloutVisible] = React.useState(initialCallout);
+	const [isSaving, setIsSaving] = React.useState(false);
+	const [hasError, setHasError] = React.useState(false);
+	const savingRef = React.useRef(false);
 
 	const handleDecide = React.useCallback(
 		async (choice: ConsentChoice) => {
+			// Single-flight: ignore rapid repeat clicks while a save is in flight.
+			if (savingRef.current) {
+				return;
+			}
+			savingRef.current = true;
+			setIsSaving(true);
+			setHasError(false);
+
 			try {
 				await saveConsent(choice, config);
 			} catch (err) {
-				// Keep the UI open so the user can retry; log for debugging.
+				// Surface the failure in the UI so the modal isn't stuck silently.
 				// eslint-disable-next-line no-console
 				console.error('[wcpos-consent] failed to save choice', err);
+				setHasError(true);
 				return;
+			} finally {
+				savingRef.current = false;
+				setIsSaving(false);
 			}
+
 			setModalOpen(false);
 			setCalloutVisible(false);
 		},
@@ -48,8 +64,15 @@ function ConsentRoot({ config, initialModal, initialCallout }: RootProps) {
 
 	return (
 		<>
-			{calloutVisible && <ConsentCallout onDecide={handleDecide} />}
-			<ConsentModal open={modalOpen} onDecide={handleDecide} />
+			{calloutVisible && (
+				<ConsentCallout onDecide={handleDecide} busy={isSaving} error={hasError} />
+			)}
+			<ConsentModal
+				open={modalOpen}
+				onDecide={handleDecide}
+				busy={isSaving}
+				error={hasError}
+			/>
 		</>
 	);
 }
