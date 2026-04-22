@@ -25,5 +25,6 @@ export { Skeleton, type SkeletonProps } from './skeleton';
 export { FormRow, type FormRowProps } from './form-row';
 export { FormSection, type FormSectionProps } from './form-section';
 export { FilterTabs, type FilterTabsProps, type FilterTabItem } from './filter-tabs';
+export { Chip, type ChipProps, type ChipVariant, type ChipShape, type ChipSize } from './chip';
 export { Snackbar, type SnackbarProps, type SnackbarStatus } from './snackbar';
 export { SnackbarProvider, SnackbarContext, useSnackbar } from './snackbar-provider';

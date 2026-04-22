@@ -1,4 +1,5 @@
 import { Link, useMatchRoute } from '@tanstack/react-router';
+import { Chip } from '@wcpos/ui';
 import classNames from 'classnames';
 
 interface SeverityBadge {
@@ -20,31 +21,29 @@ export function NavItem({ to, label, badge, onClick }: NavItemProps) {
 	const renderBadge = () => {
 		if (badge == null) return null;
 
-		// Simple numeric badge (existing behavior).
 		if (typeof badge === 'number') {
 			if (badge <= 0) return null;
 			return (
-				<span className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:min-w-5 wcpos:h-5 wcpos:px-1.5 wcpos:rounded-full wcpos:bg-wp-admin-theme-color wcpos:text-white wcpos:text-xs wcpos:font-medium wcpos:leading-none">
+				<Chip variant="brand" shape="round" size="xs">
 					{badge}
-				</span>
+				</Chip>
 			);
 		}
 
-		// Severity badge (error + warning pills).
 		const { error = 0, warning = 0 } = badge;
 		if (error <= 0 && warning <= 0) return null;
 
 		return (
 			<span className="wcpos:inline-flex wcpos:items-center wcpos:gap-1">
 				{error > 0 && (
-					<span className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:min-w-5 wcpos:h-5 wcpos:px-1.5 wcpos:rounded-full wcpos:bg-red-600 wcpos:text-white wcpos:text-xs wcpos:font-medium wcpos:leading-none">
+					<Chip variant="critical" shape="round" size="xs">
 						{error}
-					</span>
+					</Chip>
 				)}
 				{warning > 0 && (
-					<span className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:min-w-5 wcpos:h-5 wcpos:px-1.5 wcpos:rounded-full wcpos:bg-amber-500 wcpos:text-white wcpos:text-xs wcpos:font-medium wcpos:leading-none">
+					<Chip variant="warning" shape="round" size="xs">
 						{warning}
-					</span>
+					</Chip>
 				)}
 			</span>
 		);

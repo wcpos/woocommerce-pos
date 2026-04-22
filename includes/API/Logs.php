@@ -91,10 +91,12 @@ class Logs extends WP_REST_Controller {
 		$page          = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
 		$available     = $this->get_available_sources();
 		$allowed_slugs = array_column( $available, 'source' );
-		$raw_source    = (string) ( $request->get_param( 'source' ) ?? self::CORE_SOURCE );
+		$raw_source    = trim( (string) ( $request->get_param( 'source' ) ?? 'all' ) );
 
-		// Resolve the requested source against the allowlist. 'all' → every allowed slug.
-		if ( 'all' === $raw_source ) {
+		// Resolve the requested source against the allowlist. Empty or 'all'
+		// means every allowed slug; a valid slug is allowed through; anything
+		// else falls back to the core source.
+		if ( '' === $raw_source || 'all' === $raw_source ) {
 			$sources = $allowed_slugs;
 		} elseif ( \in_array( $raw_source, $allowed_slugs, true ) ) {
 			$sources = array( $raw_source );
@@ -153,7 +155,7 @@ class Logs extends WP_REST_Controller {
 		$sources = array(
 			array(
 				'source'       => self::CORE_SOURCE,
-				'name'         => 'WooCommerce POS',
+				'name'         => 'WCPOS',
 				'requires_pro' => false,
 				'is_core'      => true,
 			),
@@ -380,8 +382,17 @@ class Logs extends WP_REST_Controller {
 					$message = substr( $message, 0, $context_pos );
 				}
 
+				// MySQL DATETIME ('YYYY-MM-DD HH:MM:SS' in GMT) is not portable
+				// ISO 8601 — Safari/WebKit rejects it in `new Date(...)`. Emit
+				// RFC3339 UTC so the frontend can parse it consistently with
+				// file-based entries.
+				$timestamp_utc = strtotime( $row['timestamp'] . ' UTC' );
+				$timestamp     = false === $timestamp_utc
+					? $row['timestamp']
+					: gmdate( 'c', $timestamp_utc );
+
 				return array(
-					'timestamp' => $row['timestamp'],
+					'timestamp' => $timestamp,
 					'level'     => $level_map[ (int) $row['level'] ] ?? 'debug',
 					'message'   => $message,
 					'context'   => $context,
@@ -518,7 +529,7 @@ class Logs extends WP_REST_Controller {
 		}
 
 		// Warning level = 400, error/critical/emergency/alert = 500-800.
-		$where = $wpdb->prepare( 'WHERE source = %s AND level >= %d', 'woocommerce-pos', 400 );
+		$where = $wpdb->prepare( 'WHERE source = %s AND level >= %d', self::CORE_SOURCE, 400 );
 
 		if ( $last_viewed_ts ) {
 			$last_viewed_date = gmdate( 'Y-m-d H:i:s', $last_viewed_ts );

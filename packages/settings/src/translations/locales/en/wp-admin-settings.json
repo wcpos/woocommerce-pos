@@ -17,6 +17,8 @@
 	"common.guest": "Guest",
 	"common.license": "License",
 	"common.logs": "Logs",
+	"common.next": "Next",
+	"common.previous": "Previous",
 	"logs.source": "Source",
 	"common.pos_settings": "POS settings",
 	"common.save": "Save",
@@ -120,9 +122,16 @@
 	"license.deactivate": "Deactivate",
 	"license.license_key": "License Key",
 	"license.activate": "Activate",
+	"logs.copied": "Copied",
+	"logs.copy": "Copy",
+	"logs.copy_failed": "Copy failed",
+	"logs.entries_count_one": "{count} entry",
+	"logs.entries_count_other": "{count} entries",
 	"logs.errors": "Errors",
 	"logs.fatal_errors_detected": "Fatal errors detected",
 	"logs.no_entries": "No log entries found.",
+	"logs.today": "Today",
 	"logs.view_in_wc": "view in WooCommerce logs",
-	"logs.warnings": "Warnings"
+	"logs.warnings": "Warnings",
+	"logs.yesterday": "Yesterday"
 }
