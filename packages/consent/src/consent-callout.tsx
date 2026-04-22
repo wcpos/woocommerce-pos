@@ -43,6 +43,7 @@ export function ConsentCallout({
 			<button
 				type="button"
 				className="notice-dismiss"
+				disabled={busy}
 				onClick={onDismiss}
 			>
 				<span className="screen-reader-text">
