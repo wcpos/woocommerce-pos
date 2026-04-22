@@ -91,7 +91,7 @@ class Logs extends WP_REST_Controller {
 		$page          = max( 1, (int) ( $request->get_param( 'page' ) ? $request->get_param( 'page' ) : 1 ) );
 		$available     = $this->get_available_sources();
 		$allowed_slugs = array_column( $available, 'source' );
-		$raw_source    = (string) ( $request->get_param( 'source' ) ?? self::CORE_SOURCE );
+		$raw_source    = (string) ( $request->get_param( 'source' ) ?? 'all' );
 
 		// Resolve the requested source against the allowlist. 'all' → every allowed slug.
 		if ( 'all' === $raw_source ) {
@@ -153,7 +153,7 @@ class Logs extends WP_REST_Controller {
 		$sources = array(
 			array(
 				'source'       => self::CORE_SOURCE,
-				'name'         => 'WooCommerce POS',
+				'name'         => 'WCPOS',
 				'requires_pro' => false,
 				'is_core'      => true,
 			),
