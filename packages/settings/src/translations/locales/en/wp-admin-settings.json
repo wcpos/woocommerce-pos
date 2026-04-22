@@ -120,9 +120,14 @@
 	"license.deactivate": "Deactivate",
 	"license.license_key": "License Key",
 	"license.activate": "Activate",
+	"logs.copied": "Copied",
+	"logs.copy": "Copy",
+	"logs.entries_count": "%d entries",
 	"logs.errors": "Errors",
 	"logs.fatal_errors_detected": "Fatal errors detected",
 	"logs.no_entries": "No log entries found.",
+	"logs.today": "Today",
 	"logs.view_in_wc": "view in WooCommerce logs",
-	"logs.warnings": "Warnings"
+	"logs.warnings": "Warnings",
+	"logs.yesterday": "Yesterday"
 }
