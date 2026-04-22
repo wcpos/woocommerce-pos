@@ -12,6 +12,12 @@ export type ToggleProps = {
 	description?: string;
 	disabled?: boolean;
 	className?: string;
+	/**
+	 * Override the default label styling. The default is
+	 * `text-sm font-medium text-gray-900`. Use to render a smaller/muted
+	 * label (e.g. `text-xs font-normal text-gray-500`).
+	 */
+	labelClassName?: string;
 } & ToggleA11yProps;
 
 export function Toggle({
@@ -21,6 +27,7 @@ export function Toggle({
 	description,
 	disabled,
 	className,
+	labelClassName,
 	'aria-label': ariaLabel,
 }: ToggleProps) {
 	const generatedId = React.useId();
@@ -67,7 +74,11 @@ export function Toggle({
 				<div onClick={handleToggle}>
 					<label
 						id={labelId}
-						className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900 wcpos:cursor-pointer"
+						className={classNames(
+							disabled ? 'wcpos:cursor-not-allowed' : 'wcpos:cursor-pointer',
+							labelClassName ??
+								'wcpos:text-sm wcpos:font-medium wcpos:text-gray-900'
+						)}
 					>
 						{label}
 					</label>
