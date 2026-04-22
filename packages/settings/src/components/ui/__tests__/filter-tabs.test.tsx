@@ -12,7 +12,7 @@ describe('FilterTabs', () => {
 		{ key: 'disabled', label: 'Disabled', disabled: true },
 	] as const;
 
-	it('renders active and inactive tabs with button-like cursor behavior', () => {
+	it('renders tabs, marks active via aria-pressed, and fires onChange on click', () => {
 		const onChange = vi.fn();
 
 		render(<FilterTabs items={items} value="error" onChange={onChange} />);
@@ -20,10 +20,8 @@ describe('FilterTabs', () => {
 		const activeTab = screen.getByRole('button', { name: 'Errors' });
 		const inactiveTab = screen.getByRole('button', { name: 'Warnings' });
 
-		expect(activeTab.className).toContain('wcpos:bg-wp-admin-theme-color');
-		expect(activeTab.className).toContain('wcpos:cursor-pointer');
-		expect(inactiveTab.className).toContain('hover:wcpos:bg-gray-200');
-		expect(inactiveTab.className).toContain('wcpos:cursor-pointer');
+		expect(activeTab).toHaveAttribute('aria-pressed', 'true');
+		expect(inactiveTab).toHaveAttribute('aria-pressed', 'false');
 
 		fireEvent.click(inactiveTab);
 		expect(onChange).toHaveBeenCalledWith('warning');
@@ -35,11 +33,18 @@ describe('FilterTabs', () => {
 		render(<FilterTabs items={items} value="error" onChange={onChange} />);
 
 		const disabledTab = screen.getByRole('button', { name: 'Disabled' });
-
 		expect(disabledTab).toBeDisabled();
-		expect(disabledTab.className).toContain('wcpos:cursor-not-allowed');
 
 		fireEvent.click(disabledTab);
 		expect(onChange).not.toHaveBeenCalled();
+	});
+
+	it('renders a sliding indicator inside the tab container', () => {
+		const { container } = render(
+			<FilterTabs items={items} value="error" onChange={() => {}} />
+		);
+
+		const indicator = container.querySelector('[data-testid="filter-tabs-indicator"]');
+		expect(indicator).not.toBeNull();
 	});
 });
