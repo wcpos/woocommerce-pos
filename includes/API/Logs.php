@@ -222,7 +222,15 @@ class Logs extends WP_REST_Controller {
 				continue;
 			}
 
+			// Anchor on "{source}-YYYY-MM-DD-" so we don't over-match when one
+			// source is a prefix of another (e.g. "woocommerce-pos" vs
+			// "woocommerce-pos-foo").
+			$pattern = '/^' . preg_quote( $source, '/' ) . '-\d{4}-\d{2}-\d{2}-/';
+
 			foreach ( $matched as $file ) {
+				if ( 1 !== preg_match( $pattern, basename( $file ) ) ) {
+					continue;
+				}
 				$files[] = array(
 					'path'   => $file,
 					'source' => $source,
