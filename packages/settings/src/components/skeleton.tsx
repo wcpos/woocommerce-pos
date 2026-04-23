@@ -138,30 +138,53 @@ export function AccessSkeleton() {
 }
 
 /**
- * Skeleton for sessions page (toggle buttons + table).
+ * Skeleton for sessions page (master/detail layout).
  */
 export function SessionsSkeleton() {
 	return (
 		<div className="wcpos:p-4" role="status" aria-label="Loading">
 			<Skeleton className="wcpos:h-10 wcpos:w-full wcpos:rounded-md wcpos:mb-3" />
-			<div className="wcpos:mb-3 wcpos:flex wcpos:gap-2">
-				<Skeleton className="wcpos:h-8 wcpos:rounded" width="90px" />
-				<Skeleton className="wcpos:h-8 wcpos:rounded" width="100px" />
-			</div>
-			<div className="wcpos:space-y-2">
-				{Array.from({ length: 4 }).map((_, i) => (
-					<div
-						key={i}
-						className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:border wcpos:border-gray-200 wcpos:rounded-md wcpos:p-3"
-					>
-						<Skeleton className="wcpos:h-8 wcpos:w-8 wcpos:rounded-full wcpos:shrink-0" />
-						<div className="wcpos:flex-1 wcpos:space-y-1">
-							<Skeleton className="wcpos:h-4" width="30%" />
-							<Skeleton className="wcpos:h-3" width="50%" />
+			<div className="wcpos:grid wcpos:grid-cols-[minmax(0,18rem)_1fr] wcpos:gap-4">
+				<div className="wcpos:space-y-2 wcpos:border-r wcpos:border-gray-200 wcpos:pr-4">
+					<Skeleton className="wcpos:h-8 wcpos:w-full wcpos:rounded-md" />
+					{Array.from({ length: 4 }).map((_, i) => (
+						<div
+							key={i}
+							className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:px-3 wcpos:py-2"
+						>
+							<Skeleton className="wcpos:h-10 wcpos:w-10 wcpos:shrink-0 wcpos:rounded-full" />
+							<div className="wcpos:flex-1 wcpos:space-y-1">
+								<Skeleton className="wcpos:h-4" width="60%" />
+								<Skeleton className="wcpos:h-3" width="40%" />
+							</div>
+							<Skeleton className="wcpos:h-5 wcpos:w-6 wcpos:rounded-full" />
 						</div>
-						<Skeleton className="wcpos:h-7 wcpos:rounded" width="70px" />
+					))}
+				</div>
+				<div className="wcpos:space-y-3">
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:border-b wcpos:border-gray-200 wcpos:pb-3">
+						<Skeleton className="wcpos:h-12 wcpos:w-12 wcpos:shrink-0 wcpos:rounded-full" />
+						<div className="wcpos:flex-1 wcpos:space-y-1">
+							<Skeleton className="wcpos:h-5" width="40%" />
+							<Skeleton className="wcpos:h-3" width="30%" />
+						</div>
+						<Skeleton className="wcpos:h-8 wcpos:rounded" width="120px" />
 					</div>
-				))}
+					{Array.from({ length: 3 }).map((_, i) => (
+						<div
+							key={i}
+							className="wcpos:flex wcpos:items-start wcpos:gap-3 wcpos:rounded-md wcpos:border wcpos:border-gray-200 wcpos:p-3"
+						>
+							<Skeleton className="wcpos:h-10 wcpos:w-10 wcpos:shrink-0 wcpos:rounded-md" />
+							<div className="wcpos:flex-1 wcpos:space-y-1">
+								<Skeleton className="wcpos:h-4" width="50%" />
+								<Skeleton className="wcpos:h-3" width="70%" />
+								<Skeleton className="wcpos:h-8 wcpos:rounded wcpos:mt-2" width="100%" />
+							</div>
+							<Skeleton className="wcpos:h-7 wcpos:rounded" width="80px" />
+						</div>
+					))}
+				</div>
 			</div>
 		</div>
 	);
