@@ -446,6 +446,9 @@ class Auth extends WP_REST_Controller {
 
 		$users_data = array();
 
+		// Get current JTI if available from the request token.
+		$current_jti = $this->get_current_jti_from_request( $request );
+
 		foreach ( $user_ids as $user_id ) {
 			$user = get_user_by( 'id', $user_id );
 			if ( ! $user ) {
@@ -459,13 +462,15 @@ class Auth extends WP_REST_Controller {
 				continue;
 			}
 
-			// Find the most recent activity.
+			// Mark the current session and find the most recent activity.
 			$last_active = 0;
-			foreach ( $sessions as $session ) {
+			foreach ( $sessions as &$session ) {
+				$session['is_current'] = ( ! empty( $current_jti ) && $session['jti'] === $current_jti );
 				if ( $session['last_active'] > $last_active ) {
 					$last_active = $session['last_active'];
 				}
 			}
+			unset( $session );
 
 			$users_data[] = array(
 				'user_id'       => (int) $user_id,
@@ -558,16 +563,21 @@ class Auth extends WP_REST_Controller {
 			return null;
 		}
 
-		// Try to decode the token to get JTI.
+		// Try to decode as refresh token first.
 		$auth_service = AuthService::instance();
 		$decoded      = $auth_service->validate_token( $token, 'refresh' );
 
+		if ( ! is_wp_error( $decoded ) ) {
+			return $decoded->jti ?? null;
+		}
+
+		// Fallback: access tokens carry the session link as refresh_jti.
+		$decoded = $auth_service->validate_token( $token, 'access' );
+
 		if ( is_wp_error( $decoded ) ) {
-			// If it's not a refresh token, it might be an access token
-			// Access tokens don't have JTI, so return null.
 			return null;
 		}
 
-		return $decoded->jti ?? null;
+		return $decoded->refresh_jti ?? null;
 	}
 }

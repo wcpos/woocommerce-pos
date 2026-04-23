@@ -218,6 +218,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 		// Create a session
 		$refresh_token = $this->auth_service->generate_refresh_token( $this->regular_user );
 		$decoded = $this->auth_service->validate_token( $refresh_token, 'refresh' );
+		$this->assertNotWPError( $decoded );
 
 		// Verify session exists
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
@@ -293,6 +294,10 @@ class Test_Auth_API extends WP_UnitTestCase {
 		$token1 = $this->auth_service->generate_refresh_token( $this->regular_user );
 		$this->auth_service->generate_refresh_token( $this->regular_user );
 		$this->auth_service->generate_refresh_token( $this->regular_user );
+		$decoded_refresh = $this->auth_service->validate_token( $token1, 'refresh' );
+		$this->assertNotWPError( $decoded_refresh );
+		$access_token = $this->auth_service->generate_access_token( $this->regular_user, $decoded_refresh->jti );
+		$this->assertNotWPError( $access_token );
 
 		// Verify sessions exist
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
@@ -304,7 +309,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 				'user_id' => $this->regular_user->ID,
 				'except_current' => true,
 			),
-			array( 'authorization' => 'Bearer ' . $token1 )
+			array( 'authorization' => 'Bearer ' . $access_token )
 		);
 		$response = $this->api->delete_all_sessions( $request );
 		$data = $response->get_data();
@@ -314,6 +319,7 @@ class Test_Auth_API extends WP_UnitTestCase {
 		// Verify only one session remains
 		$sessions = $this->auth_service->get_user_sessions( $this->regular_user->ID );
 		$this->assertCount( 1, $sessions );
+		$this->assertEquals( $decoded_refresh->jti, $sessions[0]['jti'] );
 	}
 
 	/**
@@ -323,11 +329,18 @@ class Test_Auth_API extends WP_UnitTestCase {
 		wp_set_current_user( $this->admin_user->ID );
 
 		// Create sessions for multiple users
-		$this->auth_service->generate_refresh_token( $this->admin_user );
+		$admin_refresh_token = $this->auth_service->generate_refresh_token( $this->admin_user );
 		$this->auth_service->generate_refresh_token( $this->regular_user );
 		$this->auth_service->generate_refresh_token( $this->shop_manager_user );
+		$admin_refresh_decoded = $this->auth_service->validate_token( $admin_refresh_token, 'refresh' );
+		$this->assertNotWPError( $admin_refresh_decoded );
+		$admin_access_token = $this->auth_service->generate_access_token( $this->admin_user, $admin_refresh_decoded->jti );
+		$this->assertNotWPError( $admin_access_token );
 
-		$request = $this->create_request();
+		$request = $this->create_request(
+			array(),
+			array( 'authorization' => 'Bearer ' . $admin_access_token )
+		);
 		$response = $this->api->get_all_users_sessions( $request );
 		$data = $response->get_data();
 
@@ -346,6 +359,22 @@ class Test_Auth_API extends WP_UnitTestCase {
 			$this->assertArrayHasKey( 'last_active', $user_data );
 			$this->assertArrayHasKey( 'sessions', $user_data );
 		}
+
+		$admin_session_marked_current = false;
+		foreach ( $data['users'] as $user_data ) {
+			if ( (int) $user_data['user_id'] !== (int) $this->admin_user->ID ) {
+				continue;
+			}
+
+			foreach ( $user_data['sessions'] as $session ) {
+				if ( ! empty( $session['is_current'] ) ) {
+					$admin_session_marked_current = true;
+					$this->assertEquals( $admin_refresh_decoded->jti, $session['jti'] );
+				}
+			}
+		}
+
+		$this->assertTrue( $admin_session_marked_current );
 	}
 
 	/**
@@ -444,4 +473,3 @@ class Test_Auth_API extends WP_UnitTestCase {
 		$this->assertFalse( $result );
 	}
 }
-
