@@ -59,6 +59,13 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_item' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'context' => array(
+							'type'              => 'array',
+							'validate_callback' => array( $this, 'validate_context_param' ),
+							'sanitize_callback' => array( $this, 'sanitize_context_param' ),
+						),
+					),
 				),
 			)
 		);
@@ -96,6 +103,26 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 		$data    = $this->gateway_contract->get_bootstrap_response( $gateway_id, $context, $request );
 
 		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Validate bootstrap context input.
+	 *
+	 * @param mixed $value Context value.
+	 */
+	public function validate_context_param( $value ): bool {
+		return is_array( $value );
+	}
+
+	/**
+	 * Sanitize bootstrap context input.
+	 *
+	 * @param mixed $value Context value.
+	 *
+	 * @return array
+	 */
+	public function sanitize_context_param( $value ): array {
+		return is_array( $value ) ? $value : array();
 	}
 
 	/**

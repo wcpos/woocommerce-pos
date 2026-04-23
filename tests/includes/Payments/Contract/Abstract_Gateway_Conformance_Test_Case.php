@@ -22,6 +22,8 @@ abstract class Abstract_Gateway_Conformance_Test_Case extends WCPOS_REST_Unit_Te
 
 	/**
 	 * Assert the discovery contract for the configured gateway.
+	 *
+	 * @param array $gateway Gateway payload.
 	 */
 	protected function assert_gateway_contract_shape( array $gateway ): void {
 		$this->assertSame( $this->gateway_id, $gateway['id'] ?? '' );
@@ -63,6 +65,10 @@ abstract class Abstract_Gateway_Conformance_Test_Case extends WCPOS_REST_Unit_Te
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( $this->gateway_id, $data['gateway_id'] ?? '' );
+		$this->assertArrayHasKey( 'status', $data );
+		$this->assertArrayHasKey( 'provider_data', $data );
+		$this->assertArrayHasKey( 'expires_at', $data );
+		$this->assertIsArray( $data['provider_data'] );
 
 		return $data;
 	}
