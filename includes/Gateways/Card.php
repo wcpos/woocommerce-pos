@@ -44,7 +44,7 @@ class Card extends WC_Payment_Gateway {
 		add_filter( 'wcpos_payment_gateway_pos_type', array( $this, 'wcpos_pos_type' ), 10, 3 );
 		add_filter( 'wcpos_payment_gateway_provider_data', array( $this, 'wcpos_provider_data' ), 10, 3 );
 		add_filter( 'wcpos_payment_gateway_bootstrap', array( $this, 'wcpos_bootstrap' ), 10, 4 );
-		add_filter( 'wcpos_process_checkout_action', array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
+		add_filter( 'wcpos_process_checkout_action_' . $this->id, array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
 	}
 
 	/**
@@ -100,7 +100,15 @@ class Card extends WC_Payment_Gateway {
 			$cashback = wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['pos-cashback'] ) ) );
 		}
 
-		$this->apply_card_payment( $order, $cashback );
+		$result = $this->apply_card_payment( $order, $cashback );
+		if ( is_wp_error( $result ) ) {
+			wc_add_notice( $result->get_error_message(), 'error' );
+
+			return array(
+				'result'   => 'failure',
+				'redirect' => '',
+			);
+		}
 
 		// success.
 		return array(
@@ -212,13 +220,17 @@ class Card extends WC_Payment_Gateway {
 	/**
 	 * Handle POS checkout contract for card.
 	 *
-	 * @param array     $state        Checkout state.
+	 * @param array|\WP_Error $state        Checkout state.
 	 * @param string    $action       Checkout action.
 	 * @param array     $payment_data Payment data.
 	 * @param \WC_Order $order       Order object.
 	 * @param mixed     $request      REST request.
 	 */
 	public function wcpos_process_checkout_action( $state, $action, $payment_data, $order, $request = null ) {
+		if ( is_wp_error( $state ) ) {
+			return $state;
+		}
+
 		if ( ( $state['gateway_id'] ?? '' ) !== $this->id ) {
 			return $state;
 		}
@@ -236,7 +248,10 @@ class Card extends WC_Payment_Gateway {
 			? wc_format_decimal( $payment_data['cashback_amount'] )
 			: 0;
 
-		$this->apply_card_payment( $order, $cashback );
+		$result = $this->apply_card_payment( $order, $cashback );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 
 		$state['status']        = 'completed';
 		$state['provider_data'] = array(
@@ -251,8 +266,20 @@ class Card extends WC_Payment_Gateway {
 	 *
 	 * @param \WC_Order        $order    Order object.
 	 * @param float|int|string $cashback Cashback amount.
+	 *
+	 * @return true|\WP_Error
 	 */
-	private function apply_card_payment( $order, $cashback ): void {
+	private function apply_card_payment( $order, $cashback ) {
+		$cashback = wc_format_decimal( $cashback );
+
+		if ( (float) $cashback < 0 ) {
+			return new \WP_Error(
+				'wcpos_invalid_cashback_amount',
+				__( 'Cashback amount must be zero or greater.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$order->set_payment_method( $this->id );
 		$order->set_payment_method_title( $this->title );
 
@@ -279,5 +306,7 @@ class Card extends WC_Payment_Gateway {
 		}
 
 		$order->payment_complete();
+
+		return true;
 	}
 }

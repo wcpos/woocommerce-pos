@@ -54,6 +54,33 @@ class Gateway_Contract {
 	}
 
 	/**
+	 * Whether a gateway is enabled for POS.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway object.
+	 */
+	public function is_pos_enabled( WC_Payment_Gateway $gateway ): bool {
+		$settings = woocommerce_pos_get_settings( 'payment_gateways' );
+
+		if ( is_wp_error( $settings ) ) {
+			return wc_string_to_bool( $gateway->enabled );
+		}
+
+		$pos_setting = $settings['gateways'][ $gateway->id ] ?? array();
+
+		return isset( $pos_setting['enabled'] ) ? (bool) $pos_setting['enabled'] : wc_string_to_bool( $gateway->enabled );
+	}
+
+	/**
+	 * Whether a gateway supports the POS checkout contract.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway object.
+	 * @param WP_REST_Request    $request Request object.
+	 */
+	public function supports_checkout( WC_Payment_Gateway $gateway, WP_REST_Request $request ): bool {
+		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', true, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+	}
+
+	/**
 	 * Capabilities exposed to the POS app.
 	 *
 	 * @param WC_Payment_Gateway $gateway Gateway object.
@@ -64,7 +91,7 @@ class Gateway_Contract {
 		$supports_provider_refunds = ! in_array( $gateway->id, self::MANUAL_GATEWAYS, true ) && $gateway->supports( 'refunds' );
 
 		return array(
-			'supports_checkout'          => (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', true, $gateway, $request ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+			'supports_checkout'          => $this->supports_checkout( $gateway, $request ),
 			'supports_automatic_refunds' => (bool) apply_filters( 'wcpos_payment_gateway_supports_automatic_refunds', $supports_provider_refunds, $gateway, $request ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 			'supports_provider_refunds'  => (bool) apply_filters( 'wcpos_payment_gateway_supports_provider_refunds', $supports_provider_refunds, $gateway, $request ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 			'requires_hardware'          => 'terminal' === $pos_type,

@@ -38,13 +38,6 @@ class Payment_Gateways extends WC_REST_Payment_Gateways_Controller {
 	protected $rest_base = 'payment-gateways';
 
 	/**
-	 * POS settings.
-	 *
-	 * @var array
-	 */
-	private $settings;
-
-	/**
 	 * Shared gateway contract helper.
 	 *
 	 * @var Gateway_Contract
@@ -55,7 +48,6 @@ class Payment_Gateways extends WC_REST_Payment_Gateways_Controller {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->settings         = woocommerce_pos_get_settings( 'payment_gateways' );
 		$this->gateway_contract = new Gateway_Contract();
 	}
 
@@ -95,9 +87,7 @@ class Payment_Gateways extends WC_REST_Payment_Gateways_Controller {
 	public function prepare_item_for_response( $item, $request ): WP_REST_Response {
 		$response   = parent::prepare_item_for_response( $item, $request );
 		$data       = $response->get_data();
-		$pos_setting = $this->settings['gateways'][ $item->id ] ?? array();
-
-		$data['enabled']       = isset( $pos_setting['enabled'] ) ? (bool) $pos_setting['enabled'] : wc_string_to_bool( $item->enabled );
+		$data['enabled']       = $this->gateway_contract->is_pos_enabled( $item );
 		$data['provider']      = $this->gateway_contract->get_provider( $item, $request );
 		$data['pos_type']      = $this->gateway_contract->infer_pos_type( $item, $request );
 		$data['capabilities']  = $this->gateway_contract->get_capabilities( $item, $request );

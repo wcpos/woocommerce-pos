@@ -46,7 +46,7 @@ class Cash extends WC_Payment_Gateway {
 		add_filter( 'wcpos_payment_gateway_pos_type', array( $this, 'wcpos_pos_type' ), 10, 3 );
 		add_filter( 'wcpos_payment_gateway_provider_data', array( $this, 'wcpos_provider_data' ), 10, 3 );
 		add_filter( 'wcpos_payment_gateway_bootstrap', array( $this, 'wcpos_bootstrap' ), 10, 4 );
-		add_filter( 'wcpos_process_checkout_action', array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
+		add_filter( 'wcpos_process_checkout_action_' . $this->id, array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
 	}
 
 	/**
@@ -150,7 +150,15 @@ class Cash extends WC_Payment_Gateway {
 		if ( isset( $_POST['pos-cash-tendered'] ) && ! empty( $_POST['pos-cash-tendered'] ) ) {
 			$tendered = wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['pos-cash-tendered'] ) ) );
 		}
-		$this->apply_tendered_payment( $order, $tendered, true );
+		$result = $this->apply_tendered_payment( $order, $tendered, true );
+		if ( is_wp_error( $result ) ) {
+			wc_add_notice( $result->get_error_message(), 'error' );
+
+			return array(
+				'result'   => 'failure',
+				'redirect' => '',
+			);
+		}
 
 		// Return thankyou redirect
 		// $redirect = add_query_arg(array(
@@ -268,13 +276,17 @@ class Cash extends WC_Payment_Gateway {
 	/**
 	 * Handle POS checkout contract.
 	 *
-	 * @param array    $state        Checkout state.
+	 * @param array|\WP_Error $state        Checkout state.
 	 * @param string   $action       Checkout action.
 	 * @param array    $payment_data Payment data.
 	 * @param WC_Order $order      Order object.
 	 * @param mixed    $request      REST request.
 	 */
 	public function wcpos_process_checkout_action( $state, $action, $payment_data, $order, $request = null ) {
+		if ( is_wp_error( $state ) ) {
+			return $state;
+		}
+
 		if ( ( $state['gateway_id'] ?? '' ) !== $this->id ) {
 			return $state;
 		}
@@ -316,6 +328,16 @@ class Cash extends WC_Payment_Gateway {
 	 * @return true|\WP_Error
 	 */
 	private function apply_tendered_payment( WC_Order $order, string $tendered, bool $allow_partial ) {
+		$tendered = wc_format_decimal( $tendered );
+
+		if ( (float) $tendered < 0 ) {
+			return new \WP_Error(
+				'wcpos_invalid_tendered_amount',
+				__( 'Tendered amount must be zero or greater.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$change = $tendered > $order->get_total() ? wc_format_decimal( floatval( $tendered ) - floatval( $order->get_total() ) ) : '0';
 		$order->set_payment_method( $this->id );
 		$order->set_payment_method_title( $this->title );

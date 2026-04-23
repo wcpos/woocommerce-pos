@@ -139,17 +139,6 @@ class Checkout_Controller extends WC_REST_Controller {
 			);
 		}
 
-		$request_hash = md5( wp_json_encode( $this->normalize_for_hash( $params ) ) );
-		$conflict     = $this->idempotency_repository->assert_not_conflicting( 'checkout', $idempotency_key, $request_hash );
-		if ( is_wp_error( $conflict ) ) {
-			return $conflict;
-		}
-
-		$existing = $this->idempotency_repository->find( 'checkout', $idempotency_key );
-		if ( $existing ) {
-			return new WP_REST_Response( $existing['body'], $existing['status_code'] );
-		}
-
 		$gateway_id = isset( $params['gateway_id'] ) ? (string) $params['gateway_id'] : '';
 		$gateway    = $this->get_gateway( $gateway_id );
 		if ( ! $gateway ) {
@@ -160,27 +149,41 @@ class Checkout_Controller extends WC_REST_Controller {
 			);
 		}
 
+		if ( ! $this->gateway_contract->is_pos_enabled( $gateway ) || ! $this->gateway_contract->supports_checkout( $gateway, $request ) ) {
+			return new WP_Error(
+				'wcpos_payment_gateway_not_available',
+				__( 'Payment gateway is not available for POS checkout.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$idempotency_scope = $this->get_idempotency_scope( $order->get_id() );
+		$request_hash      = md5(
+			wp_json_encode(
+				$this->normalize_for_hash(
+					array(
+						'order_id' => $order->get_id(),
+						'params'   => $params,
+					)
+				)
+			)
+		);
+		$claim             = $this->idempotency_repository->claim( $idempotency_scope, $idempotency_key, $request_hash );
+
+		if ( is_wp_error( $claim ) ) {
+			return $claim;
+		}
+
+		if ( is_array( $claim ) ) {
+			return new WP_REST_Response( $claim['body'], $claim['status_code'] );
+		}
+
 		$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
 		$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS checkout contract filter.
-		$state        = apply_filters(
-			'wcpos_process_checkout_action',
-			array(
-				'checkout_id'   => wp_generate_uuid4(),
-				'order_id'      => $order->get_id(),
-				'gateway_id'    => $gateway_id,
-				'status'        => 'processing',
-				'provider_data' => array(),
-				'terminal'      => false,
-			),
-			$action,
-			$payment_data,
-			$order,
-			$request
-		);
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$state        = $this->dispatch_checkout_action( $gateway_id, $order->get_id(), $action, $payment_data, $order, $request );
 
 		if ( is_wp_error( $state ) ) {
+			$this->idempotency_repository->release( $idempotency_scope, $idempotency_key );
 			return $state;
 		}
 
@@ -193,7 +196,7 @@ class Checkout_Controller extends WC_REST_Controller {
 			$order->save_meta_data();
 		}
 
-		$this->idempotency_repository->store( 'checkout', $idempotency_key, $request_hash, 200, $state );
+		$this->idempotency_repository->store( $idempotency_scope, $idempotency_key, $request_hash, 200, $state );
 
 		return rest_ensure_response( $state );
 	}
@@ -256,6 +259,47 @@ class Checkout_Controller extends WC_REST_Controller {
 	}
 
 	/**
+	 * Dispatch checkout processing to the resolved gateway only.
+	 *
+	 * @param string          $gateway_id    Gateway ID.
+	 * @param int             $order_id      Order ID.
+	 * @param string          $action        Checkout action.
+	 * @param array           $payment_data  Payment data.
+	 * @param \WC_Order       $order         Order object.
+	 * @param WP_REST_Request $request       Request object.
+	 *
+	 * @return array|WP_Error
+	 */
+	private function dispatch_checkout_action( string $gateway_id, int $order_id, string $action, array $payment_data, $order, WP_REST_Request $request ) {
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS checkout contract filter.
+		return apply_filters(
+			"wcpos_process_checkout_action_{$gateway_id}",
+			array(
+				'checkout_id'   => wp_generate_uuid4(),
+				'order_id'      => $order_id,
+				'gateway_id'    => $gateway_id,
+				'status'        => 'processing',
+				'provider_data' => array(),
+				'terminal'      => false,
+			),
+			$action,
+			$payment_data,
+			$order,
+			$request
+		);
+		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+	}
+
+	/**
+	 * Build order-scoped idempotency namespace.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	private function get_idempotency_scope( int $order_id ): string {
+		return 'checkout:' . $order_id;
+	}
+
+	/**
 	 * Normalize checkout state payload.
 	 *
 	 * @param int    $order_id   Order ID.
@@ -263,13 +307,15 @@ class Checkout_Controller extends WC_REST_Controller {
 	 * @param array  $state      Raw state.
 	 */
 	private function normalize_state( int $order_id, string $gateway_id, array $state ): array {
+		$status = (string) ( $state['status'] ?? 'processing' );
+
 		return array(
 			'checkout_id'   => $state['checkout_id'] ?? null,
 			'order_id'      => $order_id,
 			'gateway_id'    => $state['gateway_id'] ?? $gateway_id,
-			'status'        => $state['status'] ?? 'processing',
+			'status'        => $status,
 			'provider_data' => isset( $state['provider_data'] ) && is_array( $state['provider_data'] ) ? $state['provider_data'] : array(),
-			'terminal'      => isset( $state['terminal'] ) ? (bool) $state['terminal'] : $this->gateway_contract->is_terminal_status( (string) ( $state['status'] ?? 'processing' ) ),
+			'terminal'      => ( isset( $state['terminal'] ) ? (bool) $state['terminal'] : false ) || $this->gateway_contract->is_terminal_status( $status ),
 		);
 	}
 
