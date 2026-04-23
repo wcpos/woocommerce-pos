@@ -40,6 +40,11 @@ class Card extends WC_Payment_Gateway {
 			)
 		);
 		add_action( 'woocommerce_thankyou_pos_card', array( $this, 'calculate_cashback' ) );
+		add_filter( 'wcpos_payment_gateway_provider', array( $this, 'wcpos_provider' ), 10, 3 );
+		add_filter( 'wcpos_payment_gateway_pos_type', array( $this, 'wcpos_pos_type' ), 10, 3 );
+		add_filter( 'wcpos_payment_gateway_provider_data', array( $this, 'wcpos_provider_data' ), 10, 3 );
+		add_filter( 'wcpos_payment_gateway_bootstrap', array( $this, 'wcpos_bootstrap' ), 10, 4 );
+		add_filter( 'wcpos_process_checkout_action', array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
 	}
 
 	/**
@@ -95,34 +100,7 @@ class Card extends WC_Payment_Gateway {
 			$cashback = wc_format_decimal( sanitize_text_field( wp_unslash( $_POST['pos-cashback'] ) ) );
 		}
 
-		if ( 0 !== $cashback ) {
-			// add order meta.
-			$order->update_meta_data( '_pos_card_cashback', $cashback );
-
-			// add cashback as fee line item
-			// TODO: this should be handled by $order->add_fee after WC 2.2.
-			$item_id = wc_add_order_item(
-				$order_id,
-				array(
-					'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
-					'order_item_type' => 'fee',
-				)
-			);
-
-			if ( $item_id ) {
-				wc_add_order_item_meta( $item_id, '_line_total', $cashback );
-				wc_add_order_item_meta( $item_id, '_line_tax', 0 );
-				wc_add_order_item_meta( $item_id, '_line_subtotal', $cashback );
-				wc_add_order_item_meta( $item_id, '_line_subtotal_tax', 0 );
-				wc_add_order_item_meta( $item_id, '_tax_class', 'zero-rate' );
-			}
-
-			// update the order total to include fee.
-			$order->set_total( wc_format_decimal( \floatval( $order->get_total() ) + \floatval( $cashback ) ) );
-		}
-
-		// payment complete (saves the order internally).
-		$order->payment_complete();
+		$this->apply_card_payment( $order, $cashback );
 
 		// success.
 		return array(
@@ -163,5 +141,143 @@ class Card extends WC_Payment_Gateway {
 		}
 
 		echo wp_kses_post( $message );
+	}
+
+	/**
+	 * POS provider family.
+	 *
+	 * @param string $provider Provider value.
+	 * @param mixed  $gateway  Gateway object.
+	 * @param mixed  $request  REST request.
+	 */
+	public function wcpos_provider( $provider, $gateway, $request = null ) {
+		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
+			return 'wcpos';
+		}
+
+		return $provider;
+	}
+
+	/**
+	 * POS type.
+	 *
+	 * @param string $pos_type POS type.
+	 * @param mixed  $gateway  Gateway object.
+	 * @param mixed  $request  REST request.
+	 */
+	public function wcpos_pos_type( $pos_type, $gateway, $request = null ) {
+		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
+			return 'manual';
+		}
+
+		return $pos_type;
+	}
+
+	/**
+	 * Non-secret provider data.
+	 *
+	 * @param array $provider_data Provider data.
+	 * @param mixed $gateway       Gateway object.
+	 * @param mixed $request       REST request.
+	 */
+	public function wcpos_provider_data( $provider_data, $gateway, $request = null ) {
+		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
+			return array();
+		}
+
+		return $provider_data;
+	}
+
+	/**
+	 * Bootstrap response for POS card.
+	 *
+	 * @param array  $response   Bootstrap response.
+	 * @param string $gateway_id Gateway ID.
+	 * @param array  $context    Bootstrap context.
+	 * @param mixed  $request    REST request.
+	 */
+	public function wcpos_bootstrap( $response, $gateway_id, $context = array(), $request = null ) {
+		if ( $this->id === $gateway_id ) {
+			return array(
+				'gateway_id'    => $gateway_id,
+				'status'        => 'ready',
+				'expires_at'    => null,
+				'provider_data' => array(),
+			);
+		}
+
+		return $response;
+	}
+
+	/**
+	 * Handle POS checkout contract for card.
+	 *
+	 * @param array     $state        Checkout state.
+	 * @param string    $action       Checkout action.
+	 * @param array     $payment_data Payment data.
+	 * @param \WC_Order $order       Order object.
+	 * @param mixed     $request      REST request.
+	 */
+	public function wcpos_process_checkout_action( $state, $action, $payment_data, $order, $request = null ) {
+		if ( ( $state['gateway_id'] ?? '' ) !== $this->id ) {
+			return $state;
+		}
+
+		if ( 'cancel' === $action ) {
+			$state['status'] = 'cancelled';
+			return $state;
+		}
+
+		if ( 'start' !== $action ) {
+			return $state;
+		}
+
+		$cashback = isset( $payment_data['cashback_amount'] ) && '' !== $payment_data['cashback_amount']
+			? wc_format_decimal( $payment_data['cashback_amount'] )
+			: 0;
+
+		$this->apply_card_payment( $order, $cashback );
+
+		$state['status']        = 'completed';
+		$state['provider_data'] = array(
+			'cashback' => $order->get_meta( '_pos_card_cashback' ),
+		);
+
+		return $state;
+	}
+
+	/**
+	 * Apply card payment changes to an order.
+	 *
+	 * @param \WC_Order        $order    Order object.
+	 * @param float|int|string $cashback Cashback amount.
+	 */
+	private function apply_card_payment( $order, $cashback ): void {
+		$order->set_payment_method( $this->id );
+		$order->set_payment_method_title( $this->title );
+
+		if ( 0 !== $cashback && '0' !== (string) $cashback ) {
+			$order->update_meta_data( '_pos_card_cashback', $cashback );
+
+			$item_id = wc_add_order_item(
+				$order->get_id(),
+				array(
+					'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
+					'order_item_type' => 'fee',
+				)
+			);
+
+			if ( $item_id ) {
+				wc_add_order_item_meta( $item_id, '_line_total', $cashback );
+				wc_add_order_item_meta( $item_id, '_line_tax', 0 );
+				wc_add_order_item_meta( $item_id, '_line_subtotal', $cashback );
+				wc_add_order_item_meta( $item_id, '_line_subtotal_tax', 0 );
+				wc_add_order_item_meta( $item_id, '_tax_class', 'zero-rate' );
+			}
+
+			$order->set_total( wc_format_decimal( \floatval( $order->get_total() ) + \floatval( $cashback ) ) );
+		}
+
+		$order->payment_complete();
 	}
 }

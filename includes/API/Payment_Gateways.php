@@ -1,82 +1,107 @@
 <?php
 /**
- * Payment_Gateways.
+ * POS payment gateways controller.
  *
  * @package WCPOS\WooCommercePOS
  */
 
 namespace WCPOS\WooCommercePOS\API;
 
+\defined( 'ABSPATH' ) || die;
+
+if ( ! class_exists( 'WC_REST_Payment_Gateways_Controller' ) ) {
+	return;
+}
+
 use WC_Payment_Gateway;
+use WC_REST_Payment_Gateways_Controller;
+use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * Payment_Gateways class.
+ * POS payment gateways controller.
  */
-class Payment_Gateways {
+class Payment_Gateways extends WC_REST_Payment_Gateways_Controller {
 	/**
-	 * The REST request.
+	 * REST namespace.
 	 *
-	 * @phpstan-ignore-next-line
-	 *
-	 * @var WP_REST_Request
+	 * @var string
 	 */
-	private $request;
+	protected $namespace = 'wcpos/v1';
 
 	/**
-	 * The POS settings.
+	 * REST base.
+	 *
+	 * @var string
+	 */
+	protected $rest_base = 'payment-gateways';
+
+	/**
+	 * POS settings.
 	 *
 	 * @var array
 	 */
 	private $settings;
 
 	/**
-	 * Payment Gateways constructor.
+	 * Shared gateway contract helper.
 	 *
-	 * @param WP_REST_Request $request The REST request.
+	 * @var Gateway_Contract
 	 */
-	public function __construct( WP_REST_Request $request ) {
-		$this->request = $request;
-		$this->settings = woocommerce_pos_get_settings( 'payment_gateways' );
+	private $gateway_contract;
 
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'check_permissions' ), 10, 4 );
-		add_filter( 'woocommerce_rest_prepare_payment_gateway', array( $this, 'prepare_payment_gateway' ), 10, 3 );
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		$this->settings         = woocommerce_pos_get_settings( 'payment_gateways' );
+		$this->gateway_contract = new Gateway_Contract();
 	}
 
 	/**
-	 * Authorize payment_gateways API (read only) for cashiers.
+	 * Read permissions for payment gateway catalog.
 	 *
-	 * @param mixed $permission The current permission.
-	 * @param mixed $context    The context of the request.
-	 * @param mixed $object_id  The object ID.
-	 * @param mixed $object     The object type.
+	 * @param WP_REST_Request $request Request object.
 	 */
-	public function check_permissions( $permission, $context, $object_id, $object ) {
-		if ( ! $permission && 'payment_gateways' === $object && 'read' === $context ) {
-			$permission = current_user_can( 'publish_shop_orders' );
-		}
-
-		return $permission;
+	public function get_items_permissions_check( $request ) {
+		return current_user_can( 'publish_shop_orders' );
 	}
 
 	/**
-	 * Filter payment gateway objects returned from the REST API.
+	 * Return the POS payment gateway catalog.
 	 *
-	 * @param WP_REST_Response   $response The response object.
-	 * @param WC_Payment_Gateway $gateway  Payment gateway object.
-	 * @param WP_REST_Request    $request  Request object.
+	 * @param WP_REST_Request $request Request object.
 	 */
-	public function prepare_payment_gateway( WP_REST_Response $response, WC_Payment_Gateway $gateway, WP_REST_Request $request ): WP_REST_Response {
-		$pos_setting = $this->settings['gateways'][ $gateway->id ] ?? null;
-		$data  = $response->get_data();
+	public function get_items( $request ) {
+		WC()->payment_gateways();
+		$gateways = WC()->payment_gateways->payment_gateways();
+		$data     = array();
 
-		if ( $pos_setting ) {
-			$data['enabled'] = $pos_setting['enabled'];
-			$data['order']   = $pos_setting['order'];
-		} else {
-			$data['enabled'] = false;
+		foreach ( $gateways as $gateway ) {
+			$response = $this->prepare_item_for_response( $gateway, $request );
+			$data[]   = $this->prepare_response_for_collection( $response );
 		}
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Prepare gateway item for response.
+	 *
+	 * @param WC_Payment_Gateway $item    Gateway object.
+	 * @param WP_REST_Request    $request Request object.
+	 */
+	public function prepare_item_for_response( $item, $request ): WP_REST_Response {
+		$response   = parent::prepare_item_for_response( $item, $request );
+		$data       = $response->get_data();
+		$pos_setting = $this->settings['gateways'][ $item->id ] ?? array();
+
+		$data['enabled']       = isset( $pos_setting['enabled'] ) ? (bool) $pos_setting['enabled'] : wc_string_to_bool( $item->enabled );
+		$data['provider']      = $this->gateway_contract->get_provider( $item, $request );
+		$data['pos_type']      = $this->gateway_contract->infer_pos_type( $item, $request );
+		$data['capabilities']  = $this->gateway_contract->get_capabilities( $item, $request );
+		$data['provider_data'] = $this->gateway_contract->get_provider_data( $item, $request );
 
 		$response->set_data( $data );
 

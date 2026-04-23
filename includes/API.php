@@ -120,6 +120,9 @@ class API {
 				'stores'                => API\Stores::class,
 				'extensions'            => API\Extensions::class,
 				'logs'                  => API\Logs::class,
+				'payment_gateways'      => API\Payment_Gateways::class,
+				'gateway_bootstrap'     => API\Gateway_Bootstrap_Controller::class,
+				'checkout'              => API\Checkout_Controller::class,
 
 				// extend WC REST API controllers.
 				'products'              => API\Products_Controller::class,
@@ -188,6 +191,7 @@ class API {
 	public function rest_allowed_cors_headers( array $allow_headers ): array {
 		$allow_headers[] = 'X-WCPOS';
 		$allow_headers[] = 'X-HTTP-Method-Override';
+		$allow_headers[] = 'X-WCPOS-Idempotency-Key';
 
 		return $allow_headers;
 	}
