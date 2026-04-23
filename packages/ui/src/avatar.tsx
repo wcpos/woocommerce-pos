@@ -67,6 +67,7 @@ export function Avatar({
 }: AvatarProps) {
 	const [hasError, setHasError] = React.useState(false);
 	const showImage = Boolean(src) && !hasError;
+	const fallbackLabel = name.trim() || 'Avatar';
 
 	// Reset error state if the src changes to a new URL.
 	React.useEffect(() => {
@@ -89,7 +90,7 @@ export function Avatar({
 					RING_CLASSES[ring]
 				)}
 				role={showImage ? undefined : 'img'}
-				aria-label={showImage ? undefined : name}
+				aria-label={showImage ? undefined : fallbackLabel}
 			>
 				{showImage ? (
 					<img

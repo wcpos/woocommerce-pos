@@ -11,7 +11,7 @@ interface ConfirmDialogProps {
 	cancelLabel?: string;
 	isSubmitting?: boolean;
 	onConfirm: () => void;
-	onClose: () => void;
+	onClose: (value?: boolean) => void;
 }
 
 function ConfirmDialog({
@@ -27,7 +27,13 @@ function ConfirmDialog({
 	return (
 		<Modal open={open} onClose={onClose} title={title} description={description}>
 			<div className="wcpos:mt-4 wcpos:flex wcpos:justify-end wcpos:gap-2">
-				<Button variant="secondary" onClick={onClose} disabled={isSubmitting}>
+				<Button
+					variant="secondary"
+					onClick={() => {
+						onClose(false);
+					}}
+					disabled={isSubmitting}
+				>
 					{cancelLabel || t('sessions.cancel')}
 				</Button>
 				<Button variant="destructive" onClick={onConfirm} disabled={isSubmitting}>

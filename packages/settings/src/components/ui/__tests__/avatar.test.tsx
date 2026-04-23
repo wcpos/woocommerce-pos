@@ -34,6 +34,12 @@ describe('Avatar', () => {
 		expect(screen.getByLabelText('Ada Lovelace')).toBeInTheDocument();
 	});
 
+	it('uses a non-empty fallback aria-label when name is blank', () => {
+		render(<Avatar name="   " />);
+		expect(screen.getByText('?')).toBeInTheDocument();
+		expect(screen.getByLabelText('Avatar')).toBeInTheDocument();
+	});
+
 	it('falls back to initials if the image fails to load', () => {
 		render(<Avatar name="Ada Lovelace" src="https://example.test/broken.png" />);
 		const img = screen.getByAltText('Ada Lovelace');
