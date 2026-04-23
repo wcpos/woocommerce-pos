@@ -221,10 +221,10 @@ class Card extends WC_Payment_Gateway {
 	 * Handle POS checkout contract for card.
 	 *
 	 * @param array|\WP_Error $state        Checkout state.
-	 * @param string    $action       Checkout action.
-	 * @param array     $payment_data Payment data.
-	 * @param \WC_Order $order       Order object.
-	 * @param mixed     $request      REST request.
+	 * @param string          $action       Checkout action.
+	 * @param array           $payment_data Payment data.
+	 * @param \WC_Order       $order       Order object.
+	 * @param mixed           $request      REST request.
 	 */
 	public function wcpos_process_checkout_action( $state, $action, $payment_data, $order, $request = null ) {
 		if ( is_wp_error( $state ) ) {
