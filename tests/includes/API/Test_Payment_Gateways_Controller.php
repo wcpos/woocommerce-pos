@@ -41,4 +41,34 @@ class Test_Payment_Gateways_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'capabilities', $gateway );
 		$this->assertArrayHasKey( 'provider_data', $gateway );
 	}
+
+	public function test_payment_gateways_default_checkout_support_matches_registered_handler(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+
+		$cash = array_shift(
+			wp_list_filter(
+				$data,
+				array(
+					'id' => 'pos_cash',
+				)
+			)
+		);
+		$bacs = array_shift(
+			wp_list_filter(
+				$data,
+				array(
+					'id' => 'bacs',
+				)
+			)
+		);
+
+		$this->assertNotEmpty( $cash );
+		$this->assertNotEmpty( $bacs );
+		$this->assertTrue( $cash['capabilities']['supports_checkout'] );
+		$this->assertFalse( $bacs['capabilities']['supports_checkout'] );
+	}
 }

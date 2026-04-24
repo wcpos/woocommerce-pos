@@ -77,7 +77,9 @@ class Gateway_Contract {
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function supports_checkout( WC_Payment_Gateway $gateway, WP_REST_Request $request ): bool {
-		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', true, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		$has_handler = false !== has_action( 'wcpos_process_checkout_action_' . $gateway->id );
+
+		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', $has_handler, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 	}
 
 	/**
