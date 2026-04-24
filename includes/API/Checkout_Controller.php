@@ -92,9 +92,9 @@ class Checkout_Controller extends WC_REST_Controller {
 	/**
 	 * Read permissions check.
 	 *
-	 * @param WP_REST_Request $request Request object.
+	 * @param WP_REST_Request $_request Request object.
 	 */
-	public function get_item_permissions_check( $request ) {
+	public function get_item_permissions_check( $_request ) {
 		return current_user_can( 'publish_shop_orders' )
 			? true
 			: new WP_Error( 'rest_forbidden', __( 'Sorry, you cannot view checkout state.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
@@ -103,9 +103,9 @@ class Checkout_Controller extends WC_REST_Controller {
 	/**
 	 * Create permissions check.
 	 *
-	 * @param WP_REST_Request $request Request object.
+	 * @param WP_REST_Request $_request Request object.
 	 */
-	public function create_item_permissions_check( $request ) {
+	public function create_item_permissions_check( $_request ) {
 		return current_user_can( 'publish_shop_orders' )
 			? true
 			: new WP_Error( 'rest_forbidden', __( 'Sorry, you cannot process checkout.', 'woocommerce-pos' ), array( 'status' => rest_authorization_required_code() ) );
