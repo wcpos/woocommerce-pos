@@ -18,6 +18,77 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
  */
 class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * It releases the idempotency claim after a successful checkout.
+	 */
+	public function test_checkout_releases_idempotency_claim_after_success(): void {
+		$key   = wp_generate_uuid4();
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'total'          => '50.00',
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request->set_header( 'X-WCPOS-Idempotency-Key', $key );
+		$request->set_body_params(
+			array(
+				'gateway_id'   => 'pos_cash',
+				'action'       => 'start',
+				'payment_data' => array(
+					'amount_tendered' => '50.00',
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertFalse( get_option( $this->get_claim_option_key( $order->get_id(), $key ) ) );
+	}
+
+	/**
+	 * It releases the idempotency claim when checkout processing throws.
+	 */
+	public function test_checkout_releases_idempotency_claim_when_gateway_throws(): void {
+		$key   = wp_generate_uuid4();
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'pos_cash',
+				'total'          => '50.00',
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request->set_header( 'X-WCPOS-Idempotency-Key', $key );
+		$request->set_body_params(
+			array(
+				'gateway_id'   => 'pos_cash',
+				'action'       => 'start',
+				'payment_data' => array(
+					'amount_tendered' => '50.00',
+				),
+			)
+		);
+
+		$callback = static function () {
+			throw new \RuntimeException( 'boom' );
+		};
+
+		add_filter( 'wcpos_process_checkout_action_pos_cash', $callback, 1 );
+
+		try {
+			$this->server->dispatch( $request );
+			$this->fail( 'Expected checkout processing to throw.' );
+		} catch ( \RuntimeException $exception ) {
+			$this->assertSame( 'boom', $exception->getMessage() );
+			$this->assertFalse( get_option( $this->get_claim_option_key( $order->get_id(), $key ) ) );
+		} finally {
+			remove_filter( 'wcpos_process_checkout_action_pos_cash', $callback, 1 );
+		}
+	}
+
+	/**
 	 * It returns a completed state for POS cash checkout.
 	 */
 	public function test_post_checkout_start_returns_completed_state_for_pos_cash(): void {
@@ -228,5 +299,15 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( 400, $response->get_status() );
 		$this->assertSame( 'wcpos_invalid_cashback_amount', $data['code'] );
+	}
+
+	/**
+	 * Build the in-flight claim option key for an order-scoped checkout request.
+	 *
+	 * @param int    $order_id Order ID.
+	 * @param string $key      Idempotency key.
+	 */
+	private function get_claim_option_key( int $order_id, string $key ): string {
+		return 'wcpos_idempotency_claim_' . md5( 'checkout:' . $order_id . '|' . $key );
 	}
 }

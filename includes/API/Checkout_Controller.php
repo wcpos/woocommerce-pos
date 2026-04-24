@@ -178,27 +178,30 @@ class Checkout_Controller extends WC_REST_Controller {
 			return new WP_REST_Response( $claim['body'], $claim['status_code'] );
 		}
 
-		$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
-		$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
-		$state        = $this->dispatch_checkout_action( $gateway_id, $order->get_id(), $action, $payment_data, $order, $request );
+		try {
+			$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
+			$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
+			$state        = $this->dispatch_checkout_action( $gateway_id, $order->get_id(), $action, $payment_data, $order, $request );
 
-		if ( is_wp_error( $state ) ) {
+			if ( is_wp_error( $state ) ) {
+				return $state;
+			}
+
+			$state = $this->normalize_state( $order->get_id(), $gateway_id, $state );
+			$this->state_repository->upsert( $order->get_id(), $state );
+
+			if ( 'completed' === $state['status'] ) {
+				$order->update_meta_data( '_pos_checkout_gateway_id', $gateway_id );
+				$order->update_meta_data( '_pos_checkout_idempotency_key', $idempotency_key );
+				$order->save_meta_data();
+			}
+
+			$this->idempotency_repository->store( $idempotency_scope, $idempotency_key, $request_hash, 200, $state );
+
+			return rest_ensure_response( $state );
+		} finally {
 			$this->idempotency_repository->release( $idempotency_scope, $idempotency_key );
-			return $state;
 		}
-
-		$state = $this->normalize_state( $order->get_id(), $gateway_id, $state );
-		$this->state_repository->upsert( $order->get_id(), $state );
-
-		if ( 'completed' === $state['status'] ) {
-			$order->update_meta_data( '_pos_checkout_gateway_id', $gateway_id );
-			$order->update_meta_data( '_pos_checkout_idempotency_key', $idempotency_key );
-			$order->save_meta_data();
-		}
-
-		$this->idempotency_repository->store( $idempotency_scope, $idempotency_key, $request_hash, 200, $state );
-
-		return rest_ensure_response( $state );
 	}
 
 	/**
