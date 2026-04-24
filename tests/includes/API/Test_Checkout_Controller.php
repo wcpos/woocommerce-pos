@@ -304,6 +304,9 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Build the in-flight claim option key for an order-scoped checkout request.
 	 *
+	 * Keep this in sync with Checkout_Controller::get_idempotency_scope(), which
+	 * currently returns 'checkout:' . $order_id before the hashed key suffix.
+	 *
 	 * @param int    $order_id Order ID.
 	 * @param string $key      Idempotency key.
 	 */

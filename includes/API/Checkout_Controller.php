@@ -217,10 +217,12 @@ class Checkout_Controller extends WC_REST_Controller {
 
 		$state = $this->state_repository->get( $order->get_id() );
 		if ( empty( $state ) ) {
+			$gateway_id = $order->get_meta( '_pos_checkout_gateway_id', true );
+
 			$state = array(
 				'checkout_id'   => null,
 				'order_id'      => $order->get_id(),
-				'gateway_id'    => $order->get_meta( '_pos_checkout_gateway_id', true ) ? $order->get_meta( '_pos_checkout_gateway_id', true ) : '',
+				'gateway_id'    => $gateway_id ? $gateway_id : '',
 				'status'        => 'pending',
 				'provider_data' => array(),
 				'terminal'      => false,
