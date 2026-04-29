@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-17T14:49:17+00:00\n"
+"POT-Creation-Date: 2026-04-29T13:06:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -58,6 +58,18 @@ msgstr ""
 msgid "<strong>WCPOS</strong> requires <a href=\"%1$s\">WCPOS Pro %2$s or higher</a>. Please <a href=\"%3$s\">install and activate WCPOS Pro</a>"
 msgstr ""
 
+msgid "You do not have permission to update WCPOS settings."
+msgstr ""
+
+msgid "Invalid consent value."
+msgstr ""
+
+msgid "Unable to load general settings."
+msgstr ""
+
+msgid "No current user."
+msgstr ""
+
 msgid "POS"
 msgstr ""
 
@@ -72,6 +84,9 @@ msgid "Templates"
 msgstr ""
 
 msgid "Upgrade to Pro"
+msgstr ""
+
+msgid "You do not have permission to access this page."
 msgstr ""
 
 msgid "Online"
@@ -334,12 +349,6 @@ msgstr ""
 msgid "Failed to create template copy."
 msgstr ""
 
-msgid "Sample Customer"
-msgstr ""
-
-msgid "Sample Cashier"
-msgstr ""
-
 msgid "You do not have permission to access the POS."
 msgstr ""
 
@@ -406,6 +415,24 @@ msgstr ""
 msgid "Store not found or not accessible by this cashier."
 msgstr ""
 
+msgid "Sorry, you cannot view checkout state."
+msgstr ""
+
+msgid "Sorry, you cannot process checkout."
+msgstr ""
+
+msgid "Missing X-WCPOS-Idempotency-Key header."
+msgstr ""
+
+msgid "Payment gateway not found."
+msgstr ""
+
+msgid "Payment gateway is not available for POS checkout."
+msgstr ""
+
+msgid "Order not found."
+msgstr ""
+
 msgid "Filter customers by roles."
 msgstr ""
 
@@ -420,6 +447,9 @@ msgid "Order Status Label."
 msgstr ""
 
 msgid "You do not have permission to view extensions."
+msgstr ""
+
+msgid "Sorry, you cannot bootstrap payment gateways."
 msgstr ""
 
 msgid "You do not have permission to view logs."
@@ -513,6 +543,12 @@ msgstr ""
 msgid "Template ID to preview."
 msgstr ""
 
+msgid "Order ID or \"latest\" for most recent POS order. Omit for sample data."
+msgstr ""
+
+msgid "POS store ID for store-specific data."
+msgstr ""
+
 msgid "Template ID to delete."
 msgstr ""
 
@@ -542,10 +578,22 @@ msgstr ""
 msgid "Template was installed but could not be retrieved."
 msgstr ""
 
-msgid "Create a POS order to preview this template."
+msgid "Order not found or is not a POS order."
 msgstr ""
 
-msgid "Preview — Sample receipt with demo data"
+msgid "Store not found."
+msgstr ""
+
+msgid "Mustache template syntax error. Check your template."
+msgstr ""
+
+msgid "Preview failed. Check the template for PHP errors."
+msgstr ""
+
+msgid "Thermal preview unavailable."
+msgstr ""
+
+msgid "Thermal preview failed."
 msgstr ""
 
 msgid "Current page of the collection."
@@ -561,6 +609,9 @@ msgid "Search templates by title or description."
 msgstr ""
 
 msgid "Limit to templates modified after this ISO 8601 date."
+msgstr ""
+
+msgid "Limit results to templates resolved for a specific store."
 msgstr ""
 
 msgid "Sorry, you cannot list templates."
@@ -602,6 +653,9 @@ msgstr ""
 msgid "Nonce verification failed"
 msgstr ""
 
+msgid "Cashback amount must be zero or greater."
+msgstr ""
+
 msgid "Cash"
 msgstr ""
 
@@ -611,11 +665,17 @@ msgstr ""
 msgid "Change"
 msgstr ""
 
-msgid "Partial Payment"
-msgstr ""
-
 msgctxt "Money returned from cash sale"
 msgid "Change"
+msgstr ""
+
+msgid "Tendered amount must be zero or greater."
+msgstr ""
+
+msgid "Partial cash payments are not supported by the POS API checkout flow."
+msgstr ""
+
+msgid "Partial Payment"
 msgstr ""
 
 msgid "WCPOS cannot run alongside the wePOS plugin due to compatibility issues. WCPOS has been deactivated."
@@ -643,7 +703,16 @@ msgid_plural "POS - Partial Payment <span class=\"count\">(%s)</span>"
 msgstr[0] ""
 msgstr[1] ""
 
+msgid "Idempotency key was reused with a different request."
+msgstr ""
+
+msgid "An identical request is already being processed."
+msgstr ""
+
 msgid "JWT is not configured properly, please contact the admin"
+msgstr ""
+
+msgid "Closed"
 msgstr ""
 
 msgid "Gift Wrapping"
@@ -660,6 +729,24 @@ msgstr ""
 msgid "Please gift wrap this order. Thank you!"
 msgstr ""
 
+msgid "Tax Receipt"
+msgstr ""
+
+msgid "Tax ID"
+msgstr ""
+
+msgid "Auth Code"
+msgstr ""
+
+msgid "Thank you for shopping with us! We appreciate your business."
+msgstr ""
+
+msgid "Returns accepted within 30 days with original receipt. Items must be unused and in original packaging."
+msgstr ""
+
+msgid "Thank you for your purchase!"
+msgstr ""
+
 msgid "Tax"
 msgstr ""
 
@@ -672,13 +759,16 @@ msgstr ""
 msgid "Discount"
 msgstr ""
 
-msgid "Order Meta"
-msgstr ""
-
-msgid "Schema Version"
+msgid "Receipt"
 msgstr ""
 
 msgid "Mode"
+msgstr ""
+
+msgid "Receipt Printed"
+msgstr ""
+
+msgid "Order"
 msgstr ""
 
 msgid "Order ID"
@@ -687,13 +777,19 @@ msgstr ""
 msgid "Order Number"
 msgstr ""
 
-msgid "Date/Time"
-msgstr ""
-
 msgid "Currency"
 msgstr ""
 
 msgid "Customer Note"
+msgstr ""
+
+msgid "Order Created"
+msgstr ""
+
+msgid "Order Paid"
+msgstr ""
+
+msgid "Order Completed"
 msgstr ""
 
 msgid "Store"
@@ -703,9 +799,6 @@ msgid "Store Name"
 msgstr ""
 
 msgid "Address Lines"
-msgstr ""
-
-msgid "Tax ID"
 msgstr ""
 
 msgid "Phone"
@@ -718,6 +811,15 @@ msgid "Logo URL"
 msgstr ""
 
 msgid "Opening Hours"
+msgstr ""
+
+msgid "Opening Hours (Vertical)"
+msgstr ""
+
+msgid "Opening Hours (Inline)"
+msgstr ""
+
+msgid "Opening Hours Notes"
 msgstr ""
 
 msgid "Personal Notes"
@@ -765,10 +867,25 @@ msgstr ""
 msgid "Quantity"
 msgstr ""
 
+msgid "Unit Subtotal"
+msgstr ""
+
+msgid "Unit Subtotal (incl tax)"
+msgstr ""
+
+msgid "Unit Subtotal (excl tax)"
+msgstr ""
+
+msgid "Unit Price"
+msgstr ""
+
 msgid "Unit Price (incl tax)"
 msgstr ""
 
 msgid "Unit Price (excl tax)"
+msgstr ""
+
+msgid "Subtotal"
 msgstr ""
 
 msgid "Subtotal (incl tax)"
@@ -777,10 +894,16 @@ msgstr ""
 msgid "Subtotal (excl tax)"
 msgstr ""
 
+msgid "Discounts"
+msgstr ""
+
 msgid "Discounts (incl tax)"
 msgstr ""
 
 msgid "Discounts (excl tax)"
+msgstr ""
+
+msgid "Line Total"
 msgstr ""
 
 msgid "Line Total (incl tax)"
@@ -792,10 +915,16 @@ msgstr ""
 msgid "Line Taxes"
 msgstr ""
 
+msgid "Item Meta"
+msgstr ""
+
 msgid "Fees"
 msgstr ""
 
 msgid "Fee Label"
+msgstr ""
+
+msgid "Total"
 msgstr ""
 
 msgid "Total (incl tax)"
@@ -807,13 +936,16 @@ msgstr ""
 msgid "Shipping Label"
 msgstr ""
 
-msgid "Discounts"
-msgstr ""
-
 msgid "Discount Label"
 msgstr ""
 
+msgid "Coupon Codes"
+msgstr ""
+
 msgid "Totals"
+msgstr ""
+
+msgid "Discount Total"
 msgstr ""
 
 msgid "Discount Total (incl tax)"
@@ -823,6 +955,9 @@ msgid "Discount Total (excl tax)"
 msgstr ""
 
 msgid "Tax Total"
+msgstr ""
+
+msgid "Grand Total"
 msgstr ""
 
 msgid "Grand Total (incl tax)"
@@ -895,6 +1030,277 @@ msgid "Tax Agency Code"
 msgstr ""
 
 msgid "Signed At"
+msgstr ""
+
+msgid "Signature Excerpt"
+msgstr ""
+
+msgid "Document Label"
+msgstr ""
+
+msgid "Is Reprint"
+msgstr ""
+
+msgid "Reprint Count"
+msgstr ""
+
+msgid "Extra Fields"
+msgstr ""
+
+msgid "Label"
+msgstr ""
+
+msgid "Value"
+msgstr ""
+
+msgid "Labels (i18n)"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "Date & Time"
+msgstr ""
+
+msgid "Time"
+msgstr ""
+
+msgid "Short Date & Time"
+msgstr ""
+
+msgid "Long Date & Time"
+msgstr ""
+
+msgid "Full Date & Time"
+msgstr ""
+
+msgid "Short Date"
+msgstr ""
+
+msgid "Long Date"
+msgstr ""
+
+msgid "Full Date"
+msgstr ""
+
+msgid "YYYY-MM-DD"
+msgstr ""
+
+msgid "DD/MM/YYYY"
+msgstr ""
+
+msgid "MM/DD/YYYY"
+msgstr ""
+
+msgid "Weekday Short"
+msgstr ""
+
+msgid "Weekday Long"
+msgstr ""
+
+msgid "Day"
+msgstr ""
+
+msgid "Month Number"
+msgstr ""
+
+msgid "Month Short"
+msgstr ""
+
+msgid "Month Long"
+msgstr ""
+
+msgid "Year"
+msgstr ""
+
+msgid "Invoice No."
+msgstr ""
+
+msgid "Customer Tax ID"
+msgstr ""
+
+msgid "Prepared For"
+msgstr ""
+
+msgid "Processed by"
+msgstr ""
+
+msgid "Bill To"
+msgstr ""
+
+msgid "Ship To"
+msgstr ""
+
+msgid "Item"
+msgstr ""
+
+msgid "Qty"
+msgstr ""
+
+msgid "Unit (excl.)"
+msgstr ""
+
+msgid "Total (excl.)"
+msgstr ""
+
+msgid "Packed"
+msgstr ""
+
+msgid "Subtotal (excl. tax)"
+msgstr ""
+
+msgid "Total Tax"
+msgstr ""
+
+msgid "Grand Total (incl. tax)"
+msgstr ""
+
+msgid "Paid"
+msgstr ""
+
+msgid "Taxable (excl.)"
+msgstr ""
+
+msgid "Taxable (incl.)"
+msgstr ""
+
+msgid "Invoice"
+msgstr ""
+
+msgid "Tax Invoice"
+msgstr ""
+
+msgid "Quote"
+msgstr ""
+
+msgid "Gift Receipt"
+msgstr ""
+
+msgid "Credit Note"
+msgstr ""
+
+msgid "Packing Slip"
+msgstr ""
+
+msgid "Returned Items"
+msgstr ""
+
+msgid "Total Refunded"
+msgstr ""
+
+msgid "Terms & Conditions"
+msgstr ""
+
+msgid "A message for you"
+msgstr ""
+
+msgid "Thank you!"
+msgstr ""
+
+msgid "Thank you for shopping with us!"
+msgstr ""
+
+msgid "Thank you for your business."
+msgstr ""
+
+msgid "This is a tax invoice. Please retain for your records."
+msgstr ""
+
+msgid "Items may be returned or exchanged within 30 days with this receipt."
+msgstr ""
+
+msgid "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
+msgstr ""
+
+msgid "This is a quote, not a receipt"
+msgstr ""
+
+msgid "Please retain this receipt for your records."
+msgstr ""
+
+msgid "KITCHEN"
+msgstr ""
+
+msgid "Signature"
+msgstr ""
+
+msgid "Document Type"
+msgstr ""
+
+msgid "Copy No."
+msgstr ""
+
+#. translators: %s: store tax identification number
+#. translators: %s: tax identification number
+#. translators: %s: tax ID
+#, php-format
+msgid "Tax ID: %s"
+msgstr ""
+
+#. translators: %s: store phone number
+#, php-format
+msgid "Phone: %s"
+msgstr ""
+
+#. translators: %s: store email address
+#, php-format
+msgid "Email: %s"
+msgstr ""
+
+#. translators: %s: payment method name
+#, php-format
+msgid "Paid via %s"
+msgstr ""
+
+#. translators: %s: payment method name
+#, php-format
+msgid "Refunded via %s"
+msgstr ""
+
+#. translators: %s: cashier name
+#, php-format
+msgid "Served by %s"
+msgstr ""
+
+#. translators: %s: customer name
+#, php-format
+msgid "Customer: %s"
+msgstr ""
+
+#. translators: %s: customer name
+#, php-format
+msgid "Thank you, %s!"
+msgstr ""
+
+#. translators: %s: payment reference
+#. translators: %s: order number with # prefix
+#, php-format
+msgid "Ref: %s"
+msgstr ""
+
+#. translators: %s: order number with # prefix
+#, php-format
+msgid "Order %s"
+msgstr ""
+
+#. translators: %s: product SKU
+#, php-format
+msgid "SKU: %s"
+msgstr ""
+
+#. translators: %s: line subtotal amount
+#, php-format
+msgid "Subtotal: %s"
+msgstr ""
+
+#. translators: %s: discount amount with minus sign
+#, php-format
+msgid "Discount: %s"
+msgstr ""
+
+#. translators: %s: taxable amount
+#, php-format
+msgid "Taxable: %s"
 msgstr ""
 
 #. translators: %d: receipt sequence number.
@@ -1091,9 +1497,6 @@ msgstr ""
 msgid "Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines."
 msgstr ""
 
-msgid "Gift Receipt"
-msgstr ""
-
 msgid "Shows items without prices. Displays the customer note as a gift message. Useful for gift wrapping counters."
 msgstr ""
 
@@ -1121,15 +1524,6 @@ msgstr ""
 msgid "Report templates for analytics"
 msgstr ""
 
-msgid "Receipt"
-msgstr ""
-
-msgid "Invoice"
-msgstr ""
-
-msgid "Credit Note"
-msgstr ""
-
 msgid "Purchase Order"
 msgstr ""
 
@@ -1137,9 +1531,6 @@ msgid "Kitchen Ticket"
 msgstr ""
 
 msgid "Bar Ticket"
-msgstr ""
-
-msgid "Order"
 msgstr ""
 
 msgid "Missing or invalid redirect_uri parameter."
@@ -1290,35 +1681,9 @@ msgstr ""
 msgid "Template contains dangerous function: %s(). This function is not allowed for security reasons."
 msgstr ""
 
-msgid "A message for you"
-msgstr ""
-
-msgid "Date"
-msgstr ""
-
-msgid "Item"
-msgstr ""
-
-msgid "Qty"
-msgstr ""
-
-msgid "Total"
-msgstr ""
-
-msgid "Subtotal"
-msgstr ""
-
 #. translators: 1: amount tendered 2: change given
 #, php-format
 msgid "Tendered %1$s / Change %2$s"
-msgstr ""
-
-msgid "Thank you for your purchase!"
-msgstr ""
-
-#. translators: %s: tax identification number
-#, php-format
-msgid "Tax ID: %s"
 msgstr ""
 
 msgid "SALES RECEIPT"
@@ -1336,7 +1701,10 @@ msgstr ""
 msgid "Point of Sale"
 msgstr ""
 
-msgid "Tax Receipt"
+msgid "incl."
+msgstr ""
+
+msgid "excl."
 msgstr ""
 
 msgid "The WCPOS plugin failed to load correctly."
