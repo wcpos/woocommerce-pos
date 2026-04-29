@@ -45,7 +45,8 @@ pnpm-lock.yaml
 .claude/worktrees/
 languages/*.l10n.php
 languages/*.mo
-docs/# Local agent artifacts (canonical repo guidance lives in CLAUDE.md + AGENTS.md)
+docs/
+# Local agent artifacts (canonical repo guidance lives in CLAUDE.md + AGENTS.md)
 .ai/
 .codex/
 .claude/handoffs/
