@@ -40,7 +40,8 @@ jobs:
 
       - name: 👷 Build
         run: |
-          pnpm install --no-lockfile
+          pnpm install --lockfile-only --ignore-scripts
+          pnpm install --frozen-lockfile
           composer prefix-dependencies
           composer install --no-dev
           pnpm build
