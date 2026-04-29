@@ -426,7 +426,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
   - Wait for PR 1 review/merge before starting PR 2.
   - PR 2 should begin in `monorepo-v2` by extracting the browser-safe `@wcpos/receipt-renderer` package.
 - Changed assumptions/follow-up decisions:
-  - `logicless` sample previews now omit `preview_html` by default; Studio should request `include_legacy_html=1` only when it needs PHP comparison output.
+  - `logicless` sample previews keep `preview_html` by default for backward compatibility with current gallery clients. Studio can still use `template_content` + `receipt_data` as the stable rendering contract and treat `preview_html` as temporary Phase 1 comparison output.
   - The schema package intentionally exports a broad TypeScript shape plus the JSON Schema artifact; renderer/studio code should use the JSON Schema for structural validation rather than relying on exhaustive hand-authored TS interfaces.
 
 #### PR 2 — Extract browser-safe renderer package in monorepo-v2

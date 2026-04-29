@@ -919,8 +919,7 @@ class Templates_Controller extends WP_REST_Controller {
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 		// Determine engine.
-		$engine              = $template['engine'] ?? 'legacy-php';
-		$include_legacy_html = (bool) $request->get_param( 'include_legacy_html' );
+		$engine = $template['engine'] ?? 'legacy-php';
 
 		// Thermal (ESC/POS) templates: render an HTML approximation using the bundled thermal template.
 		// The ESC/POS XML cannot be displayed in a browser, so we render receipt_data as HTML instead.
@@ -980,16 +979,14 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( 'logicless' === $engine ) {
 			$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, 0, $id );
 
-			if ( $include_legacy_html ) {
-				// Temporary Phase 1 diagnostic for Template Studio drift comparison.
-				// JS renderers should use template_content + receipt_data as the stable contract.
-				try {
-					$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
-				} catch ( \Mustache\Exception\SyntaxException $e ) {
-					$response['preview_html'] = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
-						. esc_html__( 'Mustache template syntax error. Check your template.', 'woocommerce-pos' )
-						. '</div>';
-				}
+			// Keep sample-mode logicless previews backward-compatible for existing gallery clients.
+			// JS renderers should use template_content + receipt_data as the stable contract.
+			try {
+				$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
+			} catch ( \Mustache\Exception\SyntaxException $e ) {
+				$response['preview_html'] = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
+					. esc_html__( 'Mustache template syntax error. Check your template.', 'woocommerce-pos' )
+					. '</div>';
 			}
 
 			return rest_ensure_response( $response );

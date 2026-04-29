@@ -874,7 +874,8 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'receipt_data', $data );
 		$this->assertArrayHasKey( 'order_id', $data );
 		$this->assertArrayHasKey( 'template_id', $data );
-		$this->assertArrayNotHasKey( 'preview_html', $data );
+		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertStringContainsString( '<div>', $data['preview_html'] );
 		$this->assertEquals( '<div>{{order.number}}</div>', $data['template_content'] );
 		$this->assertEquals( 0, $data['order_id'] );
 		$this->assertEquals( $post_id, $data['template_id'] );
