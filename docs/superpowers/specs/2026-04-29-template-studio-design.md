@@ -527,7 +527,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
 - Gallery preview image generator check mode.
 - Template gallery package lint/test/build.
 
-**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`, current head `70c632d39aee10bf27a41f8bce9acaeebc1bd9f1`):**
+**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`, current head `a065b9109c277b0031fe983a77fcd813c46c50cd`):**
 
 - Completed:
   - Added `apps/template-studio/` in `monorepo-v2` with a Vite/React local tuning UI for bundled/gallery `logicless` and `thermal` templates.
@@ -545,8 +545,11 @@ Implement in separate PRs. Each PR should leave the product working and testable
   - `pnpm --filter @wcpos/template-studio build`
   - `/codex-review` three times; findings were fixed for engine-filter selection, hot reload signaling, snapshot check mutation, wp-env filter reset, and fixture/schema alignment.
   - Conflict follow-up checks on 2026-04-30: `git fetch origin main feature/template-studio-pr3`; `git switch -C feature/template-studio-pr3 origin/feature/template-studio-pr3`; `git merge-base origin/main HEAD`; `gh pr view 339 --repo wcpos/monorepo --json mergeable,mergeStateStatus,headRefOid,baseRefName,headRefName`; `gh pr checks 339 --repo wcpos/monorepo`. Evidence: merge base matched `origin/main` (`6b072e6c0e292168b149677c55ab5cdafa0cbd6f`), PR head was `70c632d39aee10bf27a41f8bce9acaeebc1bd9f1`, GitHub reported `mergeable: MERGEABLE`, and remaining blockers were pending CI/review statuses.
+  - Review follow-up on 2026-04-30: addressed new CodeRabbit App.tsx XSS-sink feedback by sanitizing both canonical preview HTML and temporary PHP diagnostic HTML before DOM insertion, added a regression test covering `<script>` and inline event-handler removal, added metadata JSON parse filename context, refreshed two stale long-product-name curated snapshots, and pushed commit `a065b9109c277b0031fe983a77fcd813c46c50cd` to PR #339.
+  - Round 3 validation on 2026-04-30 before pushing `a065b9109`: `pnpm --filter @wcpos/template-studio lint`; `pnpm --filter @wcpos/template-studio test` (1 file / 7 tests passed); `pnpm --filter @wcpos/template-studio test:snapshots` (curated snapshots current); `pnpm --filter @wcpos/template-studio check:gallery-previews` (gallery preview images current); `pnpm --filter @wcpos/template-studio build` (Vite build completed).
+  - Round 3 PR evidence on 2026-04-30: posted PR #339 comment `4348336896`; replied to and resolved review thread `PRRT_kwDOGW7Gic5-mRRP`; `gh pr view 339 --repo wcpos/monorepo --json state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefOid,url` reported head `a065b9109c277b0031fe983a77fcd813c46c50cd`, `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`, and new CI pending (`Analyze`, `Lint`; unit tests not yet queued in that check snapshot).
 - What remains:
-  - PR #339 has been refreshed against `origin/main`; GitHub reports `mergeable: MERGEABLE` and the remaining blocked state is pending CI/review status rather than a file conflict.
+  - PR #339 has review-thread follow-up pushed at `a065b9109c277b0031fe983a77fcd813c46c50cd`; GitHub reports `mergeable: MERGEABLE` and the remaining blocked state is pending CI/review status rather than a file conflict.
   - Wait for PR #339 checks/review to settle, address any new actionable review feedback, and merge PR #339 when green.
   - After merge, have the maintainer use Studio to tune/approve bundled gallery templates visually.
   - Copy or regenerate approved preview assets into the plugin gallery-owned asset directory and wire `packages/template-gallery` to use committed preview assets for bundled/gallery templates only.
