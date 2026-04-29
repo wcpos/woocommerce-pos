@@ -302,6 +302,65 @@ class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It accepts a non-WCPOS provider when the gateway contract supports checkout.
+	 */
+	public function test_checkout_accepts_non_wcpos_provider_when_gateway_contract_supports_checkout(): void {
+		$order = OrderHelper::create_order(
+			array(
+				'payment_method' => 'bacs',
+				'total'          => '50.00',
+			)
+		);
+
+		add_filter(
+			'woocommerce_pos_payment_gateways_settings',
+			static function ( $settings ) {
+				$settings['gateways']['bacs']['enabled'] = true;
+				return $settings;
+			}
+		);
+
+		add_filter(
+			'wcpos_payment_gateway_supports_checkout',
+			static function ( $supports, $gateway ) {
+				return 'bacs' === $gateway->id ? true : $supports;
+			},
+			10,
+			2
+		);
+
+		add_filter(
+			'wcpos_process_checkout_action_bacs',
+			static function () use ( $order ) {
+				return array(
+					'checkout_id'   => 'chk_test',
+					'order_id'      => $order->get_id(),
+					'gateway_id'    => 'bacs',
+					'status'        => 'completed',
+					'provider_data' => array(),
+					'terminal'      => true,
+				);
+			},
+			10,
+			0
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+		$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+		$request->set_body_params(
+			array(
+				'gateway_id' => 'bacs',
+				'action'     => 'start',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$this->assertSame( 200, $response->get_status(), wp_json_encode( $data ) );
+		$this->assertSame( 'bacs', $data['gateway_id'] );
+	}
+
+	/**
 	 * Build the in-flight claim option key for an order-scoped checkout request.
 	 *
 	 * Keep this in sync with Checkout_Controller::get_idempotency_scope(), which
