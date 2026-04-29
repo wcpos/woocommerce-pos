@@ -1,0 +1,1064 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://wcpos.com/schemas/receipt-data.schema.json",
+	"title": "ReceiptData",
+	"type": "object",
+	"additionalProperties": true,
+	"required": [
+		"receipt",
+		"order",
+		"meta",
+		"store",
+		"cashier",
+		"customer",
+		"lines",
+		"fees",
+		"shipping",
+		"discounts",
+		"totals",
+		"tax_summary",
+		"payments",
+		"fiscal",
+		"presentation_hints",
+		"i18n"
+	],
+	"properties": {
+		"receipt": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"mode": {
+					"type": "string",
+					"description": "Mode"
+				},
+				"printed": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"datetime": {
+							"type": "string",
+							"description": "Date & Time"
+						},
+						"date": {
+							"type": "string",
+							"description": "Date"
+						},
+						"time": {
+							"type": "string",
+							"description": "Time"
+						},
+						"datetime_short": {
+							"type": "string",
+							"description": "Short Date & Time"
+						},
+						"datetime_long": {
+							"type": "string",
+							"description": "Long Date & Time"
+						},
+						"datetime_full": {
+							"type": "string",
+							"description": "Full Date & Time"
+						},
+						"date_short": {
+							"type": "string",
+							"description": "Short Date"
+						},
+						"date_long": {
+							"type": "string",
+							"description": "Long Date"
+						},
+						"date_full": {
+							"type": "string",
+							"description": "Full Date"
+						},
+						"date_ymd": {
+							"type": "string",
+							"description": "YYYY-MM-DD"
+						},
+						"date_dmy": {
+							"type": "string",
+							"description": "DD/MM/YYYY"
+						},
+						"date_mdy": {
+							"type": "string",
+							"description": "MM/DD/YYYY"
+						},
+						"weekday_short": {
+							"type": "string",
+							"description": "Weekday Short"
+						},
+						"weekday_long": {
+							"type": "string",
+							"description": "Weekday Long"
+						},
+						"day": {
+							"type": "string",
+							"description": "Day"
+						},
+						"month": {
+							"type": "string",
+							"description": "Month Number"
+						},
+						"month_short": {
+							"type": "string",
+							"description": "Month Short"
+						},
+						"month_long": {
+							"type": "string",
+							"description": "Month Long"
+						},
+						"year": {
+							"type": "string",
+							"description": "Year"
+						}
+					},
+					"description": "Receipt Printed"
+				}
+			},
+			"description": "Receipt"
+		},
+		"order": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"id": {
+					"type": "number",
+					"description": "Order ID"
+				},
+				"number": {
+					"type": "string",
+					"description": "Order Number"
+				},
+				"currency": {
+					"type": "string",
+					"description": "Currency"
+				},
+				"customer_note": {
+					"type": "string",
+					"description": "Customer Note"
+				},
+				"created": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"datetime": {
+							"type": "string",
+							"description": "Date & Time"
+						},
+						"date": {
+							"type": "string",
+							"description": "Date"
+						},
+						"time": {
+							"type": "string",
+							"description": "Time"
+						},
+						"datetime_short": {
+							"type": "string",
+							"description": "Short Date & Time"
+						},
+						"datetime_long": {
+							"type": "string",
+							"description": "Long Date & Time"
+						},
+						"datetime_full": {
+							"type": "string",
+							"description": "Full Date & Time"
+						},
+						"date_short": {
+							"type": "string",
+							"description": "Short Date"
+						},
+						"date_long": {
+							"type": "string",
+							"description": "Long Date"
+						},
+						"date_full": {
+							"type": "string",
+							"description": "Full Date"
+						},
+						"date_ymd": {
+							"type": "string",
+							"description": "YYYY-MM-DD"
+						},
+						"date_dmy": {
+							"type": "string",
+							"description": "DD/MM/YYYY"
+						},
+						"date_mdy": {
+							"type": "string",
+							"description": "MM/DD/YYYY"
+						},
+						"weekday_short": {
+							"type": "string",
+							"description": "Weekday Short"
+						},
+						"weekday_long": {
+							"type": "string",
+							"description": "Weekday Long"
+						},
+						"day": {
+							"type": "string",
+							"description": "Day"
+						},
+						"month": {
+							"type": "string",
+							"description": "Month Number"
+						},
+						"month_short": {
+							"type": "string",
+							"description": "Month Short"
+						},
+						"month_long": {
+							"type": "string",
+							"description": "Month Long"
+						},
+						"year": {
+							"type": "string",
+							"description": "Year"
+						}
+					},
+					"description": "Order Created"
+				},
+				"paid": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"datetime": {
+							"type": "string",
+							"description": "Date & Time"
+						},
+						"date": {
+							"type": "string",
+							"description": "Date"
+						},
+						"time": {
+							"type": "string",
+							"description": "Time"
+						},
+						"datetime_short": {
+							"type": "string",
+							"description": "Short Date & Time"
+						},
+						"datetime_long": {
+							"type": "string",
+							"description": "Long Date & Time"
+						},
+						"datetime_full": {
+							"type": "string",
+							"description": "Full Date & Time"
+						},
+						"date_short": {
+							"type": "string",
+							"description": "Short Date"
+						},
+						"date_long": {
+							"type": "string",
+							"description": "Long Date"
+						},
+						"date_full": {
+							"type": "string",
+							"description": "Full Date"
+						},
+						"date_ymd": {
+							"type": "string",
+							"description": "YYYY-MM-DD"
+						},
+						"date_dmy": {
+							"type": "string",
+							"description": "DD/MM/YYYY"
+						},
+						"date_mdy": {
+							"type": "string",
+							"description": "MM/DD/YYYY"
+						},
+						"weekday_short": {
+							"type": "string",
+							"description": "Weekday Short"
+						},
+						"weekday_long": {
+							"type": "string",
+							"description": "Weekday Long"
+						},
+						"day": {
+							"type": "string",
+							"description": "Day"
+						},
+						"month": {
+							"type": "string",
+							"description": "Month Number"
+						},
+						"month_short": {
+							"type": "string",
+							"description": "Month Short"
+						},
+						"month_long": {
+							"type": "string",
+							"description": "Month Long"
+						},
+						"year": {
+							"type": "string",
+							"description": "Year"
+						}
+					},
+					"description": "Order Paid"
+				},
+				"completed": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"datetime": {
+							"type": "string",
+							"description": "Date & Time"
+						},
+						"date": {
+							"type": "string",
+							"description": "Date"
+						},
+						"time": {
+							"type": "string",
+							"description": "Time"
+						},
+						"datetime_short": {
+							"type": "string",
+							"description": "Short Date & Time"
+						},
+						"datetime_long": {
+							"type": "string",
+							"description": "Long Date & Time"
+						},
+						"datetime_full": {
+							"type": "string",
+							"description": "Full Date & Time"
+						},
+						"date_short": {
+							"type": "string",
+							"description": "Short Date"
+						},
+						"date_long": {
+							"type": "string",
+							"description": "Long Date"
+						},
+						"date_full": {
+							"type": "string",
+							"description": "Full Date"
+						},
+						"date_ymd": {
+							"type": "string",
+							"description": "YYYY-MM-DD"
+						},
+						"date_dmy": {
+							"type": "string",
+							"description": "DD/MM/YYYY"
+						},
+						"date_mdy": {
+							"type": "string",
+							"description": "MM/DD/YYYY"
+						},
+						"weekday_short": {
+							"type": "string",
+							"description": "Weekday Short"
+						},
+						"weekday_long": {
+							"type": "string",
+							"description": "Weekday Long"
+						},
+						"day": {
+							"type": "string",
+							"description": "Day"
+						},
+						"month": {
+							"type": "string",
+							"description": "Month Number"
+						},
+						"month_short": {
+							"type": "string",
+							"description": "Month Short"
+						},
+						"month_long": {
+							"type": "string",
+							"description": "Month Long"
+						},
+						"year": {
+							"type": "string",
+							"description": "Year"
+						}
+					},
+					"description": "Order Completed"
+				}
+			},
+			"description": "Order"
+		},
+		"meta": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"schema_version": {
+					"type": "string",
+					"const": "1.2.0",
+					"description": "Receipt data schema version."
+				}
+			}
+		},
+		"store": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Store Name"
+				},
+				"address_lines": {
+					"type": "array",
+					"description": "Address Lines",
+					"items": {
+						"type": "string"
+					}
+				},
+				"tax_id": {
+					"type": "string",
+					"description": "Tax ID"
+				},
+				"phone": {
+					"type": "string",
+					"description": "Phone"
+				},
+				"email": {
+					"type": "string",
+					"description": "Email"
+				},
+				"logo": {
+					"type": "string",
+					"description": "Logo URL"
+				},
+				"opening_hours": {
+					"type": "string",
+					"description": "Opening Hours"
+				},
+				"opening_hours_vertical": {
+					"type": "string",
+					"description": "Opening Hours (Vertical)"
+				},
+				"opening_hours_inline": {
+					"type": "string",
+					"description": "Opening Hours (Inline)"
+				},
+				"opening_hours_notes": {
+					"type": "string",
+					"description": "Opening Hours Notes"
+				},
+				"personal_notes": {
+					"type": "string",
+					"description": "Personal Notes"
+				},
+				"policies_and_conditions": {
+					"type": "string",
+					"description": "Policies & Conditions"
+				},
+				"footer_imprint": {
+					"type": "string",
+					"description": "Footer Imprint"
+				}
+			},
+			"description": "Store"
+		},
+		"cashier": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"id": {
+					"type": "number",
+					"description": "Cashier ID"
+				},
+				"name": {
+					"type": "string",
+					"description": "Cashier Name"
+				}
+			},
+			"description": "Cashier"
+		},
+		"customer": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"id": {
+					"type": "number",
+					"description": "Customer ID"
+				},
+				"name": {
+					"type": "string",
+					"description": "Customer Name"
+				},
+				"billing_address": {
+					"type": "object",
+					"description": "Billing Address"
+				},
+				"shipping_address": {
+					"type": "object",
+					"description": "Shipping Address"
+				},
+				"tax_id": {
+					"type": "string",
+					"description": "Tax ID"
+				}
+			},
+			"description": "Customer"
+		},
+		"lines": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"key": {
+						"type": "string",
+						"description": "Item Key"
+					},
+					"sku": {
+						"type": "string",
+						"description": "SKU"
+					},
+					"name": {
+						"type": "string",
+						"description": "Product Name"
+					},
+					"qty": {
+						"type": "number",
+						"description": "Quantity"
+					},
+					"unit_subtotal": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Subtotal"
+					},
+					"unit_subtotal_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Subtotal (incl tax)"
+					},
+					"unit_subtotal_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Subtotal (excl tax)"
+					},
+					"unit_price": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Price"
+					},
+					"unit_price_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Price (incl tax)"
+					},
+					"unit_price_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Unit Price (excl tax)"
+					},
+					"line_subtotal": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Subtotal"
+					},
+					"line_subtotal_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Subtotal (incl tax)"
+					},
+					"line_subtotal_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Subtotal (excl tax)"
+					},
+					"discounts": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Discounts"
+					},
+					"discounts_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Discounts (incl tax)"
+					},
+					"discounts_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Discounts (excl tax)"
+					},
+					"line_total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Line Total"
+					},
+					"line_total_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Line Total (incl tax)"
+					},
+					"line_total_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Line Total (excl tax)"
+					},
+					"taxes": {
+						"type": "array",
+						"description": "Line Taxes",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
+					},
+					"meta": {
+						"type": "array",
+						"description": "Item Meta",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
+					}
+				},
+				"description": "Line Items"
+			},
+			"additionalProperties": true
+		},
+		"fees": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "Fee Label"
+					},
+					"total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total"
+					},
+					"total_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (incl tax)"
+					},
+					"total_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (excl tax)"
+					}
+				},
+				"description": "Fees"
+			},
+			"additionalProperties": true
+		},
+		"shipping": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "Shipping Label"
+					},
+					"total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total"
+					},
+					"total_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (incl tax)"
+					},
+					"total_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (excl tax)"
+					}
+				},
+				"description": "Shipping"
+			},
+			"additionalProperties": true
+		},
+		"discounts": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "Discount Label"
+					},
+					"codes": {
+						"type": "string",
+						"description": "Coupon Codes"
+					},
+					"total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total"
+					},
+					"total_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (incl tax)"
+					},
+					"total_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total (excl tax)"
+					}
+				},
+				"description": "Discounts"
+			},
+			"additionalProperties": true
+		},
+		"totals": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"subtotal": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Subtotal"
+				},
+				"subtotal_incl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Subtotal (incl tax)"
+				},
+				"subtotal_excl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Subtotal (excl tax)"
+				},
+				"discount_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Discount Total"
+				},
+				"discount_total_incl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Discount Total (incl tax)"
+				},
+				"discount_total_excl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Discount Total (excl tax)"
+				},
+				"tax_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Tax Total"
+				},
+				"grand_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Grand Total"
+				},
+				"grand_total_incl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Grand Total (incl tax)"
+				},
+				"grand_total_excl": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Grand Total (excl tax)"
+				},
+				"paid_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Paid Total"
+				},
+				"change_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Change"
+				}
+			},
+			"description": "Totals"
+		},
+		"tax_summary": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"code": {
+						"type": "string",
+						"description": "Tax Code"
+					},
+					"label": {
+						"type": "string",
+						"description": "Tax Label"
+					},
+					"rate": {
+						"type": "number",
+						"description": "Tax Rate (%)"
+					},
+					"taxable_amount_excl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Taxable Amount (excl)"
+					},
+					"tax_amount": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Tax Amount"
+					},
+					"taxable_amount_incl": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Taxable Amount (incl)"
+					}
+				},
+				"description": "Tax Summary"
+			},
+			"additionalProperties": true
+		},
+		"payments": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"method_id": {
+						"type": "string",
+						"description": "Method ID"
+					},
+					"method_title": {
+						"type": "string",
+						"description": "Payment Method"
+					},
+					"amount": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Amount"
+					},
+					"tendered": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Tendered"
+					},
+					"change": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Change"
+					},
+					"reference": {
+						"type": "string",
+						"description": "Reference"
+					}
+				},
+				"description": "Payments"
+			},
+			"additionalProperties": true
+		},
+		"fiscal": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"immutable_id": {
+					"type": "string",
+					"description": "Immutable ID"
+				},
+				"receipt_number": {
+					"type": "string",
+					"description": "Receipt Number"
+				},
+				"sequence": {
+					"type": "number",
+					"description": "Sequence"
+				},
+				"hash": {
+					"type": "string",
+					"description": "Hash"
+				},
+				"qr_payload": {
+					"type": "string",
+					"description": "QR Payload"
+				},
+				"tax_agency_code": {
+					"type": "string",
+					"description": "Tax Agency Code"
+				},
+				"signed_at": {
+					"type": "string",
+					"description": "Signed At"
+				},
+				"signature_excerpt": {
+					"type": "string",
+					"description": "Signature Excerpt"
+				},
+				"document_label": {
+					"type": "string",
+					"description": "Document Label"
+				},
+				"is_reprint": {
+					"type": "boolean",
+					"description": "Is Reprint"
+				},
+				"reprint_count": {
+					"type": "number",
+					"description": "Reprint Count"
+				},
+				"extra_fields": {
+					"type": "array",
+					"description": "Extra Fields",
+					"items": {
+						"type": "object",
+						"additionalProperties": true,
+						"properties": {
+							"label": {
+								"type": "string",
+								"description": "Label"
+							},
+							"value": {
+								"type": "string",
+								"description": "Value"
+							}
+						}
+					}
+				}
+			},
+			"description": "Fiscal"
+		},
+		"presentation_hints": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": []
+		},
+		"i18n": {
+			"type": "object",
+			"additionalProperties": true,
+			"properties": {
+				"order": {
+					"type": "string",
+					"description": "Order"
+				},
+				"date": {
+					"type": "string",
+					"description": "Date"
+				},
+				"cashier": {
+					"type": "string",
+					"description": "Cashier"
+				},
+				"customer": {
+					"type": "string",
+					"description": "Customer"
+				},
+				"subtotal": {
+					"type": "string",
+					"description": "Subtotal"
+				},
+				"total": {
+					"type": "string",
+					"description": "Total"
+				}
+			},
+			"description": "Labels (i18n)"
+		}
+	}
+}

@@ -784,6 +784,196 @@ class Receipt_Data_Schema {
 	}
 
 	/**
+	 * Get the JSON Schema for canonical receipt_data payloads.
+	 *
+	 * PHP remains the source of truth in this repository. This export is used by
+	 * generated TypeScript artifacts and downstream renderer/studio checks.
+	 *
+	 * @return array<string, mixed> JSON-Schema-compatible receipt data schema.
+	 */
+	public static function get_json_schema(): array {
+		$schema = array(
+			'$schema'              => 'https://json-schema.org/draft/2020-12/schema',
+			'$id'                  => 'https://wcpos.com/schemas/receipt-data.schema.json',
+			'title'                => 'ReceiptData',
+			'type'                 => 'object',
+			'additionalProperties' => true,
+			'required'             => self::REQUIRED_KEYS,
+			'properties'           => array(),
+		);
+
+		foreach ( self::REQUIRED_KEYS as $key ) {
+			$schema['properties'][ $key ] = self::get_default_section_schema( $key );
+		}
+
+		foreach ( self::get_field_tree() as $path => $section ) {
+			self::merge_field_tree_section_schema( $schema, $path, $section );
+		}
+
+		$schema['properties']['meta']['properties']['schema_version'] = array(
+			'type'        => 'string',
+			'const'       => self::VERSION,
+			'description' => 'Receipt data schema version.',
+		);
+
+		return $schema;
+	}
+
+	/**
+	 * Get a default schema for a top-level receipt section.
+	 *
+	 * @param string $key Top-level receipt data key.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function get_default_section_schema( string $key ): array {
+		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' ), true ) ) {
+			return array(
+				'type'                 => 'array',
+				'items'                => array(
+					'type'                 => 'object',
+					'additionalProperties' => true,
+					'properties'           => array(),
+				),
+				'additionalProperties' => true,
+			);
+		}
+
+		return array(
+			'type'                 => 'object',
+			'additionalProperties' => true,
+			'properties'           => array(),
+		);
+	}
+
+	/**
+	 * Merge a template editor field-tree section into the JSON Schema.
+	 *
+	 * @param array<string, mixed> $schema  Full schema, passed by reference.
+	 * @param string               $path    Dot path for the field-tree section.
+	 * @param array<string, mixed> $section Field-tree section metadata.
+	 *
+	 * @return void
+	 */
+	private static function merge_field_tree_section_schema( array &$schema, string $path, array $section ): void {
+		$segments = explode( '.', $path );
+		$top_key  = array_shift( $segments );
+
+		if ( ! \is_string( $top_key ) || '' === $top_key ) {
+			return;
+		}
+
+		if ( ! isset( $schema['properties'][ $top_key ] ) ) {
+			$schema['properties'][ $top_key ] = self::get_default_section_schema( $top_key );
+		}
+
+		$target                    =& $schema['properties'][ $top_key ];
+		$target_is_collection_item = false;
+
+		if ( 'array' === ( $target['type'] ?? null ) ) {
+			$target                    =& $target['items'];
+			$target_is_collection_item = true;
+		}
+
+		foreach ( $segments as $segment ) {
+			if ( ! isset( $target['properties'][ $segment ] ) ) {
+				$target['properties'][ $segment ] = array(
+					'type'                 => 'object',
+					'additionalProperties' => true,
+					'properties'           => array(),
+				);
+			}
+			$target =& $target['properties'][ $segment ];
+		}
+
+		$target['description'] = isset( $section['label'] ) ? (string) $section['label'] : $path;
+
+		if ( ! empty( $section['is_array'] ) && ! $target_is_collection_item ) {
+			$target['type']  = 'array';
+			$target['items'] = $target['items'] ?? array(
+				'type'                 => 'object',
+				'additionalProperties' => true,
+				'properties'           => array(),
+			);
+		} else {
+			$target['type']                 = 'object';
+			$target['additionalProperties'] = true;
+			$target['properties']           = $target['properties'] ?? array();
+		}
+
+		$field_target =& $target;
+		if ( 'array' === ( $target['type'] ?? null ) ) {
+			$field_target =& $target['items'];
+		}
+
+		foreach ( $section['fields'] ?? array() as $field_name => $field ) {
+			$field_target['properties'][ $field_name ] = self::field_metadata_to_json_schema( $field );
+		}
+	}
+
+	/**
+	 * Convert one field-tree field to a JSON Schema property.
+	 *
+	 * @param array<string,mixed> $field Field metadata.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function field_metadata_to_json_schema( array $field ): array {
+		$type        = isset( $field['type'] ) ? (string) $field['type'] : 'string';
+		$schema_type = self::field_type_to_json_type( $type );
+
+		$schema = array(
+			'type'        => $schema_type,
+			'description' => isset( $field['label'] ) ? (string) $field['label'] : '',
+		);
+
+		if ( \in_array( $type, array( 'string[]', 'array' ), true ) ) {
+			$schema['items'] = array( 'type' => 'string[]' === $type ? 'string' : array( 'string', 'number', 'boolean', 'object', 'array', 'null' ) );
+		}
+
+		if ( ! empty( $field['is_array'] ) && ! empty( $field['fields'] ) ) {
+			$schema['type']  = 'array';
+			$schema['items'] = array(
+				'type'                 => 'object',
+				'additionalProperties' => true,
+				'properties'           => array(),
+			);
+
+			foreach ( $field['fields'] as $child_name => $child_field ) {
+				$schema['items']['properties'][ $child_name ] = self::field_metadata_to_json_schema( $child_field );
+			}
+		}
+
+		return $schema;
+	}
+
+	/**
+	 * Map template field-tree scalar types to JSON Schema types.
+	 *
+	 * @param string $type Field-tree type.
+	 *
+	 * @return string|array<int,string>
+	 */
+	private static function field_type_to_json_type( string $type ) {
+		switch ( $type ) {
+			case 'number':
+				return 'number';
+			case 'boolean':
+				return 'boolean';
+			case 'money':
+				return array( 'number', 'string' );
+			case 'object':
+				return 'object';
+			case 'array':
+			case 'string[]':
+				return 'array';
+			case 'string':
+			default:
+				return 'string';
+		}
+	}
+
+	/**
 	 * Get mock receipt data for template preview.
 	 *
 	 * Returns a representative receipt payload with realistic values

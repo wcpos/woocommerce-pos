@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WP_UnitTestCase;
 
 /**
@@ -207,5 +208,59 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 				$this->assertSame( 'string', $fields[ $field ]['type'] );
 			}
 		}
+	}
+
+	/**
+	 * Test JSON schema exports the current receipt schema version.
+	 */
+	public function test_get_json_schema_exports_schema_version(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertSame( Receipt_Data_Schema::VERSION, $schema['properties']['meta']['properties']['schema_version']['const'] );
+		$this->assertSame( 'https://json-schema.org/draft/2020-12/schema', $schema['$schema'] );
+		$this->assertSame( 'ReceiptData', $schema['title'] );
+	}
+
+	/**
+	 * Test JSON schema requires the canonical top-level receipt keys.
+	 */
+	public function test_get_json_schema_requires_canonical_top_level_keys(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertEquals( Receipt_Data_Schema::REQUIRED_KEYS, $schema['required'] );
+
+		foreach ( Receipt_Data_Schema::REQUIRED_KEYS as $key ) {
+			$this->assertArrayHasKey( $key, $schema['properties'], "Missing schema property: {$key}" );
+		}
+	}
+
+	/**
+	 * Test JSON schema maps field tree types to JSON Schema types.
+	 */
+	public function test_get_json_schema_maps_field_tree_types(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+
+		$this->assertSame( 'array', $schema['properties']['lines']['type'] );
+		$this->assertSame( 'object', $schema['properties']['lines']['items']['type'] );
+		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
+		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['grand_total']['type'] );
+		$this->assertSame( 'boolean', $schema['properties']['fiscal']['properties']['is_reprint']['type'] );
+	}
+
+	/**
+	 * Test preview fixture data satisfies the exported top-level schema contract.
+	 */
+	public function test_preview_receipt_data_satisfies_exported_schema_contract(): void {
+		$schema = Receipt_Data_Schema::get_json_schema();
+		$data   = ( new Preview_Receipt_Builder() )->build();
+
+		foreach ( $schema['required'] as $key ) {
+			$this->assertArrayHasKey( $key, $data, "Mock data missing required key: {$key}" );
+		}
+
+		$this->assertSame( Receipt_Data_Schema::VERSION, $data['meta']['schema_version'] );
+		$this->assertIsArray( $data['lines'] );
+		$this->assertIsArray( $data['totals'] );
+		$this->assertIsArray( $data['payments'] );
 	}
 }

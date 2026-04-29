@@ -277,6 +277,14 @@ class Templates_Controller extends WP_REST_Controller {
 						'required'    => false,
 						'default'     => 0,
 					),
+					'include_legacy_html' => array(
+						'description'       => __( 'Include temporary PHP-rendered HTML diagnostics for logicless previews.', 'woocommerce-pos' ),
+						'type'              => 'boolean',
+						'required'          => false,
+						'default'           => false,
+						'sanitize_callback' => 'rest_sanitize_boolean',
+						'validate_callback' => 'rest_validate_request_arg',
+					),
 				),
 			)
 		);
@@ -916,16 +924,10 @@ class Templates_Controller extends WP_REST_Controller {
 		// Thermal (ESC/POS) templates: render an HTML approximation using the bundled thermal template.
 		// The ESC/POS XML cannot be displayed in a browser, so we render receipt_data as HTML instead.
 		if ( 'thermal' === $engine ) {
-			return rest_ensure_response(
-				array(
-					'engine'           => 'thermal',
-					'preview_html'     => $this->render_thermal_html_preview( $receipt_data ),
-					'template_content' => $template['content'] ?? '',
-					'receipt_data'     => $formatted_data,
-					'order_id'         => $order_id,
-					'template_id'      => $id,
-				)
-			);
+			$response                 = $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id );
+			$response['preview_html'] = $this->render_thermal_html_preview( $receipt_data );
+
+			return rest_ensure_response( $response );
 		}
 
 		// Non-thermal with a real order.
@@ -935,12 +937,7 @@ class Templates_Controller extends WP_REST_Controller {
 				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 				$formatted_data['t']               = true;
 
-				$response = array(
-					'engine'       => 'logicless',
-					'receipt_data' => $formatted_data,
-					'order_id'     => $order_id,
-					'template_id'  => $id,
-				);
+				$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id );
 
 				try {
 					$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
@@ -980,12 +977,10 @@ class Templates_Controller extends WP_REST_Controller {
 		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
 		if ( 'logicless' === $engine ) {
-			$response = array(
-				'engine'      => 'logicless',
-				'order_id'    => 0,
-				'template_id' => $id,
-			);
+			$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, 0, $id );
 
+			// Keep sample-mode logicless previews backward-compatible for existing gallery clients.
+			// JS renderers should use template_content + receipt_data as the stable contract.
 			try {
 				$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
 			} catch ( \Mustache\Exception\SyntaxException $e ) {
@@ -1018,6 +1013,29 @@ class Templates_Controller extends WP_REST_Controller {
 				'order_id'     => 0,
 				'template_id'  => $id,
 			)
+		);
+	}
+
+	/**
+	 * Prepare the normalized preview payload for non-legacy renderers.
+	 *
+	 * JS consumers render from template_content + receipt_data. Temporary diagnostic
+	 * fields such as preview_html may be added by callers during the migration.
+	 *
+	 * @param array      $template       Template metadata.
+	 * @param array      $receipt_data   Formatted receipt data.
+	 * @param int        $order_id       Order ID, or 0 for sample data.
+	 * @param int|string $template_id    Numeric database ID or virtual/gallery key.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function prepare_non_legacy_preview_response( array $template, array $receipt_data, int $order_id, $template_id ): array {
+		return array(
+			'engine'           => $template['engine'] ?? 'logicless',
+			'template_content' => isset( $template['content'] ) && \is_string( $template['content'] ) ? $template['content'] : '',
+			'receipt_data'     => $receipt_data,
+			'order_id'         => $order_id,
+			'template_id'      => is_numeric( $template_id ) ? (int) $template_id : (string) $template_id,
 		);
 	}
 

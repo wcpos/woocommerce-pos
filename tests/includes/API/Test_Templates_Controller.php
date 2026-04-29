@@ -856,6 +856,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_preview_returns_sample_data_without_order_id(): void {
 		$post_id = $this->create_template( 'Preview Template' );
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => '<div>{{order.number}}</div>',
+			)
+		);
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
 		$response = $this->server->dispatch( $request );
@@ -863,9 +869,47 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertEquals( 'logicless', $data['engine'] );
+		$this->assertArrayHasKey( 'template_content', $data );
+		$this->assertArrayHasKey( 'receipt_data', $data );
 		$this->assertArrayHasKey( 'order_id', $data );
+		$this->assertArrayHasKey( 'template_id', $data );
+		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertStringContainsString( '<div>', $data['preview_html'] );
+		$this->assertEquals( '<div>{{order.number}}</div>', $data['template_content'] );
 		$this->assertEquals( 0, $data['order_id'] );
+		$this->assertEquals( $post_id, $data['template_id'] );
+		$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
+		$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
+	 * Test logicless preview can include temporary Phase 1 legacy HTML diagnostics.
+	 */
+	public function test_preview_logicless_can_include_legacy_html_diagnostic(): void {
+		$post_id = $this->create_template( 'Preview Template' );
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => '<div>{{order.number}}</div>',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$request->set_param( 'include_legacy_html', true );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 'logicless', $data['engine'] );
+		$this->assertArrayHasKey( 'template_content', $data );
+		$this->assertArrayHasKey( 'receipt_data', $data );
+		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertStringContainsString( '<div>', $data['preview_html'] );
+		$this->assertEquals( $post_id, $data['template_id'] );
 
 		wp_delete_post( $post_id, true );
 	}
@@ -930,8 +974,13 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		// Without order_id, non-thermal templates return preview_html (sample data).
-		$this->assertArrayHasKey( 'preview_html', $data );
+		// Without order_id, non-legacy templates return data for JS consumers.
+		if ( 'legacy-php' === ( $target['engine'] ?? 'legacy-php' ) ) {
+			$this->assertArrayHasKey( 'preview_html', $data );
+		} else {
+			$this->assertArrayHasKey( 'template_content', $data );
+			$this->assertArrayHasKey( 'receipt_data', $data );
+		}
 		$this->assertEquals( $gallery_key, $data['template_id'] );
 	}
 
@@ -970,6 +1019,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$data = $response->get_data();
 			$this->assertArrayHasKey( 'preview_html', $data, 'Logicless order preview must return preview_html' );
 			$this->assertArrayHasKey( 'receipt_data', $data, 'Logicless order preview must return receipt_data for editor' );
+			$this->assertArrayHasKey( 'template_content', $data, 'Logicless order preview must return source content for JS renderers' );
 			$this->assertEquals( $order->get_id(), $data['order_id'] );
 			$this->assertEquals( $logicless['key'], $data['template_id'] );
 		} finally {
@@ -1008,8 +1058,10 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$data = $response->get_data();
 			$this->assertEquals( 'thermal', $data['engine'] );
 			$this->assertArrayHasKey( 'preview_html', $data );
+			$this->assertArrayHasKey( 'template_content', $data );
 			$this->assertArrayHasKey( 'receipt_data', $data );
 			$this->assertStringContainsString( '<!DOCTYPE html>', $data['preview_html'] );
+			$this->assertEquals( $thermal['content'], $data['template_content'] );
 			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields should be pre-formatted strings.
