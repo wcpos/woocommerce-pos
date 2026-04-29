@@ -28,6 +28,7 @@ jobs:
           echo "wc=$(jq -r '.woocommerce.stable' .github/test-matrix.json)" >> $GITHUB_OUTPUT
           echo "wp_min=$(jq -r '.wordpress.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
           echo "wc_min=$(jq -r '.woocommerce.minimum' .github/test-matrix.json)" >> $GITHUB_OUTPUT
+          echo "php_experimental=$(jq -r '.php.experimental' .github/test-matrix.json)" >> $GITHUB_OUTPUT
 
       - name: Get latest stable WordPress
         id: wp
@@ -45,11 +46,32 @@ jobs:
           echo "stable=$WC_LATEST" >> $GITHUB_OUTPUT
           echo "Latest stable WC: $WC_LATEST"
 
+      - name: Get latest stable PHP minor
+        id: php
+        run: |
+          PHP_LATEST_MINOR=$(curl -sf "https://www.php.net/releases/index.php?json&version=8&max=20" \
+            | jq -r 'keys[]' \
+            | sort -V \
+            | tail -1 \
+            | cut -d. -f1,2)
+          if [ -z "$PHP_LATEST_MINOR" ] || ! echo "$PHP_LATEST_MINOR" | grep -qE '^8\.[0-9]+$'; then
+            echo "::error::Failed to resolve latest PHP 8.x minor version: '$PHP_LATEST_MINOR'"
+            exit 1
+          fi
+          echo "experimental=$PHP_LATEST_MINOR" >> $GITHUB_OUTPUT
+          echo "Latest stable PHP minor: $PHP_LATEST_MINOR"
+
       - name: Check for RC/beta activity
         id: rc
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version_is_not_newer() {
+            local candidate="$1"
+            local stable="$2"
+            [ "$(printf '%s\n%s\n' "$candidate" "$stable" | sort -V | head -1)" = "$candidate" ]
+          }
+
           # WordPress RC
           WP_RC=$(curl -sf "https://api.wordpress.org/core/version-check/1.7/?channel=rc" \
             | jq -r '.offers[] | select(.response == "development") | .version // ""' \
@@ -61,12 +83,32 @@ jobs:
           echo "wp_rc=${WP_RC:-none}" >> $GITHUB_OUTPUT
 
           # WooCommerce RC/beta
-          WC_RC=$(curl -sf \
+          WC_STABLE="${{ steps.wc.outputs.stable }}"
+          WC_RC=""
+          WC_PRERELEASES=$(curl -sf \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/woocommerce/woocommerce/releases" \
-            | jq -r '[.[] | select(.prerelease == true) | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+-(rc|beta)"; "i")) | .tag_name][0] // ""' \
+            | jq -r '[.[] | select(.prerelease == true) | select(.tag_name | test("^[0-9]+\\.[0-9]+\\.[0-9]+-(rc|beta)"; "i"))] | sort_by(.published_at) | reverse | .[].tag_name' \
             2>/dev/null || echo "")
+
+          while IFS= read -r wc_prerelease; do
+            [ -z "$wc_prerelease" ] && continue
+
+            wc_prerelease_base="${wc_prerelease%%-*}"
+            if version_is_not_newer "$wc_prerelease_base" "$WC_STABLE"; then
+              echo "Skipping stale WooCommerce pre-release $wc_prerelease because stable $WC_STABLE is already available"
+              continue
+            fi
+
+            wc_zip="https://downloads.wordpress.org/plugin/woocommerce.${wc_prerelease}.zip"
+            if curl -sfI "$wc_zip" >/dev/null; then
+              WC_RC="$wc_prerelease"
+              break
+            fi
+            echo "Skipping WooCommerce pre-release $wc_prerelease because $wc_zip is not available"
+          done <<< "$WC_PRERELEASES"
+
           echo "wc_rc=${WC_RC:-none}" >> $GITHUB_OUTPUT
 
       - name: Determine updates needed
@@ -77,9 +119,11 @@ jobs:
           LATEST_WP="${{ steps.wp.outputs.stable }}"
           CURRENT_WC="${{ steps.current.outputs.wc }}"
           LATEST_WC="${{ steps.wc.outputs.stable }}"
+          CURRENT_PHP_EXPERIMENTAL="${{ steps.current.outputs.php_experimental }}"
+          LATEST_PHP_EXPERIMENTAL="${{ steps.php.outputs.experimental }}"
 
           # Validate that all versions are non-empty semver-like strings
-          for var_name in CURRENT_WP LATEST_WP CURRENT_WC LATEST_WC; do
+          for var_name in CURRENT_WP LATEST_WP CURRENT_WC LATEST_WC CURRENT_PHP_EXPERIMENTAL LATEST_PHP_EXPERIMENTAL; do
             val="${!var_name}"
             if [ -z "$val" ] || ! echo "$val" | grep -qE '^[0-9]+\.[0-9]+'; then
               echo "::error::$var_name is empty or not a valid version: '$val'"
@@ -111,6 +155,11 @@ jobs:
             echo "WC patch update: $CURRENT_WC -> $LATEST_WC"
           fi
 
+          if [ "$CURRENT_PHP_EXPERIMENTAL" != "$LATEST_PHP_EXPERIMENTAL" ]; then
+            CHANGES="${CHANGES}php-experimental "
+            echo "PHP experimental update: $CURRENT_PHP_EXPERIMENTAL -> $LATEST_PHP_EXPERIMENTAL"
+          fi
+
           if [ -z "$CHANGES" ]; then
             echo "No updates needed"
             echo "needed=false" >> $GITHUB_OUTPUT
@@ -125,9 +174,27 @@ jobs:
         run: |
           LATEST_WP="${{ steps.wp.outputs.stable }}"
           LATEST_WC="${{ steps.wc.outputs.stable }}"
+          LATEST_PHP_EXPERIMENTAL="${{ steps.php.outputs.experimental }}"
           CURRENT_WP="${{ steps.current.outputs.wp }}"
           CURRENT_WC="${{ steps.current.outputs.wc }}"
           CHANGES="${{ steps.updates.outputs.changes }}"
+
+          version_lt() {
+            local left="$1"
+            local right="$2"
+            [ "$(printf '%s\n%s\n' "$left" "$right" | sort -V | head -1)" = "$left" ] && [ "$left" != "$right" ]
+          }
+
+          wc_required_wp() {
+            local wc_version="${1%%-*}"
+            local major="${wc_version%%.*}"
+
+            if [ "$major" -ge 10 ] 2>/dev/null; then
+              echo "6.8"
+            else
+              echo "5.6"
+            fi
+          }
 
           if echo "$CHANGES" | grep -q "wp-major"; then
             # Rotate WP: current stable becomes minimum, latest becomes stable
@@ -148,6 +215,22 @@ jobs:
           elif echo "$CHANGES" | grep -q "wc-patch"; then
             jq --arg stable "$LATEST_WC" \
               '.woocommerce.stable = $stable' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          fi
+
+          if echo "$CHANGES" | grep -q "php-experimental"; then
+            jq --arg experimental "$LATEST_PHP_EXPERIMENTAL" \
+              '.php.experimental = $experimental' \
+              .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
+          fi
+
+          WC_MINIMUM=$(jq -r '.woocommerce.minimum' .github/test-matrix.json)
+          WP_MINIMUM=$(jq -r '.wordpress.minimum' .github/test-matrix.json)
+          REQUIRED_WP=$(wc_required_wp "$WC_MINIMUM")
+          if version_lt "$WP_MINIMUM" "$REQUIRED_WP"; then
+            echo "Raising WordPress minimum from $WP_MINIMUM to $REQUIRED_WP for WooCommerce $WC_MINIMUM compatibility"
+            jq --arg min "$REQUIRED_WP" \
+              '.wordpress.minimum = $min' \
               .github/test-matrix.json > /tmp/matrix.json && mv /tmp/matrix.json .github/test-matrix.json
           fi
 
@@ -187,6 +270,7 @@ jobs:
             |---|---|---|
             | WordPress | ${{ steps.current.outputs.wp }} | ${{ steps.wp.outputs.stable }} |
             | WooCommerce | ${{ steps.current.outputs.wc }} | ${{ steps.wc.outputs.stable }} |
+            | PHP experimental | ${{ steps.current.outputs.php_experimental }} | ${{ steps.php.outputs.experimental }} |
 
             ### Active Pre-releases (tested automatically as experimental)
             - WordPress RC: ${{ steps.rc.outputs.wp_rc }}
@@ -207,6 +291,7 @@ jobs:
           echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| WordPress | ${{ steps.current.outputs.wp }} | ${{ steps.wp.outputs.stable }} |" >> $GITHUB_STEP_SUMMARY
           echo "| WooCommerce | ${{ steps.current.outputs.wc }} | ${{ steps.wc.outputs.stable }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| PHP experimental | ${{ steps.current.outputs.php_experimental }} | ${{ steps.php.outputs.experimental }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Active Pre-releases (auto-detected at test time)" >> $GITHUB_STEP_SUMMARY
           echo "- WordPress: ${{ steps.rc.outputs.wp_rc }}" >> $GITHUB_STEP_SUMMARY

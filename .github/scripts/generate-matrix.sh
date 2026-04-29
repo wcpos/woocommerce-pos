@@ -57,6 +57,35 @@ version_is_not_newer() {
 ' "$candidate" "$stable" | sort -V | head -1)" == "$candidate" ]]
 }
 
+version_lt() {
+  local left="$1"
+  local right="$2"
+
+  [[ "$(printf '%s
+%s
+' "$left" "$right" | sort -V | head -1)" == "$left" && "$left" != "$right" ]]
+}
+
+wc_required_wp() {
+  local wc_version="${1%%-*}"
+  local major="${wc_version%%.*}"
+
+  if [[ "$major" =~ ^[0-9]+$ && "$major" -ge 10 ]]; then
+    echo "6.8"
+  else
+    echo "5.6"
+  fi
+}
+
+wc_wp_compatible() {
+  local wc_version="$1"
+  local wp_version="$2"
+  local required_wp
+
+  required_wp=$(wc_required_wp "$wc_version")
+  ! version_lt "$wp_version" "$required_wp"
+}
+
 entry_exists() {
   local php="$1"
   local wp="$2"
@@ -193,6 +222,12 @@ while IFS= read -r row; do
   php_ver=$(resolve_php "$php_alias")
   wp_ver=$(resolve_wp "$wp_alias")
   wc_ver=$(resolve_wc "$wc_alias")
+
+  if ! wc_wp_compatible "$wc_ver" "$wp_ver"; then
+    required_wp=$(wc_required_wp "$wc_ver")
+    log "  Skipping incompatible entry: php=$php_ver wp=$wp_ver wc=$wc_ver (WooCommerce requires WordPress >= $required_wp)"
+    continue
+  fi
 
   experimental=false
   if is_prerelease_version "$wp_ver" || is_prerelease_version "$wc_ver"; then
