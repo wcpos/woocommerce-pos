@@ -4,10 +4,10 @@
   "php": {
     "minimum": "7.4",
     "stable": "8.2",
-    "experimental": "8.4"
+    "experimental": "8.5"
   },
   "wordpress": {
-    "minimum": "6.7",
+    "minimum": "6.8",
     "stable": "6.9.4"
   },
   "woocommerce": {
