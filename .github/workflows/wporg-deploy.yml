@@ -22,7 +22,7 @@ jobs:
 
       - name: 👷 Build
         run: |
-          pnpm install
+          pnpm install --no-lockfile
           composer prefix-dependencies
           composer install --no-dev
           pnpm build

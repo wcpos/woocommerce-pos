@@ -57,7 +57,7 @@ jobs:
       - name: 👷 Build
         if: steps.check_version.outputs.release == 'true'
         run: |
-          pnpm install
+          pnpm install --no-lockfile
           composer prefix-dependencies
           composer install --no-dev
           pnpm build

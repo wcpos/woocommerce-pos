@@ -4,10 +4,8 @@ on:
   pull_request:
     paths:
       - '**/package.json'
-      - '**/pnpm-lock.yaml'
       - '**/package-lock.json'
       - '**/composer.json'
-      - '**/composer.lock'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

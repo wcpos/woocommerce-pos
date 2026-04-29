@@ -7,7 +7,6 @@ on:
     paths:
       - "**.php"
       - "composer.json"
-      - "composer.lock"
       - ".github/test-matrix.json"
       - ".github/scripts/generate-matrix.sh"
       - ".github/scripts/get-woocommerce-stable-version.sh"
@@ -37,7 +36,6 @@ jobs:
             php:
               - '**.php'
               - 'composer.json'
-              - 'composer.lock'
               - '.github/test-matrix.json'
               - '.github/scripts/generate-matrix.sh'
               - '.github/scripts/get-woocommerce-stable-version.sh'
@@ -67,7 +65,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Install dependencies
@@ -100,7 +98,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: Install dependencies
@@ -184,7 +182,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-php8.2-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-php8.2-${{ hashFiles('composer.json') }}
           restore-keys: ${{ runner.os }}-composer-php8.2-
 
       # Cache Docker images for wp-env
@@ -200,7 +198,7 @@ jobs:
             ${{ runner.os }}-docker-wp-latest-
 
       - name: Install Node dependencies
-        run: pnpm install
+        run: pnpm install --no-lockfile
 
       - name: Prefix PHP dependencies
         run: composer prefix-dependencies
@@ -333,7 +331,7 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-php${{ matrix.php }}-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-php${{ matrix.php }}-${{ hashFiles('composer.json') }}
           restore-keys: ${{ runner.os }}-composer-php${{ matrix.php }}-
 
       # Cache Docker images for wp-env
@@ -349,7 +347,7 @@ jobs:
             ${{ runner.os }}-docker-wp-php${{ matrix.php }}-
 
       - name: Install Node dependencies
-        run: pnpm install
+        run: pnpm install --no-lockfile
 
       - name: Prefix PHP dependencies
         run: composer prefix-dependencies
@@ -462,11 +460,11 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-php8.2-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-php8.2-${{ hashFiles('composer.json') }}
           restore-keys: ${{ runner.os }}-composer-php8.2-
 
       - name: Install Node dependencies
-        run: pnpm install
+        run: pnpm install --no-lockfile
 
       - name: Prefix PHP dependencies
         run: composer prefix-dependencies

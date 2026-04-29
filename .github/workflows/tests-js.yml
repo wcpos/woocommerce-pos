@@ -47,7 +47,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-lockfile
 
       - name: Run Jest tests
         run: pnpm run test:unit:js
