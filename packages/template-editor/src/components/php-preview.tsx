@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import apiFetch from '@wordpress/api-fetch';
 
 import { t } from '../translations';
@@ -39,6 +39,7 @@ export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewSt
 
 export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 	const [iframeKey, setIframeKey] = useState(0);
+	const requestIdRef = useRef(0);
 	const [previewState, setPreviewState] = useState<PreviewState>({
 		src: null,
 		srcDoc: null,
@@ -47,6 +48,8 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 
 	const loadPreview = useCallback(() => {
 		if (!previewUrl) return;
+		const requestId = requestIdRef.current + 1;
+		requestIdRef.current = requestId;
 
 		setPreviewState((prev) => ({ ...prev, loading: true }));
 
@@ -55,6 +58,8 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 			method: 'GET',
 		})
 			.then((response) => {
+				if (requestId !== requestIdRef.current) return;
+
 				setPreviewState({
 					...getPhpPreviewFrame(response),
 					loading: false,
@@ -62,6 +67,8 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 				setIframeKey((k) => k + 1);
 			})
 			.catch(() => {
+				if (requestId !== requestIdRef.current) return;
+
 				setPreviewState({
 					src: null,
 					srcDoc: `<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">${t('editor.preview_failed')}</div>`,

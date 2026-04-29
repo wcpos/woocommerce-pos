@@ -1367,13 +1367,25 @@ class Templates_Controller extends WP_REST_Controller {
 
 		$order = TemplatesManager::get_template_order( $type );
 		if ( ! empty( $order ) ) {
-			$order_map = array_flip( array_map( 'strval', $order ) );
+			$order_map          = array_flip( array_map( 'strval', $order ) );
+			$original_positions = array();
+			foreach ( $templates as $index => $template ) {
+				$original_positions[ (string) $template['id'] ] = $index;
+			}
+
 			usort(
 				$templates,
-				function ( $a, $b ) use ( $order_map ) {
+				function ( $a, $b ) use ( $order_map, $original_positions ) {
 					$pos_a = $order_map[ (string) $a['id'] ] ?? PHP_INT_MAX;
 					$pos_b = $order_map[ (string) $b['id'] ] ?? PHP_INT_MAX;
-					return $pos_a - $pos_b;
+
+					if ( $pos_a === $pos_b ) {
+						$idx_a = $original_positions[ (string) $a['id'] ] ?? PHP_INT_MAX;
+						$idx_b = $original_positions[ (string) $b['id'] ] ?? PHP_INT_MAX;
+						return $idx_a <=> $idx_b;
+					}
+
+					return $pos_a <=> $pos_b;
 				}
 			);
 		}
