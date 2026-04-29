@@ -527,7 +527,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
 - Gallery preview image generator check mode.
 - Template gallery package lint/test/build.
 
-**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`):**
+**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`, current head `70c632d39aee10bf27a41f8bce9acaeebc1bd9f1`):**
 
 - Completed:
   - Added `apps/template-studio/` in `monorepo-v2` with a Vite/React local tuning UI for bundled/gallery `logicless` and `thermal` templates.
@@ -544,14 +544,21 @@ Implement in separate PRs. Each PR should leave the product working and testable
   - `pnpm --filter @wcpos/template-studio check:gallery-previews`
   - `pnpm --filter @wcpos/template-studio build`
   - `/codex-review` three times; findings were fixed for engine-filter selection, hot reload signaling, snapshot check mutation, wp-env filter reset, and fixture/schema alignment.
+  - Conflict follow-up checks on 2026-04-30: `git fetch origin main feature/template-studio-pr3`; `git switch -C feature/template-studio-pr3 origin/feature/template-studio-pr3`; `git merge-base origin/main HEAD`; `gh pr view 339 --repo wcpos/monorepo --json mergeable,mergeStateStatus,headRefOid,baseRefName,headRefName`; `gh pr checks 339 --repo wcpos/monorepo`. Evidence: merge base matched `origin/main` (`6b072e6c0e292168b149677c55ab5cdafa0cbd6f`), PR head was `70c632d39aee10bf27a41f8bce9acaeebc1bd9f1`, GitHub reported `mergeable: MERGEABLE`, and remaining blockers were pending CI/review statuses.
 - What remains:
-  - Review/merge PR #339, then have the maintainer use Studio to tune/approve bundled gallery templates visually.
+  - PR #339 has been refreshed against `origin/main`; GitHub reports `mergeable: MERGEABLE` and the remaining blocked state is pending CI/review status rather than a file conflict.
+  - Wait for PR #339 checks/review to settle, address any new actionable review feedback, and merge PR #339 when green.
+  - After merge, have the maintainer use Studio to tune/approve bundled gallery templates visually.
   - Copy or regenerate approved preview assets into the plugin gallery-owned asset directory and wire `packages/template-gallery` to use committed preview assets for bundled/gallery templates only.
   - Start PR 4 only after PR 3 is reviewed/merged and the maintainer is satisfied the Studio loop is coherent.
 - Changed assumptions/follow-up decisions:
   - Preview image artifacts are PNG because the Playwright screenshot path used by the harness supports PNG reliably; WebP can be revisited if/when an image optimization step is added.
   - The PR keeps generated previews local to `monorepo-v2` by default to make the harness self-contained; cross-repo gallery UI consumption is left as the next plugin-side step.
   - The full matrix remains local/ephemeral; committed snapshots stay curated to avoid overbuilding drift reporting.
+
+**Next-agent operating note — 2026-04-30:**
+
+The maintainer is going to bed. Do not wait for interactive decisions unless a genuinely destructive action or secret is required. Make reasonable assumptions from this spec, local rules, PR state, and code, then go as far as safely possible: get PR #339 green/merged if permissions and CI allow, keep updating the handoff with exact evidence, and proceed to the next coherent safe checkpoint without starting PR 4 until PR 3 is merged and the Studio loop is reviewable/approved.
 
 #### PR 4 — Replace WP Admin non-legacy previews with JS renderer
 
