@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
+import apiFetch from '@wordpress/api-fetch';
+
 import { t } from '../translations';
 
 declare const jQuery: any;
@@ -7,31 +9,94 @@ interface PhpPreviewProps {
 	previewUrl: string;
 }
 
+export interface PhpPreviewResponse {
+	preview_url?: string;
+	preview_html?: string;
+}
+
+interface PreviewState {
+	src: string | null;
+	srcDoc: string | null;
+	loading: boolean;
+}
+
+export function getPhpPreviewRequestUrl(previewUrl: string): string {
+	if (!previewUrl) return previewUrl;
+	const separator = previewUrl.includes('?') ? '&' : '?';
+	return previewUrl.includes('wcpos=') ? previewUrl : `${previewUrl}${separator}wcpos=1`;
+}
+
+export function decodeLabel(label: string): string {
+	return label.replace(/&amp;/g, '&');
+}
+
+export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewState, 'src' | 'srcDoc'> {
+	return {
+		src: response.preview_url ?? null,
+		srcDoc: response.preview_html ?? null,
+	};
+}
+
 export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 	const [iframeKey, setIframeKey] = useState(0);
+	const [previewState, setPreviewState] = useState<PreviewState>({
+		src: null,
+		srcDoc: null,
+		loading: Boolean(previewUrl),
+	});
+
+	const loadPreview = useCallback(() => {
+		if (!previewUrl) return;
+
+		setPreviewState((prev) => ({ ...prev, loading: true }));
+
+		apiFetch<PhpPreviewResponse>({
+			url: getPhpPreviewRequestUrl(previewUrl),
+			method: 'GET',
+		})
+			.then((response) => {
+				setPreviewState({
+					...getPhpPreviewFrame(response),
+					loading: false,
+				});
+				setIframeKey((k) => k + 1);
+			})
+			.catch(() => {
+				setPreviewState({
+					src: null,
+					srcDoc: `<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">${t('editor.preview_failed')}</div>`,
+					loading: false,
+				});
+				setIframeKey((k) => k + 1);
+			});
+	}, [previewUrl]);
 
 	const handleSaveAndPreview = useCallback(() => {
 		const wp = (window as any).wp;
 		if (wp?.autosave?.server) {
 			wp.autosave.server.triggerSave();
 		} else {
-			setIframeKey((k) => k + 1);
+			loadPreview();
 		}
-	}, []);
+	}, [loadPreview]);
+
+	useEffect(() => {
+		loadPreview();
+	}, [loadPreview]);
 
 	useEffect(() => {
 		if (typeof jQuery === 'undefined') return;
 
 		const onAutosaveComplete = (_event: unknown, data?: { success?: boolean }) => {
 			if (data && data.success === false) return;
-			setIframeKey((k) => k + 1);
+			loadPreview();
 		};
 
 		jQuery(document).on('after-autosave', onAutosaveComplete);
 		return () => {
 			jQuery(document).off('after-autosave', onAutosaveComplete);
 		};
-	}, []);
+	}, [loadPreview]);
 
 	if (!previewUrl) {
 		return (
@@ -53,28 +118,35 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 						onClick={handleSaveAndPreview}
 						className="wcpos:text-xs wcpos:px-2 wcpos:py-1 wcpos:bg-blue-600 wcpos:text-white wcpos:rounded hover:wcpos:bg-blue-700"
 					>
-						{t('editor.save_and_preview')}
+						{decodeLabel(t('editor.save_and_preview'))}
 					</button>
-					<a
-						href={previewUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline wcpos:self-center"
-					>
-						{t('editor.open_in_tab')}
-					</a>
+					{previewState.src && (
+						<a
+							href={previewState.src}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline wcpos:self-center"
+						>
+							{t('editor.open_in_tab')}
+						</a>
+					)}
 				</div>
 			</div>
 			<div className="wcpos:p-2 wcpos:text-xs wcpos:text-amber-700 wcpos:bg-amber-50 wcpos:border-b wcpos:border-amber-200">
 				{t('editor.php_save_notice')}
 			</div>
 			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
-				<iframe
-					key={iframeKey}
-					src={previewUrl}
-					style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
-					title={t('editor.template_preview')}
-				/>
+				{previewState.loading ? (
+					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
+				) : (
+					<iframe
+						key={iframeKey}
+						src={previewState.src ?? undefined}
+						srcDoc={previewState.srcDoc ?? undefined}
+						style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
+						title={t('editor.template_preview')}
+					/>
+				)}
 			</div>
 		</div>
 	);
