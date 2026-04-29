@@ -527,6 +527,32 @@ Implement in separate PRs. Each PR should leave the product working and testable
 - Gallery preview image generator check mode.
 - Template gallery package lint/test/build.
 
+**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`):**
+
+- Completed:
+  - Added `apps/template-studio/` in `monorepo-v2` with a Vite/React local tuning UI for bundled/gallery `logicless` and `thermal` templates.
+  - Studio renders through `@wcpos/receipt-renderer`, loads gallery templates from the sibling `woocommerce-pos/templates/gallery` checkout, and full-reloads when those template files or Studio fixtures change.
+  - Added wp-env preview fetching through the Vite `/wp-json` proxy, preserving browser cookie auth and sending `X-WCPOS: 1`; logicless responses can display temporary `preview_html` diagnostics.
+  - Thermal templates show canonical HTML preview plus ESC/POS hex and printable ASCII debug output.
+  - Added six receipt fixtures covering default gallery data, empty cart, long product names/large quantities, RTL/multi-currency, refund/tax-inclusive, and fiscal-data scenarios, aligned to the fields current gallery templates consume.
+  - Added curated snapshot goldens/checking and a lightweight summary without creating a drift-reporting subsystem.
+  - Added `generate:gallery-previews` / `check:gallery-previews` for bundled/gallery templates only, with committed generated PNG previews under `apps/template-studio/gallery-previews`; the output path can be pointed at `woocommerce-pos/packages/template-gallery/src/assets/previews` via `WCPOS_GALLERY_PREVIEW_DIR` when the gallery UI is wired to assets.
+- Verification run:
+  - `pnpm --filter @wcpos/template-studio lint`
+  - `pnpm --filter @wcpos/template-studio test`
+  - `pnpm --filter @wcpos/template-studio test:snapshots`
+  - `pnpm --filter @wcpos/template-studio check:gallery-previews`
+  - `pnpm --filter @wcpos/template-studio build`
+  - `/codex-review` three times; findings were fixed for engine-filter selection, hot reload signaling, snapshot check mutation, wp-env filter reset, and fixture/schema alignment.
+- What remains:
+  - Review/merge PR #339, then have the maintainer use Studio to tune/approve bundled gallery templates visually.
+  - Copy or regenerate approved preview assets into the plugin gallery-owned asset directory and wire `packages/template-gallery` to use committed preview assets for bundled/gallery templates only.
+  - Start PR 4 only after PR 3 is reviewed/merged and the maintainer is satisfied the Studio loop is coherent.
+- Changed assumptions/follow-up decisions:
+  - Preview image artifacts are PNG because the Playwright screenshot path used by the harness supports PNG reliably; WebP can be revisited if/when an image optimization step is added.
+  - The PR keeps generated previews local to `monorepo-v2` by default to make the harness self-contained; cross-repo gallery UI consumption is left as the next plugin-side step.
+  - The full matrix remains local/ephemeral; committed snapshots stay curated to avoid overbuilding drift reporting.
+
 #### PR 4 — Replace WP Admin non-legacy previews with JS renderer
 
 **Repo:** `woocommerce-pos`
