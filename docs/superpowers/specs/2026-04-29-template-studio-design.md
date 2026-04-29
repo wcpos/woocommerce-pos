@@ -407,7 +407,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
 - Schema generation/check command.
 - Relevant JS package type/lint checks.
 
-**Status update — 2026-04-29 / PR opened from `template-studio-pr1`:**
+**Status update — 2026-04-29 / PR #834 opened from `template-studio-pr1`:**
 
 - Completed:
   - Normalized non-legacy preview payloads so `logicless` and `thermal` responses include `{ engine, template_content, receipt_data, order_id, template_id }`.
