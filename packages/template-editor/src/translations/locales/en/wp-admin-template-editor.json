@@ -9,7 +9,7 @@
 	"editor.template_preview": "Template preview",
 	"editor.thermal_template_preview": "Thermal template preview",
 	"editor.no_orders": "No POS orders found. Create an order in the POS to preview templates.",
-	"editor.save_and_preview": "Save & Preview",
+	"editor.save_and_preview": "Save and Preview",
 	"editor.php_save_notice": "PHP templates require saving before the preview updates.",
 	"editor.sample_data": "Sample Data",
 	"editor.order": "Order",
@@ -25,5 +25,6 @@
 	"element.row_columns": "Row / Columns",
 	"element.feed": "Feed (blank lines)",
 	"element.cut": "Cut",
-	"element.image": "Image"
+	"element.image": "Image",
+	"editor.preview_failed": "Preview failed. Save the template and try again."
 }

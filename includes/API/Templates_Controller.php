@@ -329,22 +329,31 @@ class Templates_Controller extends WP_REST_Controller {
 		$page           = max( 1, (int) ( $request->get_param( 'page' ) ?? 1 ) );
 		$has_filters    = ( null !== $search && '' !== $search ) || ( null !== $category && '' !== $category ) || ( null !== $modified_after && '' !== $modified_after );
 
-		// Step 1: Resolve which templates to return.
-		if ( $store_id ) {
-			$enabled = TemplatesManager::resolve_templates( (int) $store_id, $type );
-		} else {
-			$enabled = TemplatesManager::get_enabled_templates( $type );
-		}
+		// Step 1: Resolve which template is active. Store-specific requests keep the
+		// POS runtime behavior of returning enabled templates only. The admin list
+		// only includes inactive templates for managers so POS/runtime callers with
+		// access_woocommerce_pos do not receive disabled or draft templates.
+		$is_manager = current_user_can( 'manage_woocommerce_pos' );
+		$enabled    = $store_id ? TemplatesManager::resolve_templates( (int) $store_id, $type ) : array();
 		$active_template_id = $store_id
 			? ( ! empty( $enabled ) ? $enabled[0]['id'] : null )
 			: TemplatesManager::get_active_template_id( $type );
 
 		// Step 2: Build full template list.
-		// When store_id is set or no filters, use the resolved enabled list directly.
-		// When filters are active (search/category/modified_after), query DB with filters.
+		// When store_id is set, use the resolved enabled list directly.
+		// Managers without filters get the full admin list (including inactive).
+		// Non-manager callers without store_id keep the previous enabled-only list.
+		// When filters are active, query database templates with filters.
 		if ( $store_id || ! $has_filters ) {
+			if ( $store_id ) {
+				$source_templates = $enabled;
+			} elseif ( $is_manager ) {
+				$source_templates = $this->get_admin_template_list( $type );
+			} else {
+				$source_templates = TemplatesManager::get_enabled_templates( $type );
+			}
 			$templates = array();
-			foreach ( $enabled as $template ) {
+			foreach ( $source_templates as $template ) {
 				$template['is_active'] = ( null !== $active_template_id && (string) $template['id'] === (string) $active_template_id );
 				$templates[]           = $this->prepare_item_for_response( $template, $request );
 			}
@@ -362,7 +371,7 @@ class Templates_Controller extends WP_REST_Controller {
 			// Filtered DB query (search, category, modified_after).
 			$args = array(
 				'post_type'      => 'wcpos_template',
-				'post_status'    => array( 'publish', 'draft' ),
+				'post_status'    => $is_manager ? array( 'publish', 'draft' ) : 'publish',
 				'posts_per_page' => $per_page,
 				'paged'          => $page,
 				'orderby'        => 'menu_order',
@@ -1334,6 +1343,72 @@ class Templates_Controller extends WP_REST_Controller {
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);
+	}
+
+	/**
+	 * Get all templates for the admin list, including inactive templates.
+	 *
+	 * Runtime/store contexts use TemplatesManager::get_enabled_templates(); the
+	 * admin gallery needs the broader list so draft posts and disabled virtual
+	 * templates remain visible with their Active switch off.
+	 *
+	 * @param string $type Template type.
+	 *
+	 * @return array<int,array<string,mixed>> Template data arrays.
+	 */
+	private function get_admin_template_list( string $type ): array {
+		$templates = TemplatesManager::detect_filesystem_templates( $type );
+
+		$posts = get_posts(
+			array(
+				'post_type'      => 'wcpos_template',
+				'post_status'    => array( 'publish', 'draft' ),
+				'posts_per_page' => -1,
+				'orderby'        => 'menu_order',
+				'order'          => 'ASC',
+				'tax_query'      => array(
+					array(
+						'taxonomy' => 'wcpos_template_type',
+						'field'    => 'slug',
+						'terms'    => $type,
+					),
+				),
+			)
+		);
+
+		foreach ( $posts as $post ) {
+			$template = TemplatesManager::get_template( $post->ID );
+			if ( $template ) {
+				$templates[] = $template;
+			}
+		}
+
+		$order = TemplatesManager::get_template_order( $type );
+		if ( ! empty( $order ) ) {
+			$order_map          = array_flip( array_map( 'strval', $order ) );
+			$original_positions = array();
+			foreach ( $templates as $index => $template ) {
+				$original_positions[ (string) $template['id'] ] = $index;
+			}
+
+			usort(
+				$templates,
+				function ( $a, $b ) use ( $order_map, $original_positions ) {
+					$pos_a = $order_map[ (string) $a['id'] ] ?? PHP_INT_MAX;
+					$pos_b = $order_map[ (string) $b['id'] ] ?? PHP_INT_MAX;
+
+					if ( $pos_a === $pos_b ) {
+						$idx_a = $original_positions[ (string) $a['id'] ] ?? PHP_INT_MAX;
+						$idx_b = $original_positions[ (string) $b['id'] ] ?? PHP_INT_MAX;
+						return $idx_a <=> $idx_b;
+					}
+
+					return $pos_a <=> $pos_b;
+				}
+			);
+		}
+
+		return $templates;
 	}
 
 	/**

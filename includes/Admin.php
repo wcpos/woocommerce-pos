@@ -84,10 +84,11 @@ class Admin {
 		// Register admin-post.php handlers only when our specific actions are requested.
 		// This keeps the footprint minimal and avoids conflicts with other plugins.
 		$action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
-		if ( \in_array( $action, array( 'wcpos_activate_template', 'wcpos_copy_template', 'wcpos_install_starter' ), true ) ) {
+		if ( \in_array( $action, array( 'wcpos_activate_template', 'wcpos_copy_template', 'wcpos_install_starter', 'wcpos_toggle_template_status' ), true ) ) {
 			add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
 			add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
 			add_action( 'admin_post_wcpos_install_starter', array( $this, 'handle_install_starter' ) );
+			add_action( 'admin_post_wcpos_toggle_template_status', array( $this, 'handle_toggle_template_status' ) );
 		}
 	}
 
@@ -100,6 +101,17 @@ class Admin {
 	public function handle_activate_template(): void {
 		$handler = new List_Templates();
 		$handler->activate_template();
+	}
+
+	/**
+	 * Handle template active/inactive status toggles via admin-post.php.
+	 * Delegates to Single_Template class.
+	 *
+	 * @return void
+	 */
+	public function handle_toggle_template_status(): void {
+		$handler = new Single_Template();
+		$handler->toggle_template_status();
 	}
 
 	/**

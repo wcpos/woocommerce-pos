@@ -74,8 +74,8 @@ class Single_Template {
 		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
-		add_action( 'admin_post_wcpos_activate_template', array( $this, 'activate_template' ) );
-		add_action( 'admin_post_wcpos_copy_template', array( $this, 'copy_template' ) );
+		add_action( 'admin_head-post.php', array( $this, 'hide_publish_status_controls' ) );
+		add_action( 'admin_head-post-new.php', array( $this, 'hide_publish_status_controls' ) );
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
 		add_action( 'edit_form_after_title', array( $this, 'add_template_info' ) );
 
@@ -295,27 +295,97 @@ class Single_Template {
 	 * @return void
 	 */
 	public function render_actions_metabox( \WP_Post $post ): void {
-		$template  = TemplatesManager::get_template( $post->ID );
-		$type      = $template ? $template['type'] : 'receipt';
-		$is_active = $template ? TemplatesManager::is_active_template( $post->ID, $type ) : false;
+		$is_published = 'publish' === $post->post_status;
+		$action       = $is_published ? 'deactivate' : 'activate';
+		$button_label = $is_published ? __( 'Deactivate Template', 'woocommerce-pos' ) : __( 'Activate Template', 'woocommerce-pos' );
+		$description  = $is_published
+			? __( 'This template is active and available for POS receipts.', 'woocommerce-pos' )
+			: __( 'This template is inactive and will not be used for POS receipts.', 'woocommerce-pos' );
+		$button_class = $is_published ? 'button button-large' : 'button button-primary button-large';
 
-		if ( $is_active ) {
-			?>
-			<p style="color: #00a32a; font-weight: bold;">
-				✓ <?php esc_html_e( 'This template is currently active', 'woocommerce-pos' ); ?>
-			</p>
-			<?php
-		} else {
-			?>
-			<p>
-				<a href="<?php echo esc_url( $this->get_activate_url( $post->ID ) ); ?>" 
-				   class="button button-primary button-large" 
-				   style="width: 100%; text-align: center;">
-					<?php esc_html_e( 'Set as Active Template', 'woocommerce-pos' ); ?>
-				</a>
-			</p>
-			<?php
+		?>
+		<p style="margin-top: 0;">
+			<?php echo esc_html( $description ); ?>
+		</p>
+		<p>
+			<a href="<?php echo esc_url( $this->get_toggle_status_url( $post->ID, $action ) ); ?>"
+			   class="<?php echo esc_attr( $button_class ); ?>"
+			   style="width: 100%; text-align: center;">
+				<?php echo esc_html( $button_label ); ?>
+			</a>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Hide confusing WordPress Status and Visibility controls in the Publish box.
+	 *
+	 * Templates use the explicit Active/Inactive controls in Template Actions and
+	 * the gallery list. WordPress visibility does not affect POS template usage.
+	 *
+	 * @return void
+	 */
+	public function hide_publish_status_controls(): void {
+		$screen = get_current_screen();
+		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
+			return;
 		}
+
+		?>
+		<style>
+			#misc-publishing-actions .misc-pub-post-status,
+			#misc-publishing-actions #visibility {
+				display: none;
+			}
+		</style>
+		<?php
+	}
+
+	/**
+	 * Handle template active/inactive status toggles from the edit screen.
+	 *
+	 * @return void
+	 */
+	public function toggle_template_status(): void {
+		$template_id = isset( $_GET['template_id'] ) ? absint( $_GET['template_id'] ) : 0;
+		$state       = isset( $_GET['state'] ) ? sanitize_key( wp_unslash( $_GET['state'] ) ) : '';
+
+		if ( ! $template_id || ! \in_array( $state, array( 'activate', 'deactivate' ), true ) ) {
+			wp_die( esc_html__( 'Invalid template status request.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_toggle_template_status_' . $template_id . '_' . $state ) ) {
+			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+		}
+
+		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
+			wp_die( esc_html__( 'You do not have permission to update templates.', 'woocommerce-pos' ) );
+		}
+
+		$post = get_post( $template_id );
+		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
+			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+		}
+
+		$result = wp_update_post(
+			array(
+				'ID'          => $template_id,
+				'post_status' => 'activate' === $state ? 'publish' : 'draft',
+			),
+			true
+		);
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'post'                 => $template_id,
+					'action'               => 'edit',
+					'wcpos_status_updated' => is_wp_error( $result ) ? '0' : '1',
+				),
+				admin_url( 'post.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -682,6 +752,24 @@ class Single_Template {
 			<?php
 		}
 
+		// Status toggle notices.
+		if ( isset( $_GET['wcpos_status_updated'] ) ) {
+			$success = '1' === $_GET['wcpos_status_updated'];
+			?>
+			<div class="notice <?php echo $success ? 'notice-success' : 'notice-error'; ?> is-dismissible">
+				<p>
+					<?php
+					echo esc_html(
+						$success
+							? __( 'Template status updated successfully.', 'woocommerce-pos' )
+							: __( 'Failed to update template status.', 'woocommerce-pos' )
+					);
+					?>
+				</p>
+			</div>
+			<?php
+		}
+
 		// Copy success notice.
 		if ( isset( $_GET['wcpos_copied'] ) && '1' === $_GET['wcpos_copied'] ) {
 			?>
@@ -711,16 +799,17 @@ class Single_Template {
 	}
 
 	/**
-	 * Get activate template URL.
+	 * Get template status toggle URL.
 	 *
-	 * @param int $template_id Template ID.
+	 * @param int    $template_id Template ID.
+	 * @param string $state       Desired state (activate or deactivate).
 	 *
-	 * @return string Activate URL.
+	 * @return string Toggle URL.
 	 */
-	private function get_activate_url( int $template_id ): string {
+	private function get_toggle_status_url( int $template_id, string $state ): string {
 		return wp_nonce_url(
-			admin_url( 'admin-post.php?action=wcpos_activate_template&template_id=' . $template_id ),
-			'wcpos_activate_template_' . $template_id
+			admin_url( 'admin-post.php?action=wcpos_toggle_template_status&template_id=' . $template_id . '&state=' . $state ),
+			'wcpos_toggle_template_status_' . $template_id . '_' . $state
 		);
 	}
 }

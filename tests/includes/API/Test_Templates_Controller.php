@@ -178,6 +178,67 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test get_items keeps draft database templates in the admin list as inactive.
+	 */
+	public function test_get_items_includes_draft_database_templates_as_inactive(): void {
+		$published_id = $this->create_template( 'Published Template', 'receipt', 'publish' );
+		$draft_id     = $this->create_template( 'Draft Template', 'receipt', 'draft' );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$templates_by_id = array();
+		foreach ( $data as $template ) {
+			$templates_by_id[ (string) $template['id'] ] = $template;
+		}
+
+		$this->assertArrayHasKey( (string) $published_id, $templates_by_id );
+		$this->assertArrayHasKey( (string) $draft_id, $templates_by_id );
+		$this->assertSame( 'publish', $templates_by_id[ (string) $published_id ]['status'] );
+		$this->assertSame( 'draft', $templates_by_id[ (string) $draft_id ]['status'] );
+		$this->assertFalse( $templates_by_id[ (string) $draft_id ]['is_active'] );
+
+		wp_delete_post( $published_id, true );
+		wp_delete_post( $draft_id, true );
+	}
+
+	/**
+	 * Test access-only users do not receive inactive templates in the default list.
+	 */
+	public function test_get_items_excludes_inactive_templates_for_access_only_users(): void {
+		$published_id = $this->create_template( 'Published Template', 'receipt', 'publish' );
+		$draft_id     = $this->create_template( 'Draft Template', 'receipt', 'draft' );
+		$user_id      = $this->factory->user->create(
+			array(
+				'role' => 'subscriber',
+			)
+		);
+		$user         = get_user_by( 'id', $user_id );
+
+		$user->add_cap( 'access_woocommerce_pos' );
+		\WCPOS\WooCommercePOS\Templates::set_virtual_template_disabled( 'plugin-core', true );
+		wp_set_current_user( $user_id );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = array_map( 'strval', array_column( $response->get_data(), 'id' ) );
+
+		$this->assertContains( (string) $published_id, $ids );
+		$this->assertNotContains( (string) $draft_id, $ids );
+		$this->assertNotContains( 'plugin-core', $ids );
+
+		wp_delete_post( $published_id, true );
+		wp_delete_post( $draft_id, true );
+		wp_delete_user( $user_id );
+	}
+
+	/**
 	 * Test get_items respects per_page when virtual templates are included.
 	 */
 	public function test_get_items_respects_per_page_with_virtual_templates(): void {
@@ -1247,12 +1308,12 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test get_items excludes disabled virtual templates.
+	 * Test admin get_items keeps disabled virtual templates visible.
 	 *
-	 * The unified pipeline uses get_enabled_templates() which filters out
-	 * disabled virtual templates server-side.
+	 * The admin list must keep inactive rows visible so users can toggle the
+	 * template back on without leaving the list.
 	 */
-	public function test_get_items_excludes_disabled_virtual_template(): void {
+	public function test_get_items_includes_disabled_virtual_template_for_admin_list(): void {
 		\WCPOS\WooCommercePOS\Templates::set_virtual_template_disabled( 'plugin-core', true );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates' );
@@ -1269,7 +1330,36 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 
-		$this->assertNull( $core, 'Disabled virtual template should not appear in response' );
+		$this->assertNotNull( $core, 'Disabled virtual template should remain in the admin response' );
+		$this->assertFalse( $core['is_active'] );
+		$this->assertTrue( $core['is_disabled'] );
+	}
+
+	/**
+	 * Test runtime/store get_items excludes disabled virtual templates.
+	 *
+	 * Store requests still use the enabled-template pipeline so inactive
+	 * templates are not returned to POS runtime consumers.
+	 */
+	public function test_get_items_excludes_disabled_virtual_template_for_store_list(): void {
+		\WCPOS\WooCommercePOS\Templates::set_virtual_template_disabled( 'plugin-core', true );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates' );
+		$request->set_param( 'store_id', 123 );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$core = null;
+		foreach ( $data as $t ) {
+			if ( 'plugin-core' === ( $t['id'] ?? '' ) ) {
+				$core = $t;
+				break;
+			}
+		}
+
+		$this->assertNull( $core, 'Disabled virtual template should not appear in store response' );
 	}
 
 	/**
