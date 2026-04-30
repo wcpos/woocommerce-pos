@@ -1,9 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
+const previewDir = path.join(repoRoot, 'assets', 'img', 'template-gallery', 'previews');
+
+
+beforeEach(() => {
+	(window as Window & { wcpos?: { templateGallery?: { previewBaseUrl?: string } } }).wcpos = {
+		templateGallery: {
+			previewBaseUrl: 'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
+		},
+	};
+});
+
+afterEach(() => {
+	delete (window as Window & { wcpos?: unknown }).wcpos;
+});
 
 describe('gallery template assets', () => {
 	it('includes a browser thermal-style receipt template', () => {
@@ -45,4 +59,19 @@ describe('gallery template assets', () => {
 			expect(content).toContain('<bold>{{name}}</bold>');
 		}
 	});
+
+	it('maps every bundled gallery template to a committed preview image', async () => {
+		const { getGalleryPreviewSrc } = await import('../preview-assets');
+		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
+
+		for (const filename of metadataFiles) {
+			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
+				key: string;
+			};
+
+			expect(fs.existsSync(path.join(previewDir, `${metadata.key}.png`)), metadata.key).toBe(true);
+			expect(getGalleryPreviewSrc(metadata.key), metadata.key).toMatch(/template-gallery\/previews\/.+\.png$/);
+		}
+	});
+
 });

@@ -3,6 +3,7 @@ import classnames from 'classnames';
 import { Button, Card } from '@wcpos/ui';
 
 import { TemplateTags } from './template-tags';
+import { getGalleryPreviewSrc } from '../preview-assets';
 import { t } from '../translations';
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
@@ -36,6 +37,7 @@ export function TemplateCard(props: TemplateCardProps) {
 	const name = template.title;
 	const description = template.description;
 	const isActive = !isGallery && 'status' in template && template.status === 'publish';
+	const previewSrc = isGallery ? getGalleryPreviewSrc(template.key) : undefined;
 
 	return (
 		<Card active={isActive}>
@@ -43,9 +45,19 @@ export function TemplateCard(props: TemplateCardProps) {
 			<button
 				type="button"
 				onClick={onPreview}
-				className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0"
+				aria-label={t('common.preview')}
+				className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0 wcpos:overflow-hidden"
 			>
-				<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
+				{previewSrc ? (
+					<img
+						src={previewSrc}
+						alt=""
+						loading="lazy"
+						className="wcpos:w-full wcpos:h-full wcpos:object-contain"
+					/>
+				) : (
+					<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
+				)}
 			</button>
 
 			<Card.Body className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:p-3">
