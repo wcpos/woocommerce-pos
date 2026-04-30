@@ -1,13 +1,15 @@
 # WCPOS Free Plugin (`woocommerce-pos`)
 
-WordPress plugin providing the server-side foundation for WCPOS. This file is the repo-local source of truth for Claude and Codex. Do not duplicate these rules into `.ai/`, `.codex/`, or repo-local `.claude/skills`.
+WordPress plugin providing the server-side foundation for WCPOS. This repository keeps project-specific agent context tracked in git so fresh clones are self-contained.
 
 ## Canonical Agent Context
 
-- Global instructions live in `/Users/kilbot/.claude/CLAUDE.md` and `/Users/kilbot/.claude/rules/*.mdc`.
-- Reusable skills live in `/Users/kilbot/.claude/skills`.
-- Repo-specific context belongs in this root `CLAUDE.md`.
-- Codex entrypoint is `AGENTS.md`, which delegates back to this file.
+- `CLAUDE.md` is the top-level project overview for Claude and Codex.
+- `AGENTS.md` is the Codex entrypoint and points back to tracked repo context.
+- `.ai/rules/*.mdc` contains project-specific rules that must ship with the repo.
+- `.claude/skills/*/SKILL.md` contains project-specific skills that must ship with the repo.
+- Global maintainer files under `/Users/kilbot/.claude` are optional personal preferences only; do not rely on them for project rules, and do not move project-specific context there.
+- Do not create duplicate `.codex` rule/skill sets when the same project guidance already exists in this repo.
 
 ## Product and Naming
 

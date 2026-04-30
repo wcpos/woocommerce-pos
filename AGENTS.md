@@ -1,12 +1,14 @@
 # WCPOS Agent Instructions
 
-This repo uses `CLAUDE.md` as the single repo-local source of truth for both Claude and Codex.
+This repository is self-contained for both Claude and Codex. A fresh clone must include the repo-specific rules and skills needed to work here.
 
 Before substantial work:
-1. Read `/Users/kilbot/.claude/CLAUDE.md` (primary maintainer local setup).
-2. Read `/Users/kilbot/.claude/rules/*.mdc` (primary maintainer local setup).
-3. Read this repo's `CLAUDE.md`.
+1. Read this repo's `CLAUDE.md`.
+2. Read this repo's `.ai/rules/*.mdc` files.
+3. Use this repo's `.claude/skills/*/SKILL.md` files when their descriptions match the task.
 
-Do not create duplicate rule or skill sets in `.ai/`, `.codex/`, or repo-local `.claude/skills` when the same guidance belongs in the global `/Users/kilbot/.claude` tree or this root `CLAUDE.md`.
+Global files such as `/Users/kilbot/.claude/*` are personal maintainer preferences only. They must never replace tracked project context, and agents must not move project-specific rules or skills out of this repository.
+
+Do not create duplicate `.codex` rule/skill sets when the same project guidance already exists in `CLAUDE.md`, `.ai/rules`, or `.claude/skills`.
 
 Critical repo rule: PHP/WordPress tests must run through Docker/wp-env. Do not fall back to local Composer/PHPUnit.
