@@ -191,6 +191,14 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 			$args['orderby'] = 'title';
 		}
 
+		if ( ! empty( $request['wcpos_include'] ) ) {
+			$args['post__in'] = array_map( 'intval', (array) $request['wcpos_include'] );
+		}
+
+		if ( ! empty( $request['wcpos_exclude'] ) ) {
+			$args['post__not_in'] = array_map( 'intval', (array) $request['wcpos_exclude'] );
+		}
+
 		return $args;
 	}
 
