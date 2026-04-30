@@ -581,7 +581,57 @@ Implement in separate PRs. Each PR should leave the product working and testable
 
 **Next-agent operating note — 2026-04-30:**
 
-PR #339 is merged and plugin-side gallery preview asset integration is open/green as PR #837. The next safe checkpoint is maintainer visual approval/tuning of the Studio-rendered templates; regenerate/replace the PNGs in PR #837 if needed, then merge it. Do not start PR 4 solely because PR #339 merged; PR 4 remains gated on accepting the Studio loop/thumbnail workflow.
+PR #339 is merged and plugin-side gallery preview asset integration is merged as PR #837. The maintainer found the first Studio loop insufficient for real iteration because it lacked real store data, barcode generation, and direct print testing. A follow-up Template Studio print-lab PR is now open in `monorepo-v2` as wcpos/monorepo#351.
+
+- Print-lab status — 2026-04-30 / PR #351 opened (`feature/template-studio-print-lab`, head `16eab186f`):
+  - Completed:
+    - Added real-store preview loading from Store URL + Template ID + optional Order ID through `/__studio/wp-preview`.
+    - Added explicit `WCPOS_STUDIO_STORE_ORIGINS` origin allowlisting; cookies are forwarded only to the configured `WCPOS_STUDIO_WP_URL` origin to avoid leaking local auth cookies to arbitrary URLs.
+    - Added print-dialog testing via a generated print document and `window.print()`.
+    - Added guarded raw TCP ESC/POS sending for thermal templates through `/__studio/print/raw-tcp`; loopback clients only, custom Studio header required, and target hosts default to loopback unless `WCPOS_STUDIO_PRINT_HOSTS` is set.
+    - Added `bwip-js` barcode/QR SVG generation in `@wcpos/receipt-renderer`, thermal SVG sanitizer allowlists, and React preview regression coverage so generated SVGs survive DOM insertion.
+    - Fixed the default sibling `woocommerce-pos` path for normal monorepo checkouts and monorepo worktrees.
+    - Refreshed the changed thermal Studio PNG previews and copied the matching plugin gallery preview assets into this handoff/assets branch.
+  - Exact commands run:
+    - `npm view bwip-js version`
+    - `npm view qrcode version`
+    - `npm view @types/qrcode version`
+    - `pnpm --filter @wcpos/receipt-renderer add bwip-js@4.10.1 qrcode@1.5.4`
+    - `pnpm --filter @wcpos/receipt-renderer add -D @types/qrcode@1.5.6`
+    - `pnpm --filter @wcpos/receipt-renderer remove qrcode @types/qrcode`
+    - `rm -rf apps/electron`
+    - `git submodule update --init --recursive --force apps/electron`
+    - `git -C .wiki reset --hard`
+    - `git -C apps/web reset --hard`
+    - `pnpm --filter @wcpos/receipt-renderer lint`
+    - `pnpm --filter @wcpos/receipt-renderer test`
+    - `pnpm --filter @wcpos/receipt-renderer build`
+    - `pnpm --filter @wcpos/receipt-renderer check:browser-import`
+    - `pnpm --filter @wcpos/template-studio lint`
+    - `pnpm --filter @wcpos/template-studio test`
+    - `pnpm --filter @wcpos/template-studio test:snapshots`
+    - `pnpm --filter @wcpos/template-studio check:gallery-previews`
+    - `pnpm --filter @wcpos/template-studio build`
+    - `codex review --base origin/main` (three rounds; fixed SVG sanitization, cookie forwarding/relay concerns, QR aspect ratio, and raw TCP CSRF header protection)
+    - `git fetch origin main && git rebase origin/main`
+    - `git branch -vv | grep "$(git branch --show-current)"`
+    - `gh pr list --repo wcpos/monorepo --head "$(git branch --show-current)" --state all`
+    - `gh pr list --repo wcpos/monorepo --head "$(git branch --show-current)" --state merged`
+    - `git push -u origin feature/template-studio-print-lab`
+    - `gh pr create --repo wcpos/monorepo --base main --head feature/template-studio-print-lab --title "Build Template Studio print lab" --body-file /tmp/template-studio-print-lab-pr.md`
+  - Verification evidence:
+    - `@wcpos/receipt-renderer`: lint passed; test passed (1 file / 12 tests); build passed; browser import check passed.
+    - `@wcpos/template-studio`: lint passed; test passed (3 files / 15 tests); snapshots current; gallery previews current; build passed with only the expected Vite >500 kB chunk warning from `bwip-js`.
+    - Final `codex review --base origin/main` reported no discrete actionable correctness issues.
+  - What remains:
+    - Review/merge wcpos/monorepo#351.
+    - After #351 merges, keep the two refreshed plugin preview assets (`thermal-simple-80mm.png`, `thermal-detailed-80mm.png`) in sync with the final monorepo preview output; this handoff/assets branch already copies the current #351 images.
+    - Have the maintainer test Studio against a real allowed store origin and thermal simulator. For non-default stores, start Studio with `WCPOS_STUDIO_STORE_ORIGINS=<origin>`; for non-loopback simulator hostnames, set `WCPOS_STUDIO_PRINT_HOSTS=<host>`.
+    - PR 4 remains gated until the maintainer confirms the Studio loop is useful with real data and print testing.
+  - Changed assumptions/follow-up decisions:
+    - Store URL remains user-entered, but server-side fetches are origin-allowlisted for safety.
+    - Browser cookies are not a general remote-store authentication mechanism; they are forwarded only to the configured local/wp-env origin. Remote stores will need an already-supported authenticated context or a future explicit auth design, not silent cookie forwarding.
+    - Raw TCP print testing is intentionally local/dev-only and guarded against cross-site browser triggers.
 
 #### PR 4 — Replace WP Admin non-legacy previews with JS renderer
 
