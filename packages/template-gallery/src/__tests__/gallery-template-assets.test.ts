@@ -70,7 +70,7 @@ describe('gallery template assets', () => {
 			};
 
 			expect(fs.existsSync(path.join(previewDir, `${metadata.key}.png`)), metadata.key).toBe(true);
-			expect(getGalleryPreviewSrc(metadata.key), metadata.key).toMatch(/template-gallery\/previews\/.+\.png$/);
+			expect(getGalleryPreviewSrc(metadata.key), metadata.key).toBe(`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${metadata.key}.png`);
 		}
 	});
 
