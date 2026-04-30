@@ -76,9 +76,10 @@ const galleryTemplate: GalleryTemplate = {
 };
 
 beforeEach(() => {
-	(window as Window & { wcpos?: { templateGallery?: { adminUrl?: string } } }).wcpos = {
+	(window as Window & { wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } } }).wcpos = {
 		templateGallery: {
 			adminUrl: 'https://example.test/wp-admin',
+			previewBaseUrl: 'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
 		},
 	};
 });
@@ -116,5 +117,23 @@ describe('TemplateCard gallery layout', () => {
 
 		expect(markup).toContain(GALLERY_GRID_WRAPPER_CLASS);
 		expect(markup).toContain(GALLERY_GRID_CLASS);
+	});
+
+	it('renders committed preview images for gallery templates', () => {
+		const markup = renderToStaticMarkup(
+			<TemplateCard
+				template={galleryTemplate}
+				isGallery
+				onPreview={() => {}}
+				onCustomize={() => {}}
+			/>,
+		);
+
+		expect(markup).toContain('<img');
+		expect(markup).toContain('aria-label="common.preview"');
+		expect(markup).toContain('alt=""');
+		expect(markup).toContain('template-gallery/previews/branded-receipt.png');
+		expect(markup).toContain('wcpos:object-contain');
+		expect(markup).not.toContain('common.preview</span>');
 	});
 });
