@@ -559,9 +559,27 @@ Implement in separate PRs. Each PR should leave the product working and testable
   - The PR keeps generated previews local to `monorepo-v2` by default to make the harness self-contained; cross-repo gallery UI consumption is left as the next plugin-side step.
   - The full matrix remains local/ephemeral; committed snapshots stay curated to avoid overbuilding drift reporting.
 
+- Plugin-side follow-up status — 2026-04-30 / PR #837 opened (`feature/template-gallery-preview-assets`, head `c34dba8434b296e3fd444987c0e2dd7931b9214f`):
+  - Completed:
+    - Copied the 15 Template Studio generated PNG gallery previews from monorepo-v2 merge `f94d658508f5fcd196efce9da7a3208c20df33c7` into `assets/img/template-gallery/previews/` in `woocommerce-pos`.
+    - Added `previewBaseUrl` to the Template Gallery inline bootstrap data and wired gallery cards to render lazy-loaded committed preview images for bundled/gallery templates only.
+    - Preserved the thumbnail preview button accessible name with `aria-label` and used `object-contain` so portrait receipt previews are not cropped inside the existing card thumbnail frame.
+    - Added Template Gallery tests that verify every bundled gallery template has a committed preview image and that gallery cards render the image URL/accessibility affordance.
+  - Verification run:
+    - `pnpm install --no-frozen-lockfile` in the worktree to create local `node_modules` after `pnpm install --frozen-lockfile` was blocked by pre-existing override/lockfile config mismatch.
+    - Red test: `pnpm --filter @wcpos/template-gallery test` failed because `../preview-assets` did not exist and `TemplateCard` still rendered the text placeholder.
+    - Green/final checks: `pnpm --filter @wcpos/template-gallery test` (2 files / 7 tests passed); `pnpm --filter @wcpos/template-gallery build` (Vite build completed); `pnpm exec wp-env run --config /tmp/wp-env-template-gallery-preview-assets.json --env-cwd='wp-content/plugins/template-gallery-preview-assets' tests-cli -- php -l includes/Admin/Menu.php` (no syntax errors); `codex review --base main` (final pass found no discrete correctness issues).
+    - Blocked checks: `pnpm --filter @wcpos/template-gallery lint` fails before linting code because ESLint 10 no longer honors the package's legacy `.eslintrc` setup (`ESLint couldn't find an eslint.config.(js|mjs|cjs) file`). Attempted wp-env PHPCS via `composer run lint -- includes/Admin/Menu.php`, but the container had no vendor; `composer install` inside wp-env failed extracting `ramsey/uuid`, so PHPCS did not run.
+  - PR evidence:
+    - `gh pr view 837 --repo wcpos/woocommerce-pos --json url,state,headRefOid,mergeable,mergeStateStatus,statusCheckRollup,isDraft` reported PR #837 open, non-draft, head `c34dba8434b296e3fd444987c0e2dd7931b9214f`, `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`, with CI/CodeRabbit pending immediately after opening.
+  - What remains:
+    - Wait for PR #837 CI/review to settle and address any actionable feedback.
+    - Maintainer still needs to visually approve/tune the actual gallery template output in Studio; if the approved outputs change, regenerate/replace these committed PNGs from the Studio generator before merging/finalizing the gallery asset checkpoint.
+    - PR 4 remains gated until the Studio loop/thumbnail workflow is accepted.
+
 **Next-agent operating note — 2026-04-30:**
 
-PR #339 is merged. The next safe checkpoint is plugin-side gallery preview asset integration after maintainer visual approval of the Studio-rendered templates, or PR 4 once that approval/asset decision is settled. Do not start PR 4 solely because PR #339 merged; the acceptance gate still requires the Studio loop to be used for visual tuning/approval and gallery thumbnail workflow confirmation.
+PR #339 is merged and plugin-side gallery preview asset integration has been opened as PR #837. The next safe checkpoint is to get PR #837 through CI/review, then have the maintainer visually approve/tune the Studio-rendered templates and regenerate/replace the PNGs if needed. Do not start PR 4 solely because PR #339 merged; PR 4 remains gated on accepting the Studio loop/thumbnail workflow.
 
 #### PR 4 — Replace WP Admin non-legacy previews with JS renderer
 
