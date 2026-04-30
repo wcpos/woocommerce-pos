@@ -335,9 +335,7 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data = $response->get_data();
 		$ids  = wp_list_pluck( $data, 'id' );
 
-		$this->assertContains( $coupon1->get_id(), $ids );
-		$this->assertNotContains( $coupon2->get_id(), $ids );
-		$this->assertContains( $coupon3->get_id(), $ids );
+		$this->assertEqualsCanonicalizing( array( $coupon1->get_id(), $coupon3->get_id() ), $ids );
 	}
 
 	/**
