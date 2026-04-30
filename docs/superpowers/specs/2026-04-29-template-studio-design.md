@@ -527,7 +527,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
 - Gallery preview image generator check mode.
 - Template gallery package lint/test/build.
 
-**Status update — 2026-04-30 / PR #339 opened (`feature/template-studio-pr3`, current head `a065b9109c277b0031fe983a77fcd813c46c50cd`):**
+**Status update — 2026-04-30 / PR #339 merged (`feature/template-studio-pr3`, head `a065b9109c277b0031fe983a77fcd813c46c50cd`, merge `f94d658508f5fcd196efce9da7a3208c20df33c7`):**
 
 - Completed:
   - Added `apps/template-studio/` in `monorepo-v2` with a Vite/React local tuning UI for bundled/gallery `logicless` and `thermal` templates.
@@ -549,11 +549,11 @@ Implement in separate PRs. Each PR should leave the product working and testable
   - Round 3 validation on 2026-04-30 before pushing `a065b9109`: `pnpm --filter @wcpos/template-studio lint`; `pnpm --filter @wcpos/template-studio test` (1 file / 7 tests passed); `pnpm --filter @wcpos/template-studio test:snapshots` (curated snapshots current); `pnpm --filter @wcpos/template-studio check:gallery-previews` (gallery preview images current); `pnpm --filter @wcpos/template-studio build` (Vite build completed).
   - Round 3 PR evidence on 2026-04-30: posted PR #339 comment `4348336896`; replied to and resolved review thread `PRRT_kwDOGW7Gic5-mRRP`; `gh pr view 339 --repo wcpos/monorepo --json state,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefOid,url` reported head `a065b9109c277b0031fe983a77fcd813c46c50cd`, `mergeable: MERGEABLE`, `mergeStateStatus: BLOCKED`, and new CI pending (`Analyze`, `Lint`; unit tests not yet queued in that check snapshot).
 - What remains:
-  - PR #339 has review-thread follow-up pushed at `a065b9109c277b0031fe983a77fcd813c46c50cd`; GitHub reports `mergeable: MERGEABLE` and the remaining blocked state is pending CI/review status rather than a file conflict.
-  - Wait for PR #339 checks/review to settle, address any new actionable review feedback, and merge PR #339 when green.
-  - After merge, have the maintainer use Studio to tune/approve bundled gallery templates visually.
+  - PR #339 is merged. `gh pr view 339 --repo wcpos/monorepo --json state,mergedAt,mergeCommit,headRefOid,url,statusCheckRollup,reviewDecision` reported `state: MERGED`, `mergedAt: 2026-04-30T00:00:06Z`, merge commit `f94d658508f5fcd196efce9da7a3208c20df33c7`, and head `a065b9109c277b0031fe983a77fcd813c46c50cd`.
+  - Post-merge deploy E2E had an unrelated-looking failure in shard 5/6 (`pos-refunds.spec.ts` could not find `Process Refund`; two cart/checkout tests were flaky and passed on retry). Unit tests, lint, merge gate, CodeQL, dependency review, and the deploy job itself completed successfully. No Template Studio-specific follow-up was identified from the failed log excerpt.
+  - Have the maintainer use Studio to tune/approve bundled gallery templates visually.
   - Copy or regenerate approved preview assets into the plugin gallery-owned asset directory and wire `packages/template-gallery` to use committed preview assets for bundled/gallery templates only.
-  - Start PR 4 only after PR 3 is reviewed/merged and the maintainer is satisfied the Studio loop is coherent.
+  - Start PR 4 only after the maintainer is satisfied the Studio loop is coherent and the gallery-preview handoff/asset decision is settled.
 - Changed assumptions/follow-up decisions:
   - Preview image artifacts are PNG because the Playwright screenshot path used by the harness supports PNG reliably; WebP can be revisited if/when an image optimization step is added.
   - The PR keeps generated previews local to `monorepo-v2` by default to make the harness self-contained; cross-repo gallery UI consumption is left as the next plugin-side step.
@@ -561,7 +561,7 @@ Implement in separate PRs. Each PR should leave the product working and testable
 
 **Next-agent operating note — 2026-04-30:**
 
-The maintainer is going to bed. Do not wait for interactive decisions unless a genuinely destructive action or secret is required. Make reasonable assumptions from this spec, local rules, PR state, and code, then go as far as safely possible: get PR #339 green/merged if permissions and CI allow, keep updating the handoff with exact evidence, and proceed to the next coherent safe checkpoint without starting PR 4 until PR 3 is merged and the Studio loop is reviewable/approved.
+PR #339 is merged. The next safe checkpoint is plugin-side gallery preview asset integration after maintainer visual approval of the Studio-rendered templates, or PR 4 once that approval/asset decision is settled. Do not start PR 4 solely because PR #339 merged; the acceptance gate still requires the Studio loop to be used for visual tuning/approval and gallery thumbnail workflow confirmation.
 
 #### PR 4 — Replace WP Admin non-legacy previews with JS renderer
 
