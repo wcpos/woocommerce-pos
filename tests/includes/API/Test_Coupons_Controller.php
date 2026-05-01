@@ -288,6 +288,57 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test coupon API supports include filtering.
+	 */
+	public function test_coupon_api_get_with_includes(): void {
+		$coupon1 = CouponHelper::create_coupon( 'includeone' );
+		$coupon2 = CouponHelper::create_coupon( 'includetwo' );
+		$coupon3 = CouponHelper::create_coupon( 'includethree' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_query_params(
+			array(
+				'include' => array( $coupon1->get_id(), $coupon3->get_id() ),
+			)
+		);
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $coupon1->get_id(), $coupon3->get_id() ), $ids );
+		$this->assertNotContains( $coupon2->get_id(), $ids );
+	}
+
+	/**
+	 * Test coupon API supports exclude filtering.
+	 */
+	public function test_coupon_api_get_with_excludes(): void {
+		$coupon1 = CouponHelper::create_coupon( 'excludeone' );
+		$coupon2 = CouponHelper::create_coupon( 'excludetwo' );
+		$coupon3 = CouponHelper::create_coupon( 'excludethree' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_query_params(
+			array(
+				'exclude' => array( $coupon2->get_id() ),
+			)
+		);
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $coupon1->get_id(), $coupon3->get_id() ), $ids );
+	}
+
+	/**
 	 * PATCH coupon amount should update date_modified_gmt.
 	 *
 	 * @see https://github.com/wcpos/woocommerce-pos-pro/issues/86
