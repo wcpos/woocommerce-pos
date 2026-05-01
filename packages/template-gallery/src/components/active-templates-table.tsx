@@ -11,6 +11,7 @@ import {
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/reorder-with-edge';
 import classnames from 'classnames';
+import { Toggle } from '@wcpos/ui';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
 
@@ -167,26 +168,13 @@ function DraggableRow({
 				{getAvailability(template)}
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:text-center">
-				<button
-					type="button"
-					onClick={() => onToggle(template.id)}
+				<Toggle
+					checked={enabled}
+					onChange={() => onToggle(template.id)}
 					disabled={isToggling}
 					aria-label={enabled ? t('table.deactivate_template') : t('table.activate_template')}
-					aria-pressed={enabled}
-					className={classnames(
-						'wcpos:relative wcpos:inline-flex wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:cursor-pointer wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:bg-transparent wcpos:p-0',
-						'focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color focus:wcpos:ring-offset-2',
-						enabled ? 'wcpos:bg-wp-admin-theme-color' : 'wcpos:bg-gray-200',
-						isToggling && 'wcpos:opacity-50 wcpos:cursor-not-allowed',
-					)}
-				>
-					<span
-						className={classnames(
-							'wcpos:pointer-events-none wcpos:inline-block wcpos:h-4 wcpos:w-4 wcpos:transform wcpos:rounded-full wcpos:bg-white wcpos:shadow wcpos:ring-0 wcpos:transition wcpos:duration-200 wcpos:ease-in-out',
-							enabled ? 'wcpos:translate-x-4' : 'wcpos:translate-x-0',
-						)}
-					/>
-				</button>
+					className="wcpos:justify-center"
+				/>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2">
 				<div className="wcpos:flex wcpos:gap-3 wcpos:items-center">
