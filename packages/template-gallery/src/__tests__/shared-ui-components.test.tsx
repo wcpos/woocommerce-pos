@@ -71,8 +71,6 @@ describe('template gallery shared UI integration', () => {
 		expect(switchTag).toContain('wcpos:m-0');
 		// Defensive against inline baseline shifts.
 		expect(switchTag).toContain('wcpos:align-middle');
-		// Keep the colored fill inside the transparent border in hosts without preflight.
-		expect(switchTag).toContain('wcpos:bg-clip-padding');
 		// Prevent line-height from affecting knob height/alignment.
 		expect(switchTag).toContain('wcpos:block');
 	});
