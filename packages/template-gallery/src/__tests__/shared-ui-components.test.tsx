@@ -44,6 +44,39 @@ describe('template gallery shared UI integration', () => {
 		expect(markup).not.toContain('aria-pressed');
 	});
 
+	it('renders the toggle track with classes that survive missing host resets', () => {
+		// Tailwind preflight is not always loaded in consumers (e.g. Template
+		// Gallery imports utilities only). Without these classes the user-agent
+		// button padding/line-height misaligns the knob inside the track.
+		const markup = renderToStaticMarkup(
+			<TemplatesTable
+				templates={[activeTemplate]}
+				onPreview={() => {}}
+				onToggle={() => {}}
+				onDelete={() => {}}
+				onReorder={() => {}}
+				togglingId={null}
+				deletingId={null}
+			/>,
+		);
+
+		const switchMatch = markup.match(/<button[^>]*role="switch"[^>]*>[\s\S]*?<\/button>/);
+		expect(switchMatch).not.toBeNull();
+		const switchTag = switchMatch![0];
+
+		// Vertical centering of the knob inside the track.
+		expect(switchTag).toContain('wcpos:items-center');
+		// Neutralize browser/WP-admin button padding + margin.
+		expect(switchTag).toContain('wcpos:p-0');
+		expect(switchTag).toContain('wcpos:m-0');
+		// Defensive against inline baseline shifts.
+		expect(switchTag).toContain('wcpos:align-middle');
+		// Keep the colored fill inside the transparent border in hosts without preflight.
+		expect(switchTag).toContain('wcpos:bg-clip-padding');
+		// Prevent line-height from affecting knob height/alignment.
+		expect(switchTag).toContain('wcpos:block');
+	});
+
 	it('includes shared UI source files in Tailwind generation', () => {
 		const cssPath = path.resolve(__dirname, '../index.css');
 		const css = fs.readFileSync(cssPath, 'utf8');
