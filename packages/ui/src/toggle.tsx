@@ -59,9 +59,11 @@ export function Toggle({
 					// Layout + sizing. `items-center` centers the knob vertically;
 					// `p-0`/`m-0`/`align-middle` neutralize user-agent and WP-admin
 					// button defaults so the component does not depend on the host
-					// loading Tailwind preflight. `bg-clip-padding` keeps the colored
-					// fill inside the transparent border in those same hosts.
-					'wcpos:relative wcpos:inline-flex wcpos:items-center wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:bg-clip-padding wcpos:p-0 wcpos:m-0 wcpos:align-middle wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:ring-offset-2',
+					// loading Tailwind preflight. The transparent border is
+					// intentional: with the default `background-clip: border-box`
+					// the colored fill extends through it, giving the 16px knob
+					// 2px of vertical breathing room inside the 20px visible track.
+					'wcpos:relative wcpos:inline-flex wcpos:items-center wcpos:h-5 wcpos:w-9 wcpos:shrink-0 wcpos:rounded-full wcpos:border-2 wcpos:border-transparent wcpos:p-0 wcpos:m-0 wcpos:align-middle wcpos:transition-colors wcpos:duration-200 wcpos:ease-in-out wcpos:focus:outline-none wcpos:focus:ring-2 wcpos:focus:ring-wp-admin-theme-color wcpos:focus:ring-offset-2',
 					checked ? 'wcpos:bg-wp-admin-theme-color' : 'wcpos:bg-gray-200',
 					disabled
 						? 'wcpos:opacity-50 wcpos:cursor-not-allowed'
