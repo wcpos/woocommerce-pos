@@ -539,6 +539,7 @@ class Test_Tax_Id_Reader extends WC_REST_Unit_Test_Case {
 		$this->assertCount( 1, $result );
 		$this->assertSame( Tax_Id_Types::TYPE_GB_VAT, $result[0]['type'] );
 		$this->assertSame( 'GB123456789', $result[0]['value'] );
+		$this->assertSame( 'GB', $result[0]['country'] );
 	}
 
 	// -----------------------------------------------------------------------
@@ -606,6 +607,7 @@ class Test_Tax_Id_Reader extends WC_REST_Unit_Test_Case {
 		$this->assertCount( 1, $result );
 		$this->assertSame( Tax_Id_Types::TYPE_GB_VAT, $result[0]['type'] );
 		$this->assertSame( 'GB123456789', $result[0]['value'] );
+		$this->assertSame( 'GB', $result[0]['country'] );
 
 		wp_delete_user( $user_id );
 	}
