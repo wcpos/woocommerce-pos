@@ -32,7 +32,7 @@ $version = extract_plugin_version( __DIR__ . '/woocommerce-pos.php' ) ?: '1.8.7'
 
 // Free plugin constants - automatically extracted from plugin file.
 \define( 'WCPOS\WooCommercePOS\VERSION', $version );
-\define( 'WCPOS\WooCommercePOS\TRANSLATION_VERSION', '2026.5.1' );
+\define( 'WCPOS\WooCommercePOS\TRANSLATION_VERSION', '2026.5.2' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_NAME', 'woocommerce-pos' );
 \define( 'WCPOS\WooCommercePOS\SHORT_NAME', 'wcpos' );
 \define( 'WCPOS\WooCommercePOS\PLUGIN_FILE', 'woocommerce-pos/woocommerce-pos.php' );
