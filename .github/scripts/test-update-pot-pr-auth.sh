@@ -8,8 +8,8 @@ if [[ ! -f "$WORKFLOW_FILE" ]]; then
   exit 1
 fi
 
-if ! grep -Eq 'wp-cli/i18n-command:v[0-9]+\.[0-9]+\.[0-9]+' "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command with a v-prefixed semantic version tag" >&2
+if ! grep -Fq 'wp-cli/i18n-command:v2.2.13' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command:v2.2.13" >&2
   exit 1
 fi
 
@@ -28,13 +28,13 @@ if ! grep -Fq 'actions/create-github-app-token@' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if ! grep -Fq "app-id: \${{ secrets.TRANSLATION_APP_ID }}" "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to use TRANSLATION_APP_ID for PR creation" >&2
+if ! grep -Fq "app-id: \${{ secrets.WCPOS_BOT_APP_ID }}" "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to use WCPOS_BOT_APP_ID for PR creation" >&2
   exit 1
 fi
 
-if ! grep -Fq "private-key: \${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}" "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to use TRANSLATION_APP_PRIVATE_KEY for PR creation" >&2
+if ! grep -Fq "private-key: \${{ secrets.WCPOS_BOT_PRIVATE_KEY }}" "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to use WCPOS_BOT_PRIVATE_KEY for PR creation" >&2
   exit 1
 fi
 
@@ -43,18 +43,19 @@ if ! grep -Fq 'peter-evans/create-pull-request@' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if ! grep -A15 -F 'peter-evans/create-pull-request@' "$WORKFLOW_FILE" | grep -Fq "token: \${{ steps.app-token.outputs.token }}"; then
+if ! grep -Fq "token: \${{ steps.app-token.outputs.token }}" "$WORKFLOW_FILE"; then
   echo "Expected create-pull-request to use the GitHub App token output" >&2
   exit 1
 fi
 
-if ! grep -A6 -F 'name: Checkout main for PR' "$WORKFLOW_FILE" | grep -Fq 'ref: main'; then
-  echo "Expected POT PR creation to force checkout of main" >&2
+if ! grep -Fq 'persist-credentials: false' "$WORKFLOW_FILE"; then
+  echo "Expected checkout to disable persisted GITHUB_TOKEN credentials before create-pull-request adds app credentials" >&2
   exit 1
 fi
 
-if ! grep -A6 -F 'name: Checkout main for PR' "$WORKFLOW_FILE" | grep -Fq "token: \${{ steps.app-token.outputs.token }}"; then
-  echo "Expected checkout of main to use the GitHub App token output" >&2
+checkout_count=$(grep -Ec 'uses:[[:space:]]*actions/checkout@' "$WORKFLOW_FILE" || true)
+if (( checkout_count > 1 )); then
+  echo "Expected a single checkout step before create-pull-request to avoid duplicate Authorization headers" >&2
   exit 1
 fi
 
@@ -63,4 +64,4 @@ if grep -Fq 'gh pr create' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-echo "Update POT workflow uses quiet make-pot generation and Translation App PR auth"
+echo "Update POT workflow uses quiet make-pot generation and non-duplicated WCPOS Bot App PR auth"
