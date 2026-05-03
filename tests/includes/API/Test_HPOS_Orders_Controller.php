@@ -142,6 +142,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			'is_editable',
 			'needs_payment',
 			'needs_processing',
+			'tax_ids',
 		);
 	}
 

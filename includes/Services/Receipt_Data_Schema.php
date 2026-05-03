@@ -13,8 +13,11 @@ namespace WCPOS\WooCommercePOS\Services;
 class Receipt_Data_Schema {
 	/**
 	 * Current schema version.
+	 *
+	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
+	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
 	 */
-	const VERSION = '1.2.0';
+	const VERSION = '1.3.0';
 
 	/**
 	 * Top-level keys required in a receipt payload.
@@ -323,6 +326,28 @@ class Receipt_Data_Schema {
 					'tax_id'           => array(
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
+					),
+				),
+			),
+			'customer.tax_ids' => array(
+				'label'    => __( 'Customer Tax IDs', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'type'    => array(
+						'type'  => 'string',
+						'label' => __( 'Type', 'woocommerce-pos' ),
+					),
+					'value'   => array(
+						'type'  => 'string',
+						'label' => __( 'Value', 'woocommerce-pos' ),
+					),
+					'country' => array(
+						'type'  => 'string',
+						'label' => __( 'Country', 'woocommerce-pos' ),
+					),
+					'label'   => array(
+						'type'  => 'string',
+						'label' => __( 'Label', 'woocommerce-pos' ),
 					),
 				),
 			),

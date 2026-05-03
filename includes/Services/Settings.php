@@ -38,6 +38,11 @@ class Settings {
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
 			'tracking_consent'            => 'undecided',
+			'tax_ids'                     => array(
+				// Per-type meta-key write overrides. Empty by default: the composed
+				// write_map (defaults + plugin detection + scan) is used.
+				'write_map' => array(),
+			),
 		),
 		'checkout' => array(
 			'receipt_default_mode' => 'fiscal',

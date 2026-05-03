@@ -17,6 +17,9 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -90,6 +93,35 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
 			unset( $schema['properties']['billing']['properties']['email']['format'] );
 		}
+
+		// Add structured tax_ids property (TaxId[]).
+		$schema['properties']['tax_ids'] = array(
+			'description' => __( 'Customer tax IDs.', 'woocommerce-pos' ),
+			'type'        => 'array',
+			'context'     => array( 'view', 'edit' ),
+			'items'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'type'    => array(
+						'type'        => 'string',
+						'enum'        => Tax_Id_Types::all_types(),
+						'description' => __( 'Tax ID type.', 'woocommerce-pos' ),
+					),
+					'value'   => array(
+						'type'        => 'string',
+						'description' => __( 'Tax ID value.', 'woocommerce-pos' ),
+					),
+					'country' => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'ISO 3166-1 alpha-2 country code.', 'woocommerce-pos' ),
+					),
+					'label'   => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'Optional human-readable label.', 'woocommerce-pos' ),
+					),
+				),
+			),
+		);
 
 		return $schema;
 	}
@@ -217,7 +249,10 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		);
 
 		// Proceed with the parent method to handle the creation.
-		return parent::create_item( $request );
+		$response = parent::create_item( $request );
+		$this->wcpos_persist_tax_ids_from_request( $response, $request );
+
+		return $response;
 	}
 
 	/**
@@ -234,7 +269,41 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 
 		// Proceed with the parent method to handle the creation.
-		return parent::update_item( $request );
+		$response = parent::update_item( $request );
+		$this->wcpos_persist_tax_ids_from_request( $response, $request );
+
+		return $response;
+	}
+
+	/**
+	 * Persist `tax_ids` from a create/update request via Tax_Id_Writer.
+	 *
+	 * No-op when the request did not include `tax_ids`, the response is an
+	 * error, or the resolved user ID is invalid.
+	 *
+	 * @param mixed           $response Response from the parent controller.
+	 * @param WP_REST_Request $request  Original request.
+	 */
+	protected function wcpos_persist_tax_ids_from_request( $response, WP_REST_Request $request ): void {
+		if ( ! ( $response instanceof WP_REST_Response ) ) {
+			return;
+		}
+		$tax_ids = $request->get_param( 'tax_ids' );
+		if ( ! \is_array( $tax_ids ) ) {
+			return;
+		}
+
+		$data    = $response->get_data();
+		$user_id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+		if ( $user_id <= 0 ) {
+			return;
+		}
+
+		( new Tax_Id_Writer() )->write_for_user( $user_id, $tax_ids );
+
+		// Reflect persisted list in the response.
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_user( $user_id );
+		$response->set_data( $data );
 	}
 
 	/**
@@ -317,6 +386,9 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		} catch ( Exception $e ) {
 			Logger::log( 'Error getting customer meta data: ' . $e->getMessage() );
 		}
+
+		// Add structured tax_ids list (read fallback across legacy plugin meta keys).
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_user( $user_data->ID );
 
 		// Estimate response size and log if excessive.
 		$this->wcpos_estimate_response_size( $data, $user_data->ID, 'Customer' );
@@ -567,6 +639,14 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					'compare' => 'LIKE',
 				),
 			);
+
+			foreach ( Tax_Id_Reader::fallback_user_meta_keys() as $meta_key ) {
+				$search_meta_query[] = array(
+					'key'     => $meta_key,
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				);
+			}
 
 			// Combine the search meta_query with the existing meta_query.
 			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );
