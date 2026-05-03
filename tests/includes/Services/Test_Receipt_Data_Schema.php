@@ -98,6 +98,26 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test refunds field tree mirrors the builder refund payload shape.
+	 */
+	public function test_get_field_tree_refunds_include_date_and_typed_lines(): void {
+		$tree    = Receipt_Data_Schema::get_field_tree();
+		$refunds = $tree['refunds']['fields'];
+
+		$this->assertArrayHasKey( 'date', $refunds );
+		$this->assertSame( 'object', $refunds['date']['type'] );
+
+		$this->assertArrayHasKey( 'lines', $refunds );
+		$this->assertSame( 'array', $refunds['lines']['type'] );
+		$this->assertTrue( $refunds['lines']['is_array'] );
+		$this->assertSame( array( 'name', 'sku', 'qty', 'total' ), array_keys( $refunds['lines']['fields'] ) );
+		$this->assertSame( 'string', $refunds['lines']['fields']['name']['type'] );
+		$this->assertSame( 'string', $refunds['lines']['fields']['sku']['type'] );
+		$this->assertSame( 'number', $refunds['lines']['fields']['qty']['type'] );
+		$this->assertSame( 'money', $refunds['lines']['fields']['total']['type'] );
+	}
+
+	/**
 	 * Test get_field_tree money fields have money type.
 	 */
 	public function test_get_field_tree_money_fields_have_money_type(): void {
@@ -248,6 +268,13 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'string', $schema['properties']['customer']['properties']['tax_ids']['items']['properties']['value']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
 		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['grand_total']['type'] );
+		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['date']['type'] );
+		$this->assertSame( 'array', $schema['properties']['refunds']['items']['properties']['lines']['type'] );
+		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['lines']['items']['type'] );
+		$this->assertSame( 'string', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['name']['type'] );
+		$this->assertSame( 'string', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['sku']['type'] );
+		$this->assertSame( 'number', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['qty']['type'] );
+		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['total']['type'] );
 		$this->assertSame( 'boolean', $schema['properties']['fiscal']['properties']['is_reprint']['type'] );
 	}
 

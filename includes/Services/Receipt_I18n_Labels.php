@@ -184,10 +184,10 @@ class Receipt_I18n_Labels {
 				'format'    => __( 'Thank you, %s!', 'woocommerce-pos' ),
 				'variables' => array( '{{customer.name}}' ),
 			),
-			'Ref: {{reference}}'               => array(
-				/* translators: %s: payment reference */
+			'Ref: {{transaction_id}}'          => array(
+				/* translators: %s: payment transaction ID */
 				'format'    => __( 'Ref: %s', 'woocommerce-pos' ),
-				'variables' => array( '{{reference}}' ),
+				'variables' => array( '{{transaction_id}}' ),
 			),
 			'Ref: #{{meta.order_number}}'      => array(
 				/* translators: %s: order number with # prefix */

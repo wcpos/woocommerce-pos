@@ -110,9 +110,9 @@
     <col width="24" align="right">{{change}}</col>
   </row>
   {{/change}}
-  {{#reference}}
-  <text>  Ref: {{reference}}</text>
-  {{/reference}}
+  {{#transaction_id}}
+  <text>  Ref: {{transaction_id}}</text>
+  {{/transaction_id}}
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
