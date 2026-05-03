@@ -1066,6 +1066,7 @@ class Receipt_Data_Schema {
 			'type'        => 'string',
 			'description' => 'How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api).',
 		);
+		unset( $schema['properties']['presentation_hints']['properties'] );
 
 		return $schema;
 	}

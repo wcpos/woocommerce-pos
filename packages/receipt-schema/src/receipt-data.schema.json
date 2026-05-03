@@ -1403,8 +1403,7 @@
 		},
 		"presentation_hints": {
 			"type": "object",
-			"additionalProperties": true,
-			"properties": []
+			"additionalProperties": true
 		},
 		"i18n": {
 			"type": "object",
