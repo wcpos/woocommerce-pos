@@ -107,7 +107,7 @@ class Tax_Id_Reader {
 
 		$meta_map                              = array();
 		$meta_map[ self::CANONICAL_META_KEY ]  = $order->get_meta( self::CANONICAL_META_KEY, true );
-		$has_canonical                        = ! empty( $meta_map[ self::CANONICAL_META_KEY ] );
+		$has_canonical                        = null !== self::parse_canonical( $meta_map[ self::CANONICAL_META_KEY ] );
 		$owned_keys                           = (array) $order->get_meta( Tax_Id_Writer::OWNED_KEYS_META_KEY, true );
 
 		foreach ( array_keys( self::ORDER_FALLBACK_KEYS ) as $meta_key ) {
@@ -144,7 +144,7 @@ class Tax_Id_Reader {
 
 		// Canonical: stored on the user with the underscore-prefixed key.
 		$meta_map[ self::CANONICAL_META_KEY ] = get_user_meta( $user_id, self::CANONICAL_META_KEY, true );
-		$has_canonical                       = ! empty( $meta_map[ self::CANONICAL_META_KEY ] );
+		$has_canonical                       = null !== self::parse_canonical( $meta_map[ self::CANONICAL_META_KEY ] );
 		$owned_keys                          = (array) get_user_meta( $user_id, Tax_Id_Writer::OWNED_KEYS_META_KEY, true );
 
 		foreach ( array_keys( self::ORDER_FALLBACK_KEYS ) as $meta_key ) {
