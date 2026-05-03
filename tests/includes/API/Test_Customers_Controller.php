@@ -10,6 +10,8 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Customers_Controller;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 
 /**
  * Test_Customers_Controller class.
@@ -151,6 +153,55 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
 		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
+	}
+
+	/**
+	 * Updating customer tax_ids preserves the submitted type and country even
+	 * when the mapped legacy meta key is generic and billing country differs.
+	 */
+	public function test_update_customer_tax_ids_preserves_type_and_country(): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'billing_country' => 'US',
+				'email'           => 'tax-id-customer@example.com',
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/customers/' . $customer->get_id() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'tax_ids' => array(
+						array(
+							'type'    => Tax_Id_Types::TYPE_AU_ABN,
+							'value'   => '86792035060',
+							'country' => 'AU',
+							'label'   => null,
+						),
+					),
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				array(
+					'type'     => Tax_Id_Types::TYPE_AU_ABN,
+					'value'    => '86792035060',
+					'country'  => 'AU',
+					'label'    => null,
+					'verified' => null,
+				),
+			),
+			$data['tax_ids']
+		);
+		$this->assertSame( '86792035060', get_user_meta( $customer->get_id(), 'billing_vat_number', true ) );
+		$this->assertNotEmpty( get_user_meta( $customer->get_id(), Tax_Id_Writer::OWNED_KEYS_META_KEY, true ) );
 	}
 
 	/**

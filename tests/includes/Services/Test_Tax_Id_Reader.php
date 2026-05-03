@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -523,6 +524,24 @@ class Test_Tax_Id_Reader extends WC_REST_Unit_Test_Case {
 		$this->assertContains( Tax_Id_Types::TYPE_AU_ABN, $types );
 	}
 
+	/**
+	 * Malformed canonical order meta must not suppress valid owned fallback keys.
+	 */
+	public function test_read_for_order_malformed_canonical_keeps_owned_fallback(): void {
+		$order = OrderHelper::create_order();
+		$order->update_meta_data( Tax_Id_Reader::CANONICAL_META_KEY, '{not valid json' );
+		$order->update_meta_data( Tax_Id_Writer::OWNED_KEYS_META_KEY, array( '_billing_vat_number' ) );
+		$order->update_meta_data( '_billing_vat_number', 'GB123456789' );
+		$order->save();
+
+		$result = $this->reader->read_for_order( $order );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( Tax_Id_Types::TYPE_GB_VAT, $result[0]['type'] );
+		$this->assertSame( 'GB123456789', $result[0]['value'] );
+		$this->assertSame( 'GB', $result[0]['country'] );
+	}
+
 	// -----------------------------------------------------------------------
 	// Integration: read_for_user
 	// -----------------------------------------------------------------------
@@ -563,6 +582,25 @@ class Test_Tax_Id_Reader extends WC_REST_Unit_Test_Case {
 				)
 			)
 		);
+
+		$result = $this->reader->read_for_user( $user_id );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( Tax_Id_Types::TYPE_GB_VAT, $result[0]['type'] );
+		$this->assertSame( 'GB123456789', $result[0]['value'] );
+		$this->assertSame( 'GB', $result[0]['country'] );
+
+		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * Malformed canonical user meta must not suppress valid owned fallback keys.
+	 */
+	public function test_read_for_user_malformed_canonical_keeps_owned_fallback(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		update_user_meta( $user_id, Tax_Id_Reader::CANONICAL_META_KEY, '{not valid json' );
+		update_user_meta( $user_id, Tax_Id_Writer::OWNED_KEYS_META_KEY, array( '_billing_vat_number' ) );
+		update_user_meta( $user_id, 'billing_vat_number', 'GB123456789' );
 
 		$result = $this->reader->read_for_user( $user_id );
 
