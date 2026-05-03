@@ -9,6 +9,10 @@ export interface TaxId {
 	label?: string;
 }
 
+export interface TaxIdsFieldHandle {
+	addRow: () => void;
+}
+
 interface TaxIdsFieldProps {
 	value: TaxId[];
 	onChange: (value: TaxId[]) => void;
@@ -64,118 +68,183 @@ const normalizeTaxId = (taxId: TaxId): TaxId => {
 	return next;
 };
 
-function TaxIdsField({ value, onChange, labels }: TaxIdsFieldProps) {
-	const [draftTaxId, setDraftTaxId] = React.useState<TaxId | null>(null);
-	const taxIds = React.useMemo(
-		() => (Array.isArray(value) ? value.map(normalizeTaxId) : []),
-		[value]
-	);
-	const displayTaxIds = React.useMemo(
-		() => (draftTaxId ? [...taxIds, draftTaxId] : taxIds),
-		[draftTaxId, taxIds]
-	);
+/**
+ * Editable list of tax IDs rendered as a compact table. Each row exposes
+ * type / value / country / label fields plus a remove action.
+ *
+ * The "add row" affordance is exposed both as a built-in Add button
+ * (rendered below the table) and via an imperative `addRow` handle so
+ * consumers can also place an Add button in a section header.
+ */
+const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
+	function TaxIdsField({ value, onChange, labels }, ref) {
+		const [draftTaxId, setDraftTaxId] = React.useState<TaxId | null>(null);
+		const taxIds = React.useMemo(
+			() => (Array.isArray(value) ? value.map(normalizeTaxId) : []),
+			[value]
+		);
+		const displayTaxIds = React.useMemo(
+			() => (draftTaxId ? [...taxIds, draftTaxId] : taxIds),
+			[draftTaxId, taxIds]
+		);
 
-	const updateAt = React.useCallback(
-		(index: number, patch: Partial<TaxId>) => {
-			if (index >= taxIds.length && draftTaxId) {
-				const nextTaxId = normalizeTaxId({
-					...draftTaxId,
-					...patch,
-				});
+		const updateAt = React.useCallback(
+			(index: number, patch: Partial<TaxId>) => {
+				if (index >= taxIds.length && draftTaxId) {
+					const nextTaxId = normalizeTaxId({
+						...draftTaxId,
+						...patch,
+					});
 
-				if (patch.value && nextTaxId.value) {
-					setDraftTaxId(null);
-					onChange([...taxIds, nextTaxId]);
+					if (patch.value && nextTaxId.value) {
+						setDraftTaxId(null);
+						onChange([...taxIds, nextTaxId]);
+						return;
+					}
+
+					setDraftTaxId(nextTaxId);
 					return;
 				}
 
-				setDraftTaxId(nextTaxId);
-				return;
-			}
+				const next = taxIds.map((taxId, currentIndex) => {
+					if (currentIndex !== index) {
+						return taxId;
+					}
 
-			const next = taxIds.map((taxId, currentIndex) => {
-				if (currentIndex !== index) {
-					return taxId;
+					return normalizeTaxId({
+						...taxId,
+						...patch,
+					});
+				});
+				onChange(next);
+			},
+			[draftTaxId, onChange, taxIds]
+		);
+
+		const removeAt = React.useCallback(
+			(index: number) => {
+				if (index >= taxIds.length) {
+					setDraftTaxId(null);
+					return;
 				}
 
-				return normalizeTaxId({
-					...taxId,
-					...patch,
-				});
-			});
-			onChange(next);
-		},
-		[draftTaxId, onChange, taxIds]
-	);
+				onChange(taxIds.filter((_, currentIndex) => currentIndex !== index));
+			},
+			[onChange, taxIds]
+		);
 
-	const removeAt = React.useCallback(
-		(index: number) => {
-			if (index >= taxIds.length) {
-				setDraftTaxId(null);
-				return;
-			}
+		const addRow = React.useCallback(() => {
+			setDraftTaxId((current) => current ?? { type: 'other', value: '' });
+		}, []);
 
-			onChange(taxIds.filter((_, currentIndex) => currentIndex !== index));
-		},
-		[onChange, taxIds]
-	);
+		React.useImperativeHandle(ref, () => ({ addRow }), [addRow]);
 
-	return (
-		<div className="wcpos:space-y-3">
-			{displayTaxIds.length === 0 && (
-				<p className="wcpos:rounded-md wcpos:border wcpos:border-dashed wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-500">
-					{labels.empty}
-				</p>
-			)}
-			{displayTaxIds.map((taxId, index) => (
-				<div
-					key={index}
-					className="wcpos:rounded-lg wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:p-3 wcpos:shadow-sm"
-				>
-					<div className="wcpos:grid wcpos:grid-cols-1 wcpos:gap-2 wcpos:md:grid-cols-[minmax(150px,1fr)_minmax(180px,1.5fr)]">
-						<Select
-							aria-label={labels.type}
-							value={taxId.type}
-							options={TYPE_OPTIONS}
-							onChange={({ value: type }) => updateAt(index, { type: String(type) })}
-						/>
-						<TextInput
-							aria-label={labels.value}
-							placeholder={labels.value}
-							defaultValue={taxId.value}
-							onBlur={(event) => updateAt(index, { value: event.target.value.trim() })}
-						/>
-						<TextInput
-							aria-label={labels.country}
-							placeholder={labels.country}
-							maxLength={2}
-							defaultValue={taxId.country ?? ''}
-							onBlur={(event) =>
-								updateAt(index, { country: event.target.value.trim().toUpperCase() })
-							}
-						/>
-						<TextInput
-							aria-label={labels.label}
-							placeholder={labels.label}
-							defaultValue={taxId.label ?? ''}
-							onBlur={(event) => updateAt(index, { label: event.target.value.trim() })}
-						/>
-					</div>
-					<div className="wcpos:mt-2 wcpos:flex wcpos:justify-end">
-						<Button variant="ghost-destructive" onClick={() => removeAt(index)}>
-							{labels.remove}
-						</Button>
-					</div>
+		if (displayTaxIds.length === 0) {
+			return (
+				<div className="wcpos:space-y-3">
+					<p className="wcpos:rounded-md wcpos:border wcpos:border-dashed wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:px-3 wcpos:py-4 wcpos:text-center wcpos:text-sm wcpos:text-gray-500">
+						{labels.empty}
+					</p>
+					<Button variant="outline" onClick={addRow}>
+						{labels.add}
+					</Button>
 				</div>
-			))}
-			<Button
-				variant="outline"
-				onClick={() => setDraftTaxId((current) => current ?? { type: 'other', value: '' })}
-			>
-				{labels.add}
-			</Button>
-		</div>
-	);
-}
+			);
+		}
+
+		return (
+			<div className="wcpos:space-y-3">
+				<div className="wcpos:overflow-x-auto wcpos:rounded-md wcpos:border wcpos:border-gray-200">
+					<table className="wcpos:w-full wcpos:text-sm">
+						<thead>
+							<tr className="wcpos:bg-gray-50 wcpos:text-left wcpos:text-xs wcpos:uppercase wcpos:tracking-wide wcpos:text-gray-500">
+								<th
+									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium"
+									style={{ width: '11rem' }}
+								>
+									{labels.type}
+								</th>
+								<th className="wcpos:px-3 wcpos:py-2 wcpos:font-medium">{labels.value}</th>
+								<th
+									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium"
+									style={{ width: '6rem' }}
+								>
+									{labels.country}
+								</th>
+								<th className="wcpos:px-3 wcpos:py-2 wcpos:font-medium">{labels.label}</th>
+								<th
+									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium wcpos:text-right"
+									style={{ width: '1%' }}
+								>
+									<span className="wcpos:sr-only">{labels.remove}</span>
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{displayTaxIds.map((taxId, index) => (
+								<tr
+									key={index}
+									className="wcpos:border-t wcpos:border-gray-100 wcpos:bg-white"
+								>
+									<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+										<Select
+											aria-label={labels.type}
+											value={taxId.type}
+											options={TYPE_OPTIONS}
+											onChange={({ value: type }) =>
+												updateAt(index, { type: String(type) })
+											}
+										/>
+									</td>
+									<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+										<TextInput
+											aria-label={labels.value}
+											placeholder={labels.value}
+											defaultValue={taxId.value}
+											onBlur={(event) =>
+												updateAt(index, { value: event.target.value.trim() })
+											}
+										/>
+									</td>
+									<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+										<TextInput
+											aria-label={labels.country}
+											placeholder={labels.country}
+											maxLength={2}
+											defaultValue={taxId.country ?? ''}
+											onBlur={(event) =>
+												updateAt(index, {
+													country: event.target.value.trim().toUpperCase(),
+												})
+											}
+										/>
+									</td>
+									<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+										<TextInput
+											aria-label={labels.label}
+											placeholder={labels.label}
+											defaultValue={taxId.label ?? ''}
+											onBlur={(event) =>
+												updateAt(index, { label: event.target.value.trim() })
+											}
+										/>
+									</td>
+									<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle wcpos:text-right">
+										<Button variant="ghost-destructive" onClick={() => removeAt(index)}>
+											{labels.remove}
+										</Button>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+				<Button variant="outline" onClick={addRow}>
+					{labels.add}
+				</Button>
+			</div>
+		);
+	}
+);
 
 export default TaxIdsField;

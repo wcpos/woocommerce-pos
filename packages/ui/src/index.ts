@@ -21,6 +21,7 @@ export {
 	type CardFooterProps,
 } from './card';
 export { Notice, type NoticeProps, type NoticeStatus } from './notice';
+export { Callout, type CalloutProps, type CalloutStatus } from './callout';
 export { Skeleton, type SkeletonProps } from './skeleton';
 export { FormRow, type FormRowProps } from './form-row';
 export { FormSection, type FormSectionProps } from './form-section';

@@ -4,7 +4,11 @@ import classNames from 'classnames';
 
 export interface FormSectionProps {
 	title?: string;
-	description?: string;
+	/**
+	 * Helper text rendered under the title. Accepts a string or ReactNode so
+	 * inline links (e.g. "Learn more") can be embedded.
+	 */
+	description?: React.ReactNode;
 	/**
 	 * Optional content rendered to the right of the title row — useful for
 	 * inline controls like reset links, counts, or toggles.
