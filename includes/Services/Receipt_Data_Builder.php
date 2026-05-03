@@ -667,8 +667,12 @@ class Receipt_Data_Builder {
 			$pos_gateway_id  = (string) $refund->get_meta( '_pos_refund_gateway_id' );
 			$pos_gateway_title = (string) $refund->get_meta( '_pos_refund_gateway_title' );
 			if ( '' === $pos_gateway_title && '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
-				WC()->payment_gateways();
-				$gateways = WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
+				// Resolve via the WC()->payment_gateways() method (which returns
+				// WC_Payment_Gateways::instance() lazily) instead of the
+				// WC()->payment_gateways property — the property can legitimately
+				// be null mid-bootstrap or in some test environments.
+				$registry = WC()->payment_gateways();
+				$gateways = $registry ? $registry->payment_gateways() : array();
 				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
 					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
 				}
