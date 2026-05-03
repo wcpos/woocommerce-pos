@@ -484,6 +484,8 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$data    = $this->builder->build();
 		$payment = $data['payments'][0];
 
+		$this->assertArrayHasKey( 'transaction_id', $payment );
+		$this->assertArrayNotHasKey( 'reference', $payment );
 		$this->assertGreaterThanOrEqual( $payment['amount'], $payment['tendered'], 'Tendered should be at least the payment amount' );
 		$this->assertEqualsWithDelta( $payment['tendered'] - $payment['amount'], $payment['change'], 0.01, 'Change should equal tendered minus amount' );
 	}

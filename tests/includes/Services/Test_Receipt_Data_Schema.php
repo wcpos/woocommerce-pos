@@ -72,7 +72,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'fiscal' );
+		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -86,7 +86,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_marks_array_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$array_sections = array( 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' );
+		$array_sections = array( 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' );
 		foreach ( $array_sections as $section ) {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
@@ -95,6 +95,26 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		foreach ( $scalar_sections as $section ) {
 			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
 		}
+	}
+
+	/**
+	 * Test refunds field tree mirrors the builder refund payload shape.
+	 */
+	public function test_get_field_tree_refunds_include_date_and_typed_lines(): void {
+		$tree    = Receipt_Data_Schema::get_field_tree();
+		$refunds = $tree['refunds']['fields'];
+
+		$this->assertArrayHasKey( 'date', $refunds );
+		$this->assertSame( 'object', $refunds['date']['type'] );
+
+		$this->assertArrayHasKey( 'lines', $refunds );
+		$this->assertSame( 'array', $refunds['lines']['type'] );
+		$this->assertTrue( $refunds['lines']['is_array'] );
+		$this->assertSame( array( 'name', 'sku', 'qty', 'total' ), array_keys( $refunds['lines']['fields'] ) );
+		$this->assertSame( 'string', $refunds['lines']['fields']['name']['type'] );
+		$this->assertSame( 'string', $refunds['lines']['fields']['sku']['type'] );
+		$this->assertSame( 'number', $refunds['lines']['fields']['qty']['type'] );
+		$this->assertSame( 'money', $refunds['lines']['fields']['total']['type'] );
 	}
 
 	/**
@@ -241,12 +261,20 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$schema = Receipt_Data_Schema::get_json_schema();
 
 		$this->assertSame( 'array', $schema['properties']['lines']['type'] );
+		$this->assertSame( 'array', $schema['properties']['refunds']['type'] );
 		$this->assertSame( 'object', $schema['properties']['lines']['items']['type'] );
 		$this->assertSame( 'array', $schema['properties']['customer']['properties']['tax_ids']['type'] );
 		$this->assertSame( 'object', $schema['properties']['customer']['properties']['tax_ids']['items']['type'] );
 		$this->assertSame( 'string', $schema['properties']['customer']['properties']['tax_ids']['items']['properties']['value']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
 		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['grand_total']['type'] );
+		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['date']['type'] );
+		$this->assertSame( 'array', $schema['properties']['refunds']['items']['properties']['lines']['type'] );
+		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['lines']['items']['type'] );
+		$this->assertSame( 'string', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['name']['type'] );
+		$this->assertSame( 'string', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['sku']['type'] );
+		$this->assertSame( 'number', $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['qty']['type'] );
+		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['refunds']['items']['properties']['lines']['items']['properties']['total']['type'] );
 		$this->assertSame( 'boolean', $schema['properties']['fiscal']['properties']['is_reprint']['type'] );
 	}
 
@@ -265,5 +293,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertIsArray( $data['lines'] );
 		$this->assertIsArray( $data['totals'] );
 		$this->assertIsArray( $data['payments'] );
+		$this->assertIsArray( $data['refunds'] );
 	}
 }

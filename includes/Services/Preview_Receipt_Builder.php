@@ -722,14 +722,16 @@ class Preview_Receipt_Builder {
 
 		$payments = array(
 			array(
-				'method_id'    => 'pos_cash',
-				'method_title' => __( 'Cash', 'woocommerce-pos' ),
-				'amount'       => $grand_total_incl,
-				'reference'    => '',
-				'tendered'     => $tendered,
-				'change'       => $change_total,
+				'method_id'      => 'pos_cash',
+				'method_title'   => __( 'Cash', 'woocommerce-pos' ),
+				'amount'         => $grand_total_incl,
+				'transaction_id' => '',
+				'tendered'       => $tendered,
+				'change'         => $change_total,
 			),
 		);
+
+		$refunds = array();
 
 		$tax_display_mode   = get_option( 'woocommerce_tax_total_display', 'itemized' );
 		$presentation_hints = array(
@@ -777,6 +779,7 @@ class Preview_Receipt_Builder {
 			'totals'             => $totals,
 			'tax_summary'        => $tax_summary,
 			'payments'           => $payments,
+			'refunds'            => $refunds,
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels(),

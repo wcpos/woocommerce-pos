@@ -36,6 +36,7 @@ class Receipt_Data_Schema {
 		'totals',
 		'tax_summary',
 		'payments',
+		'refunds',
 		'fiscal',
 		'presentation_hints',
 		'i18n',
@@ -57,6 +58,7 @@ class Receipt_Data_Schema {
 		'grand_total_excl',
 		'paid_total',
 		'change_total',
+		'refund_total',
 	);
 
 	/**
@@ -76,6 +78,8 @@ class Receipt_Data_Schema {
 		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
+		'refund_total',
+		'total_refunded',
 	);
 
 	/**
@@ -120,6 +124,9 @@ class Receipt_Data_Schema {
 		'grand_total_excl',
 		'paid_total',
 		'change_total',
+		'refund_total',
+		// Per-line refund.
+		'total_refunded',
 		// Tax summary.
 		'taxable_amount_excl',
 		'tax_amount',
@@ -371,6 +378,10 @@ class Receipt_Data_Schema {
 						'type'  => 'number',
 						'label' => __( 'Quantity', 'woocommerce-pos' ),
 					),
+					'qty_refunded'       => array(
+						'type'  => 'number',
+						'label' => __( 'Quantity Refunded', 'woocommerce-pos' ),
+					),
 					'unit_subtotal'      => array(
 						'type'  => 'money',
 						'label' => __( 'Unit Subtotal', 'woocommerce-pos' ),
@@ -431,6 +442,10 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Line Total (excl tax)', 'woocommerce-pos' ),
 					),
+					'total_refunded'     => array(
+						'type'  => 'money',
+						'label' => __( 'Total Refunded', 'woocommerce-pos' ),
+					),
 					'taxes'              => array(
 						'type'  => 'array',
 						'label' => __( 'Line Taxes', 'woocommerce-pos' ),
@@ -461,6 +476,14 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),
+					'taxes'      => array(
+						'type'  => 'array',
+						'label' => __( 'Fee Taxes', 'woocommerce-pos' ),
+					),
+					'meta'       => array(
+						'type'  => 'array',
+						'label' => __( 'Fee Meta', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'shipping'    => array(
@@ -470,6 +493,10 @@ class Receipt_Data_Schema {
 					'label'      => array(
 						'type'  => 'string',
 						'label' => __( 'Shipping Label', 'woocommerce-pos' ),
+					),
+					'method_id'  => array(
+						'type'  => 'string',
+						'label' => __( 'Shipping Method ID', 'woocommerce-pos' ),
 					),
 					'total'      => array(
 						'type'  => 'money',
@@ -483,6 +510,14 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),
+					'taxes'      => array(
+						'type'  => 'array',
+						'label' => __( 'Shipping Taxes', 'woocommerce-pos' ),
+					),
+					'meta'       => array(
+						'type'  => 'array',
+						'label' => __( 'Shipping Meta', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'discounts'   => array(
@@ -492,6 +527,10 @@ class Receipt_Data_Schema {
 					'label'      => array(
 						'type'  => 'string',
 						'label' => __( 'Discount Label', 'woocommerce-pos' ),
+					),
+					'code'       => array(
+						'type'  => 'string',
+						'label' => __( 'Coupon Code', 'woocommerce-pos' ),
 					),
 					'codes'      => array(
 						'type'  => 'string',
@@ -562,6 +601,10 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Change', 'woocommerce-pos' ),
 					),
+					'refund_total'        => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Total', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'tax_summary' => array(
@@ -579,6 +622,10 @@ class Receipt_Data_Schema {
 					'rate'                => array(
 						'type'  => 'number',
 						'label' => __( 'Tax Rate (%)', 'woocommerce-pos' ),
+					),
+					'compound'            => array(
+						'type'  => 'boolean',
+						'label' => __( 'Compound Tax', 'woocommerce-pos' ),
 					),
 					'taxable_amount_excl' => array(
 						'type'  => 'money',
@@ -618,9 +665,66 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Change', 'woocommerce-pos' ),
 					),
-					'reference'    => array(
+					'transaction_id' => array(
 						'type'  => 'string',
-						'label' => __( 'Reference', 'woocommerce-pos' ),
+						'label' => __( 'Transaction ID', 'woocommerce-pos' ),
+					),
+				),
+			),
+			'refunds'     => array(
+				'label'    => __( 'Refunds', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'id'                => array(
+						'type'  => 'number',
+						'label' => __( 'Refund ID', 'woocommerce-pos' ),
+					),
+					'date'              => array(
+						'type'  => 'object',
+						'label' => __( 'Refund Date', 'woocommerce-pos' ),
+					),
+					'amount'            => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Amount', 'woocommerce-pos' ),
+					),
+					'reason'            => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Reason', 'woocommerce-pos' ),
+					),
+					'refunded_by_id'    => array(
+						'type'  => 'number',
+						'label' => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
+					),
+					'refunded_by_name'  => array(
+						'type'  => 'string',
+						'label' => __( 'Refunded By (Name)', 'woocommerce-pos' ),
+					),
+					'refunded_payment'  => array(
+						'type'  => 'boolean',
+						'label' => __( 'Refunded Payment', 'woocommerce-pos' ),
+					),
+					'lines'             => array(
+						'type'     => 'array',
+						'label'    => __( 'Refund Lines', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'name'  => array(
+								'type'  => 'string',
+								'label' => __( 'Product Name', 'woocommerce-pos' ),
+							),
+							'sku'   => array(
+								'type'  => 'string',
+								'label' => __( 'SKU', 'woocommerce-pos' ),
+							),
+							'qty'   => array(
+								'type'  => 'number',
+								'label' => __( 'Quantity', 'woocommerce-pos' ),
+							),
+							'total' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total', 'woocommerce-pos' ),
+							),
+						),
 					),
 				),
 			),
@@ -852,7 +956,7 @@ class Receipt_Data_Schema {
 	 * @return array<string, mixed>
 	 */
 	private static function get_default_section_schema( string $key ): array {
-		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' ), true ) ) {
+		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' ), true ) ) {
 			return array(
 				'type'                 => 'array',
 				'items'                => array(
