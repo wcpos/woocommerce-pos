@@ -16,6 +16,8 @@ class Receipt_Data_Schema {
 	 *
 	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
 	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
+	 * 1.4.0 — added structured store.tax_ids[] (TaxId[]) on the store block;
+	 * store.tax_id remains as a derived scalar.
 	 */
 	const VERSION = '1.4.0';
 
@@ -267,6 +269,10 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					),
+					'tax_ids'                 => array(
+						'type'  => 'array',
+						'label' => __( 'Tax IDs', 'woocommerce-pos' ),
+					),
 					'phone'                   => array(
 						'type'  => 'string',
 						'label' => __( 'Phone', 'woocommerce-pos' ),
@@ -349,6 +355,28 @@ class Receipt_Data_Schema {
 			),
 			'customer.tax_ids' => array(
 				'label'    => __( 'Customer Tax IDs', 'woocommerce-pos' ),
+				'is_array' => true,
+				'fields'   => array(
+					'type'    => array(
+						'type'  => 'string',
+						'label' => __( 'Type', 'woocommerce-pos' ),
+					),
+					'value'   => array(
+						'type'  => 'string',
+						'label' => __( 'Value', 'woocommerce-pos' ),
+					),
+					'country' => array(
+						'type'  => 'string',
+						'label' => __( 'Country', 'woocommerce-pos' ),
+					),
+					'label'   => array(
+						'type'  => 'string',
+						'label' => __( 'Label', 'woocommerce-pos' ),
+					),
+				),
+			),
+			'store.tax_ids' => array(
+				'label'    => __( 'Store Tax IDs', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'type'    => array(
