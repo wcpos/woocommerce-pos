@@ -74,9 +74,9 @@ and the payment method used for the refund.
 		<span style="color: #555;">Refunded via {{method_title}}</span>
 		<span>{{amount}}</span>
 	</div>
-	{{#reference}}
-	<div style="margin-bottom: 4px; padding-left: 12px; font-size: 11px; color: #999;">Ref: {{reference}}</div>
-	{{/reference}}
+	{{#transaction_id}}
+	<div style="margin-bottom: 4px; padding-left: 12px; font-size: 11px; color: #999;">Ref: {{transaction_id}}</div>
+	{{/transaction_id}}
 	{{/payments}}
 
 	{{#store.policies_and_conditions}}

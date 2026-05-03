@@ -34,10 +34,10 @@ class Test_Install_Gallery_I18n extends WP_UnitTestCase {
 	 * @return void
 	 */
 	public function test_translate_interpolated_phrases_preserves_mustache_variables(): void {
-		$content = 'Tax ID: {{store.tax_id}} and Ref: {{reference}}';
+		$content = 'Tax ID: {{store.tax_id}} and Ref: {{transaction_id}}';
 		$result  = Receipt_I18n_Labels::translate_interpolated_phrases( $content );
 		$this->assertStringContainsString( '{{store.tax_id}}', $result );
-		$this->assertStringContainsString( '{{reference}}', $result );
+		$this->assertStringContainsString( '{{transaction_id}}', $result );
 	}
 
 	/**

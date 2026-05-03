@@ -2,10 +2,10 @@
 /**
  * Tax ID Settings.
  *
- * Centralises the Tax-ID-related settings: per-type write-map overrides and
- * (later) verification toggles. Values come from WCPOS settings (the
- * `general` section under the `tax_ids` key, allowing the existing settings
- * service to handle persistence) and fall back to sensible defaults.
+ * Centralises the Tax-ID-related settings: per-type write-map overrides plus
+ * the capture/display toggles surfaced in the admin SPA. Values come from
+ * WCPOS settings (the top-level `tax_ids` section, allowing the existing
+ * settings service to handle persistence) and fall back to sensible defaults.
  *
  * @package WCPOS\WooCommercePOS
  */
@@ -47,17 +47,17 @@ class Tax_Id_Settings {
 	/**
 	 * User-configured per-type overrides for the write map.
 	 *
-	 * Reads from the `general.tax_ids.write_map` settings tree, which Settings.php
-	 * declares (with empty defaults) so it round-trips through the existing
-	 * REST settings endpoint without bespoke wiring. Invalid types or empty
-	 * keys are silently dropped.
+	 * Reads from the `tax_ids.write_map` settings tree, including the legacy
+	 * `general.tax_ids.write_map` fallback provided by Settings. Invalid types
+	 * or empty keys are silently dropped.
 	 *
 	 * @return array<string,string>
 	 */
 	public static function get_overrides(): array {
-		$general = (array) get_option( 'woocommerce_pos_settings_general', array() );
-		$tax_ids = isset( $general['tax_ids'] ) && \is_array( $general['tax_ids'] ) ? $general['tax_ids'] : array();
-		$raw     = isset( $tax_ids['write_map'] ) && \is_array( $tax_ids['write_map'] ) ? $tax_ids['write_map'] : array();
+		$raw = \wcpos_get_settings( 'tax_ids', 'write_map' );
+		if ( ! \is_array( $raw ) ) {
+			$raw = array();
+		}
 
 		$out = array();
 		foreach ( $raw as $type => $meta_key ) {
@@ -71,19 +71,5 @@ class Tax_Id_Settings {
 		}
 
 		return $out;
-	}
-
-	/**
-	 * Default tax-ID settings sub-tree, suitable for inclusion in the `general`
-	 * settings defaults.
-	 *
-	 * @return array<string,mixed>
-	 */
-	public static function default_settings_subtree(): array {
-		return array(
-			// User overrides for the per-type write map. Empty by default — the
-			// composed write_map (defaults + plugin detection + scan) is used.
-			'write_map' => array(),
-		);
 	}
 }

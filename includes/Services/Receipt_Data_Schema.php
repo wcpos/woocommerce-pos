@@ -690,6 +690,10 @@ class Receipt_Data_Schema {
 						'type'  => 'number',
 						'label' => __( 'Refund ID', 'woocommerce-pos' ),
 					),
+					'date'              => array(
+						'type'  => 'object',
+						'label' => __( 'Refund Date', 'woocommerce-pos' ),
+					),
 					'amount'            => array(
 						'type'  => 'money',
 						'label' => __( 'Refund Amount', 'woocommerce-pos' ),
@@ -743,8 +747,27 @@ class Receipt_Data_Schema {
 						'label' => __( 'Refund Processing Mode', 'woocommerce-pos' ),
 					),
 					'lines'             => array(
-						'type'  => 'array',
-						'label' => __( 'Refund Lines', 'woocommerce-pos' ),
+						'type'     => 'array',
+						'label'    => __( 'Refund Lines', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'name'  => array(
+								'type'  => 'string',
+								'label' => __( 'Product Name', 'woocommerce-pos' ),
+							),
+							'sku'   => array(
+								'type'  => 'string',
+								'label' => __( 'SKU', 'woocommerce-pos' ),
+							),
+							'qty'   => array(
+								'type'  => 'number',
+								'label' => __( 'Quantity', 'woocommerce-pos' ),
+							),
+							'total' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total', 'woocommerce-pos' ),
+							),
+						),
 					),
 					'fees'              => array(
 						'type'  => 'array',
