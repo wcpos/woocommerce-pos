@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WP_REST_Request;
 use WP_UnitTestCase;
 
@@ -290,5 +291,27 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 		$response = $this->api->update_payment_gateways_settings( $request );
 		$this->assertFalse( $response['gateways']['pos_cash']['enabled'] );
+	}
+
+	/**
+	 * The tax_ids/detection endpoint surfaces only customer-applicable types.
+	 *
+	 * Business-register identifiers (de_ust_id, nl_kvk, fr_siret, etc.) describe
+	 * the store, not the customer, so they must not appear in the write-map UI.
+	 */
+	public function test_tax_ids_detection_excludes_business_register_types(): void {
+		$response = $this->api->get_tax_ids_detection( $this->mock_rest_request() );
+		$data     = $response->get_data();
+
+		$this->assertArrayHasKey( 'types', $data );
+		$this->assertSame( Tax_Id_Types::customer_applicable_types(), $data['types'] );
+
+		foreach ( Tax_Id_Types::business_register_types() as $business_type ) {
+			$this->assertNotContains(
+				$business_type,
+				$data['types'],
+				"Business-register type {$business_type} must not appear in detection response"
+			);
+		}
 	}
 }

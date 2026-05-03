@@ -296,41 +296,6 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function get_tax_ids_endpoint_args(): array {
 		return array(
-			'enabled' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'capture_on_customer' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'capture_on_cart' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'show_on_receipt' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'b2b_required_threshold' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					if ( null === $param ) {
-						return true;
-					}
-					if ( ! \is_array( $param ) ) {
-						return false;
-					}
-					$has_country  = isset( $param['country'] ) && \is_string( $param['country'] );
-					$has_amount   = isset( $param['amount'] ) && ( \is_int( $param['amount'] ) || \is_float( $param['amount'] ) );
-					$has_currency = isset( $param['currency'] ) && \is_string( $param['currency'] );
-
-					return $has_country && $has_amount && $has_currency;
-				},
-			),
 			'write_map' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					if ( ! \is_array( $param ) ) {
@@ -498,8 +463,7 @@ class Settings extends WP_REST_Controller {
 		$payload      = $request->get_json_params();
 
 		// `write_map` is intentionally a full replacement (not deep-merged) so
-		// users can remove entries by sending the trimmed map. All other keys
-		// merge through array_replace_recursive.
+		// users can remove entries by sending the trimmed map.
 		$settings = array_replace_recursive( $old_settings, $payload );
 		if ( isset( $payload['write_map'] ) && \is_array( $payload['write_map'] ) ) {
 			$settings['write_map'] = $payload['write_map'];
@@ -530,7 +494,10 @@ class Settings extends WP_REST_Controller {
 				'plugins'           => $summary['plugins'],
 				'default_write_map' => Tax_Id_Settings::default_write_map(),
 				'composed_write_map' => $summary['write_map'],
-				'types'             => Tax_Id_Types::all_types(),
+				// Only customer-applicable types are surfaced: business-register
+				// identifiers (DE/NL/FR/CH commercial-register types) live on the
+				// store, not on customers, so they have no write-map row.
+				'types'             => Tax_Id_Types::customer_applicable_types(),
 			)
 		);
 		$response->set_status( 200 );

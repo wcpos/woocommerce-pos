@@ -16,7 +16,6 @@ import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
 import LogsPage from './screens/logs';
 import SessionsPage from './screens/sessions';
-import TaxIdsPage from './screens/tax-ids';
 
 // Root route — renders the full-page layout with sidebar navigation.
 const rootRoute = createRootRoute({
@@ -42,7 +41,13 @@ const settingsLoader = (id: string) => () => {
 const generalRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/general',
-	loader: settingsLoader('general'),
+	loader: () => {
+		// General page also embeds the Tax IDs subsection, so prefetch both
+		// settings trees concurrently — saves an additional round-trip when
+		// the Suspense boundary resolves.
+		settingsLoader('general')();
+		settingsLoader('tax_ids')();
+	},
 	component: GeneralPage,
 });
 
@@ -58,13 +63,6 @@ const accessRoute = createRoute({
 	path: '/access',
 	loader: settingsLoader('access'),
 	component: AccessPage,
-});
-
-const taxIdsRoute = createRoute({
-	getParentRoute: () => rootRoute,
-	path: '/tax-ids',
-	loader: settingsLoader('tax_ids'),
-	component: TaxIdsPage,
 });
 
 const sessionsRoute = createRoute({
@@ -105,7 +103,6 @@ const routeTree = rootRoute.addChildren([
 	generalRoute,
 	checkoutRoute,
 	accessRoute,
-	taxIdsRoute,
 	sessionsRoute,
 	extensionsRoute,
 	logsRoute,

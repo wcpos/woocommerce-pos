@@ -5,6 +5,7 @@ import { isString, isNumber } from 'lodash';
 import { PrivacyInfoModal } from '@wcpos/consent';
 
 import BarcodeSelect from './barcode-select';
+import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
@@ -131,6 +132,11 @@ function General() {
 						/>
 					</div>
 				</FormRow>
+				<React.Suspense
+					fallback={<Skeleton className="wcpos:h-32 wcpos:w-full wcpos:rounded-md wcpos:mt-4" />}
+				>
+					<TaxIdsSection />
+				</React.Suspense>
 			</FormSection>
 			<FormSection title={t('settings.privacy_section_title')}>
 				<FormRow>
