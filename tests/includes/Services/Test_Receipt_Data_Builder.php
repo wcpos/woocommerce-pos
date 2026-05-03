@@ -37,6 +37,20 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Restore the WC payment gateways instance in case a test nulled it
+	 * (the refund gateway-fallback tests intentionally null
+	 * WC()->payment_gateways to exercise the snapshot-only path; without
+	 * this restoration the next test's parent::setUp() -> rest_api_init
+	 * would explode inside WC StoreApi's CheckoutSchema).
+	 */
+	public function tearDown(): void {
+		if ( null === WC()->payment_gateways ) {
+			WC()->payment_gateways = \WC_Payment_Gateways::instance();
+		}
+		parent::tearDown();
+	}
+
+	/**
 	 * Create an order with a taxable product for tax-setting assertions.
 	 *
 	 * @param string $tax_display_mode Tax display mode option.
@@ -753,14 +767,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$fee = new \WC_Order_Item_Fee();
 		$fee->set_name( 'Booking fee' );
 		$fee->set_total( '5.00' );
-		$fee->set_total_tax( '0.00' );
 		$order->add_item( $fee );
 
 		$shipping = new \WC_Order_Item_Shipping();
 		$shipping->set_method_title( 'Flat rate' );
 		$shipping->set_method_id( 'flat_rate' );
 		$shipping->set_total( '3.00' );
-		$shipping->set_total_tax( '0.00' );
 		$order->add_item( $shipping );
 
 		$order->calculate_totals();
