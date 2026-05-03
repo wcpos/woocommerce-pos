@@ -174,6 +174,7 @@ class Tax_Id_Writer {
 	public function write_for_order( WC_Abstract_Order $order, array $tax_ids, $write_map = null ): array {
 		$normalized = self::normalize_input( $tax_ids );
 		$map        = \is_array( $write_map ) ? $write_map : ( new Tax_Id_Detector() )->summary()['write_map'];
+		$canonical  = self::canonicalize_for_storage( $normalized );
 
 		$plan = self::build_updates( $normalized, $map );
 
@@ -186,6 +187,12 @@ class Tax_Id_Writer {
 
 		foreach ( $plan['updates'] as $meta_key => $meta_value ) {
 			$order->update_meta_data( (string) $meta_key, $meta_value );
+		}
+
+		if ( ! empty( $canonical ) ) {
+			$order->update_meta_data( Tax_Id_Reader::CANONICAL_META_KEY, wp_json_encode( array_values( $canonical ) ) );
+		} else {
+			$order->delete_meta_data( Tax_Id_Reader::CANONICAL_META_KEY );
 		}
 
 		if ( ! empty( $plan['owned'] ) ) {
@@ -228,6 +235,7 @@ class Tax_Id_Writer {
 
 		$normalized = self::normalize_input( $tax_ids );
 		$map        = \is_array( $write_map ) ? $write_map : ( new Tax_Id_Detector() )->summary()['write_map'];
+		$canonical  = self::canonicalize_for_storage( $normalized );
 
 		$plan = self::build_updates( $normalized, $map );
 
@@ -244,6 +252,12 @@ class Tax_Id_Writer {
 		foreach ( $plan['updates'] as $meta_key => $meta_value ) {
 			$user_key = ltrim( (string) $meta_key, '_' );
 			update_user_meta( $user_id, $user_key, $meta_value );
+		}
+
+		if ( ! empty( $canonical ) ) {
+			update_user_meta( $user_id, Tax_Id_Reader::CANONICAL_META_KEY, wp_json_encode( array_values( $canonical ) ) );
+		} else {
+			delete_user_meta( $user_id, Tax_Id_Reader::CANONICAL_META_KEY );
 		}
 
 		if ( ! empty( $plan['owned'] ) ) {
@@ -335,6 +349,25 @@ class Tax_Id_Writer {
 		$value = (string) preg_replace( '/\s+/', '', $value );
 
 		return strtoupper( $value );
+	}
+
+	/**
+	 * Prepare the canonical WCPOS TaxId[] sidecar. This preserves the submitted
+	 * type/country metadata while matching legacy VAT storage's country-prefixed
+	 * value convention for round-trip compatibility.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Tax ID list.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function canonicalize_for_storage( array $tax_ids ): array {
+		$canonical = array();
+		foreach ( $tax_ids as $tax_id ) {
+			$tax_id['value'] = self::format_value_with_country( $tax_id );
+			$canonical[]     = $tax_id;
+		}
+
+		return $canonical;
 	}
 
 	/**
