@@ -269,10 +269,6 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					),
-					'tax_ids'                 => array(
-						'type'  => 'array',
-						'label' => __( 'Tax IDs', 'woocommerce-pos' ),
-					),
 					'phone'                   => array(
 						'type'  => 'string',
 						'label' => __( 'Phone', 'woocommerce-pos' ),
@@ -1315,6 +1311,14 @@ class Receipt_Data_Schema {
 				'name'                    => 'My Store',
 				'address_lines'           => array( '123 Main St', 'Anytown, CA 90210' ),
 				'tax_id'                  => '12-3456789',
+				'tax_ids'                 => array(
+					array(
+						'type'    => 'us_ein',
+						'value'   => '12-3456789',
+						'country' => 'US',
+						'label'   => 'EIN',
+					),
+				),
 				'phone'                   => '+1 (555) 123-4567',
 				'email'                   => 'hello@mystore.com',
 				'logo'                    => 'https://example.com/logo.png',

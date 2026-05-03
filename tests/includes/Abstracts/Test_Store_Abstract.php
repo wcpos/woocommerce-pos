@@ -12,15 +12,21 @@ use WP_UnitTestCase;
  */
 class Test_Store_Abstract extends WP_UnitTestCase {
 	private $store;
+	private $original_store_tax_number;
+	private $original_default_country;
 
 	public function setUp(): void {
 		parent::setUp();
+		$this->original_store_tax_number = get_option( 'woocommerce_store_tax_number', null );
+		$this->original_default_country  = get_option( 'woocommerce_default_country', null );
 		$this->store = new Store();
 	}
 
 	public function tearDown(): void {
-		parent::tearDown();
+		update_option( 'woocommerce_store_tax_number', $this->original_store_tax_number );
+		update_option( 'woocommerce_default_country', $this->original_default_country );
 		unset( $this->store );
+		parent::tearDown();
 	}
 
 	/**
@@ -303,5 +309,21 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$tax_ids = $store->get_tax_ids();
 		$this->assertSame( 'IT', $tax_ids[0]['country'] );
 		$this->assertSame( 'IT01234567890', $tax_ids[0]['value'] ); // value retains the prefix verbatim; country is the inferred ISO code.
+	}
+
+	public function test_get_tax_id_uses_first_entry_for_non_zero_keys(): void {
+		$store = new Store();
+		$store->set_props(
+			array(
+				'tax_ids' => array(
+					7 => array(
+						'type'  => 'eu_vat',
+						'value' => 'DE123456789',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( 'DE123456789', $store->get_tax_id() );
 	}
 }

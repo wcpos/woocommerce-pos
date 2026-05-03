@@ -103,5 +103,12 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 		$response_fields = array_keys( $data );
 		$this->assertEmpty( array_diff( $expected_response_fields, $response_fields ), 'These fields were expected but not present in WCPOS API response: ' . print_r( array_diff( $expected_response_fields, $response_fields ), true ) );
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
+		$this->assertArrayHasKey( 'tax_ids', $data );
+		$this->assertIsArray( $data['tax_ids'] );
+		foreach ( $data['tax_ids'] as $tax_id ) {
+			$this->assertIsArray( $tax_id );
+			$this->assertArrayHasKey( 'type', $tax_id );
+			$this->assertArrayHasKey( 'value', $tax_id );
+		}
 	}
 }

@@ -659,7 +659,7 @@ class Store extends \WC_Data implements StoreInterface {
 		if ( empty( $tax_ids ) ) {
 			return '';
 		}
-		$primary = $tax_ids[0];
+		$primary = reset( $tax_ids );
 		return isset( $primary['value'] ) ? (string) $primary['value'] : '';
 	}
 
