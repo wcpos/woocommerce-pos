@@ -169,23 +169,22 @@ class Receipt_Data_Builder {
 			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $dp ) : 0.0;
 			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $dp ) : 0.0;
 
-			$item_meta      = array();
-			$formatted_meta = $item->get_formatted_meta_data( '_', true );
-			foreach ( $formatted_meta as $meta_entry ) {
-				$item_meta[] = array(
-					'key'   => wp_strip_all_tags( $meta_entry->display_key ),
-					'value' => wp_strip_all_tags( $meta_entry->display_value ),
-				);
-			}
-
 			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
 			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );
+
+			$qty_refunded   = method_exists( $order, 'get_qty_refunded_for_item' )
+				? abs( (float) $order->get_qty_refunded_for_item( $item_id ) )
+				: 0.0;
+			$total_refunded = method_exists( $order, 'get_total_refunded_for_item' )
+				? abs( (float) $order->get_total_refunded_for_item( $item_id ) )
+				: 0.0;
 
 			$lines[] = array(
 				'key'                => (string) $item_id,
 				'sku'                => $item->get_product() ? $item->get_product()->get_sku() : '',
 				'name'               => $item->get_name(),
 				'qty'                => $qty,
+				'qty_refunded'       => $qty_refunded,
 				'unit_subtotal'      => $display_incl ? $unit_subtotal_incl : $unit_subtotal_excl,
 				'unit_subtotal_incl' => $unit_subtotal_incl,
 				'unit_subtotal_excl' => $unit_subtotal_excl,
@@ -201,21 +200,28 @@ class Receipt_Data_Builder {
 				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
 				'line_total_incl'    => $line_total_incl,
 				'line_total_excl'    => $line_total_excl,
+				'total_refunded'     => $total_refunded,
 				'taxes'              => $this->get_line_taxes( $item ),
-				'meta'               => $item_meta,
+				'meta'               => $this->get_item_meta_pairs( $item ),
 			);
 		}
 
-		$shipping_total_excl = (float) $order->get_shipping_total();
-		$shipping_total_tax  = (float) $order->get_shipping_tax();
-		$shipping            = array();
-		$shipping_total_incl = $shipping_total_excl + $shipping_total_tax;
-		if ( $shipping_total_excl > 0 || $shipping_total_tax > 0 ) {
-			$shipping[] = array(
-				'label'      => __( 'Shipping', 'woocommerce-pos' ),
-				'total'      => $display_incl ? $shipping_total_incl : $shipping_total_excl,
-				'total_incl' => $shipping_total_incl,
-				'total_excl' => $shipping_total_excl,
+		$shipping = array();
+		foreach ( $order->get_items( 'shipping' ) as $shipping_item ) {
+			if ( ! $shipping_item instanceof \WC_Order_Item_Shipping ) {
+				continue;
+			}
+			$ship_total_excl = (float) $shipping_item->get_total();
+			$ship_total_tax  = (float) $shipping_item->get_total_tax();
+			$ship_total_incl = $ship_total_excl + $ship_total_tax;
+			$shipping[]      = array(
+				'label'      => $shipping_item->get_name(),
+				'method_id'  => (string) $shipping_item->get_method_id(),
+				'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
+				'total_incl' => $ship_total_incl,
+				'total_excl' => $ship_total_excl,
+				'taxes'      => $this->get_item_taxes( $shipping_item ),
+				'meta'       => $this->get_item_meta_pairs( $shipping_item ),
 			);
 		}
 
@@ -229,22 +235,32 @@ class Receipt_Data_Builder {
 				'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
 				'total_incl' => $fee_total_incl,
 				'total_excl' => $fee_total_excl,
+				'taxes'      => $this->get_item_taxes( $fee ),
+				'meta'       => $this->get_item_meta_pairs( $fee ),
+			);
+		}
+
+		$discounts = array();
+		foreach ( $order->get_items( 'coupon' ) as $coupon_item ) {
+			if ( ! $coupon_item instanceof \WC_Order_Item_Coupon ) {
+				continue;
+			}
+			$coupon_excl = (float) $coupon_item->get_discount();
+			$coupon_tax  = (float) $coupon_item->get_discount_tax();
+			$coupon_incl = $coupon_excl + $coupon_tax;
+			$discounts[] = array(
+				'label'      => $coupon_item->get_code(),
+				'code'       => $coupon_item->get_code(),
+				'codes'      => $coupon_item->get_code(),
+				'total'      => $display_incl ? $coupon_incl : $coupon_excl,
+				'total_incl' => $coupon_incl,
+				'total_excl' => $coupon_excl,
 			);
 		}
 
 		$discount_total_excl = (float) $order->get_discount_total();
 		$discount_total_tax  = (float) $order->get_discount_tax();
 		$discount_total_incl = $discount_total_excl + $discount_total_tax;
-		$discounts           = array();
-		if ( $discount_total_excl > 0 || $discount_total_tax > 0 ) {
-			$discounts[] = array(
-				'label'      => __( 'Discount', 'woocommerce-pos' ),
-				'codes'      => implode( ', ', $order->get_coupon_codes() ),
-				'total'      => $display_incl ? $discount_total_incl : $discount_total_excl,
-				'total_incl' => $discount_total_incl,
-				'total_excl' => $discount_total_excl,
-			);
-		}
 
 		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
 		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
@@ -253,6 +269,9 @@ class Receipt_Data_Builder {
 		$total     = (float) $order->get_total();
 
 		$grand_total_excl = $total - $tax_total;
+		$refund_total     = method_exists( $order, 'get_total_refunded' )
+			? abs( (float) $order->get_total_refunded() )
+			: 0.0;
 
 		$totals = array(
 			'subtotal'             => $display_incl ? $subtotal_incl : $subtotal_excl,
@@ -267,16 +286,17 @@ class Receipt_Data_Builder {
 			'grand_total_excl'     => $grand_total_excl,
 			'paid_total'           => $total,
 			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
+			'refund_total'         => $refund_total,
 		);
 
 		$payments = array(
 			array(
-				'method_id'    => $order->get_payment_method(),
-				'method_title' => $order->get_payment_method_title(),
-				'amount'       => $total,
-				'reference'    => '',
-				'tendered'     => (float) $order->get_meta( '_pos_cash_amount_tendered' ),
-				'change'       => (float) $order->get_meta( '_pos_cash_change' ),
+				'method_id'      => $order->get_payment_method(),
+				'method_title'   => $order->get_payment_method_title(),
+				'amount'         => $total,
+				'transaction_id' => (string) $order->get_transaction_id(),
+				'tendered'       => (float) $order->get_meta( '_pos_cash_amount_tendered' ),
+				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
 			),
 		);
 
@@ -317,6 +337,7 @@ class Receipt_Data_Builder {
 			'totals'             => $totals,
 			'tax_summary'        => $this->get_tax_summary( $order ),
 			'payments'           => $payments,
+			'refunds'            => $this->get_refunds( $order ),
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels(),
@@ -347,6 +368,7 @@ class Receipt_Data_Builder {
 				'code'                => (string) $tax_item->get_rate_id(),
 				'rate'                => $rate > 0 ? $rate : null,
 				'label'               => $tax_item->get_label( $order ),
+				'compound'            => method_exists( $tax_item, 'is_compound' ) ? (bool) $tax_item->is_compound() : false,
 				'taxable_amount_excl' => $taxable_excl,
 				'tax_amount'          => $tax_amount,
 				'taxable_amount_incl' => $taxable_incl,
@@ -442,21 +464,147 @@ class Receipt_Data_Builder {
 	 * @return array
 	 */
 	private function get_line_taxes( $item ): array {
+		return $this->get_item_taxes( $item );
+	}
+
+	/**
+	 * Build tax rows for any order item that exposes get_taxes().
+	 *
+	 * Resolves human-readable label and percent rate via WC_Tax when possible,
+	 * falling back to the rate id string and null rate.
+	 *
+	 * @param object $item Order item.
+	 *
+	 * @return array
+	 */
+	private function get_item_taxes( $item ): array {
 		$taxes = array();
 
-		foreach ( $item->get_taxes()['total'] ?? array() as $tax_rate_id => $tax_amount ) {
+		if ( ! method_exists( $item, 'get_taxes' ) ) {
+			return $taxes;
+		}
+
+		$raw = $item->get_taxes();
+		if ( ! \is_array( $raw ) ) {
+			return $taxes;
+		}
+
+		$totals = isset( $raw['total'] ) && \is_array( $raw['total'] ) ? $raw['total'] : array();
+
+		foreach ( $totals as $tax_rate_id => $tax_amount ) {
 			if ( ! $tax_amount ) {
 				continue;
 			}
 
+			$rate  = null;
+			$label = (string) $tax_rate_id;
+
+			if ( class_exists( '\WC_Tax' ) ) {
+				$rate_data = \WC_Tax::_get_tax_rate( (int) $tax_rate_id, OBJECT );
+				if ( \is_object( $rate_data ) ) {
+					if ( isset( $rate_data->tax_rate ) && '' !== $rate_data->tax_rate ) {
+						$rate = (float) $rate_data->tax_rate;
+					}
+					$resolved_label = \WC_Tax::get_rate_label( $rate_data );
+					if ( \is_string( $resolved_label ) && '' !== $resolved_label ) {
+						$label = $resolved_label;
+					}
+				}
+			}
+
 			$taxes[] = array(
 				'code'   => (string) $tax_rate_id,
-				'rate'   => null,
-				'label'  => (string) $tax_rate_id,
+				'rate'   => $rate,
+				'label'  => $label,
 				'amount' => (float) $tax_amount,
 			);
 		}
 
 		return $taxes;
+	}
+
+	/**
+	 * Extract formatted meta pairs from an order item.
+	 *
+	 * @param object $item Order item.
+	 *
+	 * @return array
+	 */
+	private function get_item_meta_pairs( $item ): array {
+		$pairs = array();
+
+		if ( ! method_exists( $item, 'get_formatted_meta_data' ) ) {
+			return $pairs;
+		}
+
+		$formatted_meta = $item->get_formatted_meta_data( '_', true );
+		if ( ! \is_array( $formatted_meta ) ) {
+			return $pairs;
+		}
+
+		foreach ( $formatted_meta as $meta_entry ) {
+			$pairs[] = array(
+				'key'   => wp_strip_all_tags( $meta_entry->display_key ),
+				'value' => wp_strip_all_tags( $meta_entry->display_value ),
+			);
+		}
+
+		return $pairs;
+	}
+
+	/**
+	 * Build refunds[] block from $order->get_refunds().
+	 *
+	 * @param WC_Abstract_Order $order Order object.
+	 *
+	 * @return array
+	 */
+	private function get_refunds( WC_Abstract_Order $order ): array {
+		$refunds = array();
+
+		if ( ! method_exists( $order, 'get_refunds' ) ) {
+			return $refunds;
+		}
+
+		foreach ( $order->get_refunds() as $refund ) {
+			if ( ! $refund instanceof \WC_Order_Refund ) {
+				continue;
+			}
+
+			$refunded_by_id   = (int) $refund->get_refunded_by();
+			$refunded_by_name = '';
+			if ( $refunded_by_id > 0 ) {
+				$user = get_user_by( 'id', $refunded_by_id );
+				if ( $user ) {
+					$refunded_by_name = (string) $user->display_name;
+				}
+			}
+
+			$refund_lines = array();
+			foreach ( $refund->get_items( 'line_item' ) as $refund_item ) {
+				if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
+					continue;
+				}
+				$refund_lines[] = array(
+					'name'  => (string) $refund_item->get_name(),
+					'sku'   => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
+					'qty'   => abs( (float) $refund_item->get_quantity() ),
+					'total' => abs( (float) $refund_item->get_total() ),
+				);
+			}
+
+			$refunds[] = array(
+				'id'                => (int) $refund->get_id(),
+				'date'              => Receipt_Date_Formatter::from_wc_datetime( $refund->get_date_created() ),
+				'amount'            => abs( (float) $refund->get_amount() ),
+				'reason'            => (string) $refund->get_reason(),
+				'refunded_by_id'    => $refunded_by_id > 0 ? $refunded_by_id : null,
+				'refunded_by_name'  => $refunded_by_name,
+				'refunded_payment'  => method_exists( $refund, 'get_refunded_payment' ) ? (bool) $refund->get_refunded_payment() : false,
+				'lines'             => $refund_lines,
+			);
+		}
+
+		return $refunds;
 	}
 }

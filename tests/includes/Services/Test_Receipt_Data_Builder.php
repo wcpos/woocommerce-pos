@@ -518,4 +518,247 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			remove_theme_mod( 'custom_logo' );
 		}
 	}
+
+	/**
+	 * Test payments use transaction_id (not deprecated reference) and wire it from the order.
+	 */
+	public function test_build_payments_use_transaction_id_from_order(): void {
+		$order = OrderHelper::create_order();
+		$order->set_transaction_id( 'txn_12345' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertNotEmpty( $payload['payments'] );
+		$payment = $payload['payments'][0];
+		$this->assertArrayHasKey( 'transaction_id', $payment );
+		$this->assertArrayNotHasKey( 'reference', $payment );
+		$this->assertSame( 'txn_12345', $payment['transaction_id'] );
+	}
+
+	/**
+	 * Test tax summary entries include the compound flag.
+	 */
+	public function test_build_tax_summary_includes_compound_flag(): void {
+		$order   = $this->create_taxed_order( 'itemized', 'no' );
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertNotEmpty( $payload['tax_summary'] );
+		foreach ( $payload['tax_summary'] as $row ) {
+			$this->assertArrayHasKey( 'compound', $row );
+			$this->assertIsBool( $row['compound'] );
+		}
+	}
+
+	/**
+	 * Test line tax rows expose a human-readable label and numeric rate when WC_Tax can resolve them.
+	 */
+	public function test_build_line_taxes_resolve_label_and_rate(): void {
+		$order   = $this->create_taxed_order( 'itemized', 'no' );
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertNotEmpty( $payload['lines'] );
+		$line = $payload['lines'][0];
+		$this->assertNotEmpty( $line['taxes'] );
+		$tax = $line['taxes'][0];
+		$this->assertSame( 'US Tax', $tax['label'] );
+		$this->assertNotNull( $tax['rate'] );
+		$this->assertEqualsWithDelta( 10.0, (float) $tax['rate'], 0.001 );
+	}
+
+	/**
+	 * Test discounts emit one row per coupon code instead of a single synthetic row.
+	 */
+	public function test_build_emits_per_coupon_discount_rows(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '50.00' );
+		$product->save();
+
+		$coupon_a = new \WC_Coupon();
+		$coupon_a->set_code( 'CODE_A' );
+		$coupon_a->set_amount( 5 );
+		$coupon_a->set_discount_type( 'fixed_cart' );
+		$coupon_a->save();
+
+		$coupon_b = new \WC_Coupon();
+		$coupon_b->set_code( 'CODE_B' );
+		$coupon_b->set_amount( 10 );
+		$coupon_b->set_discount_type( 'fixed_cart' );
+		$coupon_b->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( 'CODE_A' );
+		$order->apply_coupon( 'CODE_B' );
+		$order->calculate_totals();
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertCount( 2, $payload['discounts'] );
+		$codes = array_column( $payload['discounts'], 'code' );
+		$this->assertContains( 'CODE_A', $codes );
+		$this->assertContains( 'CODE_B', $codes );
+	}
+
+	/**
+	 * Test shipping emits one row per shipping method, with method_id, taxes and meta.
+	 */
+	public function test_build_emits_per_shipping_method_rows(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Shippable' );
+		$product->set_regular_price( '20.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+
+		$ship_a = new \WC_Order_Item_Shipping();
+		$ship_a->set_method_title( 'Standard' );
+		$ship_a->set_method_id( 'flat_rate' );
+		$ship_a->set_total( 5 );
+		$order->add_item( $ship_a );
+
+		$ship_b = new \WC_Order_Item_Shipping();
+		$ship_b->set_method_title( 'Express' );
+		$ship_b->set_method_id( 'flat_rate' );
+		$ship_b->set_total( 12 );
+		$order->add_item( $ship_b );
+
+		$order->calculate_totals();
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertCount( 2, $payload['shipping'] );
+		$labels = array_column( $payload['shipping'], 'label' );
+		$this->assertContains( 'Standard', $labels );
+		$this->assertContains( 'Express', $labels );
+		foreach ( $payload['shipping'] as $row ) {
+			$this->assertArrayHasKey( 'method_id', $row );
+			$this->assertArrayHasKey( 'taxes', $row );
+			$this->assertArrayHasKey( 'meta', $row );
+		}
+	}
+
+	/**
+	 * Test fees emit meta and taxes alongside the totals.
+	 */
+	public function test_build_fees_emit_meta_and_taxes(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Item' );
+		$product->set_regular_price( '20.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+
+		$fee = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Service Fee' );
+		$fee->set_amount( '3.00' );
+		$fee->set_total( '3.00' );
+		$order->add_item( $fee );
+
+		$order->calculate_totals();
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertCount( 1, $payload['fees'] );
+		$this->assertArrayHasKey( 'meta', $payload['fees'][0] );
+		$this->assertArrayHasKey( 'taxes', $payload['fees'][0] );
+		$this->assertIsArray( $payload['fees'][0]['meta'] );
+		$this->assertIsArray( $payload['fees'][0]['taxes'] );
+	}
+
+	/**
+	 * Test refunds[] block is emitted with line items and amounts.
+	 */
+	public function test_build_includes_refunds_block_with_line_items(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Refundable' );
+		$product->set_regular_price( '15.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+		$order->calculate_totals();
+		$order->save();
+
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+
+		wc_create_refund(
+			array(
+				'amount'     => '15.00',
+				'reason'     => 'Customer changed mind',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 15.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		$this->assertNotEmpty( $payload['refunds'] );
+		$refund = $payload['refunds'][0];
+		$this->assertArrayHasKey( 'id', $refund );
+		$this->assertArrayHasKey( 'amount', $refund );
+		$this->assertArrayHasKey( 'reason', $refund );
+		$this->assertArrayHasKey( 'lines', $refund );
+		$this->assertSame( 'Customer changed mind', $refund['reason'] );
+		$this->assertEqualsWithDelta( 15.00, (float) $refund['amount'], 0.001 );
+		$this->assertNotEmpty( $refund['lines'] );
+		$this->assertEqualsWithDelta( 1.0, (float) $refund['lines'][0]['qty'], 0.001 );
+	}
+
+	/**
+	 * Test per-line qty_refunded / total_refunded and totals.refund_total are populated.
+	 */
+	public function test_build_includes_per_line_refund_info_and_refund_total(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Refundable' );
+		$product->set_regular_price( '20.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 2 );
+		$order->calculate_totals();
+		$order->save();
+
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+
+		wc_create_refund(
+			array(
+				'amount'     => '20.00',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 20.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		$this->assertNotEmpty( $payload['lines'] );
+		$line = $payload['lines'][0];
+		$this->assertArrayHasKey( 'qty_refunded', $line );
+		$this->assertArrayHasKey( 'total_refunded', $line );
+		$this->assertEqualsWithDelta( 1.0, (float) $line['qty_refunded'], 0.001 );
+		$this->assertEqualsWithDelta( 20.00, (float) $line['total_refunded'], 0.001 );
+
+		$this->assertArrayHasKey( 'refund_total', $payload['totals'] );
+		$this->assertEqualsWithDelta( 20.00, (float) $payload['totals']['refund_total'], 0.001 );
+	}
 }
