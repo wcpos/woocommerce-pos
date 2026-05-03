@@ -89,7 +89,26 @@ $separator = str_repeat( '-', 42 );
 		<div class="center small"><?php echo esc_html( $store['phone'] ); ?></div>
 	<?php endif; ?>
 
-	<?php if ( ! empty( $store['tax_id'] ) ) : ?>
+	<?php if ( ! empty( $store['tax_ids'] ) && is_array( $store['tax_ids'] ) ) : ?>
+		<?php foreach ( $store['tax_ids'] as $tax_id ) : ?>
+			<?php
+			if ( empty( $tax_id['value'] ) ) {
+				continue;
+			}
+			$tax_id_label = ! empty( $tax_id['label'] ) ? $tax_id['label'] : __( 'Tax ID', 'woocommerce-pos' );
+			?>
+			<div class="center small">
+				<?php
+				printf(
+					/* translators: 1: tax ID label, 2: tax identification number */
+					esc_html__( '%1$s: %2$s', 'woocommerce-pos' ),
+					esc_html( $tax_id_label ),
+					esc_html( $tax_id['value'] )
+				);
+				?>
+			</div>
+		<?php endforeach; ?>
+	<?php elseif ( ! empty( $store['tax_id'] ) ) : ?>
 		<div class="center small">
 			<?php
 			printf(

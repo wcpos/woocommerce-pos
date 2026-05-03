@@ -92,6 +92,55 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertEquals( 0, $settings['default_customer'] );
 		$this->assertEquals( '_sku', $settings['barcode_field'] );
 		$this->assertEquals( 'undecided', $settings['tracking_consent'] );
+		$this->assertSame( array(), $settings['store_tax_ids'] );
+	}
+
+	public function test_save_general_settings_sanitizes_store_tax_ids(): void {
+		$result = $this->settings->save_settings(
+			'general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => ' de_steuernummer ',
+						'value'   => ' 12/345/67890 ',
+						'country' => ' de ',
+						'label'   => ' Steuernummer ',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => '',
+					),
+					array(
+						'type'  => '',
+						'value' => 'HRB 12345',
+					),
+					'not-an-array',
+					array(
+						'type'    => 'de_hrb',
+						'value'   => ' HRB 12345 ',
+						'country' => '',
+						'label'   => '',
+					),
+				),
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			array(
+				array(
+					'type'    => 'de_steuernummer',
+					'value'   => '12/345/67890',
+					'country' => 'DE',
+					'label'   => 'Steuernummer',
+				),
+				array(
+					'type'  => 'de_hrb',
+					'value' => 'HRB 12345',
+				),
+			),
+			$result['store_tax_ids']
+		);
 	}
 
 	/**

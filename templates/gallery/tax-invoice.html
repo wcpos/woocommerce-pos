@@ -31,9 +31,14 @@ Suited for jurisdictions requiring itemized tax documentation.
 		</div>
 		<div style="text-align: right;">
 			<div style="font-size: 24px; font-weight: 700; color: #1a56db; text-transform: uppercase;">{{i18n.tax_invoice}}</div>
+			{{#store.tax_ids}}
+			<div style="font-size: 13px; font-weight: 600; margin-top: 4px; padding: 4px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; display: inline-block;">{{label}}: {{value}}</div>
+			{{/store.tax_ids}}
+			{{^store.tax_ids}}
 			{{#store.tax_id}}
-			<div style="font-size: 13px; font-weight: 600; margin-top: 4px; padding: 4px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; display: inline-block;">Tax ID: {{store.tax_id}}</div>
+			<div style="font-size: 13px; font-weight: 600; margin-top: 4px; padding: 4px 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; display: inline-block;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
 			{{/store.tax_id}}
+			{{/store.tax_ids}}
 		</div>
 	</div>
 

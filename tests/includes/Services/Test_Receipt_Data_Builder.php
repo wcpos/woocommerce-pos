@@ -468,6 +468,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'eu_vat', $payload['store']['tax_ids'][0]['type'] );
 		$this->assertSame( 'DE123456789', $payload['store']['tax_ids'][0]['value'] );
 		$this->assertSame( 'DE', $payload['store']['tax_ids'][0]['country'] );
+		$this->assertSame( 'VAT ID', $payload['store']['tax_ids'][0]['label'] );
 
 		// Back-compat scalar still emitted.
 		$this->assertSame( 'DE123456789', $payload['store']['tax_id'] );

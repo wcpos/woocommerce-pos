@@ -38,6 +38,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		delete_option( 'woocommerce_pos_settings_general' );
 		parent::tearDown();
 	}
 
@@ -71,6 +72,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertFalse( $settings['default_customer_is_cashier'] );
 		$this->assertEquals( 0, $settings['default_customer'] );
 		$this->assertEquals( '_sku', $settings['barcode_field'] );
+		$this->assertSame( array(), $settings['store_tax_ids'] );
 	}
 
 	/**
@@ -168,6 +170,70 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$request  = $this->mock_rest_request( array( 'pos_only_products' => true ) );
 		$response = $this->api->update_general_settings( $request );
 		$this->assertTrue( $response['pos_only_products'] );
+	}
+
+	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
+		$request = $this->mock_rest_request(
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => 'de_steuernummer',
+						'value'   => ' 12/345/67890 ',
+						'country' => 'de',
+						'label'   => ' Steuernummer ',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => '',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => 'HRB 12345',
+					),
+				),
+			)
+		);
+
+		$response = $this->api->update_general_settings( $request );
+
+		$this->assertSame(
+			array(
+				array(
+					'type'    => 'de_steuernummer',
+					'value'   => '12/345/67890',
+					'country' => 'DE',
+					'label'   => 'Steuernummer',
+				),
+				array(
+					'type'  => 'de_hrb',
+					'value' => 'HRB 12345',
+				),
+			),
+			$response['store_tax_ids']
+		);
+	}
+
+	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'  => 'de_steuernummer',
+						'value' => '12/345/67890',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => 'HRB 12345',
+					),
+				),
+			)
+		);
+
+		$request  = $this->mock_rest_request( array( 'store_tax_ids' => array() ) );
+		$response = $this->api->update_general_settings( $request );
+
+		$this->assertSame( array(), $response['store_tax_ids'] );
 	}
 
 	/**

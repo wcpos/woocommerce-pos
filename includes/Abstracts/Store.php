@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Abstracts;
 
 use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WC_Countries;
 use function wc_format_country_state_string;
@@ -469,7 +470,7 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'personal_notes', '' );
 		$this->set_prop( 'policies_and_conditions', '' );
 		$this->set_prop( 'footer_imprint', '' );
-		$this->set_prop( 'tax_ids', $this->derive_tax_ids_from_wc_options() );
+		$this->set_prop( 'tax_ids', $this->merge_store_tax_ids() );
 	}
 
 	/**
@@ -499,6 +500,41 @@ class Store extends \WC_Data implements StoreInterface {
 			$entry['country'] = $country;
 		}
 		return array( $entry );
+	}
+
+	/**
+	 * Merge the legacy WooCommerce core tax-number option with additional WCPOS
+	 * General > Store tax IDs.
+	 *
+	 * The WC core option remains first for back-compat with store.tax_id.
+	 * Additional settings entries follow and are de-duplicated by value.
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	protected function merge_store_tax_ids(): array {
+		$tax_ids = $this->derive_tax_ids_from_wc_options();
+		$general = woocommerce_pos_get_settings( 'general' );
+		$additional = array();
+
+		if ( \is_array( $general ) && isset( $general['store_tax_ids'] ) ) {
+			$additional = Settings::sanitize_store_tax_ids( $general['store_tax_ids'] );
+		}
+
+		$seen   = array();
+		$merged = array();
+		foreach ( array_merge( $tax_ids, $additional ) as $tax_id ) {
+			if ( ! \is_array( $tax_id ) || ! isset( $tax_id['value'] ) ) {
+				continue;
+			}
+			$value = trim( (string) $tax_id['value'] );
+			if ( '' === $value || isset( $seen[ $value ] ) ) {
+				continue;
+			}
+			$seen[ $value ] = true;
+			$merged[]       = $tax_id;
+		}
+
+		return $merged;
 	}
 
 	/**

@@ -259,9 +259,92 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 
 	public function test_get_tax_ids_returns_empty_when_wc_option_blank(): void {
 		update_option( 'woocommerce_store_tax_number', '' );
+		delete_option( 'woocommerce_pos_settings_general' );
 		$store = new Store();
 		$this->assertSame( array(), $store->get_tax_ids() );
 		$this->assertSame( '', $store->get_tax_id() );
+	}
+
+	public function test_get_tax_ids_merges_wc_option_with_general_store_tax_ids_and_deduplicates_by_value(): void {
+		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
+		update_option( 'woocommerce_default_country', 'DE:BY' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => 'eu_vat',
+						'value'   => 'DE123456789',
+						'country' => 'DE',
+					),
+					array(
+						'type'    => 'de_steuernummer',
+						'value'   => '12/345/67890',
+						'country' => 'DE',
+						'label'   => 'Steuernummer',
+					),
+					array(
+						'type'  => 'de_hrb',
+						'value' => 'HRB 12345',
+					),
+				),
+			)
+		);
+
+		$store   = new Store();
+		$tax_ids = $store->get_tax_ids();
+
+		$this->assertSame(
+			array(
+				array(
+					'type'    => 'eu_vat',
+					'value'   => 'DE123456789',
+					'country' => 'DE',
+				),
+				array(
+					'type'    => 'de_steuernummer',
+					'value'   => '12/345/67890',
+					'country' => 'DE',
+					'label'   => 'Steuernummer',
+				),
+				array(
+					'type'  => 'de_hrb',
+					'value' => 'HRB 12345',
+				),
+			),
+			$tax_ids
+		);
+		$this->assertSame( 'DE123456789', $store->get_tax_id() );
+	}
+
+	public function test_get_tax_ids_uses_general_store_tax_ids_when_wc_option_blank(): void {
+		update_option( 'woocommerce_store_tax_number', '' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => 'de_steuernummer',
+						'value'   => '12/345/67890',
+						'country' => 'DE',
+					),
+				),
+			)
+		);
+
+		$store = new Store();
+
+		$this->assertSame(
+			array(
+				array(
+					'type'    => 'de_steuernummer',
+					'value'   => '12/345/67890',
+					'country' => 'DE',
+				),
+			),
+			$store->get_tax_ids()
+		);
+		$this->assertSame( '12/345/67890', $store->get_tax_id() );
 	}
 
 	public function test_get_tax_ids_derives_eu_vat_from_de_country(): void {

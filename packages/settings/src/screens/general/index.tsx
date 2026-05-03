@@ -9,6 +9,7 @@ import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { Skeleton } from '../../components/skeleton';
+import TaxIdsField, { type TaxId } from '../../components/tax-ids-field';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
@@ -23,6 +24,7 @@ export interface GeneralSettingsProps {
 	barcode_field: string;
 	restore_stock_on_delete: boolean;
 	tracking_consent: 'undecided' | 'allowed' | 'denied';
+	store_tax_ids: TaxId[];
 }
 
 function General() {
@@ -31,6 +33,25 @@ function General() {
 
 	return (
 		<>
+			<FormSection title={t('settings.store_section_title')}>
+				<FormRow label={t('settings.store_tax_ids')} description={t('settings.store_tax_ids_tip')}>
+					<TaxIdsField
+						value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : []}
+						onChange={(store_tax_ids) => {
+							mutate({ store_tax_ids });
+						}}
+						labels={{
+							add: t('settings.store_tax_ids_add'),
+							type: t('settings.store_tax_ids_type'),
+							value: t('settings.store_tax_ids_value'),
+							country: t('settings.store_tax_ids_country'),
+							label: t('settings.store_tax_ids_label'),
+							remove: t('settings.store_tax_ids_remove'),
+							empty: t('settings.store_tax_ids_empty'),
+						}}
+					/>
+				</FormRow>
+			</FormSection>
 			<FormSection title={t('settings.products_section_title')}>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>
