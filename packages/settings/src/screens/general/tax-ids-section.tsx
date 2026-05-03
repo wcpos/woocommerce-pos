@@ -253,9 +253,8 @@ export function TaxIdsSection() {
 			const current = writeMap[type] ?? '';
 			if (value === current) return;
 			const next = { ...writeMap };
-			// Empty input or matching default = drop the override so the
-			// auto-detected map wins.
-			if (value === '' || value === defaultKey) {
+			// Empty input = drop override so composed detection/default wins.
+			if (value === '') {
 				delete next[type];
 			} else {
 				next[type] = value;
