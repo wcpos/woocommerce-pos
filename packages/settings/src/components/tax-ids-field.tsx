@@ -153,7 +153,11 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 				/>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle wcpos:text-right">
-				<Button variant="ghost-destructive" onClick={onRemove}>
+				<Button
+					variant="ghost-destructive"
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={onRemove}
+				>
 					{labels.remove}
 				</Button>
 			</td>
