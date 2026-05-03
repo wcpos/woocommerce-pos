@@ -933,7 +933,7 @@ class Receipt_Data_Schema {
 	 * @return array<string, mixed>
 	 */
 	private static function get_default_section_schema( string $key ): array {
-		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' ), true ) ) {
+		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' ), true ) ) {
 			return array(
 				'type'                 => 'array',
 				'items'                => array(

@@ -72,7 +72,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'fiscal' );
+		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -86,7 +86,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_marks_array_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$array_sections = array( 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments' );
+		$array_sections = array( 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' );
 		foreach ( $array_sections as $section ) {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
@@ -241,6 +241,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$schema = Receipt_Data_Schema::get_json_schema();
 
 		$this->assertSame( 'array', $schema['properties']['lines']['type'] );
+		$this->assertSame( 'array', $schema['properties']['refunds']['type'] );
 		$this->assertSame( 'object', $schema['properties']['lines']['items']['type'] );
 		$this->assertSame( 'array', $schema['properties']['customer']['properties']['tax_ids']['type'] );
 		$this->assertSame( 'object', $schema['properties']['customer']['properties']['tax_ids']['items']['type'] );
@@ -265,5 +266,6 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertIsArray( $data['lines'] );
 		$this->assertIsArray( $data['totals'] );
 		$this->assertIsArray( $data['payments'] );
+		$this->assertIsArray( $data['refunds'] );
 	}
 }

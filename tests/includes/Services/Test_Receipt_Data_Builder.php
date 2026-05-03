@@ -598,8 +598,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$this->assertCount( 2, $payload['discounts'] );
 		$codes = array_column( $payload['discounts'], 'code' );
-		$this->assertContains( 'CODE_A', $codes );
-		$this->assertContains( 'CODE_B', $codes );
+		$this->assertContains( wc_format_coupon_code( 'CODE_A' ), $codes );
+		$this->assertContains( wc_format_coupon_code( 'CODE_B' ), $codes );
 	}
 
 	/**

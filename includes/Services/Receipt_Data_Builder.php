@@ -500,15 +500,21 @@ class Receipt_Data_Builder {
 			$label = (string) $tax_rate_id;
 
 			if ( class_exists( '\WC_Tax' ) ) {
-				$rate_data = \WC_Tax::_get_tax_rate( (int) $tax_rate_id, OBJECT );
-				if ( \is_object( $rate_data ) ) {
-					if ( isset( $rate_data->tax_rate ) && '' !== $rate_data->tax_rate ) {
-						$rate = (float) $rate_data->tax_rate;
+				// _get_tax_rate() is internal to WooCommerce; keep the fallback label/rate if it changes.
+				try {
+					$rate_data = \WC_Tax::_get_tax_rate( (int) $tax_rate_id, OBJECT );
+					if ( \is_object( $rate_data ) ) {
+						if ( isset( $rate_data->tax_rate ) && '' !== $rate_data->tax_rate ) {
+							$rate = (float) $rate_data->tax_rate;
+						}
+						$resolved_label = \WC_Tax::get_rate_label( $rate_data );
+						if ( \is_string( $resolved_label ) && '' !== $resolved_label ) {
+							$label = $resolved_label;
+						}
 					}
-					$resolved_label = \WC_Tax::get_rate_label( $rate_data );
-					if ( \is_string( $resolved_label ) && '' !== $resolved_label ) {
-						$label = $resolved_label;
-					}
+				} catch ( \Throwable $exception ) {
+					$rate  = null;
+					$label = (string) $tax_rate_id;
 				}
 			}
 
