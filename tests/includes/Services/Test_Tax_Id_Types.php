@@ -106,6 +106,54 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that all 8 business-register types are present in all_types() and pass is_valid_type().
+	 */
+	public function test_business_register_types_are_in_all_types(): void {
+		$all = Tax_Id_Types::all_types();
+		foreach ( array(
+			'de_ust_id',
+			'de_steuernummer',
+			'de_hrb',
+			'nl_kvk',
+			'fr_siret',
+			'fr_siren',
+			'gb_company',
+			'ch_uid',
+		) as $type ) {
+			$this->assertContains( $type, $all, "Missing business-register type: {$type}" );
+			$this->assertTrue( Tax_Id_Types::is_valid_type( $type ), "Type rejected: {$type}" );
+		}
+	}
+
+	/**
+	 * Test that business-register types resolve to the correct ISO 3166-1 alpha-2 country code.
+	 */
+	public function test_business_register_types_resolve_to_country(): void {
+		$this->assertSame( 'DE', Tax_Id_Types::country_for_type( 'de_ust_id' ) );
+		$this->assertSame( 'DE', Tax_Id_Types::country_for_type( 'de_steuernummer' ) );
+		$this->assertSame( 'DE', Tax_Id_Types::country_for_type( 'de_hrb' ) );
+		$this->assertSame( 'NL', Tax_Id_Types::country_for_type( 'nl_kvk' ) );
+		$this->assertSame( 'FR', Tax_Id_Types::country_for_type( 'fr_siret' ) );
+		$this->assertSame( 'FR', Tax_Id_Types::country_for_type( 'fr_siren' ) );
+		$this->assertSame( 'GB', Tax_Id_Types::country_for_type( 'gb_company' ) );
+		$this->assertSame( 'CH', Tax_Id_Types::country_for_type( 'ch_uid' ) );
+	}
+
+	/**
+	 * Test that business-register types return their expected default labels.
+	 */
+	public function test_business_register_types_have_default_labels(): void {
+		$this->assertSame( 'USt-IdNr.',    Tax_Id_Types::default_label( 'de_ust_id' ) );
+		$this->assertSame( 'Steuernummer', Tax_Id_Types::default_label( 'de_steuernummer' ) );
+		$this->assertSame( 'HRB',          Tax_Id_Types::default_label( 'de_hrb' ) );
+		$this->assertSame( 'KVK',          Tax_Id_Types::default_label( 'nl_kvk' ) );
+		$this->assertSame( 'SIRET',        Tax_Id_Types::default_label( 'fr_siret' ) );
+		$this->assertSame( 'SIREN',        Tax_Id_Types::default_label( 'fr_siren' ) );
+		$this->assertSame( 'Company No.',  Tax_Id_Types::default_label( 'gb_company' ) );
+		$this->assertSame( 'UID',          Tax_Id_Types::default_label( 'ch_uid' ) );
+	}
+
+	/**
 	 * Test is_eu_vat_country recognises EU member states (note the EL/GR quirk).
 	 */
 	public function test_is_eu_vat_country(): void {

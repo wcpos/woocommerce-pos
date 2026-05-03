@@ -19,20 +19,28 @@ namespace WCPOS\WooCommercePOS\Services;
  * Tax_Id_Types class.
  */
 class Tax_Id_Types {
-	const TYPE_EU_VAT     = 'eu_vat';
-	const TYPE_GB_VAT     = 'gb_vat';
-	const TYPE_AU_ABN     = 'au_abn';
-	const TYPE_BR_CPF     = 'br_cpf';
-	const TYPE_BR_CNPJ    = 'br_cnpj';
-	const TYPE_IN_GST     = 'in_gst';
-	const TYPE_IT_CF      = 'it_cf';
-	const TYPE_IT_PIVA    = 'it_piva';
-	const TYPE_ES_NIF     = 'es_nif';
-	const TYPE_AR_CUIT    = 'ar_cuit';
-	const TYPE_SA_VAT     = 'sa_vat';
-	const TYPE_CA_GST_HST = 'ca_gst_hst';
-	const TYPE_US_EIN     = 'us_ein';
-	const TYPE_OTHER      = 'other';
+	const TYPE_EU_VAT          = 'eu_vat';
+	const TYPE_GB_VAT          = 'gb_vat';
+	const TYPE_AU_ABN          = 'au_abn';
+	const TYPE_BR_CPF          = 'br_cpf';
+	const TYPE_BR_CNPJ         = 'br_cnpj';
+	const TYPE_IN_GST          = 'in_gst';
+	const TYPE_IT_CF           = 'it_cf';
+	const TYPE_IT_PIVA         = 'it_piva';
+	const TYPE_ES_NIF          = 'es_nif';
+	const TYPE_AR_CUIT         = 'ar_cuit';
+	const TYPE_SA_VAT          = 'sa_vat';
+	const TYPE_CA_GST_HST      = 'ca_gst_hst';
+	const TYPE_US_EIN          = 'us_ein';
+	const TYPE_DE_UST_ID       = 'de_ust_id';
+	const TYPE_DE_STEUERNUMMER = 'de_steuernummer';
+	const TYPE_DE_HRB          = 'de_hrb';
+	const TYPE_NL_KVK          = 'nl_kvk';
+	const TYPE_FR_SIRET        = 'fr_siret';
+	const TYPE_FR_SIREN        = 'fr_siren';
+	const TYPE_GB_COMPANY      = 'gb_company';
+	const TYPE_CH_UID          = 'ch_uid';
+	const TYPE_OTHER           = 'other';
 
 	/**
 	 * EU member-state VAT country codes (note: Greece uses EL not GR for VAT).
@@ -89,6 +97,14 @@ class Tax_Id_Types {
 			self::TYPE_SA_VAT,
 			self::TYPE_CA_GST_HST,
 			self::TYPE_US_EIN,
+			self::TYPE_DE_UST_ID,
+			self::TYPE_DE_STEUERNUMMER,
+			self::TYPE_DE_HRB,
+			self::TYPE_NL_KVK,
+			self::TYPE_FR_SIRET,
+			self::TYPE_FR_SIREN,
+			self::TYPE_GB_COMPANY,
+			self::TYPE_CH_UID,
 			self::TYPE_OTHER,
 		);
 	}
@@ -147,6 +163,24 @@ class Tax_Id_Types {
 			case self::TYPE_US_EIN:
 				return 'US';
 
+			case self::TYPE_DE_UST_ID:
+			case self::TYPE_DE_STEUERNUMMER:
+			case self::TYPE_DE_HRB:
+				return 'DE';
+
+			case self::TYPE_NL_KVK:
+				return 'NL';
+
+			case self::TYPE_FR_SIRET:
+			case self::TYPE_FR_SIREN:
+				return 'FR';
+
+			case self::TYPE_GB_COMPANY:
+				return 'GB';
+
+			case self::TYPE_CH_UID:
+				return 'CH';
+
 			case self::TYPE_EU_VAT:
 			case self::TYPE_OTHER:
 			default:
@@ -199,6 +233,30 @@ class Tax_Id_Types {
 
 			case self::TYPE_US_EIN:
 				return __( 'EIN', 'woocommerce-pos' );
+
+			case self::TYPE_DE_UST_ID:
+				return __( 'USt-IdNr.', 'woocommerce-pos' );
+
+			case self::TYPE_DE_STEUERNUMMER:
+				return __( 'Steuernummer', 'woocommerce-pos' );
+
+			case self::TYPE_DE_HRB:
+				return __( 'HRB', 'woocommerce-pos' );
+
+			case self::TYPE_NL_KVK:
+				return __( 'KVK', 'woocommerce-pos' );
+
+			case self::TYPE_FR_SIRET:
+				return __( 'SIRET', 'woocommerce-pos' );
+
+			case self::TYPE_FR_SIREN:
+				return __( 'SIREN', 'woocommerce-pos' );
+
+			case self::TYPE_GB_COMPANY:
+				return __( 'Company No.', 'woocommerce-pos' );
+
+			case self::TYPE_CH_UID:
+				return __( 'UID', 'woocommerce-pos' );
 
 			case self::TYPE_OTHER:
 			default:
