@@ -26,21 +26,25 @@ interface TaxIdsFieldProps {
 const TYPE_OPTIONS: OptionProps[] = [
 	{ value: 'eu_vat', label: 'EU VAT' },
 	{ value: 'gb_vat', label: 'GB VAT' },
+	{ value: 'au_abn', label: 'AU ABN' },
+	{ value: 'br_cpf', label: 'BR CPF' },
+	{ value: 'br_cnpj', label: 'BR CNPJ' },
+	{ value: 'in_gst', label: 'IN GSTIN' },
+	{ value: 'it_cf', label: 'IT Codice Fiscale' },
+	{ value: 'it_piva', label: 'IT Partita IVA' },
+	{ value: 'es_nif', label: 'ES NIF' },
+	{ value: 'ar_cuit', label: 'AR CUIT' },
+	{ value: 'sa_vat', label: 'SA VAT' },
+	{ value: 'ca_gst_hst', label: 'CA GST/HST' },
+	{ value: 'us_ein', label: 'US EIN' },
 	{ value: 'de_ust_id', label: 'DE USt-IdNr.' },
 	{ value: 'de_steuernummer', label: 'DE Steuernummer' },
 	{ value: 'de_hrb', label: 'DE HRB' },
-	{ value: 'it_piva', label: 'IT Partita IVA' },
-	{ value: 'it_cf', label: 'IT Codice Fiscale' },
-	{ value: 'es_nif', label: 'ES NIF' },
+	{ value: 'nl_kvk', label: 'NL KVK' },
 	{ value: 'fr_siret', label: 'FR SIRET' },
 	{ value: 'fr_siren', label: 'FR SIREN' },
-	{ value: 'nl_kvk', label: 'NL KVK' },
 	{ value: 'gb_company', label: 'GB Company number' },
 	{ value: 'ch_uid', label: 'CH UID' },
-	{ value: 'au_abn', label: 'AU ABN' },
-	{ value: 'au_acn', label: 'AU ACN' },
-	{ value: 'ca_gst_hst', label: 'CA GST/HST' },
-	{ value: 'us_ein', label: 'US EIN' },
 	{ value: 'other', label: 'Other' },
 ];
 
@@ -61,10 +65,34 @@ const normalizeTaxId = (taxId: TaxId): TaxId => {
 };
 
 function TaxIdsField({ value, onChange, labels }: TaxIdsFieldProps) {
-	const taxIds = React.useMemo(() => (Array.isArray(value) ? value.map(normalizeTaxId) : []), [value]);
+	const [draftTaxId, setDraftTaxId] = React.useState<TaxId | null>(null);
+	const taxIds = React.useMemo(
+		() => (Array.isArray(value) ? value.map(normalizeTaxId) : []),
+		[value]
+	);
+	const displayTaxIds = React.useMemo(
+		() => (draftTaxId ? [...taxIds, draftTaxId] : taxIds),
+		[draftTaxId, taxIds]
+	);
 
 	const updateAt = React.useCallback(
 		(index: number, patch: Partial<TaxId>) => {
+			if (index >= taxIds.length && draftTaxId) {
+				const nextTaxId = normalizeTaxId({
+					...draftTaxId,
+					...patch,
+				});
+
+				if (patch.value && nextTaxId.value) {
+					setDraftTaxId(null);
+					onChange([...taxIds, nextTaxId]);
+					return;
+				}
+
+				setDraftTaxId(nextTaxId);
+				return;
+			}
+
 			const next = taxIds.map((taxId, currentIndex) => {
 				if (currentIndex !== index) {
 					return taxId;
@@ -77,11 +105,16 @@ function TaxIdsField({ value, onChange, labels }: TaxIdsFieldProps) {
 			});
 			onChange(next);
 		},
-		[onChange, taxIds]
+		[draftTaxId, onChange, taxIds]
 	);
 
 	const removeAt = React.useCallback(
 		(index: number) => {
+			if (index >= taxIds.length) {
+				setDraftTaxId(null);
+				return;
+			}
+
 			onChange(taxIds.filter((_, currentIndex) => currentIndex !== index));
 		},
 		[onChange, taxIds]
@@ -89,14 +122,14 @@ function TaxIdsField({ value, onChange, labels }: TaxIdsFieldProps) {
 
 	return (
 		<div className="wcpos:space-y-3">
-			{taxIds.length === 0 && (
+			{displayTaxIds.length === 0 && (
 				<p className="wcpos:rounded-md wcpos:border wcpos:border-dashed wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:px-3 wcpos:py-2 wcpos:text-sm wcpos:text-gray-500">
 					{labels.empty}
 				</p>
 			)}
-			{taxIds.map((taxId, index) => (
+			{displayTaxIds.map((taxId, index) => (
 				<div
-					key={`${index}-${taxId.type}-${taxId.value}`}
+					key={index}
 					className="wcpos:rounded-lg wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:p-3 wcpos:shadow-sm"
 				>
 					<div className="wcpos:grid wcpos:grid-cols-1 wcpos:gap-2 wcpos:md:grid-cols-[minmax(150px,1fr)_minmax(180px,1.5fr)]">
@@ -137,7 +170,7 @@ function TaxIdsField({ value, onChange, labels }: TaxIdsFieldProps) {
 			))}
 			<Button
 				variant="outline"
-				onClick={() => onChange([...taxIds, { type: 'other', value: '' }])}
+				onClick={() => setDraftTaxId((current) => current ?? { type: 'other', value: '' })}
 			>
 				{labels.add}
 			</Button>
