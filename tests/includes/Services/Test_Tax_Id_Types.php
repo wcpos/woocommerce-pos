@@ -188,6 +188,16 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 			count( $customer ) + count( $business ),
 			'customer_applicable_types() + business_register_types() should partition all_types()'
 		);
+
+		$combined = array_values( array_unique( array_merge( $customer, $business ) ) );
+		sort( $combined );
+		sort( $all );
+
+		$this->assertSame(
+			$all,
+			$combined,
+			'customer_applicable_types() + business_register_types() should equal all_types()'
+		);
 	}
 
 	/**

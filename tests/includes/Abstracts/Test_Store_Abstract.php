@@ -256,6 +256,18 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertSame( 'DE123456789', $store->get_tax_id() );
 	}
 
+	public function test_get_tax_ids_derives_eu_vat_from_gr_country(): void {
+		update_option( 'woocommerce_store_tax_number', 'GR123456789' );
+		update_option( 'woocommerce_default_country', 'GR' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertCount( 1, $tax_ids );
+		$this->assertSame( 'eu_vat', $tax_ids[0]['type'] );
+		$this->assertSame( 'GR123456789', $tax_ids[0]['value'] );
+		$this->assertSame( 'GR', $tax_ids[0]['country'] );
+		$this->assertSame( 'GR123456789', $store->get_tax_id() );
+	}
+
 	public function test_get_tax_ids_derives_gb_vat(): void {
 		update_option( 'woocommerce_store_tax_number', 'GB123456789' );
 		update_option( 'woocommerce_default_country', 'GB' );

@@ -516,7 +516,8 @@ class Store extends \WC_Data implements StoreInterface {
 		if ( '' === $country ) {
 			return Tax_Id_Types::TYPE_OTHER;
 		}
-		if ( Tax_Id_Types::is_eu_vat_country( $country ) ) {
+		$vat_country = ( 'GR' === $country ) ? 'EL' : $country;
+		if ( Tax_Id_Types::is_eu_vat_country( $vat_country ) ) {
 			return Tax_Id_Types::TYPE_EU_VAT;
 		}
 		$map = array(
