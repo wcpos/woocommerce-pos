@@ -153,6 +153,9 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 		$this->assertSame( 'UID',          Tax_Id_Types::default_label( 'ch_uid' ) );
 	}
 
+	/**
+	 * Every business-register type appears in `all_types()`.
+	 */
 	public function test_business_register_types_subset_of_all_types(): void {
 		$all       = Tax_Id_Types::all_types();
 		$business  = Tax_Id_Types::business_register_types();
@@ -162,6 +165,9 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * `customer_applicable_types()` excludes every store-only business-register type.
+	 */
 	public function test_customer_applicable_types_excludes_business_registers(): void {
 		$customer = Tax_Id_Types::customer_applicable_types();
 		$business = Tax_Id_Types::business_register_types();
@@ -170,6 +176,9 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 		}
 	}
 
+	/**
+	 * `customer_applicable_types()` and `business_register_types()` are a strict partition of `all_types()`.
+	 */
 	public function test_customer_applicable_plus_business_register_equals_all(): void {
 		$all      = Tax_Id_Types::all_types();
 		$customer = Tax_Id_Types::customer_applicable_types();
