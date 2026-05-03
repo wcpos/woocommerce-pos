@@ -242,12 +242,15 @@ class Tax_Id_Detector {
 		// Tally populated rows per candidate.
 		$counts = array_fill_keys( array_keys( $candidates ), 0 );
 		foreach ( $orders as $order_id ) {
-			$order = \wc_get_order( $order_id );
-			if ( ! $order ) {
+			if ( \is_object( $order_id ) && \method_exists( $order_id, 'get_id' ) ) {
+				$order_id = $order_id->get_id();
+			}
+			$meta = \get_post_meta( (int) $order_id );
+			if ( ! \is_array( $meta ) || empty( $meta ) ) {
 				continue;
 			}
 			foreach ( $candidates as $meta_key => $_type ) {
-				$value = $order->get_meta( $meta_key, true );
+				$value = isset( $meta[ $meta_key ][0] ) ? $meta[ $meta_key ][0] : null;
 				if ( '' === $value || array() === $value || null === $value ) {
 					continue;
 				}

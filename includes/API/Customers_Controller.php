@@ -638,28 +638,15 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					'value'   => $search_keyword,
 					'compare' => 'LIKE',
 				),
-				// Tax-ID legacy meta keys (user-meta variant — no leading underscore).
-				array(
-					'key'     => 'billing_vat_number',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_cpf',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_cnpj',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_gstin',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
 			);
+
+			foreach ( Tax_Id_Reader::fallback_user_meta_keys() as $meta_key ) {
+				$search_meta_query[] = array(
+					'key'     => $meta_key,
+					'value'   => $search_keyword,
+					'compare' => 'LIKE',
+				);
+			}
 
 			// Combine the search meta_query with the existing meta_query.
 			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );

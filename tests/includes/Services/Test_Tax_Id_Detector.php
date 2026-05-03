@@ -21,6 +21,14 @@ use WP_UnitTestCase;
  */
 class Test_Tax_Id_Detector extends WP_UnitTestCase {
 	/**
+	 * Reset general settings option after each test.
+	 */
+	public function tearDown(): void {
+		delete_option( 'woocommerce_pos_settings_general' );
+		parent::tearDown();
+	}
+
+	/**
 	 * Defaults are returned when nothing is detected and no overrides exist.
 	 */
 	public function test_compose_with_only_defaults(): void {

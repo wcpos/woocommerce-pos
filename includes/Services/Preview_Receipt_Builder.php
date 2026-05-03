@@ -1017,28 +1017,28 @@ class Preview_Receipt_Builder {
 			'GB' => array(
 				array(
 					'type'    => Tax_Id_Types::TYPE_GB_VAT,
-					'value'   => '123456789',
+					'value'   => 'GB123456789',
 					'country' => 'GB',
 				),
 			),
 			'DE' => array(
 				array(
 					'type'    => Tax_Id_Types::TYPE_EU_VAT,
-					'value'   => '123456789',
+					'value'   => 'DE123456789',
 					'country' => 'DE',
 				),
 			),
 			'FR' => array(
 				array(
 					'type'    => Tax_Id_Types::TYPE_EU_VAT,
-					'value'   => '12345678901',
+					'value'   => 'FR12345678901',
 					'country' => 'FR',
 				),
 			),
 			'NL' => array(
 				array(
 					'type'    => Tax_Id_Types::TYPE_EU_VAT,
-					'value'   => '123456789B01',
+					'value'   => 'NL123456789B01',
 					'country' => 'NL',
 				),
 			),

@@ -84,6 +84,7 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 			'is_paying_customer',
 			'avatar_url',
 			'meta_data',
+			'tax_ids',
 		);
 	}
 

@@ -546,6 +546,35 @@ class Test_Tax_Id_Reader extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Read tax IDs from the canonical WCPOS customer meta key.
+	 */
+	public function test_read_for_user_canonical_meta(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		update_user_meta(
+			$user_id,
+			Tax_Id_Reader::CANONICAL_META_KEY,
+			wp_json_encode(
+				array(
+					array(
+						'type'    => Tax_Id_Types::TYPE_GB_VAT,
+						'value'   => 'GB123456789',
+						'country' => 'GB',
+					),
+				)
+			)
+		);
+
+		$result = $this->reader->read_for_user( $user_id );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( Tax_Id_Types::TYPE_GB_VAT, $result[0]['type'] );
+		$this->assertSame( 'GB123456789', $result[0]['value'] );
+		$this->assertSame( 'GB', $result[0]['country'] );
+
+		wp_delete_user( $user_id );
+	}
+
+	/**
 	 * Read tax IDs from a user with the underscore-prefixed variant (some
 	 * plugins store user meta with a leading underscore).
 	 */

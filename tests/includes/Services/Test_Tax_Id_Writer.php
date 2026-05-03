@@ -214,6 +214,7 @@ class Test_Tax_Id_Writer extends WC_REST_Unit_Test_Case {
 		$result = ( new Tax_Id_Reader() )->read_for_order( $order );
 		$this->assertCount( 1, $result );
 		$this->assertSame( Tax_Id_Types::TYPE_EU_VAT, $result[0]['type'] );
+		$this->assertSame( 'DE123456789', $result[0]['value'] );
 		$this->assertSame( 'DE', $result[0]['country'] );
 	}
 
@@ -283,6 +284,7 @@ class Test_Tax_Id_Writer extends WC_REST_Unit_Test_Case {
 				'role'       => 'customer',
 			)
 		);
+		$this->assertFalse( is_wp_error( $user_id ) );
 		$this->assertGreaterThan( 0, $user_id );
 
 		( new Tax_Id_Writer() )->write_for_user(
@@ -309,6 +311,7 @@ class Test_Tax_Id_Writer extends WC_REST_Unit_Test_Case {
 				'role'       => 'customer',
 			)
 		);
+		$this->assertFalse( is_wp_error( $user_id ) );
 		update_user_meta( $user_id, 'billing_country', 'DE' );
 		update_user_meta( $user_id, 'billing_vat_number', 'DE123456789' );
 

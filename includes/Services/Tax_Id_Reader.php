@@ -80,6 +80,20 @@ class Tax_Id_Reader {
 	);
 
 	/**
+	 * User-meta variants of the order fallback keys.
+	 *
+	 * @return array<int,string>
+	 */
+	public static function fallback_user_meta_keys(): array {
+		$keys = array();
+		foreach ( array_keys( self::ORDER_FALLBACK_KEYS ) as $meta_key ) {
+			$keys[] = ltrim( $meta_key, '_' );
+		}
+
+		return array_values( array_unique( $keys ) );
+	}
+
+	/**
 	 * Read tax IDs for a WooCommerce order. Reads only from the order's own meta
 	 * (the order is treated as the snapshot — it is never re-pulled from the
 	 * customer record).

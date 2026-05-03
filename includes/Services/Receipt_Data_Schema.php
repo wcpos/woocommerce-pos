@@ -327,10 +327,6 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'Tax ID', 'woocommerce-pos' ),
 					),
-					'tax_ids'          => array(
-						'type'  => 'array',
-						'label' => __( 'Tax IDs', 'woocommerce-pos' ),
-					),
 				),
 			),
 			'customer.tax_ids' => array(
