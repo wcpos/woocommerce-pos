@@ -24,24 +24,55 @@ test.describe('General Settings', () => {
 		expect(count).toBeGreaterThanOrEqual(3);
 	});
 
-	test('toggling a setting triggers a save', async ({ adminPage }) => {
-		// Find the first toggle and click it
+	test('toggling a setting saves to the API and persists across reloads', async ({
+		adminPage,
+	}) => {
 		const firstSwitch = adminPage.locator('button[role="switch"]').first();
 		await expect(firstSwitch).toBeVisible({ timeout: 10000 });
 
-		// Capture the initial state
 		const wasChecked = await firstSwitch.getAttribute('aria-checked');
+
+		// Toggle and wait for the POST. waitForResponse must be set up BEFORE
+		// the click — clicking first races the listener attach against the
+		// network request.
+		const savedResponse = adminPage.waitForResponse(
+			(resp) =>
+				resp.url().includes('wcpos/v1/settings/general') &&
+				resp.request().method() === 'POST',
+			{ timeout: 15000 }
+		);
 		await firstSwitch.click();
+		const postResp = await savedResponse;
+		expect(postResp.status()).toBe(200);
 
-		// Wait for the API save to complete
-		await adminPage.waitForTimeout(2000);
-
-		// The toggle state should have flipped
+		// UI reflects the new state.
 		const isCheckedNow = await firstSwitch.getAttribute('aria-checked');
 		expect(isCheckedNow).not.toBe(wasChecked);
 
-		// Toggle it back to restore original state
-		await firstSwitch.click();
-		await adminPage.waitForTimeout(2000);
+		// Reload the page and confirm the new state actually persisted on
+		// the server. Without this, a successful POST that wrote nothing
+		// would still pass the previous version of this test.
+		const settingsReloaded = adminPage.waitForResponse(
+			(resp) => resp.url().includes('wcpos/v1/settings/general') && resp.status() === 200,
+			{ timeout: 30000 }
+		);
+		await adminPage.reload();
+		await settingsReloaded;
+		const reloadedSwitch = adminPage.locator('button[role="switch"]').first();
+		await expect(reloadedSwitch).toBeVisible({ timeout: 10000 });
+		await expect(reloadedSwitch).toHaveAttribute('aria-checked', isCheckedNow ?? '');
+
+		// Toggle back to restore original state and confirm the rollback save
+		// also returned 200, so the next test starts from a clean baseline.
+		const restoreResponse = adminPage.waitForResponse(
+			(resp) =>
+				resp.url().includes('wcpos/v1/settings/general') &&
+				resp.request().method() === 'POST',
+			{ timeout: 15000 }
+		);
+		await reloadedSwitch.click();
+		const restoreResp = await restoreResponse;
+		expect(restoreResp.status()).toBe(200);
+		await expect(reloadedSwitch).toHaveAttribute('aria-checked', wasChecked ?? '');
 	});
 });
