@@ -785,6 +785,54 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that a persisted _pos_refund_gateway_title snapshot wins over
+	 * the live gateway registry, so historical receipts keep their original
+	 * audit value when a gateway is renamed or removed.
+	 */
+	public function test_build_refunds_prefer_persisted_gateway_title(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Refundable' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->save();
+
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+
+		$refund = wc_create_refund(
+			array(
+				'amount'     => '10.00',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 10.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$refund->update_meta_data( '_pos_refund_gateway_id', 'cod' );
+		$refund->update_meta_data( '_pos_refund_gateway_title', 'Pay on collection' );
+		$refund->save();
+
+		WC()->payment_gateways = null;
+
+		$payload    = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+		$out_refund = $payload['refunds'][0];
+
+		// Snapshot label is preserved even though the live registry would
+		// resolve 'cod' to "Cash on delivery".
+		$this->assertSame( 'cod', $out_refund['gateway_id'] );
+		$this->assertSame( 'Pay on collection', $out_refund['gateway_title'] );
+	}
+
+	/**
 	 * Test per-line qty_refunded / total_refunded and totals.refund_total are populated.
 	 */
 	public function test_build_includes_per_line_refund_info_and_refund_total(): void {

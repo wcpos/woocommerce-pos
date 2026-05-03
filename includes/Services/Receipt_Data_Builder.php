@@ -664,8 +664,8 @@ class Receipt_Data_Builder {
 			$pos_destination = (string) $refund->get_meta( '_pos_refund_destination' );
 			$pos_mode        = (string) $refund->get_meta( '_pos_refund_mode' );
 			$pos_gateway_id  = (string) $refund->get_meta( '_pos_refund_gateway_id' );
-			$pos_gateway_title = '';
-			if ( '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
+			$pos_gateway_title = (string) $refund->get_meta( '_pos_refund_gateway_title' );
+			if ( '' === $pos_gateway_title && '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
 				WC()->payment_gateways();
 				$gateways = WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
 				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
