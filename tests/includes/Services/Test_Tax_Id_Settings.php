@@ -20,10 +20,10 @@ use WP_UnitTestCase;
  */
 class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	/**
-	 * Reset general settings option after each test.
+	 * Reset tax_ids settings option after each test.
 	 */
 	protected function tearDown(): void {
-		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( 'woocommerce_pos_settings_tax_ids' );
 		parent::tearDown();
 	}
 
@@ -53,16 +53,14 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Get_overrides returns the values stored in general settings.
+	 * Get_overrides returns the values stored in tax_ids settings.
 	 */
 	public function test_get_overrides_reads_settings(): void {
 		update_option(
-			'woocommerce_pos_settings_general',
+			'woocommerce_pos_settings_tax_ids',
 			array(
-				'tax_ids' => array(
-					'write_map' => array(
-						Tax_Id_Types::TYPE_BR_CPF => '_my_cpf',
-					),
+				'write_map' => array(
+					Tax_Id_Types::TYPE_BR_CPF => '_my_cpf',
 				),
 			)
 		);
@@ -76,14 +74,12 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	 */
 	public function test_get_overrides_filters_invalid(): void {
 		update_option(
-			'woocommerce_pos_settings_general',
+			'woocommerce_pos_settings_tax_ids',
 			array(
-				'tax_ids' => array(
-					'write_map' => array(
-						'bogus_type'                => '_x',
-						Tax_Id_Types::TYPE_BR_CPF   => '',
-						Tax_Id_Types::TYPE_BR_CNPJ  => '_my_cnpj',
-					),
+				'write_map' => array(
+					'bogus_type'               => '_x',
+					Tax_Id_Types::TYPE_BR_CPF  => '',
+					Tax_Id_Types::TYPE_BR_CNPJ => '_my_cnpj',
 				),
 			)
 		);
@@ -96,13 +92,13 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	 * Get_overrides returns empty array when settings are missing/malformed.
 	 */
 	public function test_get_overrides_handles_missing(): void {
-		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( 'woocommerce_pos_settings_tax_ids' );
 		$this->assertSame( array(), Tax_Id_Settings::get_overrides() );
 
-		update_option( 'woocommerce_pos_settings_general', 'not-an-array' );
+		update_option( 'woocommerce_pos_settings_tax_ids', 'not-an-array' );
 		$this->assertSame( array(), Tax_Id_Settings::get_overrides() );
 
-		update_option( 'woocommerce_pos_settings_general', array( 'tax_ids' => 'not-an-array' ) );
+		update_option( 'woocommerce_pos_settings_tax_ids', array( 'write_map' => 'not-an-array' ) );
 		$this->assertSame( array(), Tax_Id_Settings::get_overrides() );
 	}
 }

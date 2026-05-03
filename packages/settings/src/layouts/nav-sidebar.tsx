@@ -39,6 +39,7 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 					<NavItem to="/general" label={t('common.general')} onClick={onNavItemClick} />
 					<NavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
 					<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
+					<NavItem to="/tax-ids" label={t('common.tax_ids')} onClick={onNavItemClick} />
 					<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
 					<NavItem
 						to="/extensions"

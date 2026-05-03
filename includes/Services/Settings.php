@@ -38,11 +38,17 @@ class Settings {
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
 			'tracking_consent'            => 'undecided',
-			'tax_ids'                     => array(
-				// Per-type meta-key write overrides. Empty by default: the composed
-				// write_map (defaults + plugin detection + scan) is used.
-				'write_map' => array(),
-			),
+		),
+		'tax_ids' => array(
+			'enabled'                => true,
+			'capture_on_customer'    => true,
+			'capture_on_cart'        => true,
+			'show_on_receipt'        => true,
+			// Soft B2B gate: null disables; otherwise { country, amount, currency }.
+			'b2b_required_threshold' => null,
+			// Per-type meta-key write overrides. Empty by default: the composed
+			// write_map (defaults + plugin detection + scan) is used.
+			'write_map'              => array(),
 		),
 		'checkout' => array(
 			'receipt_default_mode' => 'fiscal',
@@ -334,6 +340,38 @@ class Settings {
 		 * @hook woocommerce_pos_general_settings
 		 */
 		return apply_filters( 'woocommerce_pos_general_settings', $settings );
+	}
+
+	/**
+	 * Get tax IDs settings.
+	 *
+	 * Defaults are merged for any missing keys so the SPA always receives the
+	 * full subtree shape.
+	 *
+	 * @return array
+	 */
+	public function get_tax_ids_settings(): array {
+		$default_settings = self::$default_settings['tax_ids'];
+		$settings         = get_option( self::$db_prefix . 'tax_ids', array() );
+
+		if ( ! \is_array( $settings ) ) {
+			$settings = array();
+		}
+
+		foreach ( $default_settings as $key => $value ) {
+			if ( ! \array_key_exists( $key, $settings ) ) {
+				$settings[ $key ] = $value;
+			}
+		}
+
+		/*
+		 * Filters the tax IDs settings.
+		 *
+		 * @param {array} $settings
+		 * @returns {array} $settings
+		 * @hook woocommerce_pos_tax_ids_settings
+		 */
+		return apply_filters( 'woocommerce_pos_tax_ids_settings', $settings );
 	}
 
 	/**
