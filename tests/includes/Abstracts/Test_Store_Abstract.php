@@ -284,7 +284,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertSame( 'JP', $tax_ids[0]['country'] );
 	}
 
-	public function test_get_tax_ids_strips_country_prefix_when_present(): void {
+	public function test_get_tax_ids_preserves_country_prefix_in_value_verbatim(): void {
 		update_option( 'woocommerce_store_tax_number', 'IT01234567890' );
 		update_option( 'woocommerce_default_country', 'IT' );
 		$store = new Store();

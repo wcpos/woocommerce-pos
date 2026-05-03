@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Abstracts;
 
 use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WC_Countries;
 use function wc_format_country_state_string;
 
@@ -513,22 +514,22 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	protected static function infer_tax_id_type( string $country ): string {
 		if ( '' === $country ) {
-			return \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_OTHER;
+			return Tax_Id_Types::TYPE_OTHER;
 		}
-		if ( \WCPOS\WooCommercePOS\Services\Tax_Id_Types::is_eu_vat_country( $country ) ) {
-			return \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_EU_VAT;
+		if ( Tax_Id_Types::is_eu_vat_country( $country ) ) {
+			return Tax_Id_Types::TYPE_EU_VAT;
 		}
 		$map = array(
-			'GB' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_GB_VAT,
-			'AU' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_AU_ABN,
-			'CA' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_CA_GST_HST,
-			'US' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_US_EIN,
-			'BR' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_BR_CNPJ,
-			'IN' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_IN_GST,
-			'AR' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_AR_CUIT,
-			'SA' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_SA_VAT,
+			'GB' => Tax_Id_Types::TYPE_GB_VAT,
+			'AU' => Tax_Id_Types::TYPE_AU_ABN,
+			'CA' => Tax_Id_Types::TYPE_CA_GST_HST,
+			'US' => Tax_Id_Types::TYPE_US_EIN,
+			'BR' => Tax_Id_Types::TYPE_BR_CNPJ,
+			'IN' => Tax_Id_Types::TYPE_IN_GST,
+			'AR' => Tax_Id_Types::TYPE_AR_CUIT,
+			'SA' => Tax_Id_Types::TYPE_SA_VAT,
 		);
-		return $map[ $country ] ?? \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_OTHER;
+		return $map[ $country ] ?? Tax_Id_Types::TYPE_OTHER;
 	}
 
 	/**
