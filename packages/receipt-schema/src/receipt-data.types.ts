@@ -19,6 +19,7 @@ export interface ReceiptData {
 	"totals": ReceiptObject | ReceiptObject[];
 	"tax_summary": ReceiptObject | ReceiptObject[];
 	"payments": ReceiptObject | ReceiptObject[];
+	"refunds": ReceiptObject | ReceiptObject[];
 	"fiscal": ReceiptObject | ReceiptObject[];
 	"presentation_hints": ReceiptObject | ReceiptObject[];
 	"i18n": ReceiptObject | ReceiptObject[];
@@ -38,9 +39,10 @@ export const receiptDataRequiredKeys = [
 	"totals",
 	"tax_summary",
 	"payments",
+	"refunds",
 	"fiscal",
 	"presentation_hints",
 	"i18n"
 ] as const;
 export type ReceiptDataRequiredKey = (typeof receiptDataRequiredKeys)[number];
-export const receiptDataSchemaVersion = "1.2.0" as const;
+export const receiptDataSchemaVersion = "1.4.0" as const;

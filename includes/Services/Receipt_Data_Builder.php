@@ -28,13 +28,14 @@ class Receipt_Data_Builder {
 
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
-			'mode'             => $mode,
 			'created_at_gmt'   => current_time( 'mysql', true ),
 			'created_at_local' => current_time( 'mysql', false ),
 			'order_id'         => $order->get_id(),
 			'order_number'     => $order->get_order_number(),
 			'currency'         => $order->get_currency(),
 			'customer_note'    => $order->get_customer_note(),
+			'wc_status'        => method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '',
+			'created_via'      => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
 		);
 
 		$receipt = array(
@@ -47,6 +48,8 @@ class Receipt_Data_Builder {
 			'number'        => (string) $order->get_order_number(),
 			'currency'      => (string) $order->get_currency(),
 			'customer_note' => (string) $order->get_customer_note(),
+			'wc_status'     => method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '',
+			'created_via'   => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
 			'created'       => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_created() ),
 			'paid'          => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_paid() ),
 			'completed'     => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_completed() ),
@@ -591,23 +594,85 @@ class Receipt_Data_Builder {
 				if ( ! $refund_item instanceof \WC_Order_Item_Product ) {
 					continue;
 				}
-				$refund_lines[] = array(
-					'name'  => (string) $refund_item->get_name(),
-					'sku'   => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
-					'qty'   => abs( (float) $refund_item->get_quantity() ),
-					'total' => abs( (float) $refund_item->get_total() ),
+				$line_total_excl = abs( (float) $refund_item->get_total() );
+				$line_total_tax  = abs( (float) $refund_item->get_total_tax() );
+				$line_total_incl = $line_total_excl + $line_total_tax;
+				$refund_lines[]  = array(
+					'name'       => (string) $refund_item->get_name(),
+					'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
+					'qty'        => abs( (float) $refund_item->get_quantity() ),
+					'total'      => $line_total_excl,
+					'total_incl' => $line_total_incl,
+					'total_excl' => $line_total_excl,
+					'taxes'      => $this->get_item_taxes( $refund_item ),
 				);
 			}
 
+			$refund_fees = array();
+			foreach ( $refund->get_items( 'fee' ) as $refund_fee ) {
+				if ( ! $refund_fee instanceof \WC_Order_Item_Fee ) {
+					continue;
+				}
+				$fee_total_excl = abs( (float) $refund_fee->get_total() );
+				$fee_total_tax  = abs( (float) $refund_fee->get_total_tax() );
+				$fee_total_incl = $fee_total_excl + $fee_total_tax;
+				$refund_fees[]  = array(
+					'label'      => (string) $refund_fee->get_name(),
+					'total'      => $fee_total_excl,
+					'total_incl' => $fee_total_incl,
+					'total_excl' => $fee_total_excl,
+					'taxes'      => $this->get_item_taxes( $refund_fee ),
+				);
+			}
+
+			$refund_shipping = array();
+			foreach ( $refund->get_items( 'shipping' ) as $refund_ship ) {
+				if ( ! $refund_ship instanceof \WC_Order_Item_Shipping ) {
+					continue;
+				}
+				$ship_total_excl   = abs( (float) $refund_ship->get_total() );
+				$ship_total_tax    = abs( (float) $refund_ship->get_total_tax() );
+				$ship_total_incl   = $ship_total_excl + $ship_total_tax;
+				$refund_shipping[] = array(
+					'label'      => (string) $refund_ship->get_name(),
+					'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
+					'total'      => $ship_total_excl,
+					'total_incl' => $ship_total_incl,
+					'total_excl' => $ship_total_excl,
+					'taxes'      => $this->get_item_taxes( $refund_ship ),
+				);
+			}
+
+			$pos_destination = (string) $refund->get_meta( '_pos_refund_destination' );
+			$pos_mode        = (string) $refund->get_meta( '_pos_refund_mode' );
+			$pos_gateway_id  = (string) $refund->get_meta( '_pos_refund_gateway_id' );
+			$pos_gateway_title = '';
+			if ( '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
+				$gateways = WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
+				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
+					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
+				}
+			}
+
 			$refunds[] = array(
-				'id'                => (int) $refund->get_id(),
-				'date'              => Receipt_Date_Formatter::from_wc_datetime( $refund->get_date_created() ),
-				'amount'            => abs( (float) $refund->get_amount() ),
-				'reason'            => (string) $refund->get_reason(),
-				'refunded_by_id'    => $refunded_by_id > 0 ? $refunded_by_id : null,
-				'refunded_by_name'  => $refunded_by_name,
-				'refunded_payment'  => method_exists( $refund, 'get_refunded_payment' ) ? (bool) $refund->get_refunded_payment() : false,
-				'lines'             => $refund_lines,
+				'id'               => (int) $refund->get_id(),
+				'date'             => Receipt_Date_Formatter::from_wc_datetime( $refund->get_date_created() ),
+				'amount'           => abs( (float) $refund->get_amount() ),
+				'subtotal'         => method_exists( $refund, 'get_subtotal' ) ? abs( (float) $refund->get_subtotal() ) : 0.0,
+				'tax_total'        => method_exists( $refund, 'get_total_tax' ) ? abs( (float) $refund->get_total_tax() ) : 0.0,
+				'shipping_total'   => method_exists( $refund, 'get_shipping_total' ) ? abs( (float) $refund->get_shipping_total() ) : 0.0,
+				'shipping_tax'     => method_exists( $refund, 'get_shipping_tax' ) ? abs( (float) $refund->get_shipping_tax() ) : 0.0,
+				'reason'           => (string) $refund->get_reason(),
+				'refunded_by_id'   => $refunded_by_id > 0 ? $refunded_by_id : null,
+				'refunded_by_name' => $refunded_by_name,
+				'refunded_payment' => method_exists( $refund, 'get_refunded_payment' ) ? (bool) $refund->get_refunded_payment() : false,
+				'destination'      => $pos_destination,
+				'gateway_id'       => $pos_gateway_id,
+				'gateway_title'    => $pos_gateway_title,
+				'processing_mode'  => $pos_mode,
+				'lines'            => $refund_lines,
+				'fees'             => $refund_fees,
+				'shipping'         => $refund_shipping,
 			);
 		}
 

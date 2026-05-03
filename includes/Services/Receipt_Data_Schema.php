@@ -17,7 +17,7 @@ class Receipt_Data_Schema {
 	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
 	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
 	 */
-	const VERSION = '1.3.0';
+	const VERSION = '1.4.0';
 
 	/**
 	 * Top-level keys required in a receipt payload.
@@ -127,6 +127,9 @@ class Receipt_Data_Schema {
 		'refund_total',
 		// Per-line refund.
 		'total_refunded',
+		// Refund-level totals.
+		'shipping_total',
+		'shipping_tax',
 		// Tax summary.
 		'taxable_amount_excl',
 		'tax_amount',
@@ -226,6 +229,14 @@ class Receipt_Data_Schema {
 					'customer_note' => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Note', 'woocommerce-pos' ),
+					),
+					'wc_status'    => array(
+						'type'  => 'string',
+						'label' => __( 'WC Status', 'woocommerce-pos' ),
+					),
+					'created_via'  => array(
+						'type'  => 'string',
+						'label' => __( 'Created Via', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -683,6 +694,22 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Refund Amount', 'woocommerce-pos' ),
 					),
+					'subtotal'          => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Subtotal', 'woocommerce-pos' ),
+					),
+					'tax_total'         => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Tax Total', 'woocommerce-pos' ),
+					),
+					'shipping_total'    => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+					),
+					'shipping_tax'      => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Shipping Tax', 'woocommerce-pos' ),
+					),
 					'reason'            => array(
 						'type'  => 'string',
 						'label' => __( 'Refund Reason', 'woocommerce-pos' ),
@@ -699,9 +726,33 @@ class Receipt_Data_Schema {
 						'type'  => 'boolean',
 						'label' => __( 'Refunded Payment', 'woocommerce-pos' ),
 					),
+					'destination'       => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Destination', 'woocommerce-pos' ),
+					),
+					'gateway_id'        => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Gateway ID', 'woocommerce-pos' ),
+					),
+					'gateway_title'     => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Gateway Title', 'woocommerce-pos' ),
+					),
+					'processing_mode'   => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Processing Mode', 'woocommerce-pos' ),
+					),
 					'lines'             => array(
 						'type'  => 'array',
 						'label' => __( 'Refund Lines', 'woocommerce-pos' ),
+					),
+					'fees'              => array(
+						'type'  => 'array',
+						'label' => __( 'Refund Fees', 'woocommerce-pos' ),
+					),
+					'shipping'          => array(
+						'type'  => 'array',
+						'label' => __( 'Refund Shipping', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -1109,13 +1160,14 @@ class Receipt_Data_Schema {
 			),
 			'meta'    => array(
 				'schema_version'   => self::VERSION,
-				'mode'             => 'sale',
 				'order_id'         => 1001,
 				'order_number'     => '#1001',
 				'created_at_gmt'   => '2024-01-15T10:30:00Z',
 				'created_at_local' => '2024-01-15 10:30:00',
 				'currency'         => 'USD',
 				'customer_note'    => '',
+				'wc_status'        => 'completed',
+				'created_via'      => 'woocommerce-pos',
 			),
 			'store'   => array(
 				'name'                    => 'My Store',

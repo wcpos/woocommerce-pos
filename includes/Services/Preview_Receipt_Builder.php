@@ -625,13 +625,14 @@ class Preview_Receipt_Builder {
 
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
-			'mode'             => 'preview',
 			'created_at_gmt'   => gmdate( 'Y-m-d H:i:s' ),
 			'created_at_local' => current_time( 'mysql', false ),
 			'order_id'         => 1234,
 			'order_number'     => '1234',
 			'currency'         => $currency,
 			'customer_note'    => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
+			'wc_status'        => 'completed',
+			'created_via'      => 'woocommerce-pos',
 		);
 
 		$created_timestamp   = strtotime( '2024-01-15 10:30:00 UTC' );
@@ -649,6 +650,8 @@ class Preview_Receipt_Builder {
 			'number'        => '1234',
 			'currency'      => $currency,
 			'customer_note' => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
+			'wc_status'     => 'completed',
+			'created_via'   => 'woocommerce-pos',
 			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, wp_timezone() ),
 			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, wp_timezone() ),
 			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, wp_timezone() ),

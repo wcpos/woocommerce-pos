@@ -177,7 +177,7 @@ class Receipt_Snapshot_Store {
 			$created  = current_time( 'mysql', true );
 
 			$snapshot['meta']['created_at_gmt']   = $created;
-			$snapshot['meta']['mode']             = 'fiscal';
+			$snapshot['receipt']['mode']          = 'fiscal';
 			$snapshot['fiscal']['sequence']       = $sequence;
 			$snapshot['fiscal']['receipt_number'] = (string) $sequence;
 			$snapshot['fiscal']['immutable_id']   = $order_id . ':' . $sequence;

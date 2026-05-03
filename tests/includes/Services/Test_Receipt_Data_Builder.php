@@ -88,7 +88,10 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		}
 
 		$this->assertEquals( Receipt_Data_Schema::VERSION, $payload['meta']['schema_version'] );
-		$this->assertEquals( 'live', $payload['meta']['mode'] );
+		$this->assertEquals( 'live', $payload['receipt']['mode'] );
+		$this->assertArrayNotHasKey( 'mode', $payload['meta'] );
+		$this->assertArrayHasKey( 'wc_status', $payload['meta'] );
+		$this->assertArrayHasKey( 'created_via', $payload['meta'] );
 	}
 
 	/**
@@ -716,6 +719,71 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEqualsWithDelta( 15.00, (float) $refund['amount'], 0.001 );
 		$this->assertNotEmpty( $refund['lines'] );
 		$this->assertEqualsWithDelta( 1.0, (float) $refund['lines'][0]['qty'], 0.001 );
+
+		// Schema v1.4.0: per-line tax sides + taxes[] passthrough.
+		$this->assertArrayHasKey( 'total_incl', $refund['lines'][0] );
+		$this->assertArrayHasKey( 'total_excl', $refund['lines'][0] );
+		$this->assertArrayHasKey( 'taxes', $refund['lines'][0] );
+
+		// Schema v1.4.0: refund-level totals.
+		$this->assertArrayHasKey( 'subtotal', $refund );
+		$this->assertArrayHasKey( 'tax_total', $refund );
+		$this->assertArrayHasKey( 'shipping_total', $refund );
+		$this->assertArrayHasKey( 'shipping_tax', $refund );
+
+		// Schema v1.4.0: refunded fee/shipping arrays exist (may be empty here).
+		$this->assertArrayHasKey( 'fees', $refund );
+		$this->assertArrayHasKey( 'shipping', $refund );
+
+		// Schema v1.4.0: Pro audit fields exist (empty strings when no Pro meta).
+		$this->assertArrayHasKey( 'destination', $refund );
+		$this->assertArrayHasKey( 'gateway_id', $refund );
+		$this->assertArrayHasKey( 'gateway_title', $refund );
+		$this->assertArrayHasKey( 'processing_mode', $refund );
+	}
+
+	/**
+	 * Test refund Pro audit meta is surfaced when present on the refund.
+	 */
+	public function test_build_refunds_include_pro_audit_meta(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Refundable' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->save();
+
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+
+		$refund = wc_create_refund(
+			array(
+				'amount'     => '10.00',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 10.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$refund->update_meta_data( '_pos_refund_destination', 'cash' );
+		$refund->update_meta_data( '_pos_refund_mode', 'manual' );
+		$refund->update_meta_data( '_pos_refund_gateway_id', 'cod' );
+		$refund->save();
+
+		$payload     = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+		$out_refund  = $payload['refunds'][0];
+
+		$this->assertSame( 'cash', $out_refund['destination'] );
+		$this->assertSame( 'manual', $out_refund['processing_mode'] );
+		$this->assertSame( 'cod', $out_refund['gateway_id'] );
 	}
 
 	/**

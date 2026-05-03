@@ -461,15 +461,17 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_basic_placeholder_substitution(): void {
 		$data = array(
-			'meta'  => array(
+			'meta'    => array(
 				'currency'     => 'USD',
 				'order_number' => '999',
-				'mode'         => 'live',
+			),
+			'receipt' => array(
+				'mode' => 'live',
 			),
 		);
 
 		$output = $this->render(
-			'<h1>{{meta.order_number}}</h1><p>{{meta.mode}}</p>',
+			'<h1>{{meta.order_number}}</h1><p>{{receipt.mode}}</p>',
 			$data
 		);
 

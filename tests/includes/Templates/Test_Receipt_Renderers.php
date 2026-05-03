@@ -49,7 +49,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$order        = OrderHelper::create_order();
 		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 		$template     = array(
-			'content' => '<h1>{{meta.order_number}}</h1><p>{{meta.mode}}</p>',
+			'content' => '<h1>{{meta.order_number}}</h1><p>{{receipt.mode}}</p>',
 		);
 
 		$renderer = new Logicless_Renderer();
