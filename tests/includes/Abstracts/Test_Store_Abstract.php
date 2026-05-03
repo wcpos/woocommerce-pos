@@ -6,6 +6,20 @@ use WCPOS\WooCommercePOS\Abstracts\Store;
 use WP_UnitTestCase;
 
 /**
+ * Test double that mirrors Pro's ability to seed Store properties directly.
+ */
+class Store_With_Test_Tax_Ids extends Store {
+	/**
+	 * Seed structured tax IDs using the Store data property.
+	 *
+	 * @param array<int,array<string,string>> $tax_ids Tax IDs to seed.
+	 */
+	public function set_test_tax_ids( array $tax_ids ): void {
+		$this->set_prop( 'tax_ids', $tax_ids );
+	}
+}
+
+/**
  * @internal
  *
  * @coversNothing
@@ -312,14 +326,12 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 	}
 
 	public function test_get_tax_id_uses_first_entry_for_non_zero_keys(): void {
-		$store = new Store();
-		$store->set_props(
+		$store = new Store_With_Test_Tax_Ids();
+		$store->set_test_tax_ids(
 			array(
-				'tax_ids' => array(
-					7 => array(
-						'type'  => 'eu_vat',
-						'value' => 'DE123456789',
-					),
+				7 => array(
+					'type'  => 'eu_vat',
+					'value' => 'DE123456789',
 				),
 			)
 		);
