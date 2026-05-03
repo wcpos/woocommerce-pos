@@ -346,4 +346,27 @@ interface StoreInterface {
 	 * @return array|false Array of image data, or false if no image.
 	 */
 	public function get_logo_image_src( $size = 'full' );
+
+	/**
+	 * Get Store tax IDs as a structured array.
+	 *
+	 * Each entry is array{ type:string, value:string, country?:string, label?:string }.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	public function get_tax_ids( $context = 'view' );
+
+	/**
+	 * Get the primary tax ID as a formatted scalar.
+	 *
+	 * Back-compat helper. Implementations should return the first tax_ids entry's
+	 * value, or empty string when no entries exist.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 *
+	 * @return string
+	 */
+	public function get_tax_id( $context = 'view' );
 }
