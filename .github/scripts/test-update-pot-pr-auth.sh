@@ -9,7 +9,12 @@ if [[ ! -f "$WORKFLOW_FILE" ]]; then
 fi
 
 if ! grep -Fq 'wp-cli/i18n-command:v2.2.13' "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command with a real v-prefixed tag" >&2
+  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command:v2.2.13" >&2
+  exit 1
+fi
+
+if ! grep -A4 -F 'name: Checkout code' "$WORKFLOW_FILE" | grep -Fq 'ref: main'; then
+  echo "Expected POT generation to start from main" >&2
   exit 1
 fi
 
@@ -48,8 +53,9 @@ if ! grep -Fq 'persist-credentials: false' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if grep -Fq 'Checkout main for PR' "$WORKFLOW_FILE"; then
-  echo "Expected no second checkout before create-pull-request; it can persist another Authorization header" >&2
+checkout_count=$(grep -Ec 'uses:[[:space:]]*actions/checkout@' "$WORKFLOW_FILE" || true)
+if (( checkout_count > 1 )); then
+  echo "Expected a single checkout step before create-pull-request to avoid duplicate Authorization headers" >&2
   exit 1
 fi
 
