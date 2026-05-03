@@ -17,7 +17,9 @@ test.describe('General Settings', () => {
 	test('General page renders toggle fields', async ({ adminPage }) => {
 		// The general page has several Toggle (Switch) controls
 		const switches = adminPage.locator('button[role="switch"]');
-		await expect(switches.first()).toBeVisible({ timeout: 10000 });
+		await expect(
+			adminPage.getByRole('switch', { name: 'Enable POS only products' })
+		).toBeVisible({ timeout: 10000 });
 
 		// Should have at least the pos_only_products, decimal_qty, and generate_username toggles
 		const count = await switches.count();
@@ -27,10 +29,12 @@ test.describe('General Settings', () => {
 	test('toggling a setting saves to the API and persists across reloads', async ({
 		adminPage,
 	}) => {
-		const firstSwitch = adminPage.locator('button[role="switch"]').first();
-		await expect(firstSwitch).toBeVisible({ timeout: 10000 });
+		const posOnlyProductsSwitch = adminPage.getByRole('switch', {
+			name: 'Enable POS only products',
+		});
+		await expect(posOnlyProductsSwitch).toBeVisible({ timeout: 10000 });
 
-		const wasChecked = await firstSwitch.getAttribute('aria-checked');
+		const wasChecked = await posOnlyProductsSwitch.getAttribute('aria-checked');
 
 		// Toggle and wait for the POST. waitForResponse must be set up BEFORE
 		// the click — clicking first races the listener attach against the
@@ -41,13 +45,13 @@ test.describe('General Settings', () => {
 				resp.request().method() === 'POST',
 			{ timeout: 15000 }
 		);
-		await firstSwitch.click();
+		await posOnlyProductsSwitch.click();
 		const postResp = await savedResponse;
 		expect(postResp.status()).toBe(200);
 
 		// UI reflects the new state.
-		const isCheckedNow = await firstSwitch.getAttribute('aria-checked');
-		expect(isCheckedNow).not.toBe(wasChecked);
+		const isCheckedNow = wasChecked === 'true' ? 'false' : 'true';
+		await expect(posOnlyProductsSwitch).toHaveAttribute('aria-checked', isCheckedNow);
 
 		// Reload the page and confirm the new state actually persisted on
 		// the server. Without this, a successful POST that wrote nothing
@@ -58,9 +62,8 @@ test.describe('General Settings', () => {
 		);
 		await adminPage.reload();
 		await settingsReloaded;
-		const reloadedSwitch = adminPage.locator('button[role="switch"]').first();
-		await expect(reloadedSwitch).toBeVisible({ timeout: 10000 });
-		await expect(reloadedSwitch).toHaveAttribute('aria-checked', isCheckedNow ?? '');
+		await expect(posOnlyProductsSwitch).toBeVisible({ timeout: 10000 });
+		await expect(posOnlyProductsSwitch).toHaveAttribute('aria-checked', isCheckedNow ?? '');
 
 		// Toggle back to restore original state and confirm the rollback save
 		// also returned 200, so the next test starts from a clean baseline.
@@ -70,9 +73,9 @@ test.describe('General Settings', () => {
 				resp.request().method() === 'POST',
 			{ timeout: 15000 }
 		);
-		await reloadedSwitch.click();
+		await posOnlyProductsSwitch.click();
 		const restoreResp = await restoreResponse;
 		expect(restoreResp.status()).toBe(200);
-		await expect(reloadedSwitch).toHaveAttribute('aria-checked', wasChecked ?? '');
+		await expect(posOnlyProductsSwitch).toHaveAttribute('aria-checked', wasChecked ?? '');
 	});
 });

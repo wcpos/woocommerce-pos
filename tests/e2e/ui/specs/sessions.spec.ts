@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/admin';
+import { test, expect, ADMIN_USER } from '../fixtures/admin';
 
 test.describe('Sessions Settings', () => {
 	test.beforeEach(async ({ adminPage }) => {
@@ -25,7 +25,9 @@ test.describe('Sessions Settings', () => {
 	test('current admin user has at least one session in the list', async ({ adminPage }) => {
 		// The user that just logged in via the fixture must appear with at
 		// least one session — if not, the auth/sessions wiring is broken.
-		await expect(adminPage.getByText('admin', { exact: false }).first()).toBeVisible({
+		await expect(
+			adminPage.getByText(ADMIN_USER.username, { exact: false }).first()
+		).toBeVisible({
 			timeout: 10000,
 		});
 	});
