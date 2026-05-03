@@ -1177,6 +1177,8 @@ class Receipt_Data_Schema {
 				'number'        => '1001',
 				'currency'      => 'USD',
 				'customer_note' => '',
+				'wc_status'     => 'completed',
+				'created_via'   => 'woocommerce-pos',
 				'created'       => $created,
 				'paid'          => $paid,
 				'completed'     => $completed,
