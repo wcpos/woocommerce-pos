@@ -51,6 +51,35 @@ class Receipt_I18n_Labels {
 			'tax_id_ca_gst_hst'      => __( 'GST/HST', 'woocommerce-pos' ),
 			'tax_id_us_ein'          => __( 'EIN', 'woocommerce-pos' ),
 			'tax_id_other'           => __( 'Tax ID', 'woocommerce-pos' ),
+
+			// Store tax IDs.
+			'store_tax_ids'                      => __( 'Tax IDs', 'woocommerce-pos' ),
+			// Store tax-ID per-type labels (separate namespace from customer-side
+			// tax_id_<type> keys added in PR #850 — same type can need different
+			// display copy on the store line vs the customer line per locale).
+			'store_tax_id_label_eu_vat'          => __( 'VAT ID', 'woocommerce-pos' ),
+			'store_tax_id_label_gb_vat'          => __( 'VAT No.', 'woocommerce-pos' ),
+			'store_tax_id_label_sa_vat'          => __( 'VAT No.', 'woocommerce-pos' ),
+			'store_tax_id_label_au_abn'          => __( 'ABN', 'woocommerce-pos' ),
+			'store_tax_id_label_br_cpf'          => __( 'CPF', 'woocommerce-pos' ),
+			'store_tax_id_label_br_cnpj'         => __( 'CNPJ', 'woocommerce-pos' ),
+			'store_tax_id_label_in_gst'          => __( 'GSTIN', 'woocommerce-pos' ),
+			'store_tax_id_label_it_cf'           => __( 'Codice Fiscale', 'woocommerce-pos' ),
+			'store_tax_id_label_it_piva'         => __( 'P.IVA', 'woocommerce-pos' ),
+			'store_tax_id_label_es_nif'          => __( 'NIF', 'woocommerce-pos' ),
+			'store_tax_id_label_ar_cuit'         => __( 'CUIT', 'woocommerce-pos' ),
+			'store_tax_id_label_ca_gst_hst'      => __( 'GST/HST No.', 'woocommerce-pos' ),
+			'store_tax_id_label_us_ein'          => __( 'EIN', 'woocommerce-pos' ),
+			'store_tax_id_label_de_ust_id'       => __( 'USt-IdNr.', 'woocommerce-pos' ),
+			'store_tax_id_label_de_steuernummer' => __( 'Steuernummer', 'woocommerce-pos' ),
+			'store_tax_id_label_de_hrb'          => __( 'HRB', 'woocommerce-pos' ),
+			'store_tax_id_label_nl_kvk'          => __( 'KVK', 'woocommerce-pos' ),
+			'store_tax_id_label_fr_siret'        => __( 'SIRET', 'woocommerce-pos' ),
+			'store_tax_id_label_fr_siren'        => __( 'SIREN', 'woocommerce-pos' ),
+			'store_tax_id_label_gb_company'      => __( 'Company No.', 'woocommerce-pos' ),
+			'store_tax_id_label_ch_uid'          => __( 'UID', 'woocommerce-pos' ),
+			'store_tax_id_label_other'           => __( 'Tax ID', 'woocommerce-pos' ),
+
 			'prepared_for'           => __( 'Prepared For', 'woocommerce-pos' ),
 			'processed_by'           => __( 'Processed by', 'woocommerce-pos' ),
 
