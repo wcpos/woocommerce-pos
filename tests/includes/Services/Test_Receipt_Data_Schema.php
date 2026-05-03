@@ -72,7 +72,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal' );
+		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'store.tax_ids', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'i18n' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -86,7 +86,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_marks_array_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$array_sections = array( 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' );
+		$array_sections = array( 'store.tax_ids', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' );
 		foreach ( $array_sections as $section ) {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
@@ -240,11 +240,20 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
 		$this->assertArrayHasKey( 'opening_hours_inline', $store );
 		$this->assertArrayHasKey( 'opening_hours_notes', $store );
+		$this->assertArrayHasKey( 'tax_ids', $store );
 		$this->assertIsString( $store['opening_hours_vertical'] );
 		$this->assertIsString( $store['opening_hours_inline'] );
 		$this->assertIsString( $store['opening_hours_notes'] );
+		$this->assertIsArray( $store['tax_ids'] );
+		$this->assertNotEmpty( $store['tax_ids'] );
 		$this->assertNotEmpty( $store['opening_hours_vertical'] );
 		$this->assertNotEmpty( $store['opening_hours_inline'] );
+		$this->assertArrayHasKey( 'type', $store['tax_ids'][0] );
+		$this->assertArrayHasKey( 'value', $store['tax_ids'][0] );
+		$this->assertArrayHasKey( 'country', $store['tax_ids'][0] );
+		$this->assertArrayHasKey( 'label', $store['tax_ids'][0] );
+		$this->assertSame( 'us_ein', $store['tax_ids'][0]['type'] );
+		$this->assertSame( '12-3456789', $store['tax_ids'][0]['value'] );
 	}
 
 	/**
@@ -299,6 +308,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'array', $schema['properties']['customer']['properties']['tax_ids']['type'] );
 		$this->assertSame( 'object', $schema['properties']['customer']['properties']['tax_ids']['items']['type'] );
 		$this->assertSame( 'string', $schema['properties']['customer']['properties']['tax_ids']['items']['properties']['value']['type'] );
+		$this->assertSame( 'array', $schema['properties']['store']['properties']['tax_ids']['type'] );
+		$this->assertSame( 'object', $schema['properties']['store']['properties']['tax_ids']['items']['type'] );
+		$this->assertSame( 'string', $schema['properties']['store']['properties']['tax_ids']['items']['properties']['value']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
 		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['grand_total']['type'] );
 		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['date']['type'] );
