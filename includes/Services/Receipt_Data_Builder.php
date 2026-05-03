@@ -340,7 +340,7 @@ class Receipt_Data_Builder {
 			'totals'             => $totals,
 			'tax_summary'        => $this->get_tax_summary( $order ),
 			'payments'           => $payments,
-			'refunds'            => $this->get_refunds( $order ),
+			'refunds'            => $this->get_refunds( $order, $display_incl ),
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels(),
@@ -564,11 +564,12 @@ class Receipt_Data_Builder {
 	/**
 	 * Build refunds[] block from $order->get_refunds().
 	 *
-	 * @param WC_Abstract_Order $order Order object.
+	 * @param WC_Abstract_Order $order        Order object.
+	 * @param bool              $display_incl Whether totals should be tax-inclusive (matches shop tax display).
 	 *
 	 * @return array
 	 */
-	private function get_refunds( WC_Abstract_Order $order ): array {
+	private function get_refunds( WC_Abstract_Order $order, bool $display_incl ): array {
 		$refunds = array();
 
 		if ( ! method_exists( $order, 'get_refunds' ) ) {
@@ -601,7 +602,7 @@ class Receipt_Data_Builder {
 					'name'       => (string) $refund_item->get_name(),
 					'sku'        => $refund_item->get_product() ? (string) $refund_item->get_product()->get_sku() : '',
 					'qty'        => abs( (float) $refund_item->get_quantity() ),
-					'total'      => $line_total_excl,
+					'total'      => $display_incl ? $line_total_incl : $line_total_excl,
 					'total_incl' => $line_total_incl,
 					'total_excl' => $line_total_excl,
 					'taxes'      => array_map(
@@ -624,7 +625,7 @@ class Receipt_Data_Builder {
 				$fee_total_incl = $fee_total_excl + $fee_total_tax;
 				$refund_fees[]  = array(
 					'label'      => (string) $refund_fee->get_name(),
-					'total'      => $fee_total_excl,
+					'total'      => $display_incl ? $fee_total_incl : $fee_total_excl,
 					'total_incl' => $fee_total_incl,
 					'total_excl' => $fee_total_excl,
 					'taxes'      => array_map(
@@ -648,7 +649,7 @@ class Receipt_Data_Builder {
 				$refund_shipping[] = array(
 					'label'      => (string) $refund_ship->get_name(),
 					'method_id'  => method_exists( $refund_ship, 'get_method_id' ) ? (string) $refund_ship->get_method_id() : '',
-					'total'      => $ship_total_excl,
+					'total'      => $display_incl ? $ship_total_incl : $ship_total_excl,
 					'total_incl' => $ship_total_incl,
 					'total_excl' => $ship_total_excl,
 					'taxes'      => array_map(

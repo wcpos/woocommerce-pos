@@ -738,6 +738,92 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test that refunded fee and shipping rows surface in refunds[].fees[] / refunds[].shipping[]
+	 * with the new schema v1.4.0 fields (label, total, total_incl, total_excl, taxes, method_id).
+	 */
+	public function test_build_refund_includes_fee_and_shipping_rows(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Refundable' );
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+
+		$fee = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Booking fee' );
+		$fee->set_total( '5.00' );
+		$fee->set_total_tax( '0.00' );
+		$order->add_item( $fee );
+
+		$shipping = new \WC_Order_Item_Shipping();
+		$shipping->set_method_title( 'Flat rate' );
+		$shipping->set_method_id( 'flat_rate' );
+		$shipping->set_total( '3.00' );
+		$shipping->set_total_tax( '0.00' );
+		$order->add_item( $shipping );
+
+		$order->calculate_totals();
+		$order->save();
+
+		$items       = $order->get_items( array( 'line_item', 'fee', 'shipping' ) );
+		$line_id     = 0;
+		$fee_id      = 0;
+		$shipping_id = 0;
+		foreach ( $items as $item ) {
+			if ( $item instanceof \WC_Order_Item_Product ) {
+				$line_id = $item->get_id();
+			} elseif ( $item instanceof \WC_Order_Item_Fee ) {
+				$fee_id = $item->get_id();
+			} elseif ( $item instanceof \WC_Order_Item_Shipping ) {
+				$shipping_id = $item->get_id();
+			}
+		}
+
+		wc_create_refund(
+			array(
+				'amount'     => '18.00',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_id     => array(
+						'qty'          => 1,
+						'refund_total' => 10.00,
+						'refund_tax'   => array(),
+					),
+					$fee_id      => array(
+						'refund_total' => 5.00,
+						'refund_tax'   => array(),
+					),
+					$shipping_id => array(
+						'refund_total' => 3.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+		$refund  = $payload['refunds'][0];
+
+		$this->assertNotEmpty( $refund['fees'] );
+		$fee_row = $refund['fees'][0];
+		$this->assertSame( 'Booking fee', $fee_row['label'] );
+		$this->assertEqualsWithDelta( 5.00, (float) $fee_row['total'], 0.001 );
+		$this->assertEqualsWithDelta( 5.00, (float) $fee_row['total_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 5.00, (float) $fee_row['total_incl'], 0.001 );
+		$this->assertSame( array(), $fee_row['taxes'] );
+
+		$this->assertNotEmpty( $refund['shipping'] );
+		$ship_row = $refund['shipping'][0];
+		$this->assertSame( 'Flat rate', $ship_row['label'] );
+		$this->assertSame( 'flat_rate', $ship_row['method_id'] );
+		$this->assertEqualsWithDelta( 3.00, (float) $ship_row['total'], 0.001 );
+		$this->assertEqualsWithDelta( 3.00, (float) $ship_row['total_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 3.00, (float) $ship_row['total_incl'], 0.001 );
+		$this->assertSame( array(), $ship_row['taxes'] );
+	}
+
+	/**
 	 * Test refund Pro audit meta is surfaced when present on the refund.
 	 */
 	public function test_build_refunds_include_pro_audit_meta(): void {
