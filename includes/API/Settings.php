@@ -281,6 +281,11 @@ class Settings extends WP_REST_Controller {
 					return \is_string( $param ) && \in_array( $param, array( 'allowed', 'denied', 'undecided' ), true );
 				},
 			),
+			'store_tax_ids' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_array( $param );
+				},
+			),
 		);
 	}
 
@@ -630,7 +635,11 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
 		$old_settings = woocommerce_pos_get_settings( 'general' );
-		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
+		$payload      = $request->get_json_params();
+		$settings     = array_replace_recursive( $old_settings, $payload );
+		if ( isset( $payload['store_tax_ids'] ) && \is_array( $payload['store_tax_ids'] ) ) {
+			$settings['store_tax_ids'] = $payload['store_tax_ids'];
+		}
 
 		$settings_service = SettingsService::instance();
 

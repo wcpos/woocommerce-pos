@@ -38,6 +38,7 @@ class Settings {
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
 			'tracking_consent'            => 'undecided',
+			'store_tax_ids'               => array(),
 		),
 		'tax_ids' => array(
 			'enabled'                => true,
@@ -245,6 +246,11 @@ class Settings {
 	 * @return array|WP_Error Returns the updated settings array on success or WP_Error on failure.
 	 */
 	public function save_settings( string $id, array $settings ) {
+		$sanitize_method = 'sanitize_' . $id . '_settings';
+		if ( method_exists( $this, $sanitize_method ) ) {
+			$settings = $this->$sanitize_method( $settings );
+		}
+
 		$settings = array_merge(
 			$settings,
 			array( 'date_modified_gmt' => current_time( 'mysql', true ) )
@@ -327,6 +333,7 @@ class Settings {
 				$settings[ $key ] = $value;
 			}
 		}
+		$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 
 		/*
 		 * Filters the general settings.
@@ -340,6 +347,77 @@ class Settings {
 		 * @hook woocommerce_pos_general_settings
 		 */
 		return apply_filters( 'woocommerce_pos_general_settings', $settings );
+	}
+
+	/**
+	 * Sanitize general settings before persisting.
+	 *
+	 * @param array $settings General settings.
+	 * @return array
+	 */
+	protected function sanitize_general_settings( array $settings ): array {
+		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
+			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
+		}
+
+		return $settings;
+	}
+
+	/**
+	 * Sanitize the additional free-store tax IDs entered in General settings.
+	 *
+	 * Drops malformed rows and keeps optional country/label fields only when
+	 * non-empty. Values are preserved verbatim apart from normal text-field
+	 * sanitization and surrounding whitespace.
+	 *
+	 * @param mixed $tax_ids Raw tax IDs.
+	 * @return array<int,array<string,string>>
+	 */
+	public static function sanitize_store_tax_ids( $tax_ids ): array {
+		if ( ! \is_array( $tax_ids ) ) {
+			return array();
+		}
+
+		$sanitized = array();
+		foreach ( $tax_ids as $tax_id ) {
+			if ( ! \is_array( $tax_id ) ) {
+				continue;
+			}
+
+			$type  = isset( $tax_id['type'] ) && \is_string( $tax_id['type'] )
+				? sanitize_key( $tax_id['type'] )
+				: '';
+			$value = isset( $tax_id['value'] ) && \is_string( $tax_id['value'] )
+				? trim( sanitize_text_field( $tax_id['value'] ) )
+				: '';
+
+			if ( '' === $type || '' === $value ) {
+				continue;
+			}
+
+			$entry = array(
+				'type'  => $type,
+				'value' => $value,
+			);
+
+			$country = isset( $tax_id['country'] ) && \is_string( $tax_id['country'] )
+				? strtoupper( trim( sanitize_text_field( $tax_id['country'] ) ) )
+				: '';
+			if ( '' !== $country ) {
+				$entry['country'] = $country;
+			}
+
+			$label = isset( $tax_id['label'] ) && \is_string( $tax_id['label'] )
+				? trim( sanitize_text_field( $tax_id['label'] ) )
+				: '';
+			if ( '' !== $label ) {
+				$entry['label'] = $label;
+			}
+
+			$sanitized[] = $entry;
+		}
+
+		return $sanitized;
 	}
 
 	/**

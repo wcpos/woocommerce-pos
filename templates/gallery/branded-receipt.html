@@ -24,9 +24,14 @@ payment details with tendered/change.
 			{{#store.email}}
 			<div style="font-size: 12px; color: #666;">{{store.email}}</div>
 			{{/store.email}}
+			{{#store.tax_ids}}
+			<div style="font-size: 12px; color: #666;">{{label}}: {{value}}</div>
+			{{/store.tax_ids}}
+			{{^store.tax_ids}}
 			{{#store.tax_id}}
-			<div style="font-size: 12px; color: #666;">Tax ID: {{store.tax_id}}</div>
+			<div style="font-size: 12px; color: #666;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
 			{{/store.tax_id}}
+			{{/store.tax_ids}}
 			{{#store.opening_hours}}
 			<div style="font-size: 11px; color: #666; margin-top: 4px; white-space: pre-line;">{{store.opening_hours}}</div>
 			{{/store.opening_hours}}
