@@ -40,15 +40,9 @@ class Settings {
 			'tracking_consent'            => 'undecided',
 		),
 		'tax_ids' => array(
-			'enabled'                => true,
-			'capture_on_customer'    => true,
-			'capture_on_cart'        => true,
-			'show_on_receipt'        => true,
-			// Soft B2B gate: null disables; otherwise { country, amount, currency }.
-			'b2b_required_threshold' => null,
 			// Per-type meta-key write overrides. Empty by default: the composed
 			// write_map (defaults + plugin detection + scan) is used.
-			'write_map'              => array(),
+			'write_map' => array(),
 		),
 		'checkout' => array(
 			'receipt_default_mode' => 'fiscal',
