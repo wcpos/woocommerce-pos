@@ -68,6 +68,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'personal_notes',
 			'policies_and_conditions',
 			'footer_imprint',
+			'tax_ids',
 		);
 	}
 
@@ -234,5 +235,73 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$is_cashier = $this->store->get_default_customer_is_cashier();
 		$this->assertIsBool( $is_cashier );
 		$this->assertFalse( $is_cashier ); // Default value
+	}
+
+	public function test_get_tax_ids_returns_empty_when_wc_option_blank(): void {
+		update_option( 'woocommerce_store_tax_number', '' );
+		$store = new Store();
+		$this->assertSame( array(), $store->get_tax_ids() );
+		$this->assertSame( '', $store->get_tax_id() );
+	}
+
+	public function test_get_tax_ids_derives_eu_vat_from_de_country(): void {
+		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
+		update_option( 'woocommerce_default_country', 'DE:BY' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertCount( 1, $tax_ids );
+		$this->assertSame( 'eu_vat', $tax_ids[0]['type'] );
+		$this->assertSame( 'DE123456789', $tax_ids[0]['value'] );
+		$this->assertSame( 'DE', $tax_ids[0]['country'] );
+		$this->assertSame( 'DE123456789', $store->get_tax_id() );
+	}
+
+	public function test_get_tax_ids_derives_eu_vat_from_gr_country(): void {
+		update_option( 'woocommerce_store_tax_number', 'GR123456789' );
+		update_option( 'woocommerce_default_country', 'GR' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertCount( 1, $tax_ids );
+		$this->assertSame( 'eu_vat', $tax_ids[0]['type'] );
+		$this->assertSame( 'GR123456789', $tax_ids[0]['value'] );
+		$this->assertSame( 'GR', $tax_ids[0]['country'] );
+		$this->assertSame( 'GR123456789', $store->get_tax_id() );
+	}
+
+	public function test_get_tax_ids_derives_gb_vat(): void {
+		update_option( 'woocommerce_store_tax_number', 'GB123456789' );
+		update_option( 'woocommerce_default_country', 'GB' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertSame( 'gb_vat', $tax_ids[0]['type'] );
+		$this->assertSame( 'GB', $tax_ids[0]['country'] );
+	}
+
+	public function test_get_tax_ids_derives_au_abn(): void {
+		update_option( 'woocommerce_store_tax_number', '12345678901' );
+		update_option( 'woocommerce_default_country', 'AU' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertSame( 'au_abn', $tax_ids[0]['type'] );
+		$this->assertSame( 'AU', $tax_ids[0]['country'] );
+		$this->assertSame( '12345678901', $tax_ids[0]['value'] );
+	}
+
+	public function test_get_tax_ids_falls_back_to_other_for_unknown_country(): void {
+		update_option( 'woocommerce_store_tax_number', 'XYZ-999' );
+		update_option( 'woocommerce_default_country', 'JP' ); // JP not auto-detected to a specific type today; falls to 'other'.
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertSame( 'other', $tax_ids[0]['type'] );
+		$this->assertSame( 'JP', $tax_ids[0]['country'] );
+	}
+
+	public function test_get_tax_ids_preserves_country_prefix_in_value_verbatim(): void {
+		update_option( 'woocommerce_store_tax_number', 'IT01234567890' );
+		update_option( 'woocommerce_default_country', 'IT' );
+		$store = new Store();
+		$tax_ids = $store->get_tax_ids();
+		$this->assertSame( 'IT', $tax_ids[0]['country'] );
+		$this->assertSame( 'IT01234567890', $tax_ids[0]['value'] ); // value retains the prefix verbatim; country is the inferred ISO code.
 	}
 }

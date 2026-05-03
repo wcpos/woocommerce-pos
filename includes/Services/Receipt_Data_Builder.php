@@ -75,6 +75,12 @@ class Receipt_Data_Builder {
 		$store_phone           = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
 		$store_email           = (string) $this->get_store_value( $pos_store, 'get_email', '' );
 
+		$store_tax_id  = (string) $this->get_store_value( $pos_store, 'get_tax_id', '' );
+		$store_tax_ids = $this->get_store_value( $pos_store, 'get_tax_ids', array() );
+		if ( ! is_array( $store_tax_ids ) ) {
+			$store_tax_ids = array();
+		}
+
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
 			'address_lines' => array_values(
@@ -87,7 +93,8 @@ class Receipt_Data_Builder {
 					)
 				)
 			),
-			'tax_id'        => get_option( 'woocommerce_store_tax_number', '' ),
+			'tax_id'        => $store_tax_id,
+			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
 			'email'         => $store_email,
 		);
