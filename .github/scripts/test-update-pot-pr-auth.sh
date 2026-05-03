@@ -23,13 +23,13 @@ if ! grep -Fq 'actions/create-github-app-token@' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if ! grep -Fq "app-id: \${{ secrets.TRANSLATION_APP_ID }}" "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to use TRANSLATION_APP_ID for PR creation" >&2
+if ! grep -Fq "app-id: \${{ secrets.WCPOS_BOT_APP_ID }}" "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to use WCPOS_BOT_APP_ID for PR creation" >&2
   exit 1
 fi
 
-if ! grep -Fq "private-key: \${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}" "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to use TRANSLATION_APP_PRIVATE_KEY for PR creation" >&2
+if ! grep -Fq "private-key: \${{ secrets.WCPOS_BOT_PRIVATE_KEY }}" "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to use WCPOS_BOT_PRIVATE_KEY for PR creation" >&2
   exit 1
 fi
 
@@ -58,4 +58,4 @@ if grep -Fq 'gh pr create' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-echo "Update POT workflow uses quiet make-pot generation and non-duplicated Translation App PR auth"
+echo "Update POT workflow uses quiet make-pot generation and non-duplicated WCPOS Bot App PR auth"
