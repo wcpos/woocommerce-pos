@@ -8,8 +8,13 @@ if [[ ! -f "$WORKFLOW_FILE" ]]; then
   exit 1
 fi
 
-if ! grep -Fq 'wp-cli/i18n-command:v2.2.13' "$WORKFLOW_FILE"; then
-  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command with a real v-prefixed tag" >&2
+if ! grep -Eq 'wp-cli/i18n-command:v[0-9]+\.[0-9]+\.[0-9]+' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE to install wp-cli/i18n-command with a v-prefixed semantic version tag" >&2
+  exit 1
+fi
+
+if ! grep -A4 -F 'name: Checkout code' "$WORKFLOW_FILE" | grep -Fq 'ref: main'; then
+  echo "Expected POT generation to start from main" >&2
   exit 1
 fi
 
@@ -38,8 +43,18 @@ if ! grep -Fq 'peter-evans/create-pull-request@' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-if ! grep -Fq "token: \${{ steps.app-token.outputs.token }}" "$WORKFLOW_FILE"; then
+if ! grep -A15 -F 'peter-evans/create-pull-request@' "$WORKFLOW_FILE" | grep -Fq "token: \${{ steps.app-token.outputs.token }}"; then
   echo "Expected create-pull-request to use the GitHub App token output" >&2
+  exit 1
+fi
+
+if ! grep -A6 -F 'name: Checkout main for PR' "$WORKFLOW_FILE" | grep -Fq 'ref: main'; then
+  echo "Expected POT PR creation to force checkout of main" >&2
+  exit 1
+fi
+
+if ! grep -A6 -F 'name: Checkout main for PR' "$WORKFLOW_FILE" | grep -Fq "token: \${{ steps.app-token.outputs.token }}"; then
+  echo "Expected checkout of main to use the GitHub App token output" >&2
   exit 1
 fi
 

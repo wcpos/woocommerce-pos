@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
 
       - name: Setup PHP with tools
         uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
@@ -66,6 +68,17 @@ jobs:
           private-key: ${{ secrets.TRANSLATION_APP_PRIVATE_KEY }}
           owner: wcpos
           repositories: woocommerce-pos
+
+      - name: Checkout main for PR
+        if: steps.git-diff.outputs.changes == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Update POT file on main
+        if: steps.git-diff.outputs.changes == 'true'
+        run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WCPOS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}" --skip-audit
 
       - name: Create PR with updated POT file
         if: steps.git-diff.outputs.changes == 'true'
