@@ -406,6 +406,14 @@
 					"type": "string",
 					"const": "1.4.0",
 					"description": "Receipt data schema version."
+				},
+				"wc_status": {
+					"type": "string",
+					"description": "WooCommerce order status (e.g. processing, completed, refunded)."
+				},
+				"created_via": {
+					"type": "string",
+					"description": "How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api)."
 				}
 			}
 		},
@@ -509,6 +517,34 @@
 				"tax_id": {
 					"type": "string",
 					"description": "Tax ID"
+				},
+				"tax_ids": {
+					"type": "array",
+					"additionalProperties": true,
+					"properties": [],
+					"description": "Customer Tax IDs",
+					"items": {
+						"type": "object",
+						"additionalProperties": true,
+						"properties": {
+							"type": {
+								"type": "string",
+								"description": "Type"
+							},
+							"value": {
+								"type": "string",
+								"description": "Value"
+							},
+							"country": {
+								"type": "string",
+								"description": "Country"
+							},
+							"label": {
+								"type": "string",
+								"description": "Label"
+							}
+						}
+					}
 				}
 			},
 			"description": "Customer"
@@ -1060,6 +1096,10 @@
 						"type": "number",
 						"description": "Refund ID"
 					},
+					"date": {
+						"type": "object",
+						"description": "Refund Date"
+					},
 					"amount": {
 						"type": [
 							"number",
@@ -1131,42 +1171,159 @@
 						"type": "array",
 						"description": "Refund Lines",
 						"items": {
-							"type": [
-								"string",
-								"number",
-								"boolean",
-								"object",
-								"array",
-								"null"
-							]
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Product Name"
+								},
+								"sku": {
+									"type": "string",
+									"description": "SKU"
+								},
+								"qty": {
+									"type": "number",
+									"description": "Quantity"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Line Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
 						}
 					},
 					"fees": {
 						"type": "array",
 						"description": "Refund Fees",
 						"items": {
-							"type": [
-								"string",
-								"number",
-								"boolean",
-								"object",
-								"array",
-								"null"
-							]
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"label": {
+									"type": "string",
+									"description": "Fee Label"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Fee Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
 						}
 					},
 					"shipping": {
 						"type": "array",
 						"description": "Refund Shipping",
 						"items": {
-							"type": [
-								"string",
-								"number",
-								"boolean",
-								"object",
-								"array",
-								"null"
-							]
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"label": {
+									"type": "string",
+									"description": "Shipping Label"
+								},
+								"method_id": {
+									"type": "string",
+									"description": "Shipping Method ID"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Shipping Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
 						}
 					}
 				},

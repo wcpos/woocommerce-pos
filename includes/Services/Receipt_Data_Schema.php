@@ -751,31 +751,93 @@ class Receipt_Data_Schema {
 						'label'    => __( 'Refund Lines', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
-							'name'  => array(
+							'name'       => array(
 								'type'  => 'string',
 								'label' => __( 'Product Name', 'woocommerce-pos' ),
 							),
-							'sku'   => array(
+							'sku'        => array(
 								'type'  => 'string',
 								'label' => __( 'SKU', 'woocommerce-pos' ),
 							),
-							'qty'   => array(
+							'qty'        => array(
 								'type'  => 'number',
 								'label' => __( 'Quantity', 'woocommerce-pos' ),
 							),
-							'total' => array(
+							'total'      => array(
 								'type'  => 'money',
 								'label' => __( 'Refund Line Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Line Taxes', 'woocommerce-pos' ),
 							),
 						),
 					),
 					'fees'              => array(
-						'type'  => 'array',
-						'label' => __( 'Refund Fees', 'woocommerce-pos' ),
+						'type'     => 'array',
+						'label'    => __( 'Refund Fees', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label'      => array(
+								'type'  => 'string',
+								'label' => __( 'Fee Label', 'woocommerce-pos' ),
+							),
+							'total'      => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Fee Taxes', 'woocommerce-pos' ),
+							),
+						),
 					),
 					'shipping'          => array(
-						'type'  => 'array',
-						'label' => __( 'Refund Shipping', 'woocommerce-pos' ),
+						'type'     => 'array',
+						'label'    => __( 'Refund Shipping', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label'      => array(
+								'type'  => 'string',
+								'label' => __( 'Shipping Label', 'woocommerce-pos' ),
+							),
+							'method_id'  => array(
+								'type'  => 'string',
+								'label' => __( 'Shipping Method ID', 'woocommerce-pos' ),
+							),
+							'total'      => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Shipping Taxes', 'woocommerce-pos' ),
+							),
+						),
 					),
 				),
 			),
@@ -994,6 +1056,14 @@ class Receipt_Data_Schema {
 			'type'        => 'string',
 			'const'       => self::VERSION,
 			'description' => 'Receipt data schema version.',
+		);
+		$schema['properties']['meta']['properties']['wc_status'] = array(
+			'type'        => 'string',
+			'description' => 'WooCommerce order status (e.g. processing, completed, refunded).',
+		);
+		$schema['properties']['meta']['properties']['created_via'] = array(
+			'type'        => 'string',
+			'description' => 'How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api).',
 		);
 
 		return $schema;

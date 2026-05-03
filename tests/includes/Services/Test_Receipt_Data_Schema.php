@@ -110,11 +110,44 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'lines', $refunds );
 		$this->assertSame( 'array', $refunds['lines']['type'] );
 		$this->assertTrue( $refunds['lines']['is_array'] );
-		$this->assertSame( array( 'name', 'sku', 'qty', 'total' ), array_keys( $refunds['lines']['fields'] ) );
+		foreach ( array( 'name', 'sku', 'qty', 'total', 'total_incl', 'total_excl', 'taxes' ) as $field ) {
+			$this->assertArrayHasKey( $field, $refunds['lines']['fields'], "refunds.lines missing {$field}" );
+		}
 		$this->assertSame( 'string', $refunds['lines']['fields']['name']['type'] );
 		$this->assertSame( 'string', $refunds['lines']['fields']['sku']['type'] );
 		$this->assertSame( 'number', $refunds['lines']['fields']['qty']['type'] );
 		$this->assertSame( 'money', $refunds['lines']['fields']['total']['type'] );
+		$this->assertSame( 'money', $refunds['lines']['fields']['total_incl']['type'] );
+		$this->assertSame( 'money', $refunds['lines']['fields']['total_excl']['type'] );
+		$this->assertSame( 'array', $refunds['lines']['fields']['taxes']['type'] );
+
+		$this->assertArrayHasKey( 'fees', $refunds );
+		$this->assertTrue( $refunds['fees']['is_array'] );
+		foreach ( array( 'label', 'total', 'total_incl', 'total_excl', 'taxes' ) as $field ) {
+			$this->assertArrayHasKey( $field, $refunds['fees']['fields'], "refunds.fees missing {$field}" );
+		}
+		$this->assertSame( 'money', $refunds['fees']['fields']['total_incl']['type'] );
+
+		$this->assertArrayHasKey( 'shipping', $refunds );
+		$this->assertTrue( $refunds['shipping']['is_array'] );
+		foreach ( array( 'label', 'method_id', 'total', 'total_incl', 'total_excl', 'taxes' ) as $field ) {
+			$this->assertArrayHasKey( $field, $refunds['shipping']['fields'], "refunds.shipping missing {$field}" );
+		}
+		$this->assertSame( 'string', $refunds['shipping']['fields']['method_id']['type'] );
+	}
+
+	/**
+	 * Test JSON schema declares the new Phase 3 meta fields.
+	 */
+	public function test_get_json_schema_meta_includes_wc_status_and_created_via(): void {
+		$schema      = Receipt_Data_Schema::get_json_schema();
+		$meta_props  = $schema['properties']['meta']['properties'];
+
+		$this->assertArrayHasKey( 'wc_status', $meta_props );
+		$this->assertSame( 'string', $meta_props['wc_status']['type'] );
+
+		$this->assertArrayHasKey( 'created_via', $meta_props );
+		$this->assertSame( 'string', $meta_props['created_via']['type'] );
 	}
 
 	/**
