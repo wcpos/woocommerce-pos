@@ -604,7 +604,13 @@ class Receipt_Data_Builder {
 					'total'      => $line_total_excl,
 					'total_incl' => $line_total_incl,
 					'total_excl' => $line_total_excl,
-					'taxes'      => $this->get_item_taxes( $refund_item ),
+					'taxes'      => array_map(
+						static function ( array $tax ): array {
+							$tax['amount'] = abs( (float) $tax['amount'] );
+							return $tax;
+						},
+						$this->get_item_taxes( $refund_item )
+					),
 				);
 			}
 
@@ -621,7 +627,13 @@ class Receipt_Data_Builder {
 					'total'      => $fee_total_excl,
 					'total_incl' => $fee_total_incl,
 					'total_excl' => $fee_total_excl,
-					'taxes'      => $this->get_item_taxes( $refund_fee ),
+					'taxes'      => array_map(
+						static function ( array $tax ): array {
+							$tax['amount'] = abs( (float) $tax['amount'] );
+							return $tax;
+						},
+						$this->get_item_taxes( $refund_fee )
+					),
 				);
 			}
 
@@ -639,7 +651,13 @@ class Receipt_Data_Builder {
 					'total'      => $ship_total_excl,
 					'total_incl' => $ship_total_incl,
 					'total_excl' => $ship_total_excl,
-					'taxes'      => $this->get_item_taxes( $refund_ship ),
+					'taxes'      => array_map(
+						static function ( array $tax ): array {
+							$tax['amount'] = abs( (float) $tax['amount'] );
+							return $tax;
+						},
+						$this->get_item_taxes( $refund_ship )
+					),
 				);
 			}
 
@@ -648,6 +666,7 @@ class Receipt_Data_Builder {
 			$pos_gateway_id  = (string) $refund->get_meta( '_pos_refund_gateway_id' );
 			$pos_gateway_title = '';
 			if ( '' !== $pos_gateway_id && function_exists( 'WC' ) ) {
+				WC()->payment_gateways();
 				$gateways = WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : array();
 				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
 					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
