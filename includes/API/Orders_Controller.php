@@ -23,6 +23,9 @@ use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use WP_Error;
 use WP_REST_Request;
@@ -301,6 +304,36 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			'readonly'    => false,
 		);
 
+		// Add structured tax_ids property (TaxId[]) snapshotted from the customer
+		// at create time. Editable via update for corrections.
+		$schema['properties']['tax_ids'] = array(
+			'description' => __( 'Customer tax IDs snapshotted at sale time.', 'woocommerce-pos' ),
+			'type'        => 'array',
+			'context'     => array( 'view', 'edit' ),
+			'items'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'type'    => array(
+						'type'        => 'string',
+						'enum'        => Tax_Id_Types::all_types(),
+						'description' => __( 'Tax ID type.', 'woocommerce-pos' ),
+					),
+					'value'   => array(
+						'type'        => 'string',
+						'description' => __( 'Tax ID value.', 'woocommerce-pos' ),
+					),
+					'country' => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'ISO 3166-1 alpha-2 country code.', 'woocommerce-pos' ),
+					),
+					'label'   => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'Optional human-readable label.', 'woocommerce-pos' ),
+					),
+				),
+			),
+		);
+
 		// Check and remove email format validation from the billing property.
 		if ( isset( $schema['properties']['billing']['properties']['email']['format'] ) ) {
 			unset( $schema['properties']['billing']['properties']['email']['format'] );
@@ -384,7 +417,10 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		$this->is_creating = true;
 
 		// Proceed with the parent method to handle the creation.
-		return parent::create_item( $request );
+		$response = parent::create_item( $request );
+		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
+
+		return $response;
 	}
 
 	/**
@@ -401,7 +437,55 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		}
 
 		// Proceed with the parent method to handle the update.
-		return parent::update_item( $request );
+		$response = parent::update_item( $request );
+		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, false );
+
+		return $response;
+	}
+
+	/**
+	 * Persist tax_ids onto the order.
+	 *
+	 * On create: if the request did not provide `tax_ids`, snapshot from the
+	 * resolved customer record so the order is self-contained. If the request
+	 * provided `tax_ids`, write those (cashier-entered tax IDs override).
+	 *
+	 * On update: only write what the request explicitly provided; never
+	 * re-snapshot, since editing a customer must not mutate historical orders.
+	 *
+	 * @param mixed           $response   Response from parent controller.
+	 * @param WP_REST_Request $request    Original request.
+	 * @param bool            $is_create  True for create, false for update.
+	 */
+	protected function wcpos_snapshot_tax_ids_to_order( $response, WP_REST_Request $request, bool $is_create ): void {
+		if ( ! ( $response instanceof WP_REST_Response ) ) {
+			return;
+		}
+
+		$data     = $response->get_data();
+		$order_id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+		if ( $order_id <= 0 ) {
+			return;
+		}
+		$order = \wc_get_order( $order_id );
+		if ( ! $order ) {
+			return;
+		}
+
+		$tax_ids = $request->get_param( 'tax_ids' );
+		$writer  = new Tax_Id_Writer();
+
+		if ( \is_array( $tax_ids ) ) {
+			$writer->write_for_order( $order, $tax_ids );
+		} elseif ( $is_create ) {
+			$customer_id = (int) $order->get_customer_id();
+			if ( $customer_id > 0 ) {
+				$writer->snapshot_from_user_to_order( $order, $customer_id );
+			}
+		}
+
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
+		$response->set_data( $data );
 	}
 
 	/**
@@ -814,6 +898,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Parse the meta data before returning the response.
 		$data['meta_data'] = $this->wcpos_parse_meta_data( $order );
+
+		// Add structured tax_ids list (read fallback across legacy plugin meta keys).
+		$data['tax_ids'] = ( new Tax_Id_Reader() )->read_for_order( $order );
 
 		// Estimate response size and log if excessive.
 		$this->wcpos_estimate_response_size( $data, $order->get_id(), 'Order' );

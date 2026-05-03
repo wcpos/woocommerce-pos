@@ -975,13 +975,125 @@ class Preview_Receipt_Builder {
 			'country'    => $country,
 		);
 
+		$tax_ids = self::sample_tax_ids_for_country( $country );
+		$primary = '';
+		if ( ! empty( $tax_ids ) ) {
+			$primary_country = isset( $tax_ids[0]['country'] ) ? (string) $tax_ids[0]['country'] : '';
+			$primary_value   = (string) $tax_ids[0]['value'];
+			$is_vat          = \in_array(
+				$tax_ids[0]['type'],
+				array( Tax_Id_Types::TYPE_EU_VAT, Tax_Id_Types::TYPE_GB_VAT ),
+				true
+			);
+			$primary         = ( $is_vat && '' !== $primary_country && ! preg_match( '/^[A-Z]{2}/', $primary_value ) )
+				? $primary_country . $primary_value
+				: $primary_value;
+		}
+
 		return array(
 			'id'               => 42,
 			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
 			'billing_address'  => $billing,
 			'shipping_address' => $shipping,
-			'tax_id'           => '',
+			'tax_id'           => $primary,
+			'tax_ids'          => $tax_ids,
 		);
+	}
+
+	/**
+	 * Sample tax ID list for the given country, used by the receipt preview.
+	 *
+	 * Values are realistic-shape but fictitious. Returns an empty array for
+	 * countries without a representative sample.
+	 *
+	 * @param string $country ISO 3166-1 alpha-2 country code.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function sample_tax_ids_for_country( string $country ): array {
+		$country = strtoupper( $country );
+
+		$samples = array(
+			'GB' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_GB_VAT,
+					'value'   => '123456789',
+					'country' => 'GB',
+				),
+			),
+			'DE' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_EU_VAT,
+					'value'   => '123456789',
+					'country' => 'DE',
+				),
+			),
+			'FR' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_EU_VAT,
+					'value'   => '12345678901',
+					'country' => 'FR',
+				),
+			),
+			'NL' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_EU_VAT,
+					'value'   => '123456789B01',
+					'country' => 'NL',
+				),
+			),
+			'ES' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_ES_NIF,
+					'value'   => 'B12345678',
+					'country' => 'ES',
+				),
+			),
+			'IT' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_IT_PIVA,
+					'value'   => '12345678901',
+					'country' => 'IT',
+				),
+			),
+			'AU' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_AU_ABN,
+					'value'   => '53004085616',
+					'country' => 'AU',
+				),
+			),
+			'CA' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_CA_GST_HST,
+					'value'   => '123456789RT0001',
+					'country' => 'CA',
+				),
+			),
+			'IN' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_IN_GST,
+					'value'   => '29ABCDE1234F1Z5',
+					'country' => 'IN',
+				),
+			),
+			'BR' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_BR_CPF,
+					'value'   => '12345678909',
+					'country' => 'BR',
+				),
+			),
+			'US' => array(
+				array(
+					'type'    => Tax_Id_Types::TYPE_US_EIN,
+					'value'   => '12-3456789',
+					'country' => 'US',
+				),
+			),
+		);
+
+		return $samples[ $country ] ?? array();
 	}
 
 	/**

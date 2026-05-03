@@ -132,12 +132,17 @@ class Receipt_Data_Builder {
 			$customer_name = __( 'Guest', 'woocommerce-pos' );
 		}
 
+		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
+
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
 			'name'             => $customer_name,
 			'billing_address'  => $order->get_address( 'billing' ),
 			'shipping_address' => $order->get_address( 'shipping' ),
-			'tax_id'           => '',
+			// Backward-compat scalar — first formatted tax-ID value, or empty.
+			'tax_id'           => $this->format_primary_tax_id( $tax_ids ),
+			// Structured TaxId[] — read fallback across the legacy meta-key inventory.
+			'tax_ids'          => $tax_ids,
 		);
 
 		$lines = array();
@@ -393,6 +398,40 @@ class Receipt_Data_Builder {
 		}
 
 		return $pos_store->{$getter}();
+	}
+
+	/**
+	 * Format the primary tax ID for the legacy `customer.tax_id` scalar.
+	 *
+	 * For VAT types we render `<COUNTRY><VALUE>` (e.g. `DE123456789`) when the
+	 * value isn't already country-prefixed; for everything else we use the raw
+	 * value. Returns an empty string when the tax-ID list is empty.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Tax ID list.
+	 *
+	 * @return string
+	 */
+	private function format_primary_tax_id( array $tax_ids ): string {
+		if ( empty( $tax_ids ) ) {
+			return '';
+		}
+
+		$primary = $tax_ids[0];
+		$value   = isset( $primary['value'] ) ? (string) $primary['value'] : '';
+		$country = isset( $primary['country'] ) ? (string) $primary['country'] : '';
+		$type    = isset( $primary['type'] ) ? (string) $primary['type'] : '';
+
+		$is_vat = \in_array(
+			$type,
+			array( Tax_Id_Types::TYPE_EU_VAT, Tax_Id_Types::TYPE_GB_VAT ),
+			true
+		);
+
+		if ( $is_vat && '' !== $country && ! preg_match( '/^[A-Z]{2}/', $value ) ) {
+			return $country . $value;
+		}
+
+		return $value;
 	}
 
 	/**
