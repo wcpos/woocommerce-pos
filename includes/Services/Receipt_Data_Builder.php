@@ -671,8 +671,7 @@ class Receipt_Data_Builder {
 				// WC_Payment_Gateways::instance() lazily) instead of the
 				// WC()->payment_gateways property — the property can legitimately
 				// be null mid-bootstrap or in some test environments.
-				$registry = WC()->payment_gateways();
-				$gateways = $registry ? $registry->payment_gateways() : array();
+				$gateways = WC()->payment_gateways()->payment_gateways();
 				if ( isset( $gateways[ $pos_gateway_id ] ) && method_exists( $gateways[ $pos_gateway_id ], 'get_title' ) ) {
 					$pos_gateway_title = (string) $gateways[ $pos_gateway_id ]->get_title();
 				}
