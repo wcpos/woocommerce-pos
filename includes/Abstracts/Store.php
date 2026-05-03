@@ -77,6 +77,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'personal_notes'              => '',
 		'policies_and_conditions'     => '',
 		'footer_imprint'              => '',
+		'tax_ids'                     => array(),
 	);
 
 	/**
@@ -467,6 +468,67 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'personal_notes', '' );
 		$this->set_prop( 'policies_and_conditions', '' );
 		$this->set_prop( 'footer_imprint', '' );
+		$this->set_prop( 'tax_ids', $this->derive_tax_ids_from_wc_options() );
+	}
+
+	/**
+	 * Derive a single-entry tax_ids array from WC core options.
+	 *
+	 * Pro overrides this by setting tax_ids directly from CPT meta;
+	 * the singleton free store falls back to woocommerce_store_tax_number.
+	 *
+	 * @return array<int,array<string,string>>
+	 */
+	protected function derive_tax_ids_from_wc_options(): array {
+		$value = (string) get_option( 'woocommerce_store_tax_number', '' );
+		if ( '' === $value ) {
+			return array();
+		}
+
+		$country_raw = (string) get_option( 'woocommerce_default_country', '' );
+		$country     = strtoupper( substr( $country_raw, 0, 2 ) );
+
+		$type = self::infer_tax_id_type( $country );
+
+		$entry = array(
+			'type'  => $type,
+			'value' => $value,
+		);
+		if ( '' !== $country ) {
+			$entry['country'] = $country;
+		}
+		return array( $entry );
+	}
+
+	/**
+	 * Infer a Tax_Id_Types constant from an ISO-3166 country code.
+	 *
+	 * Uses Tax_Id_Types::is_eu_vat_country() for the EU table, then a small
+	 * deterministic per-country map for the rest. Returns TYPE_OTHER for
+	 * countries not in either table — keeping this PR scoped to the type
+	 * registry shipped in PR #850. Adding new types is a separate change.
+	 *
+	 * @param string $country ISO-3166 alpha-2.
+	 * @return string Tax_Id_Types constant value.
+	 */
+	protected static function infer_tax_id_type( string $country ): string {
+		if ( '' === $country ) {
+			return \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_OTHER;
+		}
+		if ( \WCPOS\WooCommercePOS\Services\Tax_Id_Types::is_eu_vat_country( $country ) ) {
+			return \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_EU_VAT;
+		}
+		$map = array(
+			'GB' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_GB_VAT,
+			'AU' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_AU_ABN,
+			'CA' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_CA_GST_HST,
+			'US' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_US_EIN,
+			'BR' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_BR_CNPJ,
+			'IN' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_IN_GST,
+			'AR' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_AR_CUIT,
+			'SA' => \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_SA_VAT,
+		);
+		return $map[ $country ] ?? \WCPOS\WooCommercePOS\Services\Tax_Id_Types::TYPE_OTHER;
 	}
 
 	/**
@@ -567,6 +629,36 @@ class Store extends \WC_Data implements StoreInterface {
 				'country'   => $this->get_store_country(),
 			)
 		);
+	}
+
+	/**
+	 * Get Store tax IDs as a structured array.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 * @return array<int,array<string,string>>
+	 */
+	public function get_tax_ids( $context = 'view' ) {
+		$value = $this->get_prop( 'tax_ids', $context );
+		return is_array( $value ) ? $value : array();
+	}
+
+	/**
+	 * Get the primary tax ID as a formatted scalar.
+	 *
+	 * Back-compat helper for templates using {{store.tax_id}}.
+	 * Returns the first entry's value (verbatim — country prefix is preserved
+	 * exactly as stored), or empty string when no entries exist.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_tax_id( $context = 'view' ) {
+		$tax_ids = $this->get_tax_ids( $context );
+		if ( empty( $tax_ids ) ) {
+			return '';
+		}
+		$primary = $tax_ids[0];
+		return isset( $primary['value'] ) ? (string) $primary['value'] : '';
 	}
 
 	/**
