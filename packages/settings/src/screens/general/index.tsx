@@ -3,6 +3,7 @@ import * as React from 'react';
 import { isString, isNumber } from 'lodash';
 
 import { PrivacyInfoModal } from '@wcpos/consent';
+import { Button, Callout } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { TaxIdsSection } from './tax-ids-section';
@@ -10,10 +11,15 @@ import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { Skeleton } from '../../components/skeleton';
-import TaxIdsField, { type TaxId } from '../../components/tax-ids-field';
+import TaxIdsField, {
+	type TaxId,
+	type TaxIdsFieldHandle,
+} from '../../components/tax-ids-field';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
+
+const STORE_TAX_IDS_DOCS_URL = 'https://wcpos.com/docs/store-tax-ids';
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -31,29 +37,59 @@ export interface GeneralSettingsProps {
 function General() {
 	const { data, mutate } = useSettingsApi('general');
 	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
+	const taxIdsFieldRef = React.useRef<TaxIdsFieldHandle>(null);
+
+	const storeTaxIdsDescription = (
+		<>
+			{t('settings.store_section_description')}{' '}
+			<a
+				href={STORE_TAX_IDS_DOCS_URL}
+				target="_blank"
+				rel="noreferrer noopener"
+				className="wcpos:text-wp-admin-theme-color wcpos:underline"
+			>
+				{t('settings.store_tax_ids_learn_more')}
+			</a>
+		</>
+	);
 
 	return (
 		<>
-			<FormSection title={t('settings.store_section_title')}>
-				<FormRow label={t('settings.store_tax_ids')} description={t('settings.store_tax_ids_tip')}>
-					<TaxIdsField
-						value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : []}
-						onChange={(store_tax_ids) => {
-							mutate({ store_tax_ids });
-						}}
-						labels={{
-							add: t('settings.store_tax_ids_add'),
-							type: t('settings.store_tax_ids_type'),
-							value: t('settings.store_tax_ids_value'),
-							country: t('settings.store_tax_ids_country'),
-							label: t('settings.store_tax_ids_label'),
-							remove: t('settings.store_tax_ids_remove'),
-							empty: t('settings.store_tax_ids_empty'),
-						}}
-					/>
-				</FormRow>
+			<FormSection
+				title={t('settings.store_section_title')}
+				description={storeTaxIdsDescription}
+				headerRight={
+					<Button variant="outline" onClick={() => taxIdsFieldRef.current?.addRow()}>
+						{t('settings.store_tax_ids_add')}
+					</Button>
+				}
+				divider
+			>
+				<Callout
+					status="info"
+					title={t('settings.store_tax_ids_callout_title')}
+					className="wcpos:mb-4"
+				>
+					{t('settings.store_tax_ids_tip')}
+				</Callout>
+				<TaxIdsField
+					ref={taxIdsFieldRef}
+					value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : []}
+					onChange={(store_tax_ids) => {
+						mutate({ store_tax_ids });
+					}}
+					labels={{
+						add: t('settings.store_tax_ids_add'),
+						type: t('settings.store_tax_ids_type'),
+						value: t('settings.store_tax_ids_value'),
+						country: t('settings.store_tax_ids_country'),
+						label: t('settings.store_tax_ids_label'),
+						remove: t('settings.store_tax_ids_remove'),
+						empty: t('settings.store_tax_ids_empty'),
+					}}
+				/>
 			</FormSection>
-			<FormSection title={t('settings.products_section_title')}>
+			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>
 						<Toggle
@@ -100,7 +136,7 @@ function General() {
 					</Label>
 				</FormRow>
 			</FormSection>
-			<FormSection title={t('settings.customers_section_title')}>
+			<FormSection title={t('settings.customers_section_title')} divider>
 				<FormRow>
 					<Toggle
 						checked={!!data?.generate_username}
