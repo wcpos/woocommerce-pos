@@ -455,6 +455,37 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test store block includes tax_ids array sourced from WC option.
+	 */
+	public function test_store_block_includes_tax_ids_array_from_wc_option(): void {
+		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
+		update_option( 'woocommerce_default_country', 'DE:BY' );
+		$order   = OrderHelper::create_order();
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'tax_ids', $payload['store'] );
+		$this->assertCount( 1, $payload['store']['tax_ids'] );
+		$this->assertSame( 'eu_vat', $payload['store']['tax_ids'][0]['type'] );
+		$this->assertSame( 'DE123456789', $payload['store']['tax_ids'][0]['value'] );
+		$this->assertSame( 'DE', $payload['store']['tax_ids'][0]['country'] );
+
+		// Back-compat scalar still emitted.
+		$this->assertSame( 'DE123456789', $payload['store']['tax_id'] );
+	}
+
+	/**
+	 * Test store block emits empty tax_ids when WC option is blank.
+	 */
+	public function test_store_block_emits_empty_tax_ids_when_wc_option_blank(): void {
+		update_option( 'woocommerce_store_tax_number', '' );
+		$order   = OrderHelper::create_order();
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( array(), $payload['store']['tax_ids'] );
+		$this->assertSame( '', $payload['store']['tax_id'] );
+	}
+
+	/**
 	 * Test explicit store logo is preserved when site logo is disabled.
 	 */
 	public function test_build_preserves_explicit_logo_when_site_logo_is_disabled(): void {
