@@ -72,8 +72,14 @@ jobs:
         run: |
           # Build settings page React app
           pnpm --filter=@wcpos/settings build
-          # Verify the built file exists
-          ls -la assets/js/settings.js || echo "Warning: settings.js not found in assets/"
+          # Build the tracking-consent React bundle. This is enqueued on
+          # plugins.php and the Dashboard; without it those screens 404 on
+          # consent.js / consent.css.
+          pnpm --filter=@wcpos/consent build
+          # Verify the built files exist (fail fast if missing)
+          test -f assets/js/settings.js
+          test -f assets/js/consent.js
+          test -f assets/css/consent.css
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
