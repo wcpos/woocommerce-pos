@@ -16,6 +16,7 @@ import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
 import LogsPage from './screens/logs';
 import SessionsPage from './screens/sessions';
+import TaxIdsPage from './screens/tax-ids';
 
 // Root route — renders the full-page layout with sidebar navigation.
 const rootRoute = createRootRoute({
@@ -59,6 +60,13 @@ const accessRoute = createRoute({
 	component: AccessPage,
 });
 
+const taxIdsRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/tax-ids',
+	loader: settingsLoader('tax_ids'),
+	component: TaxIdsPage,
+});
+
 const sessionsRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/sessions',
@@ -97,6 +105,7 @@ const routeTree = rootRoute.addChildren([
 	generalRoute,
 	checkoutRoute,
 	accessRoute,
+	taxIdsRoute,
 	sessionsRoute,
 	extensionsRoute,
 	logsRoute,
