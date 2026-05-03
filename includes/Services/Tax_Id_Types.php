@@ -110,6 +110,43 @@ class Tax_Id_Types {
 	}
 
 	/**
+	 * Store-only commercial/business register identifier types.
+	 *
+	 * These types are issued to legal entities for company-registration purposes
+	 * (not for VAT/tax invoicing of customers). They are exposed on the store
+	 * data model only — customer-side writers (`Tax_Id_Writer`) and detection
+	 * (`Tax_Id_Detector`) should not target them.
+	 *
+	 * @return string[]
+	 */
+	public static function business_register_types(): array {
+		return array(
+			self::TYPE_DE_UST_ID,
+			self::TYPE_DE_STEUERNUMMER,
+			self::TYPE_DE_HRB,
+			self::TYPE_NL_KVK,
+			self::TYPE_FR_SIRET,
+			self::TYPE_FR_SIREN,
+			self::TYPE_GB_COMPANY,
+			self::TYPE_CH_UID,
+		);
+	}
+
+	/**
+	 * Types relevant to customer/order tax-ID handling.
+	 *
+	 * Excludes store-only commercial-register types. Used by customer-side
+	 * services that map types to billing meta-keys.
+	 *
+	 * @return string[]
+	 */
+	public static function customer_applicable_types(): array {
+		return array_values(
+			array_diff( self::all_types(), self::business_register_types() )
+		);
+	}
+
+	/**
 	 * Whether the given type string is a known tax-ID type.
 	 *
 	 * @param string $type Type identifier.

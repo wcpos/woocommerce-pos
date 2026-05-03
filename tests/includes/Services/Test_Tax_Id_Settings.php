@@ -29,11 +29,14 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Default_write_map provides a meta-key for every type.
+	 * Default_write_map provides a meta-key for every customer-applicable type.
+	 *
+	 * Store-only commercial-register types (Tax_Id_Types::business_register_types())
+	 * are excluded — they don't write to customer/order billing meta.
 	 */
 	public function test_default_write_map_covers_every_type(): void {
 		$map = Tax_Id_Settings::default_write_map();
-		foreach ( Tax_Id_Types::all_types() as $type ) {
+		foreach ( Tax_Id_Types::customer_applicable_types() as $type ) {
 			$this->assertArrayHasKey( $type, $map, "Missing default write key for type: {$type}" );
 			$this->assertNotEmpty( $map[ $type ] );
 		}

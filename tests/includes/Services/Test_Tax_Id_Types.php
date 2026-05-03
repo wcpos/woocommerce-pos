@@ -153,6 +153,34 @@ class Test_Tax_Id_Types extends WP_UnitTestCase {
 		$this->assertSame( 'UID',          Tax_Id_Types::default_label( 'ch_uid' ) );
 	}
 
+	public function test_business_register_types_subset_of_all_types(): void {
+		$all       = Tax_Id_Types::all_types();
+		$business  = Tax_Id_Types::business_register_types();
+		$this->assertNotEmpty( $business );
+		foreach ( $business as $type ) {
+			$this->assertContains( $type, $all, "Business-register type {$type} should appear in all_types()" );
+		}
+	}
+
+	public function test_customer_applicable_types_excludes_business_registers(): void {
+		$customer = Tax_Id_Types::customer_applicable_types();
+		$business = Tax_Id_Types::business_register_types();
+		foreach ( $business as $type ) {
+			$this->assertNotContains( $type, $customer, "Business-register type {$type} must not appear in customer_applicable_types()" );
+		}
+	}
+
+	public function test_customer_applicable_plus_business_register_equals_all(): void {
+		$all      = Tax_Id_Types::all_types();
+		$customer = Tax_Id_Types::customer_applicable_types();
+		$business = Tax_Id_Types::business_register_types();
+		$this->assertSame(
+			count( $all ),
+			count( $customer ) + count( $business ),
+			'customer_applicable_types() + business_register_types() should partition all_types()'
+		);
+	}
+
 	/**
 	 * Test is_eu_vat_country recognises EU member states (note the EL/GR quirk).
 	 */
