@@ -24,6 +24,7 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 	 */
 	protected function tearDown(): void {
 		delete_option( 'woocommerce_pos_settings_tax_ids' );
+		delete_option( 'woocommerce_pos_settings_general' );
 		parent::tearDown();
 	}
 
@@ -67,6 +68,44 @@ class Test_Tax_Id_Settings extends WP_UnitTestCase {
 
 		$overrides = Tax_Id_Settings::get_overrides();
 		$this->assertSame( array( Tax_Id_Types::TYPE_BR_CPF => '_my_cpf' ), $overrides );
+	}
+
+	/**
+	 * Get_overrides falls back to the legacy general.tax_ids write map.
+	 */
+	public function test_get_overrides_reads_legacy_settings(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'tax_ids' => array(
+					'write_map' => array(
+						Tax_Id_Types::TYPE_BR_CPF => '_legacy_cpf',
+					),
+				),
+			)
+		);
+
+		$overrides = Tax_Id_Settings::get_overrides();
+		$this->assertSame( array( Tax_Id_Types::TYPE_BR_CPF => '_legacy_cpf' ), $overrides );
+	}
+
+	/**
+	 * An explicit new write_map wins over the legacy fallback, even when empty.
+	 */
+	public function test_get_overrides_prefers_new_write_map_over_legacy(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'tax_ids' => array(
+					'write_map' => array(
+						Tax_Id_Types::TYPE_BR_CPF => '_legacy_cpf',
+					),
+				),
+			)
+		);
+		update_option( 'woocommerce_pos_settings_tax_ids', array( 'write_map' => array() ) );
+
+		$this->assertSame( array(), Tax_Id_Settings::get_overrides() );
 	}
 
 	/**

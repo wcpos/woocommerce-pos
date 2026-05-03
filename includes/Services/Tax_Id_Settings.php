@@ -47,15 +47,17 @@ class Tax_Id_Settings {
 	/**
 	 * User-configured per-type overrides for the write map.
 	 *
-	 * Reads from the `tax_ids.write_map` settings tree (top-level option
-	 * `woocommerce_pos_settings_tax_ids`). Invalid types or empty keys are
-	 * silently dropped.
+	 * Reads from the `tax_ids.write_map` settings tree, including the legacy
+	 * `general.tax_ids.write_map` fallback provided by Settings. Invalid types
+	 * or empty keys are silently dropped.
 	 *
 	 * @return array<string,string>
 	 */
 	public static function get_overrides(): array {
-		$tax_ids = (array) get_option( 'woocommerce_pos_settings_tax_ids', array() );
-		$raw     = isset( $tax_ids['write_map'] ) && \is_array( $tax_ids['write_map'] ) ? $tax_ids['write_map'] : array();
+		$raw = \wcpos_get_settings( 'tax_ids', 'write_map' );
+		if ( ! \is_array( $raw ) ) {
+			$raw = array();
+		}
 
 		$out = array();
 		foreach ( $raw as $type => $meta_key ) {

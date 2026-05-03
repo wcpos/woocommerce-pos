@@ -358,6 +358,23 @@ class Settings {
 			$settings = array();
 		}
 
+		if ( ! \array_key_exists( 'write_map', $settings ) ) {
+			$legacy_general = get_option( self::$db_prefix . 'general', array() );
+			$legacy_tax_ids = array();
+
+			if (
+				\is_array( $legacy_general )
+				&& isset( $legacy_general['tax_ids'] )
+				&& \is_array( $legacy_general['tax_ids'] )
+			) {
+				$legacy_tax_ids = $legacy_general['tax_ids'];
+			}
+
+			if ( isset( $legacy_tax_ids['write_map'] ) && \is_array( $legacy_tax_ids['write_map'] ) ) {
+				$settings['write_map'] = $legacy_tax_ids['write_map'];
+			}
+		}
+
 		foreach ( $default_settings as $key => $value ) {
 			if ( ! \array_key_exists( $key, $settings ) ) {
 				$settings[ $key ] = $value;
