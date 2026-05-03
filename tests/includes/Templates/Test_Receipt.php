@@ -34,7 +34,7 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 
 		$this->assertIsArray( $data );
 		$this->assertArrayHasKey( 'meta', $data );
-		$this->assertEquals( 'live', $data['meta']['mode'] );
+		$this->assertEquals( 'live', $data['receipt']['mode'] );
 	}
 
 	/**

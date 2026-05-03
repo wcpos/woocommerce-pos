@@ -17,7 +17,7 @@ class Receipt_Data_Schema {
 	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
 	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
 	 */
-	const VERSION = '1.3.0';
+	const VERSION = '1.4.0';
 
 	/**
 	 * Top-level keys required in a receipt payload.
@@ -127,6 +127,9 @@ class Receipt_Data_Schema {
 		'refund_total',
 		// Per-line refund.
 		'total_refunded',
+		// Refund-level totals.
+		'shipping_total',
+		'shipping_tax',
 		// Tax summary.
 		'taxable_amount_excl',
 		'tax_amount',
@@ -226,6 +229,14 @@ class Receipt_Data_Schema {
 					'customer_note' => array(
 						'type'  => 'string',
 						'label' => __( 'Customer Note', 'woocommerce-pos' ),
+					),
+					'wc_status'    => array(
+						'type'  => 'string',
+						'label' => __( 'WC Status', 'woocommerce-pos' ),
+					),
+					'created_via'  => array(
+						'type'  => 'string',
+						'label' => __( 'Created Via', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -687,13 +698,30 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Refund Amount', 'woocommerce-pos' ),
 					),
+					'subtotal'          => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Subtotal', 'woocommerce-pos' ),
+					),
+					'tax_total'         => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Tax Total', 'woocommerce-pos' ),
+					),
+					'shipping_total'    => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+					),
+					'shipping_tax'      => array(
+						'type'  => 'money',
+						'label' => __( 'Refund Shipping Tax', 'woocommerce-pos' ),
+					),
 					'reason'            => array(
 						'type'  => 'string',
 						'label' => __( 'Refund Reason', 'woocommerce-pos' ),
 					),
 					'refunded_by_id'    => array(
-						'type'  => 'number',
-						'label' => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
+						'type'     => 'number',
+						'nullable' => true,
+						'label'    => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
 					),
 					'refunded_by_name'  => array(
 						'type'  => 'string',
@@ -703,26 +731,112 @@ class Receipt_Data_Schema {
 						'type'  => 'boolean',
 						'label' => __( 'Refunded Payment', 'woocommerce-pos' ),
 					),
+					'destination'       => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Destination', 'woocommerce-pos' ),
+					),
+					'gateway_id'        => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Gateway ID', 'woocommerce-pos' ),
+					),
+					'gateway_title'     => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Gateway Title', 'woocommerce-pos' ),
+					),
+					'processing_mode'   => array(
+						'type'  => 'string',
+						'label' => __( 'Refund Processing Mode', 'woocommerce-pos' ),
+					),
 					'lines'             => array(
 						'type'     => 'array',
 						'label'    => __( 'Refund Lines', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
-							'name'  => array(
+							'name'       => array(
 								'type'  => 'string',
 								'label' => __( 'Product Name', 'woocommerce-pos' ),
 							),
-							'sku'   => array(
+							'sku'        => array(
 								'type'  => 'string',
 								'label' => __( 'SKU', 'woocommerce-pos' ),
 							),
-							'qty'   => array(
+							'qty'        => array(
 								'type'  => 'number',
 								'label' => __( 'Quantity', 'woocommerce-pos' ),
 							),
-							'total' => array(
+							'total'      => array(
 								'type'  => 'money',
 								'label' => __( 'Refund Line Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Line Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Line Taxes', 'woocommerce-pos' ),
+							),
+						),
+					),
+					'fees'              => array(
+						'type'     => 'array',
+						'label'    => __( 'Refund Fees', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label'      => array(
+								'type'  => 'string',
+								'label' => __( 'Fee Label', 'woocommerce-pos' ),
+							),
+							'total'      => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Fee Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Fee Taxes', 'woocommerce-pos' ),
+							),
+						),
+					),
+					'shipping'          => array(
+						'type'     => 'array',
+						'label'    => __( 'Refund Shipping', 'woocommerce-pos' ),
+						'is_array' => true,
+						'fields'   => array(
+							'label'      => array(
+								'type'  => 'string',
+								'label' => __( 'Shipping Label', 'woocommerce-pos' ),
+							),
+							'method_id'  => array(
+								'type'  => 'string',
+								'label' => __( 'Shipping Method ID', 'woocommerce-pos' ),
+							),
+							'total'      => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+							),
+							'total_incl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total (incl tax)', 'woocommerce-pos' ),
+							),
+							'total_excl' => array(
+								'type'  => 'money',
+								'label' => __( 'Refund Shipping Total (excl tax)', 'woocommerce-pos' ),
+							),
+							'taxes'      => array(
+								'type'  => 'array',
+								'label' => __( 'Refund Shipping Taxes', 'woocommerce-pos' ),
 							),
 						),
 					),
@@ -944,6 +1058,15 @@ class Receipt_Data_Schema {
 			'const'       => self::VERSION,
 			'description' => 'Receipt data schema version.',
 		);
+		$schema['properties']['meta']['properties']['wc_status'] = array(
+			'type'        => 'string',
+			'description' => 'WooCommerce order status (e.g. processing, completed, refunded).',
+		);
+		$schema['properties']['meta']['properties']['created_via'] = array(
+			'type'        => 'string',
+			'description' => 'How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api).',
+		);
+		unset( $schema['properties']['presentation_hints']['properties'] );
 
 		return $schema;
 	}
@@ -1024,6 +1147,10 @@ class Receipt_Data_Schema {
 				'additionalProperties' => true,
 				'properties'           => array(),
 			);
+
+			// Strip object-only keywords that may have been seeded by the
+			// segment-walk above; they are invalid on an array schema.
+			unset( $target['additionalProperties'], $target['properties'] );
 		} else {
 			$target['type']                 = 'object';
 			$target['additionalProperties'] = true;
@@ -1050,6 +1177,19 @@ class Receipt_Data_Schema {
 	private static function field_metadata_to_json_schema( array $field ): array {
 		$type        = isset( $field['type'] ) ? (string) $field['type'] : 'string';
 		$schema_type = self::field_type_to_json_type( $type );
+
+		// Honor a nullable flag from the field-tree metadata: producers may
+		// legitimately emit null for a field whose JSON Schema type would
+		// otherwise reject it (e.g. refunds[].refunded_by_id when no user).
+		if ( ! empty( $field['nullable'] ) ) {
+			if ( \is_array( $schema_type ) ) {
+				if ( ! \in_array( 'null', $schema_type, true ) ) {
+					$schema_type[] = 'null';
+				}
+			} else {
+				$schema_type = array( $schema_type, 'null' );
+			}
+		}
 
 		$schema = array(
 			'type'        => $schema_type,
@@ -1126,19 +1266,22 @@ class Receipt_Data_Schema {
 				'number'        => '1001',
 				'currency'      => 'USD',
 				'customer_note' => '',
+				'wc_status'     => 'completed',
+				'created_via'   => 'woocommerce-pos',
 				'created'       => $created,
 				'paid'          => $paid,
 				'completed'     => $completed,
 			),
 			'meta'    => array(
 				'schema_version'   => self::VERSION,
-				'mode'             => 'sale',
 				'order_id'         => 1001,
 				'order_number'     => '#1001',
 				'created_at_gmt'   => '2024-01-15T10:30:00Z',
 				'created_at_local' => '2024-01-15 10:30:00',
 				'currency'         => 'USD',
 				'customer_note'    => '',
+				'wc_status'        => 'completed',
+				'created_via'      => 'woocommerce-pos',
 			),
 			'store'   => array(
 				'name'                    => 'My Store',

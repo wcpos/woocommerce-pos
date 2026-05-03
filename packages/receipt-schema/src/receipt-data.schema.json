@@ -18,6 +18,7 @@
 		"totals",
 		"tax_summary",
 		"payments",
+		"refunds",
 		"fiscal",
 		"presentation_hints",
 		"i18n"
@@ -136,6 +137,14 @@
 				"customer_note": {
 					"type": "string",
 					"description": "Customer Note"
+				},
+				"wc_status": {
+					"type": "string",
+					"description": "WC Status"
+				},
+				"created_via": {
+					"type": "string",
+					"description": "Created Via"
 				},
 				"created": {
 					"type": "object",
@@ -395,8 +404,16 @@
 			"properties": {
 				"schema_version": {
 					"type": "string",
-					"const": "1.2.0",
+					"const": "1.4.0",
 					"description": "Receipt data schema version."
+				},
+				"wc_status": {
+					"type": "string",
+					"description": "WooCommerce order status (e.g. processing, completed, refunded)."
+				},
+				"created_via": {
+					"type": "string",
+					"description": "How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api)."
 				}
 			}
 		},
@@ -500,6 +517,32 @@
 				"tax_id": {
 					"type": "string",
 					"description": "Tax ID"
+				},
+				"tax_ids": {
+					"type": "array",
+					"description": "Customer Tax IDs",
+					"items": {
+						"type": "object",
+						"additionalProperties": true,
+						"properties": {
+							"type": {
+								"type": "string",
+								"description": "Type"
+							},
+							"value": {
+								"type": "string",
+								"description": "Value"
+							},
+							"country": {
+								"type": "string",
+								"description": "Country"
+							},
+							"label": {
+								"type": "string",
+								"description": "Label"
+							}
+						}
+					}
 				}
 			},
 			"description": "Customer"
@@ -525,6 +568,10 @@
 					"qty": {
 						"type": "number",
 						"description": "Quantity"
+					},
+					"qty_refunded": {
+						"type": "number",
+						"description": "Quantity Refunded"
 					},
 					"unit_subtotal": {
 						"type": [
@@ -631,6 +678,13 @@
 						],
 						"description": "Line Total (excl tax)"
 					},
+					"total_refunded": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Total Refunded"
+					},
 					"taxes": {
 						"type": "array",
 						"description": "Line Taxes",
@@ -694,6 +748,34 @@
 							"string"
 						],
 						"description": "Total (excl tax)"
+					},
+					"taxes": {
+						"type": "array",
+						"description": "Fee Taxes",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
+					},
+					"meta": {
+						"type": "array",
+						"description": "Fee Meta",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
 					}
 				},
 				"description": "Fees"
@@ -709,6 +791,10 @@
 					"label": {
 						"type": "string",
 						"description": "Shipping Label"
+					},
+					"method_id": {
+						"type": "string",
+						"description": "Shipping Method ID"
 					},
 					"total": {
 						"type": [
@@ -730,6 +816,34 @@
 							"string"
 						],
 						"description": "Total (excl tax)"
+					},
+					"taxes": {
+						"type": "array",
+						"description": "Shipping Taxes",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
+					},
+					"meta": {
+						"type": "array",
+						"description": "Shipping Meta",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
 					}
 				},
 				"description": "Shipping"
@@ -745,6 +859,10 @@
 					"label": {
 						"type": "string",
 						"description": "Discount Label"
+					},
+					"code": {
+						"type": "string",
+						"description": "Coupon Code"
 					},
 					"codes": {
 						"type": "string",
@@ -863,6 +981,13 @@
 						"string"
 					],
 					"description": "Change"
+				},
+				"refund_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Refund Total"
 				}
 			},
 			"description": "Totals"
@@ -884,6 +1009,10 @@
 					"rate": {
 						"type": "number",
 						"description": "Tax Rate (%)"
+					},
+					"compound": {
+						"type": "boolean",
+						"description": "Compound Tax"
 					},
 					"taxable_amount_excl": {
 						"type": [
@@ -946,12 +1075,260 @@
 						],
 						"description": "Change"
 					},
-					"reference": {
+					"transaction_id": {
 						"type": "string",
-						"description": "Reference"
+						"description": "Transaction ID"
 					}
 				},
 				"description": "Payments"
+			},
+			"additionalProperties": true
+		},
+		"refunds": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": true,
+				"properties": {
+					"id": {
+						"type": "number",
+						"description": "Refund ID"
+					},
+					"date": {
+						"type": "object",
+						"description": "Refund Date"
+					},
+					"amount": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Refund Amount"
+					},
+					"subtotal": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Refund Subtotal"
+					},
+					"tax_total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Refund Tax Total"
+					},
+					"shipping_total": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Refund Shipping Total"
+					},
+					"shipping_tax": {
+						"type": [
+							"number",
+							"string"
+						],
+						"description": "Refund Shipping Tax"
+					},
+					"reason": {
+						"type": "string",
+						"description": "Refund Reason"
+					},
+					"refunded_by_id": {
+						"type": [
+							"number",
+							"null"
+						],
+						"description": "Refunded By (User ID)"
+					},
+					"refunded_by_name": {
+						"type": "string",
+						"description": "Refunded By (Name)"
+					},
+					"refunded_payment": {
+						"type": "boolean",
+						"description": "Refunded Payment"
+					},
+					"destination": {
+						"type": "string",
+						"description": "Refund Destination"
+					},
+					"gateway_id": {
+						"type": "string",
+						"description": "Refund Gateway ID"
+					},
+					"gateway_title": {
+						"type": "string",
+						"description": "Refund Gateway Title"
+					},
+					"processing_mode": {
+						"type": "string",
+						"description": "Refund Processing Mode"
+					},
+					"lines": {
+						"type": "array",
+						"description": "Refund Lines",
+						"items": {
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Product Name"
+								},
+								"sku": {
+									"type": "string",
+									"description": "SKU"
+								},
+								"qty": {
+									"type": "number",
+									"description": "Quantity"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Line Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Line Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
+						}
+					},
+					"fees": {
+						"type": "array",
+						"description": "Refund Fees",
+						"items": {
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"label": {
+									"type": "string",
+									"description": "Fee Label"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Fee Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Fee Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
+						}
+					},
+					"shipping": {
+						"type": "array",
+						"description": "Refund Shipping",
+						"items": {
+							"type": "object",
+							"additionalProperties": true,
+							"properties": {
+								"label": {
+									"type": "string",
+									"description": "Shipping Label"
+								},
+								"method_id": {
+									"type": "string",
+									"description": "Shipping Method ID"
+								},
+								"total": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total"
+								},
+								"total_incl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total (incl tax)"
+								},
+								"total_excl": {
+									"type": [
+										"number",
+										"string"
+									],
+									"description": "Refund Shipping Total (excl tax)"
+								},
+								"taxes": {
+									"type": "array",
+									"description": "Refund Shipping Taxes",
+									"items": {
+										"type": [
+											"string",
+											"number",
+											"boolean",
+											"object",
+											"array",
+											"null"
+										]
+									}
+								}
+							}
+						}
+					}
+				},
+				"description": "Refunds"
 			},
 			"additionalProperties": true
 		},
@@ -1026,8 +1403,7 @@
 		},
 		"presentation_hints": {
 			"type": "object",
-			"additionalProperties": true,
-			"properties": []
+			"additionalProperties": true
 		},
 		"i18n": {
 			"type": "object",

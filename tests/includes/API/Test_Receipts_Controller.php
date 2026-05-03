@@ -59,7 +59,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 'fiscal', $data['mode'] );
 		$this->assertTrue( $data['has_snapshot'] );
-		$this->assertEquals( 'fiscal', $data['data']['meta']['mode'] );
+		$this->assertEquals( 'fiscal', $data['data']['receipt']['mode'] );
 	}
 
 	/**

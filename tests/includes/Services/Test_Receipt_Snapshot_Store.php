@@ -52,7 +52,7 @@ class Test_Receipt_Snapshot_Store extends WC_REST_Unit_Test_Case {
 		$first_snapshot = $this->store->get_snapshot( $order->get_id() );
 
 		$this->assertIsArray( $first_snapshot );
-		$this->assertEquals( 'fiscal', $first_snapshot['meta']['mode'] );
+		$this->assertEquals( 'fiscal', $first_snapshot['receipt']['mode'] );
 		$this->assertNotEmpty( $first_snapshot['fiscal']['immutable_id'] );
 		$this->assertNotEmpty( $first_snapshot['fiscal']['sequence'] );
 
