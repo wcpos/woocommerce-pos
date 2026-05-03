@@ -719,8 +719,9 @@ class Receipt_Data_Schema {
 						'label' => __( 'Refund Reason', 'woocommerce-pos' ),
 					),
 					'refunded_by_id'    => array(
-						'type'  => 'number',
-						'label' => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
+						'type'     => 'number',
+						'nullable' => true,
+						'label'    => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
 					),
 					'refunded_by_name'  => array(
 						'type'  => 'string',
@@ -1145,6 +1146,10 @@ class Receipt_Data_Schema {
 				'additionalProperties' => true,
 				'properties'           => array(),
 			);
+
+			// Strip object-only keywords that may have been seeded by the
+			// segment-walk above; they are invalid on an array schema.
+			unset( $target['additionalProperties'], $target['properties'] );
 		} else {
 			$target['type']                 = 'object';
 			$target['additionalProperties'] = true;
@@ -1171,6 +1176,19 @@ class Receipt_Data_Schema {
 	private static function field_metadata_to_json_schema( array $field ): array {
 		$type        = isset( $field['type'] ) ? (string) $field['type'] : 'string';
 		$schema_type = self::field_type_to_json_type( $type );
+
+		// Honor a nullable flag from the field-tree metadata: producers may
+		// legitimately emit null for a field whose JSON Schema type would
+		// otherwise reject it (e.g. refunds[].refunded_by_id when no user).
+		if ( ! empty( $field['nullable'] ) ) {
+			if ( \is_array( $schema_type ) ) {
+				if ( ! \in_array( 'null', $schema_type, true ) ) {
+					$schema_type[] = 'null';
+				}
+			} else {
+				$schema_type = array( $schema_type, 'null' );
+			}
+		}
 
 		$schema = array(
 			'type'        => $schema_type,

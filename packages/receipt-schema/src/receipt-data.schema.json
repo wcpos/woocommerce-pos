@@ -520,8 +520,6 @@
 				},
 				"tax_ids": {
 					"type": "array",
-					"additionalProperties": true,
-					"properties": [],
 					"description": "Customer Tax IDs",
 					"items": {
 						"type": "object",
@@ -1140,7 +1138,10 @@
 						"description": "Refund Reason"
 					},
 					"refunded_by_id": {
-						"type": "number",
+						"type": [
+							"number",
+							"null"
+						],
 						"description": "Refunded By (User ID)"
 					},
 					"refunded_by_name": {
