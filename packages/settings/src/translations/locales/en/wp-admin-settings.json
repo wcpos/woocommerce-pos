@@ -42,6 +42,7 @@
 	"settings.barcode_field_tip": "Product meta field to be used as barcode, eg: _sku or _barcode",
 	"settings.store_details_section_title": "Store details",
 	"settings.store_details_section_description": "Information about your physical store, used on POS receipts and invoices. Leave a field blank to inherit the WooCommerce default shown as a placeholder.",
+	"settings.store_details_upgrade_to_pro": "Upgrade to Pro to unlock per-store settings — including custom receipt templates, per-store pricing, tax rates, and authorized users.",
 	"settings.store_name": "Store name",
 	"settings.store_phone": "Phone",
 	"settings.store_email": "Email",

@@ -1,11 +1,12 @@
 import * as React from 'react';
 
-import { isString, isNumber } from 'lodash';
+import { isNumber, isString } from 'lodash';
 
 import { PrivacyInfoModal } from '@wcpos/consent';
 import { Button, Callout } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
+import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
 import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
@@ -15,7 +16,7 @@ import TaxIdsField, {
 	type TaxId,
 	type TaxIdsFieldHandle,
 } from '../../components/tax-ids-field';
-import { Toggle, Checkbox, TextInput, TextArea } from '../../components/ui';
+import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -46,6 +47,15 @@ export interface GeneralSettingsProps {
 	store_defaults: StoreDefaults;
 }
 
+/**
+ * Pro registers `general.store_details_block` to replace the default block
+ * (e.g. swap in a stores list when one or more stores have been created).
+ */
+function getStoreDetailsBlockOverride(): React.ComponentType<StoreDetailsBlockProps> | null {
+	const component = (window as any)?.wcpos?.settings?.getComponent?.('general.store_details_block');
+	return typeof component === 'function' ? component : null;
+}
+
 function General() {
 	const { data, mutate } = useSettingsApi('general');
 	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
@@ -73,47 +83,12 @@ function General() {
 		</>
 	);
 
+	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
+	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
+
 	return (
 		<>
-			<FormSection
-				title={t('settings.store_details_section_title')}
-				description={t('settings.store_details_section_description')}
-				divider
-			>
-				<FormRow label={t('settings.store_name')}>
-					<TextInput
-						value={isString(data?.store_name) ? data.store_name : ''}
-						placeholder={storeDefaults.store_name}
-						onChange={(event) => mutate({ store_name: event.target.value })}
-					/>
-				</FormRow>
-				<FormRow label={t('settings.store_phone')}>
-					<TextInput
-						value={isString(data?.store_phone) ? data.store_phone : ''}
-						placeholder={storeDefaults.store_phone}
-						onChange={(event) => mutate({ store_phone: event.target.value })}
-					/>
-				</FormRow>
-				<FormRow label={t('settings.store_email')}>
-					<TextInput
-						type="email"
-						value={isString(data?.store_email) ? data.store_email : ''}
-						placeholder={storeDefaults.store_email}
-						onChange={(event) => mutate({ store_email: event.target.value })}
-					/>
-				</FormRow>
-				<FormRow
-					label={t('settings.refund_returns_policy')}
-					description={t('settings.refund_returns_policy_tip')}
-				>
-					<TextArea
-						rows={4}
-						value={isString(data?.policies_and_conditions) ? data.policies_and_conditions : ''}
-						placeholder={storeDefaults.policies_and_conditions}
-						onChange={(event) => mutate({ policies_and_conditions: event.target.value })}
-					/>
-				</FormRow>
-			</FormSection>
+			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
 			<FormSection
 				title={t('settings.store_tax_ids_section_title')}
 				description={storeTaxIdsDescription}
