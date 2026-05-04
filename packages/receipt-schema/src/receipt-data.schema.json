@@ -449,31 +449,52 @@
 					"description": "Logo URL"
 				},
 				"opening_hours": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Opening Hours"
 				},
 				"opening_hours_vertical": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Opening Hours (Vertical)"
 				},
 				"opening_hours_inline": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Opening Hours (Inline)"
 				},
 				"opening_hours_notes": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Opening Hours Notes"
 				},
 				"personal_notes": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Personal Notes"
 				},
 				"policies_and_conditions": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Policies & Conditions"
 				},
 				"footer_imprint": {
-					"type": "string",
+					"type": [
+						"string",
+						"null"
+					],
 					"description": "Footer Imprint"
 				},
 				"tax_ids": {
