@@ -58,6 +58,36 @@ const TYPE_OPTIONS: OptionProps[] = [
 	{ value: 'other', label: 'Other' },
 ];
 
+// Country → most-common VAT/tax-ID type for receipts. Country-specific
+// business-register types (de_steuernummer, fr_siret, nl_kvk, etc.) are
+// intentionally not used as defaults — most stores want their VAT/sales-tax
+// number, and the user can switch to a register number explicitly.
+const COUNTRY_TO_TAX_ID_TYPE: Record<string, string> = {
+	AR: 'ar_cuit',
+	AU: 'au_abn',
+	BR: 'br_cnpj',
+	CA: 'ca_gst_hst',
+	CH: 'ch_uid',
+	GB: 'gb_vat',
+	IN: 'in_gst',
+	SA: 'sa_vat',
+	US: 'us_ein',
+};
+
+const EU_VAT_COUNTRIES = new Set([
+	'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
+	'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO',
+	'SE', 'SI', 'SK',
+]);
+
+function defaultTaxIdTypeFor(country: string | undefined): string {
+	if (!country) return 'other';
+	const cc = country.toUpperCase();
+	if (COUNTRY_TO_TAX_ID_TYPE[cc]) return COUNTRY_TO_TAX_ID_TYPE[cc];
+	if (EU_VAT_COUNTRIES.has(cc)) return 'eu_vat';
+	return 'other';
+}
+
 const normalizeTaxId = (taxId: TaxId): TaxId => {
 	const next: TaxId = {
 		type: taxId.type || 'other',
@@ -255,8 +285,11 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 		const addRow = React.useCallback(() => {
 			setDraft((current) => {
 				if (current) return current;
-				const taxId: TaxId = { type: 'other', value: '' };
 				const storeCountry = window?.wcpos?.settings?.storeCountry;
+				const taxId: TaxId = {
+					type: defaultTaxIdTypeFor(storeCountry),
+					value: '',
+				};
 				if (storeCountry) {
 					taxId.country = storeCountry;
 				}
