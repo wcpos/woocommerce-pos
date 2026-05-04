@@ -136,12 +136,16 @@ class Settings {
 		$countries        = function_exists( 'WC' )
 			? WC()->countries->get_countries()
 			: array();
+		$store_country    = function_exists( 'WC' )
+			? WC()->countries->get_base_country()
+			: '';
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s,
             countries: %s,
+            storeCountry: %s,
             updateExtensionsCount: %s,
             unreadLogCounts: %s,
             currentUserId: %s
@@ -149,6 +153,7 @@ class Settings {
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
 			json_encode( $countries ),
+			json_encode( $store_country ),
 			json_encode( $update_ext_count ),
 			json_encode( $unread_logs ),
 			json_encode( $current_user_id ),

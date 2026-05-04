@@ -58,6 +58,38 @@ const TYPE_OPTIONS: OptionProps[] = [
 	{ value: 'other', label: 'Other' },
 ];
 
+// Country → most-common tax/business-ID printed on receipts. EU countries
+// without a country-specific entry fall through to `eu_vat`.
+const COUNTRY_TO_TAX_ID_TYPE: Record<string, string> = {
+	AR: 'ar_cuit',
+	AU: 'au_abn',
+	BR: 'br_cnpj',
+	CA: 'ca_gst_hst',
+	CH: 'ch_uid',
+	DE: 'de_ust_id',
+	ES: 'es_nif',
+	FR: 'fr_siret',
+	GB: 'gb_vat',
+	IN: 'in_gst',
+	IT: 'it_piva',
+	NL: 'nl_kvk',
+	SA: 'sa_vat',
+	US: 'us_ein',
+};
+
+const EU_VAT_COUNTRIES = new Set([
+	'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU', 'IE',
+	'LT', 'LU', 'LV', 'MT', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+]);
+
+function defaultTaxIdTypeFor(country: string | undefined): string {
+	if (!country) return 'other';
+	const cc = country.toUpperCase();
+	if (COUNTRY_TO_TAX_ID_TYPE[cc]) return COUNTRY_TO_TAX_ID_TYPE[cc];
+	if (EU_VAT_COUNTRIES.has(cc)) return 'eu_vat';
+	return 'other';
+}
+
 const normalizeTaxId = (taxId: TaxId): TaxId => {
 	const next: TaxId = {
 		type: taxId.type || 'other',
@@ -253,9 +285,18 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 		);
 
 		const addRow = React.useCallback(() => {
-			setDraft((current) =>
-				current ?? { id: generateRowId(), taxId: { type: 'other', value: '' } }
-			);
+			setDraft((current) => {
+				if (current) return current;
+				const storeCountry = window?.wcpos?.settings?.storeCountry;
+				const taxId: TaxId = {
+					type: defaultTaxIdTypeFor(storeCountry),
+					value: '',
+				};
+				if (storeCountry) {
+					taxId.country = storeCountry;
+				}
+				return { id: generateRowId(), taxId };
+			});
 		}, []);
 
 		React.useImperativeHandle(ref, () => ({ addRow }), [addRow]);
