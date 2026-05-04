@@ -455,11 +455,21 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test store block includes tax_ids array sourced from WC option.
+	 * Test store block includes tax_ids array sourced from WCPOS general settings.
 	 */
-	public function test_store_block_includes_tax_ids_array_from_wc_option(): void {
-		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
-		update_option( 'woocommerce_default_country', 'DE:BY' );
+	public function test_store_block_includes_tax_ids_array_from_settings(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type'    => 'eu_vat',
+						'value'   => 'DE123456789',
+						'country' => 'DE',
+					),
+				),
+			)
+		);
 		$order   = OrderHelper::create_order();
 		$payload = $this->builder->build( $order, 'live' );
 
@@ -475,10 +485,10 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test store block emits empty tax_ids when WC option is blank.
+	 * Test store block emits empty tax_ids when settings are blank.
 	 */
-	public function test_store_block_emits_empty_tax_ids_when_wc_option_blank(): void {
-		update_option( 'woocommerce_store_tax_number', '' );
+	public function test_store_block_emits_empty_tax_ids_when_settings_blank(): void {
+		delete_option( 'woocommerce_pos_settings_general' );
 		$order   = OrderHelper::create_order();
 		$payload = $this->builder->build( $order, 'live' );
 

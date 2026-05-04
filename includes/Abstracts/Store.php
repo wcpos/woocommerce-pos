@@ -8,8 +8,7 @@
 namespace WCPOS\WooCommercePOS\Abstracts;
 
 use WCPOS\WooCommercePOS\Interfaces\StoreInterface;
-use WCPOS\WooCommercePOS\Services\Settings;
-use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WCPOS\WooCommercePOS\Services\Store_Defaults;
 use WC_Countries;
 use function wc_format_country_state_string;
 
@@ -98,7 +97,6 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Set WordPress settings.
 	 */
 	public function set_wordpress_settings() {
-		$this->set_prop( 'name', \get_bloginfo( 'name' ) );
 		$this->set_prop( 'locale', \get_locale() );
 	}
 
@@ -459,114 +457,21 @@ class Store extends \WC_Data implements StoreInterface {
 	 * Set Pro property defaults from WooCommerce settings.
 	 *
 	 * These properties are fully customizable in the Pro version,
-	 * but in the free version we derive sensible defaults from WooCommerce.
+	 * but in the free version we derive sensible defaults via
+	 * Store_Defaults: WCPOS general settings → WC POS core options
+	 * → WordPress / WooCommerce fallbacks.
 	 */
 	protected function set_pro_property_defaults() {
+		$this->set_prop( 'name', Store_Defaults::name() );
 		$this->set_prop( 'url', \home_url() );
-		$this->set_prop( 'phone', '' ); // No WooCommerce equivalent.
-		$this->set_prop( 'email', \get_option( 'woocommerce_email_from_address', \get_option( 'admin_email' ) ) );
+		$this->set_prop( 'phone', Store_Defaults::phone() );
+		$this->set_prop( 'email', Store_Defaults::email() );
 		$this->set_prop( 'opening_hours', array() );
 		$this->set_prop( 'opening_hours_notes', '' );
 		$this->set_prop( 'personal_notes', '' );
-		$this->set_prop( 'policies_and_conditions', '' );
+		$this->set_prop( 'policies_and_conditions', Store_Defaults::policies_and_conditions() );
 		$this->set_prop( 'footer_imprint', '' );
-		$this->set_prop( 'tax_ids', $this->merge_store_tax_ids() );
-	}
-
-	/**
-	 * Derive a single-entry tax_ids array from WC core options.
-	 *
-	 * Pro overrides this by setting tax_ids directly from CPT meta;
-	 * the singleton free store falls back to woocommerce_store_tax_number.
-	 *
-	 * @return array<int,array<string,string>>
-	 */
-	protected function derive_tax_ids_from_wc_options(): array {
-		$value = (string) get_option( 'woocommerce_store_tax_number', '' );
-		if ( '' === $value ) {
-			return array();
-		}
-
-		$country_raw = (string) get_option( 'woocommerce_default_country', '' );
-		$country     = strtoupper( substr( $country_raw, 0, 2 ) );
-
-		$type = self::infer_tax_id_type( $country );
-
-		$entry = array(
-			'type'  => $type,
-			'value' => $value,
-		);
-		if ( '' !== $country ) {
-			$entry['country'] = $country;
-		}
-		return array( $entry );
-	}
-
-	/**
-	 * Merge the legacy WooCommerce core tax-number option with additional WCPOS
-	 * General > Store tax IDs.
-	 *
-	 * The WC core option remains first for back-compat with store.tax_id.
-	 * Additional settings entries follow and are de-duplicated by value.
-	 *
-	 * @return array<int,array<string,string>>
-	 */
-	protected function merge_store_tax_ids(): array {
-		$tax_ids = $this->derive_tax_ids_from_wc_options();
-		$general = woocommerce_pos_get_settings( 'general' );
-		$additional = array();
-
-		if ( \is_array( $general ) && isset( $general['store_tax_ids'] ) ) {
-			$additional = Settings::sanitize_store_tax_ids( $general['store_tax_ids'] );
-		}
-
-		$seen   = array();
-		$merged = array();
-		foreach ( array_merge( $tax_ids, $additional ) as $tax_id ) {
-			if ( ! \is_array( $tax_id ) || ! isset( $tax_id['value'] ) ) {
-				continue;
-			}
-			$value = trim( (string) $tax_id['value'] );
-			if ( '' === $value || isset( $seen[ $value ] ) ) {
-				continue;
-			}
-			$seen[ $value ] = true;
-			$merged[]       = $tax_id;
-		}
-
-		return $merged;
-	}
-
-	/**
-	 * Infer a Tax_Id_Types constant from an ISO-3166 country code.
-	 *
-	 * Uses Tax_Id_Types::is_eu_vat_country() for the EU table, then a small
-	 * deterministic per-country map for the rest. Returns TYPE_OTHER for
-	 * countries not in either table — keeping this PR scoped to the type
-	 * registry shipped in PR #850. Adding new types is a separate change.
-	 *
-	 * @param string $country ISO-3166 alpha-2.
-	 * @return string Tax_Id_Types constant value.
-	 */
-	protected static function infer_tax_id_type( string $country ): string {
-		if ( '' === $country ) {
-			return Tax_Id_Types::TYPE_OTHER;
-		}
-		$vat_country = ( 'GR' === $country ) ? 'EL' : $country;
-		if ( Tax_Id_Types::is_eu_vat_country( $vat_country ) ) {
-			return Tax_Id_Types::TYPE_EU_VAT;
-		}
-		$map = array(
-			'GB' => Tax_Id_Types::TYPE_GB_VAT,
-			'AU' => Tax_Id_Types::TYPE_AU_ABN,
-			'CA' => Tax_Id_Types::TYPE_CA_GST_HST,
-			'US' => Tax_Id_Types::TYPE_US_EIN,
-			'BR' => Tax_Id_Types::TYPE_BR_CNPJ,
-			'IN' => Tax_Id_Types::TYPE_IN_GST,
-			'AR' => Tax_Id_Types::TYPE_AR_CUIT,
-			'SA' => Tax_Id_Types::TYPE_SA_VAT,
-		);
-		return $map[ $country ] ?? Tax_Id_Types::TYPE_OTHER;
+		$this->set_prop( 'tax_ids', Store_Defaults::tax_ids() );
 	}
 
 	/**

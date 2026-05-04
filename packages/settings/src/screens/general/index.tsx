@@ -15,11 +15,18 @@ import TaxIdsField, {
 	type TaxId,
 	type TaxIdsFieldHandle,
 } from '../../components/tax-ids-field';
-import { Toggle, Checkbox } from '../../components/ui';
+import { Toggle, Checkbox, TextInput, TextArea } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
 const STORE_TAX_IDS_DOCS_URL = 'https://wcpos.com/docs/store-tax-ids';
+
+export interface StoreDefaults {
+	store_name: string;
+	store_phone: string;
+	store_email: string;
+	policies_and_conditions: string;
+}
 
 export interface GeneralSettingsProps {
 	pos_only_products: boolean;
@@ -31,7 +38,12 @@ export interface GeneralSettingsProps {
 	barcode_field: string;
 	restore_stock_on_delete: boolean;
 	tracking_consent: 'undecided' | 'allowed' | 'denied';
+	store_name: string;
+	store_phone: string;
+	store_email: string;
+	policies_and_conditions: string;
 	store_tax_ids: TaxId[];
+	store_defaults: StoreDefaults;
 }
 
 function General() {
@@ -39,9 +51,17 @@ function General() {
 	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
 	const taxIdsFieldRef = React.useRef<TaxIdsFieldHandle>(null);
 
+	const storeDefaults: StoreDefaults = {
+		store_name: '',
+		store_phone: '',
+		store_email: '',
+		policies_and_conditions: '',
+		...(data?.store_defaults ?? {}),
+	};
+
 	const storeTaxIdsDescription = (
 		<>
-			{t('settings.store_section_description')}{' '}
+			{t('settings.store_tax_ids_section_description')}{' '}
 			<a
 				href={STORE_TAX_IDS_DOCS_URL}
 				target="_blank"
@@ -56,7 +76,46 @@ function General() {
 	return (
 		<>
 			<FormSection
-				title={t('settings.store_section_title')}
+				title={t('settings.store_details_section_title')}
+				description={t('settings.store_details_section_description')}
+				divider
+			>
+				<FormRow label={t('settings.store_name')}>
+					<TextInput
+						value={isString(data?.store_name) ? data.store_name : ''}
+						placeholder={storeDefaults.store_name}
+						onChange={(event) => mutate({ store_name: event.target.value })}
+					/>
+				</FormRow>
+				<FormRow label={t('settings.store_phone')}>
+					<TextInput
+						value={isString(data?.store_phone) ? data.store_phone : ''}
+						placeholder={storeDefaults.store_phone}
+						onChange={(event) => mutate({ store_phone: event.target.value })}
+					/>
+				</FormRow>
+				<FormRow label={t('settings.store_email')}>
+					<TextInput
+						type="email"
+						value={isString(data?.store_email) ? data.store_email : ''}
+						placeholder={storeDefaults.store_email}
+						onChange={(event) => mutate({ store_email: event.target.value })}
+					/>
+				</FormRow>
+				<FormRow
+					label={t('settings.refund_returns_policy')}
+					description={t('settings.refund_returns_policy_tip')}
+				>
+					<TextArea
+						rows={4}
+						value={isString(data?.policies_and_conditions) ? data.policies_and_conditions : ''}
+						placeholder={storeDefaults.policies_and_conditions}
+						onChange={(event) => mutate({ policies_and_conditions: event.target.value })}
+					/>
+				</FormRow>
+			</FormSection>
+			<FormSection
+				title={t('settings.store_tax_ids_section_title')}
 				description={storeTaxIdsDescription}
 				headerRight={
 					<Button variant="outline" onClick={() => taxIdsFieldRef.current?.addRow()}>

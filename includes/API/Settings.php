@@ -286,6 +286,26 @@ class Settings extends WP_REST_Controller {
 					return \is_array( $param );
 				},
 			),
+			'store_name' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
+			'store_phone' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
+			'store_email' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
+			'policies_and_conditions' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
 		);
 	}
 

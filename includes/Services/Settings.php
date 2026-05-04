@@ -38,6 +38,10 @@ class Settings {
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
 			'tracking_consent'            => 'undecided',
+			'store_name'                  => '',
+			'store_phone'                 => '',
+			'store_email'                 => '',
+			'policies_and_conditions'     => '',
 			'store_tax_ids'               => array(),
 		),
 		'tax_ids' => array(
@@ -329,6 +333,11 @@ class Settings {
 		}
 		$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 
+		// Expose resolved fallbacks so the React UI can render them as
+		// placeholders for store_name / store_phone / store_email /
+		// policies_and_conditions when the user has not entered a value.
+		$settings['store_defaults'] = Store_Defaults::fallbacks();
+
 		/*
 		 * Filters the general settings.
 		 *
@@ -353,6 +362,28 @@ class Settings {
 		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
 			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
 		}
+
+		foreach ( array( 'store_name', 'store_phone' ) as $key ) {
+			if ( \array_key_exists( $key, $settings ) ) {
+				$settings[ $key ] = \is_string( $settings[ $key ] )
+					? sanitize_text_field( $settings[ $key ] )
+					: '';
+			}
+		}
+
+		if ( \array_key_exists( 'store_email', $settings ) ) {
+			$email                  = \is_string( $settings['store_email'] ) ? trim( $settings['store_email'] ) : '';
+			$settings['store_email'] = ( '' !== $email && is_email( $email ) ) ? sanitize_email( $email ) : '';
+		}
+
+		if ( \array_key_exists( 'policies_and_conditions', $settings ) ) {
+			$settings['policies_and_conditions'] = \is_string( $settings['policies_and_conditions'] )
+				? sanitize_textarea_field( $settings['policies_and_conditions'] )
+				: '';
+		}
+
+		// store_defaults is a read-only computed field for the UI; never persist it.
+		unset( $settings['store_defaults'] );
 
 		return $settings;
 	}
