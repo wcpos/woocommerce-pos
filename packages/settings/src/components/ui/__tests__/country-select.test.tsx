@@ -141,6 +141,27 @@ describe('CountrySelect', () => {
 		expect(onChange).toHaveBeenCalledWith('');
 	});
 
+	it('clear option is reachable via keyboard navigation', () => {
+		const onChange = vi.fn();
+		render(
+			<CountrySelect
+				countries={COUNTRIES}
+				value="DE"
+				onChange={onChange}
+				clearable
+				clearLabel="None"
+			/>
+		);
+		fireEvent.click(screen.getByRole('combobox'));
+		const search = screen.getByRole('searchbox');
+		// Order: None (0, clear), Australia (1), Germany (2)…
+		// Initial active is the selected country (Germany, index 2). Two ArrowUps land on the clear option.
+		fireEvent.keyDown(search, { key: 'ArrowUp' });
+		fireEvent.keyDown(search, { key: 'ArrowUp' });
+		fireEvent.keyDown(search, { key: 'Enter' });
+		expect(onChange).toHaveBeenCalledWith('');
+	});
+
 	it('does not open when disabled', () => {
 		render(
 			<CountrySelect

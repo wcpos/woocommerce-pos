@@ -38,6 +38,12 @@ function normalize(text: string): string {
 	return text.toLowerCase();
 }
 
+interface ComboboxOption {
+	value: string;
+	label: string;
+	isClear?: boolean;
+}
+
 export function CountrySelect({
 	countries,
 	value,
@@ -64,7 +70,7 @@ export function CountrySelect({
 
 	const listboxId = React.useId();
 
-	const allOptions = React.useMemo(
+	const allOptions = React.useMemo<ComboboxOption[]>(
 		() =>
 			Object.entries(countries)
 				.map(([code, name]) => ({ value: code, label: name }))
@@ -72,7 +78,9 @@ export function CountrySelect({
 		[countries]
 	);
 
-	const filteredOptions = React.useMemo(() => {
+	// Country matches that satisfy the current filter — without the clear entry.
+	// We track this separately so the no-results message reflects countries only.
+	const filteredCountries = React.useMemo(() => {
 		const q = normalize(filter.trim());
 		if (!q) return allOptions;
 		return allOptions.filter(
@@ -80,6 +88,13 @@ export function CountrySelect({
 				normalize(opt.label).includes(q) || normalize(opt.value).includes(q)
 		);
 	}, [allOptions, filter]);
+
+	// The full navigable list. The clear entry sits at the top so arrow-key
+	// navigation can reach it like any other option (CodeRabbit #2).
+	const filteredOptions = React.useMemo<ComboboxOption[]>(() => {
+		if (!clearable) return filteredCountries;
+		return [{ value: '', label: clearLabel ?? '—', isClear: true }, ...filteredCountries];
+	}, [clearable, clearLabel, filteredCountries]);
 
 	const selectedLabel = value ? countries[value] : '';
 
@@ -97,15 +112,18 @@ export function CountrySelect({
 	const openPopover = React.useCallback(() => {
 		if (disabled) return;
 		setOpen(true);
-		// Default the active option to the currently selected value when present.
+		// Default the active option to the currently selected value when present;
+		// otherwise land on the first country (skipping the clear entry, if any).
 		const initialIndex = value
 			? Math.max(
 					0,
-					allOptions.findIndex((opt) => opt.value === value)
+					filteredOptions.findIndex((opt) => !opt.isClear && opt.value === value)
 				)
-			: 0;
-		setActiveIndex(initialIndex);
-	}, [allOptions, disabled, value]);
+			: clearable
+				? 1
+				: 0;
+		setActiveIndex(Math.min(initialIndex, Math.max(0, filteredOptions.length - 1)));
+	}, [clearable, disabled, filteredOptions, value]);
 
 	const commit = React.useCallback(
 		(next: string) => {
@@ -296,54 +314,52 @@ export function CountrySelect({
 							aria-label={ariaLabel}
 							className="wcpos:m-0 wcpos:max-h-60 wcpos:list-none wcpos:overflow-auto wcpos:p-1"
 						>
-							{clearable && (
-								<li
-									role="option"
-									aria-selected={value === ''}
-									onMouseDown={(event) => event.preventDefault()}
-									onClick={() => commit('')}
-									className={classNames(
-										'wcpos:flex wcpos:cursor-pointer wcpos:items-center wcpos:rounded wcpos:px-2 wcpos:py-1 wcpos:text-sm wcpos:text-gray-500 wcpos:hover:bg-gray-100',
-										value === '' && 'wcpos:font-medium wcpos:text-gray-700'
-									)}
-								>
-									{clearLabel ?? '—'}
-								</li>
-							)}
-							{filteredOptions.length === 0 ? (
+							{filteredOptions.map((option, index) => {
+								const isActive = index === activeIndex;
+								const isSelected = option.isClear
+									? value === ''
+									: option.value === value;
+								return (
+									<li
+										key={option.isClear ? '__clear__' : option.value}
+										id={`${listboxId}-option-${index}`}
+										data-index={index}
+										role="option"
+										aria-selected={isSelected}
+										onMouseDown={(event) => event.preventDefault()}
+										onMouseEnter={() => setActiveIndex(index)}
+										onClick={() => commit(option.value)}
+										className={classNames(
+											'wcpos:flex wcpos:cursor-pointer wcpos:items-center wcpos:gap-2 wcpos:rounded wcpos:px-2 wcpos:py-1 wcpos:text-sm',
+											option.isClear
+												? 'wcpos:text-gray-500'
+												: 'wcpos:justify-between wcpos:text-gray-700',
+											isActive && 'wcpos:bg-gray-100',
+											isSelected && (option.isClear
+												? 'wcpos:font-medium wcpos:text-gray-700'
+												: 'wcpos:font-medium')
+										)}
+									>
+										{option.isClear ? (
+											<span className="wcpos:truncate">{option.label}</span>
+										) : (
+											<>
+												<span className="wcpos:truncate">{option.label}</span>
+												<span className="wcpos:text-xs wcpos:text-gray-400">
+													{option.value}
+												</span>
+											</>
+										)}
+									</li>
+								);
+							})}
+							{filteredCountries.length === 0 && (
 								<li
 									role="presentation"
 									className="wcpos:px-2 wcpos:py-2 wcpos:text-sm wcpos:text-gray-500"
 								>
 									{noResultsLabel ?? 'No results'}
 								</li>
-							) : (
-								filteredOptions.map((option, index) => {
-									const isActive = index === activeIndex;
-									const isSelected = option.value === value;
-									return (
-										<li
-											key={option.value}
-											id={`${listboxId}-option-${index}`}
-											data-index={index}
-											role="option"
-											aria-selected={isSelected}
-											onMouseDown={(event) => event.preventDefault()}
-											onMouseEnter={() => setActiveIndex(index)}
-											onClick={() => commit(option.value)}
-											className={classNames(
-												'wcpos:flex wcpos:cursor-pointer wcpos:items-center wcpos:justify-between wcpos:gap-2 wcpos:rounded wcpos:px-2 wcpos:py-1 wcpos:text-sm wcpos:text-gray-700',
-												isActive && 'wcpos:bg-gray-100',
-												isSelected && 'wcpos:font-medium'
-											)}
-										>
-											<span className="wcpos:truncate">{option.label}</span>
-											<span className="wcpos:text-xs wcpos:text-gray-400">
-												{option.value}
-											</span>
-										</li>
-									);
-								})
 							)}
 						</ul>
 					</div>,
