@@ -2,6 +2,7 @@ export { Toggle } from './toggle';
 export { Button } from './button';
 export { Select, type OptionProps } from './select';
 export { CountrySelect, type CountrySelectProps } from './country-select';
+export { Combobox, type ComboboxProps, type ComboboxOption } from './combobox';
 export { TextInput } from './text-input';
 export { TextArea } from './text-area';
 export { Checkbox } from './checkbox';

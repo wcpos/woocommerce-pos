@@ -40,6 +40,8 @@
 	"settings.use_cashier_account": "Use cashier account",
 	"settings.barcode_field": "Barcode Field",
 	"settings.barcode_field_tip": "Product meta field to be used as barcode, eg: _sku or _barcode",
+	"settings.barcode_field_create": "Create \"{value}\"",
+	"settings.barcode_field_no_results": "No barcode fields match",
 	"settings.store_details_section_title": "Store details",
 	"settings.store_details_section_description": "Information about your physical store, used on POS receipts and invoices. Leave a field blank to inherit the WooCommerce default shown as a placeholder.",
 	"settings.store_details_upgrade_callout_title": "Unlock per-store settings",

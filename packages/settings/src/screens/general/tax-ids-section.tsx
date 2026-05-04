@@ -14,7 +14,7 @@ import {
 	TableRow,
 } from '@wcpos/ui';
 
-import { TextInput } from '../../components/ui';
+import { Combobox, type ComboboxOption } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
 
@@ -195,7 +195,7 @@ interface OverrideRowProps {
 	composed: string;
 	defaultKey: string;
 	override: string | undefined;
-	suggestionsId: string;
+	suggestions: ComboboxOption[];
 	onCommit: (type: string, value: string, defaultKey: string) => void;
 }
 
@@ -204,7 +204,7 @@ function OverrideRow({
 	composed,
 	defaultKey,
 	override,
-	suggestionsId,
+	suggestions,
 	onCommit,
 }: OverrideRowProps) {
 	const inUse = effectiveKey(override, composed, defaultKey);
@@ -224,12 +224,14 @@ function OverrideRow({
 				<SourceBadge source={source} />
 			</TableCell>
 			<TableCell>
-				<TextInput
-					list={suggestionsId}
-					defaultValue={override ?? ''}
+				<Combobox
+					value={override ?? ''}
+					options={suggestions}
+					onChange={(value) => onCommit(type, value.trim(), defaultKey)}
+					allowCustomValue
 					placeholder={t('tax_ids.write_map_use_default')}
 					className="wcpos:font-mono wcpos:text-xs"
-					onBlur={(e) => onCommit(type, e.target.value.trim(), defaultKey)}
+					aria-label={`${TAX_ID_TYPE_LABELS[type] ?? type} ${t('tax_ids.col_override')}`}
 				/>
 			</TableCell>
 		</TableRow>
@@ -271,16 +273,16 @@ export function TaxIdsSection() {
 		[mutate, writeMap]
 	);
 
-	// Datalist suggestions are the unique set of default keys + composed keys —
+	// Suggestions are the unique set of default keys + composed keys —
 	// gives users a typeahead of "what other plugins use" without being binding.
-	const suggestions = React.useMemo(() => {
+	const suggestions = React.useMemo<ComboboxOption[]>(() => {
 		const keys = new Set<string>();
 		Object.values(detection.default_write_map).forEach((k) => k && keys.add(k));
 		Object.values(detection.composed_write_map).forEach((k) => k && keys.add(k));
-		return Array.from(keys).sort();
+		return Array.from(keys)
+			.sort()
+			.map((key) => ({ value: key, label: key }));
 	}, [detection.composed_write_map, detection.default_write_map]);
-
-	const suggestionsId = 'wcpos-tax-id-meta-keys';
 
 	return (
 		<div className="wcpos:mt-4 wcpos:pt-4 wcpos:border-t wcpos:border-gray-200">
@@ -334,17 +336,12 @@ export function TaxIdsSection() {
 									composed={detection.composed_write_map[type] ?? ''}
 									defaultKey={detection.default_write_map[type] ?? ''}
 									override={writeMap[type]}
-									suggestionsId={suggestionsId}
+									suggestions={suggestions}
 									onCommit={handleCommit}
 								/>
 							))}
 						</TableBody>
 					</Table>
-					<datalist id={suggestionsId}>
-						{suggestions.map((s) => (
-							<option key={s} value={s} />
-						))}
-					</datalist>
 					<div className="wcpos:mt-3 wcpos:text-xs wcpos:text-gray-500 wcpos:flex wcpos:flex-wrap wcpos:gap-x-3 wcpos:gap-y-1 wcpos:items-center">
 						<span className="wcpos:flex wcpos:items-center wcpos:gap-1.5">
 							<SourceBadge source="plugin" /> {t('tax_ids.legend_plugin')}
