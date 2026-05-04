@@ -30,6 +30,11 @@ function generateSnackbarId(): string {
  * offset reads `--wp-admin--admin-bar--height` (defined responsively by WP
  * core: 32px ≥783px, 46px ≤782px), with a 32px fallback for safety.
  *
+ * Horizontally, the slot tracks the bounds of its parent container instead of
+ * spanning the viewport. In WP admin this keeps the snackbar aligned with the
+ * page content area so it doesn't sit behind the admin sidebar — and it
+ * auto-adjusts when the sidebar collapses, folds, or hides on mobile.
+ *
  * Only one snackbar is shown at a time — calling `addSnackbar` replaces any
  * currently-displayed snackbar. This matches the "saving → saved/error"
  * pattern used in the settings page.
@@ -40,6 +45,26 @@ function generateSnackbarId(): string {
  */
 export function SnackbarProvider({ children }: SnackbarProviderProps) {
 	const [snackbars, setSnackbars] = React.useState<SnackbarProps[]>([]);
+	const containerRef = React.useRef<HTMLDivElement>(null);
+	const [bounds, setBounds] = React.useState<{ left: number; width: number } | null>(null);
+
+	React.useEffect(() => {
+		const el = containerRef.current;
+		if (!el) return;
+		const update = () => {
+			const rect = el.getBoundingClientRect();
+			setBounds({ left: rect.left, width: rect.width });
+		};
+		update();
+		const observer =
+			typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+		observer?.observe(el);
+		window.addEventListener('resize', update);
+		return () => {
+			observer?.disconnect();
+			window.removeEventListener('resize', update);
+		};
+	}, []);
 
 	const addSnackbar = React.useCallback((snackbar: AddSnackbarInput) => {
 		const id = snackbar.id ?? generateSnackbarId();
@@ -50,11 +75,19 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 		setSnackbars((prev) => prev.filter((snackbar) => snackbar.id !== id));
 	}, []);
 
+	const slotStyle: React.CSSProperties = bounds
+		? { left: bounds.left, width: bounds.width }
+		: { left: 0, right: 0 };
+
 	return (
 		<SnackbarContext.Provider value={{ addSnackbar }}>
-			<div className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
+			<div
+				ref={containerRef}
+				className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col"
+			>
 				<div
-					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden"
+					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:z-50 wcpos:overflow-hidden"
+					style={slotStyle}
 					role="status"
 					aria-live="polite"
 					aria-atomic="true"
