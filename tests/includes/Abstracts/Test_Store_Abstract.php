@@ -26,19 +26,56 @@ class Store_With_Test_Tax_Ids extends Store {
  */
 class Test_Store_Abstract extends WP_UnitTestCase {
 	private $store;
-	private $original_store_tax_number;
 	private $original_default_country;
+	private $original_general_settings;
+	private $original_pos_store_name;
+	private $original_pos_store_phone;
+	private $original_pos_store_email;
+	private $original_pos_refund_returns_policy;
 
 	public function setUp(): void {
 		parent::setUp();
-		$this->original_store_tax_number = get_option( 'woocommerce_store_tax_number', null );
-		$this->original_default_country  = get_option( 'woocommerce_default_country', null );
+		$this->original_default_country         = get_option( 'woocommerce_default_country', null );
+		$this->original_general_settings        = get_option( 'woocommerce_pos_settings_general', null );
+		$this->original_pos_store_name          = get_option( 'woocommerce_pos_store_name', null );
+		$this->original_pos_store_phone         = get_option( 'woocommerce_pos_store_phone', null );
+		$this->original_pos_store_email         = get_option( 'woocommerce_pos_store_email', null );
+		$this->original_pos_refund_returns_policy = get_option( 'woocommerce_pos_refund_returns_policy', null );
+		delete_option( 'woocommerce_pos_settings_general' );
+		delete_option( 'woocommerce_pos_store_name' );
+		delete_option( 'woocommerce_pos_store_phone' );
+		delete_option( 'woocommerce_pos_store_email' );
+		delete_option( 'woocommerce_pos_refund_returns_policy' );
 		$this->store = new Store();
 	}
 
 	public function tearDown(): void {
-		update_option( 'woocommerce_store_tax_number', $this->original_store_tax_number );
 		update_option( 'woocommerce_default_country', $this->original_default_country );
+		if ( null === $this->original_general_settings ) {
+			delete_option( 'woocommerce_pos_settings_general' );
+		} else {
+			update_option( 'woocommerce_pos_settings_general', $this->original_general_settings );
+		}
+		if ( null === $this->original_pos_store_name ) {
+			delete_option( 'woocommerce_pos_store_name' );
+		} else {
+			update_option( 'woocommerce_pos_store_name', $this->original_pos_store_name );
+		}
+		if ( null === $this->original_pos_store_phone ) {
+			delete_option( 'woocommerce_pos_store_phone' );
+		} else {
+			update_option( 'woocommerce_pos_store_phone', $this->original_pos_store_phone );
+		}
+		if ( null === $this->original_pos_store_email ) {
+			delete_option( 'woocommerce_pos_store_email' );
+		} else {
+			update_option( 'woocommerce_pos_store_email', $this->original_pos_store_email );
+		}
+		if ( null === $this->original_pos_refund_returns_policy ) {
+			delete_option( 'woocommerce_pos_refund_returns_policy' );
+		} else {
+			update_option( 'woocommerce_pos_refund_returns_policy', $this->original_pos_refund_returns_policy );
+		}
 		unset( $this->store );
 		parent::tearDown();
 	}
@@ -106,11 +143,75 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertEquals( 0, $store_id );
 	}
 
-	public function test_get_store_name(): void {
-		// Test uses the real get_bloginfo function from WordPress test environment
+	public function test_get_store_name_falls_back_to_blog_name_when_unset(): void {
+		// Test uses the real get_bloginfo function from WordPress test environment.
 		$store_name = $this->store->get_name();
 		$this->assertIsString( $store_name );
 		$this->assertEquals( 'Test Blog', $store_name );
+	}
+
+	public function test_get_store_name_falls_back_to_wc_pos_option_when_setting_blank(): void {
+		update_option( 'woocommerce_pos_store_name', 'WC POS Store' );
+		$store = new Store();
+		$this->assertEquals( 'WC POS Store', $store->get_name() );
+	}
+
+	public function test_get_store_name_uses_wcpos_setting_when_present(): void {
+		update_option( 'woocommerce_pos_store_name', 'WC POS Store' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array( 'store_name' => 'My WCPOS Store' )
+		);
+		$store = new Store();
+		$this->assertEquals( 'My WCPOS Store', $store->get_name() );
+	}
+
+	public function test_get_phone_falls_back_to_wc_pos_option(): void {
+		update_option( 'woocommerce_pos_store_phone', '+1 555 0100' );
+		$store = new Store();
+		$this->assertEquals( '+1 555 0100', $store->get_phone() );
+	}
+
+	public function test_get_phone_uses_wcpos_setting_when_present(): void {
+		update_option( 'woocommerce_pos_store_phone', '+1 555 0100' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array( 'store_phone' => '+44 20 7946 0958' )
+		);
+		$store = new Store();
+		$this->assertEquals( '+44 20 7946 0958', $store->get_phone() );
+	}
+
+	public function test_get_email_falls_back_to_wc_pos_option(): void {
+		update_option( 'woocommerce_pos_store_email', 'pos@example.com' );
+		$store = new Store();
+		$this->assertEquals( 'pos@example.com', $store->get_email() );
+	}
+
+	public function test_get_email_uses_wcpos_setting_when_present(): void {
+		update_option( 'woocommerce_pos_store_email', 'pos@example.com' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array( 'store_email' => 'shop@example.com' )
+		);
+		$store = new Store();
+		$this->assertEquals( 'shop@example.com', $store->get_email() );
+	}
+
+	public function test_get_policies_and_conditions_falls_back_to_wc_pos_option(): void {
+		update_option( 'woocommerce_pos_refund_returns_policy', 'No refunds.' );
+		$store = new Store();
+		$this->assertEquals( 'No refunds.', $store->get_policies_and_conditions() );
+	}
+
+	public function test_get_policies_and_conditions_uses_wcpos_setting_when_present(): void {
+		update_option( 'woocommerce_pos_refund_returns_policy', 'No refunds.' );
+		update_option(
+			'woocommerce_pos_settings_general',
+			array( 'policies_and_conditions' => 'Returns within 30 days.' )
+		);
+		$store = new Store();
+		$this->assertEquals( 'Returns within 30 days.', $store->get_policies_and_conditions() );
 	}
 
 	public function test_get_store_locale(): void {
@@ -257,17 +358,14 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertFalse( $is_cashier ); // Default value
 	}
 
-	public function test_get_tax_ids_returns_empty_when_wc_option_blank(): void {
-		update_option( 'woocommerce_store_tax_number', '' );
+	public function test_get_tax_ids_returns_empty_when_settings_blank(): void {
 		delete_option( 'woocommerce_pos_settings_general' );
 		$store = new Store();
 		$this->assertSame( array(), $store->get_tax_ids() );
 		$this->assertSame( '', $store->get_tax_id() );
 	}
 
-	public function test_get_tax_ids_merges_wc_option_with_general_store_tax_ids_and_deduplicates_by_value(): void {
-		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
-		update_option( 'woocommerce_default_country', 'DE:BY' );
+	public function test_get_tax_ids_uses_general_store_tax_ids(): void {
 		update_option(
 			'woocommerce_pos_settings_general',
 			array(
@@ -317,95 +415,31 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertSame( 'DE123456789', $store->get_tax_id() );
 	}
 
-	public function test_get_tax_ids_uses_general_store_tax_ids_when_wc_option_blank(): void {
-		update_option( 'woocommerce_store_tax_number', '' );
+	public function test_get_tax_ids_drops_malformed_entries(): void {
 		update_option(
 			'woocommerce_pos_settings_general',
 			array(
 				'store_tax_ids' => array(
+					array( 'type' => 'eu_vat' ), // missing value
+					array( 'value' => 'orphan' ), // missing type
 					array(
-						'type'    => 'de_steuernummer',
-						'value'   => '12/345/67890',
-						'country' => 'DE',
+						'type'  => 'de_steuernummer',
+						'value' => '12/345/67890',
 					),
 				),
 			)
 		);
 
 		$store = new Store();
-
 		$this->assertSame(
 			array(
 				array(
-					'type'    => 'de_steuernummer',
-					'value'   => '12/345/67890',
-					'country' => 'DE',
+					'type'  => 'de_steuernummer',
+					'value' => '12/345/67890',
 				),
 			),
 			$store->get_tax_ids()
 		);
-		$this->assertSame( '12/345/67890', $store->get_tax_id() );
-	}
-
-	public function test_get_tax_ids_derives_eu_vat_from_de_country(): void {
-		update_option( 'woocommerce_store_tax_number', 'DE123456789' );
-		update_option( 'woocommerce_default_country', 'DE:BY' );
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertCount( 1, $tax_ids );
-		$this->assertSame( 'eu_vat', $tax_ids[0]['type'] );
-		$this->assertSame( 'DE123456789', $tax_ids[0]['value'] );
-		$this->assertSame( 'DE', $tax_ids[0]['country'] );
-		$this->assertSame( 'DE123456789', $store->get_tax_id() );
-	}
-
-	public function test_get_tax_ids_derives_eu_vat_from_gr_country(): void {
-		update_option( 'woocommerce_store_tax_number', 'GR123456789' );
-		update_option( 'woocommerce_default_country', 'GR' );
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertCount( 1, $tax_ids );
-		$this->assertSame( 'eu_vat', $tax_ids[0]['type'] );
-		$this->assertSame( 'GR123456789', $tax_ids[0]['value'] );
-		$this->assertSame( 'GR', $tax_ids[0]['country'] );
-		$this->assertSame( 'GR123456789', $store->get_tax_id() );
-	}
-
-	public function test_get_tax_ids_derives_gb_vat(): void {
-		update_option( 'woocommerce_store_tax_number', 'GB123456789' );
-		update_option( 'woocommerce_default_country', 'GB' );
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertSame( 'gb_vat', $tax_ids[0]['type'] );
-		$this->assertSame( 'GB', $tax_ids[0]['country'] );
-	}
-
-	public function test_get_tax_ids_derives_au_abn(): void {
-		update_option( 'woocommerce_store_tax_number', '12345678901' );
-		update_option( 'woocommerce_default_country', 'AU' );
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertSame( 'au_abn', $tax_ids[0]['type'] );
-		$this->assertSame( 'AU', $tax_ids[0]['country'] );
-		$this->assertSame( '12345678901', $tax_ids[0]['value'] );
-	}
-
-	public function test_get_tax_ids_falls_back_to_other_for_unknown_country(): void {
-		update_option( 'woocommerce_store_tax_number', 'XYZ-999' );
-		update_option( 'woocommerce_default_country', 'JP' ); // JP not auto-detected to a specific type today; falls to 'other'.
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertSame( 'other', $tax_ids[0]['type'] );
-		$this->assertSame( 'JP', $tax_ids[0]['country'] );
-	}
-
-	public function test_get_tax_ids_preserves_country_prefix_in_value_verbatim(): void {
-		update_option( 'woocommerce_store_tax_number', 'IT01234567890' );
-		update_option( 'woocommerce_default_country', 'IT' );
-		$store = new Store();
-		$tax_ids = $store->get_tax_ids();
-		$this->assertSame( 'IT', $tax_ids[0]['country'] );
-		$this->assertSame( 'IT01234567890', $tax_ids[0]['value'] ); // value retains the prefix verbatim; country is the inferred ISO code.
 	}
 
 	public function test_get_tax_id_uses_first_entry_for_non_zero_keys(): void {

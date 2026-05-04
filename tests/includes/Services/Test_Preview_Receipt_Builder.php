@@ -61,14 +61,16 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 * @covers ::build
 	 */
 	public function test_store_info_uses_wc_settings(): void {
-		$original_name     = get_option( 'blogname' );
+		$original_pos_name = get_option( 'woocommerce_pos_store_name' );
 		$original_address  = get_option( 'woocommerce_store_address' );
 		$original_city     = get_option( 'woocommerce_store_city' );
 		$original_postcode = get_option( 'woocommerce_store_postcode' );
 		$original_currency = get_option( 'woocommerce_currency' );
 
 		try {
-			update_option( 'blogname', 'My Test Store' );
+			// Store name is sourced from the WC core "Point of Sale" panel
+			// (woocommerce_pos_store_name), which itself defaults to blogname.
+			update_option( 'woocommerce_pos_store_name', 'My Test Store' );
 			update_option( 'woocommerce_store_address', '789 Elm Street' );
 			update_option( 'woocommerce_store_city', 'Portland' );
 			update_option( 'woocommerce_store_postcode', '97201' );
@@ -81,7 +83,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertEquals( 'EUR', $data['meta']['currency'] );
 			$this->assertEquals( 'EUR', $data['order']['currency'] );
 		} finally {
-			update_option( 'blogname', $original_name );
+			update_option( 'woocommerce_pos_store_name', $original_pos_name );
 			update_option( 'woocommerce_store_address', $original_address );
 			update_option( 'woocommerce_store_city', $original_city );
 			update_option( 'woocommerce_store_postcode', $original_postcode );

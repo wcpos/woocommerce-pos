@@ -93,6 +93,57 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertEquals( '_sku', $settings['barcode_field'] );
 		$this->assertEquals( 'undecided', $settings['tracking_consent'] );
 		$this->assertSame( array(), $settings['store_tax_ids'] );
+		$this->assertSame( '', $settings['store_name'] );
+		$this->assertSame( '', $settings['store_phone'] );
+		$this->assertSame( '', $settings['store_email'] );
+		$this->assertSame( '', $settings['policies_and_conditions'] );
+		$this->assertIsArray( $settings['store_defaults'] );
+		$this->assertArrayHasKey( 'store_name', $settings['store_defaults'] );
+		$this->assertArrayHasKey( 'store_phone', $settings['store_defaults'] );
+		$this->assertArrayHasKey( 'store_email', $settings['store_defaults'] );
+		$this->assertArrayHasKey( 'policies_and_conditions', $settings['store_defaults'] );
+	}
+
+	public function test_save_general_settings_sanitizes_store_details_strings(): void {
+		$result = $this->settings->save_settings(
+			'general',
+			array(
+				'store_name'              => "  Acme \n<script>alert(1)</script>  ",
+				'store_phone'             => '  +1 555 0100  ',
+				'store_email'             => '  Owner@Example.COM  ',
+				'policies_and_conditions' => "  Line 1\nLine 2  ",
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Acme', $result['store_name'] );
+		$this->assertSame( '+1 555 0100', $result['store_phone'] );
+		$this->assertSame( 'Owner@Example.COM', $result['store_email'] );
+		$this->assertSame( "Line 1\nLine 2", $result['policies_and_conditions'] );
+	}
+
+	public function test_save_general_settings_drops_invalid_email(): void {
+		$result = $this->settings->save_settings(
+			'general',
+			array( 'store_email' => 'not-an-email' )
+		);
+
+		$this->assertSame( '', $result['store_email'] );
+	}
+
+	public function test_save_general_settings_strips_store_defaults_from_payload(): void {
+		$result = $this->settings->save_settings(
+			'general',
+			array(
+				'store_name'     => 'Acme',
+				'store_defaults' => array( 'store_name' => 'Hijack' ),
+			)
+		);
+
+		$this->assertSame( 'Acme', $result['store_name'] );
+		// store_defaults is recomputed on read, never persisted from the payload.
+		$persisted = get_option( 'woocommerce_pos_settings_general' );
+		$this->assertArrayNotHasKey( 'store_defaults', $persisted );
 	}
 
 	public function test_save_general_settings_sanitizes_store_tax_ids(): void {
