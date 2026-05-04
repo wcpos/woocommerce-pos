@@ -133,17 +133,22 @@ class Settings {
 		$update_ext_count = $this->get_update_available_count();
 		$unread_logs      = Logs::get_unread_counts( get_current_user_id() );
 		$current_user_id  = get_current_user_id();
+		$countries        = function_exists( 'WC' ) && WC()->countries
+			? WC()->countries->get_countries()
+			: array();
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
             barcodes: %s,
             order_statuses: %s,
+            countries: %s,
             updateExtensionsCount: %s,
             unreadLogCounts: %s,
             currentUserId: %s
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
+			json_encode( $countries ),
 			json_encode( $update_ext_count ),
 			json_encode( $unread_logs ),
 			json_encode( $current_user_id ),

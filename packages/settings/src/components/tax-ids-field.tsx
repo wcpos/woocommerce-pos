@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { Button, Select, TextInput, type OptionProps } from './ui';
+import { Button, CountrySelect, Select, TextInput, type OptionProps } from './ui';
 
 export interface TaxId {
 	type: string;
@@ -18,6 +18,10 @@ interface TaxIdsLabels {
 	type: string;
 	value: string;
 	country: string;
+	countryPlaceholder?: string;
+	countrySearchPlaceholder?: string;
+	countryNoResults?: string;
+	countryClear?: string;
 	label: string;
 	remove: string;
 	empty: string;
@@ -86,15 +90,12 @@ interface TaxIdRowProps {
  */
 function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 	const [valueDraft, setValueDraft] = React.useState(taxId.value);
-	const [countryDraft, setCountryDraft] = React.useState(taxId.country ?? '');
 	const [labelDraft, setLabelDraft] = React.useState(taxId.label ?? '');
+	const countries = window?.wcpos?.settings?.countries ?? {};
 
 	React.useEffect(() => {
 		setValueDraft(taxId.value);
 	}, [taxId.value]);
-	React.useEffect(() => {
-		setCountryDraft(taxId.country ?? '');
-	}, [taxId.country]);
 	React.useEffect(() => {
 		setLabelDraft(taxId.label ?? '');
 	}, [taxId.label]);
@@ -124,18 +125,16 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 				/>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
-				<TextInput
+				<CountrySelect
 					aria-label={labels.country}
-					placeholder={labels.country}
-					maxLength={2}
-					value={countryDraft}
-					onChange={(event) => setCountryDraft(event.target.value)}
-					onBlur={() => {
-						const trimmed = countryDraft.trim().toUpperCase();
-						if (trimmed !== (taxId.country ?? '')) {
-							onChangeField({ country: trimmed });
-						}
-					}}
+					countries={countries}
+					value={taxId.country ?? ''}
+					onChange={(country) => onChangeField({ country })}
+					placeholder={labels.countryPlaceholder ?? labels.country}
+					searchPlaceholder={labels.countrySearchPlaceholder}
+					noResultsLabel={labels.countryNoResults}
+					clearable
+					clearLabel={labels.countryClear}
 				/>
 			</td>
 			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
@@ -300,7 +299,7 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 								<th className="wcpos:px-3 wcpos:py-2 wcpos:font-medium">{labels.value}</th>
 								<th
 									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium"
-									style={{ width: '6rem' }}
+									style={{ width: '12rem' }}
 								>
 									{labels.country}
 								</th>
