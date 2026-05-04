@@ -17,7 +17,13 @@ const baseLabels = {
 function setStoreCountry(country: string | undefined) {
 	(window as any).wcpos = (window as any).wcpos || {};
 	(window as any).wcpos.settings = {
-		countries: { DE: 'Germany', US: 'United States', GB: 'United Kingdom' },
+		countries: {
+			AT: 'Austria',
+			DE: 'Germany',
+			FR: 'France',
+			GB: 'United Kingdom',
+			US: 'United States',
+		},
 	};
 	if (country) {
 		(window as any).wcpos.settings.storeCountry = country;
@@ -35,7 +41,7 @@ describe('TaxIdsField addRow defaults', () => {
 		delete (window as any).wcpos;
 	});
 
-	it('pre-fills new rows with storeCountry and an EU-aligned type for EU stores', () => {
+	it('uses the country-specific type for DE stores (de_ust_id)', () => {
 		setStoreCountry('DE');
 		const onChange = vi.fn();
 
@@ -45,7 +51,35 @@ describe('TaxIdsField addRow defaults', () => {
 		commitDraftValue('DE123456789');
 
 		expect(onChange).toHaveBeenCalledWith([
-			{ type: 'eu_vat', value: 'DE123456789', country: 'DE' },
+			{ type: 'de_ust_id', value: 'DE123456789', country: 'DE' },
+		]);
+	});
+
+	it('uses fr_siret for FR stores', () => {
+		setStoreCountry('FR');
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={[]} onChange={onChange} labels={baseLabels} />);
+
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('12345678901234');
+
+		expect(onChange).toHaveBeenCalledWith([
+			{ type: 'fr_siret', value: '12345678901234', country: 'FR' },
+		]);
+	});
+
+	it('falls through to eu_vat for EU countries without a country-specific entry (AT)', () => {
+		setStoreCountry('AT');
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={[]} onChange={onChange} labels={baseLabels} />);
+
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('ATU12345678');
+
+		expect(onChange).toHaveBeenCalledWith([
+			{ type: 'eu_vat', value: 'ATU12345678', country: 'AT' },
 		]);
 	});
 

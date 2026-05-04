@@ -58,26 +58,28 @@ const TYPE_OPTIONS: OptionProps[] = [
 	{ value: 'other', label: 'Other' },
 ];
 
-// Country → most-common VAT/tax-ID type for receipts. Country-specific
-// business-register types (de_steuernummer, fr_siret, nl_kvk, etc.) are
-// intentionally not used as defaults — most stores want their VAT/sales-tax
-// number, and the user can switch to a register number explicitly.
+// Country → most-common tax/business-ID printed on receipts. EU countries
+// without a country-specific entry fall through to `eu_vat`.
 const COUNTRY_TO_TAX_ID_TYPE: Record<string, string> = {
 	AR: 'ar_cuit',
 	AU: 'au_abn',
 	BR: 'br_cnpj',
 	CA: 'ca_gst_hst',
 	CH: 'ch_uid',
+	DE: 'de_ust_id',
+	ES: 'es_nif',
+	FR: 'fr_siret',
 	GB: 'gb_vat',
 	IN: 'in_gst',
+	IT: 'it_piva',
+	NL: 'nl_kvk',
 	SA: 'sa_vat',
 	US: 'us_ein',
 };
 
 const EU_VAT_COUNTRIES = new Set([
-	'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
-	'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO',
-	'SE', 'SI', 'SK',
+	'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU', 'IE',
+	'LT', 'LU', 'LV', 'MT', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
 ]);
 
 function defaultTaxIdTypeFor(country: string | undefined): string {
