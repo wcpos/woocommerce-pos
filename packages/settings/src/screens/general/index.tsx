@@ -53,7 +53,10 @@ export interface GeneralSettingsProps {
  */
 function getStoreDetailsBlockOverride(): React.ComponentType<StoreDetailsBlockProps> | null {
 	const component = (window as any)?.wcpos?.settings?.getComponent?.('general.store_details_block');
-	return typeof component === 'function' ? component : null;
+	// Accept any non-null value: plain function components, React.memo()
+	// and React.forwardRef() wrappers (both runtime objects with $$typeof),
+	// and React.lazy() wrappers.
+	return component ? (component as React.ComponentType<StoreDetailsBlockProps>) : null;
 }
 
 function General() {
