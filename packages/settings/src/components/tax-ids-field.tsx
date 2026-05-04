@@ -253,9 +253,15 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 		);
 
 		const addRow = React.useCallback(() => {
-			setDraft((current) =>
-				current ?? { id: generateRowId(), taxId: { type: 'other', value: '' } }
-			);
+			setDraft((current) => {
+				if (current) return current;
+				const taxId: TaxId = { type: 'other', value: '' };
+				const storeCountry = window?.wcpos?.settings?.storeCountry;
+				if (storeCountry) {
+					taxId.country = storeCountry;
+				}
+				return { id: generateRowId(), taxId };
+			});
 		}, []);
 
 		React.useImperativeHandle(ref, () => ({ addRow }), [addRow]);

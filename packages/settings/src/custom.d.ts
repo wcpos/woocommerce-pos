@@ -6,6 +6,7 @@ declare global {
 		barcodes?: string[];
 		order_statuses?: Record<string, string>;
 		countries?: Record<string, string>;
+		storeCountry?: string;
 		updateExtensionsCount?: number | null;
 		unreadLogCounts?: Record<string, number>;
 		currentUserId?: number;
