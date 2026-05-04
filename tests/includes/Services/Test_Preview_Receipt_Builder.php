@@ -92,6 +92,96 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Sample-data previews should reflect the chosen store's currency rather
+	 * than the global WooCommerce default — so editing a store's currency in
+	 * the admin UI updates the preview after save.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_uses_store_currency_when_store_provides_one(): void {
+		$original_currency = get_option( 'woocommerce_currency' );
+
+		$store_filter = static function () {
+			return new class() {
+				public function get_currency(): string {
+					return 'JPY';
+				}
+
+				public function get_locale(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			update_option( 'woocommerce_currency', 'USD' );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data = $this->builder->build();
+
+			$this->assertEquals( 'JPY', $data['meta']['currency'] );
+			$this->assertEquals( 'JPY', $data['order']['currency'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			update_option( 'woocommerce_currency', $original_currency );
+		}
+	}
+
+	/**
+	 * The store's locale should drive the preview's presentation_hints locale
+	 * so date/number formatting matches the store's region.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_uses_store_locale_for_presentation_hints(): void {
+		$store_filter = static function () {
+			return new class() {
+				public function get_currency(): string {
+					return '';
+				}
+
+				public function get_locale(): string {
+					return 'de_DE';
+				}
+			};
+		};
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data = $this->builder->build();
+
+			$this->assertEquals( 'de_DE', $data['presentation_hints']['locale'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+		}
+	}
+
+	/**
+	 * When the store object does not expose currency/locale, fall back to the
+	 * site defaults so legacy callers keep working.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_falls_back_to_site_currency_and_locale_when_store_lacks_methods(): void {
+		$original_currency = get_option( 'woocommerce_currency' );
+
+		try {
+			update_option( 'woocommerce_currency', 'GBP' );
+
+			// Pass an explicit empty stub so the fallback path is deterministic:
+			// without get_currency()/get_locale() methods the builder must use
+			// the site defaults, not whatever wcpos_get_store() happens to return.
+			$data = $this->builder->build( new class() {} );
+
+			$this->assertEquals( 'GBP', $data['meta']['currency'] );
+			$this->assertEquals( get_locale(), $data['presentation_hints']['locale'] );
+		} finally {
+			update_option( 'woocommerce_currency', $original_currency );
+		}
+	}
+
+	/**
 	 * Test legacy string opening hours are preserved in preview payloads.
 	 *
 	 * @covers ::build

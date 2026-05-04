@@ -149,6 +149,43 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Existing-order receipts keep the order's currency (financial record)
+	 * but should use the store's locale for date/number formatting so the
+	 * presentation matches the store's region rather than the site default.
+	 */
+	public function test_build_uses_store_locale_when_store_provides_one(): void {
+		$order = $this->create_taxed_order( 'itemized', 'yes' );
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return 'fr_FR';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		$this->assertEquals( 'fr_FR', $payload['presentation_hints']['locale'] );
+		// Currency stays from the order, not the store.
+		$this->assertEquals( $order->get_currency(), $payload['order']['currency'] );
+	}
+
+	/**
+	 * Falls back to the site locale when the store does not expose
+	 * get_locale or returns an empty value.
+	 */
+	public function test_build_falls_back_to_site_locale_when_store_lacks_locale(): void {
+		$order = $this->create_taxed_order( 'itemized', 'yes' );
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return '';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		$this->assertEquals( get_locale(), $payload['presentation_hints']['locale'] );
+	}
+
+	/**
 	 * Test tax summary reports taxable base values instead of tax-only values.
 	 */
 	public function test_build_tax_summary_uses_taxable_base_amounts(): void {
