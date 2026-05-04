@@ -137,8 +137,10 @@ export function CountrySelect({
 	React.useLayoutEffect(() => {
 		if (!open) return;
 		updatePosition();
-		// Move focus into the filter once the popover renders.
-		requestAnimationFrame(() => filterRef.current?.focus());
+		// Move focus into the filter once the popover renders. Cancel on
+		// cleanup so the callback can't fire after unmount or close.
+		const frameId = requestAnimationFrame(() => filterRef.current?.focus());
+		return () => cancelAnimationFrame(frameId);
 	}, [open, updatePosition]);
 
 	React.useEffect(() => {
