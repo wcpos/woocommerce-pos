@@ -2,7 +2,8 @@ import * as React from 'react';
 
 import { isString } from 'lodash';
 
-import Notice from '../../components/notice';
+import { Callout } from '@wcpos/ui';
+
 import { FormRow, FormSection } from '../../components/form';
 import { TextInput, TextArea } from '../../components/ui';
 import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
@@ -75,18 +76,25 @@ export function StoreDetailsBlock({ data, mutate, storeDefaults }: StoreDetailsB
 						onChange={(event) => mutate({ policies_and_conditions: event.target.value })}
 					/>
 				</FormRow>
-				<Notice status="info" isDismissible={false} className="wcpos:mt-2">
-					{t('settings.store_details_upgrade_to_pro')}{' '}
-					<a
-						href={UPGRADE_URL}
-						target="_blank"
-						rel="noreferrer noopener"
-						onClick={() => captureUpgradeCtaClicked(UPGRADE_PLACEMENT, UPGRADE_URL)}
-					>
-						{t('common.upgrade_to_pro')}
-					</a>
-					.
-				</Notice>
+				<Callout
+					status="info"
+					title={t('settings.store_details_upgrade_callout_title')}
+					className="wcpos:mt-4"
+				>
+					<p className="wcpos:m-0">
+						{t('settings.store_details_upgrade_to_pro')}
+					</p>
+					<p className="wcpos:mt-2 wcpos:mb-0">
+						<a
+							href={UPGRADE_URL}
+							target="_blank"
+							rel="noreferrer noopener"
+							onClick={() => captureUpgradeCtaClicked(UPGRADE_PLACEMENT, UPGRADE_URL)}
+						>
+							{t('common.upgrade_to_pro')}
+						</a>
+					</p>
+				</Callout>
 			</FormSection>
 		</>
 	);
