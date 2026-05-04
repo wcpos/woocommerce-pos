@@ -475,6 +475,32 @@
 				"footer_imprint": {
 					"type": "string",
 					"description": "Footer Imprint"
+				},
+				"tax_ids": {
+					"type": "array",
+					"description": "Store Tax IDs",
+					"items": {
+						"type": "object",
+						"additionalProperties": true,
+						"properties": {
+							"type": {
+								"type": "string",
+								"description": "Type"
+							},
+							"value": {
+								"type": "string",
+								"description": "Value"
+							},
+							"country": {
+								"type": "string",
+								"description": "Country"
+							},
+							"label": {
+								"type": "string",
+								"description": "Label"
+							}
+						}
+					}
 				}
 			},
 			"description": "Store"
