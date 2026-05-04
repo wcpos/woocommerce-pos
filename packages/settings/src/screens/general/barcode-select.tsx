@@ -1,6 +1,7 @@
 import * as React from 'react';
 
-import Combobox from '../../components/combobox';
+import { Combobox } from '../../components/ui';
+import { t } from '../../translations';
 
 interface BarcodeSelectProps {
 	selected: string;
@@ -8,42 +9,20 @@ interface BarcodeSelectProps {
 }
 
 function BarcodeSelect({ selected, onSelect }: BarcodeSelectProps) {
-	const [query, setQuery] = React.useState('');
-	const barcodes = window?.wcpos?.settings?.barcodes;
-
 	const options = React.useMemo(() => {
-		const normalizedQuery = (query || '').trim().toLowerCase();
-
-		const filtered = (barcodes || [])
-			.filter((barcode) => barcode.toLowerCase().includes(normalizedQuery))
-			.map((option) => ({
-				value: option,
-				label: option,
-			}));
-
-		const exactMatch = (barcodes || []).some(
-			(barcode) => barcode.toLowerCase() === normalizedQuery
-		);
-
-		if (normalizedQuery && !exactMatch) {
-			const trimmedQuery = query.trim();
-			filtered.push({
-				value: trimmedQuery,
-				label: `Create "${trimmedQuery}"`,
-			});
-		}
-
-		return filtered;
-	}, [barcodes, query]);
+		const barcodes = window?.wcpos?.settings?.barcodes ?? [];
+		return barcodes.map((barcode) => ({ value: barcode, label: barcode }));
+	}, []);
 
 	return (
 		<Combobox
 			value={selected}
 			options={options}
-			onChange={({ value }) => {
-				onSelect(value);
-			}}
-			onSearch={(value) => setQuery(value)}
+			onChange={(value) => onSelect(value || null)}
+			allowCustomValue
+			createLabel={(query) => t('settings.barcode_field_create', { value: query })}
+			noResultsLabel={t('settings.barcode_field_no_results')}
+			aria-label={t('settings.barcode_field')}
 		/>
 	);
 }
