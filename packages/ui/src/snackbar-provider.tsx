@@ -26,8 +26,9 @@ function generateSnackbarId(): string {
 
 /**
  * SnackbarProvider mounts a single snackbar slot fixed to the viewport, just
- * below the WP admin bar (32px desktop / 46px on screens ≤782px), so it stays
- * visible as the page scrolls.
+ * below the WP admin bar, so it stays visible as the page scrolls. The top
+ * offset reads `--wp-admin--admin-bar--height` (defined responsively by WP
+ * core: 32px ≥783px, 46px ≤782px), with a 32px fallback for safety.
  *
  * Only one snackbar is shown at a time — calling `addSnackbar` replaces any
  * currently-displayed snackbar. This matches the "saving → saved/error"
@@ -53,7 +54,7 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 		<SnackbarContext.Provider value={{ addSnackbar }}>
 			<div className="wcpos:relative wcpos:flex-1 wcpos:flex wcpos:flex-col">
 				<div
-					className="wcpos:fixed wcpos:top-[32px] wcpos:max-[783px]:top-[46px] wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden"
+					className="wcpos:fixed wcpos:top-[var(--wp-admin--admin-bar--height,32px)] wcpos:left-0 wcpos:right-0 wcpos:z-50 wcpos:overflow-hidden"
 					role="status"
 					aria-live="polite"
 					aria-atomic="true"
