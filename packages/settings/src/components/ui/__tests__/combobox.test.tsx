@@ -113,6 +113,15 @@ describe('Combobox', () => {
 			expect(onChange).toHaveBeenCalledWith('durian');
 		});
 
+		it('commits typed text on blur', () => {
+			const { onChange } = renderCombobox({ allowCustomValue: true });
+			const input = screen.getByRole('combobox');
+			fireEvent.focus(input);
+			fireEvent.change(input, { target: { value: 'durian' } });
+			fireEvent.blur(input);
+			expect(onChange).toHaveBeenCalledWith('durian');
+		});
+
 		it('shows a Create entry when createLabel is provided', () => {
 			renderCombobox({
 				allowCustomValue: true,

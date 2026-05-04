@@ -195,6 +195,14 @@ export function Combobox({
 		close();
 	}, [allowCustomValue, close, inputValue, onChange, options, value]);
 
+	// Keep the latest commit closure in a ref so the click-outside effect below
+	// doesn't re-attach listeners on every keystroke (commitCurrentInput's identity
+	// changes whenever inputValue does).
+	const commitCurrentInputRef = React.useRef(commitCurrentInput);
+	React.useEffect(() => {
+		commitCurrentInputRef.current = commitCurrentInput;
+	}, [commitCurrentInput]);
+
 	React.useLayoutEffect(() => {
 		if (!open) return;
 		updatePosition();
@@ -211,7 +219,7 @@ export function Combobox({
 			) {
 				return;
 			}
-			commitCurrentInput();
+			commitCurrentInputRef.current();
 		};
 
 		document.addEventListener('mousedown', handleClickOutside);
@@ -223,7 +231,7 @@ export function Combobox({
 			window.removeEventListener('scroll', updatePosition, true);
 			window.removeEventListener('resize', updatePosition);
 		};
-	}, [open, commitCurrentInput, updatePosition]);
+	}, [open, updatePosition]);
 
 	React.useEffect(() => {
 		if (!open) return;
@@ -259,6 +267,21 @@ export function Combobox({
 		// Select all so a quick second focus replaces rather than appends.
 		const node = inputRef.current;
 		if (node) requestAnimationFrame(() => node.select());
+	};
+
+	const handleInputBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+		// Focus moving into the chevron or a list option is part of the same widget —
+		// keep the popover open and don't commit. Anything else (Tab away, programmatic
+		// blur, click that didn't fire mousedown-outside first) commits via the ref so
+		// the eventual onChange is naturally deduped against the committed value.
+		const next = event.relatedTarget as Node | null;
+		if (
+			next &&
+			(triggerRef.current?.contains(next) || popoverRef.current?.contains(next))
+		) {
+			return;
+		}
+		commitCurrentInputRef.current();
 	};
 
 	const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -371,6 +394,7 @@ export function Combobox({
 					placeholder={placeholder}
 					onChange={handleInputChange}
 					onFocus={handleInputFocus}
+					onBlur={handleInputBlur}
 					onKeyDown={handleKeyDown}
 					className={INPUT_CLASSES}
 				/>
@@ -430,7 +454,7 @@ export function Combobox({
 									const isSelected = !option.isCreate && option.value === value;
 									return (
 										<li
-											key={option.isCreate ? '__create__' : option.value}
+											key={option.isCreate ? `__create__-${listboxId}` : option.value}
 											id={`${listboxId}-option-${index}`}
 											data-index={index}
 											role="option"
