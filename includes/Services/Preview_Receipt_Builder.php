@@ -920,6 +920,8 @@ class Preview_Receipt_Builder {
 	 * Resolve the currency code for the preview, preferring the store's
 	 * configured currency over the global WooCommerce default. Sample-data
 	 * previews should reflect what the chosen store will charge.
+	 *
+	 * @return string ISO 4217 currency code (e.g. "USD", "EUR").
 	 */
 	private function resolve_currency(): string {
 		$fallback = get_option( 'woocommerce_currency', 'USD' );
@@ -932,6 +934,8 @@ class Preview_Receipt_Builder {
 	 * Resolve the locale for the preview's presentation hints, preferring
 	 * the store's configured locale over the site locale so date/number
 	 * formatting matches the store's region.
+	 *
+	 * @return string Locale identifier (e.g. "en_US", "de_DE").
 	 */
 	private function resolve_locale(): string {
 		$fallback = get_locale();

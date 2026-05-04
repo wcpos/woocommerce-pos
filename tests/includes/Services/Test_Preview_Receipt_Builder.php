@@ -169,7 +169,10 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		try {
 			update_option( 'woocommerce_currency', 'GBP' );
 
-			$data = $this->builder->build();
+			// Pass an explicit empty stub so the fallback path is deterministic:
+			// without get_currency()/get_locale() methods the builder must use
+			// the site defaults, not whatever wcpos_get_store() happens to return.
+			$data = $this->builder->build( new class() {} );
 
 			$this->assertEquals( 'GBP', $data['meta']['currency'] );
 			$this->assertEquals( get_locale(), $data['presentation_hints']['locale'] );
