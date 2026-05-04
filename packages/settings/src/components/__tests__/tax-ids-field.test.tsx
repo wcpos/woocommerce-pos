@@ -20,8 +20,11 @@ function setStoreCountry(country: string | undefined) {
 		countries: {
 			AT: 'Austria',
 			DE: 'Germany',
+			ES: 'Spain',
 			FR: 'France',
 			GB: 'United Kingdom',
+			IT: 'Italy',
+			NL: 'Netherlands',
 			US: 'United States',
 		},
 	};
@@ -66,6 +69,48 @@ describe('TaxIdsField addRow defaults', () => {
 
 		expect(onChange).toHaveBeenCalledWith([
 			{ type: 'fr_siret', value: '12345678901234', country: 'FR' },
+		]);
+	});
+
+	it('uses es_nif for ES stores', () => {
+		setStoreCountry('ES');
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={[]} onChange={onChange} labels={baseLabels} />);
+
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('B12345674');
+
+		expect(onChange).toHaveBeenCalledWith([
+			{ type: 'es_nif', value: 'B12345674', country: 'ES' },
+		]);
+	});
+
+	it('uses it_piva for IT stores', () => {
+		setStoreCountry('IT');
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={[]} onChange={onChange} labels={baseLabels} />);
+
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('12345678901');
+
+		expect(onChange).toHaveBeenCalledWith([
+			{ type: 'it_piva', value: '12345678901', country: 'IT' },
+		]);
+	});
+
+	it('uses nl_kvk for NL stores', () => {
+		setStoreCountry('NL');
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={[]} onChange={onChange} labels={baseLabels} />);
+
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('12345678');
+
+		expect(onChange).toHaveBeenCalledWith([
+			{ type: 'nl_kvk', value: '12345678', country: 'NL' },
 		]);
 	});
 
