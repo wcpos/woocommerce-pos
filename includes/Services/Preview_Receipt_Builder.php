@@ -494,7 +494,7 @@ class Preview_Receipt_Builder {
 			$resolved_store = wcpos_get_store();
 		}
 		$this->pos_store = \is_object( $resolved_store ) ? $resolved_store : new Store();
-		$currency     = get_option( 'woocommerce_currency', 'USD' );
+		$currency = $this->resolve_currency();
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 		$tax_config   = $this->get_tax_config();
 		$tax_rate     = $tax_config['rate'];
@@ -741,7 +741,7 @@ class Preview_Receipt_Builder {
 			'display_tax'             => wc_tax_enabled() ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
 			'prices_entered_with_tax' => $prices_include_tax,
 			'rounding_mode'           => get_option( 'woocommerce_tax_round_at_subtotal', 'no' ),
-			'locale'                  => get_locale(),
+			'locale'                  => $this->resolve_locale(),
 		);
 
 		$fiscal = array(
@@ -914,6 +914,30 @@ class Preview_Receipt_Builder {
 		}
 
 		return $pos_store->{$getter}();
+	}
+
+	/**
+	 * Resolve the currency code for the preview, preferring the store's
+	 * configured currency over the global WooCommerce default. Sample-data
+	 * previews should reflect what the chosen store will charge.
+	 */
+	private function resolve_currency(): string {
+		$fallback = get_option( 'woocommerce_currency', 'USD' );
+		$store_currency = (string) $this->get_store_value( $this->pos_store, 'get_currency', '' );
+
+		return '' !== $store_currency ? $store_currency : $fallback;
+	}
+
+	/**
+	 * Resolve the locale for the preview's presentation hints, preferring
+	 * the store's configured locale over the site locale so date/number
+	 * formatting matches the store's region.
+	 */
+	private function resolve_locale(): string {
+		$fallback = get_locale();
+		$store_locale = (string) $this->get_store_value( $this->pos_store, 'get_locale', '' );
+
+		return '' !== $store_locale ? $store_locale : $fallback;
 	}
 
 	/**

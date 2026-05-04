@@ -311,12 +311,15 @@ class Receipt_Data_Builder {
 			),
 		);
 
+		$store_locale = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
 		$tax_display_mode = get_option( 'woocommerce_tax_total_display', 'itemized' );
 		$presentation_hints = array(
 			'display_tax'              => wc_tax_enabled() ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
 			'prices_entered_with_tax'  => wc_prices_include_tax(),
 			'rounding_mode'            => get_option( 'woocommerce_tax_round_at_subtotal', 'no' ),
-			'locale'                   => get_locale(),
+			// Currency stays from the order (financial record). Locale follows the store
+			// so date/number formatting matches the store's region rather than the site default.
+			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),
 		);
 
 		$fiscal = array(
