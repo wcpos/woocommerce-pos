@@ -56,11 +56,12 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 			setBounds({ left: rect.left, width: rect.width });
 		};
 		update();
-		const observer = new ResizeObserver(update);
-		observer.observe(el);
+		const observer =
+			typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+		observer?.observe(el);
 		window.addEventListener('resize', update);
 		return () => {
-			observer.disconnect();
+			observer?.disconnect();
 			window.removeEventListener('resize', update);
 		};
 	}, []);
