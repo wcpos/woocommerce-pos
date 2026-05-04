@@ -4,6 +4,16 @@ import { useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 import classNames from 'classnames';
 
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableHeaderRow,
+	TableRow,
+} from '@wcpos/ui';
+
 import { TextInput } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
@@ -201,22 +211,19 @@ function OverrideRow({
 	const source = resolveSource(type, override, composed, defaultKey);
 
 	return (
-		<tr
-			className={classNames(
-				'wcpos:border-t wcpos:border-gray-100',
-				source === 'override' && 'wcpos:bg-amber-50/40'
-			)}
+		<TableRow
+			className={classNames(source === 'override' && 'wcpos:bg-amber-50/40')}
 		>
-			<td className="wcpos:py-2 wcpos:pr-3 wcpos:font-medium wcpos:text-gray-900">
+			<TableCell className="wcpos:font-medium wcpos:text-gray-900">
 				{TAX_ID_TYPE_LABELS[type] ?? type}
-			</td>
-			<td className="wcpos:py-2 wcpos:pr-3 wcpos:font-mono wcpos:text-xs wcpos:text-gray-600">
+			</TableCell>
+			<TableCell className="wcpos:font-mono wcpos:text-xs wcpos:text-gray-600">
 				{inUse}
-			</td>
-			<td className="wcpos:py-2 wcpos:pr-3">
+			</TableCell>
+			<TableCell>
 				<SourceBadge source={source} />
-			</td>
-			<td className="wcpos:py-2">
+			</TableCell>
+			<TableCell>
 				<TextInput
 					list={suggestionsId}
 					defaultValue={override ?? ''}
@@ -224,8 +231,8 @@ function OverrideRow({
 					className="wcpos:font-mono wcpos:text-xs"
 					onBlur={(e) => onCommit(type, e.target.value.trim(), defaultKey)}
 				/>
-			</td>
-		</tr>
+			</TableCell>
+		</TableRow>
 	);
 }
 
@@ -310,39 +317,29 @@ export function TaxIdsSection() {
 					<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:mb-3">
 						{t('tax_ids.advanced_intro')}
 					</p>
-					<div className="wcpos:overflow-x-auto">
-						<table className="wcpos:w-full wcpos:text-sm">
-							<thead>
-								<tr className="wcpos:text-left wcpos:text-gray-500 wcpos:text-xs wcpos:uppercase wcpos:tracking-wide">
-									<th className="wcpos:py-2 wcpos:pr-3 wcpos:font-medium">
-										{t('tax_ids.col_type')}
-									</th>
-									<th className="wcpos:py-2 wcpos:pr-3 wcpos:font-medium">
-										{t('tax_ids.col_field')}
-									</th>
-									<th className="wcpos:py-2 wcpos:pr-3 wcpos:font-medium">
-										{t('tax_ids.col_source')}
-									</th>
-									<th className="wcpos:py-2 wcpos:font-medium">
-										{t('tax_ids.col_override')}
-									</th>
-								</tr>
-							</thead>
-							<tbody>
-								{detection.types.map((type) => (
-									<OverrideRow
-										key={type}
-										type={type}
-										composed={detection.composed_write_map[type] ?? ''}
-										defaultKey={detection.default_write_map[type] ?? ''}
-										override={writeMap[type]}
-										suggestionsId={suggestionsId}
-										onCommit={handleCommit}
-									/>
-								))}
-							</tbody>
-						</table>
-					</div>
+					<Table>
+						<TableHeader>
+							<TableHeaderRow>
+								<TableHead>{t('tax_ids.col_type')}</TableHead>
+								<TableHead>{t('tax_ids.col_field')}</TableHead>
+								<TableHead>{t('tax_ids.col_source')}</TableHead>
+								<TableHead>{t('tax_ids.col_override')}</TableHead>
+							</TableHeaderRow>
+						</TableHeader>
+						<TableBody>
+							{detection.types.map((type) => (
+								<OverrideRow
+									key={type}
+									type={type}
+									composed={detection.composed_write_map[type] ?? ''}
+									defaultKey={detection.default_write_map[type] ?? ''}
+									override={writeMap[type]}
+									suggestionsId={suggestionsId}
+									onCommit={handleCommit}
+								/>
+							))}
+						</TableBody>
+					</Table>
 					<datalist id={suggestionsId}>
 						{suggestions.map((s) => (
 							<option key={s} value={s} />
