@@ -38,3 +38,18 @@ export {
 } from './avatar';
 export { Snackbar, type SnackbarProps, type SnackbarStatus } from './snackbar';
 export { SnackbarProvider, SnackbarContext, useSnackbar } from './snackbar-provider';
+export {
+	Table,
+	TableHeader,
+	TableHeaderRow,
+	TableBody,
+	TableRow,
+	TableHead,
+	TableCell,
+	type TableProps,
+	type TableHeaderProps,
+	type TableBodyProps,
+	type TableRowProps,
+	type TableHeadProps,
+	type TableCellProps,
+} from './table';

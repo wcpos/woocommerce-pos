@@ -1,5 +1,15 @@
 import * as React from 'react';
 
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableHeaderRow,
+	TableRow,
+} from '@wcpos/ui';
+
 import { Button, CountrySelect, Select, TextInput, type OptionProps } from './ui';
 
 export interface TaxId {
@@ -133,16 +143,16 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 	}, [taxId.label]);
 
 	return (
-		<tr className="wcpos:border-t wcpos:border-gray-100 wcpos:bg-white">
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+		<TableRow>
+			<TableCell>
 				<Select
 					aria-label={labels.type}
 					value={taxId.type}
 					options={TYPE_OPTIONS}
 					onChange={({ value: type }) => onChangeField({ type: String(type) })}
 				/>
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+			</TableCell>
+			<TableCell>
 				<TextInput
 					aria-label={labels.value}
 					placeholder={labels.value}
@@ -155,8 +165,8 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 						}
 					}}
 				/>
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+			</TableCell>
+			<TableCell>
 				<CountrySelect
 					aria-label={labels.country}
 					countries={countries}
@@ -168,8 +178,8 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 					clearable
 					clearLabel={labels.countryClear}
 				/>
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle">
+			</TableCell>
+			<TableCell>
 				<TextInput
 					aria-label={labels.label}
 					placeholder={labels.label}
@@ -182,8 +192,8 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 						}
 					}}
 				/>
-			</td>
-			<td className="wcpos:px-3 wcpos:py-2 wcpos:align-middle wcpos:text-right">
+			</TableCell>
+			<TableCell className="wcpos:text-right">
 				<Button
 					variant="ghost-destructive"
 					onMouseDown={(event) => event.preventDefault()}
@@ -191,8 +201,8 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 				>
 					{labels.remove}
 				</Button>
-			</td>
-		</tr>
+			</TableCell>
+		</TableRow>
 	);
 }
 
@@ -327,45 +337,30 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 
 		return (
 			<div className="wcpos:space-y-3">
-				<div className="wcpos:overflow-x-auto wcpos:rounded-md wcpos:border wcpos:border-gray-200">
-					<table className="wcpos:w-full wcpos:text-sm">
-						<thead>
-							<tr className="wcpos:bg-gray-50 wcpos:text-left wcpos:text-xs wcpos:uppercase wcpos:tracking-wide wcpos:text-gray-500">
-								<th
-									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium"
-									style={{ width: '11rem' }}
-								>
-									{labels.type}
-								</th>
-								<th className="wcpos:px-3 wcpos:py-2 wcpos:font-medium">{labels.value}</th>
-								<th
-									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium"
-									style={{ width: '12rem' }}
-								>
-									{labels.country}
-								</th>
-								<th className="wcpos:px-3 wcpos:py-2 wcpos:font-medium">{labels.label}</th>
-								<th
-									className="wcpos:px-3 wcpos:py-2 wcpos:font-medium wcpos:text-right"
-									style={{ width: '1%' }}
-								>
-									<span className="wcpos:sr-only">{labels.remove}</span>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							{displayRows.map((row, index) => (
-								<TaxIdRow
-									key={row.id}
-									taxId={row.taxId}
-									labels={labels}
-									onChangeField={(patch) => updateAt(index, patch)}
-									onRemove={() => removeAt(index)}
-								/>
-							))}
-						</tbody>
-					</table>
-				</div>
+				<Table>
+					<TableHeader>
+						<TableHeaderRow>
+							<TableHead style={{ width: '11rem' }}>{labels.type}</TableHead>
+							<TableHead>{labels.value}</TableHead>
+							<TableHead style={{ width: '12rem' }}>{labels.country}</TableHead>
+							<TableHead>{labels.label}</TableHead>
+							<TableHead className="wcpos:text-right" style={{ width: '1%' }}>
+								<span className="wcpos:sr-only">{labels.remove}</span>
+							</TableHead>
+						</TableHeaderRow>
+					</TableHeader>
+					<TableBody>
+						{displayRows.map((row, index) => (
+							<TaxIdRow
+								key={row.id}
+								taxId={row.taxId}
+								labels={labels}
+								onChangeField={(patch) => updateAt(index, patch)}
+								onRemove={() => removeAt(index)}
+							/>
+						))}
+					</TableBody>
+				</Table>
 				<Button variant="outline" onClick={addRow}>
 					{labels.add}
 				</Button>

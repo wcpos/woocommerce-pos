@@ -108,18 +108,50 @@ function dayHeaderLabel(label: string): string {
 	return label;
 }
 
+/**
+ * Copy text to the clipboard, falling back to a hidden-textarea +
+ * `document.execCommand('copy')` when the async Clipboard API is unavailable
+ * (HTTP / non-secure WP admin) or rejected by the browser.
+ */
+async function copyText(text: string): Promise<boolean> {
+	if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+		try {
+			await navigator.clipboard.writeText(text);
+			return true;
+		} catch {
+			// fall through to legacy fallback
+		}
+	}
+
+	if (typeof document === 'undefined') return false;
+
+	const textarea = document.createElement('textarea');
+	textarea.value = text;
+	textarea.setAttribute('readonly', '');
+	textarea.style.position = 'fixed';
+	textarea.style.left = '-9999px';
+	textarea.style.top = '0';
+	document.body.appendChild(textarea);
+	const previousActive = document.activeElement as HTMLElement | null;
+	textarea.focus();
+	textarea.select();
+	let ok = false;
+	try {
+		ok = document.execCommand('copy');
+	} catch {
+		ok = false;
+	}
+	document.body.removeChild(textarea);
+	previousActive?.focus?.();
+	return ok;
+}
+
 function CopyButton({ payload }: { payload: string }) {
 	const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
 
 	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(payload);
-			setStatus('copied');
-		} catch {
-			// Clipboard API denied (permissions, insecure context, etc.).
-			// Surface the failure so users know to fall back to the textarea.
-			setStatus('failed');
-		}
+		const ok = await copyText(payload);
+		setStatus(ok ? 'copied' : 'failed');
 		setTimeout(() => setStatus('idle'), 1500);
 	};
 

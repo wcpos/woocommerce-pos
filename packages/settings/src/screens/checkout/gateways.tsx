@@ -13,7 +13,17 @@ import { reorderWithEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/r
 import classNames from 'classnames';
 import { sortBy, keyBy } from 'lodash';
 
-import { DropdownMenu, DropdownMenuItem } from '@wcpos/ui';
+import {
+	DropdownMenu,
+	DropdownMenuItem,
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableHeaderRow,
+	TableRow,
+} from '@wcpos/ui';
 
 import GatewayModal from './gateway-modal';
 import OrderStatusSelect from './order-status-select';
@@ -94,7 +104,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 	}, [item.id, index]);
 
 	return (
-		<tr
+		<TableRow
 			ref={rowRef}
 			className={classNames(
 				'wcpos:relative',
@@ -103,7 +113,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 			)}
 		>
 			{closestEdge && (
-				<td
+				<TableCell
 					colSpan={7}
 					className={classNames(
 						'wcpos:absolute wcpos:left-0 wcpos:right-0 wcpos:h-0.5 wcpos:bg-wp-admin-theme-color wcpos:p-0',
@@ -111,13 +121,13 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 					)}
 				/>
 			)}
-			<td
+			<TableCell
 				ref={dragHandleRef}
-				className="wcpos:pl-3 wcpos:pr-1 wcpos:py-2 wcpos:whitespace-nowrap wcpos:cursor-grab wcpos:w-8"
+				className="wcpos:pl-3 wcpos:pr-1 wcpos:whitespace-nowrap wcpos:cursor-grab wcpos:w-8"
 			>
 				<DragIcon className="wcpos:w-5 wcpos:h-5 wcpos:text-gray-400 wcpos:fill-current" />
-			</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-center">
+			</TableCell>
+			<TableCell className="wcpos:whitespace-nowrap wcpos:text-center">
 				<input
 					type="radio"
 					value={item.id}
@@ -128,12 +138,12 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 						mutate({ default_gateway: item.id });
 					}}
 				/>
-			</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:text-ellipsis wcpos:overflow-hidden wcpos:whitespace-nowrap">
+			</TableCell>
+			<TableCell className="wcpos:text-ellipsis wcpos:overflow-hidden wcpos:whitespace-nowrap">
 				<strong>{item.title}</strong>
-			</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap">{item.id}</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-center">
+			</TableCell>
+			<TableCell className="wcpos:whitespace-nowrap">{item.id}</TableCell>
+			<TableCell className="wcpos:whitespace-nowrap wcpos:text-center">
 				<Toggle
 					aria-label={item.title}
 					checked={item.enabled}
@@ -148,8 +158,8 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 					}}
 					disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 				/>
-			</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap">
+			</TableCell>
+			<TableCell className="wcpos:whitespace-nowrap">
 				<OrderStatusSelect
 					selectedStatus={item.order_status || 'wc-completed'}
 					onChange={(value) => {
@@ -163,8 +173,8 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 					}}
 					disabled={!proEnabled && !['pos_cash', 'pos_card'].includes(item.id)}
 				/>
-			</td>
-			<td className="wcpos:px-4 wcpos:py-2 wcpos:whitespace-nowrap wcpos:text-right">
+			</TableCell>
+			<TableCell className="wcpos:whitespace-nowrap wcpos:text-right">
 				<DropdownMenu
 					label={item.title}
 					trigger={
@@ -195,8 +205,8 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 						</DropdownMenuItem>
 					)}
 				</DropdownMenu>
-			</td>
-		</tr>
+			</TableCell>
+		</TableRow>
 	);
 }
 
@@ -269,66 +279,43 @@ function Gateways() {
 					</Notice>
 				</div>
 			)}
-			<div className="wcpos:overflow-x-auto wcpos:border wcpos:border-gray-200 wcpos:sm:rounded-lg">
-				<table className="wcpos:min-w-full wcpos:divide-y wcpos:divide-gray-200">
-					<thead className="wcpos:bg-gray-50">
-						<tr>
-							<th scope="col" />
-							<th
-								scope="col"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
-							>
-								{t('common.default')}
-							</th>
-							<th
-								scope="col"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
-							>
-								{t('common.gateway')}
-							</th>
-							<th
-								scope="col"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
-							>
-								{t('checkout.gateway_id')}
-							</th>
-							<th
-								scope="col"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-center"
-							>
-								{t('common.enabled')}
-							</th>
-							<th
-								scope="col"
-								className="wcpos:px-4 wcpos:py-2 wcpos:text-xs wcpos:font-medium wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:text-left"
-							>
-								{t('checkout.order_status')}
-							</th>
-							<th scope="col" />
-						</tr>
-					</thead>
-					<tbody className="wcpos:bg-white wcpos:divide-y wcpos:divide-gray-200">
-						{gateways.map((item, index) => (
-							<GatewayRow
-								key={item.id}
-								item={item}
-								index={index}
-								data={data}
-								mutate={mutate}
-								proEnabled={!!proEnabled}
-								onEditGateway={handleEditGateway}
-							/>
-						))}
-					</tbody>
-				</table>
-				{isOpen && modalGateway.current && (
-					<GatewayModal
-						gateway={modalGateway.current}
-						mutate={mutate}
-						closeModal={() => setOpen(false)}
-					/>
-				)}
-			</div>
+			<Table>
+				<TableHeader>
+					<TableHeaderRow>
+						<TableHead scope="col" />
+						<TableHead scope="col" className="wcpos:text-center">
+							{t('common.default')}
+						</TableHead>
+						<TableHead scope="col">{t('common.gateway')}</TableHead>
+						<TableHead scope="col">{t('checkout.gateway_id')}</TableHead>
+						<TableHead scope="col" className="wcpos:text-center">
+							{t('common.enabled')}
+						</TableHead>
+						<TableHead scope="col">{t('checkout.order_status')}</TableHead>
+						<TableHead scope="col" />
+					</TableHeaderRow>
+				</TableHeader>
+				<TableBody>
+					{gateways.map((item, index) => (
+						<GatewayRow
+							key={item.id}
+							item={item}
+							index={index}
+							data={data}
+							mutate={mutate}
+							proEnabled={!!proEnabled}
+							onEditGateway={handleEditGateway}
+						/>
+					))}
+				</TableBody>
+			</Table>
+			{isOpen && modalGateway.current && (
+				<GatewayModal
+					gateway={modalGateway.current}
+					mutate={mutate}
+					closeModal={() => setOpen(false)}
+				/>
+			)}
 		</>
 	);
 }
