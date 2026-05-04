@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-03T21:47:46+00:00\n"
+"POT-Creation-Date: 2026-05-04T13:36:16+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1147,8 +1147,8 @@ msgstr ""
 msgid "Thank you for your purchase!"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:1209
-#: includes/Services/Preview_Receipt_Builder.php:1234
+#: includes/Services/Preview_Receipt_Builder.php:1237
+#: includes/Services/Preview_Receipt_Builder.php:1262
 #: includes/Services/Receipt_I18n_Labels.php:107
 msgid "Tax"
 msgstr ""
@@ -2267,28 +2267,28 @@ msgid "POS fiscal receipt snapshot created (receipt #%d)."
 msgstr ""
 
 #. translators: 1. %s: Settings group id, 2. %s: Settings key.
-#: includes/Services/Settings.php:218
+#: includes/Services/Settings.php:222
 #, php-format
 msgid "Settings with id %1$s and key %2$s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'.
-#: includes/Services/Settings.php:229
+#: includes/Services/Settings.php:233
 #, php-format
 msgid "Settings with id %s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'.
-#: includes/Services/Settings.php:280
+#: includes/Services/Settings.php:284
 #, php-format
 msgid "Can not save settings with id %s"
 msgstr ""
 
-#: includes/Services/Settings.php:746
+#: includes/Services/Settings.php:777
 msgid "Invalid arguments provided"
 msgstr ""
 
-#: includes/Services/Settings.php:758
+#: includes/Services/Settings.php:789
 msgid "Invalid visibility option provided"
 msgstr ""
 
