@@ -133,7 +133,7 @@ class Settings {
 		$update_ext_count = $this->get_update_available_count();
 		$unread_logs      = Logs::get_unread_counts( get_current_user_id() );
 		$current_user_id  = get_current_user_id();
-		$countries        = function_exists( 'WC' ) && WC()->countries
+		$countries        = function_exists( 'WC' )
 			? WC()->countries->get_countries()
 			: array();
 
