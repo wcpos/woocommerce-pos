@@ -18,6 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   trigger-translations:
     runs-on: ubuntu-latest
@@ -25,6 +28,26 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Push to translations-source-php branch
+        id: push-source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          SOURCE_REF="translations-source-php/${{ github.run_id }}-${{ github.run_attempt }}"
+
+          mkdir -p /tmp/translations-out
+          cp languages/woocommerce-pos.pot /tmp/translations-out/
+
+          git checkout --orphan translations-source-php
+          git rm -rf .
+          cp /tmp/translations-out/woocommerce-pos.pot .
+          git add woocommerce-pos.pot
+          git commit -m "translation PHP source strings from ${{ github.sha }}"
+          git push origin HEAD:"$SOURCE_REF"
+          echo "ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
+
+          git checkout -f ${{ github.sha }}
 
       - name: Generate GitHub App token
         id: app-token
@@ -35,12 +58,13 @@ jobs:
           owner: wcpos
           repositories: translations
 
-      - name: Send POT to translations repo
+      - name: Notify translations repo
         run: |
-          POT_BASE64=$(base64 -w 0 languages/woocommerce-pos.pot)
           gh api repos/wcpos/translations/dispatches \
             -f event_type=update-free-pot \
-            -f "client_payload[pot_content]=$POT_BASE64" \
+            -f "client_payload[repo_name]=${{ github.event.repository.name }}" \
+            -f "client_payload[ref]=${{ steps.push-source.outputs.ref }}" \
+            -f "client_payload[pot_file]=woocommerce-pos.pot" \
             -f "client_payload[force]=${{ inputs.force || 'false' }}"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
