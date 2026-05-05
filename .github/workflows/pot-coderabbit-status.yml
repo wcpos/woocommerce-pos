@@ -1,0 +1,67 @@
+name: POT CodeRabbit Status
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths:
+      - 'languages/woocommerce-pos.pot'
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+jobs:
+  validate-pot-coderabbit-status:
+    name: Validate POT CodeRabbit status
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Publish guarded CodeRabbit status for automated POT PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          publish_status() {
+            local state="$1"
+            local description="$2"
+
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+              -f state="$state" \
+              -f context=CodeRabbit \
+              -f description="$description" \
+              -f target_url="$RUN_URL"
+          }
+
+          if [[ "$PR_AUTHOR" != 'wcpos-bot[bot]' ]]; then
+            echo "PR author is $PR_AUTHOR, not wcpos-bot[bot]. Leaving CodeRabbit to the CodeRabbit app."
+            exit 0
+          fi
+
+          if [[ "$PR_TITLE" != 'chore(i18n): update languages/woocommerce-pos.pot' ]]; then
+            publish_status failure 'Invalid automated POT PR title.'
+            echo "Unexpected automated POT PR title: $PR_TITLE" >&2
+            exit 1
+          fi
+
+          mapfile -t changed_files < <(gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only)
+          printf 'Changed files:\n'
+          printf ' - %s\n' "${changed_files[@]}"
+
+          if (( ${#changed_files[@]} != 1 )) || [[ "${changed_files[0]}" != 'languages/woocommerce-pos.pot' ]]; then
+            publish_status failure 'Invalid automated POT PR file set.'
+            echo "Automated POT CodeRabbit status is only allowed for POT-only PRs." >&2
+            exit 1
+          fi
+
+          publish_status success 'Automated POT-only PR validated.'
