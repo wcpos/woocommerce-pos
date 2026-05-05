@@ -20,14 +20,14 @@
 		"@wordpress/api-fetch": "^7.39.0",
 		"@wordpress/url": "^4.39.0",
 		"classnames": "^2.5.1",
-		"react": "18.3.1",
-		"react-dom": "18.3.1",
+		"react": "19.2.5",
+		"react-dom": "19.2.5",
 		"react-error-boundary": "^6.1.0"
 	},
 	"devDependencies": {
 		"@tailwindcss/vite": "^4.1.18",
-		"@types/react": "^18.3.28",
-		"@types/react-dom": "^18.3.7",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.1",
 		"@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
 		"eslint": "^10.0.3",
