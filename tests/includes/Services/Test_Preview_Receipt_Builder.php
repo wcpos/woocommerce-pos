@@ -667,16 +667,16 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$totals = $data['totals'];
 
 		$this->assertEqualsWithDelta(
-			$totals['grand_total_excl'] + $totals['tax_total'],
-			$totals['grand_total_incl'],
+			$totals['total_excl'] + $totals['tax_total'],
+			$totals['total_incl'],
 			0.02,
-			'grand_total_incl should equal grand_total_excl + tax_total'
+			'total_incl should equal total_excl + tax_total'
 		);
 
 		$this->assertEquals(
-			$totals['grand_total_incl'],
+			$totals['total_incl'],
 			$totals['paid_total'],
-			'paid_total should equal grand_total_incl'
+			'paid_total should equal total_incl'
 		);
 	}
 

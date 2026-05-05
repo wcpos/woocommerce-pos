@@ -14,12 +14,12 @@ class Receipt_Data_Schema {
 	/**
 	 * Current schema version.
 	 *
-	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
-	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
-	 * 1.4.0 — added structured store.tax_ids[] (TaxId[]) on the store block;
-	 * store.tax_id remains as a derived scalar.
+	 * Pinned at 1 — this is v1 of the receipt-data contract. The version
+	 * only changes on a breaking-change release, not on additive iterations
+	 * during pre-release. The previous synthetic semver (1.0.0–1.4.0) was a
+	 * pre-release artefact and has been collapsed.
 	 */
-	const VERSION = '1.4.0';
+	const VERSION = 1;
 
 	/**
 	 * Top-level keys required in a receipt payload.
@@ -55,9 +55,9 @@ class Receipt_Data_Schema {
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
-		'grand_total',
-		'grand_total_incl',
-		'grand_total_excl',
+		'total',
+		'total_incl',
+		'total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -108,22 +108,20 @@ class Receipt_Data_Schema {
 		'discounts_excl',
 		'line_total_incl',
 		'line_total_excl',
-		// Fees, shipping, discounts (shared names — only used in these array contexts).
+		// Shared by fees / shipping / discounts arrays AND by totals — same key
+		// names appear in both contexts; listing once is enough since the
+		// `array_flip` lookup uses values as keys.
 		'total',
 		'total_incl',
 		'total_excl',
-		// Totals (display).
+		// Totals (display + explicit incl/excl).
 		'subtotal',
-		'discount_total',
-		'grand_total',
-		// Totals (explicit incl/excl).
 		'subtotal_incl',
 		'subtotal_excl',
+		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
-		'grand_total_incl',
-		'grand_total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -174,19 +172,34 @@ class Receipt_Data_Schema {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency, $presentation_hints );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				// For conditional-display fields (change, tendered, discounts, etc.),
-				// keep zero as numeric 0 so Mustache section guards treat them as falsy.
-				if ( 0.0 === (float) $value && isset( $zero_falsy[ $k ] ) ) {
-					$result[ $k ] = 0;
-				} else {
-					$result[ $k ] = html_entity_decode(
+				// ──────────────────────────────────────────────────────────
+				// Money fields: KEEP the numeric value at the bare key and
+				// ADD a `<key>_display` companion holding the locale-formatted
+				// currency string. Mirrors the JS `formatReceiptData` shape
+				// exactly so a single Mustache template renders the same way
+				// in both the studio (JS) and production print (PHP).
+				//
+				// DO NOT change this back to in-place replacement — bare keys
+				// must be numeric so app code can still do math on them, and
+				// templates have a stable `_display` variant to render
+				// currency without re-implementing wc_price() in JS.
+				// ──────────────────────────────────────────────────────────
+				$numeric    = (float) $value;
+				$is_zero_falsy = ( 0.0 === $numeric && isset( $zero_falsy[ $k ] ) );
+				// Conditional-display fields (change, tendered, discounts, etc.) keep
+				// the bare key as integer 0 when the value is zero so Mustache section
+				// guards (`{{#change}}…{{/change}}`) treat them as falsy and the rest
+				// of the test suite's `assertSame( 0, … )` checks stay green.
+				$result[ $k ]              = $is_zero_falsy ? 0 : $numeric;
+				$result[ $k . '_display' ] = $is_zero_falsy
+					? ''
+					: html_entity_decode(
 						wp_strip_all_tags(
-							wc_price( (float) $value, $price_args )
+							wc_price( $numeric, $price_args )
 						),
 						ENT_QUOTES | ENT_SUBSTITUTE,
 						'UTF-8'
 					);
-				}
 			} else {
 				$result[ $k ] = $value;
 			}
@@ -677,17 +690,17 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Tax Total', 'woocommerce-pos' ),
 					),
-					'grand_total'         => array(
+					'total'         => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total', 'woocommerce-pos' ),
+						'label' => __( 'Total', 'woocommerce-pos' ),
 					),
-					'grand_total_incl'    => array(
+					'total_incl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total (incl tax)', 'woocommerce-pos' ),
+						'label' => __( 'Total (incl. tax)', 'woocommerce-pos' ),
 					),
-					'grand_total_excl'    => array(
+					'total_excl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total (excl tax)', 'woocommerce-pos' ),
+						'label' => __( 'Total (excl. tax)', 'woocommerce-pos' ),
 					),
 					'paid_total'          => array(
 						'type'  => 'money',
@@ -1139,9 +1152,9 @@ class Receipt_Data_Schema {
 		}
 
 		$schema['properties']['meta']['properties']['schema_version'] = array(
-			'type'        => 'string',
+			'type'        => 'integer',
 			'const'       => self::VERSION,
-			'description' => 'Receipt data schema version.',
+			'description' => 'Receipt data schema version. Pinned at 1.',
 		);
 		$schema['properties']['meta']['properties']['wc_status'] = array(
 			'type'        => 'string',

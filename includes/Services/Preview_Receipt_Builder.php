@@ -626,12 +626,12 @@ class Preview_Receipt_Builder {
 		$taxable_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
 		$total_tax    = round( $taxable_excl * $tax_rate / 100, $dp );
 
-		$grand_total_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
-		$grand_total_incl = $grand_total_excl + $total_tax;
+		$total_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
+		$total_incl = $total_excl + $total_tax;
 
 		// Payment: cash rounded up to nearest 5.
-		$tendered     = (float) ( ceil( $grand_total_incl / 5 ) * 5 );
-		$change_total = round( $tendered - $grand_total_incl, $dp );
+		$tendered     = (float) ( ceil( $total_incl / 5 ) * 5 );
+		$change_total = round( $tendered - $total_incl, $dp );
 
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
@@ -709,10 +709,10 @@ class Preview_Receipt_Builder {
 			'discount_total_incl' => $discount_incl,
 			'discount_total_excl' => $discount_excl,
 			'tax_total'           => $total_tax,
-			'grand_total'         => $display_incl ? $grand_total_incl : $grand_total_excl,
-			'grand_total_incl'    => $grand_total_incl,
-			'grand_total_excl'    => $grand_total_excl,
-			'paid_total'          => $grand_total_incl,
+			'total'         => $display_incl ? $total_incl : $total_excl,
+			'total_incl'    => $total_incl,
+			'total_excl'    => $total_excl,
+			'paid_total'          => $total_incl,
 			'change_total'        => $change_total,
 		);
 
@@ -737,7 +737,7 @@ class Preview_Receipt_Builder {
 			array(
 				'method_id'      => 'pos_cash',
 				'method_title'   => __( 'Cash', 'woocommerce-pos' ),
-				'amount'         => $grand_total_incl,
+				'amount'         => $total_incl,
 				'transaction_id' => '',
 				'tendered'       => $tendered,
 				'change'         => $change_total,

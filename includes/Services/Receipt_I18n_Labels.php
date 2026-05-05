@@ -117,7 +117,7 @@ class Receipt_I18n_Labels {
 			'subtotal_excl_tax'      => __( 'Subtotal (excl. tax)', 'woocommerce-pos' ),
 			'total'                  => __( 'Total', 'woocommerce-pos' ),
 			'total_tax'              => __( 'Total Tax', 'woocommerce-pos' ),
-			'grand_total_incl_tax'   => __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
+			'total_incl_tax'   => __( 'Total (incl. tax)', 'woocommerce-pos' ),
 			'tax'                    => __( 'Tax', 'woocommerce-pos' ),
 			'paid'                   => __( 'Paid', 'woocommerce-pos' ),
 			'tendered'               => __( 'Tendered', 'woocommerce-pos' ),

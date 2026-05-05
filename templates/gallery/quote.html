@@ -64,8 +64,8 @@ Includes validity placeholder and terms.
 			<tr style="border-bottom: 1px solid #eee;">
 				<td style="padding: 8px 4px;">{{name}}{{#sku}} <span style="color: #888; font-size: 11px;">({{sku}})</span>{{/sku}}</td>
 				<td style="padding: 8px 4px; text-align: center;">{{qty}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{unit_price_incl}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{line_total_incl}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{unit_price_incl_display}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{line_total_incl_display}}</td>
 			</tr>
 			{{/lines}}
 		</tbody>
@@ -75,26 +75,26 @@ Includes validity placeholder and terms.
 		<div style="width: 280px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{i18n.subtotal}}</span>
-				<span>{{totals.subtotal_incl}}</span>
+				<span>{{totals.subtotal_incl_display}}</span>
 			</div>
 
 			{{#discounts}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
 				<span>{{label}}</span>
-				<span>-{{total_incl}}</span>
+				<span>-{{total_incl_display}}</span>
 			</div>
 			{{/discounts}}
 
 			{{#tax_summary}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-				<span>{{tax_amount}}</span>
+				<span>{{tax_amount_display}}</span>
 			</div>
 			{{/tax_summary}}
 
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
 				<span>{{i18n.total}}</span>
-				<span>{{totals.grand_total_incl}}</span>
+				<span>{{totals.total_incl_display}}</span>
 			</div>
 		</div>
 	</div>

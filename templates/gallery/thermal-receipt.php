@@ -186,7 +186,7 @@ $separator = str_repeat( '-', 42 );
 
 	<div class="total-row">
 		<span><?php esc_html_e( 'TOTAL', 'woocommerce-pos' ); ?></span>
-		<span><?php echo esc_html( $money( $totals['grand_total'] ) ); ?></span>
+		<span><?php echo esc_html( $money( $totals['total'] ) ); ?></span>
 	</div>
 
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>

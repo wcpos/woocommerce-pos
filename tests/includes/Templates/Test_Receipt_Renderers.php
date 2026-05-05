@@ -161,13 +161,15 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 				'currency' => 'USD',
 			),
 			'totals' => array(
-				'grand_total_incl' => 19.99,
+				'total_incl' => 19.99,
 				'subtotal_incl'    => 19.99,
 			),
 		);
 
+		// Templates use the `_display` companion for currency-formatted output.
+		// The bare key ({{totals.total_incl}}) renders the raw numeric value.
 		$template = array(
-			'content' => '<span>{{totals.grand_total_incl}}</span>',
+			'content' => '<span>{{totals.total_incl_display}}</span>|<span>{{totals.total_incl}}</span>',
 		);
 
 		$renderer = new Logicless_Renderer();
@@ -175,7 +177,9 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$renderer->render( $template, $order, $receipt_data );
 		$output = ob_get_clean();
 
+		// The _display variant renders the formatted currency string (e.g. "$19.99").
 		$this->assertStringContainsString( '19.99', $output );
+		$this->assertStringContainsString( '$', $output );
 		$this->assertStringNotContainsString( '{{', $output );
 		// Entities from wc_price() should be decoded, not double-escaped.
 		$this->assertStringNotContainsString( '&amp;', $output );

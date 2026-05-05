@@ -27,7 +27,7 @@ class Html_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		}
 
 		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : ( isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '' );
-		$total        = isset( $receipt_data['totals']['grand_total_incl'] ) ? (float) $receipt_data['totals']['grand_total_incl'] : 0;
+		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
 
 		return sprintf(
 			'<div class="wcpos-receipt" data-order="%s"><strong>%s</strong>: %s</div>',

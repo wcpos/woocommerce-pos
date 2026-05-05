@@ -332,27 +332,35 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	// ─── Task 6: Money formatting ───
 
 	/**
-	 * Test money fields are auto-formatted.
+	 * Money fields: `<key>_display` placeholders render locale-formatted
+	 * currency strings; the bare key renders the raw numeric value.
+	 *
+	 * Templates use `_display` for currency rendering and the bare key for
+	 * Mustache section guards / math. Mirrors the JS `formatReceiptData`
+	 * contract — see Receipt_Data_Schema::format_money_fields().
 	 */
 	public function test_money_fields_auto_formatted(): void {
 		$data = array(
 			'meta'   => array( 'currency' => 'USD' ),
 			'totals' => array(
-				'grand_total_incl' => 12.5,
+				'total_incl' => 12.5,
 			),
 		);
 
 		$output = $this->render(
-			'<span>{{totals.grand_total_incl}}</span>',
+			'<span>{{totals.total_incl_display}}</span>|<span>{{totals.total_incl}}</span>',
 			$data
 		);
 
-		$this->assertStringNotContainsString( '>12.5<', $output );
-		$this->assertMatchesRegularExpression( '/12\\.50/', $output );
+		// _display companion holds the formatted currency string.
+		$this->assertMatchesRegularExpression( '/<span>[^<]*12\\.50[^<]*<\/span>/', $output );
+		// Bare key renders the raw numeric value (12.5).
+		$this->assertMatchesRegularExpression( '/<span>12\\.5<\/span>/', $output );
 	}
 
 	/**
-	 * Test money fields inside sections are formatted.
+	 * Money fields inside iteration sections — `_display` renders the
+	 * formatted string; the bare key remains numeric.
 	 */
 	public function test_money_fields_formatted_inside_sections(): void {
 		$data = array(
@@ -366,7 +374,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		);
 
 		$output = $this->render(
-			'{{#lines}}{{name}}: {{line_total_incl}}{{/lines}}',
+			'{{#lines}}{{name}}: {{line_total_incl_display}}{{/lines}}',
 			$data
 		);
 

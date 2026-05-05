@@ -86,7 +86,7 @@ class Escpos_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$print_qr      = isset( $context['print_qr'] ) ? (bool) $context['print_qr'] : false;
 
 		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : ( isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '' );
-		$total        = isset( $receipt_data['totals']['grand_total_incl'] ) ? (float) $receipt_data['totals']['grand_total_incl'] : 0;
+		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
 		$currency     = isset( $receipt_data['order']['currency'] ) ? (string) $receipt_data['order']['currency'] : ( isset( $receipt_data['meta']['currency'] ) ? (string) $receipt_data['meta']['currency'] : get_woocommerce_currency() );
 		$store_name   = isset( $receipt_data['store']['name'] ) ? (string) $receipt_data['store']['name'] : get_bloginfo( 'name' );
 		$created_at   = isset( $receipt_data['order']['created']['datetime'] ) ? (string) $receipt_data['order']['created']['datetime'] : ( isset( $receipt_data['meta']['created_at_gmt'] ) ? (string) $receipt_data['meta']['created_at_gmt'] : '' );

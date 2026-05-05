@@ -42,14 +42,14 @@
   {{/sku}}
   {{#discounts}}
   <row>
-    <col width="24">@ {{unit_subtotal_incl}}</col>
-    <col width="24" align="right">-{{discounts_incl}}</col>
+    <col width="24">@ {{unit_subtotal_incl_display}}</col>
+    <col width="24" align="right">-{{discounts_incl_display}}</col>
   </row>
   {{/discounts}}
   <row>
-    <col width="24">@ {{unit_price_incl}}</col>
+    <col width="24">@ {{unit_price_incl_display}}</col>
     <col width="8" align="right">{{qty}}</col>
-    <col width="16" align="right">{{line_total_incl}}</col>
+    <col width="16" align="right">{{line_total_incl_display}}</col>
   </row>
   {{/lines}}
   {{#order.customer_note}}
@@ -60,54 +60,54 @@
   <line />
   <row>
     <col width="24">{{i18n.subtotal}}</col>
-    <col width="24" align="right">{{totals.subtotal_incl}}</col>
+    <col width="24" align="right">{{totals.subtotal_incl_display}}</col>
   </row>
   {{#discounts}}
   <row>
     <col width="24">{{label}}</col>
-    <col width="24" align="right">-{{total_incl}}</col>
+    <col width="24" align="right">-{{total_incl_display}}</col>
   </row>
   {{/discounts}}
   {{#shipping}}
   <row>
     <col width="24">{{label}}</col>
-    <col width="24" align="right">{{total_incl}}</col>
+    <col width="24" align="right">{{total_incl_display}}</col>
   </row>
   {{/shipping}}
   {{#fees}}
   <row>
     <col width="24">{{label}}</col>
-    <col width="24" align="right">{{total_incl}}</col>
+    <col width="24" align="right">{{total_incl_display}}</col>
   </row>
   {{/fees}}
   <line />
   {{#tax_summary}}
   <row>
     <col width="24">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
-    <col width="24" align="right">{{tax_amount}}</col>
+    <col width="24" align="right">{{tax_amount_display}}</col>
   </row>
   {{/tax_summary}}
   <line style="double" />
   <row>
     <col width="24"><bold><size width="2">{{i18n.total}}</size></bold></col>
-    <col width="24" align="right"><bold><size width="2">{{totals.grand_total_incl}}</size></bold></col>
+    <col width="24" align="right"><bold><size width="2">{{totals.total_incl_display}}</size></bold></col>
   </row>
   <line style="double" />
   {{#payments}}
   <row>
     <col width="24">{{method_title}}</col>
-    <col width="24" align="right">{{amount}}</col>
+    <col width="24" align="right">{{amount_display}}</col>
   </row>
   {{#tendered}}
   <row>
     <col width="24">  {{i18n.tendered}}</col>
-    <col width="24" align="right">{{tendered}}</col>
+    <col width="24" align="right">{{tendered_display}}</col>
   </row>
   {{/tendered}}
   {{#change}}
   <row>
     <col width="24">  {{i18n.change}}</col>
-    <col width="24" align="right">{{change}}</col>
+    <col width="24" align="right">{{change_display}}</col>
   </row>
   {{/change}}
   {{#transaction_id}}
