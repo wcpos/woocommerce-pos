@@ -87,6 +87,17 @@ class Receipt_Data_Builder {
 
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
+			// Structured address parts mirror customer.billing_address — templates that
+			// want country-specific layouts compose from these. address_lines[] is the
+			// pre-formatted default for templates that just iterate.
+			'address'       => array(
+				'address_1' => $store_address,
+				'address_2' => $store_address_2,
+				'city'      => $store_city,
+				'state'     => $store_state,
+				'postcode'  => $store_postcode,
+				'country'   => $store_country,
+			),
 			'address_lines' => array_values(
 				array_filter(
 					array(
@@ -147,6 +158,7 @@ class Receipt_Data_Builder {
 		}
 
 		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
+		$tax_ids = self::with_customer_tax_id_labels( $tax_ids );
 
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
@@ -821,17 +833,41 @@ class Receipt_Data_Builder {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private static function with_store_tax_id_labels( array $tax_ids ): array {
+		return self::with_tax_id_labels( $tax_ids, 'store' );
+	}
+
+	/**
+	 * Ensure customer tax IDs include display labels for logicless templates.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Customer tax IDs.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function with_customer_tax_id_labels( array $tax_ids ): array {
+		return self::with_tax_id_labels( $tax_ids, 'customer' );
+	}
+
+	/**
+	 * Resolve a display label for each tax-ID entry. Precedence: explicit
+	 * `label` → `<scope>_tax_id_label_<type>` i18n key → scope-specific
+	 * `_other` fallback.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Tax IDs.
+	 * @param string                         $scope   "store" or "customer".
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function with_tax_id_labels( array $tax_ids, string $scope ): array {
 		$labels = Receipt_I18n_Labels::get_labels();
+		$prefix = $scope . '_tax_id_label_';
 
 		return array_map(
-			static function ( array $tax_id ) use ( $labels ): array {
+			static function ( array $tax_id ) use ( $labels, $prefix ): array {
 				if ( ! empty( $tax_id['label'] ) ) {
 					return $tax_id;
 				}
 
 				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = 'store_tax_id_label_' . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels['store_tax_id_label_other'];
+				$key             = $prefix . $type;
+				$tax_id['label'] = $labels[ $key ] ?? $labels[ $prefix . 'other' ];
 
 				return $tax_id;
 			},

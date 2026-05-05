@@ -467,6 +467,35 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
+			'store.address' => array(
+				'label'  => __( 'Store Address', 'woocommerce-pos' ),
+				'fields' => array(
+					'address_1' => array(
+						'type'  => 'string',
+						'label' => __( 'Address line 1', 'woocommerce-pos' ),
+					),
+					'address_2' => array(
+						'type'  => 'string',
+						'label' => __( 'Address line 2', 'woocommerce-pos' ),
+					),
+					'city'      => array(
+						'type'  => 'string',
+						'label' => __( 'City', 'woocommerce-pos' ),
+					),
+					'state'     => array(
+						'type'  => 'string',
+						'label' => __( 'State / Region', 'woocommerce-pos' ),
+					),
+					'postcode'  => array(
+						'type'  => 'string',
+						'label' => __( 'Postcode', 'woocommerce-pos' ),
+					),
+					'country'   => array(
+						'type'  => 'string',
+						'label' => __( 'Country', 'woocommerce-pos' ),
+					),
+				),
+			),
 			'lines'       => array(
 				'label'    => __( 'Line Items', 'woocommerce-pos' ),
 				'is_array' => true,
@@ -1383,6 +1412,14 @@ class Receipt_Data_Schema {
 			),
 			'store'   => array(
 				'name'                    => 'My Store',
+				'address'                 => array(
+					'address_1' => '123 Main St',
+					'address_2' => '',
+					'city'      => 'Anytown',
+					'state'     => 'CA',
+					'postcode'  => '90210',
+					'country'   => 'US',
+				),
 				'address_lines'           => array( '123 Main St', 'Anytown, CA 90210' ),
 				'tax_id'                  => '12-3456789',
 				'tax_ids'                 => array(

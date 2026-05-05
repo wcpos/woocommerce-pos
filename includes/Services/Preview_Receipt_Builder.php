@@ -816,6 +816,14 @@ class Preview_Receipt_Builder {
 
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
+			'address'       => array(
+				'address_1' => $store_address,
+				'address_2' => $store_address_2,
+				'city'      => $store_city,
+				'state'     => $store_state,
+				'postcode'  => $store_postcode,
+				'country'   => $store_country,
+			),
 			'address_lines' => array_values(
 				array_filter(
 					array(
