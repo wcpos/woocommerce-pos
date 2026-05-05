@@ -190,9 +190,52 @@ describe('TaxIdsField tax ID country/type syncing', () => {
 			target: { value: 'us_ein' },
 		});
 
-		expect(onChange).toHaveBeenCalledWith([
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenLastCalledWith([
 			{ type: 'us_ein', value: 'DE123456789', country: 'US' },
 		]);
+	});
+
+	it('updates the country to an EU store country when the tax ID type changes to eu_vat', () => {
+		setStoreCountry('DE');
+		const onChange = vi.fn();
+
+		render(
+			<TaxIdsField
+				value={[{ type: 'us_ein', value: '12-3456789', country: 'US' }]}
+				onChange={onChange}
+				labels={baseLabels}
+			/>
+		);
+
+		fireEvent.change(screen.getByRole('combobox', { name: baseLabels.type }), {
+			target: { value: 'eu_vat' },
+		});
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenLastCalledWith([
+			{ type: 'eu_vat', value: '12-3456789', country: 'DE' },
+		]);
+	});
+
+	it('clears the country when the tax ID type changes to eu_vat without an EU default', () => {
+		setStoreCountry('US');
+		const onChange = vi.fn();
+
+		render(
+			<TaxIdsField
+				value={[{ type: 'us_ein', value: '12-3456789', country: 'US' }]}
+				onChange={onChange}
+				labels={baseLabels}
+			/>
+		);
+
+		fireEvent.change(screen.getByRole('combobox', { name: baseLabels.type }), {
+			target: { value: 'eu_vat' },
+		});
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenLastCalledWith([{ type: 'eu_vat', value: '12-3456789' }]);
 	});
 
 	it('updates the tax ID type when the country changes to a mapped default', () => {
@@ -210,7 +253,8 @@ describe('TaxIdsField tax ID country/type syncing', () => {
 		fireEvent.click(screen.getByRole('combobox', { name: baseLabels.country }));
 		fireEvent.click(screen.getByRole('option', { name: /Germany/ }));
 
-		expect(onChange).toHaveBeenCalledWith([
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenLastCalledWith([
 			{ type: 'de_ust_id', value: '12-3456789', country: 'DE' },
 		]);
 	});

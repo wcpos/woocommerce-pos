@@ -135,8 +135,9 @@ const TAX_ID_TYPE_TO_COUNTRY: Record<string, string> = {
 };
 
 const EU_VAT_COUNTRIES = new Set([
-	'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU', 'IE',
-	'LT', 'LU', 'LV', 'MT', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+	'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR',
+	'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO',
+	'SE', 'SI', 'SK',
 ]);
 
 function defaultTaxIdTypeFor(country: string | undefined): string {
@@ -199,6 +200,13 @@ const syncTaxIdPatch = (current: TaxId, patch: Partial<TaxId>): Partial<TaxId> =
 			return {
 				...patch,
 				country,
+			};
+		}
+
+		if (patch.type === 'eu_vat') {
+			return {
+				...patch,
+				country: undefined,
 			};
 		}
 	}
