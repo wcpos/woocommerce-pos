@@ -1001,9 +1001,9 @@ class Preview_Receipt_Builder {
 	 * @return string
 	 */
 	private function resolve_store_string( string $getter, $fallback ): string {
-		$value = $this->get_store_value( $this->pos_store, $getter, $fallback );
+		$value = $this->get_store_value( $this->pos_store, $getter, null );
 
-		return '' !== (string) $value ? (string) $value : (string) $fallback;
+		return null !== $value ? (string) $value : (string) $fallback;
 	}
 
 	/**

@@ -63,7 +63,7 @@ class Receipt_Data_Builder {
 		if ( ! \is_object( $pos_store ) ) {
 			$pos_store = new Store();
 		}
-		$display_incl = 'incl' === $this->resolve_store_string(
+		$display_incl = 'incl' === $this->resolve_store_option_string(
 			$pos_store,
 			'get_tax_display_cart',
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
@@ -177,11 +177,11 @@ class Receipt_Data_Builder {
 			if ( $qty <= 0 ) {
 				$qty = 0.0;
 			}
-			$dp                 = $this->resolve_price_num_decimals( $pos_store );
-			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $dp ) : 0.0;
-			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $dp ) : 0.0;
-			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $dp ) : 0.0;
-			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $dp ) : 0.0;
+			$calc_dp            = wc_get_price_decimals();
+			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $calc_dp ) : 0.0;
+			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $calc_dp ) : 0.0;
+			$unit_subtotal_excl = $qty > 0 ? round( $line_subtotal_excl / $qty, $calc_dp ) : 0.0;
 
 			$discounts_incl = max( 0, $line_subtotal_incl - $line_total_incl );
 			$discounts_excl = max( 0, $line_subtotal_excl - $line_total_excl );
@@ -442,33 +442,34 @@ class Receipt_Data_Builder {
 	 * @return array<string,mixed>
 	 */
 	private function build_presentation_hints( $pos_store, string $currency ): array {
-		$tax_enabled      = 'yes' === $this->resolve_store_string(
+		$tax_enabled      = 'yes' === $this->resolve_store_option_string(
 			$pos_store,
 			'get_calc_taxes',
 			get_option( 'woocommerce_calc_taxes', 'no' )
 		);
-		$tax_display_mode = $this->resolve_store_string(
+		$tax_display_mode = $this->resolve_store_option_string(
 			$pos_store,
 			'get_tax_total_display',
 			get_option( 'woocommerce_tax_total_display', 'itemized' )
 		);
+		$store_locale     = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
 
 		return array(
 			'display_tax'              => $tax_enabled ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
-			'prices_entered_with_tax'  => 'yes' === $this->resolve_store_string(
+			'prices_entered_with_tax'  => 'yes' === $this->resolve_store_option_string(
 				$pos_store,
 				'get_prices_include_tax',
 				wc_prices_include_tax() ? 'yes' : 'no'
 			),
-			'rounding_mode'            => $this->resolve_store_string(
+			'rounding_mode'            => $this->resolve_store_option_string(
 				$pos_store,
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
 			// Currency stays from the order (financial record). Locale and price formatting
 			// follow the store so presentation matches the store's region/settings.
-			'locale'                   => $this->resolve_store_string( $pos_store, 'get_locale', get_locale() ),
-			'currency_position'        => $this->resolve_store_string(
+			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),
+			'currency_position'        => $this->resolve_store_option_string(
 				$pos_store,
 				'get_currency_position',
 				get_option( 'woocommerce_currency_pos', 'left' )
@@ -503,9 +504,24 @@ class Receipt_Data_Builder {
 	 * @return string
 	 */
 	private function resolve_store_string( $pos_store, string $getter, $fallback ): string {
-		$value = $this->get_store_value( $pos_store, $getter, $fallback );
+		$value = $this->get_store_value( $pos_store, $getter, null );
 
-		return '' !== (string) $value ? (string) $value : (string) $fallback;
+		return null !== $value ? (string) $value : (string) $fallback;
+	}
+
+	/**
+	 * Resolve an enum-like store setting with a WooCommerce fallback.
+	 *
+	 * @param object $pos_store POS store object.
+	 * @param string $getter    Store getter method.
+	 * @param mixed  $fallback  Fallback value.
+	 *
+	 * @return string
+	 */
+	private function resolve_store_option_string( $pos_store, string $getter, $fallback ): string {
+		$value = $this->get_store_value( $pos_store, $getter, null );
+
+		return null !== $value && '' !== (string) $value ? (string) $value : (string) $fallback;
 	}
 
 	/**

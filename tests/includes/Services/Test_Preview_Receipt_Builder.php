@@ -265,6 +265,44 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Explicit blank store formatting values should override non-empty globals.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_preserves_empty_store_price_formatting_overrides(): void {
+		$original_thousand_sep = get_option( 'woocommerce_price_thousand_sep' );
+		$original_price_suffix = get_option( 'woocommerce_price_display_suffix' );
+
+		$store_filter = static function () {
+			return new class() {
+				public function get_price_thousand_separator(): string {
+					return '';
+				}
+
+				public function get_price_display_suffix(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			update_option( 'woocommerce_price_thousand_sep', ',' );
+			update_option( 'woocommerce_price_display_suffix', ' including tax' );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data  = $this->builder->build();
+			$hints = $data['presentation_hints'];
+
+			$this->assertSame( '', $hints['price_thousand_separator'] );
+			$this->assertSame( '', $hints['price_display_suffix'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
+			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );
+		}
+	}
+
+	/**
 	 * When the store object does not expose currency/locale, fall back to the
 	 * site defaults so legacy callers keep working.
 	 *
