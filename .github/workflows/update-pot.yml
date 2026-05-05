@@ -90,9 +90,3 @@ jobs:
           add-paths: |
             languages/woocommerce-pos.pot
 
-      - name: Request CodeRabbit review
-        if: steps.create-pr.outputs.pull-request-number != ''
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR_NUMBER: ${{ steps.create-pr.outputs.pull-request-number }}
-        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "@coderabbitai review"

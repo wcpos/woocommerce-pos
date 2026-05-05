@@ -64,4 +64,41 @@ if grep -Fq 'gh pr create' "$WORKFLOW_FILE"; then
   exit 1
 fi
 
-echo "Update POT workflow uses quiet make-pot generation and non-duplicated WCPOS Bot App PR auth"
+if grep -Fq '@coderabbitai review' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE not to rely on bot-authored CodeRabbit comments" >&2
+  exit 1
+fi
+
+if [[ ! -f '.github/workflows/pot-coderabbit-status.yml' ]]; then
+  echo "Expected guarded POT CodeRabbit status workflow to exist" >&2
+  exit 1
+fi
+
+POT_CODERABBIT_WORKFLOW='.github/workflows/pot-coderabbit-status.yml'
+
+if ! grep -Fq 'statuses: write' "$POT_CODERABBIT_WORKFLOW"; then
+  echo "Expected POT CodeRabbit workflow to be able to publish the required CodeRabbit status" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'context=CodeRabbit' "$POT_CODERABBIT_WORKFLOW"; then
+  echo "Expected POT CodeRabbit workflow to publish the required CodeRabbit status context" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'wcpos-bot[bot]' "$POT_CODERABBIT_WORKFLOW"; then
+  echo "Expected POT CodeRabbit workflow to limit the bypass to WCPOS Bot PRs" >&2
+  exit 1
+fi
+
+if ! grep -Fq 'languages/woocommerce-pos.pot' "$POT_CODERABBIT_WORKFLOW"; then
+  echo "Expected POT CodeRabbit workflow to limit the bypass to the POT file" >&2
+  exit 1
+fi
+
+if grep -Fq 'name: CodeRabbit' "$POT_CODERABBIT_WORKFLOW"; then
+  echo "Expected POT CodeRabbit workflow to publish a status context, not a duplicate Actions check named CodeRabbit" >&2
+  exit 1
+fi
+
+echo "Update POT workflow uses quiet make-pot generation, non-duplicated WCPOS Bot App PR auth, and a guarded CodeRabbit status for automated POT-only PRs"
