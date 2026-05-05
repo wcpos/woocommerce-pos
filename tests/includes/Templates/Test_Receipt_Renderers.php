@@ -161,13 +161,13 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 				'currency' => 'USD',
 			),
 			'totals' => array(
-				'grand_total_incl' => 19.99,
+				'total_incl' => 19.99,
 				'subtotal_incl'    => 19.99,
 			),
 		);
 
 		$template = array(
-			'content' => '<span>{{totals.grand_total_incl}}</span>',
+			'content' => '<span>{{totals.total_incl}}</span>',
 		);
 
 		$renderer = new Logicless_Renderer();

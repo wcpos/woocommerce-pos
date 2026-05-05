@@ -43,8 +43,8 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		$this->assertContains( 'subtotal_incl', $fields );
 		$this->assertContains( 'subtotal_excl', $fields );
-		$this->assertContains( 'grand_total_incl', $fields );
-		$this->assertContains( 'grand_total_excl', $fields );
+		$this->assertContains( 'total_incl', $fields );
+		$this->assertContains( 'total_excl', $fields );
 		$this->assertContains( 'tax_total', $fields );
 		$this->assertContains( 'paid_total', $fields );
 		$this->assertContains( 'change_total', $fields );
@@ -78,14 +78,14 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 				'price_num_decimals'       => 2,
 			),
 			'totals'             => array(
-				'grand_total_incl' => 1234.5,
+				'total_incl' => 1234.5,
 				'change_total'     => 0,
 			),
 		);
 
 		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'EUR' );
 
-		$this->assertEquals( '1 234,50 €', $formatted['totals']['grand_total_incl'] );
+		$this->assertEquals( '1 234,50 €', $formatted['totals']['total_incl'] );
 		$this->assertSame( 0, $formatted['totals']['change_total'] );
 	}
 
@@ -179,7 +179,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_money_fields_have_money_type(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$this->assertSame( 'money', $tree['totals']['fields']['grand_total_incl']['type'] );
+		$this->assertSame( 'money', $tree['totals']['fields']['total_incl']['type'] );
 		$this->assertSame( 'money', $tree['lines']['fields']['line_total_incl']['type'] );
 		$this->assertSame( 'string', $tree['store']['fields']['name']['type'] );
 	}
@@ -335,7 +335,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'object', $schema['properties']['store']['properties']['tax_ids']['items']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['tax_ids']['items']['properties']['value']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
-		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['grand_total']['type'] );
+		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['total']['type'] );
 		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['date']['type'] );
 		$this->assertSame( 'array', $schema['properties']['refunds']['items']['properties']['lines']['type'] );
 		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['lines']['items']['type'] );

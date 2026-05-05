@@ -338,12 +338,12 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		$data = array(
 			'meta'   => array( 'currency' => 'USD' ),
 			'totals' => array(
-				'grand_total_incl' => 12.5,
+				'total_incl' => 12.5,
 			),
 		);
 
 		$output = $this->render(
-			'<span>{{totals.grand_total_incl}}</span>',
+			'<span>{{totals.total_incl}}</span>',
 			$data
 		);
 

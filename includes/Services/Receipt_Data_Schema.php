@@ -14,12 +14,12 @@ class Receipt_Data_Schema {
 	/**
 	 * Current schema version.
 	 *
-	 * 1.3.0 — added structured customer.tax_ids[] (TaxId[]) alongside legacy
-	 * customer.tax_id scalar, sourced via Tax_Id_Reader fallback.
-	 * 1.4.0 — added structured store.tax_ids[] (TaxId[]) on the store block;
-	 * store.tax_id remains as a derived scalar.
+	 * Pinned at 1 — this is v1 of the receipt-data contract. The version
+	 * only changes on a breaking-change release, not on additive iterations
+	 * during pre-release. The previous synthetic semver (1.0.0–1.4.0) was a
+	 * pre-release artefact and has been collapsed.
 	 */
-	const VERSION = '1.4.0';
+	const VERSION = 1;
 
 	/**
 	 * Top-level keys required in a receipt payload.
@@ -58,9 +58,6 @@ class Receipt_Data_Schema {
 		'total',
 		'total_incl',
 		'total_excl',
-		'grand_total',
-		'grand_total_incl',
-		'grand_total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -127,9 +124,6 @@ class Receipt_Data_Schema {
 		'tax_total',
 		'total_incl',
 		'total_excl',
-		'grand_total',
-		'grand_total_incl',
-		'grand_total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -695,18 +689,6 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Total (excl. tax)', 'woocommerce-pos' ),
 					),
-					'grand_total'      => array(
-						'type'  => 'money',
-						'label' => __( 'Grand Total', 'woocommerce-pos' ),
-					),
-					'grand_total_incl' => array(
-						'type'  => 'money',
-						'label' => __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
-					),
-					'grand_total_excl' => array(
-						'type'  => 'money',
-						'label' => __( 'Grand Total (excl. tax)', 'woocommerce-pos' ),
-					),
 					'paid_total'          => array(
 						'type'  => 'money',
 						'label' => __( 'Paid Total', 'woocommerce-pos' ),
@@ -1157,9 +1139,9 @@ class Receipt_Data_Schema {
 		}
 
 		$schema['properties']['meta']['properties']['schema_version'] = array(
-			'type'        => 'string',
+			'type'        => 'integer',
 			'const'       => self::VERSION,
-			'description' => 'Receipt data schema version.',
+			'description' => 'Receipt data schema version. Pinned at 1.',
 		);
 		$schema['properties']['meta']['properties']['wc_status'] = array(
 			'type'        => 'string',

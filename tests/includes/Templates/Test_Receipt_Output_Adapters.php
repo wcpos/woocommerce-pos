@@ -49,7 +49,7 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 				),
 			),
 			'totals' => array(
-				'grand_total_incl' => 19.98,
+				'total_incl' => 19.98,
 			),
 			'fiscal' => array(
 				'qr_payload' => 'FISCAL-QR-1001',

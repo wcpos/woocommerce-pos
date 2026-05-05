@@ -58,7 +58,7 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
       {{/lines}}
     </tbody>
   </table>
-  <p><strong>Total: {{totals.grand_total_incl}}</strong></p>
+  <p><strong>Total: {{totals.total_incl}}</strong></p>
 </div>';
 
 	/**

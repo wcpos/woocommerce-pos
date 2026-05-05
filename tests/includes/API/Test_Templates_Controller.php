@@ -1126,7 +1126,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields should be pre-formatted strings.
-			$this->assertIsString( $data['receipt_data']['totals']['grand_total_incl'] );
+			$this->assertIsString( $data['receipt_data']['totals']['total_incl'] );
 		} finally {
 			wp_delete_post( $order->get_id(), true );
 		}
