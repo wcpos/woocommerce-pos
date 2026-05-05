@@ -149,12 +149,13 @@ class Receipt_Data_Schema {
 	 * whose terminal key matches a known money field with a formatted
 	 * currency string (e.g. "$29.99").
 	 *
-	 * @param array  $data     Receipt data array (or nested sub-array).
-	 * @param string $currency WooCommerce currency code.
+	 * @param array               $data               Receipt data array (or nested sub-array).
+	 * @param string              $currency           WooCommerce currency code.
+	 * @param array<string,mixed> $presentation_hints Receipt presentation hints.
 	 *
 	 * @return array Data with money fields formatted as strings.
 	 */
-	public static function format_money_fields( array $data, string $currency = 'USD' ): array {
+	public static function format_money_fields( array $data, string $currency = 'USD', array $presentation_hints = array() ): array {
 		static $lookup = null;
 		static $zero_falsy = null;
 		if ( null === $lookup ) {
@@ -162,11 +163,16 @@ class Receipt_Data_Schema {
 			$zero_falsy = array_flip( self::ZERO_FALSY_MONEY_FIELDS );
 		}
 
+		if ( empty( $presentation_hints ) && isset( $data['presentation_hints'] ) && \is_array( $data['presentation_hints'] ) ) {
+			$presentation_hints = $data['presentation_hints'];
+		}
+
+		$price_args = self::get_price_format_args( $currency, $presentation_hints );
 		$result = array();
 
 		foreach ( $data as $k => $value ) {
 			if ( \is_array( $value ) ) {
-				$result[ $k ] = self::format_money_fields( $value, $currency );
+				$result[ $k ] = self::format_money_fields( $value, $currency, $presentation_hints );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
 				// For conditional-display fields (change, tendered, discounts, etc.),
 				// keep zero as numeric 0 so Mustache section guards treat them as falsy.
@@ -175,7 +181,7 @@ class Receipt_Data_Schema {
 				} else {
 					$result[ $k ] = html_entity_decode(
 						wp_strip_all_tags(
-							wc_price( (float) $value, array( 'currency' => $currency ) )
+							wc_price( (float) $value, $price_args )
 						),
 						ENT_QUOTES | ENT_SUBSTITUTE,
 						'UTF-8'
@@ -187,6 +193,54 @@ class Receipt_Data_Schema {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Build wc_price() arguments from presentation hints.
+	 *
+	 * @param string              $currency           WooCommerce currency code.
+	 * @param array<string,mixed> $presentation_hints Receipt presentation hints.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function get_price_format_args( string $currency, array $presentation_hints ): array {
+		$args = array( 'currency' => $currency );
+
+		if ( isset( $presentation_hints['currency_position'] ) ) {
+			$args['price_format'] = self::get_price_format_for_position( (string) $presentation_hints['currency_position'] );
+		}
+		if ( isset( $presentation_hints['price_decimal_separator'] ) ) {
+			$args['decimal_separator'] = (string) $presentation_hints['price_decimal_separator'];
+		}
+		if ( isset( $presentation_hints['price_thousand_separator'] ) ) {
+			$args['thousand_separator'] = (string) $presentation_hints['price_thousand_separator'];
+		}
+		if ( isset( $presentation_hints['price_num_decimals'] ) && is_numeric( $presentation_hints['price_num_decimals'] ) ) {
+			$args['decimals'] = (int) $presentation_hints['price_num_decimals'];
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Convert a WooCommerce currency position option to a wc_price format.
+	 *
+	 * @param string $position WooCommerce currency position.
+	 *
+	 * @return string wc_price format.
+	 */
+	private static function get_price_format_for_position( string $position ): string {
+		switch ( $position ) {
+			case 'right':
+				return '%2$s%1$s';
+			case 'left_space':
+				return '%1$s %2$s';
+			case 'right_space':
+				return '%2$s %1$s';
+			case 'left':
+			default:
+				return '%1$s%2$s';
+		}
 	}
 
 	/**

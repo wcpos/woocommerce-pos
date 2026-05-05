@@ -12,6 +12,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\i18n;
+
 /**
  * Receipt_I18n_Labels class.
  */
@@ -22,9 +24,21 @@ class Receipt_I18n_Labels {
 	 *
 	 * These are referenced in templates as {{i18n.key}}.
 	 *
+	 * @param string $locale Optional locale to use while resolving labels.
+	 *
 	 * @return array<string, string> Map of label key => translated string.
 	 */
-	public static function get_labels(): array {
+	public static function get_labels( string $locale = '' ): array {
+		if ( '' !== $locale && get_locale() !== $locale && function_exists( 'switch_to_locale' ) && switch_to_locale( $locale ) ) {
+			try {
+				new i18n();
+
+				return self::get_labels();
+			} finally {
+				restore_previous_locale();
+			}
+		}
+
 		return array(
 			// Order meta.
 			'order'                  => __( 'Order', 'woocommerce-pos' ),

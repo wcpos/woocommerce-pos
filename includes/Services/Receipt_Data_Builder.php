@@ -348,7 +348,7 @@ class Receipt_Data_Builder {
 			'refunds'            => $this->get_refunds( $order, $display_incl ),
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
-			'i18n'               => Receipt_I18n_Labels::get_labels(),
+			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
 		);
 	}
 
