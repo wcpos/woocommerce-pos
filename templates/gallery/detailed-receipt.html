@@ -92,9 +92,11 @@ can be removed once the keys are in the dictionary.
 			<div style="color: #6b7280;">{{customer.shipping_address.address_1}}{{#customer.shipping_address.address_2}}, {{customer.shipping_address.address_2}}{{/customer.shipping_address.address_2}}</div>
 			<div style="color: #6b7280;">{{customer.shipping_address.postcode}} {{customer.shipping_address.city}}{{#customer.shipping_address.country}}, {{customer.shipping_address.country}}{{/customer.shipping_address.country}}</div>
 			{{/customer.shipping_address.address_1}}
-			{{#shipping.0.meta}}
+			{{#shipping}}
+			{{#meta}}
 			<div style="color: #6b7280; font-size: 11px; margin-top: 4px;"><strong>{{key}}</strong> {{value}}</div>
-			{{/shipping.0.meta}}
+			{{/meta}}
+			{{/shipping}}
 		</div>
 
 		<div style="font-size: 12px;">
@@ -176,7 +178,7 @@ can be removed once the keys are in the dictionary.
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right;">—</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right;">—</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right;">—</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">-{{total_incl_display}}</td>
 			</tr>
 			{{/discounts}}
 		</tbody>
@@ -214,7 +216,7 @@ can be removed once the keys are in the dictionary.
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.subtotal}}</div>
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal_excl_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_excl_display}}</span></div>
 			{{#totals.discount_total_incl}}
-			<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.discount_total_incl_display}}</span></div>
+			<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.discount_total_incl_display}}</span></div>
 			{{/totals.discount_total_incl}}
 			<div style="border-top: 1px solid #e5e7eb; margin: 8px 0;"></div>
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_excl}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_excl_display}}</span></div>
