@@ -90,7 +90,7 @@
   <line style="double" />
   <row>
     <col width="24"><bold><size width="2">{{i18n.total}}</size></bold></col>
-    <col width="24" align="right"><bold><size width="2">{{totals.grand_total_incl}}</size></bold></col>
+    <col width="24" align="right"><bold><size width="2">{{totals.total_incl}}</size></bold></col>
   </row>
   <line style="double" />
   {{#payments}}

@@ -282,7 +282,7 @@ class Receipt_Data_Builder {
 		$tax_total = (float) $order->get_total_tax();
 		$total     = (float) $order->get_total();
 
-		$grand_total_excl = $total - $tax_total;
+		$total_excl = $total - $tax_total;
 		$refund_total     = method_exists( $order, 'get_total_refunded' )
 			? abs( (float) $order->get_total_refunded() )
 			: 0.0;
@@ -295,9 +295,9 @@ class Receipt_Data_Builder {
 			'discount_total_incl'  => $discount_total_incl,
 			'discount_total_excl'  => $discount_total_excl,
 			'tax_total'            => $tax_total,
-			'grand_total'          => $display_incl ? $total : $grand_total_excl,
-			'grand_total_incl'     => $total,
-			'grand_total_excl'     => $grand_total_excl,
+			'total'          => $display_incl ? $total : $total_excl,
+			'total_incl'     => $total,
+			'total_excl'     => $total_excl,
 			'paid_total'           => $total,
 			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
 			'refund_total'         => $refund_total,

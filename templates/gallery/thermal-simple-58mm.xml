@@ -54,7 +54,7 @@
   <line style="double" />
   <row>
     <col width="16"><bold>{{i18n.total}}</bold></col>
-    <col width="16" align="right"><bold>{{totals.grand_total_incl}}</bold></col>
+    <col width="16" align="right"><bold>{{totals.total_incl}}</bold></col>
   </row>
   <line />
   {{#payments}}

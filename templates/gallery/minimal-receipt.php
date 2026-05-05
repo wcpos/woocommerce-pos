@@ -154,7 +154,7 @@ $money = function ( float $amount ) use ( $currency ): string {
 
 		<tr class="grand-total">
 			<td><?php esc_html_e( 'Total', 'woocommerce-pos' ); ?></td>
-			<td><?php echo esc_html( $money( $totals['grand_total_incl'] ) ); ?></td>
+			<td><?php echo esc_html( $money( $totals['total_incl'] ) ); ?></td>
 		</tr>
 	</table>
 

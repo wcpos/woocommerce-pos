@@ -55,9 +55,9 @@ class Receipt_Data_Schema {
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
-		'grand_total',
-		'grand_total_incl',
-		'grand_total_excl',
+		'total',
+		'total_incl',
+		'total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -115,15 +115,15 @@ class Receipt_Data_Schema {
 		// Totals (display).
 		'subtotal',
 		'discount_total',
-		'grand_total',
+		'total',
 		// Totals (explicit incl/excl).
 		'subtotal_incl',
 		'subtotal_excl',
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
-		'grand_total_incl',
-		'grand_total_excl',
+		'total_incl',
+		'total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -677,17 +677,17 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => __( 'Tax Total', 'woocommerce-pos' ),
 					),
-					'grand_total'         => array(
+					'total'         => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total', 'woocommerce-pos' ),
+						'label' => __( 'Total', 'woocommerce-pos' ),
 					),
-					'grand_total_incl'    => array(
+					'total_incl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total (incl tax)', 'woocommerce-pos' ),
+						'label' => __( 'Total (incl. tax)', 'woocommerce-pos' ),
 					),
-					'grand_total_excl'    => array(
+					'total_excl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Grand Total (excl tax)', 'woocommerce-pos' ),
+						'label' => __( 'Total (excl. tax)', 'woocommerce-pos' ),
 					),
 					'paid_total'          => array(
 						'type'  => 'money',
