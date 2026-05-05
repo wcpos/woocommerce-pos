@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-04T16:15:28+00:00\n"
+"POT-Creation-Date: 2026-05-05T12:53:16+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1006,7 +1006,7 @@ msgid "Cashback amount must be zero or greater."
 msgstr ""
 
 #: includes/Gateways/Cash.php:28
-#: includes/Services/Preview_Receipt_Builder.php:729
+#: includes/Services/Preview_Receipt_Builder.php:739
 msgid "Cash"
 msgstr ""
 
@@ -1095,30 +1095,30 @@ msgstr ""
 msgid "Closed"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:562
+#: includes/Services/Preview_Receipt_Builder.php:572
 msgid "Gift Wrapping"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:568
+#: includes/Services/Preview_Receipt_Builder.php:578
 msgid "Flat Rate Shipping"
 msgstr ""
 
 #. translators: %s: discount percentage
-#: includes/Services/Preview_Receipt_Builder.php:576
+#: includes/Services/Preview_Receipt_Builder.php:586
 #, php-format
 msgid "Summer Sale (%s%%)"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:633
-#: includes/Services/Preview_Receipt_Builder.php:652
+#: includes/Services/Preview_Receipt_Builder.php:643
+#: includes/Services/Preview_Receipt_Builder.php:662
 msgid "Please gift wrap this order. Thank you!"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:756
+#: includes/Services/Preview_Receipt_Builder.php:760
 msgid "Tax Receipt"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:761
+#: includes/Services/Preview_Receipt_Builder.php:765
 #: includes/Services/Receipt_Data_Schema.php:270
 #: includes/Services/Receipt_Data_Schema.php:355
 #: includes/Services/Receipt_I18n_Labels.php:53
@@ -1128,32 +1128,32 @@ msgstr ""
 msgid "Tax ID"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:765
+#: includes/Services/Preview_Receipt_Builder.php:769
 msgid "Auth Code"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:864
+#: includes/Services/Preview_Receipt_Builder.php:868
 msgid "Thank you for shopping with us! We appreciate your business."
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:867
+#: includes/Services/Preview_Receipt_Builder.php:871
 msgid "Returns accepted within 30 days with original receipt. Items must be unused and in original packaging."
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:870
+#: includes/Services/Preview_Receipt_Builder.php:874
 #: includes/Services/Receipt_I18n_Labels.php:139
 #: templates/gallery/minimal-receipt.php:179
 #: templates/gallery/thermal-receipt.php:223
 msgid "Thank you for your purchase!"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:1237
-#: includes/Services/Preview_Receipt_Builder.php:1262
+#: includes/Services/Preview_Receipt_Builder.php:1312
+#: includes/Services/Preview_Receipt_Builder.php:1337
 #: includes/Services/Receipt_I18n_Labels.php:107
 msgid "Tax"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Builder.php:143
+#: includes/Services/Receipt_Data_Builder.php:146
 #: includes/Templates/Payment.php:355
 #: tests/includes/Templates/Test_Receipt_Renderers.php:297
 msgid "Guest"
