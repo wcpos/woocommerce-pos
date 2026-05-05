@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-05T12:53:16+00:00\n"
+"POT-Creation-Date: 2026-05-05T14:35:19+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -55,9 +55,9 @@ msgid "Enable permalinks"
 msgstr ""
 
 #: includes/Activator.php:363
-#: includes/Services/Receipt_Data_Schema.php:322
-#: includes/Services/Receipt_Data_Schema.php:955
-#: includes/Services/Receipt_I18n_Labels.php:36
+#: includes/Services/Receipt_Data_Schema.php:376
+#: includes/Services/Receipt_Data_Schema.php:1009
+#: includes/Services/Receipt_I18n_Labels.php:50
 #: includes/Templates/Payment.php:337
 #: templates/gallery/minimal-receipt.php:97
 #: templates/gallery/thermal-receipt.php:137
@@ -297,8 +297,8 @@ msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:407
 #: includes/Admin/Templates/List_Templates.php:840
-#: includes/Services/Receipt_Data_Schema.php:365
-#: includes/Services/Receipt_Data_Schema.php:387
+#: includes/Services/Receipt_Data_Schema.php:419
+#: includes/Services/Receipt_Data_Schema.php:441
 msgid "Type"
 msgstr ""
 
@@ -346,7 +346,7 @@ msgid "Activate"
 msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:458
-#: includes/Services/Receipt_I18n_Labels.php:154
+#: includes/Services/Receipt_I18n_Labels.php:168
 msgid "Copy"
 msgstr ""
 
@@ -1017,9 +1017,9 @@ msgid "Amount Tendered"
 msgstr ""
 
 #: includes/Gateways/Cash.php:100
-#: includes/Services/Receipt_Data_Schema.php:644
-#: includes/Services/Receipt_Data_Schema.php:708
-#: includes/Services/Receipt_I18n_Labels.php:110
+#: includes/Services/Receipt_Data_Schema.php:698
+#: includes/Services/Receipt_Data_Schema.php:762
+#: includes/Services/Receipt_I18n_Labels.php:124
 #: templates/gallery/thermal-receipt.php:205
 #: templates/receipt.php:257
 msgid "Change"
@@ -1119,10 +1119,10 @@ msgid "Tax Receipt"
 msgstr ""
 
 #: includes/Services/Preview_Receipt_Builder.php:765
-#: includes/Services/Receipt_Data_Schema.php:270
-#: includes/Services/Receipt_Data_Schema.php:355
-#: includes/Services/Receipt_I18n_Labels.php:53
-#: includes/Services/Receipt_I18n_Labels.php:81
+#: includes/Services/Receipt_Data_Schema.php:324
+#: includes/Services/Receipt_Data_Schema.php:409
+#: includes/Services/Receipt_I18n_Labels.php:67
+#: includes/Services/Receipt_I18n_Labels.php:95
 #: includes/Services/Tax_Id_Types.php:300
 #: templates/gallery/thermal-receipt.php:98
 msgid "Tax ID"
@@ -1141,7 +1141,7 @@ msgid "Returns accepted within 30 days with original receipt. Items must be unus
 msgstr ""
 
 #: includes/Services/Preview_Receipt_Builder.php:874
-#: includes/Services/Receipt_I18n_Labels.php:139
+#: includes/Services/Receipt_I18n_Labels.php:153
 #: templates/gallery/minimal-receipt.php:179
 #: templates/gallery/thermal-receipt.php:223
 msgid "Thank you for your purchase!"
@@ -1149,7 +1149,7 @@ msgstr ""
 
 #: includes/Services/Preview_Receipt_Builder.php:1312
 #: includes/Services/Preview_Receipt_Builder.php:1337
-#: includes/Services/Receipt_I18n_Labels.php:107
+#: includes/Services/Receipt_I18n_Labels.php:121
 msgid "Tax"
 msgstr ""
 
@@ -1159,1019 +1159,1019 @@ msgstr ""
 msgid "Guest"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:204
-#: includes/Services/Receipt_I18n_Labels.php:122
+#: includes/Services/Receipt_Data_Schema.php:258
+#: includes/Services/Receipt_I18n_Labels.php:136
 #: includes/Templates.php:1117
 msgid "Receipt"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:208
+#: includes/Services/Receipt_Data_Schema.php:262
 msgid "Mode"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:213
+#: includes/Services/Receipt_Data_Schema.php:267
 msgid "Receipt Printed"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:217
-#: includes/Services/Receipt_Data_Schema.php:947
-#: includes/Services/Receipt_I18n_Labels.php:30
+#: includes/Services/Receipt_Data_Schema.php:271
+#: includes/Services/Receipt_Data_Schema.php:1001
+#: includes/Services/Receipt_I18n_Labels.php:44
 #: includes/Templates/Adapters/Html_Output_Adapter.php:35
 #: templates/gallery/minimal-receipt.php:88
 msgid "Order"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:221
+#: includes/Services/Receipt_Data_Schema.php:275
 msgid "Order ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:225
+#: includes/Services/Receipt_Data_Schema.php:279
 msgid "Order Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:229
+#: includes/Services/Receipt_Data_Schema.php:283
 msgid "Currency"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:233
-#: includes/Services/Receipt_I18n_Labels.php:133
+#: includes/Services/Receipt_Data_Schema.php:287
+#: includes/Services/Receipt_I18n_Labels.php:147
 msgid "Customer Note"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:237
+#: includes/Services/Receipt_Data_Schema.php:291
 msgid "WC Status"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:241
+#: includes/Services/Receipt_Data_Schema.php:295
 msgid "Created Via"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:246
+#: includes/Services/Receipt_Data_Schema.php:300
 msgid "Order Created"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:250
+#: includes/Services/Receipt_Data_Schema.php:304
 msgid "Order Paid"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:254
+#: includes/Services/Receipt_Data_Schema.php:308
 msgid "Order Completed"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:258
+#: includes/Services/Receipt_Data_Schema.php:312
 msgid "Store"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:262
+#: includes/Services/Receipt_Data_Schema.php:316
 msgid "Store Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:266
+#: includes/Services/Receipt_Data_Schema.php:320
 msgid "Address Lines"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:274
+#: includes/Services/Receipt_Data_Schema.php:328
 msgid "Phone"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:278
+#: includes/Services/Receipt_Data_Schema.php:332
 msgid "Email"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:282
+#: includes/Services/Receipt_Data_Schema.php:336
 msgid "Logo URL"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:287
+#: includes/Services/Receipt_Data_Schema.php:341
 msgid "Opening Hours"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:292
+#: includes/Services/Receipt_Data_Schema.php:346
 msgid "Opening Hours (Vertical)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:297
+#: includes/Services/Receipt_Data_Schema.php:351
 msgid "Opening Hours (Inline)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:302
+#: includes/Services/Receipt_Data_Schema.php:356
 msgid "Opening Hours Notes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:307
+#: includes/Services/Receipt_Data_Schema.php:361
 msgid "Personal Notes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:312
+#: includes/Services/Receipt_Data_Schema.php:366
 msgid "Policies & Conditions"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:317
+#: includes/Services/Receipt_Data_Schema.php:371
 msgid "Footer Imprint"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:326
+#: includes/Services/Receipt_Data_Schema.php:380
 msgid "Cashier ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:330
+#: includes/Services/Receipt_Data_Schema.php:384
 msgid "Cashier Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:335
-#: includes/Services/Receipt_Data_Schema.php:959
-#: includes/Services/Receipt_I18n_Labels.php:37
+#: includes/Services/Receipt_Data_Schema.php:389
+#: includes/Services/Receipt_Data_Schema.php:1013
+#: includes/Services/Receipt_I18n_Labels.php:51
 #: templates/gallery/thermal-receipt.php:141
 #: templates/receipt.php:126
 msgid "Customer"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:339
+#: includes/Services/Receipt_Data_Schema.php:393
 msgid "Customer ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:343
+#: includes/Services/Receipt_Data_Schema.php:397
 msgid "Customer Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:347
-#: includes/Services/Receipt_I18n_Labels.php:89
+#: includes/Services/Receipt_Data_Schema.php:401
+#: includes/Services/Receipt_I18n_Labels.php:103
 msgid "Billing Address"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:351
+#: includes/Services/Receipt_Data_Schema.php:405
 msgid "Shipping Address"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:360
-#: includes/Services/Receipt_I18n_Labels.php:39
+#: includes/Services/Receipt_Data_Schema.php:414
+#: includes/Services/Receipt_I18n_Labels.php:53
 msgid "Customer Tax IDs"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:369
-#: includes/Services/Receipt_Data_Schema.php:391
-#: includes/Services/Receipt_Data_Schema.php:934
+#: includes/Services/Receipt_Data_Schema.php:423
+#: includes/Services/Receipt_Data_Schema.php:445
+#: includes/Services/Receipt_Data_Schema.php:988
 msgid "Value"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:373
-#: includes/Services/Receipt_Data_Schema.php:395
+#: includes/Services/Receipt_Data_Schema.php:427
+#: includes/Services/Receipt_Data_Schema.php:449
 msgid "Country"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:377
-#: includes/Services/Receipt_Data_Schema.php:399
-#: includes/Services/Receipt_Data_Schema.php:930
+#: includes/Services/Receipt_Data_Schema.php:431
+#: includes/Services/Receipt_Data_Schema.php:453
+#: includes/Services/Receipt_Data_Schema.php:984
 msgid "Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:382
+#: includes/Services/Receipt_Data_Schema.php:436
 msgid "Store Tax IDs"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:404
+#: includes/Services/Receipt_Data_Schema.php:458
 msgid "Line Items"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:409
+#: includes/Services/Receipt_Data_Schema.php:463
 msgid "Item Key"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:413
-#: includes/Services/Receipt_Data_Schema.php:792
-#: includes/Services/Receipt_I18n_Labels.php:93
+#: includes/Services/Receipt_Data_Schema.php:467
+#: includes/Services/Receipt_Data_Schema.php:846
+#: includes/Services/Receipt_I18n_Labels.php:107
 msgid "SKU"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:417
-#: includes/Services/Receipt_Data_Schema.php:788
+#: includes/Services/Receipt_Data_Schema.php:471
+#: includes/Services/Receipt_Data_Schema.php:842
 msgid "Product Name"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:421
-#: includes/Services/Receipt_Data_Schema.php:796
+#: includes/Services/Receipt_Data_Schema.php:475
+#: includes/Services/Receipt_Data_Schema.php:850
 msgid "Quantity"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:425
+#: includes/Services/Receipt_Data_Schema.php:479
 msgid "Quantity Refunded"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:429
+#: includes/Services/Receipt_Data_Schema.php:483
 msgid "Unit Subtotal"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:433
+#: includes/Services/Receipt_Data_Schema.php:487
 msgid "Unit Subtotal (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:437
+#: includes/Services/Receipt_Data_Schema.php:491
 msgid "Unit Subtotal (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:441
-#: includes/Services/Receipt_I18n_Labels.php:95
+#: includes/Services/Receipt_Data_Schema.php:495
+#: includes/Services/Receipt_I18n_Labels.php:109
 msgid "Unit Price"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:445
+#: includes/Services/Receipt_Data_Schema.php:499
 msgid "Unit Price (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:449
+#: includes/Services/Receipt_Data_Schema.php:503
 msgid "Unit Price (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:453
-#: includes/Services/Receipt_Data_Schema.php:600
-#: includes/Services/Receipt_Data_Schema.php:963
-#: includes/Services/Receipt_I18n_Labels.php:102
+#: includes/Services/Receipt_Data_Schema.php:507
+#: includes/Services/Receipt_Data_Schema.php:654
+#: includes/Services/Receipt_Data_Schema.php:1017
+#: includes/Services/Receipt_I18n_Labels.php:116
 #: templates/gallery/minimal-receipt.php:130
 #: templates/gallery/thermal-receipt.php:162
 msgid "Subtotal"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:457
-#: includes/Services/Receipt_Data_Schema.php:604
+#: includes/Services/Receipt_Data_Schema.php:511
+#: includes/Services/Receipt_Data_Schema.php:658
 msgid "Subtotal (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:461
-#: includes/Services/Receipt_Data_Schema.php:608
+#: includes/Services/Receipt_Data_Schema.php:515
+#: includes/Services/Receipt_Data_Schema.php:662
 msgid "Subtotal (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:465
-#: includes/Services/Receipt_Data_Schema.php:566
+#: includes/Services/Receipt_Data_Schema.php:519
+#: includes/Services/Receipt_Data_Schema.php:620
 msgid "Discounts"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:469
+#: includes/Services/Receipt_Data_Schema.php:523
 msgid "Discounts (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:473
+#: includes/Services/Receipt_Data_Schema.php:527
 msgid "Discounts (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:477
+#: includes/Services/Receipt_Data_Schema.php:531
 msgid "Line Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:481
+#: includes/Services/Receipt_Data_Schema.php:535
 msgid "Line Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:485
+#: includes/Services/Receipt_Data_Schema.php:539
 msgid "Line Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:489
-#: includes/Services/Receipt_I18n_Labels.php:130
+#: includes/Services/Receipt_Data_Schema.php:543
+#: includes/Services/Receipt_I18n_Labels.php:144
 msgid "Total Refunded"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:493
+#: includes/Services/Receipt_Data_Schema.php:547
 msgid "Line Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:497
+#: includes/Services/Receipt_Data_Schema.php:551
 msgid "Item Meta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:502
+#: includes/Services/Receipt_Data_Schema.php:556
 msgid "Fees"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:507
-#: includes/Services/Receipt_Data_Schema.php:823
+#: includes/Services/Receipt_Data_Schema.php:561
+#: includes/Services/Receipt_Data_Schema.php:877
 msgid "Fee Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:511
-#: includes/Services/Receipt_Data_Schema.php:545
-#: includes/Services/Receipt_Data_Schema.php:583
-#: includes/Services/Receipt_Data_Schema.php:967
-#: includes/Services/Receipt_I18n_Labels.php:104
+#: includes/Services/Receipt_Data_Schema.php:565
+#: includes/Services/Receipt_Data_Schema.php:599
+#: includes/Services/Receipt_Data_Schema.php:637
+#: includes/Services/Receipt_Data_Schema.php:1021
+#: includes/Services/Receipt_I18n_Labels.php:118
 #: templates/gallery/minimal-receipt.php:109
 #: templates/gallery/minimal-receipt.php:156
 msgid "Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:515
-#: includes/Services/Receipt_Data_Schema.php:549
-#: includes/Services/Receipt_Data_Schema.php:587
+#: includes/Services/Receipt_Data_Schema.php:569
+#: includes/Services/Receipt_Data_Schema.php:603
+#: includes/Services/Receipt_Data_Schema.php:641
 msgid "Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:519
-#: includes/Services/Receipt_Data_Schema.php:553
-#: includes/Services/Receipt_Data_Schema.php:591
+#: includes/Services/Receipt_Data_Schema.php:573
+#: includes/Services/Receipt_Data_Schema.php:607
+#: includes/Services/Receipt_Data_Schema.php:645
 msgid "Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:523
+#: includes/Services/Receipt_Data_Schema.php:577
 msgid "Fee Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:527
+#: includes/Services/Receipt_Data_Schema.php:581
 msgid "Fee Meta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:532
+#: includes/Services/Receipt_Data_Schema.php:586
 msgid "Shipping"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:537
-#: includes/Services/Receipt_Data_Schema.php:850
+#: includes/Services/Receipt_Data_Schema.php:591
+#: includes/Services/Receipt_Data_Schema.php:904
 msgid "Shipping Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:541
-#: includes/Services/Receipt_Data_Schema.php:854
+#: includes/Services/Receipt_Data_Schema.php:595
+#: includes/Services/Receipt_Data_Schema.php:908
 msgid "Shipping Method ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:557
+#: includes/Services/Receipt_Data_Schema.php:611
 msgid "Shipping Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:561
+#: includes/Services/Receipt_Data_Schema.php:615
 msgid "Shipping Meta"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:571
+#: includes/Services/Receipt_Data_Schema.php:625
 msgid "Discount Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:575
+#: includes/Services/Receipt_Data_Schema.php:629
 msgid "Coupon Code"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:579
+#: includes/Services/Receipt_Data_Schema.php:633
 msgid "Coupon Codes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:596
+#: includes/Services/Receipt_Data_Schema.php:650
 msgid "Totals"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:612
+#: includes/Services/Receipt_Data_Schema.php:666
 msgid "Discount Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:616
+#: includes/Services/Receipt_Data_Schema.php:670
 msgid "Discount Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:620
+#: includes/Services/Receipt_Data_Schema.php:674
 msgid "Discount Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:624
+#: includes/Services/Receipt_Data_Schema.php:678
 msgid "Tax Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:628
+#: includes/Services/Receipt_Data_Schema.php:682
 msgid "Grand Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:632
+#: includes/Services/Receipt_Data_Schema.php:686
 msgid "Grand Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:636
+#: includes/Services/Receipt_Data_Schema.php:690
 msgid "Grand Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:640
+#: includes/Services/Receipt_Data_Schema.php:694
 msgid "Paid Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:648
+#: includes/Services/Receipt_Data_Schema.php:702
 msgid "Refund Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:653
-#: includes/Services/Receipt_I18n_Labels.php:113
+#: includes/Services/Receipt_Data_Schema.php:707
+#: includes/Services/Receipt_I18n_Labels.php:127
 msgid "Tax Summary"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:658
+#: includes/Services/Receipt_Data_Schema.php:712
 msgid "Tax Code"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:662
+#: includes/Services/Receipt_Data_Schema.php:716
 msgid "Tax Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:666
+#: includes/Services/Receipt_Data_Schema.php:720
 msgid "Tax Rate (%)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:670
+#: includes/Services/Receipt_Data_Schema.php:724
 msgid "Compound Tax"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:674
+#: includes/Services/Receipt_Data_Schema.php:728
 msgid "Taxable Amount (excl)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:678
-#: includes/Services/Receipt_I18n_Labels.php:115
+#: includes/Services/Receipt_Data_Schema.php:732
+#: includes/Services/Receipt_I18n_Labels.php:129
 msgid "Tax Amount"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:682
+#: includes/Services/Receipt_Data_Schema.php:736
 msgid "Taxable Amount (incl)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:687
+#: includes/Services/Receipt_Data_Schema.php:741
 msgid "Payments"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:692
+#: includes/Services/Receipt_Data_Schema.php:746
 msgid "Method ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:696
+#: includes/Services/Receipt_Data_Schema.php:750
 msgid "Payment Method"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:700
-#: includes/Services/Receipt_I18n_Labels.php:129
+#: includes/Services/Receipt_Data_Schema.php:754
+#: includes/Services/Receipt_I18n_Labels.php:143
 msgid "Amount"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:704
-#: includes/Services/Receipt_I18n_Labels.php:109
+#: includes/Services/Receipt_Data_Schema.php:758
+#: includes/Services/Receipt_I18n_Labels.php:123
 #: templates/gallery/thermal-receipt.php:201
 #: templates/receipt.php:253
 msgid "Tendered"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:712
+#: includes/Services/Receipt_Data_Schema.php:766
 msgid "Transaction ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:717
+#: includes/Services/Receipt_Data_Schema.php:771
 msgid "Refunds"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:722
+#: includes/Services/Receipt_Data_Schema.php:776
 msgid "Refund ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:726
+#: includes/Services/Receipt_Data_Schema.php:780
 msgid "Refund Date"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:730
+#: includes/Services/Receipt_Data_Schema.php:784
 msgid "Refund Amount"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:734
+#: includes/Services/Receipt_Data_Schema.php:788
 msgid "Refund Subtotal"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:738
+#: includes/Services/Receipt_Data_Schema.php:792
 msgid "Refund Tax Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:742
-#: includes/Services/Receipt_Data_Schema.php:858
+#: includes/Services/Receipt_Data_Schema.php:796
+#: includes/Services/Receipt_Data_Schema.php:912
 msgid "Refund Shipping Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:746
+#: includes/Services/Receipt_Data_Schema.php:800
 msgid "Refund Shipping Tax"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:750
+#: includes/Services/Receipt_Data_Schema.php:804
 msgid "Refund Reason"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:755
+#: includes/Services/Receipt_Data_Schema.php:809
 msgid "Refunded By (User ID)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:759
+#: includes/Services/Receipt_Data_Schema.php:813
 msgid "Refunded By (Name)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:763
+#: includes/Services/Receipt_Data_Schema.php:817
 msgid "Refunded Payment"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:767
+#: includes/Services/Receipt_Data_Schema.php:821
 msgid "Refund Destination"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:771
+#: includes/Services/Receipt_Data_Schema.php:825
 msgid "Refund Gateway ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:775
+#: includes/Services/Receipt_Data_Schema.php:829
 msgid "Refund Gateway Title"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:779
+#: includes/Services/Receipt_Data_Schema.php:833
 msgid "Refund Processing Mode"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:783
+#: includes/Services/Receipt_Data_Schema.php:837
 msgid "Refund Lines"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:800
+#: includes/Services/Receipt_Data_Schema.php:854
 msgid "Refund Line Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:804
+#: includes/Services/Receipt_Data_Schema.php:858
 msgid "Refund Line Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:808
+#: includes/Services/Receipt_Data_Schema.php:862
 msgid "Refund Line Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:812
+#: includes/Services/Receipt_Data_Schema.php:866
 msgid "Refund Line Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:818
+#: includes/Services/Receipt_Data_Schema.php:872
 msgid "Refund Fees"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:827
+#: includes/Services/Receipt_Data_Schema.php:881
 msgid "Refund Fee Total"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:831
+#: includes/Services/Receipt_Data_Schema.php:885
 msgid "Refund Fee Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:835
+#: includes/Services/Receipt_Data_Schema.php:889
 msgid "Refund Fee Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:839
+#: includes/Services/Receipt_Data_Schema.php:893
 msgid "Refund Fee Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:845
+#: includes/Services/Receipt_Data_Schema.php:899
 msgid "Refund Shipping"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:862
+#: includes/Services/Receipt_Data_Schema.php:916
 msgid "Refund Shipping Total (incl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:866
+#: includes/Services/Receipt_Data_Schema.php:920
 msgid "Refund Shipping Total (excl tax)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:870
+#: includes/Services/Receipt_Data_Schema.php:924
 msgid "Refund Shipping Taxes"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:877
+#: includes/Services/Receipt_Data_Schema.php:931
 msgid "Fiscal"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:881
+#: includes/Services/Receipt_Data_Schema.php:935
 msgid "Immutable ID"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:885
+#: includes/Services/Receipt_Data_Schema.php:939
 msgid "Receipt Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:889
+#: includes/Services/Receipt_Data_Schema.php:943
 msgid "Sequence"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:893
+#: includes/Services/Receipt_Data_Schema.php:947
 msgid "Hash"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:897
+#: includes/Services/Receipt_Data_Schema.php:951
 msgid "QR Payload"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:901
+#: includes/Services/Receipt_Data_Schema.php:955
 msgid "Tax Agency Code"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:905
+#: includes/Services/Receipt_Data_Schema.php:959
 msgid "Signed At"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:909
+#: includes/Services/Receipt_Data_Schema.php:963
 msgid "Signature Excerpt"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:913
+#: includes/Services/Receipt_Data_Schema.php:967
 msgid "Document Label"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:917
+#: includes/Services/Receipt_Data_Schema.php:971
 msgid "Is Reprint"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:921
+#: includes/Services/Receipt_Data_Schema.php:975
 msgid "Reprint Count"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:925
+#: includes/Services/Receipt_Data_Schema.php:979
 msgid "Extra Fields"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:943
+#: includes/Services/Receipt_Data_Schema.php:997
 msgid "Labels (i18n)"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:951
-#: includes/Services/Receipt_Data_Schema.php:987
-#: includes/Services/Receipt_I18n_Labels.php:31
+#: includes/Services/Receipt_Data_Schema.php:1005
+#: includes/Services/Receipt_Data_Schema.php:1041
+#: includes/Services/Receipt_I18n_Labels.php:45
 #: templates/gallery/minimal-receipt.php:92
 #: templates/gallery/thermal-receipt.php:134
 #: templates/receipt.php:114
 msgid "Date"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:983
+#: includes/Services/Receipt_Data_Schema.php:1037
 msgid "Date & Time"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:991
+#: includes/Services/Receipt_Data_Schema.php:1045
 msgid "Time"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:995
+#: includes/Services/Receipt_Data_Schema.php:1049
 msgid "Short Date & Time"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:999
+#: includes/Services/Receipt_Data_Schema.php:1053
 msgid "Long Date & Time"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1003
+#: includes/Services/Receipt_Data_Schema.php:1057
 msgid "Full Date & Time"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1007
+#: includes/Services/Receipt_Data_Schema.php:1061
 msgid "Short Date"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1011
+#: includes/Services/Receipt_Data_Schema.php:1065
 msgid "Long Date"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1015
+#: includes/Services/Receipt_Data_Schema.php:1069
 msgid "Full Date"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1019
+#: includes/Services/Receipt_Data_Schema.php:1073
 msgid "YYYY-MM-DD"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1023
+#: includes/Services/Receipt_Data_Schema.php:1077
 msgid "DD/MM/YYYY"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1027
+#: includes/Services/Receipt_Data_Schema.php:1081
 msgid "MM/DD/YYYY"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1031
+#: includes/Services/Receipt_Data_Schema.php:1085
 msgid "Weekday Short"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1035
+#: includes/Services/Receipt_Data_Schema.php:1089
 msgid "Weekday Long"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1039
+#: includes/Services/Receipt_Data_Schema.php:1093
 msgid "Day"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1043
+#: includes/Services/Receipt_Data_Schema.php:1097
 msgid "Month Number"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1047
+#: includes/Services/Receipt_Data_Schema.php:1101
 msgid "Month Short"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1051
+#: includes/Services/Receipt_Data_Schema.php:1105
 msgid "Month Long"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Schema.php:1055
+#: includes/Services/Receipt_Data_Schema.php:1109
 msgid "Year"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:32
+#: includes/Services/Receipt_I18n_Labels.php:46
 msgid "Invoice No."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:33
+#: includes/Services/Receipt_I18n_Labels.php:47
 msgid "Reference"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:38
+#: includes/Services/Receipt_I18n_Labels.php:52
 msgid "Customer Tax ID"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:40
-#: includes/Services/Receipt_I18n_Labels.php:41
-#: includes/Services/Receipt_I18n_Labels.php:42
+#: includes/Services/Receipt_I18n_Labels.php:54
+#: includes/Services/Receipt_I18n_Labels.php:55
+#: includes/Services/Receipt_I18n_Labels.php:56
 #: includes/Services/Tax_Id_Types.php:242
 msgid "VAT Number"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:43
-#: includes/Services/Receipt_I18n_Labels.php:63
+#: includes/Services/Receipt_I18n_Labels.php:57
+#: includes/Services/Receipt_I18n_Labels.php:77
 #: includes/Services/Tax_Id_Types.php:245
 msgid "ABN"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:44
-#: includes/Services/Receipt_I18n_Labels.php:64
+#: includes/Services/Receipt_I18n_Labels.php:58
+#: includes/Services/Receipt_I18n_Labels.php:78
 #: includes/Services/Tax_Id_Types.php:248
 msgid "CPF"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:45
-#: includes/Services/Receipt_I18n_Labels.php:65
+#: includes/Services/Receipt_I18n_Labels.php:59
+#: includes/Services/Receipt_I18n_Labels.php:79
 #: includes/Services/Tax_Id_Types.php:251
 msgid "CNPJ"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:46
-#: includes/Services/Receipt_I18n_Labels.php:66
+#: includes/Services/Receipt_I18n_Labels.php:60
+#: includes/Services/Receipt_I18n_Labels.php:80
 #: includes/Services/Tax_Id_Types.php:254
 msgid "GSTIN"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:47
-#: includes/Services/Receipt_I18n_Labels.php:67
+#: includes/Services/Receipt_I18n_Labels.php:61
+#: includes/Services/Receipt_I18n_Labels.php:81
 #: includes/Services/Tax_Id_Types.php:257
 msgid "Codice Fiscale"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:48
+#: includes/Services/Receipt_I18n_Labels.php:62
 #: includes/Services/Tax_Id_Types.php:260
 msgid "Partita IVA"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:49
-#: includes/Services/Receipt_I18n_Labels.php:69
+#: includes/Services/Receipt_I18n_Labels.php:63
+#: includes/Services/Receipt_I18n_Labels.php:83
 #: includes/Services/Tax_Id_Types.php:263
 msgid "NIF"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:50
-#: includes/Services/Receipt_I18n_Labels.php:70
+#: includes/Services/Receipt_I18n_Labels.php:64
+#: includes/Services/Receipt_I18n_Labels.php:84
 #: includes/Services/Tax_Id_Types.php:266
 msgid "CUIT"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:51
+#: includes/Services/Receipt_I18n_Labels.php:65
 #: includes/Services/Tax_Id_Types.php:269
 msgid "GST/HST"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:52
-#: includes/Services/Receipt_I18n_Labels.php:72
+#: includes/Services/Receipt_I18n_Labels.php:66
+#: includes/Services/Receipt_I18n_Labels.php:86
 #: includes/Services/Tax_Id_Types.php:272
 msgid "EIN"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:56
+#: includes/Services/Receipt_I18n_Labels.php:70
 msgid "Tax IDs"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:60
+#: includes/Services/Receipt_I18n_Labels.php:74
 msgid "VAT ID"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:61
-#: includes/Services/Receipt_I18n_Labels.php:62
+#: includes/Services/Receipt_I18n_Labels.php:75
+#: includes/Services/Receipt_I18n_Labels.php:76
 msgid "VAT No."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:68
+#: includes/Services/Receipt_I18n_Labels.php:82
 msgid "P.IVA"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:71
+#: includes/Services/Receipt_I18n_Labels.php:85
 msgid "GST/HST No."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:73
+#: includes/Services/Receipt_I18n_Labels.php:87
 #: includes/Services/Tax_Id_Types.php:275
 msgid "USt-IdNr."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:74
+#: includes/Services/Receipt_I18n_Labels.php:88
 #: includes/Services/Tax_Id_Types.php:278
 msgid "Steuernummer"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:75
+#: includes/Services/Receipt_I18n_Labels.php:89
 #: includes/Services/Tax_Id_Types.php:281
 msgid "HRB"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:76
+#: includes/Services/Receipt_I18n_Labels.php:90
 #: includes/Services/Tax_Id_Types.php:284
 msgid "KVK"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:77
+#: includes/Services/Receipt_I18n_Labels.php:91
 #: includes/Services/Tax_Id_Types.php:287
 msgid "SIRET"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:78
+#: includes/Services/Receipt_I18n_Labels.php:92
 #: includes/Services/Tax_Id_Types.php:290
 msgid "SIREN"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:79
+#: includes/Services/Receipt_I18n_Labels.php:93
 #: includes/Services/Tax_Id_Types.php:293
 msgid "Company No."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:80
+#: includes/Services/Receipt_I18n_Labels.php:94
 #: includes/Services/Tax_Id_Types.php:296
 msgid "UID"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:83
+#: includes/Services/Receipt_I18n_Labels.php:97
 msgid "Prepared For"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:84
+#: includes/Services/Receipt_I18n_Labels.php:98
 msgid "Processed by"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:87
+#: includes/Services/Receipt_I18n_Labels.php:101
 msgid "Bill To"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:88
+#: includes/Services/Receipt_I18n_Labels.php:102
 msgid "Ship To"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:92
+#: includes/Services/Receipt_I18n_Labels.php:106
 #: templates/gallery/minimal-receipt.php:107
 msgid "Item"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:94
+#: includes/Services/Receipt_I18n_Labels.php:108
 #: templates/gallery/minimal-receipt.php:108
 msgid "Qty"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:96
+#: includes/Services/Receipt_I18n_Labels.php:110
 msgid "Unit (excl.)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:97
+#: includes/Services/Receipt_I18n_Labels.php:111
 msgid "Total (excl.)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:98
+#: includes/Services/Receipt_I18n_Labels.php:112
 #: templates/gallery/minimal-receipt.php:136
 #: templates/gallery/thermal-receipt.php:168
 msgid "Discount"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:99
+#: includes/Services/Receipt_I18n_Labels.php:113
 msgid "Packed"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:103
+#: includes/Services/Receipt_I18n_Labels.php:117
 msgid "Subtotal (excl. tax)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:105
+#: includes/Services/Receipt_I18n_Labels.php:119
 msgid "Total Tax"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:106
+#: includes/Services/Receipt_I18n_Labels.php:120
 msgid "Grand Total (incl. tax)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:108
+#: includes/Services/Receipt_I18n_Labels.php:122
 msgid "Paid"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:114
+#: includes/Services/Receipt_I18n_Labels.php:128
 msgid "Taxable (excl.)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:116
+#: includes/Services/Receipt_I18n_Labels.php:130
 msgid "Taxable (incl.)"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:119
+#: includes/Services/Receipt_I18n_Labels.php:133
 #: includes/Templates.php:1118
 msgid "Invoice"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:120
+#: includes/Services/Receipt_I18n_Labels.php:134
 msgid "Tax Invoice"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:121
+#: includes/Services/Receipt_I18n_Labels.php:135
 msgid "Quote"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:123
+#: includes/Services/Receipt_I18n_Labels.php:137
 #: includes/Templates.php:824
 #: includes/Templates.php:1119
 #: templates/gallery/gift-receipt.php:105
 msgid "Gift Receipt"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:124
+#: includes/Services/Receipt_I18n_Labels.php:138
 #: includes/Templates.php:1120
 msgid "Credit Note"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:125
+#: includes/Services/Receipt_I18n_Labels.php:139
 msgid "Packing Slip"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:128
+#: includes/Services/Receipt_I18n_Labels.php:142
 msgid "Returned Items"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:134
+#: includes/Services/Receipt_I18n_Labels.php:148
 msgid "Terms & Conditions"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:135
+#: includes/Services/Receipt_I18n_Labels.php:149
 #: templates/gallery/gift-receipt.php:123
 msgid "A message for you"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:138
+#: includes/Services/Receipt_I18n_Labels.php:152
 msgid "Thank you!"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:140
+#: includes/Services/Receipt_I18n_Labels.php:154
 msgid "Thank you for shopping with us!"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:141
+#: includes/Services/Receipt_I18n_Labels.php:155
 msgid "Thank you for your business."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:142
+#: includes/Services/Receipt_I18n_Labels.php:156
 msgid "This is a tax invoice. Please retain for your records."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:143
+#: includes/Services/Receipt_I18n_Labels.php:157
 msgid "Items may be returned or exchanged within 30 days with this receipt."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:144
+#: includes/Services/Receipt_I18n_Labels.php:158
 msgid "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:145
+#: includes/Services/Receipt_I18n_Labels.php:159
 msgid "This is a quote, not a receipt"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:146
+#: includes/Services/Receipt_I18n_Labels.php:160
 msgid "Please retain this receipt for your records."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:149
+#: includes/Services/Receipt_I18n_Labels.php:163
 msgid "KITCHEN"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:152
+#: includes/Services/Receipt_I18n_Labels.php:166
 msgid "Signature"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:153
+#: includes/Services/Receipt_I18n_Labels.php:167
 msgid "Document Type"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:155
+#: includes/Services/Receipt_I18n_Labels.php:169
 msgid "Copy No."
 msgstr ""
 
 #. translators: %s: store tax identification number
 #. translators: %s: tax identification number
 #. translators: %s: tax ID
-#: includes/Services/Receipt_I18n_Labels.php:178
+#: includes/Services/Receipt_I18n_Labels.php:192
 #: templates/gallery/thermal-receipt.php:116
 #: templates/receipt.php:97
 #, php-format
@@ -2179,83 +2179,83 @@ msgid "Tax ID: %s"
 msgstr ""
 
 #. translators: %s: store phone number
-#: includes/Services/Receipt_I18n_Labels.php:183
+#: includes/Services/Receipt_I18n_Labels.php:197
 #, php-format
 msgid "Phone: %s"
 msgstr ""
 
 #. translators: %s: store email address
-#: includes/Services/Receipt_I18n_Labels.php:188
+#: includes/Services/Receipt_I18n_Labels.php:202
 #, php-format
 msgid "Email: %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:193
+#: includes/Services/Receipt_I18n_Labels.php:207
 #, php-format
 msgid "Paid via %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:198
+#: includes/Services/Receipt_I18n_Labels.php:212
 #, php-format
 msgid "Refunded via %s"
 msgstr ""
 
 #. translators: %s: cashier name
-#: includes/Services/Receipt_I18n_Labels.php:203
+#: includes/Services/Receipt_I18n_Labels.php:217
 #, php-format
 msgid "Served by %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:208
+#: includes/Services/Receipt_I18n_Labels.php:222
 #, php-format
 msgid "Customer: %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:213
+#: includes/Services/Receipt_I18n_Labels.php:227
 #, php-format
 msgid "Thank you, %s!"
 msgstr ""
 
 #. translators: %s: payment transaction ID
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:218
-#: includes/Services/Receipt_I18n_Labels.php:223
-#: includes/Services/Receipt_I18n_Labels.php:228
+#: includes/Services/Receipt_I18n_Labels.php:232
+#: includes/Services/Receipt_I18n_Labels.php:237
+#: includes/Services/Receipt_I18n_Labels.php:242
 #, php-format
 msgid "Ref: %s"
 msgstr ""
 
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:233
-#: includes/Services/Receipt_I18n_Labels.php:238
+#: includes/Services/Receipt_I18n_Labels.php:247
+#: includes/Services/Receipt_I18n_Labels.php:252
 #, php-format
 msgid "Order %s"
 msgstr ""
 
 #. translators: %s: product SKU
-#: includes/Services/Receipt_I18n_Labels.php:243
+#: includes/Services/Receipt_I18n_Labels.php:257
 #, php-format
 msgid "SKU: %s"
 msgstr ""
 
 #. translators: %s: line subtotal amount
-#: includes/Services/Receipt_I18n_Labels.php:248
+#: includes/Services/Receipt_I18n_Labels.php:262
 #, php-format
 msgid "Subtotal: %s"
 msgstr ""
 
 #. translators: %s: discount amount with minus sign
-#: includes/Services/Receipt_I18n_Labels.php:253
+#: includes/Services/Receipt_I18n_Labels.php:267
 #, php-format
 msgid "Discount: %s"
 msgstr ""
 
 #. translators: %s: taxable amount
-#: includes/Services/Receipt_I18n_Labels.php:258
+#: includes/Services/Receipt_I18n_Labels.php:272
 #, php-format
 msgid "Taxable: %s"
 msgstr ""
