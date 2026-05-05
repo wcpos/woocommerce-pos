@@ -108,22 +108,20 @@ class Receipt_Data_Schema {
 		'discounts_excl',
 		'line_total_incl',
 		'line_total_excl',
-		// Fees, shipping, discounts (shared names — only used in these array contexts).
+		// Shared by fees / shipping / discounts arrays AND by totals — same key
+		// names appear in both contexts; listing once is enough since the
+		// `array_flip` lookup uses values as keys.
 		'total',
 		'total_incl',
 		'total_excl',
-		// Totals (display).
+		// Totals (display + explicit incl/excl).
 		'subtotal',
-		'discount_total',
-		'total',
-		// Totals (explicit incl/excl).
 		'subtotal_incl',
 		'subtotal_excl',
+		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
 		'tax_total',
-		'total_incl',
-		'total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -186,9 +184,14 @@ class Receipt_Data_Schema {
 				// templates have a stable `_display` variant to render
 				// currency without re-implementing wc_price() in JS.
 				// ──────────────────────────────────────────────────────────
-				$numeric           = 0.0 + (float) $value;
-				$result[ $k ]      = $numeric;
-				$result[ $k . '_display' ] = ( 0.0 === $numeric && isset( $zero_falsy[ $k ] ) )
+				$numeric    = (float) $value;
+				$is_zero_falsy = ( 0.0 === $numeric && isset( $zero_falsy[ $k ] ) );
+				// Conditional-display fields (change, tendered, discounts, etc.) keep
+				// the bare key as integer 0 when the value is zero so Mustache section
+				// guards (`{{#change}}…{{/change}}`) treat them as falsy and the rest
+				// of the test suite's `assertSame( 0, … )` checks stay green.
+				$result[ $k ]              = $is_zero_falsy ? 0 : $numeric;
+				$result[ $k . '_display' ] = $is_zero_falsy
 					? ''
 					: html_entity_decode(
 						wp_strip_all_tags(

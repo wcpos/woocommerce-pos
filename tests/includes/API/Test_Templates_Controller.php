@@ -1125,8 +1125,11 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertEquals( $thermal['content'], $data['template_content'] );
 			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
-			// Money fields should be pre-formatted strings.
-			$this->assertIsString( $data['receipt_data']['totals']['total_incl'] );
+			// Money fields: bare keys carry the numeric value, `<key>_display`
+			// holds the locale-formatted currency string. Mirrors the JS
+			// `formatReceiptData` contract — see Receipt_Data_Schema::format_money_fields().
+			$this->assertIsNumeric( $data['receipt_data']['totals']['total_incl'] );
+			$this->assertIsString( $data['receipt_data']['totals']['total_incl_display'] );
 		} finally {
 			wp_delete_post( $order->get_id(), true );
 		}
