@@ -67,6 +67,29 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test money formatting honors receipt presentation hints.
+	 */
+	public function test_format_money_fields_uses_presentation_hints(): void {
+		$data = array(
+			'presentation_hints' => array(
+				'currency_position'        => 'right_space',
+				'price_thousand_separator' => ' ',
+				'price_decimal_separator'  => ',',
+				'price_num_decimals'       => 2,
+			),
+			'totals'             => array(
+				'grand_total_incl' => 1234.5,
+				'change_total'     => 0,
+			),
+		);
+
+		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'EUR' );
+
+		$this->assertEquals( '1 234,50 €', $formatted['totals']['grand_total_incl'] );
+		$this->assertSame( 0, $formatted['totals']['change_total'] );
+	}
+
+	/**
 	 * Test get_field_tree returns all required sections.
 	 */
 	public function test_get_field_tree_returns_all_required_sections(): void {
