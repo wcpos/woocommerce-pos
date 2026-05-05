@@ -68,6 +68,30 @@ const TYPE_OPTIONS: OptionProps[] = [
 	{ value: 'other', label: 'Other' },
 ];
 
+const TAX_ID_TYPE_EXAMPLES: Record<string, string> = {
+	eu_vat: 'DE123456789',
+	gb_vat: 'GB123456789',
+	au_abn: '12345678901',
+	br_cpf: '123.456.789-09',
+	br_cnpj: '12.345.678/0001-95',
+	in_gst: '22AAAAA0000A1Z5',
+	it_cf: 'RSSMRA80A01H501U',
+	it_piva: '12345678901',
+	es_nif: 'B12345674',
+	ar_cuit: '20-12345678-3',
+	sa_vat: '300123456700003',
+	ca_gst_hst: '123456789RT0001',
+	us_ein: '12-3456789',
+	de_ust_id: 'DE123456789',
+	de_steuernummer: '12/345/67890',
+	de_hrb: 'HRB 12345',
+	nl_kvk: '12345678',
+	fr_siret: '12345678901234',
+	fr_siren: '123456789',
+	gb_company: '12345678',
+	ch_uid: 'CHE-123.456.789',
+};
+
 // Country → most-common tax/business-ID printed on receipts. EU countries
 // without a country-specific entry fall through to `eu_vat`.
 const COUNTRY_TO_TAX_ID_TYPE: Record<string, string> = {
@@ -87,6 +111,29 @@ const COUNTRY_TO_TAX_ID_TYPE: Record<string, string> = {
 	US: 'us_ein',
 };
 
+const TAX_ID_TYPE_TO_COUNTRY: Record<string, string> = {
+	ar_cuit: 'AR',
+	au_abn: 'AU',
+	br_cpf: 'BR',
+	br_cnpj: 'BR',
+	ca_gst_hst: 'CA',
+	ch_uid: 'CH',
+	de_hrb: 'DE',
+	de_steuernummer: 'DE',
+	de_ust_id: 'DE',
+	es_nif: 'ES',
+	fr_siren: 'FR',
+	fr_siret: 'FR',
+	gb_company: 'GB',
+	gb_vat: 'GB',
+	in_gst: 'IN',
+	it_cf: 'IT',
+	it_piva: 'IT',
+	nl_kvk: 'NL',
+	sa_vat: 'SA',
+	us_ein: 'US',
+};
+
 const EU_VAT_COUNTRIES = new Set([
 	'AT', 'BE', 'BG', 'CY', 'CZ', 'DK', 'EE', 'FI', 'GR', 'HR', 'HU', 'IE',
 	'LT', 'LU', 'LV', 'MT', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
@@ -98,6 +145,28 @@ function defaultTaxIdTypeFor(country: string | undefined): string {
 	if (COUNTRY_TO_TAX_ID_TYPE[cc]) return COUNTRY_TO_TAX_ID_TYPE[cc];
 	if (EU_VAT_COUNTRIES.has(cc)) return 'eu_vat';
 	return 'other';
+}
+
+function defaultCountryForTaxIdType(type: string, currentCountry?: string): string | undefined {
+	if (type === 'eu_vat') {
+		const current = currentCountry?.toUpperCase();
+		if (current && EU_VAT_COUNTRIES.has(current)) {
+			return current;
+		}
+
+		const storeCountry = window?.wcpos?.settings?.storeCountry?.toUpperCase();
+		if (storeCountry && EU_VAT_COUNTRIES.has(storeCountry)) {
+			return storeCountry;
+		}
+
+		return undefined;
+	}
+
+	return TAX_ID_TYPE_TO_COUNTRY[type];
+}
+
+function placeholderForTaxIdType(type: string, fallback: string): string {
+	return TAX_ID_TYPE_EXAMPLES[type] ?? fallback;
 }
 
 const normalizeTaxId = (taxId: TaxId): TaxId => {
@@ -114,6 +183,27 @@ const normalizeTaxId = (taxId: TaxId): TaxId => {
 	}
 
 	return next;
+};
+
+const syncTaxIdPatch = (current: TaxId, patch: Partial<TaxId>): Partial<TaxId> => {
+	if (typeof patch.country === 'string' && patch.country) {
+		return {
+			...patch,
+			type: defaultTaxIdTypeFor(patch.country),
+		};
+	}
+
+	if (typeof patch.type === 'string') {
+		const country = defaultCountryForTaxIdType(patch.type, current.country);
+		if (country) {
+			return {
+				...patch,
+				country,
+			};
+		}
+	}
+
+	return patch;
 };
 
 let rowIdCounter = 0;
@@ -155,7 +245,7 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
 			<TableCell>
 				<TextInput
 					aria-label={labels.value}
-					placeholder={labels.value}
+					placeholder={placeholderForTaxIdType(taxId.type, labels.value)}
 					value={valueDraft}
 					onChange={(event) => setValueDraft(event.target.value)}
 					onBlur={() => {
@@ -250,9 +340,10 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 		const updateAt = React.useCallback(
 			(index: number, patch: Partial<TaxId>) => {
 				if (index >= taxIds.length && draft) {
+					const syncedPatch = syncTaxIdPatch(draft.taxId, patch);
 					const nextTaxId = normalizeTaxId({
 						...draft.taxId,
-						...patch,
+						...syncedPatch,
 					});
 
 					if (patch.value && nextTaxId.value) {
@@ -271,9 +362,10 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 						return taxId;
 					}
 
+					const syncedPatch = syncTaxIdPatch(taxId, patch);
 					return normalizeTaxId({
 						...taxId,
-						...patch,
+						...syncedPatch,
 					});
 				});
 				onChange(next);
