@@ -158,6 +158,151 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Store-level price and tax presentation settings should drive preview hints
+	 * so changing a store refreshes formatted amounts without relying on globals.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_uses_store_price_and_tax_presentation_settings(): void {
+		$original_currency_pos      = get_option( 'woocommerce_currency_pos' );
+		$original_thousand_sep      = get_option( 'woocommerce_price_thousand_sep' );
+		$original_decimal_sep       = get_option( 'woocommerce_price_decimal_sep' );
+		$original_num_decimals      = get_option( 'woocommerce_price_num_decimals' );
+		$original_price_suffix      = get_option( 'woocommerce_price_display_suffix' );
+		$original_tax_display_cart  = get_option( 'woocommerce_tax_display_cart' );
+		$original_tax_total_display = get_option( 'woocommerce_tax_total_display' );
+		$original_tax_rounding      = get_option( 'woocommerce_tax_round_at_subtotal' );
+		$original_prices_tax        = get_option( 'woocommerce_prices_include_tax' );
+
+		$store_filter = static function () {
+			return new class() {
+				public function get_currency(): string {
+					return 'JPY';
+				}
+
+				public function get_locale(): string {
+					return 'ja_JP';
+				}
+
+				public function get_currency_position(): string {
+					return 'right_space';
+				}
+
+				public function get_price_thousand_separator(): string {
+					return ' ';
+				}
+
+				public function get_price_decimal_separator(): string {
+					return ',';
+				}
+
+				public function get_price_number_of_decimals(): int {
+					return 0;
+				}
+
+				public function get_price_display_suffix(): string {
+					return '税込';
+				}
+
+				public function get_tax_display_cart(): string {
+					return 'incl';
+				}
+
+				public function get_tax_total_display(): string {
+					return 'single';
+				}
+
+				public function get_tax_round_at_subtotal(): string {
+					return 'yes';
+				}
+
+				public function get_prices_include_tax(): string {
+					return 'yes';
+				}
+
+				public function get_calc_taxes(): string {
+					return 'yes';
+				}
+			};
+		};
+
+		try {
+			update_option( 'woocommerce_currency_pos', 'left' );
+			update_option( 'woocommerce_price_thousand_sep', ',' );
+			update_option( 'woocommerce_price_decimal_sep', '.' );
+			update_option( 'woocommerce_price_num_decimals', '2' );
+			update_option( 'woocommerce_price_display_suffix', '' );
+			update_option( 'woocommerce_tax_display_cart', 'excl' );
+			update_option( 'woocommerce_tax_total_display', 'itemized' );
+			update_option( 'woocommerce_tax_round_at_subtotal', 'no' );
+			update_option( 'woocommerce_prices_include_tax', 'no' );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data  = $this->builder->build();
+			$hints = $data['presentation_hints'];
+
+			$this->assertEquals( 'right_space', $hints['currency_position'] );
+			$this->assertEquals( get_woocommerce_currency_symbol( 'JPY' ), $hints['currency_symbol'] );
+			$this->assertEquals( ' ', $hints['price_thousand_separator'] );
+			$this->assertEquals( ',', $hints['price_decimal_separator'] );
+			$this->assertEquals( 0, $hints['price_num_decimals'] );
+			$this->assertEquals( '税込', $hints['price_display_suffix'] );
+			$this->assertEquals( 'single', $hints['display_tax'] );
+			$this->assertTrue( $hints['prices_entered_with_tax'] );
+			$this->assertEquals( 'yes', $hints['rounding_mode'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			update_option( 'woocommerce_currency_pos', $original_currency_pos );
+			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
+			update_option( 'woocommerce_price_decimal_sep', $original_decimal_sep );
+			update_option( 'woocommerce_price_num_decimals', $original_num_decimals );
+			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );
+			update_option( 'woocommerce_tax_display_cart', $original_tax_display_cart );
+			update_option( 'woocommerce_tax_total_display', $original_tax_total_display );
+			update_option( 'woocommerce_tax_round_at_subtotal', $original_tax_rounding );
+			update_option( 'woocommerce_prices_include_tax', $original_prices_tax );
+		}
+	}
+
+	/**
+	 * Explicit blank store formatting values should override non-empty globals.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_preserves_empty_store_price_formatting_overrides(): void {
+		$original_thousand_sep = get_option( 'woocommerce_price_thousand_sep' );
+		$original_price_suffix = get_option( 'woocommerce_price_display_suffix' );
+
+		$store_filter = static function () {
+			return new class() {
+				public function get_price_thousand_separator(): string {
+					return '';
+				}
+
+				public function get_price_display_suffix(): string {
+					return '';
+				}
+			};
+		};
+
+		try {
+			update_option( 'woocommerce_price_thousand_sep', ',' );
+			update_option( 'woocommerce_price_display_suffix', ' including tax' );
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data  = $this->builder->build();
+			$hints = $data['presentation_hints'];
+
+			$this->assertSame( '', $hints['price_thousand_separator'] );
+			$this->assertSame( '', $hints['price_display_suffix'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
+			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );
+		}
+	}
+
+	/**
 	 * When the store object does not expose currency/locale, fall back to the
 	 * site defaults so legacy callers keep working.
 	 *

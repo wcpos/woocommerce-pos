@@ -169,6 +169,199 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Existing-order receipts should keep the order currency while taking
+	 * price-formatting and tax-presentation hints from the selected store.
+	 */
+	public function test_build_uses_store_price_and_tax_presentation_settings(): void {
+		$order = $this->create_taxed_order( 'itemized', 'no' );
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return 'de_DE';
+			}
+
+			public function get_currency_position(): string {
+				return 'right_space';
+			}
+
+			public function get_price_thousand_separator(): string {
+				return '.';
+			}
+
+			public function get_price_decimal_separator(): string {
+				return ',';
+			}
+
+			public function get_price_number_of_decimals(): int {
+				return 3;
+			}
+
+			public function get_price_display_suffix(): string {
+				return 'inkl. MwSt.';
+			}
+
+			public function get_tax_display_cart(): string {
+				return 'incl';
+			}
+
+			public function get_tax_total_display(): string {
+				return 'single';
+			}
+
+			public function get_tax_round_at_subtotal(): string {
+				return 'yes';
+			}
+
+			public function get_prices_include_tax(): string {
+				return 'yes';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+		$hints   = $payload['presentation_hints'];
+
+		$this->assertEquals( $order->get_currency(), $payload['order']['currency'] );
+		$this->assertEquals( get_woocommerce_currency_symbol( $order->get_currency() ), $hints['currency_symbol'] );
+		$this->assertEquals( 'right_space', $hints['currency_position'] );
+		$this->assertEquals( '.', $hints['price_thousand_separator'] );
+		$this->assertEquals( ',', $hints['price_decimal_separator'] );
+		$this->assertEquals( 3, $hints['price_num_decimals'] );
+		$this->assertEquals( 'inkl. MwSt.', $hints['price_display_suffix'] );
+		$this->assertEquals( 'single', $hints['display_tax'] );
+		$this->assertTrue( $hints['prices_entered_with_tax'] );
+		$this->assertEquals( 'yes', $hints['rounding_mode'] );
+	}
+
+	/**
+	 * Explicit blank store formatting values should override non-empty globals.
+	 */
+	public function test_build_preserves_empty_store_price_formatting_overrides(): void {
+		$order                 = $this->create_taxed_order( 'itemized', 'no' );
+		$original_thousand_sep = get_option( 'woocommerce_price_thousand_sep' );
+		$original_price_suffix = get_option( 'woocommerce_price_display_suffix' );
+		$pos_store             = new class() {
+			public function get_price_thousand_separator(): string {
+				return '';
+			}
+
+			public function get_price_display_suffix(): string {
+				return '';
+			}
+		};
+
+		try {
+			update_option( 'woocommerce_price_thousand_sep', ',' );
+			update_option( 'woocommerce_price_display_suffix', ' including tax' );
+
+			$payload = $this->builder->build( $order, 'live', $pos_store );
+			$hints   = $payload['presentation_hints'];
+
+			$this->assertSame( '', $hints['price_thousand_separator'] );
+			$this->assertSame( '', $hints['price_display_suffix'] );
+		} finally {
+			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
+			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );
+		}
+	}
+
+	/**
+	 * Empty store option values should fall back to WooCommerce defaults.
+	 */
+	public function test_build_falls_back_for_empty_store_option_values(): void {
+		$original_calc_taxes        = get_option( 'woocommerce_calc_taxes' );
+		$original_tax_display_cart  = get_option( 'woocommerce_tax_display_cart' );
+		$original_tax_total_display = get_option( 'woocommerce_tax_total_display' );
+		$original_tax_rounding      = get_option( 'woocommerce_tax_round_at_subtotal' );
+		$original_prices_tax        = get_option( 'woocommerce_prices_include_tax' );
+		$original_currency_pos      = get_option( 'woocommerce_currency_pos' );
+		$order                      = $this->create_taxed_order( 'single', 'yes' );
+		$pos_store                  = new class() {
+			public function get_calc_taxes(): string {
+				return '';
+			}
+
+			public function get_tax_display_cart(): string {
+				return '';
+			}
+
+			public function get_tax_total_display(): string {
+				return '';
+			}
+
+			public function get_tax_round_at_subtotal(): string {
+				return '';
+			}
+
+			public function get_prices_include_tax(): string {
+				return '';
+			}
+
+			public function get_currency_position(): string {
+				return '';
+			}
+		};
+
+		try {
+			update_option( 'woocommerce_calc_taxes', 'yes' );
+			update_option( 'woocommerce_tax_display_cart', 'incl' );
+			update_option( 'woocommerce_tax_total_display', 'single' );
+			update_option( 'woocommerce_tax_round_at_subtotal', 'yes' );
+			update_option( 'woocommerce_prices_include_tax', 'yes' );
+			update_option( 'woocommerce_currency_pos', 'right' );
+
+			$payload = $this->builder->build( $order, 'live', $pos_store );
+			$hints   = $payload['presentation_hints'];
+
+			$this->assertEquals( 'single', $hints['display_tax'] );
+			$this->assertTrue( $hints['prices_entered_with_tax'] );
+			$this->assertEquals( 'yes', $hints['rounding_mode'] );
+			$this->assertEquals( 'right', $hints['currency_position'] );
+		} finally {
+			update_option( 'woocommerce_calc_taxes', $original_calc_taxes );
+			update_option( 'woocommerce_tax_display_cart', $original_tax_display_cart );
+			update_option( 'woocommerce_tax_total_display', $original_tax_total_display );
+			update_option( 'woocommerce_tax_round_at_subtotal', $original_tax_rounding );
+			update_option( 'woocommerce_prices_include_tax', $original_prices_tax );
+			update_option( 'woocommerce_currency_pos', $original_currency_pos );
+		}
+	}
+
+	/**
+	 * Store display decimals should not round numeric line-item payload values.
+	 */
+	public function test_build_uses_calculation_precision_for_unit_values(): void {
+		$original_num_decimals = get_option( 'woocommerce_price_num_decimals' );
+		$pos_store             = new class() {
+			public function get_price_number_of_decimals(): int {
+				return 0;
+			}
+		};
+
+		try {
+			update_option( 'woocommerce_price_num_decimals', '2' );
+
+			$product = new \WC_Product_Simple();
+			$product->set_name( 'Calculation Precision Product' );
+			$product->set_regular_price( '10.99' );
+			$product->set_price( '10.99' );
+			$product->save();
+
+			$order = wc_create_order();
+			$order->add_product( $product, 2 );
+			$order->calculate_totals( true );
+			$order->save();
+
+			$payload = $this->builder->build( $order, 'live', $pos_store );
+			$line    = $payload['lines'][0];
+
+			$this->assertEquals( 0, $payload['presentation_hints']['price_num_decimals'] );
+			$this->assertEquals( 10.99, (float) $line['unit_price_excl'] );
+			$this->assertEquals( 10.99, (float) $line['unit_subtotal_excl'] );
+		} finally {
+			update_option( 'woocommerce_price_num_decimals', $original_num_decimals );
+		}
+	}
+
+	/**
 	 * Falls back to the site locale when the store does not expose
 	 * get_locale or returns an empty value.
 	 */
