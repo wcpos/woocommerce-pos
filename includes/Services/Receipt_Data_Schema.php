@@ -174,19 +174,29 @@ class Receipt_Data_Schema {
 			if ( \is_array( $value ) ) {
 				$result[ $k ] = self::format_money_fields( $value, $currency, $presentation_hints );
 			} elseif ( is_numeric( $value ) && isset( $lookup[ $k ] ) ) {
-				// For conditional-display fields (change, tendered, discounts, etc.),
-				// keep zero as numeric 0 so Mustache section guards treat them as falsy.
-				if ( 0.0 === (float) $value && isset( $zero_falsy[ $k ] ) ) {
-					$result[ $k ] = 0;
-				} else {
-					$result[ $k ] = html_entity_decode(
+				// ──────────────────────────────────────────────────────────
+				// Money fields: KEEP the numeric value at the bare key and
+				// ADD a `<key>_display` companion holding the locale-formatted
+				// currency string. Mirrors the JS `formatReceiptData` shape
+				// exactly so a single Mustache template renders the same way
+				// in both the studio (JS) and production print (PHP).
+				//
+				// DO NOT change this back to in-place replacement — bare keys
+				// must be numeric so app code can still do math on them, and
+				// templates have a stable `_display` variant to render
+				// currency without re-implementing wc_price() in JS.
+				// ──────────────────────────────────────────────────────────
+				$numeric           = 0.0 + (float) $value;
+				$result[ $k ]      = $numeric;
+				$result[ $k . '_display' ] = ( 0.0 === $numeric && isset( $zero_falsy[ $k ] ) )
+					? ''
+					: html_entity_decode(
 						wp_strip_all_tags(
-							wc_price( (float) $value, $price_args )
+							wc_price( $numeric, $price_args )
 						),
 						ENT_QUOTES | ENT_SUBSTITUTE,
 						'UTF-8'
 					);
-				}
 			} else {
 				$result[ $k ] = $value;
 			}

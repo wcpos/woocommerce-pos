@@ -67,10 +67,10 @@ All styles are inline because wp_kses_post strips <style> tags.
 		<div style="font-weight: 700; overflow-wrap: anywhere; word-break: break-word;">{{name}}</div>
 		<div style="display: flex; justify-content: space-between; color: #444; font-size: 11px; padding-left: 8px; margin-bottom: 4px;">
 			<span style="flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: break-word;">
-				{{qty}} x {{unit_price_incl}}
+				{{qty}} x {{unit_price_incl_display}}
 				{{#sku}} ({{sku}}){{/sku}}
 			</span>
-			<span style="flex-shrink: 0; margin-left: 8px; white-space: nowrap;">{{line_total_incl}}</span>
+			<span style="flex-shrink: 0; margin-left: 8px; white-space: nowrap;">{{line_total_incl_display}}</span>
 		</div>
 		{{/lines}}
 
@@ -78,40 +78,40 @@ All styles are inline because wp_kses_post strips <style> tags.
 
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{i18n.subtotal}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{totals.subtotal_incl}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{totals.subtotal_incl_display}}</span>
 		</div>
 
 		{{#discounts}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{label}}</span>
-			<span style="flex-shrink: 0; text-align: right;">-{{total_incl}}</span>
+			<span style="flex-shrink: 0; text-align: right;">-{{total_incl_display}}</span>
 		</div>
 		{{/discounts}}
 
 		{{#shipping}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{label}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{total_incl}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{total_incl_display}}</span>
 		</div>
 		{{/shipping}}
 
 		{{#fees}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{label}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{total_incl}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{total_incl_display}}</span>
 		</div>
 		{{/fees}}
 
 		{{#tax_summary}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{tax_amount}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{tax_amount_display}}</span>
 		</div>
 		{{/tax_summary}}
 
 		<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; border-top: 2px solid #000; margin-top: 4px; padding-top: 4px;">
 			<span>{{i18n.total}}</span>
-			<span>{{totals.total_incl}}</span>
+			<span>{{totals.total_incl_display}}</span>
 		</div>
 
 		<div style="text-align: center; color: #888; margin: 6px 0; letter-spacing: -1px; overflow: hidden;">------------------------------------------</div>
@@ -119,18 +119,18 @@ All styles are inline because wp_kses_post strips <style> tags.
 		{{#payments}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
 			<span style="flex: 1;">{{method_title}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{amount}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{amount_display}}</span>
 		</div>
 		{{#tendered}}
 		<div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
 			<span style="flex: 1;">&nbsp;&nbsp;{{i18n.tendered}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{tendered}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{tendered_display}}</span>
 		</div>
 		{{/tendered}}
 		{{#change}}
 		<div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
 			<span style="flex: 1;">&nbsp;&nbsp;{{i18n.change}}</span>
-			<span style="flex-shrink: 0; text-align: right;">{{change}}</span>
+			<span style="flex-shrink: 0; text-align: right;">{{change_display}}</span>
 		</div>
 		{{/change}}
 		{{/payments}}

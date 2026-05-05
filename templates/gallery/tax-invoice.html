@@ -92,8 +92,8 @@ Suited for jurisdictions requiring itemized tax documentation.
 			<tr style="border-bottom: 1px solid #e5e7eb;">
 				<td style="padding: 8px 4px;">{{name}}{{#sku}} <span style="color: #888; font-size: 11px;">({{sku}})</span>{{/sku}}</td>
 				<td style="padding: 8px 4px; text-align: center;">{{qty}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{unit_price_excl}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{line_total_excl}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{unit_price_excl_display}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{line_total_excl_display}}</td>
 			</tr>
 			{{/lines}}
 		</tbody>
@@ -104,27 +104,27 @@ Suited for jurisdictions requiring itemized tax documentation.
 		<div style="width: 320px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{i18n.subtotal_excl_tax}}</span>
-				<span>{{totals.subtotal_excl}}</span>
+				<span>{{totals.subtotal_excl_display}}</span>
 			</div>
 
 			{{#shipping}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{label}}</span>
-				<span>{{total_excl}}</span>
+				<span>{{total_excl_display}}</span>
 			</div>
 			{{/shipping}}
 
 			{{#fees}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{label}}</span>
-				<span>{{total_excl}}</span>
+				<span>{{total_excl_display}}</span>
 			</div>
 			{{/fees}}
 
 			{{#discounts}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; color: #16a34a;">
 				<span>{{label}}</span>
-				<span>-{{total_excl}}</span>
+				<span>-{{total_excl_display}}</span>
 			</div>
 			{{/discounts}}
 		</div>
@@ -147,9 +147,9 @@ Suited for jurisdictions requiring itemized tax documentation.
 				{{#tax_summary}}
 				<tr style="border-bottom: 1px solid #f0f0f0;">
 					<td style="padding: 6px 0;">{{label}}{{#rate}} @ {{rate}}%{{/rate}}</td>
-					<td style="padding: 6px 0; text-align: right; color: #555;">{{#taxable_amount_excl}}{{taxable_amount_excl}}{{/taxable_amount_excl}}</td>
-					<td style="padding: 6px 0; text-align: right; font-weight: 600;">{{tax_amount}}</td>
-					<td style="padding: 6px 0; text-align: right; color: #555;">{{#taxable_amount_incl}}{{taxable_amount_incl}}{{/taxable_amount_incl}}</td>
+					<td style="padding: 6px 0; text-align: right; color: #555;">{{#taxable_amount_excl}}{{taxable_amount_excl_display}}{{/taxable_amount_excl}}</td>
+					<td style="padding: 6px 0; text-align: right; font-weight: 600;">{{tax_amount_display}}</td>
+					<td style="padding: 6px 0; text-align: right; color: #555;">{{#taxable_amount_incl}}{{taxable_amount_incl_display}}{{/taxable_amount_incl}}</td>
 				</tr>
 				{{/tax_summary}}
 			</tbody>
@@ -162,11 +162,11 @@ Suited for jurisdictions requiring itemized tax documentation.
 		<div style="width: 320px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 				<span style="color: #555;">{{i18n.total_tax}}</span>
-				<span>{{totals.tax_total}}</span>
+				<span>{{totals.tax_total_display}}</span>
 			</div>
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333;">
 				<span>{{i18n.total_incl_tax}}</span>
-				<span>{{totals.total_incl}}</span>
+				<span>{{totals.total_incl_display}}</span>
 			</div>
 		</div>
 	</div>
@@ -175,7 +175,7 @@ Suited for jurisdictions requiring itemized tax documentation.
 	{{#payments}}
 	<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 8px 12px; font-size: 12px; color: #555; border: 1px solid #e5e7eb; border-radius: 4px;">
 		<span>Paid via {{method_title}}{{#transaction_id}} <span style="color: #888;">— Ref: {{transaction_id}}</span>{{/transaction_id}}</span>
-		<span style="font-weight: 600;">{{amount}}</span>
+		<span style="font-weight: 600;">{{amount_display}}</span>
 	</div>
 	{{/payments}}
 

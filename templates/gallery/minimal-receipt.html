@@ -49,9 +49,9 @@ All styles are inline (wp_kses_post strips <style> tags).
 		<div style="margin-bottom: 16px;">
 			<div style="display: flex; justify-content: space-between; align-items: baseline; font-size: 13px;">
 				<span>{{name}}</span>
-				<span style="white-space: nowrap; margin-left: 12px;">{{line_total_incl}}</span>
+				<span style="white-space: nowrap; margin-left: 12px;">{{line_total_incl_display}}</span>
 			</div>
-			<div style="font-size: 11px; color: #999; margin-top: 2px;">{{qty}} &times; {{unit_price_incl}}</div>
+			<div style="font-size: 11px; color: #999; margin-top: 2px;">{{qty}} &times; {{unit_price_incl_display}}</div>
 		</div>
 		{{/lines}}
 	</div>
@@ -63,28 +63,28 @@ All styles are inline (wp_kses_post strips <style> tags).
 	<div style="text-align: right;">
 
 		{{#discounts}}
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} -{{total_incl}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} -{{total_incl_display}}</div>
 		{{/discounts}}
 
 		{{#shipping}}
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} {{total_incl}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} {{total_incl_display}}</div>
 		{{/shipping}}
 
 		{{#fees}}
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} {{total_incl}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}} {{total_incl_display}}</div>
 		{{/fees}}
 
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{i18n.subtotal}} {{totals.subtotal_incl}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{i18n.subtotal}} {{totals.subtotal_incl_display}}</div>
 
 		{{#tax_summary}}
-		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}}{{#rate}} ({{rate}}%){{/rate}} {{tax_amount}}</div>
+		<div style="font-size: 12px; color: #999; margin-bottom: 4px;">{{label}}{{#rate}} ({{rate}}%){{/rate}} {{tax_amount_display}}</div>
 		{{/tax_summary}}
 
 		<!-- Spacer -->
 		<div style="height: 8px;"></div>
 
 		<!-- Total — the only bold text on the receipt -->
-		<div style="font-size: 16px; font-weight: 700;">{{totals.total_incl}}</div>
+		<div style="font-size: 16px; font-weight: 700;">{{totals.total_incl_display}}</div>
 
 	</div>
 
@@ -94,9 +94,9 @@ All styles are inline (wp_kses_post strips <style> tags).
 	<!-- Payment -->
 	<div style="font-size: 11px; color: #999;">
 		{{#payments}}
-		<div>{{method_title}} {{amount}}</div>
+		<div>{{method_title}} {{amount_display}}</div>
 		{{#tendered}}
-		<div>{{i18n.tendered}} {{tendered}} / {{i18n.change}} {{change}}</div>
+		<div>{{i18n.tendered}} {{tendered_display}} / {{i18n.change}} {{change_display}}</div>
 		{{/tendered}}
 		{{/payments}}
 	</div>

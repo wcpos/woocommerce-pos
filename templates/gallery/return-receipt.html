@@ -57,7 +57,7 @@ and the payment method used for the refund.
 	{{#lines}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 		<span>{{name}} x{{qty}}</span>
-		<span>{{line_total_incl}}</span>
+		<span>{{line_total_incl_display}}</span>
 	</div>
 	{{/lines}}
 
@@ -66,13 +66,13 @@ and the payment method used for the refund.
 	{{#tax_summary}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-		<span>{{tax_amount}}</span>
+		<span>{{tax_amount_display}}</span>
 	</div>
 	{{/tax_summary}}
 
 	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #dc2626; margin-top: 8px; color: #dc2626;">
 		<span>{{i18n.total_refunded}}</span>
-		<span>{{totals.total_incl}}</span>
+		<span>{{totals.total_incl_display}}</span>
 	</div>
 
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 16px 0;">
@@ -80,7 +80,7 @@ and the payment method used for the refund.
 	{{#payments}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
 		<span style="color: #555;">Refunded via {{method_title}}</span>
-		<span>{{amount}}</span>
+		<span>{{amount_display}}</span>
 	</div>
 	{{#transaction_id}}
 	<div style="margin-bottom: 4px; padding-left: 12px; font-size: 11px; color: #999;">Ref: {{transaction_id}}</div>

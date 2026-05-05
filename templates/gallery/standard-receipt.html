@@ -79,7 +79,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{#lines}}
 		<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 13px;">
 			<span>{{name}} <span style="color: #999; font-size: 12px;">&times; {{qty}}</span></span>
-			<span style="white-space: nowrap; margin-left: 12px;">{{line_total_incl}}</span>
+			<span style="white-space: nowrap; margin-left: 12px;">{{line_total_incl_display}}</span>
 		</div>
 		{{/lines}}
 	</div>
@@ -93,40 +93,40 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{#fees}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">{{label}}</span>
-			<span>{{total_incl}}</span>
+			<span>{{total_incl_display}}</span>
 		</div>
 		{{/fees}}
 
 		{{#shipping}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">{{label}}</span>
-			<span>{{total_incl}}</span>
+			<span>{{total_incl_display}}</span>
 		</div>
 		{{/shipping}}
 
 		{{#discounts}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #16a34a;">
 			<span>{{label}}</span>
-			<span>-{{total_incl}}</span>
+			<span>-{{total_incl_display}}</span>
 		</div>
 		{{/discounts}}
 
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">{{i18n.subtotal}}</span>
-			<span>{{totals.subtotal_incl}}</span>
+			<span>{{totals.subtotal_incl_display}}</span>
 		</div>
 
 		{{#tax_summary}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-			<span>{{tax_amount}}</span>
+			<span>{{tax_amount_display}}</span>
 		</div>
 		{{/tax_summary}}
 
 		<!-- Total -->
 		<div style="display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 18px; padding-top: 10px; border-top: 2px solid #333; margin-top: 10px;">
 			<span>{{i18n.total}}</span>
-			<span>{{totals.total_incl}}</span>
+			<span>{{totals.total_incl_display}}</span>
 		</div>
 	</div>
 
@@ -138,18 +138,18 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{#payments}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 			<span style="color: #555;">{{method_title}}</span>
-			<span>{{amount}}</span>
+			<span>{{amount_display}}</span>
 		</div>
 		{{#tendered}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
 			<span style="padding-left: 8px;">{{i18n.tendered}}</span>
-			<span>{{tendered}}</span>
+			<span>{{tendered_display}}</span>
 		</div>
 		{{/tendered}}
 		{{#change}}
 		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
 			<span style="padding-left: 8px;">{{i18n.change}}</span>
-			<span>{{change}}</span>
+			<span>{{change_display}}</span>
 		</div>
 		{{/change}}
 		{{/payments}}

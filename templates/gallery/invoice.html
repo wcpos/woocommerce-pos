@@ -89,9 +89,9 @@ customer note, and payment info.
 				<td style="padding: 8px 4px;">{{name}}</td>
 				<td style="padding: 8px 4px; color: #888; font-size: 12px;">{{sku}}</td>
 				<td style="padding: 8px 4px; text-align: center;">{{qty}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{unit_price_incl}}</td>
-				<td style="padding: 8px 4px; text-align: right; color: #16a34a;">{{#discounts_incl}}-{{discounts_incl}}{{/discounts_incl}}</td>
-				<td style="padding: 8px 4px; text-align: right;">{{line_total_incl}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{unit_price_incl_display}}</td>
+				<td style="padding: 8px 4px; text-align: right; color: #16a34a;">{{#discounts_incl}}-{{discounts_incl_display}}{{/discounts_incl}}</td>
+				<td style="padding: 8px 4px; text-align: right;">{{line_total_incl_display}}</td>
 			</tr>
 			{{/lines}}
 		</tbody>
@@ -101,46 +101,46 @@ customer note, and payment info.
 		<div style="width: 280px;">
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 				<span style="color: #555;">{{i18n.subtotal}}</span>
-				<span>{{totals.subtotal_incl}}</span>
+				<span>{{totals.subtotal_incl_display}}</span>
 			</div>
 
 			{{#shipping}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 				<span style="color: #555;">{{label}}</span>
-				<span>{{total_incl}}</span>
+				<span>{{total_incl_display}}</span>
 			</div>
 			{{/shipping}}
 
 			{{#fees}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 				<span style="color: #555;">{{label}}</span>
-				<span>{{total_incl}}</span>
+				<span>{{total_incl_display}}</span>
 			</div>
 			{{/fees}}
 
 			{{#discounts}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #16a34a;">
 				<span>{{label}}</span>
-				<span>-{{total_incl}}</span>
+				<span>-{{total_incl_display}}</span>
 			</div>
 			{{/discounts}}
 
 			{{#tax_summary}}
 			<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
 				<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-				<span>{{tax_amount}}</span>
+				<span>{{tax_amount_display}}</span>
 			</div>
 			{{/tax_summary}}
 
 			<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 10px; border-top: 2px solid #333; margin-top: 6px;">
 				<span>{{i18n.total}}</span>
-				<span>{{totals.total_incl}}</span>
+				<span>{{totals.total_incl_display}}</span>
 			</div>
 
 			{{#payments}}
 			<div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #555;">
 				<span>Paid via {{method_title}}</span>
-				<span>{{amount}}</span>
+				<span>{{amount_display}}</span>
 			</div>
 			{{/payments}}
 		</div>
