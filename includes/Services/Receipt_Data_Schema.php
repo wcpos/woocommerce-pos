@@ -58,6 +58,9 @@ class Receipt_Data_Schema {
 		'total',
 		'total_incl',
 		'total_excl',
+		'grand_total',
+		'grand_total_incl',
+		'grand_total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -124,6 +127,9 @@ class Receipt_Data_Schema {
 		'tax_total',
 		'total_incl',
 		'total_excl',
+		'grand_total',
+		'grand_total_incl',
+		'grand_total_excl',
 		'paid_total',
 		'change_total',
 		'refund_total',
@@ -688,6 +694,18 @@ class Receipt_Data_Schema {
 					'total_excl'    => array(
 						'type'  => 'money',
 						'label' => __( 'Total (excl. tax)', 'woocommerce-pos' ),
+					),
+					'grand_total'      => array(
+						'type'  => 'money',
+						'label' => __( 'Grand Total', 'woocommerce-pos' ),
+					),
+					'grand_total_incl' => array(
+						'type'  => 'money',
+						'label' => __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
+					),
+					'grand_total_excl' => array(
+						'type'  => 'money',
+						'label' => __( 'Grand Total (excl. tax)', 'woocommerce-pos' ),
 					),
 					'paid_total'          => array(
 						'type'  => 'money',

@@ -235,7 +235,8 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? $rec
 
 	<tr class="grand-total">
 		<td><?php esc_html_e( 'Total', 'woocommerce' ); ?></td>
-		<td><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total'] ?? 0, $currency_args ) ); ?></td>
+		<?php $receipt_total = $receipt_data['totals']['total'] ?? $receipt_data['totals']['grand_total'] ?? 0; ?>
+		<td><?php echo wp_kses_post( wc_price( $receipt_total, $currency_args ) ); ?></td>
 	</tr>
 </table>
 
