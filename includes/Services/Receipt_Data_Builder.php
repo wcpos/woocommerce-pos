@@ -24,8 +24,6 @@ class Receipt_Data_Builder {
 	 * @return array
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
-
 		$meta = array(
 			'schema_version'   => Receipt_Data_Schema::VERSION,
 			'created_at_gmt'   => current_time( 'mysql', true ),
@@ -65,6 +63,11 @@ class Receipt_Data_Builder {
 		if ( ! \is_object( $pos_store ) ) {
 			$pos_store = new Store();
 		}
+		$display_incl = 'incl' === $this->resolve_store_string(
+			$pos_store,
+			'get_tax_display_cart',
+			get_option( 'woocommerce_tax_display_cart', 'excl' )
+		);
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
@@ -174,7 +177,7 @@ class Receipt_Data_Builder {
 			if ( $qty <= 0 ) {
 				$qty = 0.0;
 			}
-			$dp                 = wc_get_price_decimals();
+			$dp                 = $this->resolve_price_num_decimals( $pos_store );
 			$unit_price_incl    = $qty > 0 ? round( $line_total_incl / $qty, $dp ) : 0.0;
 			$unit_price_excl    = $qty > 0 ? round( $line_total_excl / $qty, $dp ) : 0.0;
 			$unit_subtotal_incl = $qty > 0 ? round( $line_subtotal_incl / $qty, $dp ) : 0.0;
@@ -311,16 +314,7 @@ class Receipt_Data_Builder {
 			),
 		);
 
-		$store_locale = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
-		$tax_display_mode = get_option( 'woocommerce_tax_total_display', 'itemized' );
-		$presentation_hints = array(
-			'display_tax'              => wc_tax_enabled() ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
-			'prices_entered_with_tax'  => wc_prices_include_tax(),
-			'rounding_mode'            => get_option( 'woocommerce_tax_round_at_subtotal', 'no' ),
-			// Currency stays from the order (financial record). Locale follows the store
-			// so date/number formatting matches the store's region rather than the site default.
-			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),
-		);
+		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 
 		$fiscal = array(
 			'immutable_id'      => '',
@@ -434,6 +428,97 @@ class Receipt_Data_Builder {
 		}
 
 		return $pos_store->{$getter}();
+	}
+
+	/**
+	 * Build price, currency, locale, and tax presentation hints for renderers.
+	 *
+	 * Existing-order receipts keep the order currency as the financial record,
+	 * but presentation settings follow the POS store when available.
+	 *
+	 * @param object $pos_store POS store object.
+	 * @param string $currency  Order currency code.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function build_presentation_hints( $pos_store, string $currency ): array {
+		$tax_enabled      = 'yes' === $this->resolve_store_string(
+			$pos_store,
+			'get_calc_taxes',
+			get_option( 'woocommerce_calc_taxes', 'no' )
+		);
+		$tax_display_mode = $this->resolve_store_string(
+			$pos_store,
+			'get_tax_total_display',
+			get_option( 'woocommerce_tax_total_display', 'itemized' )
+		);
+
+		return array(
+			'display_tax'              => $tax_enabled ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
+			'prices_entered_with_tax'  => 'yes' === $this->resolve_store_string(
+				$pos_store,
+				'get_prices_include_tax',
+				wc_prices_include_tax() ? 'yes' : 'no'
+			),
+			'rounding_mode'            => $this->resolve_store_string(
+				$pos_store,
+				'get_tax_round_at_subtotal',
+				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
+			),
+			// Currency stays from the order (financial record). Locale and price formatting
+			// follow the store so presentation matches the store's region/settings.
+			'locale'                   => $this->resolve_store_string( $pos_store, 'get_locale', get_locale() ),
+			'currency_position'        => $this->resolve_store_string(
+				$pos_store,
+				'get_currency_position',
+				get_option( 'woocommerce_currency_pos', 'left' )
+			),
+			'currency_symbol'          => get_woocommerce_currency_symbol( $currency ),
+			'price_thousand_separator' => $this->resolve_store_string(
+				$pos_store,
+				'get_price_thousand_separator',
+				wc_get_price_thousand_separator()
+			),
+			'price_decimal_separator'  => $this->resolve_store_string(
+				$pos_store,
+				'get_price_decimal_separator',
+				wc_get_price_decimal_separator()
+			),
+			'price_num_decimals'       => $this->resolve_price_num_decimals( $pos_store ),
+			'price_display_suffix'     => $this->resolve_store_string(
+				$pos_store,
+				'get_price_display_suffix',
+				get_option( 'woocommerce_price_display_suffix', '' )
+			),
+		);
+	}
+
+	/**
+	 * Resolve a string setting from the store with a WooCommerce fallback.
+	 *
+	 * @param object $pos_store POS store object.
+	 * @param string $getter    Store getter method.
+	 * @param mixed  $fallback  Fallback value.
+	 *
+	 * @return string
+	 */
+	private function resolve_store_string( $pos_store, string $getter, $fallback ): string {
+		$value = $this->get_store_value( $pos_store, $getter, $fallback );
+
+		return '' !== (string) $value ? (string) $value : (string) $fallback;
+	}
+
+	/**
+	 * Resolve the number of price decimals from the store with WC fallback.
+	 *
+	 * @param object $pos_store POS store object.
+	 *
+	 * @return int
+	 */
+	private function resolve_price_num_decimals( $pos_store ): int {
+		$value = $this->get_store_value( $pos_store, 'get_price_number_of_decimals', wc_get_price_decimals() );
+
+		return '' !== (string) $value ? (int) $value : wc_get_price_decimals();
 	}
 
 	/**

@@ -169,6 +169,69 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Existing-order receipts should keep the order currency while taking
+	 * price-formatting and tax-presentation hints from the selected store.
+	 */
+	public function test_build_uses_store_price_and_tax_presentation_settings(): void {
+		$order = $this->create_taxed_order( 'itemized', 'no' );
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return 'de_DE';
+			}
+
+			public function get_currency_position(): string {
+				return 'right_space';
+			}
+
+			public function get_price_thousand_separator(): string {
+				return '.';
+			}
+
+			public function get_price_decimal_separator(): string {
+				return ',';
+			}
+
+			public function get_price_number_of_decimals(): int {
+				return 3;
+			}
+
+			public function get_price_display_suffix(): string {
+				return 'inkl. MwSt.';
+			}
+
+			public function get_tax_display_cart(): string {
+				return 'incl';
+			}
+
+			public function get_tax_total_display(): string {
+				return 'single';
+			}
+
+			public function get_tax_round_at_subtotal(): string {
+				return 'yes';
+			}
+
+			public function get_prices_include_tax(): string {
+				return 'yes';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+		$hints   = $payload['presentation_hints'];
+
+		$this->assertEquals( $order->get_currency(), $payload['order']['currency'] );
+		$this->assertEquals( get_woocommerce_currency_symbol( $order->get_currency() ), $hints['currency_symbol'] );
+		$this->assertEquals( 'right_space', $hints['currency_position'] );
+		$this->assertEquals( '.', $hints['price_thousand_separator'] );
+		$this->assertEquals( ',', $hints['price_decimal_separator'] );
+		$this->assertEquals( 3, $hints['price_num_decimals'] );
+		$this->assertEquals( 'inkl. MwSt.', $hints['price_display_suffix'] );
+		$this->assertEquals( 'single', $hints['display_tax'] );
+		$this->assertTrue( $hints['prices_entered_with_tax'] );
+		$this->assertEquals( 'yes', $hints['rounding_mode'] );
+	}
+
+	/**
 	 * Falls back to the site locale when the store does not expose
 	 * get_locale or returns an empty value.
 	 */

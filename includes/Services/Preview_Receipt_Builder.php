@@ -494,16 +494,26 @@ class Preview_Receipt_Builder {
 			$resolved_store = wcpos_get_store();
 		}
 		$this->pos_store = \is_object( $resolved_store ) ? $resolved_store : new Store();
-		$currency = $this->resolve_currency();
-		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
-		$tax_config   = $this->get_tax_config();
+		$currency     = $this->resolve_currency();
+		$display_incl = 'incl' === $this->resolve_store_string(
+			'get_tax_display_cart',
+			get_option( 'woocommerce_tax_display_cart', 'excl' )
+		);
+		$tax_enabled  = 'yes' === $this->resolve_store_string(
+			'get_calc_taxes',
+			get_option( 'woocommerce_calc_taxes', 'no' )
+		);
+		$tax_config   = $this->get_tax_config( $tax_enabled );
 		$tax_rate     = $tax_config['rate'];
 		$tax_label    = $tax_config['label'];
 		$tax_code     = $tax_config['code'];
 
 		$raw_products       = $this->get_products();
-		$prices_include_tax = wc_prices_include_tax();
-		$dp                 = wc_get_price_decimals();
+		$prices_include_tax = 'yes' === $this->resolve_store_string(
+			'get_prices_include_tax',
+			wc_prices_include_tax() ? 'yes' : 'no'
+		);
+		$dp                 = $this->resolve_price_num_decimals();
 
 		// Build line items.
 		$lines            = array();
@@ -736,13 +746,7 @@ class Preview_Receipt_Builder {
 
 		$refunds = array();
 
-		$tax_display_mode   = get_option( 'woocommerce_tax_total_display', 'itemized' );
-		$presentation_hints = array(
-			'display_tax'             => wc_tax_enabled() ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
-			'prices_entered_with_tax' => $prices_include_tax,
-			'rounding_mode'           => get_option( 'woocommerce_tax_round_at_subtotal', 'no' ),
-			'locale'                  => $this->resolve_locale(),
-		);
+		$presentation_hints = $this->build_presentation_hints( $currency, $tax_enabled, $prices_include_tax );
 
 		$fiscal = array(
 			'immutable_id'      => '12345:42',
@@ -942,6 +946,75 @@ class Preview_Receipt_Builder {
 		$store_locale = (string) $this->get_store_value( $this->pos_store, 'get_locale', '' );
 
 		return '' !== $store_locale ? $store_locale : $fallback;
+	}
+
+	/**
+	 * Build price, currency, locale, and tax presentation hints for renderers.
+	 *
+	 * @param string $currency            Currency code used by the preview data.
+	 * @param bool   $tax_enabled         Whether taxes are enabled for this store.
+	 * @param bool   $prices_include_tax  Whether entered prices include tax.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function build_presentation_hints( string $currency, bool $tax_enabled, bool $prices_include_tax ): array {
+		$tax_display_mode = $this->resolve_store_string(
+			'get_tax_total_display',
+			get_option( 'woocommerce_tax_total_display', 'itemized' )
+		);
+
+		return array(
+			'display_tax'              => $tax_enabled ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
+			'prices_entered_with_tax'  => $prices_include_tax,
+			'rounding_mode'            => $this->resolve_store_string(
+				'get_tax_round_at_subtotal',
+				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
+			),
+			'locale'                   => $this->resolve_locale(),
+			'currency_position'        => $this->resolve_store_string(
+				'get_currency_position',
+				get_option( 'woocommerce_currency_pos', 'left' )
+			),
+			'currency_symbol'          => get_woocommerce_currency_symbol( $currency ),
+			'price_thousand_separator' => $this->resolve_store_string(
+				'get_price_thousand_separator',
+				wc_get_price_thousand_separator()
+			),
+			'price_decimal_separator'  => $this->resolve_store_string(
+				'get_price_decimal_separator',
+				wc_get_price_decimal_separator()
+			),
+			'price_num_decimals'       => $this->resolve_price_num_decimals(),
+			'price_display_suffix'     => $this->resolve_store_string(
+				'get_price_display_suffix',
+				get_option( 'woocommerce_price_display_suffix', '' )
+			),
+		);
+	}
+
+	/**
+	 * Resolve a string setting from the store with a WooCommerce fallback.
+	 *
+	 * @param string $getter   Store getter method.
+	 * @param mixed  $fallback Fallback value.
+	 *
+	 * @return string
+	 */
+	private function resolve_store_string( string $getter, $fallback ): string {
+		$value = $this->get_store_value( $this->pos_store, $getter, $fallback );
+
+		return '' !== (string) $value ? (string) $value : (string) $fallback;
+	}
+
+	/**
+	 * Resolve the number of price decimals from the store with WC fallback.
+	 *
+	 * @return int
+	 */
+	private function resolve_price_num_decimals(): int {
+		$value = $this->get_store_value( $this->pos_store, 'get_price_number_of_decimals', wc_get_price_decimals() );
+
+		return '' !== (string) $value ? (int) $value : wc_get_price_decimals();
 	}
 
 	/**
@@ -1221,10 +1294,12 @@ class Preview_Receipt_Builder {
 	 * the primary tax rate. Falls back to a default rate if no rates
 	 * are configured.
 	 *
+	 * @param bool $tax_enabled Whether taxes are enabled for this store.
+	 *
 	 * @return array Tax config with rate (float), label (string), and code (string).
 	 */
-	private function get_tax_config(): array {
-		if ( ! wc_tax_enabled() ) {
+	private function get_tax_config( bool $tax_enabled ): array {
+		if ( ! $tax_enabled ) {
 			return array(
 				'rate'  => 0.0,
 				'label' => '',
