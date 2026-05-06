@@ -141,12 +141,24 @@ class Receipt_I18n_Labels {
 			'discount'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Discount', 'woocommerce-pos' ),
 			'packed'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Packed', 'woocommerce-pos' ),
 
+			// Short receipt table headers.
+			'item_short'             => /* translators: Short receipt table header for product/item name. Keep very short, ideally 3–8 characters. */ _x( 'Item', 'short receipt table header', 'woocommerce-pos' ),
+			'sku_short'              => /* translators: Short receipt table header for SKU/reference/product code. Keep very short. */ _x( 'SKU', 'short receipt table header', 'woocommerce-pos' ),
+			'qty_short'              => /* translators: Short receipt table header for quantity. Keep very short. */ _x( 'Qty', 'short receipt table header', 'woocommerce-pos' ),
+			'unit_excl_short'        => /* translators: Short receipt table header for unit price excluding tax/VAT/GST. Keep compact for narrow receipt columns. */ _x( 'Unit excl.', 'short receipt table header', 'woocommerce-pos' ),
+			'tax_rate_short'         => /* translators: Short receipt table header for tax/VAT/GST rate percentage, not tax amount. Keep compact for narrow receipt columns. */ _x( 'Tax %', 'short receipt table header: tax rate percentage', 'woocommerce-pos' ),
+			'tax_amount_short'       => /* translators: Short receipt table header for tax/VAT/GST amount, not tax rate. Keep compact for narrow receipt columns. */ _x( 'Tax', 'short receipt table header: tax amount', 'woocommerce-pos' ),
+			'total_incl_tax_short'   => /* translators: Short receipt table header for line total including tax/VAT/GST. Keep compact for narrow receipt columns. */ _x( 'Total incl.', 'short receipt table header', 'woocommerce-pos' ),
+			'taxable_excl_short'     => /* translators: Short receipt table header for taxable amount excluding tax/VAT/GST. Keep compact for narrow receipt columns. */ _x( 'Taxable excl.', 'short receipt table header', 'woocommerce-pos' ),
+			'taxable_incl_short'     => /* translators: Short receipt table header for taxable amount including tax/VAT/GST. Keep compact for narrow receipt columns. */ _x( 'Taxable incl.', 'short receipt table header', 'woocommerce-pos' ),
+
 			// Totals.
 			'subtotal'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Subtotal', 'woocommerce-pos' ),
 			'subtotal_excl_tax'      => /* translators: Standalone label used in printed receipt templates. */ __( 'Subtotal (excl. tax)', 'woocommerce-pos' ),
 			'total'                  => /* translators: Standalone label used in printed receipt templates. */ __( 'Total', 'woocommerce-pos' ),
 			'total_tax'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Total Tax', 'woocommerce-pos' ),
-			'total_incl_tax'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Total (incl. tax)', 'woocommerce-pos' ),
+			'total_incl_tax'         => /* translators: Standalone label used in printed receipt templates. */ __( 'Total (incl. tax)', 'woocommerce-pos' ),
+			'grand_total_incl_tax'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
 			'tax'                    => /* translators: Standalone label used in printed receipt templates. */ __( 'Tax', 'woocommerce-pos' ),
 			'paid'                   => /* translators: Standalone label used in printed receipt templates. */ __( 'Paid', 'woocommerce-pos' ),
 			'tendered'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Tendered', 'woocommerce-pos' ),
