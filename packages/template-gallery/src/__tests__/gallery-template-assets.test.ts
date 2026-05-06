@@ -60,7 +60,7 @@ describe('gallery template assets', () => {
 		}
 	});
 
-	it('uses presentation_hints.order_barcode_type for order barcodes', () => {
+	it('uses a literal code128 type for order barcodes', () => {
 		const barcodeTemplates = [
 			'detailed-receipt.html',
 			'thermal-simple-80mm.xml',
@@ -69,8 +69,8 @@ describe('gallery template assets', () => {
 
 		for (const filename of barcodeTemplates) {
 			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
-			expect(content, filename).toContain('{{presentation_hints.order_barcode_type}}');
-			expect(content, filename).not.toContain('type="code128"');
+			expect(content, filename).toContain('type="code128"');
+			expect(content, filename).not.toContain('{{presentation_hints.order_barcode_type}}');
 		}
 	});
 
