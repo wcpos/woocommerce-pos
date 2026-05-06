@@ -94,6 +94,35 @@ class Receipt_I18n_Labels {
 			'store_tax_id_label_ch_uid'          => __( 'UID', 'woocommerce-pos' ),
 			'store_tax_id_label_other'           => __( 'Tax ID', 'woocommerce-pos' ),
 
+			// Customer tax-ID labels — mirror the store-side keys so customer.tax_ids[]
+			// renders with the same per-type labels (ABN, VAT ID, NIF, GSTIN, etc.) the
+			// receipt header uses for the store. Resolved by Receipt_Data_Builder via
+			// the shared tax-id-label helper. Stores in the wild may want to translate
+			// these differently for the bill-to block (e.g. "Customer ABN") — splitting
+			// the namespace lets them.
+			'customer_tax_id_label_eu_vat'          => __( 'VAT ID', 'woocommerce-pos' ),
+			'customer_tax_id_label_gb_vat'          => __( 'VAT No.', 'woocommerce-pos' ),
+			'customer_tax_id_label_sa_vat'          => __( 'VAT No.', 'woocommerce-pos' ),
+			'customer_tax_id_label_au_abn'          => __( 'ABN', 'woocommerce-pos' ),
+			'customer_tax_id_label_br_cpf'          => __( 'CPF', 'woocommerce-pos' ),
+			'customer_tax_id_label_br_cnpj'         => __( 'CNPJ', 'woocommerce-pos' ),
+			'customer_tax_id_label_in_gst'          => __( 'GSTIN', 'woocommerce-pos' ),
+			'customer_tax_id_label_it_cf'           => __( 'Codice Fiscale', 'woocommerce-pos' ),
+			'customer_tax_id_label_it_piva'         => __( 'P.IVA', 'woocommerce-pos' ),
+			'customer_tax_id_label_es_nif'          => __( 'NIF', 'woocommerce-pos' ),
+			'customer_tax_id_label_ar_cuit'         => __( 'CUIT', 'woocommerce-pos' ),
+			'customer_tax_id_label_ca_gst_hst'      => __( 'GST/HST No.', 'woocommerce-pos' ),
+			'customer_tax_id_label_us_ein'          => __( 'EIN', 'woocommerce-pos' ),
+			'customer_tax_id_label_de_ust_id'       => __( 'USt-IdNr.', 'woocommerce-pos' ),
+			'customer_tax_id_label_de_steuernummer' => __( 'Steuernummer', 'woocommerce-pos' ),
+			'customer_tax_id_label_de_hrb'          => __( 'HRB', 'woocommerce-pos' ),
+			'customer_tax_id_label_nl_kvk'          => __( 'KVK', 'woocommerce-pos' ),
+			'customer_tax_id_label_fr_siret'        => __( 'SIRET', 'woocommerce-pos' ),
+			'customer_tax_id_label_fr_siren'        => __( 'SIREN', 'woocommerce-pos' ),
+			'customer_tax_id_label_gb_company'      => __( 'Company No.', 'woocommerce-pos' ),
+			'customer_tax_id_label_ch_uid'          => __( 'UID', 'woocommerce-pos' ),
+			'customer_tax_id_label_other'           => __( 'Tax ID', 'woocommerce-pos' ),
+
 			'prepared_for'           => __( 'Prepared For', 'woocommerce-pos' ),
 			'processed_by'           => __( 'Processed by', 'woocommerce-pos' ),
 
@@ -167,6 +196,11 @@ class Receipt_I18n_Labels {
 			'document_type'          => __( 'Document Type', 'woocommerce-pos' ),
 			'copy'                   => __( 'Copy', 'woocommerce-pos' ),
 			'copy_number'            => __( 'Copy No.', 'woocommerce-pos' ),
+
+			// Order meta + footer (used by detailed-receipt header / order column / footer).
+			'status'                 => __( 'Status', 'woocommerce-pos' ),
+			'completed'              => __( 'Completed', 'woocommerce-pos' ),
+			'printed'                => __( 'Printed', 'woocommerce-pos' ),
 		);
 	}
 

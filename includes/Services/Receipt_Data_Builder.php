@@ -68,6 +68,7 @@ class Receipt_Data_Builder {
 			'get_tax_display_cart',
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
 		);
+		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
@@ -83,10 +84,21 @@ class Receipt_Data_Builder {
 		if ( ! is_array( $store_tax_ids ) ) {
 			$store_tax_ids = array();
 		}
-		$store_tax_ids = self::with_store_tax_id_labels( $store_tax_ids );
+		$store_tax_ids = self::with_store_tax_id_labels( $store_tax_ids, $presentation_hints['locale'] ?? '' );
 
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
+			// Structured address parts mirror customer.billing_address — templates that
+			// want country-specific layouts compose from these. address_lines[] is the
+			// pre-formatted default for templates that just iterate.
+			'address'       => array(
+				'address_1' => $store_address,
+				'address_2' => $store_address_2,
+				'city'      => $store_city,
+				'state'     => $store_state,
+				'postcode'  => $store_postcode,
+				'country'   => $store_country,
+			),
 			'address_lines' => array_values(
 				array_filter(
 					array(
@@ -147,6 +159,7 @@ class Receipt_Data_Builder {
 		}
 
 		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
+		$tax_ids = self::with_customer_tax_id_labels( $tax_ids, $presentation_hints['locale'] ?? '' );
 
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
@@ -313,8 +326,6 @@ class Receipt_Data_Builder {
 				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
 			),
 		);
-
-		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 
 		$fiscal = array(
 			'immutable_id'      => '',
@@ -818,20 +829,47 @@ class Receipt_Data_Builder {
 	 * Ensure store tax IDs include display labels for logicless templates.
 	 *
 	 * @param array<int,array<string,mixed>> $tax_ids Store tax IDs.
+	 * @param string                         $locale  Receipt locale.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function with_store_tax_id_labels( array $tax_ids ): array {
-		$labels = Receipt_I18n_Labels::get_labels();
+	private static function with_store_tax_id_labels( array $tax_ids, string $locale = '' ): array {
+		return self::with_tax_id_labels( $tax_ids, 'store', $locale );
+	}
+
+	/**
+	 * Ensure customer tax IDs include display labels for logicless templates.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Customer tax IDs.
+	 * @param string                         $locale  Receipt locale.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function with_customer_tax_id_labels( array $tax_ids, string $locale = '' ): array {
+		return self::with_tax_id_labels( $tax_ids, 'customer', $locale );
+	}
+
+	/**
+	 * Resolve a display label for each tax-ID entry. Precedence: explicit
+	 * `label` → `<scope>_tax_id_label_<type>` i18n key → scope-specific
+	 * `_other` fallback.
+	 *
+	 * @param array<int,array<string,mixed>> $tax_ids Tax IDs.
+	 * @param string                         $scope   "store" or "customer".
+	 * @param string                         $locale  Receipt locale.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function with_tax_id_labels( array $tax_ids, string $scope, string $locale = '' ): array {
+		$labels = Receipt_I18n_Labels::get_labels( $locale );
+		$prefix = $scope . '_tax_id_label_';
 
 		return array_map(
-			static function ( array $tax_id ) use ( $labels ): array {
+			static function ( array $tax_id ) use ( $labels, $prefix ): array {
 				if ( ! empty( $tax_id['label'] ) ) {
 					return $tax_id;
 				}
 
 				$type            = isset( $tax_id['type'] ) ? (string) $tax_id['type'] : 'other';
-				$key             = 'store_tax_id_label_' . $type;
-				$tax_id['label'] = $labels[ $key ] ?? $labels['store_tax_id_label_other'];
+				$key             = $prefix . $type;
+				$tax_id['label'] = $labels[ $key ] ?? $labels[ $prefix . 'other' ];
 
 				return $tax_id;
 			},

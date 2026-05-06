@@ -26,10 +26,13 @@ The fiscal block is intentionally omitted; the slot is replaced with an
 "Order barcode" area that displays {{order.number}} prominently for cashier
 scan-on-return, and is the natural insertion point for a barcode component.
 
-New i18n keys this template uses (must exist in Receipt_I18n_Labels and
-ReceiptI18nSchema): status, printed, completed. Each falls back to English
-via Mustache inverted sections so the template renders today; the fallbacks
-can be removed once the keys are in the dictionary.
+i18n keys used: i18n.{bill_to, ship_to, order, cashier, status, item, sku,
+qty, unit_excl, tax, tax_amount, taxable_excl, taxable_incl, tax_summary,
+discount, reference, subtotal, subtotal_excl_tax, total_excl, total_tax,
+total, paid, tendered, change, returned_items, total_refunded, customer_note,
+terms_and_conditions, thank_you_purchase, tax_invoice, tax_invoice_retain,
+printed, customer_tax_id}. All keys live in Receipt_I18n_Labels::get_labels()
+and ReceiptI18nSchema.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px; max-width: 800px; margin: 0 auto;">
 
@@ -104,7 +107,7 @@ can be removed once the keys are in the dictionary.
 			<div style="display: flex; justify-content: space-between;"><span style="color: #6b7280;">{{i18n.cashier}}</span><span>{{cashier.name}}</span></div>
 			{{#order.wc_status}}
 			<div style="display: flex; justify-content: space-between;">
-				<span style="color: #6b7280;">{{#i18n.status}}{{i18n.status}}{{/i18n.status}}{{^i18n.status}}Status{{/i18n.status}}</span>
+				<span style="color: #6b7280;">{{i18n.status}}</span>
 				<span>{{order.wc_status}}</span>
 			</div>
 			{{/order.wc_status}}
@@ -314,7 +317,7 @@ can be removed once the keys are in the dictionary.
 			{{#store.opening_hours_notes}}<br>{{store.opening_hours_notes}}{{/store.opening_hours_notes}}
 		</div>
 		<div style="text-align: right;">
-			{{#receipt.printed.datetime}}{{#i18n.printed}}{{i18n.printed}}{{/i18n.printed}}{{^i18n.printed}}Printed{{/i18n.printed}} {{receipt.printed.datetime}}{{/receipt.printed.datetime}}
+			{{#receipt.printed.datetime}}{{i18n.printed}} {{receipt.printed.datetime}}{{/receipt.printed.datetime}}
 		</div>
 	</footer>
 
