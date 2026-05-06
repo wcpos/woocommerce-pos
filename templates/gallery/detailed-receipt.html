@@ -312,13 +312,13 @@ inline styles on the wrapping element.
 		<div>
 			{{#store.footer_imprint}}{{store.footer_imprint}}{{/store.footer_imprint}}
 		</div>
-		{{#store.opening_hours}}
 		<div style="text-align: right;">
+			{{#store.opening_hours}}
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.opening_hours}}</div>
 			<div style="color: #374151;">{{store.opening_hours}}</div>
+			{{/store.opening_hours}}
 			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
 		</div>
-		{{/store.opening_hours}}
 	</footer>
 
 </div>
