@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-06T17:42:25+00:00\n"
+"POT-Creation-Date: 2026-05-06T19:09:26+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -357,7 +357,7 @@ msgstr ""
 #: includes/Admin/Templates/List_Templates.php:409
 #: includes/Admin/Templates/List_Templates.php:843
 #: includes/Admin/Templates/List_Templates.php:854
-#: includes/Services/Receipt_I18n_Labels.php:200
+#: includes/Services/Receipt_I18n_Labels.php:212
 msgid "Status"
 msgstr ""
 
@@ -404,7 +404,7 @@ msgstr ""
 #. translators: Label or action in the receipt templates admin screen.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Admin/Templates/List_Templates.php:458
-#: includes/Services/Receipt_I18n_Labels.php:196
+#: includes/Services/Receipt_I18n_Labels.php:208
 msgid "Copy"
 msgstr ""
 
@@ -1154,7 +1154,7 @@ msgstr ""
 #: includes/Gateways/Cash.php:100
 #: includes/Services/Receipt_Data_Schema.php:719
 #: includes/Services/Receipt_Data_Schema.php:783
-#: includes/Services/Receipt_I18n_Labels.php:153
+#: includes/Services/Receipt_I18n_Labels.php:165
 #: templates/gallery/thermal-receipt.php:209
 #: templates/receipt.php:257
 msgid "Change"
@@ -1291,7 +1291,7 @@ msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Preview_Receipt_Builder.php:855
-#: includes/Services/Receipt_I18n_Labels.php:182
+#: includes/Services/Receipt_I18n_Labels.php:194
 #: templates/gallery/minimal-receipt.php:179
 #: templates/gallery/thermal-receipt.php:227
 msgid "Thank you for your purchase!"
@@ -1301,7 +1301,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Preview_Receipt_Builder.php:1320
 #: includes/Services/Preview_Receipt_Builder.php:1345
-#: includes/Services/Receipt_I18n_Labels.php:150
+#: includes/Services/Receipt_I18n_Labels.php:162
 msgid "Tax"
 msgstr ""
 
@@ -1342,7 +1342,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:275
-#: includes/Services/Receipt_I18n_Labels.php:176
+#: includes/Services/Receipt_I18n_Labels.php:188
 msgid "Customer Note"
 msgstr ""
 
@@ -1620,7 +1620,7 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:528
 #: includes/Services/Receipt_Data_Schema.php:675
 #: includes/Services/Receipt_Data_Schema.php:1038
-#: includes/Services/Receipt_I18n_Labels.php:145
+#: includes/Services/Receipt_I18n_Labels.php:156
 #: templates/gallery/minimal-receipt.php:130
 #: templates/gallery/thermal-receipt.php:166
 msgid "Subtotal"
@@ -1672,7 +1672,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:564
-#: includes/Services/Receipt_I18n_Labels.php:173
+#: includes/Services/Receipt_I18n_Labels.php:185
 msgid "Total Refunded"
 msgstr ""
 
@@ -1705,7 +1705,7 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:658
 #: includes/Services/Receipt_Data_Schema.php:703
 #: includes/Services/Receipt_Data_Schema.php:1042
-#: includes/Services/Receipt_I18n_Labels.php:147
+#: includes/Services/Receipt_I18n_Labels.php:158
 #: templates/gallery/minimal-receipt.php:109
 #: templates/gallery/minimal-receipt.php:156
 msgid "Total"
@@ -1805,7 +1805,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:707
-#: includes/Services/Receipt_I18n_Labels.php:149
+#: includes/Services/Receipt_I18n_Labels.php:160
 msgid "Total (incl. tax)"
 msgstr ""
 
@@ -1827,7 +1827,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:728
-#: includes/Services/Receipt_I18n_Labels.php:156
+#: includes/Services/Receipt_I18n_Labels.php:168
 msgid "Tax Summary"
 msgstr ""
 
@@ -1859,7 +1859,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:753
-#: includes/Services/Receipt_I18n_Labels.php:158
+#: includes/Services/Receipt_I18n_Labels.php:170
 msgid "Tax Amount"
 msgstr ""
 
@@ -1886,7 +1886,7 @@ msgstr ""
 #. translators: Label for a receipt data field in the template editor.
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_Data_Schema.php:775
-#: includes/Services/Receipt_I18n_Labels.php:172
+#: includes/Services/Receipt_I18n_Labels.php:184
 msgid "Amount"
 msgstr ""
 
@@ -1894,7 +1894,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_Data_Schema.php:779
-#: includes/Services/Receipt_I18n_Labels.php:152
+#: includes/Services/Receipt_I18n_Labels.php:164
 #: templates/gallery/thermal-receipt.php:205
 #: templates/receipt.php:253
 msgid "Tendered"
@@ -2490,51 +2490,110 @@ msgstr ""
 msgid "Packed"
 msgstr ""
 
-#. translators: Standalone label used in printed receipt templates.
+#. translators: Short receipt table header for product/item name. Keep very short, ideally 3–8 characters.
+#: includes/Services/Receipt_I18n_Labels.php:145
+msgctxt "short receipt table header"
+msgid "Item"
+msgstr ""
+
+#. translators: Short receipt table header for SKU/reference/product code. Keep very short.
 #: includes/Services/Receipt_I18n_Labels.php:146
-msgid "Subtotal (excl. tax)"
+msgctxt "short receipt table header"
+msgid "SKU"
 msgstr ""
 
-#. translators: Standalone label used in printed receipt templates.
+#. translators: Short receipt table header for quantity. Keep very short.
+#: includes/Services/Receipt_I18n_Labels.php:147
+msgctxt "short receipt table header"
+msgid "Qty"
+msgstr ""
+
+#. translators: Short receipt table header for unit price excluding tax/VAT/GST. Keep compact for narrow receipt columns.
 #: includes/Services/Receipt_I18n_Labels.php:148
-msgid "Total Tax"
+msgctxt "short receipt table header"
+msgid "Unit excl."
 msgstr ""
 
-#. translators: Standalone label used in printed receipt templates.
+#. translators: Short receipt table header for tax/VAT/GST rate percentage, not tax amount. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:149
+msgctxt "short receipt table header: tax rate percentage"
+msgid "Tax %"
+msgstr ""
+
+#. translators: Short receipt table header for tax/VAT/GST amount, not tax rate. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:150
+msgctxt "short receipt table header: tax amount"
+msgid "Tax"
+msgstr ""
+
+#. translators: Short receipt table header for line total including tax/VAT/GST. Keep compact for narrow receipt columns.
 #: includes/Services/Receipt_I18n_Labels.php:151
-msgid "Paid"
+msgctxt "short receipt table header"
+msgid "Total incl."
+msgstr ""
+
+#. translators: Short receipt table header for taxable amount excluding tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:152
+msgctxt "short receipt table header"
+msgid "Taxable excl."
+msgstr ""
+
+#. translators: Short receipt table header for taxable amount including tax/VAT/GST. Keep compact for narrow receipt columns.
+#: includes/Services/Receipt_I18n_Labels.php:153
+msgctxt "short receipt table header"
+msgid "Taxable incl."
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_I18n_Labels.php:157
-msgid "Taxable (excl.)"
+msgid "Subtotal (excl. tax)"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_I18n_Labels.php:159
+msgid "Total Tax"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates.
+#: includes/Services/Receipt_I18n_Labels.php:161
+msgid "Grand Total (incl. tax)"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates.
+#: includes/Services/Receipt_I18n_Labels.php:163
+msgid "Paid"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates.
+#: includes/Services/Receipt_I18n_Labels.php:169
+msgid "Taxable (excl.)"
+msgstr ""
+
+#. translators: Standalone label used in printed receipt templates.
+#: includes/Services/Receipt_I18n_Labels.php:171
 msgid "Taxable (incl.)"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
-#: includes/Services/Receipt_I18n_Labels.php:162
+#: includes/Services/Receipt_I18n_Labels.php:174
 #: includes/Templates.php:1118
 msgid "Invoice"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:163
+#: includes/Services/Receipt_I18n_Labels.php:175
 msgid "Tax Invoice"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:164
+#: includes/Services/Receipt_I18n_Labels.php:176
 msgid "Quote"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
-#: includes/Services/Receipt_I18n_Labels.php:165
+#: includes/Services/Receipt_I18n_Labels.php:177
 #: includes/Templates.php:1117
 msgid "Receipt"
 msgstr ""
@@ -2542,7 +2601,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #. translators: Label shown on a POS receipt or checkout template.
-#: includes/Services/Receipt_I18n_Labels.php:166
+#: includes/Services/Receipt_I18n_Labels.php:178
 #: includes/Templates.php:824
 #: includes/Templates.php:1119
 #: templates/gallery/gift-receipt.php:105
@@ -2551,95 +2610,95 @@ msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
-#: includes/Services/Receipt_I18n_Labels.php:167
+#: includes/Services/Receipt_I18n_Labels.php:179
 #: includes/Templates.php:1120
 msgid "Credit Note"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:168
+#: includes/Services/Receipt_I18n_Labels.php:180
 msgid "Packing Slip"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:171
+#: includes/Services/Receipt_I18n_Labels.php:183
 msgid "Returned Items"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:177
+#: includes/Services/Receipt_I18n_Labels.php:189
 msgid "Terms & Conditions"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:178
+#: includes/Services/Receipt_I18n_Labels.php:190
 #: templates/gallery/gift-receipt.php:123
 msgid "A message for you"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:181
+#: includes/Services/Receipt_I18n_Labels.php:193
 msgid "Thank you!"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:183
+#: includes/Services/Receipt_I18n_Labels.php:195
 msgid "Thank you for shopping with us!"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:184
+#: includes/Services/Receipt_I18n_Labels.php:196
 msgid "Thank you for your business."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:185
+#: includes/Services/Receipt_I18n_Labels.php:197
 msgid "Items may be returned or exchanged within 30 days with this receipt."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:186
+#: includes/Services/Receipt_I18n_Labels.php:198
 msgid "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:187
+#: includes/Services/Receipt_I18n_Labels.php:199
 msgid "This is a quote, not a receipt"
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:188
+#: includes/Services/Receipt_I18n_Labels.php:200
 msgid "Please retain this receipt for your records."
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:191
+#: includes/Services/Receipt_I18n_Labels.php:203
 msgid "KITCHEN"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:194
+#: includes/Services/Receipt_I18n_Labels.php:206
 msgid "Signature"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:195
+#: includes/Services/Receipt_I18n_Labels.php:207
 msgid "Document Type"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:197
+#: includes/Services/Receipt_I18n_Labels.php:209
 msgid "Copy No."
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:201
+#: includes/Services/Receipt_I18n_Labels.php:213
 msgid "Completed"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Receipt_I18n_Labels.php:202
+#: includes/Services/Receipt_I18n_Labels.php:214
 msgid "Printed"
 msgstr ""
 
 #. translators: %s: store tax identification number
 #. translators: %s: tax identification number
 #. translators: %s: tax ID
-#: includes/Services/Receipt_I18n_Labels.php:225
+#: includes/Services/Receipt_I18n_Labels.php:237
 #: templates/gallery/thermal-receipt.php:120
 #: templates/receipt.php:97
 #, php-format
@@ -2647,81 +2706,81 @@ msgid "Tax ID: %s"
 msgstr ""
 
 #. translators: %s: store phone number
-#: includes/Services/Receipt_I18n_Labels.php:230
+#: includes/Services/Receipt_I18n_Labels.php:242
 #, php-format
 msgid "Phone: %s"
 msgstr ""
 
 #. translators: %s: store email address
-#: includes/Services/Receipt_I18n_Labels.php:235
+#: includes/Services/Receipt_I18n_Labels.php:247
 #, php-format
 msgid "Email: %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:240
+#: includes/Services/Receipt_I18n_Labels.php:252
 #, php-format
 msgid "Paid via %s"
 msgstr ""
 
 #. translators: %s: payment method name
-#: includes/Services/Receipt_I18n_Labels.php:245
+#: includes/Services/Receipt_I18n_Labels.php:257
 #, php-format
 msgid "Refunded via %s"
 msgstr ""
 
 #. translators: %s: cashier name
-#: includes/Services/Receipt_I18n_Labels.php:250
+#: includes/Services/Receipt_I18n_Labels.php:262
 #, php-format
 msgid "Served by %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:255
+#: includes/Services/Receipt_I18n_Labels.php:267
 #, php-format
 msgid "Customer: %s"
 msgstr ""
 
 #. translators: %s: customer name
-#: includes/Services/Receipt_I18n_Labels.php:260
+#: includes/Services/Receipt_I18n_Labels.php:272
 #, php-format
 msgid "Thank you, %s!"
 msgstr ""
 
 #. translators: %s: payment transaction ID
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:265
-#: includes/Services/Receipt_I18n_Labels.php:270
+#: includes/Services/Receipt_I18n_Labels.php:277
+#: includes/Services/Receipt_I18n_Labels.php:282
 #, php-format
 msgid "Ref: %s"
 msgstr ""
 
 #. translators: %s: order number with # prefix
-#: includes/Services/Receipt_I18n_Labels.php:275
+#: includes/Services/Receipt_I18n_Labels.php:287
 #, php-format
 msgid "Order %s"
 msgstr ""
 
 #. translators: %s: product SKU
-#: includes/Services/Receipt_I18n_Labels.php:280
+#: includes/Services/Receipt_I18n_Labels.php:292
 #, php-format
 msgid "SKU: %s"
 msgstr ""
 
 #. translators: %s: line subtotal amount
-#: includes/Services/Receipt_I18n_Labels.php:285
+#: includes/Services/Receipt_I18n_Labels.php:297
 #, php-format
 msgid "Subtotal: %s"
 msgstr ""
 
 #. translators: %s: discount amount with minus sign
-#: includes/Services/Receipt_I18n_Labels.php:290
+#: includes/Services/Receipt_I18n_Labels.php:302
 #, php-format
 msgid "Discount: %s"
 msgstr ""
 
 #. translators: %s: taxable amount
-#: includes/Services/Receipt_I18n_Labels.php:295
+#: includes/Services/Receipt_I18n_Labels.php:307
 #, php-format
 msgid "Taxable: %s"
 msgstr ""
