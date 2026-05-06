@@ -107,7 +107,7 @@ class Auth {
 		}
 
 		if ( empty( $this->state ) ) {
-			$this->error = __( 'Missing state parameter.', 'woocommerce-pos' );
+			$this->error = /* translators: Short WCPOS UI label; keep concise. */ __( 'Missing state parameter.', 'woocommerce-pos' );
 
 			return;
 		}
@@ -280,7 +280,7 @@ class Auth {
 			// Bot detected - silently fail with generic error.
 			$this->log_auth_attempt( '', 'honeypot_triggered' );
 			sleep( 2 ); // Slow down bots.
-			$this->error = __( 'Authentication failed.', 'woocommerce-pos' );
+			$this->error = /* translators: Short WCPOS UI label; keep concise. */ __( 'Authentication failed.', 'woocommerce-pos' );
 
 			return;
 		}

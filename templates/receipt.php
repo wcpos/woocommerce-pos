@@ -106,24 +106,24 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? $rec
 <div class="meta">
 	<table>
 		<tr>
-			<td><?php esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></td>
+			<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></td>
 			<?php $order_number = $receipt_data['order']['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
 			<td><?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></td>
 		</tr>
 		<tr>
-			<td><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></td>
+			<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Date', 'woocommerce-pos' ); ?></td>
 			<?php $created_at = $receipt_data['order']['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 			<td><?php echo esc_html( $created_at ); ?></td>
 		</tr>
 		<?php if ( ! empty( $receipt_data['cashier']['name'] ) ) : ?>
 			<tr>
-				<td><?php esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></td>
+				<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></td>
 				<td><?php echo esc_html( $receipt_data['cashier']['name'] ); ?></td>
 			</tr>
 		<?php endif; ?>
 		<?php if ( ! empty( $receipt_data['customer']['name'] ) ) : ?>
 			<tr>
-				<td><?php esc_html_e( 'Customer', 'woocommerce-pos' ); ?></td>
+				<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Customer', 'woocommerce-pos' ); ?></td>
 				<td><?php echo esc_html( $receipt_data['customer']['name'] ); ?></td>
 			</tr>
 		<?php endif; ?>
@@ -216,8 +216,8 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? $rec
 		<?php
 		$display_incl = 'incl' === get_option( 'woocommerce_tax_display_cart', 'excl' );
 		$tax_suffix   = $display_incl
-			? __( 'incl.', 'woocommerce-pos' )
-			: __( 'excl.', 'woocommerce-pos' );
+			? /* translators: Label shown on a POS receipt or checkout template. */ __( 'incl.', 'woocommerce-pos' )
+			: /* translators: Label shown on a POS receipt or checkout template. */ __( 'excl.', 'woocommerce-pos' );
 		?>
 		<?php foreach ( $receipt_data['tax_summary'] as $tax ) : ?>
 			<tr>
@@ -250,11 +250,11 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? $rec
 				</tr>
 				<?php if ( ! empty( $payment['tendered'] ) && (float) $payment['tendered'] > 0 ) : ?>
 					<tr>
-						<td>&nbsp;&nbsp;<?php esc_html_e( 'Tendered', 'woocommerce-pos' ); ?></td>
+						<td>&nbsp;&nbsp;<?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Tendered', 'woocommerce-pos' ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( $payment['tendered'], $currency_args ) ); ?></td>
 					</tr>
 					<tr>
-						<td>&nbsp;&nbsp;<?php esc_html_e( 'Change', 'woocommerce-pos' ); ?></td>
+						<td>&nbsp;&nbsp;<?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Change', 'woocommerce-pos' ); ?></td>
 						<td><?php echo wp_kses_post( wc_price( $payment['change'] ?? 0, $currency_args ) ); ?></td>
 					</tr>
 				<?php endif; ?>

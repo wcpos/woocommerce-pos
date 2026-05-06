@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	<div class="inline-edit-col">
 		<div class="inline-edit-group">
 			<label class="inline-edit-status alignleft">
-				<span class="title"><?php esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?></span>
+				<span class="title"><?php /* translators: Product POS visibility or barcode label in WooCommerce admin. */ esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?></span>
 				<select name="_pos_visibility">
 					<?php
 					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Template variables.

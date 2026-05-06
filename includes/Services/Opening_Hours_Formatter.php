@@ -133,7 +133,7 @@ class Opening_Hours_Formatter {
 	 */
 	private static function format_slots( array $slots ): string {
 		if ( empty( $slots ) ) {
-			return __( 'Closed', 'woocommerce-pos' );
+			return /* translators: Short WCPOS UI label; keep concise. */ __( 'Closed', 'woocommerce-pos' );
 		}
 
 		// Drop trailing unpaired element to ensure open/close pairs.
@@ -142,7 +142,7 @@ class Opening_Hours_Formatter {
 		}
 
 		if ( empty( $slots ) ) {
-			return __( 'Closed', 'woocommerce-pos' );
+			return /* translators: Short WCPOS UI label; keep concise. */ __( 'Closed', 'woocommerce-pos' );
 		}
 
 		$ranges     = array();

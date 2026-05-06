@@ -206,7 +206,7 @@ class Receipt {
 		<head>
 			<meta charset="<?php bloginfo( 'charset' ); ?>">
 			<meta name="viewport" content="width=device-width, initial-scale=1">
-			<title><?php esc_html_e( 'Receipt Error', 'woocommerce-pos' ); ?></title>
+			<title><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Receipt Error', 'woocommerce-pos' ); ?></title>
 			<style>
 				* { box-sizing: border-box; margin: 0; padding: 0; }
 				body {
@@ -267,22 +267,22 @@ class Receipt {
 		</head>
 		<body>
 			<div class="error-container">
-				<h1><?php esc_html_e( 'Receipt Template Error', 'woocommerce-pos' ); ?></h1>
+				<h1><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Receipt Template Error', 'woocommerce-pos' ); ?></h1>
 				<p><?php esc_html_e( 'There was a problem rendering the receipt template. This is usually caused by a syntax error or undefined variable in the template code.', 'woocommerce-pos' ); ?></p>
 
 				<?php if ( $show_details ) { ?>
 					<div class="error-details">
 						<strong><?php echo esc_html( $error_type ); ?>:</strong><br>
 						<?php echo esc_html( $error['message'] ); ?><br><br>
-						<strong><?php esc_html_e( 'File:', 'woocommerce-pos' ); ?></strong> <?php echo esc_html( $error['file'] ); ?><br>
-						<strong><?php esc_html_e( 'Line:', 'woocommerce-pos' ); ?></strong> <?php echo esc_html( $error['line'] ); ?>
+						<strong><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'File:', 'woocommerce-pos' ); ?></strong> <?php echo esc_html( $error['file'] ); ?><br>
+						<strong><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Line:', 'woocommerce-pos' ); ?></strong> <?php echo esc_html( $error['line'] ); ?>
 					</div>
 
 					<div class="suggestions">
-						<h2><?php esc_html_e( 'Suggestions:', 'woocommerce-pos' ); ?></h2>
+						<h2><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Suggestions:', 'woocommerce-pos' ); ?></h2>
 						<ul>
-							<li><?php esc_html_e( 'Check the template file for syntax errors (missing semicolons, brackets, etc.)', 'woocommerce-pos' ); ?></li>
-							<li><?php esc_html_e( 'Ensure all variables used in the template are defined', 'woocommerce-pos' ); ?></li>
+							<li><?php /* translators: Help text shown on the receipt template fatal error page. */ esc_html_e( 'Check the template file for syntax errors (missing semicolons, brackets, etc.)', 'woocommerce-pos' ); ?></li>
+							<li><?php /* translators: Help text shown on the receipt template fatal error page. */ esc_html_e( 'Ensure all variables used in the template are defined', 'woocommerce-pos' ); ?></li>
 							<li><?php esc_html_e( 'Verify that any custom functions or classes exist', 'woocommerce-pos' ); ?></li>
 							<li><?php esc_html_e( 'Try resetting to the default receipt template', 'woocommerce-pos' ); ?></li>
 						</ul>

@@ -106,7 +106,7 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 		// Add the 'barcode' property if 'properties' exists and is an array.
 		if ( isset( $schema['properties'] ) && \is_array( $schema['properties'] ) ) {
 			$schema['properties']['barcode'] = array(
-				'description' => __( 'Barcode', 'woocommerce-pos' ),
+				'description' => /* translators: REST API schema field label or error message. */ __( 'Barcode', 'woocommerce-pos' ),
 				'type'        => 'string',
 				'context'     => array( 'view', 'edit' ),
 				'readonly'    => false,

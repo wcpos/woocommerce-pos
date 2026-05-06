@@ -48,7 +48,9 @@ class Form_Handler {
 			// Ensure the order exists.
 			if ( ! $order ) {
 				wp_die(
+					/* translators: Checkout/payment form error message shown when the order cannot be found. */
 					esc_html__( 'Order does not exist.', 'woocommerce-pos' ),
+					/* translators: Checkout/payment form error message title. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);
@@ -58,7 +60,9 @@ class Form_Handler {
 			$provided_key = sanitize_text_field( wp_unslash( $_GET['key'] ) );
 			if ( $provided_key !== $order->get_order_key() ) {
 				wp_die(
+					/* translators: Checkout/payment form error message shown when the order key does not match. */
 					esc_html__( 'Order key mismatch.', 'woocommerce-pos' ),
+					/* translators: Checkout/payment form error message title. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);
@@ -70,7 +74,9 @@ class Form_Handler {
 
 			if ( null === $token_key || ! isset( $_GET[ $token_key ] ) ) {
 				wp_die(
+					/* translators: Checkout/payment form error message shown when no cashier token is provided. */
 					esc_html__( 'Token not provided.', 'woocommerce-pos' ),
+					/* translators: Checkout/payment form error message title. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);
@@ -82,7 +88,9 @@ class Form_Handler {
 			$user = $auth->validate_token( $provided_token );
 			if ( is_wp_error( $user ) ) {
 				wp_die(
+					/* translators: Checkout/payment form error message shown when the cashier token does not match. */
 					esc_html__( 'Cashier token mismatch.', 'woocommerce-pos' ),
+					/* translators: Checkout/payment form error message title. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);

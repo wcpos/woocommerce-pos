@@ -43,9 +43,9 @@ class List_Products {
 
 		// visibility options.
 		$this->options = array(
-			''            => __( 'POS & Online', 'woocommerce-pos' ),
-			'pos_only'    => __( 'POS Only', 'woocommerce-pos' ),
-			'online_only' => __( 'Online Only', 'woocommerce-pos' ),
+			''            => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS & Online', 'woocommerce-pos' ),
+			'pos_only'    => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS Only', 'woocommerce-pos' ),
+			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
 		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
@@ -100,7 +100,7 @@ class List_Products {
 		woocommerce_wp_text_input(
 			array(
 				'id'          => $this->barcode_field,
-				'label'       => __( 'POS Barcode', 'woocommerce-pos' ),
+				'label'       => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS Barcode', 'woocommerce-pos' ),
 				'desc_tip'    => 'true',
 				'description' => __( 'Product barcode used at the point of sale', 'woocommerce-pos' ),
 			)
@@ -129,8 +129,8 @@ class List_Products {
 		global $wpdb;
 
 		$visibility_filters = array(
-			'pos_only'    => __( 'POS Only', 'woocommerce-pos' ),
-			'online_only' => __( 'Online Only', 'woocommerce-pos' ),
+			'pos_only'    => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS Only', 'woocommerce-pos' ),
+			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
 		if ( ! empty( $_GET['pos_visibility'] ) ) {

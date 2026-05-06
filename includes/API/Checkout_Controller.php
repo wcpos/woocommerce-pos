@@ -134,6 +134,7 @@ class Checkout_Controller extends WC_REST_Controller {
 		if ( empty( $idempotency_key ) ) {
 			return new WP_Error(
 				'wcpos_missing_idempotency_key',
+				/* translators: REST API schema field label or error message. */
 				__( 'Missing X-WCPOS-Idempotency-Key header.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);
@@ -144,6 +145,7 @@ class Checkout_Controller extends WC_REST_Controller {
 		if ( ! $gateway ) {
 			return new WP_Error(
 				'wcpos_payment_gateway_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Payment gateway not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -243,6 +245,7 @@ class Checkout_Controller extends WC_REST_Controller {
 		if ( ! $order ) {
 			return new WP_Error(
 				'wcpos_order_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Order not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);

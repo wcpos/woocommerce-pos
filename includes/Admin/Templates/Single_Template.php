@@ -54,9 +54,9 @@ class Single_Template {
 	 */
 	private static function get_engine_options(): array {
 		return array(
-			'logicless'  => __( 'HTML (Offline)', 'woocommerce-pos' ),
-			'thermal'    => __( 'XML (Receipt Printer)', 'woocommerce-pos' ),
-			'legacy-php' => __( 'PHP (Legacy)', 'woocommerce-pos' ),
+			'logicless'  => /* translators: Label or action in the receipt templates admin screen. */ __( 'HTML (Offline)', 'woocommerce-pos' ),
+			'thermal'    => /* translators: Label or action in the receipt templates admin screen. */ __( 'XML (Receipt Printer)', 'woocommerce-pos' ),
+			'legacy-php' => /* translators: Label or action in the receipt templates admin screen. */ __( 'PHP (Legacy)', 'woocommerce-pos' ),
 		);
 	}
 
@@ -122,7 +122,7 @@ class Single_Template {
 	 */
 	public function change_title_placeholder( string $title, \WP_Post $post ): string {
 		if ( 'wcpos_template' === $post->post_type ) {
-			$title = __( 'Enter template name', 'woocommerce-pos' );
+			$title = /* translators: Label or action in the receipt templates admin screen. */ __( 'Enter template name', 'woocommerce-pos' );
 		}
 
 		return $title;
@@ -145,6 +145,7 @@ class Single_Template {
 		printf(
 			'<p style="margin: 0 0 12px;"><a href="%s">&larr; %s</a></p>',
 			esc_url( $gallery_url ),
+			/* translators: Label or action in the receipt templates admin screen. */
 			esc_html__( 'Back to Templates', 'woocommerce-pos' )
 		);
 
@@ -171,6 +172,7 @@ class Single_Template {
 		remove_meta_box( 'submitdiv', 'wcpos_template', 'side' );
 		add_meta_box(
 			'submitdiv',
+			/* translators: Label or action in the receipt templates admin screen. */
 			__( 'Publish', 'woocommerce-pos' ),
 			'post_submit_meta_box',
 			'wcpos_template',
@@ -180,6 +182,7 @@ class Single_Template {
 
 		add_meta_box(
 			'wcpos_template_actions',
+			/* translators: Label or action in the receipt templates admin screen. */
 			__( 'Template Actions', 'woocommerce-pos' ),
 			array( $this, 'render_actions_metabox' ),
 			'wcpos_template',
@@ -189,6 +192,7 @@ class Single_Template {
 
 		add_meta_box(
 			'wcpos_template_settings',
+			/* translators: Label or action in the receipt templates admin screen. */
 			__( 'Template Settings', 'woocommerce-pos' ),
 			array( $this, 'render_settings_metabox' ),
 			'wcpos_template',
@@ -226,7 +230,7 @@ class Single_Template {
 		?>
 		<!-- Engine -->
 		<p>
-			<label><strong><?php esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong></label>
+			<label><strong><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( 'Template Engine', 'woocommerce-pos' ); ?></strong></label>
 			<select name="wcpos_template_engine" id="wcpos-template-engine" style="width: 100%;" <?php echo $disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 				<?php foreach ( $engines as $value => $label ) : ?>
 					<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $engine, $value ); ?>>
@@ -244,10 +248,10 @@ class Single_Template {
 		$paper_disabled = ! $is_new || 'thermal' !== $engine ? 'disabled="disabled"' : '';
 		?>
 		<p id="wcpos-paper-size-field" style="<?php echo 'thermal' !== $engine ? 'display:none;' : ''; ?>">
-			<label><strong><?php esc_html_e( 'Paper Size', 'woocommerce-pos' ); ?></strong></label>
+			<label><strong><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( 'Paper Size', 'woocommerce-pos' ); ?></strong></label>
 			<select name="wcpos_template_paper_width" id="wcpos-template-paper-width" style="width: 100%;" <?php echo $paper_disabled; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
-				<option value="80mm" <?php selected( $paper_width, '80mm' ); ?>><?php esc_html_e( '80mm (Standard)', 'woocommerce-pos' ); ?></option>
-				<option value="58mm" <?php selected( $paper_width, '58mm' ); ?>><?php esc_html_e( '58mm (Narrow)', 'woocommerce-pos' ); ?></option>
+				<option value="80mm" <?php selected( $paper_width, '80mm' ); ?>><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( '80mm (Standard)', 'woocommerce-pos' ); ?></option>
+				<option value="58mm" <?php selected( $paper_width, '58mm' ); ?>><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( '58mm (Narrow)', 'woocommerce-pos' ); ?></option>
 			</select>
 		</p>
 
@@ -297,7 +301,7 @@ class Single_Template {
 	public function render_actions_metabox( \WP_Post $post ): void {
 		$is_published = 'publish' === $post->post_status;
 		$action       = $is_published ? 'deactivate' : 'activate';
-		$button_label = $is_published ? __( 'Deactivate Template', 'woocommerce-pos' ) : __( 'Activate Template', 'woocommerce-pos' );
+		$button_label = $is_published ? /* translators: Label or action in the receipt templates admin screen. */ __( 'Deactivate Template', 'woocommerce-pos' ) : __( 'Activate Template', 'woocommerce-pos' );
 		$description  = $is_published
 			? __( 'This template is active and available for POS receipts.', 'woocommerce-pos' )
 			: __( 'This template is inactive and will not be used for POS receipts.', 'woocommerce-pos' );
@@ -355,7 +359,7 @@ class Single_Template {
 		}
 
 		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_toggle_template_status_' . $template_id . '_' . $state ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
 		}
 
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
@@ -364,7 +368,7 @@ class Single_Template {
 
 		$post = get_post( $template_id );
 		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
-			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
 		}
 
 		$result = wp_update_post(
@@ -397,11 +401,11 @@ class Single_Template {
 		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
 
 		if ( empty( $template_id ) ) {
-			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
 		}
 
 		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_activate_template_' . $template_id ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
 		}
 
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
@@ -455,11 +459,11 @@ class Single_Template {
 		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
 
 		if ( empty( $template_id ) ) {
-			wp_die( esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
 		}
 
 		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_copy_template_' . $template_id ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
 		}
 
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
@@ -470,7 +474,7 @@ class Single_Template {
 		$virtual_template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
 
 		if ( ! $virtual_template ) {
-			wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 		}
 
 		// Create a new custom template from the virtual one.
@@ -747,7 +751,7 @@ class Single_Template {
 		if ( isset( $_GET['wcpos_activated'] ) && '1' === $_GET['wcpos_activated'] ) {
 			?>
 			<div class="notice notice-success is-dismissible">
-				<p><?php esc_html_e( 'Template activated successfully.', 'woocommerce-pos' ); ?></p>
+				<p><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( 'Template activated successfully.', 'woocommerce-pos' ); ?></p>
 			</div>
 			<?php
 		}
@@ -761,7 +765,7 @@ class Single_Template {
 					<?php
 					echo esc_html(
 						$success
-							? __( 'Template status updated successfully.', 'woocommerce-pos' )
+							? /* translators: Label or action in the receipt templates admin screen. */ __( 'Template status updated successfully.', 'woocommerce-pos' )
 							: __( 'Failed to update template status.', 'woocommerce-pos' )
 					);
 					?>

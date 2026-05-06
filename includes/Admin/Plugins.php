@@ -48,6 +48,7 @@ class Plugins {
 			);
 
 			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" rel="noopener noreferrer" data-wcpos-upgrade-placement="plugin_row_action" style="color: #d63638; font-weight: 600;">' .
+				/* translators: Plugin admin screen label or notice for WCPOS. */
 				__( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>';
 		}
 
@@ -92,14 +93,14 @@ class Plugins {
 		<div style="background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%); border: 1px solid #ffb900; border-radius: 4px; padding: 12px 15px; margin-top: 10px;">
 			<p style="margin: 0 0 10px 0; font-weight: 600; color: #856404; font-size: 14px;">
 				<span class="dashicons dashicons-warning" style="color: #ffb900; margin-right: 5px;"></span>
-				<?php esc_html_e( 'Major Update', 'woocommerce-pos' ); ?>
+				<?php /* translators: Plugin admin screen label or notice for WCPOS. */ esc_html_e( 'Major Update', 'woocommerce-pos' ); ?>
 			</p>
 			<p style="margin: 0 0 10px 0; color: #856404;">
 				<?php esc_html_e( 'Update when you have time to test the POS. You can rollback to the previous version if needed.', 'woocommerce-pos' ); ?>
 			</p>
 			<p style="margin: 0; padding: 10px; background-color: rgba(255,255,255,0.5); border-radius: 3px; color: #0073aa;">
 				<span class="dashicons dashicons-star-filled" style="color: #ffb900; margin-right: 5px;"></span>
-				<strong><?php esc_html_e( 'Pro Users:', 'woocommerce-pos' ); ?></strong>
+				<strong><?php /* translators: Plugin admin screen label or notice for WCPOS. */ esc_html_e( 'Pro Users:', 'woocommerce-pos' ); ?></strong>
 				<?php
 				printf(
 					/* translators: %s: URL to My Account page */

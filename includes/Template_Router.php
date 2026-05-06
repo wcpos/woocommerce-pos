@@ -218,7 +218,7 @@ class Template_Router {
 			}
 		}
 
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		wp_die( /* translators: Error message displayed when a template cannot be found. */ esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 	}
 
 	/**
@@ -236,7 +236,7 @@ class Template_Router {
 			return;
 		}
 
-		wp_die( esc_html__( 'Template not found.', 'woocommerce-pos' ) );
+		wp_die( /* translators: Error message displayed when a template cannot be found. */ esc_html__( 'Template not found.', 'woocommerce-pos' ) );
 	}
 
 	/**

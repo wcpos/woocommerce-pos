@@ -142,7 +142,7 @@ class Receipt_Data_Builder {
 		$customer_name = trim( $order->get_formatted_billing_full_name() );
 
 		if ( ! $customer_id && '' === $customer_name ) {
-			$customer_name = __( 'Guest', 'woocommerce-pos' );
+			$customer_name = /* translators: Short WCPOS UI label; keep concise. */ __( 'Guest', 'woocommerce-pos' );
 		}
 
 		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );

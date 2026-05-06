@@ -109,6 +109,7 @@ class Stores extends WP_REST_Controller {
 		if ( ! $store ) {
 			return new \WP_Error(
 				'woocommerce_pos_store_not_found',
+				/* translators: REST API schema field label or error message. */
 				esc_html__( 'Store not found', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);

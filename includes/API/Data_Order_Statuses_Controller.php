@@ -121,13 +121,13 @@ class Data_Order_Statuses_Controller extends WC_REST_Data_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'status'        => array(
-					'description' => __( 'Order Status.', 'woocommerce-pos' ),
+					'description' => /* translators: REST API schema field label or error message. */ __( 'Order Status.', 'woocommerce-pos' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'label' => array(
-					'description' => __( 'Order Status Label.', 'woocommerce-pos' ),
+					'description' => /* translators: REST API schema field label or error message. */ __( 'Order Status Label.', 'woocommerce-pos' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,

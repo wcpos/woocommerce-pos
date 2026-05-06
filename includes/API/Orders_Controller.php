@@ -261,7 +261,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 						array(
 							'email'   => array(
 								'type'        => 'string',
-								'description' => __( 'Email address', 'woocommerce-pos' ),
+								'description' => /* translators: REST API schema field label or error message. */ __( 'Email address', 'woocommerce-pos' ),
 								'required'    => true,
 							),
 							'save_to' => array(
@@ -298,7 +298,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Add barcode property to the schema.
 		$schema['properties']['barcode'] = array(
-			'description' => __( 'Barcode', 'woocommerce-pos' ),
+			'description' => /* translators: REST API schema field label or error message. */ __( 'Barcode', 'woocommerce-pos' ),
 			'type'        => 'string',
 			'context'     => array( 'view', 'edit' ),
 			'readonly'    => false,
@@ -316,11 +316,11 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					'type'    => array(
 						'type'        => 'string',
 						'enum'        => Tax_Id_Types::all_types(),
-						'description' => __( 'Tax ID type.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID type.', 'woocommerce-pos' ),
 					),
 					'value'   => array(
 						'type'        => 'string',
-						'description' => __( 'Tax ID value.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID value.', 'woocommerce-pos' ),
 					),
 					'country' => array(
 						'type'        => array( 'string', 'null' ),
@@ -328,7 +328,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 					),
 					'label'   => array(
 						'type'        => array( 'string', 'null' ),
-						'description' => __( 'Optional human-readable label.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Optional human-readable label.', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -722,7 +722,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		// Add 'pos_cashier' parameter.
 		$params['pos_cashier'] = array(
-			'description' => __( 'Filter orders by POS cashier.', 'woocommerce-pos' ),
+			'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS cashier.', 'woocommerce-pos' ),
 			'type'        => 'integer',
 			'required'    => false,
 		);
@@ -730,7 +730,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		// Add 'pos_store' parameter
 		// @NOTE - this is different to 'store_id' which is the store the request was made from.
 		$params['pos_store'] = array(
-			'description' => __( 'Filter orders by POS store.', 'woocommerce-pos' ),
+			'description' => /* translators: REST API schema field label or error message. */ __( 'Filter orders by POS store.', 'woocommerce-pos' ),
 			'type'        => 'integer',
 			'required'    => false,
 		);

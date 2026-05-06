@@ -74,7 +74,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
 					'type' => array(
-						'description' => __( 'Template type.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'default'     => 'receipt',
 						'enum'        => array( 'receipt', 'report' ),
@@ -118,7 +118,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'update_item_permissions_check' ),
 				'args'                => array(
 					'type'            => array(
-						'description'       => __( 'Template type for ordering.', 'woocommerce-pos' ),
+						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type for ordering.', 'woocommerce-pos' ),
 						'type'              => 'string',
 						'default'           => 'receipt',
 						'enum'              => array( 'receipt', 'report' ),
@@ -149,7 +149,7 @@ class Templates_Controller extends WP_REST_Controller {
 						),
 					),
 					'order'           => array(
-						'description' => __( 'Ordered array of all template IDs (int for database, string for virtual).', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Ordered array of all template IDs (int for database, string for virtual).', 'woocommerce-pos' ),
 						'type'        => 'array',
 						'items'       => array(
 							'type' => array( 'integer', 'string' ),
@@ -199,7 +199,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
 					),
@@ -243,7 +243,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'update_item_permissions_check' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Template ID to copy.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Template ID to copy.', 'woocommerce-pos' ),
 						'type'        => 'integer',
 						'required'    => true,
 					),
@@ -261,7 +261,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'preview_item_permissions_check' ),
 				'args'                => array(
 					'id'       => array(
-						'description' => __( 'Template ID to preview.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Template ID to preview.', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
 					),
@@ -299,7 +299,7 @@ class Templates_Controller extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'update_item_permissions_check' ),
 				'args'                => array(
 					'id' => array(
-						'description'       => __( 'Template ID to delete.', 'woocommerce-pos' ),
+						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template ID to delete.', 'woocommerce-pos' ),
 						'type'              => 'integer',
 						'required'          => true,
 						'validate_callback' => function ( $value ) {
@@ -456,6 +456,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $template ) {
 			return new WP_Error(
 				'wcpos_template_invalid_id',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid template ID.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -506,6 +507,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
 			return new WP_Error(
 				'wcpos_template_invalid_id',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid template ID.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -545,6 +547,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $template ) {
 			return new WP_Error(
 				'wcpos_template_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Template not found after update.', 'woocommerce-pos' ),
 				array( 'status' => 500 )
 			);
@@ -680,6 +683,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $template ) {
 			return new WP_Error(
 				'wcpos_template_invalid_id',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid template ID.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -777,6 +781,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $template ) {
 			return new WP_Error(
 				'wcpos_template_invalid_id',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid template ID.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -868,6 +873,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( ! $template ) {
 			return new WP_Error(
 				'wcpos_template_invalid_id',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid template ID.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -911,6 +917,7 @@ class Templates_Controller extends WP_REST_Controller {
 			if ( ! \is_object( $request_pos_store ) ) {
 				return new WP_Error(
 					'wcpos_invalid_store',
+					/* translators: REST API schema field label or error message. */
 					__( 'Store not found.', 'woocommerce-pos' ),
 					array( 'status' => 404 )
 				);
@@ -1064,7 +1071,7 @@ class Templates_Controller extends WP_REST_Controller {
 
 		if ( ! file_exists( $thermal_php_path ) ) {
 			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666;">'
-				. esc_html__( 'Thermal preview unavailable.', 'woocommerce-pos' )
+				. /* translators: REST API schema field label or error message. */ esc_html__( 'Thermal preview unavailable.', 'woocommerce-pos' )
 				. '</div>';
 		}
 
@@ -1081,7 +1088,7 @@ class Templates_Controller extends WP_REST_Controller {
 			ob_end_clean();
 			Logger::log( 'error', 'Thermal HTML preview failed: ' . $e->getMessage() );
 			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
-				. esc_html__( 'Thermal preview failed.', 'woocommerce-pos' )
+				. /* translators: REST API schema field label or error message. */ esc_html__( 'Thermal preview failed.', 'woocommerce-pos' )
 				. '</div>';
 		}
 	}

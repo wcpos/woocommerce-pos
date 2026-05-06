@@ -80,8 +80,8 @@ class Single_Order {
 		wp_nonce_field( 'pos_cashier_select_action', 'pos_cashier_select_nonce' );
 
 		echo '<p class="form-field form-field-wide">';
-		echo '<label for="_pos_user">' . esc_html__( 'POS Cashier', 'woocommerce-pos' ) . ':</label>';
-		echo '<select class="wc-customer-search" id="_pos_user" name="_pos_user" data-placeholder="' . esc_attr__( 'Search for a cashier&hellip;', 'woocommerce-pos' ) . '" data-allow_clear="true" style="width: 100%;">';
+		echo '<label for="_pos_user">' . /* translators: Order list label shown in WooCommerce admin for POS orders. */ esc_html__( 'POS Cashier', 'woocommerce-pos' ) . ':</label>';
+		echo '<select class="wc-customer-search" id="_pos_user" name="_pos_user" data-placeholder="' . /* translators: Order list label shown in WooCommerce admin for POS orders. */ esc_attr__( 'Search for a cashier&hellip;', 'woocommerce-pos' ) . '" data-allow_clear="true" style="width: 100%;">';
 		if ( $cashier_id ) {
 			$user = get_user_by( 'id', $cashier_id );
 			if ( $user ) {
@@ -124,8 +124,8 @@ class Single_Order {
 				$note               = sprintf(
 					// translators: 1: old POS cashier, 2: new POS cashier.
 					__( 'POS cashier changed from %1$s to %2$s.', 'woocommerce-pos' ),
-					$current_cashier ? $current_cashier->display_name : __( 'Unknown', 'woocommerce-pos' ),
-					$new_cashier ? $new_cashier->display_name : __( 'Unknown', 'woocommerce-pos' )
+					$current_cashier ? $current_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' ),
+					$new_cashier ? $new_cashier->display_name : /* translators: Fallback cashier name shown when the POS cashier user cannot be found. */ __( 'Unknown', 'woocommerce-pos' )
 				);
 				$order->add_order_note( $note );
 			}

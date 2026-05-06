@@ -256,757 +256,757 @@ class Receipt_Data_Schema {
 	public static function get_field_tree(): array {
 		return array(
 			'order'       => array(
-				'label'  => __( 'Order', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order', 'woocommerce-pos' ),
 				'fields' => array(
 					'id'           => array(
 						'type'  => 'number',
-						'label' => __( 'Order ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Order ID', 'woocommerce-pos' ),
 					),
 					'number'       => array(
 						'type'  => 'string',
-						'label' => __( 'Order Number', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Order Number', 'woocommerce-pos' ),
 					),
 					'currency'     => array(
 						'type'  => 'string',
-						'label' => __( 'Currency', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Currency', 'woocommerce-pos' ),
 					),
 					'customer_note' => array(
 						'type'  => 'string',
-						'label' => __( 'Customer Note', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Note', 'woocommerce-pos' ),
 					),
 					'wc_status'    => array(
 						'type'  => 'string',
-						'label' => __( 'WC Status', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'WC Status', 'woocommerce-pos' ),
 					),
 					'status_label' => array(
 						'type'  => 'string',
-						'label' => __( 'Status Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Status Label', 'woocommerce-pos' ),
 					),
 					'created_via'  => array(
 						'type'  => 'string',
-						'label' => __( 'Created Via', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Created Via', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'order.created' => array(
-				'label'  => __( 'Order Created', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order Created', 'woocommerce-pos' ),
 				'fields' => self::get_date_field_tree_fields(),
 			),
 			'order.paid' => array(
-				'label'  => __( 'Order Paid', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order Paid', 'woocommerce-pos' ),
 				'fields' => self::get_date_field_tree_fields(),
 			),
 			'order.completed' => array(
-				'label'  => __( 'Order Completed', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order Completed', 'woocommerce-pos' ),
 				'fields' => self::get_date_field_tree_fields(),
 			),
 			'store'       => array(
-				'label'  => __( 'Store', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Store', 'woocommerce-pos' ),
 				'fields' => array(
 					'name'                    => array(
 						'type'  => 'string',
-						'label' => __( 'Store Name', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Store Name', 'woocommerce-pos' ),
 					),
 					'address_lines'           => array(
 						'type'  => 'string[]',
-						'label' => __( 'Address Lines', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Address Lines', 'woocommerce-pos' ),
 					),
 					'tax_id'                  => array(
 						'type'  => 'string',
-						'label' => __( 'Tax ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax ID', 'woocommerce-pos' ),
 					),
 					'phone'                   => array(
 						'type'  => 'string',
-						'label' => __( 'Phone', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Phone', 'woocommerce-pos' ),
 					),
 					'email'                   => array(
 						'type'  => 'string',
-						'label' => __( 'Email', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Email', 'woocommerce-pos' ),
 					),
 					'logo'                    => array(
 						'type'  => 'string',
-						'label' => __( 'Logo URL', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Logo URL', 'woocommerce-pos' ),
 					),
 					'opening_hours'           => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Opening Hours', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Opening Hours', 'woocommerce-pos' ),
 					),
 					'opening_hours_vertical' => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Opening Hours (Vertical)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Opening Hours (Vertical)', 'woocommerce-pos' ),
 					),
 					'opening_hours_inline'   => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Opening Hours (Inline)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Opening Hours (Inline)', 'woocommerce-pos' ),
 					),
 					'opening_hours_notes'    => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Opening Hours Notes', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Opening Hours Notes', 'woocommerce-pos' ),
 					),
 					'personal_notes'          => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Personal Notes', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Personal Notes', 'woocommerce-pos' ),
 					),
 					'policies_and_conditions' => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Policies & Conditions', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Policies & Conditions', 'woocommerce-pos' ),
 					),
 					'footer_imprint'          => array(
 						'type'     => 'string',
 						'nullable' => true,
-						'label'    => __( 'Footer Imprint', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Footer Imprint', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'cashier'     => array(
-				'label'  => __( 'Cashier', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Cashier', 'woocommerce-pos' ),
 				'fields' => array(
 					'id'   => array(
 						'type'  => 'number',
-						'label' => __( 'Cashier ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Cashier ID', 'woocommerce-pos' ),
 					),
 					'name' => array(
 						'type'  => 'string',
-						'label' => __( 'Cashier Name', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Cashier Name', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'customer'    => array(
-				'label'  => __( 'Customer', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer', 'woocommerce-pos' ),
 				'fields' => array(
 					'id'               => array(
 						'type'  => 'number',
-						'label' => __( 'Customer ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer ID', 'woocommerce-pos' ),
 					),
 					'name'             => array(
 						'type'  => 'string',
-						'label' => __( 'Customer Name', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Name', 'woocommerce-pos' ),
 					),
 					'billing_address'  => array(
 						'type'  => 'object',
-						'label' => __( 'Billing Address', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Billing Address', 'woocommerce-pos' ),
 					),
 					'shipping_address' => array(
 						'type'  => 'object',
-						'label' => __( 'Shipping Address', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Address', 'woocommerce-pos' ),
 					),
 					'tax_id'           => array(
 						'type'  => 'string',
-						'label' => __( 'Tax ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax ID', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'customer.tax_ids' => array(
-				'label'    => __( 'Customer Tax IDs', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer Tax IDs', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'type'    => array(
 						'type'  => 'string',
-						'label' => __( 'Type', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Type', 'woocommerce-pos' ),
 					),
 					'value'   => array(
 						'type'  => 'string',
-						'label' => __( 'Value', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Value', 'woocommerce-pos' ),
 					),
 					'country' => array(
 						'type'  => 'string',
-						'label' => __( 'Country', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Country', 'woocommerce-pos' ),
 					),
 					'label'   => array(
 						'type'  => 'string',
-						'label' => __( 'Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Label', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'store.tax_ids' => array(
-				'label'    => __( 'Store Tax IDs', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Store Tax IDs', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'type'    => array(
 						'type'  => 'string',
-						'label' => __( 'Type', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Type', 'woocommerce-pos' ),
 					),
 					'value'   => array(
 						'type'  => 'string',
-						'label' => __( 'Value', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Value', 'woocommerce-pos' ),
 					),
 					'country' => array(
 						'type'  => 'string',
-						'label' => __( 'Country', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Country', 'woocommerce-pos' ),
 					),
 					'label'   => array(
 						'type'  => 'string',
-						'label' => __( 'Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Label', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'store.address' => array(
-				'label'  => __( 'Store Address', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Store Address', 'woocommerce-pos' ),
 				'fields' => array(
 					'address_1' => array(
 						'type'  => 'string',
-						'label' => __( 'Address line 1', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Address line 1', 'woocommerce-pos' ),
 					),
 					'address_2' => array(
 						'type'  => 'string',
-						'label' => __( 'Address line 2', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Address line 2', 'woocommerce-pos' ),
 					),
 					'city'      => array(
 						'type'  => 'string',
-						'label' => __( 'City', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'City', 'woocommerce-pos' ),
 					),
 					'state'     => array(
 						'type'  => 'string',
-						'label' => __( 'State / Region', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'State / Region', 'woocommerce-pos' ),
 					),
 					'postcode'  => array(
 						'type'  => 'string',
-						'label' => __( 'Postcode', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Postcode', 'woocommerce-pos' ),
 					),
 					'country'   => array(
 						'type'  => 'string',
-						'label' => __( 'Country', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Country', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'lines'       => array(
-				'label'    => __( 'Line Items', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Items', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'key'                => array(
 						'type'  => 'string',
-						'label' => __( 'Item Key', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Item Key', 'woocommerce-pos' ),
 					),
 					'sku'                => array(
 						'type'  => 'string',
-						'label' => __( 'SKU', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'SKU', 'woocommerce-pos' ),
 					),
 					'name'               => array(
 						'type'  => 'string',
-						'label' => __( 'Product Name', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Product Name', 'woocommerce-pos' ),
 					),
 					'qty'                => array(
 						'type'  => 'number',
-						'label' => __( 'Quantity', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Quantity', 'woocommerce-pos' ),
 					),
 					'qty_refunded'       => array(
 						'type'  => 'number',
-						'label' => __( 'Quantity Refunded', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Quantity Refunded', 'woocommerce-pos' ),
 					),
 					'unit_subtotal'      => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Subtotal', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Subtotal', 'woocommerce-pos' ),
 					),
 					'unit_subtotal_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Subtotal (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Subtotal (incl tax)', 'woocommerce-pos' ),
 					),
 					'unit_subtotal_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Subtotal (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Subtotal (excl tax)', 'woocommerce-pos' ),
 					),
 					'unit_price'         => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Price', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Price', 'woocommerce-pos' ),
 					),
 					'unit_price_incl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Price (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Price (incl tax)', 'woocommerce-pos' ),
 					),
 					'unit_price_excl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Unit Price (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Unit Price (excl tax)', 'woocommerce-pos' ),
 					),
 					'line_subtotal'      => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal', 'woocommerce-pos' ),
 					),
 					'line_subtotal_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
 					),
 					'line_subtotal_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
 					),
 					'discounts'          => array(
 						'type'  => 'money',
-						'label' => __( 'Discounts', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discounts', 'woocommerce-pos' ),
 					),
 					'discounts_incl'     => array(
 						'type'  => 'money',
-						'label' => __( 'Discounts (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discounts (incl tax)', 'woocommerce-pos' ),
 					),
 					'discounts_excl'     => array(
 						'type'  => 'money',
-						'label' => __( 'Discounts (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discounts (excl tax)', 'woocommerce-pos' ),
 					),
 					'line_total'         => array(
 						'type'  => 'money',
-						'label' => __( 'Line Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Total', 'woocommerce-pos' ),
 					),
 					'line_total_incl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Line Total (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Total (incl tax)', 'woocommerce-pos' ),
 					),
 					'line_total_excl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Line Total (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Total (excl tax)', 'woocommerce-pos' ),
 					),
 					'total_refunded'     => array(
 						'type'  => 'money',
-						'label' => __( 'Total Refunded', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Refunded', 'woocommerce-pos' ),
 					),
 					'taxes'              => array(
 						'type'  => 'array',
-						'label' => __( 'Line Taxes', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Taxes', 'woocommerce-pos' ),
 					),
 					'meta'               => array(
 						'type'  => 'array',
-						'label' => __( 'Item Meta', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Item Meta', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'fees'        => array(
-				'label'    => __( 'Fees', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Fees', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'label'      => array(
 						'type'  => 'string',
-						'label' => __( 'Fee Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Fee Label', 'woocommerce-pos' ),
 					),
 					'total'      => array(
 						'type'  => 'money',
-						'label' => __( 'Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
 					'total_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl tax)', 'woocommerce-pos' ),
 					),
 					'total_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),
 					'taxes'      => array(
 						'type'  => 'array',
-						'label' => __( 'Fee Taxes', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Fee Taxes', 'woocommerce-pos' ),
 					),
 					'meta'       => array(
 						'type'  => 'array',
-						'label' => __( 'Fee Meta', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Fee Meta', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'shipping'    => array(
-				'label'    => __( 'Shipping', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'label'      => array(
 						'type'  => 'string',
-						'label' => __( 'Shipping Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Label', 'woocommerce-pos' ),
 					),
 					'method_id'  => array(
 						'type'  => 'string',
-						'label' => __( 'Shipping Method ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Method ID', 'woocommerce-pos' ),
 					),
 					'total'      => array(
 						'type'  => 'money',
-						'label' => __( 'Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
 					'total_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl tax)', 'woocommerce-pos' ),
 					),
 					'total_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),
 					'taxes'      => array(
 						'type'  => 'array',
-						'label' => __( 'Shipping Taxes', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Taxes', 'woocommerce-pos' ),
 					),
 					'meta'       => array(
 						'type'  => 'array',
-						'label' => __( 'Shipping Meta', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Meta', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'discounts'   => array(
-				'label'    => __( 'Discounts', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Discounts', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'label'      => array(
 						'type'  => 'string',
-						'label' => __( 'Discount Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Label', 'woocommerce-pos' ),
 					),
 					'code'       => array(
 						'type'  => 'string',
-						'label' => __( 'Coupon Code', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Code', 'woocommerce-pos' ),
 					),
 					'codes'      => array(
 						'type'  => 'string',
-						'label' => __( 'Coupon Codes', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Codes', 'woocommerce-pos' ),
 					),
 					'total'      => array(
 						'type'  => 'money',
-						'label' => __( 'Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
 					'total_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl tax)', 'woocommerce-pos' ),
 					),
 					'total_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Total (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl tax)', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'totals'      => array(
-				'label'  => __( 'Totals', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Totals', 'woocommerce-pos' ),
 				'fields' => array(
 					'subtotal'            => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal', 'woocommerce-pos' ),
 					),
 					'subtotal_incl'       => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
 					),
 					'subtotal_excl'       => array(
 						'type'  => 'money',
-						'label' => __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
 					),
 					'discount_total'      => array(
 						'type'  => 'money',
-						'label' => __( 'Discount Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total', 'woocommerce-pos' ),
 					),
 					'discount_total_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Discount Total (incl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total (incl tax)', 'woocommerce-pos' ),
 					),
 					'discount_total_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Discount Total (excl tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total (excl tax)', 'woocommerce-pos' ),
 					),
 					'tax_total'           => array(
 						'type'  => 'money',
-						'label' => __( 'Tax Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Total', 'woocommerce-pos' ),
 					),
 					'total'         => array(
 						'type'  => 'money',
-						'label' => __( 'Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
 					'total_incl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Total (incl. tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl. tax)', 'woocommerce-pos' ),
 					),
 					'total_excl'    => array(
 						'type'  => 'money',
-						'label' => __( 'Total (excl. tax)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl. tax)', 'woocommerce-pos' ),
 					),
 					'paid_total'          => array(
 						'type'  => 'money',
-						'label' => __( 'Paid Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Paid Total', 'woocommerce-pos' ),
 					),
 					'change_total'        => array(
 						'type'  => 'money',
-						'label' => __( 'Change', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Change', 'woocommerce-pos' ),
 					),
 					'refund_total'        => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Total', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'tax_summary' => array(
-				'label'    => __( 'Tax Summary', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Summary', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'code'                => array(
 						'type'  => 'string',
-						'label' => __( 'Tax Code', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Code', 'woocommerce-pos' ),
 					),
 					'label'               => array(
 						'type'  => 'string',
-						'label' => __( 'Tax Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Label', 'woocommerce-pos' ),
 					),
 					'rate'                => array(
 						'type'  => 'number',
-						'label' => __( 'Tax Rate (%)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Rate (%)', 'woocommerce-pos' ),
 					),
 					'compound'            => array(
 						'type'  => 'boolean',
-						'label' => __( 'Compound Tax', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Compound Tax', 'woocommerce-pos' ),
 					),
 					'taxable_amount_excl' => array(
 						'type'  => 'money',
-						'label' => __( 'Taxable Amount (excl)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Taxable Amount (excl)', 'woocommerce-pos' ),
 					),
 					'tax_amount'          => array(
 						'type'  => 'money',
-						'label' => __( 'Tax Amount', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Amount', 'woocommerce-pos' ),
 					),
 					'taxable_amount_incl' => array(
 						'type'  => 'money',
-						'label' => __( 'Taxable Amount (incl)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Taxable Amount (incl)', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'payments'    => array(
-				'label'    => __( 'Payments', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Payments', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'method_id'    => array(
 						'type'  => 'string',
-						'label' => __( 'Method ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Method ID', 'woocommerce-pos' ),
 					),
 					'method_title' => array(
 						'type'  => 'string',
-						'label' => __( 'Payment Method', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Payment Method', 'woocommerce-pos' ),
 					),
 					'amount'       => array(
 						'type'  => 'money',
-						'label' => __( 'Amount', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Amount', 'woocommerce-pos' ),
 					),
 					'tendered'     => array(
 						'type'  => 'money',
-						'label' => __( 'Tendered', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tendered', 'woocommerce-pos' ),
 					),
 					'change'       => array(
 						'type'  => 'money',
-						'label' => __( 'Change', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Change', 'woocommerce-pos' ),
 					),
 					'transaction_id' => array(
 						'type'  => 'string',
-						'label' => __( 'Transaction ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Transaction ID', 'woocommerce-pos' ),
 					),
 				),
 			),
 			'refunds'     => array(
-				'label'    => __( 'Refunds', 'woocommerce-pos' ),
+				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Refunds', 'woocommerce-pos' ),
 				'is_array' => true,
 				'fields'   => array(
 					'id'                => array(
 						'type'  => 'number',
-						'label' => __( 'Refund ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund ID', 'woocommerce-pos' ),
 					),
 					'date'              => array(
 						'type'  => 'object',
-						'label' => __( 'Refund Date', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Date', 'woocommerce-pos' ),
 					),
 					'amount'            => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Amount', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Amount', 'woocommerce-pos' ),
 					),
 					'subtotal'          => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Subtotal', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Subtotal', 'woocommerce-pos' ),
 					),
 					'tax_total'         => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Tax Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Tax Total', 'woocommerce-pos' ),
 					),
 					'shipping_total'    => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Total', 'woocommerce-pos' ),
 					),
 					'shipping_tax'      => array(
 						'type'  => 'money',
-						'label' => __( 'Refund Shipping Tax', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Tax', 'woocommerce-pos' ),
 					),
 					'reason'            => array(
 						'type'  => 'string',
-						'label' => __( 'Refund Reason', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Reason', 'woocommerce-pos' ),
 					),
 					'refunded_by_id'    => array(
 						'type'     => 'number',
 						'nullable' => true,
-						'label'    => __( 'Refunded By (User ID)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Refunded By (User ID)', 'woocommerce-pos' ),
 					),
 					'refunded_by_name'  => array(
 						'type'  => 'string',
-						'label' => __( 'Refunded By (Name)', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refunded By (Name)', 'woocommerce-pos' ),
 					),
 					'refunded_payment'  => array(
 						'type'  => 'boolean',
-						'label' => __( 'Refunded Payment', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refunded Payment', 'woocommerce-pos' ),
 					),
 					'destination'       => array(
 						'type'  => 'string',
-						'label' => __( 'Refund Destination', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Destination', 'woocommerce-pos' ),
 					),
 					'gateway_id'        => array(
 						'type'  => 'string',
-						'label' => __( 'Refund Gateway ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Gateway ID', 'woocommerce-pos' ),
 					),
 					'gateway_title'     => array(
 						'type'  => 'string',
-						'label' => __( 'Refund Gateway Title', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Gateway Title', 'woocommerce-pos' ),
 					),
 					'processing_mode'   => array(
 						'type'  => 'string',
-						'label' => __( 'Refund Processing Mode', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Processing Mode', 'woocommerce-pos' ),
 					),
 					'lines'             => array(
 						'type'     => 'array',
-						'label'    => __( 'Refund Lines', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Lines', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
 							'name'       => array(
 								'type'  => 'string',
-								'label' => __( 'Product Name', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Product Name', 'woocommerce-pos' ),
 							),
 							'sku'        => array(
 								'type'  => 'string',
-								'label' => __( 'SKU', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'SKU', 'woocommerce-pos' ),
 							),
 							'qty'        => array(
 								'type'  => 'number',
-								'label' => __( 'Quantity', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Quantity', 'woocommerce-pos' ),
 							),
 							'total'      => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Line Total', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Line Total', 'woocommerce-pos' ),
 							),
 							'total_incl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Line Total (incl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Line Total (incl tax)', 'woocommerce-pos' ),
 							),
 							'total_excl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Line Total (excl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Line Total (excl tax)', 'woocommerce-pos' ),
 							),
 							'taxes'      => array(
 								'type'  => 'array',
-								'label' => __( 'Refund Line Taxes', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Line Taxes', 'woocommerce-pos' ),
 							),
 						),
 					),
 					'fees'              => array(
 						'type'     => 'array',
-						'label'    => __( 'Refund Fees', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Fees', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
 							'label'      => array(
 								'type'  => 'string',
-								'label' => __( 'Fee Label', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Fee Label', 'woocommerce-pos' ),
 							),
 							'total'      => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Fee Total', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Fee Total', 'woocommerce-pos' ),
 							),
 							'total_incl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Fee Total (incl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Fee Total (incl tax)', 'woocommerce-pos' ),
 							),
 							'total_excl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Fee Total (excl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Fee Total (excl tax)', 'woocommerce-pos' ),
 							),
 							'taxes'      => array(
 								'type'  => 'array',
-								'label' => __( 'Refund Fee Taxes', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Fee Taxes', 'woocommerce-pos' ),
 							),
 						),
 					),
 					'shipping'          => array(
 						'type'     => 'array',
-						'label'    => __( 'Refund Shipping', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
 							'label'      => array(
 								'type'  => 'string',
-								'label' => __( 'Shipping Label', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Label', 'woocommerce-pos' ),
 							),
 							'method_id'  => array(
 								'type'  => 'string',
-								'label' => __( 'Shipping Method ID', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Method ID', 'woocommerce-pos' ),
 							),
 							'total'      => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Shipping Total', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Total', 'woocommerce-pos' ),
 							),
 							'total_incl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Shipping Total (incl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Total (incl tax)', 'woocommerce-pos' ),
 							),
 							'total_excl' => array(
 								'type'  => 'money',
-								'label' => __( 'Refund Shipping Total (excl tax)', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Total (excl tax)', 'woocommerce-pos' ),
 							),
 							'taxes'      => array(
 								'type'  => 'array',
-								'label' => __( 'Refund Shipping Taxes', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Shipping Taxes', 'woocommerce-pos' ),
 							),
 						),
 					),
 				),
 			),
 			'fiscal'      => array(
-				'label'  => __( 'Fiscal', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Fiscal', 'woocommerce-pos' ),
 				'fields' => array(
 					'immutable_id'      => array(
 						'type'  => 'string',
-						'label' => __( 'Immutable ID', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Immutable ID', 'woocommerce-pos' ),
 					),
 					'receipt_number'    => array(
 						'type'  => 'string',
-						'label' => __( 'Receipt Number', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Receipt Number', 'woocommerce-pos' ),
 					),
 					'sequence'          => array(
 						'type'  => 'number',
-						'label' => __( 'Sequence', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Sequence', 'woocommerce-pos' ),
 					),
 					'hash'              => array(
 						'type'  => 'string',
-						'label' => __( 'Hash', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Hash', 'woocommerce-pos' ),
 					),
 					'qr_payload'        => array(
 						'type'  => 'string',
-						'label' => __( 'QR Payload', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'QR Payload', 'woocommerce-pos' ),
 					),
 					'tax_agency_code'   => array(
 						'type'  => 'string',
-						'label' => __( 'Tax Agency Code', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Agency Code', 'woocommerce-pos' ),
 					),
 					'signed_at'         => array(
 						'type'  => 'string',
-						'label' => __( 'Signed At', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Signed At', 'woocommerce-pos' ),
 					),
 					'signature_excerpt' => array(
 						'type'  => 'string',
-						'label' => __( 'Signature Excerpt', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Signature Excerpt', 'woocommerce-pos' ),
 					),
 					'document_label'    => array(
 						'type'  => 'string',
-						'label' => __( 'Document Label', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Document Label', 'woocommerce-pos' ),
 					),
 					'is_reprint'        => array(
 						'type'  => 'boolean',
-						'label' => __( 'Is Reprint', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Is Reprint', 'woocommerce-pos' ),
 					),
 					'reprint_count'     => array(
 						'type'  => 'number',
-						'label' => __( 'Reprint Count', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Reprint Count', 'woocommerce-pos' ),
 					),
 					'extra_fields'      => array(
 						'type'     => 'array',
-						'label'    => __( 'Extra Fields', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Extra Fields', 'woocommerce-pos' ),
 						'is_array' => true,
 						'fields'   => array(
 							'label' => array(
 								'type'  => 'string',
-								'label' => __( 'Label', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Label', 'woocommerce-pos' ),
 							),
 							'value' => array(
 								'type'  => 'string',
-								'label' => __( 'Value', 'woocommerce-pos' ),
+								'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Value', 'woocommerce-pos' ),
 							),
 						),
 					),
@@ -1015,31 +1015,31 @@ class Receipt_Data_Schema {
 			// Note: field_tree is for the template editor picker — include commonly used keys.
 			// Full list is in Receipt_I18n_Labels::get_labels().
 			'i18n'        => array(
-				'label'  => __( 'Labels (i18n)', 'woocommerce-pos' ),
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Labels (i18n)', 'woocommerce-pos' ),
 				'fields' => array(
 					'order'    => array(
 						'type'  => 'string',
-						'label' => __( 'Order', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Order', 'woocommerce-pos' ),
 					),
 					'date'     => array(
 						'type'  => 'string',
-						'label' => __( 'Date', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Date', 'woocommerce-pos' ),
 					),
 					'cashier'  => array(
 						'type'  => 'string',
-						'label' => __( 'Cashier', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Cashier', 'woocommerce-pos' ),
 					),
 					'customer' => array(
 						'type'  => 'string',
-						'label' => __( 'Customer', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer', 'woocommerce-pos' ),
 					),
 					'subtotal' => array(
 						'type'  => 'string',
-						'label' => __( 'Subtotal', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal', 'woocommerce-pos' ),
 					),
 					'total'    => array(
 						'type'  => 'string',
-						'label' => __( 'Total', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -1055,79 +1055,79 @@ class Receipt_Data_Schema {
 		return array(
 			'datetime'       => array(
 				'type'  => 'string',
-				'label' => __( 'Date & Time', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Date & Time', 'woocommerce-pos' ),
 			),
 			'date'           => array(
 				'type'  => 'string',
-				'label' => __( 'Date', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Date', 'woocommerce-pos' ),
 			),
 			'time'           => array(
 				'type'  => 'string',
-				'label' => __( 'Time', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Time', 'woocommerce-pos' ),
 			),
 			'datetime_short' => array(
 				'type'  => 'string',
-				'label' => __( 'Short Date & Time', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Short Date & Time', 'woocommerce-pos' ),
 			),
 			'datetime_long'  => array(
 				'type'  => 'string',
-				'label' => __( 'Long Date & Time', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Long Date & Time', 'woocommerce-pos' ),
 			),
 			'datetime_full'  => array(
 				'type'  => 'string',
-				'label' => __( 'Full Date & Time', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Full Date & Time', 'woocommerce-pos' ),
 			),
 			'date_short'     => array(
 				'type'  => 'string',
-				'label' => __( 'Short Date', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Short Date', 'woocommerce-pos' ),
 			),
 			'date_long'      => array(
 				'type'  => 'string',
-				'label' => __( 'Long Date', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Long Date', 'woocommerce-pos' ),
 			),
 			'date_full'      => array(
 				'type'  => 'string',
-				'label' => __( 'Full Date', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Full Date', 'woocommerce-pos' ),
 			),
 			'date_ymd'       => array(
 				'type'  => 'string',
-				'label' => __( 'YYYY-MM-DD', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'YYYY-MM-DD', 'woocommerce-pos' ),
 			),
 			'date_dmy'       => array(
 				'type'  => 'string',
-				'label' => __( 'DD/MM/YYYY', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'DD/MM/YYYY', 'woocommerce-pos' ),
 			),
 			'date_mdy'       => array(
 				'type'  => 'string',
-				'label' => __( 'MM/DD/YYYY', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'MM/DD/YYYY', 'woocommerce-pos' ),
 			),
 			'weekday_short'  => array(
 				'type'  => 'string',
-				'label' => __( 'Weekday Short', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Weekday Short', 'woocommerce-pos' ),
 			),
 			'weekday_long'   => array(
 				'type'  => 'string',
-				'label' => __( 'Weekday Long', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Weekday Long', 'woocommerce-pos' ),
 			),
 			'day'            => array(
 				'type'  => 'string',
-				'label' => __( 'Day', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Day', 'woocommerce-pos' ),
 			),
 			'month'          => array(
 				'type'  => 'string',
-				'label' => __( 'Month Number', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Month Number', 'woocommerce-pos' ),
 			),
 			'month_short'    => array(
 				'type'  => 'string',
-				'label' => __( 'Month Short', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Month Short', 'woocommerce-pos' ),
 			),
 			'month_long'     => array(
 				'type'  => 'string',
-				'label' => __( 'Month Long', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Month Long', 'woocommerce-pos' ),
 			),
 			'year'           => array(
 				'type'  => 'string',
-				'label' => __( 'Year', 'woocommerce-pos' ),
+				'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Year', 'woocommerce-pos' ),
 			),
 		);
 	}

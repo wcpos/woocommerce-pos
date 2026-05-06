@@ -214,8 +214,8 @@ class Activator {
 			return;
 		}
 
-		$message = __( '<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly', 'woocommerce-pos' ) . '. ';
-		$message .= \sprintf( '<a href="%s">%s</a>', admin_url( 'options-permalink.php' ), __( 'Enable permalinks', 'woocommerce-pos' ) ) . ' &raquo;';
+		$message = /* translators: Plugin activation notice label. */ __( '<strong>WooCommerce REST API</strong> requires <em>pretty</em> permalinks to work correctly', 'woocommerce-pos' ) . '. ';
+		$message .= \sprintf( '<a href="%s">%s</a>', admin_url( 'options-permalink.php' ), /* translators: Plugin activation notice label. */ __( 'Enable permalinks', 'woocommerce-pos' ) ) . ' &raquo;';
 
 		Admin\Notices::add( $message );
 	}
@@ -360,6 +360,7 @@ class Activator {
 
 		add_role(
 			'cashier',
+			/* translators: Plugin activation notice label. */
 			__( 'Cashier', 'woocommerce-pos' ),
 			$cashier_capabilities
 		);

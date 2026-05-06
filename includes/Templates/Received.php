@@ -82,6 +82,7 @@ class Received {
 			if ( ! $provided_key || $provided_key !== $order->get_order_key() ) {
 				wp_die(
 					esc_html__( 'Sorry, this order cannot be viewed. The order key is missing or invalid.', 'woocommerce-pos' ),
+					/* translators: Short WCPOS UI label; keep concise. */
 					esc_html__( 'Error', 'woocommerce-pos' ),
 					array( 'response' => 403 )
 				);

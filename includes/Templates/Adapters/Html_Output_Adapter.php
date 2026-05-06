@@ -32,6 +32,7 @@ class Html_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		return sprintf(
 			'<div class="wcpos-receipt" data-order="%s"><strong>%s</strong>: %s</div>',
 			esc_attr( $order_number ),
+			/* translators: Short WCPOS UI label; keep concise. */
 			esc_html__( 'Order', 'woocommerce-pos' ),
 			wp_kses_post( wc_price( $total ) )
 		);
