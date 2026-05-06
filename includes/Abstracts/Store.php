@@ -78,6 +78,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'personal_notes'              => '',
 		'policies_and_conditions'     => '',
 		'footer_imprint'              => '',
+		'order_barcode_type'          => 'code128',
 		'tax_ids'                     => array(),
 	);
 
@@ -433,6 +434,16 @@ class Store extends \WC_Data implements StoreInterface {
 		return $this->get_prop( 'tax_total_display', $context );
 	}
 
+	/**
+	 * Get Store order barcode type.
+	 *
+	 * @param  string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_order_barcode_type( $context = 'view' ) {
+		return $this->get_prop( 'order_barcode_type', $context );
+	}
+
 		/**
 		 * Get Store default customer.
 		 *
@@ -471,6 +482,7 @@ class Store extends \WC_Data implements StoreInterface {
 		$this->set_prop( 'personal_notes', '' );
 		$this->set_prop( 'policies_and_conditions', Store_Defaults::policies_and_conditions() );
 		$this->set_prop( 'footer_imprint', '' );
+		$this->set_prop( 'order_barcode_type', 'code128' );
 		$this->set_prop( 'tax_ids', Store_Defaults::tax_ids() );
 	}
 

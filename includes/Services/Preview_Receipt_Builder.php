@@ -966,7 +966,7 @@ class Preview_Receipt_Builder {
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
-			'order_barcode_type'       => 'code128',
+			'order_barcode_type'       => $this->resolve_order_barcode_type(),
 			'locale'                   => $this->resolve_locale(),
 			'currency_position'        => $this->resolve_store_string(
 				'get_currency_position',
@@ -1001,6 +1001,17 @@ class Preview_Receipt_Builder {
 		$value = $this->get_store_value( $this->pos_store, $getter, null );
 
 		return null !== $value ? (string) $value : (string) $fallback;
+	}
+
+	/**
+	 * Resolve the order barcode type from the store with a safe default.
+	 *
+	 * @return string
+	 */
+	private function resolve_order_barcode_type(): string {
+		return Receipt_Barcode_Types::normalize_order_barcode_type(
+			$this->resolve_store_string( 'get_order_barcode_type', Receipt_Barcode_Types::DEFAULT_ORDER_BARCODE_TYPE )
+		);
 	}
 
 	/**
