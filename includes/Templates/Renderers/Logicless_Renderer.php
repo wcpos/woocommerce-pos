@@ -40,7 +40,7 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 			return;
 		}
 
-		$currency       = $receipt_data['order']['currency'] ?? $receipt_data['meta']['currency'] ?? 'USD';
+		$currency       = $receipt_data['order']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 		// Add boolean helpers for array sections so templates can gate wrappers.

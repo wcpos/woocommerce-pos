@@ -12,22 +12,10 @@ namespace WCPOS\WooCommercePOS\Services;
  */
 class Receipt_Data_Schema {
 	/**
-	 * Current schema version.
-	 *
-	 * Pinned at 1 — this is v1 of the receipt-data contract. The version
-	 * only changes on a breaking-change release, not on additive iterations
-	 * during pre-release. The previous synthetic semver (1.0.0–1.4.0) was a
-	 * pre-release artefact and has been collapsed.
-	 */
-	const VERSION = 1;
-
-	/**
 	 * Top-level keys required in a receipt payload.
 	 */
 	const REQUIRED_KEYS = array(
-		'receipt',
 		'order',
-		'meta',
 		'store',
 		'cashier',
 		'customer',
@@ -267,19 +255,6 @@ class Receipt_Data_Schema {
 	 */
 	public static function get_field_tree(): array {
 		return array(
-			'receipt'     => array(
-				'label'  => __( 'Receipt', 'woocommerce-pos' ),
-				'fields' => array(
-					'mode'             => array(
-						'type'  => 'string',
-						'label' => __( 'Mode', 'woocommerce-pos' ),
-					),
-				),
-			),
-			'receipt.printed' => array(
-				'label'  => __( 'Receipt Printed', 'woocommerce-pos' ),
-				'fields' => self::get_date_field_tree_fields(),
-			),
 			'order'       => array(
 				'label'  => __( 'Order', 'woocommerce-pos' ),
 				'fields' => array(
@@ -1180,19 +1155,6 @@ class Receipt_Data_Schema {
 			self::merge_field_tree_section_schema( $schema, $path, $section );
 		}
 
-		$schema['properties']['meta']['properties']['schema_version'] = array(
-			'type'        => 'integer',
-			'const'       => self::VERSION,
-			'description' => 'Receipt data schema version. Pinned at 1.',
-		);
-		$schema['properties']['meta']['properties']['wc_status'] = array(
-			'type'        => 'string',
-			'description' => 'WooCommerce order status (e.g. processing, completed, refunded).',
-		);
-		$schema['properties']['meta']['properties']['created_via'] = array(
-			'type'        => 'string',
-			'description' => 'How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api).',
-		);
 		unset( $schema['properties']['presentation_hints']['properties'] );
 
 		return $schema;
@@ -1381,13 +1343,8 @@ class Receipt_Data_Schema {
 		$created   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:30:00 UTC' ) );
 		$paid      = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:35:00 UTC' ) );
 		$completed = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:42:00 UTC' ) );
-		$printed   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:45:00 UTC' ) );
 
 		return array(
-			'receipt' => array(
-				'mode'    => 'sale',
-				'printed' => $printed,
-			),
 			'order'   => array(
 				'id'            => 1001,
 				'number'        => '1001',
@@ -1398,17 +1355,6 @@ class Receipt_Data_Schema {
 				'created'       => $created,
 				'paid'          => $paid,
 				'completed'     => $completed,
-			),
-			'meta'    => array(
-				'schema_version'   => self::VERSION,
-				'order_id'         => 1001,
-				'order_number'     => '#1001',
-				'created_at_gmt'   => '2024-01-15T10:30:00Z',
-				'created_at_local' => '2024-01-15 10:30:00',
-				'currency'         => 'USD',
-				'customer_note'    => '',
-				'wc_status'        => 'completed',
-				'created_via'      => 'woocommerce-pos',
 			),
 			'store'   => array(
 				'name'                    => 'My Store',

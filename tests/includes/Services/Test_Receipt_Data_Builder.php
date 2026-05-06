@@ -101,11 +101,10 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( $key, $payload );
 		}
 
-		$this->assertEquals( Receipt_Data_Schema::VERSION, $payload['meta']['schema_version'] );
-		$this->assertEquals( 'live', $payload['receipt']['mode'] );
-		$this->assertArrayNotHasKey( 'mode', $payload['meta'] );
-		$this->assertArrayHasKey( 'wc_status', $payload['meta'] );
-		$this->assertArrayHasKey( 'created_via', $payload['meta'] );
+		$this->assertArrayNotHasKey( 'meta', $payload );
+		$this->assertArrayNotHasKey( 'receipt', $payload );
+		$this->assertArrayHasKey( 'wc_status', $payload['order'] );
+		$this->assertArrayHasKey( 'created_via', $payload['order'] );
 	}
 
 	/**
@@ -458,15 +457,13 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test semantic receipt and order sections include rich date data.
+	 * Test the order section includes rich date data for created/paid/completed.
 	 */
-	public function test_build_includes_semantic_receipt_and_order_date_sections(): void {
+	public function test_build_includes_order_date_sections(): void {
 		$order   = wc_get_order( OrderHelper::create_order() );
 		$payload = $this->builder->build( $order, 'live' );
 
-		$this->assertArrayHasKey( 'receipt', $payload );
 		$this->assertArrayHasKey( 'order', $payload );
-		$this->assertSame( 'live', $payload['receipt']['mode'] );
 		$this->assertSame( (string) $order->get_order_number(), $payload['order']['number'] );
 		$this->assertSame( (string) $order->get_currency(), $payload['order']['currency'] );
 		$this->assertSame( (string) $order->get_customer_note(), $payload['order']['customer_note'] );
@@ -479,12 +476,6 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		}
 
 		$this->assertNotSame( '', $payload['order']['created']['datetime'] );
-
-		$this->assertArrayHasKey( 'printed', $payload['receipt'] );
-		$this->assertArrayHasKey( 'datetime', $payload['receipt']['printed'] );
-		$this->assertArrayHasKey( 'datetime_full', $payload['receipt']['printed'] );
-		$this->assertArrayHasKey( 'date_mdy', $payload['receipt']['printed'] );
-		$this->assertArrayHasKey( 'month_long', $payload['receipt']['printed'] );
 	}
 
 	/**

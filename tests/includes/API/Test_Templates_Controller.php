@@ -940,7 +940,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '<div>{{order.number}}</div>', $data['template_content'] );
 		$this->assertEquals( 0, $data['order_id'] );
 		$this->assertEquals( $post_id, $data['template_id'] );
-		$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
+		$this->assertArrayHasKey( 'order', $data['receipt_data'] );
+		$this->assertArrayNotHasKey( 'meta', $data['receipt_data'] );
+		$this->assertArrayNotHasKey( 'receipt', $data['receipt_data'] );
 		$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 
 		wp_delete_post( $post_id, true );
@@ -1123,7 +1125,9 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			$this->assertArrayHasKey( 'receipt_data', $data );
 			$this->assertStringContainsString( '<!DOCTYPE html>', $data['preview_html'] );
 			$this->assertEquals( $thermal['content'], $data['template_content'] );
-			$this->assertArrayHasKey( 'meta', $data['receipt_data'] );
+			$this->assertArrayHasKey( 'order', $data['receipt_data'] );
+			$this->assertArrayNotHasKey( 'meta', $data['receipt_data'] );
+			$this->assertArrayNotHasKey( 'receipt', $data['receipt_data'] );
 			$this->assertArrayHasKey( 'lines', $data['receipt_data'] );
 			// Money fields: bare keys carry the numeric value, `<key>_display`
 			// holds the locale-formatted currency string. Mirrors the JS
@@ -1162,8 +1166,10 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'thermal', $data['engine'] );
 		$this->assertArrayHasKey( 'preview_html', $data );
 		$this->assertArrayHasKey( 'receipt_data', $data );
-		// Mock data has order_id 1234.
-		$this->assertEquals( 1234, $data['receipt_data']['meta']['order_id'] );
+		$this->assertArrayHasKey( 'order', $data['receipt_data'] );
+		$this->assertArrayHasKey( 'id', $data['receipt_data']['order'] );
+		// Mock data has order id 1234.
+		$this->assertEquals( 1234, $data['receipt_data']['order']['id'] );
 	}
 
 	/**

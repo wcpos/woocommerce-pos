@@ -80,7 +80,6 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 			$this->assertEquals( 'My Test Store', $data['store']['name'] );
 			$this->assertContains( '789 Elm Street', $data['store']['address_lines'] );
-			$this->assertEquals( 'EUR', $data['meta']['currency'] );
 			$this->assertEquals( 'EUR', $data['order']['currency'] );
 		} finally {
 			update_option( 'woocommerce_pos_store_name', $original_pos_name );
@@ -119,7 +118,6 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 			$data = $this->builder->build();
 
-			$this->assertEquals( 'JPY', $data['meta']['currency'] );
 			$this->assertEquals( 'JPY', $data['order']['currency'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
@@ -319,7 +317,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			// the site defaults, not whatever wcpos_get_store() happens to return.
 			$data = $this->builder->build( new class() {} );
 
-			$this->assertEquals( 'GBP', $data['meta']['currency'] );
+			$this->assertEquals( 'GBP', $data['order']['currency'] );
 			$this->assertEquals( get_locale(), $data['presentation_hints']['locale'] );
 		} finally {
 			update_option( 'woocommerce_currency', $original_currency );
@@ -888,24 +886,22 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test preview data exposes semantic order and receipt dates.
+	 * Test preview data exposes semantic order dates.
 	 *
 	 * @covers ::build
 	 */
-	public function test_build_exposes_semantic_order_and_receipt_dates(): void {
+	public function test_build_exposes_semantic_order_dates(): void {
 		$data = $this->builder->build();
 
-		$this->assertArrayHasKey( 'receipt', $data );
+		$this->assertArrayNotHasKey( 'meta', $data );
+		$this->assertArrayNotHasKey( 'receipt', $data );
 		$this->assertArrayHasKey( 'order', $data );
-		$this->assertSame( 'preview', $data['receipt']['mode'] );
 		$this->assertSame( '1234', $data['order']['number'] );
 		$this->assertArrayHasKey( 'created', $data['order'] );
 		$this->assertArrayHasKey( 'paid', $data['order'] );
 		$this->assertArrayHasKey( 'completed', $data['order'] );
-		$this->assertArrayHasKey( 'printed', $data['receipt'] );
 		$this->assertNotSame( '', $data['order']['created']['datetime'] );
 		$this->assertNotSame( '', $data['order']['paid']['datetime_full'] );
 		$this->assertNotSame( '', $data['order']['completed']['datetime'] );
-		$this->assertNotSame( '', $data['receipt']['printed']['date_mdy'] );
 	}
 }

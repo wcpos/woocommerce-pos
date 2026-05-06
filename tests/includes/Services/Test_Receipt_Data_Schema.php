@@ -163,7 +163,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_returns_all_required_sections(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		$expected_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'i18n' );
+		$expected_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'store.tax_ids', 'store.address', 'cashier', 'customer', 'customer.tax_ids', 'lines', 'fees', 'shipping', 'discounts', 'totals', 'tax_summary', 'payments', 'refunds', 'fiscal', 'i18n' );
 		foreach ( $expected_sections as $section ) {
 			$this->assertArrayHasKey( $section, $tree, "Missing section: {$section}" );
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
@@ -186,7 +186,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertTrue( $tree[ $section ]['is_array'] ?? false, "{$section} should be marked as array" );
 		}
 
-		$scalar_sections = array( 'receipt', 'receipt.printed', 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
+		$scalar_sections = array( 'order', 'order.created', 'order.paid', 'order.completed', 'store', 'cashier', 'customer', 'totals', 'fiscal' );
 		foreach ( $scalar_sections as $section ) {
 			$this->assertFalse( $tree[ $section ]['is_array'] ?? false, "{$section} should not be marked as array" );
 		}
@@ -232,17 +232,17 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test JSON schema declares the new Phase 3 meta fields.
+	 * Test JSON schema declares the order metadata fields.
 	 */
-	public function test_get_json_schema_meta_includes_wc_status_and_created_via(): void {
+	public function test_get_json_schema_order_includes_wc_status_and_created_via(): void {
 		$schema      = Receipt_Data_Schema::get_json_schema();
-		$meta_props  = $schema['properties']['meta']['properties'];
+		$order_props = $schema['properties']['order']['properties'];
 
-		$this->assertArrayHasKey( 'wc_status', $meta_props );
-		$this->assertSame( 'string', $meta_props['wc_status']['type'] );
+		$this->assertArrayHasKey( 'wc_status', $order_props );
+		$this->assertSame( 'string', $order_props['wc_status']['type'] );
 
-		$this->assertArrayHasKey( 'created_via', $meta_props );
-		$this->assertSame( 'string', $meta_props['created_via']['type'] );
+		$this->assertArrayHasKey( 'created_via', $order_props );
+		$this->assertSame( 'string', $order_props['created_via']['type'] );
 	}
 
 	/**
@@ -357,7 +357,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_field_tree_exposes_practical_date_format_options(): void {
 		$tree = Receipt_Data_Schema::get_field_tree();
 
-		foreach ( array( 'order.created', 'order.paid', 'order.completed', 'receipt.printed' ) as $section ) {
+		foreach ( array( 'order.created', 'order.paid', 'order.completed' ) as $section ) {
 			$fields = $tree[ $section ]['fields'];
 
 			foreach ( array( 'datetime', 'datetime_full', 'date', 'date_long', 'date_ymd', 'date_dmy', 'date_mdy', 'weekday_short', 'weekday_long', 'month_short', 'month_long', 'year' ) as $field ) {
@@ -368,14 +368,15 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test JSON schema exports the current receipt schema version.
+	 * Test JSON schema declares the canonical envelope.
 	 */
-	public function test_get_json_schema_exports_schema_version(): void {
+	public function test_get_json_schema_exports_canonical_envelope(): void {
 		$schema = Receipt_Data_Schema::get_json_schema();
 
-		$this->assertSame( Receipt_Data_Schema::VERSION, $schema['properties']['meta']['properties']['schema_version']['const'] );
 		$this->assertSame( 'https://json-schema.org/draft/2020-12/schema', $schema['$schema'] );
 		$this->assertSame( 'ReceiptData', $schema['title'] );
+		$this->assertArrayNotHasKey( 'meta', $schema['properties'] );
+		$this->assertArrayNotHasKey( 'receipt', $schema['properties'] );
 	}
 
 	/**
@@ -429,7 +430,8 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $data, "Mock data missing required key: {$key}" );
 		}
 
-		$this->assertSame( Receipt_Data_Schema::VERSION, $data['meta']['schema_version'] );
+		$this->assertArrayNotHasKey( 'meta', $data );
+		$this->assertArrayNotHasKey( 'receipt', $data );
 		$this->assertIsArray( $data['lines'] );
 		$this->assertIsArray( $data['totals'] );
 		$this->assertIsArray( $data['payments'] );

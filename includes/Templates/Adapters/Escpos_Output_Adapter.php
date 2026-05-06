@@ -85,11 +85,11 @@ class Escpos_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$open_drawer   = isset( $context['open_drawer'] ) ? (bool) $context['open_drawer'] : false;
 		$print_qr      = isset( $context['print_qr'] ) ? (bool) $context['print_qr'] : false;
 
-		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : ( isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '' );
+		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : '';
 		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
-		$currency     = isset( $receipt_data['order']['currency'] ) ? (string) $receipt_data['order']['currency'] : ( isset( $receipt_data['meta']['currency'] ) ? (string) $receipt_data['meta']['currency'] : get_woocommerce_currency() );
+		$currency     = isset( $receipt_data['order']['currency'] ) ? (string) $receipt_data['order']['currency'] : get_woocommerce_currency();
 		$store_name   = isset( $receipt_data['store']['name'] ) ? (string) $receipt_data['store']['name'] : get_bloginfo( 'name' );
-		$created_at   = isset( $receipt_data['order']['created']['datetime'] ) ? (string) $receipt_data['order']['created']['datetime'] : ( isset( $receipt_data['meta']['created_at_gmt'] ) ? (string) $receipt_data['meta']['created_at_gmt'] : '' );
+		$created_at   = isset( $receipt_data['order']['created']['datetime'] ) ? (string) $receipt_data['order']['created']['datetime'] : '';
 
 		$output_lines = array(
 			self::ALIGN_CENTER . self::BOLD_ON . $this->fit_text( $store_name, $paper_width ) . self::LF . self::BOLD_OFF,

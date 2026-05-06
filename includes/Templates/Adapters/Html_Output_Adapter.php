@@ -26,7 +26,7 @@ class Html_Output_Adapter implements Receipt_Output_Adapter_Interface {
 			return wp_kses_post( $context['html'] );
 		}
 
-		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : ( isset( $receipt_data['meta']['order_number'] ) ? (string) $receipt_data['meta']['order_number'] : '' );
+		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : '';
 		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
 
 		return sprintf(
