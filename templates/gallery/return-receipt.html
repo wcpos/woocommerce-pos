@@ -1,8 +1,11 @@
 <!--
 Return Receipt / Credit Note — for refunds.
 
-Shows returned items with refund amounts, total refund,
-and the payment method used for the refund.
+Iterates the order's `refunds[]` array (one card per refund) and lists the
+returned line items, taxes refunded, and amount refunded with explicit
+negative formatting (the data fields stay positive — this template applies
+the credit-note look). Useful as a standalone receipt printed alongside or
+in place of the original sales receipt.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 400px; margin: 0 auto;">
 
@@ -47,40 +50,51 @@ and the payment method used for the refund.
 
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
 
-	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">{{i18n.returned_items}}</div>
+	{{#refunds}}
+	<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px;">{{i18n.returned_items}} #{{id}}</div>
 
 	{{#lines}}
 	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
 		<span>{{name}} x{{qty}}</span>
-		<span>{{line_total_incl_display}}</span>
+		<span>-{{total_incl_display}}</span>
 	</div>
 	{{/lines}}
 
-	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
-
-	{{#tax_summary}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-		<span>{{tax_amount_display}}</span>
+	{{#fees}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+		<span>{{label}}</span>
+		<span>-{{total_incl_display}}</span>
 	</div>
-	{{/tax_summary}}
+	{{/fees}}
+
+	{{#shipping}}
+	<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+		<span>{{label}}</span>
+		<span>-{{total_incl_display}}</span>
+	</div>
+	{{/shipping}}
+
+	{{#tax_total}}
+	<div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e2e2; font-size: 12px;">
+		<span style="color: #555;">{{i18n.total_tax}}</span>
+		<span>-{{tax_total_display}}</span>
+	</div>
+	{{/tax_total}}
 
 	<div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding-top: 8px; border-top: 2px solid #dc2626; margin-top: 8px; color: #dc2626;">
 		<span>{{i18n.total_refunded}}</span>
-		<span>{{totals.total_incl_display}}</span>
+		<span>-{{amount_display}}</span>
 	</div>
+
+	{{#reason}}
+	<div style="margin-top: 6px; font-size: 11px; color: #888; font-style: italic;">{{reason}}</div>
+	{{/reason}}
+	{{#gateway_title}}
+	<div style="margin-top: 6px; font-size: 11px; color: #555;">Refunded via {{gateway_title}}</div>
+	{{/gateway_title}}
 
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 16px 0;">
-
-	{{#payments}}
-	<div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px;">
-		<span style="color: #555;">Refunded via {{method_title}}</span>
-		<span>{{amount_display}}</span>
-	</div>
-	{{#transaction_id}}
-	<div style="margin-bottom: 4px; padding-left: 12px; font-size: 11px; color: #999;">Ref: {{transaction_id}}</div>
-	{{/transaction_id}}
-	{{/payments}}
+	{{/refunds}}
 
 	{{#store.policies_and_conditions}}
 	<div style="margin-top: 16px; padding: 10px; background: #f8f8f8; border-radius: 4px; font-size: 10px; color: #888; line-height: 1.5; white-space: pre-wrap;">

@@ -183,6 +183,8 @@ class Receipt_I18n_Labels {
 			'returned_items'         => /* translators: Standalone label used in printed receipt templates. */ __( 'Returned Items', 'woocommerce-pos' ),
 			'amount'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Amount', 'woocommerce-pos' ),
 			'total_refunded'         => /* translators: Standalone label used in printed receipt templates. */ __( 'Total Refunded', 'woocommerce-pos' ),
+			'refunded'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Refunded', 'woocommerce-pos' ),
+			'net_total'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Net Total', 'woocommerce-pos' ),
 
 			// Section labels.
 			'customer_note'          => /* translators: Standalone label used in printed receipt templates. */ __( 'Customer Note', 'woocommerce-pos' ),

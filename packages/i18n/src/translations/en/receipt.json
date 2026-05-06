@@ -52,6 +52,8 @@
   "returned_items": "Returned Items",
   "amount": "Amount",
   "total_refunded": "Total Refunded",
+  "refunded": "Refunded",
+  "net_total": "Net Total",
   "customer_note": "Customer Note",
   "terms_and_conditions": "Terms & Conditions",
   "a_message_for_you": "A message for you",

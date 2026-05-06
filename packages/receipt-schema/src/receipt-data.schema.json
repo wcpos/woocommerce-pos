@@ -1035,6 +1035,13 @@
 						"string"
 					],
 					"description": "Refund Total"
+				},
+				"net_total": {
+					"type": [
+						"number",
+						"string"
+					],
+					"description": "Net Total"
 				}
 			},
 			"description": "Totals"

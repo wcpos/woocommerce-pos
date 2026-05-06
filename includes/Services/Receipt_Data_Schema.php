@@ -49,6 +49,7 @@ class Receipt_Data_Schema {
 		'paid_total',
 		'change_total',
 		'refund_total',
+		'net_total',
 	);
 
 	/**
@@ -69,6 +70,7 @@ class Receipt_Data_Schema {
 		'discount_total_incl',
 		'discount_total_excl',
 		'refund_total',
+		'net_total',
 		'total_refunded',
 	);
 
@@ -113,6 +115,7 @@ class Receipt_Data_Schema {
 		'paid_total',
 		'change_total',
 		'refund_total',
+		'net_total',
 		// Per-line refund.
 		'total_refunded',
 		// Refund-level totals.
@@ -721,6 +724,10 @@ class Receipt_Data_Schema {
 					'refund_total'        => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Total', 'woocommerce-pos' ),
+					),
+					'net_total'           => array(
+						'type'  => 'money',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Net Total', 'woocommerce-pos' ),
 					),
 				),
 			),
