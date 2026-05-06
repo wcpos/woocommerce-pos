@@ -264,23 +264,30 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test store address formats country/state display names.
+	 * Test store address composes country/state via WC_Countries.
 	 */
-	public function test_receipt_data_builder_formats_country_state(): void {
+	public function test_receipt_data_builder_composes_country_aware_address(): void {
 		$previous_default_country = get_option( 'woocommerce_default_country', '' );
 		update_option( 'woocommerce_default_country', 'US:AL' );
+
+		// WC strips the country line when address country matches the base — force
+		// it on so the test can verify country-name resolution end-to-end.
+		add_filter( 'woocommerce_formatted_address_force_country_display', '__return_true' );
 
 		try {
 			$order   = OrderHelper::create_order();
 			$builder = new Receipt_Data_Builder();
-			$data    = $builder->build( $order, 'live' );
+			$data    = $builder->build( $order );
 
 			$address_lines = $data['store']['address_lines'];
 			$last_line     = end( $address_lines );
 
-			$this->assertStringContainsString( 'Alabama', $last_line );
-			$this->assertStringNotContainsString( 'US:AL', $last_line );
+			// WC_Countries::get_formatted_address ends US-format addresses with
+			// the resolved country name; never the raw "US:AL" combined token.
+			$this->assertStringContainsStringIgnoringCase( 'United States', (string) $last_line );
+			$this->assertStringNotContainsString( 'US:AL', implode( "\n", $address_lines ) );
 		} finally {
+			remove_filter( 'woocommerce_formatted_address_force_country_display', '__return_true' );
 			update_option( 'woocommerce_default_country', $previous_default_country );
 		}
 	}

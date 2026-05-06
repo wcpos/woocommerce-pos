@@ -814,26 +814,19 @@ class Preview_Receipt_Builder {
 		$store_tax_ids   = is_array( $store_tax_ids ) ? $store_tax_ids : array();
 		$store_tax_ids   = self::with_store_tax_id_labels( $store_tax_ids );
 
+		$store_address_parts = array(
+			'address_1' => $store_address,
+			'address_2' => $store_address_2,
+			'city'      => $store_city,
+			'state'     => $store_state,
+			'postcode'  => $store_postcode,
+			'country'   => $store_country,
+		);
+
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
-			'address'       => array(
-				'address_1' => $store_address,
-				'address_2' => $store_address_2,
-				'city'      => $store_city,
-				'state'     => $store_state,
-				'postcode'  => $store_postcode,
-				'country'   => $store_country,
-			),
-			'address_lines' => array_values(
-				array_filter(
-					array(
-						$store_address,
-						$store_address_2,
-						trim( $store_city . ' ' . $store_postcode ),
-						$this->format_country_state( $store_country, $store_state ),
-					)
-				)
-			),
+			'address'       => $store_address_parts,
+			'address_lines' => $this->compose_address_lines( $store_address_parts ),
 			'tax_id'        => $store_tax_id,
 			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
@@ -885,30 +878,45 @@ class Preview_Receipt_Builder {
 	}
 
 	/**
-	 * Format country and state codes into display names.
+	 * Compose `address_lines[]` using the country's WC address format.
 	 *
-	 * Converts codes like "US" / "AL" to "Alabama, United States (US)".
+	 * Defers to `WC_Countries::get_formatted_address()` so per-country layouts
+	 * are honoured. Mirrors the helper of the same name on Receipt_Data_Builder.
 	 *
-	 * @param string $country Country code.
-	 * @param string $state   State code.
-	 *
-	 * @return string
+	 * @param array<string,string> $fields Store address fields:
+	 *                                     `address_1`, `address_2`, `city`,
+	 *                                     `state`, `postcode`, `country`.
+	 * @return array<int,string>
 	 */
-	private function format_country_state( string $country, string $state ): string {
-		if ( '' === $country ) {
-			return '';
+	private function compose_address_lines( array $fields ): array {
+		$formatted = WC()->countries->get_formatted_address(
+			array(
+				'first_name' => '',
+				'last_name'  => '',
+				'company'    => '',
+				'address_1'  => $fields['address_1'] ?? '',
+				'address_2'  => $fields['address_2'] ?? '',
+				'city'       => $fields['city'] ?? '',
+				'state'      => $fields['state'] ?? '',
+				'postcode'   => $fields['postcode'] ?? '',
+				'country'    => isset( $fields['country'] ) ? (string) $fields['country'] : '',
+			),
+			"\n"
+		);
+
+		$lines = preg_split( '/\r?\n/', (string) $formatted );
+		if ( ! is_array( $lines ) ) {
+			return array();
 		}
 
-		$country_name = WC()->countries->get_countries()[ $country ] ?? $country;
-
-		if ( '' !== $state ) {
-			$states     = WC()->countries->get_states( $country );
-			$state_name = $states[ $state ] ?? $state;
-
-			return $state_name . ', ' . $country_name;
-		}
-
-		return $country_name;
+		return array_values(
+			array_filter(
+				array_map( 'trim', $lines ),
+				static function ( string $line ): bool {
+					return '' !== $line;
+				}
+			)
+		);
 	}
 
 	/**
