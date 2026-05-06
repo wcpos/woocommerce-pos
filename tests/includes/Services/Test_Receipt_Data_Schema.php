@@ -169,6 +169,10 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 			$this->assertArrayHasKey( 'label', $tree[ $section ] );
 			$this->assertArrayHasKey( 'fields', $tree[ $section ] );
 		}
+
+		foreach ( array( 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ) as $field ) {
+			$this->assertArrayHasKey( $field, $tree['store.address']['fields'], "store.address missing {$field}" );
+		}
 	}
 
 	/**

@@ -68,6 +68,7 @@ class Receipt_Data_Builder {
 			'get_tax_display_cart',
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
 		);
+		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
@@ -83,7 +84,7 @@ class Receipt_Data_Builder {
 		if ( ! is_array( $store_tax_ids ) ) {
 			$store_tax_ids = array();
 		}
-		$store_tax_ids = self::with_store_tax_id_labels( $store_tax_ids );
+		$store_tax_ids = self::with_store_tax_id_labels( $store_tax_ids, $presentation_hints['locale'] ?? '' );
 
 		$store = array(
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
@@ -158,7 +159,7 @@ class Receipt_Data_Builder {
 		}
 
 		$tax_ids = ( new Tax_Id_Reader() )->read_for_order( $order );
-		$tax_ids = self::with_customer_tax_id_labels( $tax_ids );
+		$tax_ids = self::with_customer_tax_id_labels( $tax_ids, $presentation_hints['locale'] ?? '' );
 
 		$customer = array(
 			'id'               => $customer_id ? $customer_id : null,
@@ -325,8 +326,6 @@ class Receipt_Data_Builder {
 				'change'         => (float) $order->get_meta( '_pos_cash_change' ),
 			),
 		);
-
-		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 
 		$fiscal = array(
 			'immutable_id'      => '',
@@ -830,20 +829,22 @@ class Receipt_Data_Builder {
 	 * Ensure store tax IDs include display labels for logicless templates.
 	 *
 	 * @param array<int,array<string,mixed>> $tax_ids Store tax IDs.
+	 * @param string                         $locale  Receipt locale.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function with_store_tax_id_labels( array $tax_ids ): array {
-		return self::with_tax_id_labels( $tax_ids, 'store' );
+	private static function with_store_tax_id_labels( array $tax_ids, string $locale = '' ): array {
+		return self::with_tax_id_labels( $tax_ids, 'store', $locale );
 	}
 
 	/**
 	 * Ensure customer tax IDs include display labels for logicless templates.
 	 *
 	 * @param array<int,array<string,mixed>> $tax_ids Customer tax IDs.
+	 * @param string                         $locale  Receipt locale.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function with_customer_tax_id_labels( array $tax_ids ): array {
-		return self::with_tax_id_labels( $tax_ids, 'customer' );
+	private static function with_customer_tax_id_labels( array $tax_ids, string $locale = '' ): array {
+		return self::with_tax_id_labels( $tax_ids, 'customer', $locale );
 	}
 
 	/**
@@ -853,10 +854,11 @@ class Receipt_Data_Builder {
 	 *
 	 * @param array<int,array<string,mixed>> $tax_ids Tax IDs.
 	 * @param string                         $scope   "store" or "customer".
+	 * @param string                         $locale  Receipt locale.
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function with_tax_id_labels( array $tax_ids, string $scope ): array {
-		$labels = Receipt_I18n_Labels::get_labels();
+	private static function with_tax_id_labels( array $tax_ids, string $scope, string $locale = '' ): array {
+		$labels = Receipt_I18n_Labels::get_labels( $locale );
 		$prefix = $scope . '_tax_id_label_';
 
 		return array_map(
