@@ -79,7 +79,7 @@
   {{/payments}}
   <feed lines="2" />
   <align mode="center">
-    <barcode type="{{#presentation_hints.order_barcode_type}}{{presentation_hints.order_barcode_type}}{{/presentation_hints.order_barcode_type}}{{^presentation_hints.order_barcode_type}}code128{{/presentation_hints.order_barcode_type}}" height="60">{{order.number}}</barcode>
+    <barcode type="code128" height="60">{{order.number}}</barcode>
   </align>
   <feed lines="1" />
   <align mode="center">
