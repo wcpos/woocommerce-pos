@@ -221,6 +221,10 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 				public function get_calc_taxes(): string {
 					return 'yes';
 				}
+
+				public function get_order_barcode_type(): string {
+					return 'ean13';
+				}
 			};
 		};
 
@@ -248,6 +252,9 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertEquals( 'single', $hints['display_tax'] );
 			$this->assertTrue( $hints['prices_entered_with_tax'] );
 			$this->assertEquals( 'yes', $hints['rounding_mode'] );
+			$this->assertContains( $hints['order_barcode_type'], array( 'code128', 'qrcode', 'ean13', 'ean8', 'upca' ) );
+			$this->assertSame( 'ean13', $hints['order_barcode_type'] );
+			$this->assertNotSame( 'code128', $hints['order_barcode_type'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 			update_option( 'woocommerce_currency_pos', $original_currency_pos );
@@ -259,6 +266,38 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			update_option( 'woocommerce_tax_total_display', $original_tax_total_display );
 			update_option( 'woocommerce_tax_round_at_subtotal', $original_tax_rounding );
 			update_option( 'woocommerce_prices_include_tax', $original_prices_tax );
+		}
+	}
+
+	/**
+	 * Unknown or blank store barcode types should fall back to Code 128.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_normalizes_order_barcode_type(): void {
+		foreach (
+			array(
+				' QRCode ' => 'qrcode',
+				''         => 'code128',
+				'unknown'  => 'code128',
+			) as $raw => $expected
+		) {
+			$store = $this->getMockBuilder( \stdClass::class )
+				->addMethods( array( 'get_order_barcode_type' ) )
+				->getMock();
+			$store->method( 'get_order_barcode_type' )->willReturn( $raw );
+
+			$store_filter = static function () use ( $store ) {
+				return $store;
+			};
+
+			try {
+				add_filter( 'woocommerce_pos_get_store', $store_filter );
+				$data = $this->builder->build();
+				$this->assertSame( $expected, $data['presentation_hints']['order_barcode_type'] );
+			} finally {
+				remove_filter( 'woocommerce_pos_get_store', $store_filter );
+			}
 		}
 	}
 

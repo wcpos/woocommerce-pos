@@ -2168,10 +2168,6 @@ msgstr ""
 msgid "Thank you for your business."
 msgstr ""
 
-#: includes/Services/Receipt_I18n_Labels.php:185
-msgid "This is a tax invoice. Please retain for your records."
-msgstr ""
-
 #: includes/Services/Receipt_I18n_Labels.php:186
 msgid "Items may be returned or exchanged within 30 days with this receipt."
 msgstr ""

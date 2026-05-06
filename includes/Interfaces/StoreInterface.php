@@ -251,6 +251,15 @@ interface StoreInterface {
 	public function get_tax_total_display( $context = 'view' );
 
 	/**
+	 * Get Store order barcode type.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 *
+	 * @return string
+	 */
+	public function get_order_barcode_type( $context = 'view' );
+
+	/**
 	 * Get Store default customer ID.
 	 *
 	 * @param string $context What the value is for. Valid values are view and edit.
