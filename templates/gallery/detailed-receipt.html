@@ -1,37 +1,38 @@
 <!--
-Detailed Receipt — full schema coverage.
+Detailed Receipt — A4 receipt with everything turned on.
 
-A4-oriented logicless template. Renders every meaningful field in
-ReceiptDataSchema:
+This template is designed as a starting point: it shows every section a
+WooCommerce POS receipt can include, so you can keep what you need and
+delete the rest. Most blocks are wrapped in {{#section}}…{{/section}}
+guards, so they automatically disappear when the underlying data is
+empty (no shipping address, no refunds, no customer note, etc.).
 
-  - store: logo, name, address, phone, email, tax_ids[], opening hours,
-    personal_notes, policies_and_conditions, footer_imprint
-  - order: number, created date, customer_note, wc_status (badge)
-  - cashier: name
-  - customer: name, billing_address (incl. company, email, phone),
-    shipping_address, tax_ids[]
-  - lines[]: name, meta[] (variation attributes), sku, qty, unit excl,
-    per-rate VAT %, total incl
-  - fees[], shipping[] (with method_id and meta — carrier / tracking / ETA),
-    discounts[] (with coupon code) — folded into the same item table
-  - tax_summary[]: rendered as a Net / VAT / Gross breakdown table
-  - totals: subtotal_excl, tax_total, total_incl/excl, paid_total,
-    change_total
-  - refunds[]: id, date, refunded_by_name, reason, lines[]
-  - payments[]: method_title, amount, transaction_id, tendered, change
-  - presentation_hints: locale via formatReceiptData
+Sections, top to bottom:
 
-The fiscal block is intentionally omitted; the slot is replaced with an
-"Order barcode" area that displays {{order.number}} prominently for cashier
-scan-on-return, and is the natural insertion point for a barcode component.
+  - Header — store logo, name, address, contact details and tax IDs,
+    plus the order status badge, document title, order number and date.
+  - Bill-to / Ship-to / Order — customer billing and shipping
+    addresses, customer tax IDs, cashier name and order status.
+  - Items table — line items with variation attributes, SKU, quantity,
+    unit price excl. tax, tax rate, tax amount, and line total incl.
+    tax. Fees, shipping (with carrier / tracking meta) and discounts
+    (with coupon codes) appear in the same table.
+  - Tax summary + totals — per-rate net / tax / gross breakdown on
+    the left, and subtotal / discount / total / paid / change on the
+    right.
+  - Refunds — one card per refund with id, date, who refunded it,
+    reason, returned line items and total refunded.
+  - Customer note — highlighted callout, only shown when a note was
+    left on the order.
+  - Payments + order barcode — payment methods with transaction id,
+    tendered and change, alongside a Code 128 barcode of the order
+    number for scan-on-return.
+  - Personal note — italic message centered at the bottom (falls back
+    to "Thank you for your purchase").
+  - Terms & footer — store policies, opening hours and footer imprint.
 
-i18n keys used: i18n.{bill_to, ship_to, order, cashier, status, item, sku,
-qty, unit_excl, tax, tax_amount, taxable_excl, taxable_incl, tax_summary,
-discount, reference, subtotal, subtotal_excl_tax, total_excl, total_tax,
-total, paid, tendered, change, returned_items, total_refunded, customer_note,
-terms_and_conditions, thank_you_purchase, tax_invoice, tax_invoice_retain,
-customer_tax_id}. All keys live in Receipt_I18n_Labels::get_labels()
-and ReceiptI18nSchema.
+To remove a section, delete the matching block. To restyle, edit the
+inline styles on the wrapping element.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px; max-width: 800px; margin: 0 auto;">
 
@@ -59,7 +60,7 @@ and ReceiptI18nSchema.
 		<div style="flex: 0 0 auto; text-align: right;">
 			{{#order.wc_status}}
 			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase;">
-				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{order.wc_status}}
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}
 			</div>
 			{{/order.wc_status}}
 			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase; margin-top: 8px;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</div>
@@ -76,8 +77,8 @@ and ReceiptI18nSchema.
 			{{#customer.billing_address.company}}<div style="color: #6b7280;">{{customer.billing_address.company}}</div>{{/customer.billing_address.company}}
 			{{#customer.billing_address.address_1}}<div style="color: #6b7280;">{{customer.billing_address.address_1}}{{#customer.billing_address.address_2}}, {{customer.billing_address.address_2}}{{/customer.billing_address.address_2}}</div>{{/customer.billing_address.address_1}}
 			{{#customer.billing_address.city}}<div style="color: #6b7280;">{{customer.billing_address.postcode}} {{customer.billing_address.city}}{{#customer.billing_address.state}}, {{customer.billing_address.state}}{{/customer.billing_address.state}}{{#customer.billing_address.country}}, {{customer.billing_address.country}}{{/customer.billing_address.country}}</div>{{/customer.billing_address.city}}
-			{{#customer.billing_address.email}}<div style="color: #6b7280; font-size: 11px; margin-top: 6px;">{{customer.billing_address.email}}{{#customer.billing_address.phone}} · {{customer.billing_address.phone}}{{/customer.billing_address.phone}}</div>{{/customer.billing_address.email}}
-			{{^customer.billing_address.email}}{{#customer.billing_address.phone}}<div style="color: #6b7280; font-size: 11px; margin-top: 6px;">{{customer.billing_address.phone}}</div>{{/customer.billing_address.phone}}{{/customer.billing_address.email}}
+			{{#customer.billing_address.email}}<div style="color: #6b7280; font-size: 11px; margin-top: 6px;">{{customer.billing_address.email}}</div>{{/customer.billing_address.email}}
+			{{#customer.billing_address.phone}}<div style="color: #6b7280; font-size: 11px;{{^customer.billing_address.email}} margin-top: 6px;{{/customer.billing_address.email}}">{{customer.billing_address.phone}}</div>{{/customer.billing_address.phone}}
 			{{#customer.tax_ids}}
 			<div style="color: #6b7280; font-size: 11px; margin-top: 4px;"><strong>{{#label}}{{label}}{{/label}}{{^label}}{{type}}{{/label}}</strong> {{value}}</div>
 			{{/customer.tax_ids}}
@@ -107,7 +108,7 @@ and ReceiptI18nSchema.
 			{{#order.wc_status}}
 			<div style="display: flex; justify-content: space-between;">
 				<span style="color: #6b7280;">{{i18n.status}}</span>
-				<span>{{order.wc_status}}</span>
+				<span>{{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}</span>
 			</div>
 			{{/order.wc_status}}
 		</div>
@@ -118,12 +119,12 @@ and ReceiptI18nSchema.
 		<thead>
 			<tr>
 				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.item}}</th>
-				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.sku}}</th>
-				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.qty}}</th>
-				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.unit_excl}}</th>
-				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.tax}} %</th>
-				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.tax_amount}}</th>
-				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.total_incl_tax}}</th>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.sku}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.qty}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.unit_excl}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.tax}} %</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.tax_amount}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.total_incl_tax}}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -270,7 +271,7 @@ and ReceiptI18nSchema.
 	{{/order.customer_note}}
 
 	<!-- ── Payments + Order barcode ─────────────── -->
-	<div style="display: grid; grid-template-columns: 1fr auto; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: start;">
+	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: start;">
 		<div>
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
 			<div style="font-size: 12px;">
@@ -285,10 +286,14 @@ and ReceiptI18nSchema.
 
 		<!--
 			Order barcode — Code 128 of {{order.number}}. The receipt-renderer
-			pipeline converts <barcode> elements to inline SVG via bwip-js.
+			pipeline converts <barcode> elements into a centered <div> with
+			the SVG inside; we cap that wrapper's width and float it to the
+			right via flex.
 		-->
-		<div style="border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; min-width: 220px;">
-			<barcode type="code128" height="40">{{order.number}}</barcode>
+		<div style="display: flex; justify-content: flex-end;">
+			<div style="width: 220px;">
+				<barcode type="code128" height="40">{{order.number}}</barcode>
+			</div>
 		</div>
 	</div>
 

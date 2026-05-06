@@ -241,6 +241,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'wc_status', $order_props );
 		$this->assertSame( 'string', $order_props['wc_status']['type'] );
 
+		$this->assertArrayHasKey( 'status_label', $order_props );
+		$this->assertSame( 'string', $order_props['status_label']['type'] );
+
 		$this->assertArrayHasKey( 'created_via', $order_props );
 		$this->assertSame( 'string', $order_props['created_via']['type'] );
 	}

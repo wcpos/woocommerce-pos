@@ -27,12 +27,19 @@ class Receipt_Data_Builder {
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
 		unset( $mode );
 
+		$wc_status    = method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '';
+		$status_label = '';
+		if ( '' !== $wc_status && function_exists( 'wc_get_order_status_name' ) ) {
+			$status_label = (string) wc_get_order_status_name( $wc_status );
+		}
+
 		$order_data = array(
 			'id'            => $order->get_id(),
 			'number'        => (string) $order->get_order_number(),
 			'currency'      => (string) $order->get_currency(),
 			'customer_note' => (string) $order->get_customer_note(),
-			'wc_status'     => method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '',
+			'wc_status'     => $wc_status,
+			'status_label'  => $status_label,
 			'created_via'   => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
 			'created'       => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_created() ),
 			'paid'          => Receipt_Date_Formatter::from_wc_datetime( $order->get_date_paid() ),
