@@ -286,6 +286,10 @@ class Receipt_Data_Builder {
 		$refund_total     = method_exists( $order, 'get_total_refunded' )
 			? abs( (float) $order->get_total_refunded() )
 			: 0.0;
+		// Templates render the customer-facing balance after a partial refund.
+		// Stays at 0 when nothing was refunded so detailed-receipt's section
+		// guard `{{#totals.net_total}}…{{/totals.net_total}}` collapses.
+		$net_total = $refund_total > 0 ? max( 0.0, $total - $refund_total ) : 0.0;
 
 		$totals = array(
 			'subtotal'             => $display_incl ? $subtotal_incl : $subtotal_excl,
@@ -301,6 +305,7 @@ class Receipt_Data_Builder {
 			'paid_total'           => $total,
 			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
 			'refund_total'         => $refund_total,
+			'net_total'            => $net_total,
 		);
 
 		$payments = array(

@@ -223,6 +223,10 @@ inline styles on the wrapping element.
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
 			<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
+			{{#totals.refund_total}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; color: #b91c1c;"><span>{{i18n.refunded}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.refund_total_display}}</span></div>
+			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; font-weight: 600; border-top: 1px solid #e5e7eb;"><span>{{i18n.net_total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.net_total_display}}</span></div>
+			{{/totals.refund_total}}
 			<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; color: #6b7280;"><span>{{i18n.paid}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.paid_total_display}}</span></div>
 			{{#totals.change_total}}
 			<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 11px; color: #6b7280;"><span>{{i18n.change}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.change_total_display}}</span></div>

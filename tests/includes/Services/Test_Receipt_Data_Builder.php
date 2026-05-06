@@ -1262,5 +1262,33 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$this->assertArrayHasKey( 'refund_total', $payload['totals'] );
 		$this->assertEqualsWithDelta( 20.00, (float) $payload['totals']['refund_total'], 0.001 );
+
+		// totals.net_total is the customer-facing balance after the refund
+		// (order.total - refund_total, clamped to >= 0). The detailed-receipt
+		// template renders this alongside the refund total when refunded > 0.
+		$this->assertArrayHasKey( 'net_total', $payload['totals'] );
+		$expected_net = max( 0.0, (float) $payload['totals']['total_incl'] - 20.00 );
+		$this->assertEqualsWithDelta( $expected_net, (float) $payload['totals']['net_total'], 0.001 );
+	}
+
+	/**
+	 * Test totals.net_total stays at 0 (Mustache-falsy) when no refunds exist
+	 * so the detailed-receipt section guard `{{#totals.net_total}}` collapses.
+	 */
+	public function test_build_net_total_is_zero_when_no_refunds(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'No-refund product' );
+		$product->set_regular_price( '12.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->save();
+
+		$payload = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+
+		$this->assertArrayHasKey( 'net_total', $payload['totals'] );
+		$this->assertEqualsWithDelta( 0.0, (float) $payload['totals']['net_total'], 0.001 );
 	}
 }
