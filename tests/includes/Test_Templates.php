@@ -89,18 +89,28 @@ class Test_Templates extends WP_UnitTestCase {
 	 * Test gallery templates do not reference fields absent from canonical receipt data.
 	 */
 	public function test_gallery_templates_do_not_reference_orphaned_receipt_fields(): void {
-		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery';
-		$templates   = array_merge(
-			glob( $gallery_dir . '/*.html' ),
-			glob( $gallery_dir . '/*.xml' )
+		$gallery_dir    = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery';
+		$html_templates = glob( $gallery_dir . '/*.html' );
+		$xml_templates  = glob( $gallery_dir . '/*.xml' );
+		$templates      = array_values(
+			array_filter(
+				array_merge(
+					false === $html_templates ? array() : $html_templates,
+					false === $xml_templates ? array() : $xml_templates
+				),
+				static function ( $template ): bool {
+					return is_string( $template ) && is_readable( $template );
+				}
+			)
 		);
 
-		$this->assertNotEmpty( $templates );
+		$this->assertNotEmpty( $templates, 'No readable gallery templates found in ' . $gallery_dir );
 
 		foreach ( $templates as $template ) {
 			$content = file_get_contents( $template );
 			$label   = basename( $template );
 
+			$this->assertNotFalse( $content, 'Unable to read gallery template: ' . $template );
 			$this->assertStringNotContainsString( 'has_tax_summary', $content, $label );
 			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
 			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
