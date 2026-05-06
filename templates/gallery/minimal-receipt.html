@@ -23,11 +23,6 @@ All styles are inline (wp_kses_post strips <style> tags).
 	{{#store.tax_ids}}
 	<div style="font-size: 11px; color: #999; margin-top: 4px;">{{label}} {{value}}</div>
 	{{/store.tax_ids}}
-	{{^store.tax_ids}}
-	{{#store.tax_id}}
-	<div style="font-size: 11px; color: #999; margin-top: 4px;">{{i18n.store_tax_id_label_other}} {{store.tax_id}}</div>
-	{{/store.tax_id}}
-	{{/store.tax_ids}}
 
 	<!-- Spacer -->
 	<div style="height: 24px;"></div>

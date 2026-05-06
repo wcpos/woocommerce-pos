@@ -26,11 +26,6 @@ All styles are inline because wp_kses_post strips <style> tags.
 		{{#store.tax_ids}}
 		<div style="text-align: center; font-size: 10px; color: #555;">{{label}}: {{value}}</div>
 		{{/store.tax_ids}}
-		{{^store.tax_ids}}
-		{{#store.tax_id}}
-		<div style="text-align: center; font-size: 10px; color: #555;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
-		{{/store.tax_id}}
-		{{/store.tax_ids}}
 
 		{{#store.opening_hours}}
 		<div style="text-align: center; font-size: 10px; color: #555; white-space: pre-line; margin-top: 4px;">{{store.opening_hours}}</div>
@@ -45,7 +40,7 @@ All styles are inline because wp_kses_post strips <style> tags.
 			<span style="flex-shrink: 0; text-align: right;">#{{order.number}}</span>
 		</div>
 		<div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-			<span style="flex: 1;">{{i18n.order_date}}</span>
+			<span style="flex: 1;">{{i18n.date}}</span>
 			<span style="flex-shrink: 0; text-align: right;">{{order.created.datetime}}</span>
 		</div>
 		{{#cashier.name}}

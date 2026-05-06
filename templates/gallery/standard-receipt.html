@@ -34,11 +34,6 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{#store.tax_ids}}
 		<div style="font-size: 12px; color: #666; margin-top: 2px;">{{label}}: {{value}}</div>
 		{{/store.tax_ids}}
-		{{^store.tax_ids}}
-		{{#store.tax_id}}
-		<div style="font-size: 12px; color: #666; margin-top: 2px;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
-		{{/store.tax_id}}
-		{{/store.tax_ids}}
 		{{#store.opening_hours}}
 		<div style="font-size: 11px; color: #666; margin-top: 4px; white-space: pre-line;">{{store.opening_hours}}</div>
 		{{/store.opening_hours}}

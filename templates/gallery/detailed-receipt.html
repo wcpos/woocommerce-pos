@@ -53,9 +53,6 @@ inline styles on the wrapping element.
 			{{#store.tax_ids}}
 			<div style="color: #6b7280; font-size: 12px;">{{#label}}{{label}} {{/label}}{{value}}</div>
 			{{/store.tax_ids}}
-			{{^store.tax_ids}}
-			{{#store.tax_id}}<div style="color: #6b7280; font-size: 12px;">{{store.tax_id}}</div>{{/store.tax_id}}
-			{{/store.tax_ids}}
 		</div>
 		<div style="flex: 0 0 auto; text-align: right;">
 			{{#order.wc_status}}

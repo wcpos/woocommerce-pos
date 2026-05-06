@@ -86,6 +86,28 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test gallery templates do not reference fields absent from canonical receipt data.
+	 */
+	public function test_gallery_templates_do_not_reference_orphaned_receipt_fields(): void {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery';
+		$templates   = array_merge(
+			glob( $gallery_dir . '/*.html' ),
+			glob( $gallery_dir . '/*.xml' )
+		);
+
+		$this->assertNotEmpty( $templates );
+
+		foreach ( $templates as $template ) {
+			$content = file_get_contents( $template );
+			$label   = basename( $template );
+
+			$this->assertStringNotContainsString( 'has_tax_summary', $content, $label );
+			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
+			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
+		}
+	}
+
+	/**
 	 * Test that core template is detected when only core plugin exists.
 	 */
 	public function test_detect_core_template_when_only_core_exists(): void {

@@ -23,11 +23,6 @@ Includes validity placeholder and terms.
 			{{#store.tax_ids}}
 			<div style="font-size: 12px; color: #666;">{{label}}: {{value}}</div>
 			{{/store.tax_ids}}
-			{{^store.tax_ids}}
-			{{#store.tax_id}}
-			<div style="font-size: 12px; color: #666;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
-			{{/store.tax_id}}
-			{{/store.tax_ids}}
 		</div>
 		<div style="text-align: right;">
 			<div style="font-size: 28px; font-weight: 300; color: #f59e0b; text-transform: uppercase; letter-spacing: 2px;">{{i18n.quote}}</div>

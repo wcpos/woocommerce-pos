@@ -20,11 +20,6 @@ and the payment method used for the refund.
 		{{#store.tax_ids}}
 		<div style="font-size: 11px; color: #666;">{{label}}: {{value}}</div>
 		{{/store.tax_ids}}
-		{{^store.tax_ids}}
-		{{#store.tax_id}}
-		<div style="font-size: 11px; color: #666;">{{i18n.store_tax_id_label_other}}: {{store.tax_id}}</div>
-		{{/store.tax_id}}
-		{{/store.tax_ids}}
 	</div>
 
 	<hr style="border: none; border-top: 1px solid #e2e2e2; margin: 12px 0;">
