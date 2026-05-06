@@ -128,23 +128,33 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	 * Test get_labels includes short receipt table header keys.
 	 */
 	public function test_get_labels_includes_short_receipt_table_header_keys(): void {
-		$labels = Receipt_I18n_Labels::get_labels();
+		$switched = switch_to_locale( 'en_US' );
 
-		$expected = array(
-			'item_short'           => 'Item',
-			'sku_short'            => 'SKU',
-			'qty_short'            => 'Qty',
-			'unit_excl_short'      => 'Unit excl.',
-			'tax_rate_short'       => 'Tax %',
-			'tax_amount_short'     => 'Tax',
-			'total_incl_tax_short' => 'Total incl.',
-			'taxable_excl_short'   => 'Taxable excl.',
-			'taxable_incl_short'   => 'Taxable incl.',
-		);
+		try {
+			$labels = Receipt_I18n_Labels::get_labels();
 
-		foreach ( $expected as $key => $value ) {
-			$this->assertArrayHasKey( $key, $labels );
-			$this->assertSame( $value, $labels[ $key ] );
+			$expected = array(
+				'item_short'             => 'Item',
+				'sku_short'              => 'SKU',
+				'qty_short'              => 'Qty',
+				'unit_excl_short'        => 'Unit excl.',
+				'tax_rate_short'         => 'Tax %',
+				'tax_amount_short'       => 'Tax',
+				'total_incl_tax_short'   => 'Total incl.',
+				'taxable_excl_short'     => 'Taxable excl.',
+				'taxable_incl_short'     => 'Taxable incl.',
+				'total_incl_tax'         => 'Total (incl. tax)',
+				'grand_total_incl_tax'   => 'Grand Total (incl. tax)',
+			);
+
+			foreach ( $expected as $key => $value ) {
+				$this->assertArrayHasKey( $key, $labels );
+				$this->assertSame( $value, $labels[ $key ] );
+			}
+		} finally {
+			if ( $switched ) {
+				restore_previous_locale();
+			}
 		}
 	}
 
