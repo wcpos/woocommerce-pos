@@ -487,6 +487,7 @@ class Receipt_Data_Builder {
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
+			'order_barcode_type'       => 'code128',
 			// Currency stays from the order (financial record). Locale and price formatting
 			// follow the store so presentation matches the store's region/settings.
 			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),

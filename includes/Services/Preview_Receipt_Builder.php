@@ -966,6 +966,7 @@ class Preview_Receipt_Builder {
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
+			'order_barcode_type'       => 'code128',
 			'locale'                   => $this->resolve_locale(),
 			'currency_position'        => $this->resolve_store_string(
 				'get_currency_position',

@@ -60,6 +60,30 @@ describe('gallery template assets', () => {
 		}
 	});
 
+	it('uses presentation_hints.order_barcode_type for order barcodes', () => {
+		const barcodeTemplates = [
+			'detailed-receipt.html',
+			'thermal-simple-80mm.xml',
+			'thermal-detailed-80mm.xml',
+		];
+
+		for (const filename of barcodeTemplates) {
+			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
+			expect(content, filename).toContain('{{presentation_hints.order_barcode_type}}');
+			expect(content, filename).not.toContain('type="code128"');
+		}
+	});
+
+	it('does not ship hardcoded tax-invoice retention boilerplate', () => {
+		const taxInvoiceTemplates = ['detailed-receipt.html', 'tax-invoice.html'];
+
+		for (const filename of taxInvoiceTemplates) {
+			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
+			expect(content, filename).not.toContain('tax_invoice_retain');
+			expect(content, filename).not.toContain('Please retain for your records');
+		}
+	});
+
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
