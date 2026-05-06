@@ -212,6 +212,7 @@ class Receipt_I18n_Labels {
 			'status'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Status', 'woocommerce-pos' ),
 			'completed'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Completed', 'woocommerce-pos' ),
 			'printed'                => /* translators: Standalone label used in printed receipt templates. */ __( 'Printed', 'woocommerce-pos' ),
+			'opening_hours'          => /* translators: Standalone label used in printed receipt templates. */ __( 'Opening Hours', 'woocommerce-pos' ),
 		);
 	}
 

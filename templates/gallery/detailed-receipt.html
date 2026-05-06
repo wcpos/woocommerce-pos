@@ -307,13 +307,16 @@ inline styles on the wrapping element.
 	</div>
 	{{/store.policies_and_conditions}}
 
-	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; font-size: 11px; color: #6b7280;">
+	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; font-size: 11px; color: #6b7280;">
 		<div>
-			{{#store.footer_imprint}}<strong>{{store.footer_imprint}}</strong><br>{{/store.footer_imprint}}
+			{{#store.footer_imprint}}{{store.footer_imprint}}{{/store.footer_imprint}}
 		</div>
-		<div>
-			{{#store.opening_hours}}<strong>{{store.opening_hours}}</strong>{{/store.opening_hours}}
-			{{#store.opening_hours_notes}}<br>{{store.opening_hours_notes}}{{/store.opening_hours_notes}}
+		<div style="text-align: right;">
+			{{#store.opening_hours}}
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.opening_hours}}</div>
+			<div style="color: #374151;">{{store.opening_hours}}</div>
+			{{/store.opening_hours}}
+			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
 		</div>
 	</footer>
 

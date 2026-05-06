@@ -323,4 +323,30 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
 		$this->assertStringNotContainsString( '{{', $output );
 	}
+
+	/**
+	 * Test detailed receipt renders opening hours notes without opening hours.
+	 */
+	public function test_detailed_receipt_renders_opening_hours_notes_without_opening_hours(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		$receipt_data['store']['opening_hours']       = null;
+		$receipt_data['store']['opening_hours_notes'] = 'Closed on public holidays';
+
+		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/detailed-receipt.html';
+		$this->assertFileExists( $template_path );
+
+		$template = array(
+			'content' => file_get_contents( $template_path ),
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Closed on public holidays', $output );
+		$this->assertStringNotContainsString( '{{store.opening_hours_notes}}', $output );
+	}
 }
