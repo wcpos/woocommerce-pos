@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-06T09:26:55+00:00\n"
+"POT-Creation-Date: 2026-05-06T09:32:12+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1133,30 +1133,30 @@ msgstr ""
 msgid "Auth Code"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:856
+#: includes/Services/Preview_Receipt_Builder.php:849
 msgid "Thank you for shopping with us! We appreciate your business."
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:859
+#: includes/Services/Preview_Receipt_Builder.php:852
 msgid "Returns accepted within 30 days with original receipt. Items must be unused and in original packaging."
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:862
+#: includes/Services/Preview_Receipt_Builder.php:855
 #: includes/Services/Receipt_I18n_Labels.php:182
 #: templates/gallery/minimal-receipt.php:179
 #: templates/gallery/thermal-receipt.php:227
 msgid "Thank you for your purchase!"
 msgstr ""
 
-#: includes/Services/Preview_Receipt_Builder.php:1300
-#: includes/Services/Preview_Receipt_Builder.php:1325
+#: includes/Services/Preview_Receipt_Builder.php:1308
+#: includes/Services/Preview_Receipt_Builder.php:1333
 #: includes/Services/Receipt_I18n_Labels.php:150
 msgid "Tax"
 msgstr ""
 
-#: includes/Services/Receipt_Data_Builder.php:144
+#: includes/Services/Receipt_Data_Builder.php:138
 #: includes/Templates/Payment.php:355
-#: tests/includes/Templates/Test_Receipt_Renderers.php:290
+#: tests/includes/Templates/Test_Receipt_Renderers.php:299
 msgid "Guest"
 msgstr ""
 
