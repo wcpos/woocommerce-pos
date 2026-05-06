@@ -125,6 +125,30 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_labels includes short receipt table header keys.
+	 */
+	public function test_get_labels_includes_short_receipt_table_header_keys(): void {
+		$labels = Receipt_I18n_Labels::get_labels();
+
+		$expected = array(
+			'item_short'           => 'Item',
+			'sku_short'            => 'SKU',
+			'qty_short'            => 'Qty',
+			'unit_excl_short'      => 'Unit excl.',
+			'tax_rate_short'       => 'Tax %',
+			'tax_amount_short'     => 'Tax',
+			'total_incl_tax_short' => 'Total incl.',
+			'taxable_excl_short'   => 'Taxable excl.',
+			'taxable_incl_short'   => 'Taxable incl.',
+		);
+
+		foreach ( $expected as $key => $value ) {
+			$this->assertArrayHasKey( $key, $labels );
+			$this->assertSame( $value, $labels[ $key ] );
+		}
+	}
+
+	/**
 	 * Test translate_interpolated_phrases handles multiple occurrences.
 	 */
 	public function test_translate_interpolated_phrases_handles_multiple_occurrences(): void {
