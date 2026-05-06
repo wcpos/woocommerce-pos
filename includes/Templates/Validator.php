@@ -76,7 +76,7 @@ class Validator {
 
 		return new WP_Error(
 			'invalid_language',
-			/* translators: Short WCPOS UI label; keep concise. */
+			/* translators: Validation error shown when an unsupported template language is provided. */
 			__( 'Invalid template language.', 'woocommerce-pos' )
 		);
 	}

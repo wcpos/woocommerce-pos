@@ -281,8 +281,8 @@ class Receipt {
 					<div class="suggestions">
 						<h2><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Suggestions:', 'woocommerce-pos' ); ?></h2>
 						<ul>
-							<li><?php /* translators: Short WCPOS UI label; keep concise. */ esc_html_e( 'Check the template file for syntax errors (missing semicolons, brackets, etc.)', 'woocommerce-pos' ); ?></li>
-							<li><?php esc_html_e( 'Ensure all variables used in the template are defined', 'woocommerce-pos' ); ?></li>
+							<li><?php /* translators: Help text shown on the receipt template fatal error page. */ esc_html_e( 'Check the template file for syntax errors (missing semicolons, brackets, etc.)', 'woocommerce-pos' ); ?></li>
+							<li><?php /* translators: Help text shown on the receipt template fatal error page. */ esc_html_e( 'Ensure all variables used in the template are defined', 'woocommerce-pos' ); ?></li>
 							<li><?php esc_html_e( 'Verify that any custom functions or classes exist', 'woocommerce-pos' ); ?></li>
 							<li><?php esc_html_e( 'Try resetting to the default receipt template', 'woocommerce-pos' ); ?></li>
 						</ul>

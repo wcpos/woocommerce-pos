@@ -139,7 +139,7 @@ class Cash extends WC_Payment_Gateway {
 	public function process_payment( $order_id ): array {
 		// Check nonce.
 		if ( ! isset( $_POST['pos_cash_payment_nonce_field'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_cash_payment_nonce_field'] ) ), 'pos_cash_payment_nonce' ) ) {
-			wp_die( /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
+			wp_die( /* translators: Checkout error shown when cash nonce validation fails. */ esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
 		}
 
 		// get order object.
@@ -360,7 +360,7 @@ class Cash extends WC_Payment_Gateway {
 		$fee = new WC_Order_Item_Fee();
 		$fee->set_props(
 			array(
-				'name'      => /* translators: POS payment gateway label shown during checkout. */ __( 'Partial Payment', 'woocommerce-pos' ),
+				'name'      => /* translators: Fee line-item name added when a cash payment is partial. */ __( 'Partial Payment', 'woocommerce-pos' ),
 				'tax_class' => 0,
 				'amount'    => '-' . $tendered,
 				'total'     => '-' . $tendered,

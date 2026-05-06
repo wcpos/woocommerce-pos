@@ -245,6 +245,7 @@ msgid "Enable POS specific taxes."
 msgstr ""
 
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
+#. translators: Product POS visibility label in WooCommerce admin.
 #: includes/Admin/Products/templates/post-metabox-visibility-select.php:21
 #: includes/Admin/Products/templates/quick-edit-visibility-select.php:23
 #: includes/Admin/Products/templates/variation-metabox-visibility-select.php:25
@@ -467,7 +468,7 @@ msgid "You do not have permission to copy templates."
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#. translators: Short WCPOS UI label; keep concise.
+#. translators: Error message displayed when a template cannot be found.
 #: includes/Admin/Templates/List_Templates.php:655
 #: includes/Admin/Templates/Single_Template.php:477
 #: includes/Template_Router.php:221
@@ -1086,22 +1087,22 @@ msgstr ""
 msgid "Sorry, you cannot update templates."
 msgstr ""
 
-#. translators: Checkout/payment form error message title.
+#. translators: Checkout/payment form error message shown when the order cannot be found.
 #: includes/Form_Handler.php:52
 msgid "Order does not exist."
 msgstr ""
 
-#. translators: Checkout/payment form error message title.
+#. translators: Checkout/payment form error message shown when the order key does not match.
 #: includes/Form_Handler.php:64
 msgid "Order key mismatch."
 msgstr ""
 
-#. translators: Checkout/payment form error message title.
+#. translators: Checkout/payment form error message shown when no cashier token is provided.
 #: includes/Form_Handler.php:78
 msgid "Token not provided."
 msgstr ""
 
-#. translators: Checkout/payment form error message title.
+#. translators: Checkout/payment form error message shown when the cashier token does not match.
 #: includes/Form_Handler.php:92
 msgid "Cashier token mismatch."
 msgstr ""
@@ -1112,6 +1113,7 @@ msgid "Card"
 msgstr ""
 
 #. translators: POS payment gateway label shown during checkout.
+#. translators: Fee line-item name for cashback charged on card payment.
 #: includes/Gateways/Card.php:70
 #: includes/Gateways/Card.php:73
 #: includes/Gateways/Card.php:147
@@ -1120,7 +1122,8 @@ msgstr ""
 msgid "Cashback"
 msgstr ""
 
-#. translators: POS payment gateway label shown during checkout.
+#. translators: Checkout error shown when card nonce validation fails.
+#. translators: Checkout error shown when cash nonce validation fails.
 #: includes/Gateways/Card.php:92
 #: includes/Gateways/Cash.php:142
 msgid "Nonce verification failed"
@@ -1171,7 +1174,7 @@ msgstr ""
 msgid "Partial cash payments are not supported by the POS API checkout flow."
 msgstr ""
 
-#. translators: POS payment gateway label shown during checkout.
+#. translators: Fee line-item name added when a cash payment is partial.
 #: includes/Gateways/Cash.php:363
 msgid "Partial Payment"
 msgstr ""
@@ -2747,7 +2750,7 @@ msgstr ""
 msgid "Can not save settings with id %s"
 msgstr ""
 
-#. translators: Short WCPOS UI label; keep concise.
+#. translators: Error message shown when invalid arguments are provided.
 #: includes/Services/Settings.php:778
 msgid "Invalid arguments provided"
 msgstr ""
@@ -3245,12 +3248,12 @@ msgstr ""
 msgid "Suggestions:"
 msgstr ""
 
-#. translators: Short WCPOS UI label; keep concise.
+#. translators: Help text shown on the receipt template fatal error page.
 #: includes/Templates/Receipt.php:284
 msgid "Check the template file for syntax errors (missing semicolons, brackets, etc.)"
 msgstr ""
 
-#. translators: Short WCPOS UI label; keep concise.
+#. translators: Help text shown on the receipt template fatal error page.
 #: includes/Templates/Receipt.php:285
 msgid "Ensure all variables used in the template are defined"
 msgstr ""
@@ -3275,7 +3278,7 @@ msgstr ""
 msgid "Failed to create temporary template file."
 msgstr ""
 
-#. translators: Short WCPOS UI label; keep concise.
+#. translators: Validation error shown when an unsupported template language is provided.
 #: includes/Templates/Validator.php:80
 msgid "Invalid template language."
 msgstr ""
@@ -3335,7 +3338,7 @@ msgstr ""
 msgid "Note:"
 msgstr ""
 
-#. translators: Label shown on a POS receipt or checkout template.
+#. translators: Document title shown for the POS page.
 #: templates/pos.php:14
 msgid "Point of Sale"
 msgstr ""

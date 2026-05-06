@@ -774,7 +774,7 @@ class Settings {
 		if ( empty( $args['post_type'] ) || ! isset( $args['ids'] ) ) {
 			return new WP_Error(
 				'woocommerce_pos_settings_error',
-				/* translators: Short WCPOS UI label; keep concise. */
+				/* translators: Error message shown when invalid arguments are provided. */
 				__( 'Invalid arguments provided', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);

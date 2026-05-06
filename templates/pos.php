@@ -11,7 +11,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Point of Sale', 'woocommerce-pos' ); ?> - <?php echo esc_html( bloginfo( 'name' ) ); ?></title>
+	<title><?php /* translators: Document title shown for the POS page. */ esc_html_e( 'Point of Sale', 'woocommerce-pos' ); ?> - <?php echo esc_html( bloginfo( 'name' ) ); ?></title>
 	<meta charset="utf-8"/>
 
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
