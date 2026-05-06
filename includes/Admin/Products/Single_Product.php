@@ -46,9 +46,9 @@ class Single_Product {
 
 		// visibility options.
 		$this->options = array(
-			''            => __( 'POS & Online', 'woocommerce-pos' ),
-			'pos_only'    => __( 'POS Only', 'woocommerce-pos' ),
-			'online_only' => __( 'Online Only', 'woocommerce-pos' ),
+			''            => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS & Online', 'woocommerce-pos' ),
+			'pos_only'    => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS Only', 'woocommerce-pos' ),
+			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
 		if ( $this->barcode_field && ! \in_array( $this->barcode_field, $this->get_excluded_barcode_fields(), true ) ) {
@@ -78,7 +78,7 @@ class Single_Product {
 		woocommerce_wp_text_input(
 			array(
 				'id'          => $this->barcode_field,
-				'label'       => __( 'POS Barcode', 'woocommerce-pos' ),
+				'label'       => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'POS Barcode', 'woocommerce-pos' ),
 				'desc_tip'    => 'true',
 				'description' => __( 'Product barcode used at the point of sale', 'woocommerce-pos' ),
 			)
@@ -102,7 +102,7 @@ class Single_Product {
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_price' ),
+				'description'       => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_price' ),
 				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
@@ -125,7 +125,7 @@ class Single_Product {
 				'label'             => '',
 				'value'             => true,
 				'cbvalue'           => false,
-				'description'       => __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_tax' ),
+				'description'       => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . $this->get_pro_link( 'product_edit_tax' ),
 				'custom_attributes' => array( 'disabled' => 'disabled' ),
 			)
 		);
@@ -177,7 +177,7 @@ class Single_Product {
 	 */
 	public function add_variations_store_price_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo esc_html__( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_price' ) );
+		echo /* translators: Product POS visibility or barcode label in WooCommerce admin. */ esc_html__( 'Enable POS specific prices.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_price' ) );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
@@ -191,7 +191,7 @@ class Single_Product {
 	 */
 	public function add_variations_store_tax_fields( $loop, $variation_data, $variation ): void {
 		echo '<p class="form-row form-row-full"><label>';
-		echo esc_html__( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_tax' ) );
+		echo /* translators: Product POS visibility or barcode label in WooCommerce admin. */ esc_html__( 'Enable POS specific taxes.', 'woocommerce-pos' ) . ' ' . wp_kses_post( $this->get_pro_link( 'product_edit_tax' ) );
 		echo '<input style="vertical-align:middle;margin:0 5px 0 0 !important;" type="checkbox" class="checkbox" disabled />';
 		echo '</label></p>';
 	}
@@ -204,7 +204,7 @@ class Single_Product {
 	 * @return string
 	 */
 	private function get_pro_link( string $placement ): string {
-		return '<a href="https://wcpos.com/pro" data-wcpos-upgrade-placement="' . esc_attr( $placement ) . '">' . __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
+		return '<a href="https://wcpos.com/pro" data-wcpos-upgrade-placement="' . esc_attr( $placement ) . '">' . /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Upgrade to Pro', 'woocommerce-pos' ) . '</a>.';
 	}
 
 	/**

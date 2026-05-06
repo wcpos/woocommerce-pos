@@ -56,7 +56,7 @@ class Cashier extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'check_cashier_permissions' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
 						'type'        => 'integer',
 						'required'    => true,
 					),
@@ -74,7 +74,7 @@ class Cashier extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'check_cashier_permissions' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
 						'type'        => 'integer',
 						'required'    => true,
 					),
@@ -92,7 +92,7 @@ class Cashier extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'check_cashier_permissions' ),
 				'args'                => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Unique identifier for the cashier (WordPress user ID).', 'woocommerce-pos' ),
 						'type'        => 'integer',
 						'required'    => true,
 					),
@@ -120,6 +120,7 @@ class Cashier extends WP_REST_Controller {
 		if ( ! is_user_logged_in() ) {
 			return new WP_Error(
 				'woocommerce_pos_rest_unauthorized',
+				/* translators: REST API schema field label or error message. */
 				__( 'Authentication required.', 'woocommerce-pos' ),
 				array( 'status' => 401 )
 			);
@@ -133,6 +134,7 @@ class Cashier extends WP_REST_Controller {
 		if ( ! $user ) {
 			return new WP_Error(
 				'woocommerce_pos_cashier_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Cashier not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -175,6 +177,7 @@ class Cashier extends WP_REST_Controller {
 		if ( ! $user ) {
 			return new WP_Error(
 				'woocommerce_pos_cashier_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Cashier not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -209,6 +212,7 @@ class Cashier extends WP_REST_Controller {
 		if ( ! $user ) {
 			return new WP_Error(
 				'woocommerce_pos_cashier_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Cashier not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -253,6 +257,7 @@ class Cashier extends WP_REST_Controller {
 		if ( ! $user ) {
 			return new WP_Error(
 				'woocommerce_pos_cashier_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Cashier not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);

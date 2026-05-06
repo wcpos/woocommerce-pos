@@ -77,6 +77,7 @@ class Receipts_Controller extends WP_REST_Controller {
 		if ( ! $order ) {
 			return new WP_Error(
 				'wcpos_receipt_invalid_order',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid order.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);
@@ -87,6 +88,7 @@ class Receipts_Controller extends WP_REST_Controller {
 		if ( null !== $requested_mode && ! \in_array( $requested_mode, array( 'fiscal', 'live' ), true ) ) {
 			return new WP_Error(
 				'wcpos_receipt_invalid_mode',
+				/* translators: REST API schema field label or error message. */
 				__( 'Invalid receipt mode.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);

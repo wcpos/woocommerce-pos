@@ -54,6 +54,7 @@ class Settings {
 				<p>%s <a href="mailto:support@wcpos.com">support@wcpos.com</a></p>
 			</div>
 		</div>',
+			/* translators: Short WCPOS UI label; keep concise. */
 			esc_html__( 'Error', 'woocommerce-pos' ),
 			esc_html__( 'Settings failed to load, please contact support', 'woocommerce-pos' )
 		);

@@ -23,7 +23,7 @@ class Card extends WC_Payment_Gateway {
 	 */
 	public function __construct() {
 		$this->id          = 'pos_card';
-		$this->title       = __( 'Card', 'woocommerce-pos' );
+		$this->title       = /* translators: POS payment gateway label shown during checkout. */ __( 'Card', 'woocommerce-pos' );
 		$this->description = '';
 		$this->icon        = apply_filters( 'woocommerce_pos_card_icon', '' );
 		$this->has_fields  = true;
@@ -67,10 +67,10 @@ class Card extends WC_Payment_Gateway {
 
 		echo '
       <div class="form-row " id="pos-cashback_field">
-        <label for="pos-cashback" class="">' . esc_html__( 'Cashback', 'woocommerce-pos' ) . '</label>
+        <label for="pos-cashback" class="">' . /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Cashback', 'woocommerce-pos' ) . '</label>
         <div class="input-group">
         ' . wp_kses_post( $left_addon ) . '
-          <input type="text" class="form-control" name="pos-cashback" id="pos-cashback" placeholder="" maxlength="20" data-value="0" data-numpad="cash" data-label="' . esc_attr__( 'Cashback', 'woocommerce-pos' ) . '">
+          <input type="text" class="form-control" name="pos-cashback" id="pos-cashback" placeholder="" maxlength="20" data-value="0" data-numpad="cash" data-label="' . /* translators: POS payment gateway label shown during checkout. */ esc_attr__( 'Cashback', 'woocommerce-pos' ) . '">
         ' . wp_kses_post( $right_addon ) . '
         </div>';
 		wp_nonce_field( 'pos_card_payment_nonce', 'pos_card_payment_nonce_field' );
@@ -89,7 +89,7 @@ class Card extends WC_Payment_Gateway {
 	public function process_payment( $order_id ) {
 		// Check nonce.
 		if ( ! isset( $_POST['pos_card_payment_nonce_field'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_card_payment_nonce_field'] ) ), 'pos_card_payment_nonce' ) ) {
-			wp_die( esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
+			wp_die( /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
 		}
 
 		// get order object.
@@ -144,7 +144,7 @@ class Card extends WC_Payment_Gateway {
 
 		// construct message.
 		if ( $cashback ) {
-			$message = __( 'Cashback', 'woocommerce-pos' ) . ': ';
+			$message = /* translators: POS payment gateway label shown during checkout. */ __( 'Cashback', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $cashback );
 		}
 
@@ -289,7 +289,7 @@ class Card extends WC_Payment_Gateway {
 			$item_id = wc_add_order_item(
 				$order->get_id(),
 				array(
-					'order_item_name' => __( 'Cashback', 'woocommerce-pos' ),
+					'order_item_name' => /* translators: POS payment gateway label shown during checkout. */ __( 'Cashback', 'woocommerce-pos' ),
 					'order_item_type' => 'fee',
 				)
 			);

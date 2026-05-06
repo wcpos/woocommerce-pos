@@ -324,7 +324,7 @@ class Consent {
 	public function save_consent( WP_REST_Request $request ) {
 		$choice = $request->get_param( 'consent' );
 		if ( ! \in_array( $choice, array( 'allowed', 'denied' ), true ) ) {
-			return new WP_Error( 'wcpos_consent_invalid', __( 'Invalid consent value.', 'woocommerce-pos' ), array( 'status' => 400 ) );
+			return new WP_Error( 'wcpos_consent_invalid', /* translators: Short WCPOS UI label; keep concise. */ __( 'Invalid consent value.', 'woocommerce-pos' ), array( 'status' => 400 ) );
 		}
 
 		$settings = woocommerce_pos_get_settings( 'general' );
@@ -361,7 +361,7 @@ class Consent {
 	public function dismiss_callout() {
 		$user_id = get_current_user_id();
 		if ( ! $user_id ) {
-			return new WP_Error( 'wcpos_consent_no_user', __( 'No current user.', 'woocommerce-pos' ), array( 'status' => 401 ) );
+			return new WP_Error( 'wcpos_consent_no_user', /* translators: Short WCPOS UI label; keep concise. */ __( 'No current user.', 'woocommerce-pos' ), array( 'status' => 401 ) );
 		}
 
 		$hidden_until = time() + self::CALLOUT_HIDE_TTL;

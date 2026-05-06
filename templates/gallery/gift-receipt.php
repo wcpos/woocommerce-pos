@@ -102,7 +102,7 @@ $lines = $receipt_data['lines'];
 <body>
 
 	<div class="header">
-		<div class="gift-label"><?php esc_html_e( 'Gift Receipt', 'woocommerce-pos' ); ?></div>
+		<div class="gift-label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Gift Receipt', 'woocommerce-pos' ); ?></div>
 		<div class="store-name"><?php echo esc_html( $store['name'] ); ?></div>
 	</div>
 

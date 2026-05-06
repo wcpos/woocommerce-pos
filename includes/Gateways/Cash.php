@@ -25,7 +25,7 @@ class Cash extends WC_Payment_Gateway {
 	 */
 	public function __construct() {
 		$this->id          = 'pos_cash';
-		$this->title       = __( 'Cash', 'woocommerce-pos' );
+		$this->title       = /* translators: POS payment gateway label shown during checkout. */ __( 'Cash', 'woocommerce-pos' );
 		$this->description = '';
 		$this->icon        = apply_filters( 'woocommerce_pos_cash_icon', '' );
 		$this->has_fields  = true;
@@ -89,15 +89,15 @@ class Cash extends WC_Payment_Gateway {
 		echo '
 		<div class="form-row" id="pos-cash-tendered_field" style="display: flex; justify-content: space-between;">
 			<div style="flex: 1;">
-				<label for="pos-cash-tendered" style="padding-left:0">' . esc_html__( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
+				<label for="pos-cash-tendered" style="padding-left:0">' . /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
 				<div class="input-group">
 					' . wp_kses_post( $left_addon ) . '
-					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . esc_attr__( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
+					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . /* translators: POS payment gateway label shown during checkout. */ esc_attr__( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
 					' . wp_kses_post( $right_addon ) . '
 				</div>
 			</div>
 			<div style="flex: 1;">
-				<label style="padding-left:0">' . esc_html__( 'Change', 'woocommerce-pos' ) . '</label>
+				<label style="padding-left:0">' . /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Change', 'woocommerce-pos' ) . '</label>
 				<div id="pos-cash-change-display"></div>
 			</div>';
 		wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' );
@@ -139,7 +139,7 @@ class Cash extends WC_Payment_Gateway {
 	public function process_payment( $order_id ): array {
 		// Check nonce.
 		if ( ! isset( $_POST['pos_cash_payment_nonce_field'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['pos_cash_payment_nonce_field'] ) ), 'pos_cash_payment_nonce' ) ) {
-			wp_die( esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
+			wp_die( /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Nonce verification failed', 'woocommerce-pos' ) );
 		}
 
 		// get order object.
@@ -198,9 +198,9 @@ class Cash extends WC_Payment_Gateway {
 
 		// construct message.
 		if ( $tendered && $change ) {
-			$message = __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
+			$message = /* translators: POS payment gateway label shown during checkout. */ __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $tendered ) . '<br>';
-			$message .= _x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' ) . ': ';
+			$message .= /* translators: Money returned to the customer after a cash payment. */ _x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $change );
 		}
 
@@ -360,7 +360,7 @@ class Cash extends WC_Payment_Gateway {
 		$fee = new WC_Order_Item_Fee();
 		$fee->set_props(
 			array(
-				'name'      => __( 'Partial Payment', 'woocommerce-pos' ),
+				'name'      => /* translators: POS payment gateway label shown during checkout. */ __( 'Partial Payment', 'woocommerce-pos' ),
 				'tax_class' => 0,
 				'amount'    => '-' . $tendered,
 				'total'     => '-' . $tendered,

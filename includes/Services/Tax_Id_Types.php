@@ -239,65 +239,65 @@ class Tax_Id_Types {
 			case self::TYPE_EU_VAT:
 			case self::TYPE_GB_VAT:
 			case self::TYPE_SA_VAT:
-				return __( 'VAT Number', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'VAT Number', 'woocommerce-pos' );
 
 			case self::TYPE_AU_ABN:
-				return __( 'ABN', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'ABN', 'woocommerce-pos' );
 
 			case self::TYPE_BR_CPF:
-				return __( 'CPF', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'CPF', 'woocommerce-pos' );
 
 			case self::TYPE_BR_CNPJ:
-				return __( 'CNPJ', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'CNPJ', 'woocommerce-pos' );
 
 			case self::TYPE_IN_GST:
-				return __( 'GSTIN', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'GSTIN', 'woocommerce-pos' );
 
 			case self::TYPE_IT_CF:
-				return __( 'Codice Fiscale', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'Codice Fiscale', 'woocommerce-pos' );
 
 			case self::TYPE_IT_PIVA:
-				return __( 'Partita IVA', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'Partita IVA', 'woocommerce-pos' );
 
 			case self::TYPE_ES_NIF:
-				return __( 'NIF', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'NIF', 'woocommerce-pos' );
 
 			case self::TYPE_AR_CUIT:
-				return __( 'CUIT', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'CUIT', 'woocommerce-pos' );
 
 			case self::TYPE_CA_GST_HST:
-				return __( 'GST/HST', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'GST/HST', 'woocommerce-pos' );
 
 			case self::TYPE_US_EIN:
-				return __( 'EIN', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'EIN', 'woocommerce-pos' );
 
 			case self::TYPE_DE_UST_ID:
-				return __( 'USt-IdNr.', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'USt-IdNr.', 'woocommerce-pos' );
 
 			case self::TYPE_DE_STEUERNUMMER:
-				return __( 'Steuernummer', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'Steuernummer', 'woocommerce-pos' );
 
 			case self::TYPE_DE_HRB:
-				return __( 'HRB', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'HRB', 'woocommerce-pos' );
 
 			case self::TYPE_NL_KVK:
-				return __( 'KVK', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'KVK', 'woocommerce-pos' );
 
 			case self::TYPE_FR_SIRET:
-				return __( 'SIRET', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'SIRET', 'woocommerce-pos' );
 
 			case self::TYPE_FR_SIREN:
-				return __( 'SIREN', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'SIREN', 'woocommerce-pos' );
 
 			case self::TYPE_GB_COMPANY:
-				return __( 'Company No.', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'Company No.', 'woocommerce-pos' );
 
 			case self::TYPE_CH_UID:
-				return __( 'UID', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'UID', 'woocommerce-pos' );
 
 			case self::TYPE_OTHER:
 			default:
-				return __( 'Tax ID', 'woocommerce-pos' );
+				return /* translators: Tax identification type label. */ __( 'Tax ID', 'woocommerce-pos' );
 		}
 	}
 

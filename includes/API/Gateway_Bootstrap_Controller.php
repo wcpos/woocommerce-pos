@@ -94,6 +94,7 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 		if ( ! $gateway ) {
 			return new WP_Error(
 				'wcpos_payment_gateway_not_found',
+				/* translators: REST API schema field label or error message. */
 				__( 'Payment gateway not found.', 'woocommerce-pos' ),
 				array( 'status' => 404 )
 			);

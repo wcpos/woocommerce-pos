@@ -96,7 +96,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 
 		// Add structured tax_ids property (TaxId[]).
 		$schema['properties']['tax_ids'] = array(
-			'description' => __( 'Customer tax IDs.', 'woocommerce-pos' ),
+			'description' => /* translators: REST API schema field label or error message. */ __( 'Customer tax IDs.', 'woocommerce-pos' ),
 			'type'        => 'array',
 			'context'     => array( 'view', 'edit' ),
 			'items'       => array(
@@ -105,11 +105,11 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					'type'    => array(
 						'type'        => 'string',
 						'enum'        => Tax_Id_Types::all_types(),
-						'description' => __( 'Tax ID type.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID type.', 'woocommerce-pos' ),
 					),
 					'value'   => array(
 						'type'        => 'string',
-						'description' => __( 'Tax ID value.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Tax ID value.', 'woocommerce-pos' ),
 					),
 					'country' => array(
 						'type'        => array( 'string', 'null' ),
@@ -117,7 +117,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 					),
 					'label'   => array(
 						'type'        => array( 'string', 'null' ),
-						'description' => __( 'Optional human-readable label.', 'woocommerce-pos' ),
+						'description' => /* translators: REST API schema field label or error message. */ __( 'Optional human-readable label.', 'woocommerce-pos' ),
 					),
 				),
 			),

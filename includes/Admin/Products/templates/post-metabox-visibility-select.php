@@ -18,7 +18,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 ?>
 
 <div class="misc-pub-section" id="pos-visibility">
-	<?php esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?>:
+	<?php /* translators: Product POS visibility or barcode label in WooCommerce admin. */ esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?>:
 	<strong id="pos-visibility-display"><?php echo esc_html( $this->options[ $selected ] ); // @phpstan-ignore-line ?></strong>
 	<a href="#pos-visibility" id="pos-visibility-show" class="hide-if-no-js"
 	   style="display: inline;">

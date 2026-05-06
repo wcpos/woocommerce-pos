@@ -99,7 +99,7 @@ $separator = str_repeat( '-', 42 );
 			if ( empty( $tax_id['value'] ) ) {
 				continue;
 			}
-			$tax_id_label = ! empty( $tax_id['label'] ) ? $tax_id['label'] : __( 'Tax ID', 'woocommerce-pos' );
+			$tax_id_label = ! empty( $tax_id['label'] ) ? $tax_id['label'] : /* translators: Label shown on a POS receipt or checkout template. */ __( 'Tax ID', 'woocommerce-pos' );
 			?>
 			<div class="center small">
 				<?php
@@ -130,19 +130,19 @@ $separator = str_repeat( '-', 42 );
 
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>
 
-	<div class="center bold mb"><?php esc_html_e( 'SALES RECEIPT', 'woocommerce-pos' ); ?></div>
+	<div class="center bold mb"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'SALES RECEIPT', 'woocommerce-pos' ); ?></div>
 
 	<?php $order_number = $order_data['number'] ?? ''; ?>
 	<?php $created_at = $order_data['created']['datetime'] ?? ''; ?>
-	<div class="row"><span class="label"><?php esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span></div>
-	<div class="row"><span class="label"><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $created_at ); ?></span></div>
+	<div class="row"><span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Receipt #', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span></div>
+	<div class="row"><span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Date', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $created_at ); ?></span></div>
 
 	<?php if ( ! empty( $cashier['name'] ) ) : ?>
-		<div class="row"><span class="label"><?php esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $cashier['name'] ); ?></span></div>
+		<div class="row"><span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $cashier['name'] ); ?></span></div>
 	<?php endif; ?>
 
 	<?php if ( ! empty( $customer['name'] ) ) : ?>
-		<div class="row"><span class="label"><?php esc_html_e( 'Customer', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $customer['name'] ); ?></span></div>
+		<div class="row"><span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Customer', 'woocommerce-pos' ); ?></span><span class="value"><?php echo esc_html( $customer['name'] ); ?></span></div>
 	<?php endif; ?>
 
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>
@@ -163,13 +163,13 @@ $separator = str_repeat( '-', 42 );
 	<div class="sep"><?php echo esc_html( $separator ); ?></div>
 
 	<div class="row">
-		<span class="label"><?php esc_html_e( 'Subtotal', 'woocommerce-pos' ); ?></span>
+		<span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Subtotal', 'woocommerce-pos' ); ?></span>
 		<span class="value"><?php echo esc_html( $money( $totals['subtotal'] ) ); ?></span>
 	</div>
 
 	<?php if ( ( $totals['discount_total_incl'] ?? 0 ) > 0 ) : ?>
 		<div class="row">
-			<span class="label"><?php esc_html_e( 'Discount', 'woocommerce-pos' ); ?></span>
+			<span class="label"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Discount', 'woocommerce-pos' ); ?></span>
 			<span class="value">-<?php echo esc_html( $money( $totals['discount_total'] ) ); ?></span>
 		</div>
 	<?php endif; ?>
@@ -189,7 +189,7 @@ $separator = str_repeat( '-', 42 );
 	<?php endif; ?>
 
 	<div class="total-row">
-		<span><?php esc_html_e( 'TOTAL', 'woocommerce-pos' ); ?></span>
+		<span><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'TOTAL', 'woocommerce-pos' ); ?></span>
 		<span><?php echo esc_html( $money( $totals['total'] ) ); ?></span>
 	</div>
 
@@ -202,11 +202,11 @@ $separator = str_repeat( '-', 42 );
 		</div>
 		<?php if ( $payment['tendered'] > 0 ) : ?>
 			<div class="row small">
-				<span class="label">&nbsp;&nbsp;<?php esc_html_e( 'Tendered', 'woocommerce-pos' ); ?></span>
+				<span class="label">&nbsp;&nbsp;<?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Tendered', 'woocommerce-pos' ); ?></span>
 				<span class="value"><?php echo esc_html( $money( $payment['tendered'] ) ); ?></span>
 			</div>
 			<div class="row small">
-				<span class="label">&nbsp;&nbsp;<?php esc_html_e( 'Change', 'woocommerce-pos' ); ?></span>
+				<span class="label">&nbsp;&nbsp;<?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Change', 'woocommerce-pos' ); ?></span>
 				<span class="value"><?php echo esc_html( $money( $payment['change'] ) ); ?></span>
 			</div>
 		<?php endif; ?>
@@ -216,7 +216,7 @@ $separator = str_repeat( '-', 42 );
 	<?php if ( $customer_note ) : ?>
 		<div class="sep"><?php echo esc_html( $separator ); ?></div>
 		<div class="small">
-			<span class="bold"><?php esc_html_e( 'Note:', 'woocommerce-pos' ); ?></span>
+			<span class="bold"><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Note:', 'woocommerce-pos' ); ?></span>
 			<?php echo esc_html( $customer_note ); ?>
 		</div>
 	<?php endif; ?>

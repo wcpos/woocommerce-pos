@@ -569,13 +569,13 @@ class Preview_Receipt_Builder {
 		$fee_excl      = 2.50;
 		$fee_tax       = round( $fee_excl * $tax_rate / 100, $dp );
 		$fee_incl      = $fee_excl + $fee_tax;
-		$fee_label     = __( 'Gift Wrapping', 'woocommerce-pos' );
+		$fee_label     = /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Gift Wrapping', 'woocommerce-pos' );
 
 		// Shipping (excl tax).
 		$shipping_excl     = 10.00;
 		$shipping_tax      = round( $shipping_excl * $tax_rate / 100, $dp );
 		$shipping_incl     = $shipping_excl + $shipping_tax;
-		$shipping_label    = __( 'Flat Rate Shipping', 'woocommerce-pos' );
+		$shipping_label    = /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Flat Rate Shipping', 'woocommerce-pos' );
 
 		// Discount: 10% of line items excl total.
 		$discount_rate  = 10.0;
@@ -718,7 +718,7 @@ class Preview_Receipt_Builder {
 		$payments = array(
 			array(
 				'method_id'      => 'pos_cash',
-				'method_title'   => __( 'Cash', 'woocommerce-pos' ),
+				'method_title'   => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Cash', 'woocommerce-pos' ),
 				'amount'         => $total_incl,
 				'transaction_id' => '',
 				'tendered'       => $tendered,
@@ -739,16 +739,16 @@ class Preview_Receipt_Builder {
 			'tax_agency_code'   => 'SAMPLE',
 			'signed_at'         => gmdate( 'Y-m-d\TH:i:s\Z' ),
 			'signature_excerpt' => 'A1B2',
-			'document_label'    => __( 'Tax Receipt', 'woocommerce-pos' ),
+			'document_label'    => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax Receipt', 'woocommerce-pos' ),
 			'is_reprint'        => false,
 			'reprint_count'     => 0,
 			'extra_fields'      => array(
 				array(
-					'label' => __( 'Tax ID', 'woocommerce-pos' ),
+					'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax ID', 'woocommerce-pos' ),
 					'value' => 'XX-1234567',
 				),
 				array(
-					'label' => __( 'Auth Code', 'woocommerce-pos' ),
+					'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Auth Code', 'woocommerce-pos' ),
 					'value' => 'ABC-789',
 				),
 			),
@@ -1317,7 +1317,7 @@ class Preview_Receipt_Builder {
 
 		$default = array(
 			'rate'  => self::FALLBACK_TAX_RATE,
-			'label' => __( 'Tax', 'woocommerce-pos' ),
+			'label' => /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax', 'woocommerce-pos' ),
 			'code'  => '1',
 		);
 
@@ -1342,7 +1342,7 @@ class Preview_Receipt_Builder {
 
 			return array(
 				'rate'  => (float) $first_rate['rate'],
-				'label' => $first_rate['label'] ? $first_rate['label'] : __( 'Tax', 'woocommerce-pos' ),
+				'label' => $first_rate['label'] ? $first_rate['label'] : /* translators: Sample receipt label or value used in receipt template previews. */ __( 'Tax', 'woocommerce-pos' ),
 				'code'  => (string) $rate_id,
 			);
 		}

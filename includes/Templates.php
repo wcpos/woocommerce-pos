@@ -55,38 +55,38 @@ class Templates {
 	 */
 	public function register_post_type(): void {
 		$labels = array(
-			'name'                  => _x( 'Templates', 'Post Type General Name', 'woocommerce-pos' ),
-			'singular_name'         => _x( 'Template', 'Post Type Singular Name', 'woocommerce-pos' ),
-			'menu_name'             => __( 'Templates', 'woocommerce-pos' ),
-			'name_admin_bar'        => __( 'Template', 'woocommerce-pos' ),
-			'archives'              => __( 'Template Archives', 'woocommerce-pos' ),
-			'attributes'            => __( 'Template Attributes', 'woocommerce-pos' ),
-			'parent_item_colon'     => __( 'Parent Template:', 'woocommerce-pos' ),
-			'all_items'             => __( 'Templates', 'woocommerce-pos' ),
-			'add_new_item'          => __( 'Add New Template', 'woocommerce-pos' ),
-			'add_new'               => __( 'Add New', 'woocommerce-pos' ),
-			'new_item'              => __( 'New Template', 'woocommerce-pos' ),
-			'edit_item'             => __( 'Edit Template', 'woocommerce-pos' ),
-			'update_item'           => __( 'Update Template', 'woocommerce-pos' ),
-			'view_item'             => __( 'View Template', 'woocommerce-pos' ),
-			'view_items'            => __( 'View Templates', 'woocommerce-pos' ),
-			'search_items'          => __( 'Search Template', 'woocommerce-pos' ),
-			'not_found'             => __( 'Not found', 'woocommerce-pos' ),
+			'name'                  => /* translators: Receipt template post type or template option label. */ _x( 'Templates', 'Post Type General Name', 'woocommerce-pos' ),
+			'singular_name'         => /* translators: Receipt template post type or template option label. */ _x( 'Template', 'Post Type Singular Name', 'woocommerce-pos' ),
+			'menu_name'             => /* translators: Receipt template post type or template option label. */ __( 'Templates', 'woocommerce-pos' ),
+			'name_admin_bar'        => /* translators: Receipt template post type or template option label. */ __( 'Template', 'woocommerce-pos' ),
+			'archives'              => /* translators: Receipt template post type or template option label. */ __( 'Template Archives', 'woocommerce-pos' ),
+			'attributes'            => /* translators: Receipt template post type or template option label. */ __( 'Template Attributes', 'woocommerce-pos' ),
+			'parent_item_colon'     => /* translators: Receipt template post type or template option label. */ __( 'Parent Template:', 'woocommerce-pos' ),
+			'all_items'             => /* translators: Receipt template post type or template option label. */ __( 'Templates', 'woocommerce-pos' ),
+			'add_new_item'          => /* translators: Receipt template post type or template option label. */ __( 'Add New Template', 'woocommerce-pos' ),
+			'add_new'               => /* translators: Receipt template post type or template option label. */ __( 'Add New', 'woocommerce-pos' ),
+			'new_item'              => /* translators: Receipt template post type or template option label. */ __( 'New Template', 'woocommerce-pos' ),
+			'edit_item'             => /* translators: Receipt template post type or template option label. */ __( 'Edit Template', 'woocommerce-pos' ),
+			'update_item'           => /* translators: Receipt template post type or template option label. */ __( 'Update Template', 'woocommerce-pos' ),
+			'view_item'             => /* translators: Receipt template post type or template option label. */ __( 'View Template', 'woocommerce-pos' ),
+			'view_items'            => /* translators: Receipt template post type or template option label. */ __( 'View Templates', 'woocommerce-pos' ),
+			'search_items'          => /* translators: Receipt template post type or template option label. */ __( 'Search Template', 'woocommerce-pos' ),
+			'not_found'             => /* translators: Receipt template post type or template option label. */ __( 'Not found', 'woocommerce-pos' ),
 			'not_found_in_trash'    => __( 'Not found in Trash', 'woocommerce-pos' ),
-			'featured_image'        => __( 'Featured Image', 'woocommerce-pos' ),
-			'set_featured_image'    => __( 'Set featured image', 'woocommerce-pos' ),
-			'remove_featured_image' => __( 'Remove featured image', 'woocommerce-pos' ),
+			'featured_image'        => /* translators: Receipt template post type or template option label. */ __( 'Featured Image', 'woocommerce-pos' ),
+			'set_featured_image'    => /* translators: Receipt template post type or template option label. */ __( 'Set featured image', 'woocommerce-pos' ),
+			'remove_featured_image' => /* translators: Receipt template post type or template option label. */ __( 'Remove featured image', 'woocommerce-pos' ),
 			'use_featured_image'    => __( 'Use as featured image', 'woocommerce-pos' ),
-			'insert_into_item'      => __( 'Insert into template', 'woocommerce-pos' ),
+			'insert_into_item'      => /* translators: Receipt template post type or template option label. */ __( 'Insert into template', 'woocommerce-pos' ),
 			'uploaded_to_this_item' => __( 'Uploaded to this template', 'woocommerce-pos' ),
-			'items_list'            => __( 'Templates list', 'woocommerce-pos' ),
-			'items_list_navigation' => __( 'Templates list navigation', 'woocommerce-pos' ),
-			'filter_items_list'     => __( 'Filter templates list', 'woocommerce-pos' ),
+			'items_list'            => /* translators: Receipt template post type or template option label. */ __( 'Templates list', 'woocommerce-pos' ),
+			'items_list_navigation' => /* translators: Receipt template post type or template option label. */ __( 'Templates list navigation', 'woocommerce-pos' ),
+			'filter_items_list'     => /* translators: Receipt template post type or template option label. */ __( 'Filter templates list', 'woocommerce-pos' ),
 		);
 
 		$args = array(
-			'label'               => __( 'Template', 'woocommerce-pos' ),
-			'description'         => __( 'POS Templates', 'woocommerce-pos' ),
+			'label'               => /* translators: Receipt template post type or template option label. */ __( 'Template', 'woocommerce-pos' ),
+			'description'         => /* translators: Receipt template post type or template option label. */ __( 'POS Templates', 'woocommerce-pos' ),
 			'labels'              => $labels,
 			'supports'            => array( 'title', 'editor', 'revisions' ),
 			'taxonomies'          => array( 'wcpos_template_type', 'wcpos_template_category' ),
@@ -126,26 +126,26 @@ class Templates {
 	 */
 	public function register_taxonomy(): void {
 		$labels = array(
-			'name'                       => _x( 'Template Types', 'Taxonomy General Name', 'woocommerce-pos' ),
-			'singular_name'              => _x( 'Template Type', 'Taxonomy Singular Name', 'woocommerce-pos' ),
-			'menu_name'                  => __( 'Template Types', 'woocommerce-pos' ),
-			'all_items'                  => __( 'All Template Types', 'woocommerce-pos' ),
-			'parent_item'                => __( 'Parent Template Type', 'woocommerce-pos' ),
-			'parent_item_colon'          => __( 'Parent Template Type:', 'woocommerce-pos' ),
-			'new_item_name'              => __( 'New Template Type Name', 'woocommerce-pos' ),
-			'add_new_item'               => __( 'Add New Template Type', 'woocommerce-pos' ),
-			'edit_item'                  => __( 'Edit Template Type', 'woocommerce-pos' ),
-			'update_item'                => __( 'Update Template Type', 'woocommerce-pos' ),
-			'view_item'                  => __( 'View Template Type', 'woocommerce-pos' ),
+			'name'                       => /* translators: Receipt template post type or template option label. */ _x( 'Template Types', 'Taxonomy General Name', 'woocommerce-pos' ),
+			'singular_name'              => /* translators: Receipt template post type or template option label. */ _x( 'Template Type', 'Taxonomy Singular Name', 'woocommerce-pos' ),
+			'menu_name'                  => /* translators: Receipt template post type or template option label. */ __( 'Template Types', 'woocommerce-pos' ),
+			'all_items'                  => /* translators: Receipt template post type or template option label. */ __( 'All Template Types', 'woocommerce-pos' ),
+			'parent_item'                => /* translators: Receipt template post type or template option label. */ __( 'Parent Template Type', 'woocommerce-pos' ),
+			'parent_item_colon'          => /* translators: Receipt template post type or template option label. */ __( 'Parent Template Type:', 'woocommerce-pos' ),
+			'new_item_name'              => /* translators: Receipt template post type or template option label. */ __( 'New Template Type Name', 'woocommerce-pos' ),
+			'add_new_item'               => /* translators: Receipt template post type or template option label. */ __( 'Add New Template Type', 'woocommerce-pos' ),
+			'edit_item'                  => /* translators: Receipt template post type or template option label. */ __( 'Edit Template Type', 'woocommerce-pos' ),
+			'update_item'                => /* translators: Receipt template post type or template option label. */ __( 'Update Template Type', 'woocommerce-pos' ),
+			'view_item'                  => /* translators: Receipt template post type or template option label. */ __( 'View Template Type', 'woocommerce-pos' ),
 			'separate_items_with_commas' => __( 'Separate template types with commas', 'woocommerce-pos' ),
 			'add_or_remove_items'        => __( 'Add or remove template types', 'woocommerce-pos' ),
 			'choose_from_most_used'      => __( 'Choose from the most used', 'woocommerce-pos' ),
-			'popular_items'              => __( 'Popular Template Types', 'woocommerce-pos' ),
-			'search_items'               => __( 'Search Template Types', 'woocommerce-pos' ),
-			'not_found'                  => __( 'Not Found', 'woocommerce-pos' ),
-			'no_terms'                   => __( 'No template types', 'woocommerce-pos' ),
-			'items_list'                 => __( 'Template types list', 'woocommerce-pos' ),
-			'items_list_navigation'      => __( 'Template types list navigation', 'woocommerce-pos' ),
+			'popular_items'              => /* translators: Receipt template post type or template option label. */ __( 'Popular Template Types', 'woocommerce-pos' ),
+			'search_items'               => /* translators: Receipt template post type or template option label. */ __( 'Search Template Types', 'woocommerce-pos' ),
+			'not_found'                  => /* translators: Receipt template post type or template option label. */ __( 'Not Found', 'woocommerce-pos' ),
+			'no_terms'                   => /* translators: Receipt template post type or template option label. */ __( 'No template types', 'woocommerce-pos' ),
+			'items_list'                 => /* translators: Receipt template post type or template option label. */ __( 'Template types list', 'woocommerce-pos' ),
+			'items_list_navigation'      => /* translators: Receipt template post type or template option label. */ __( 'Template types list navigation', 'woocommerce-pos' ),
 		);
 
 		$args = array(
@@ -177,8 +177,8 @@ class Templates {
 			array( 'wcpos_template' ),
 			array(
 				'labels'            => array(
-					'name'          => _x( 'Template Categories', 'Taxonomy General Name', 'woocommerce-pos' ),
-					'singular_name' => _x( 'Template Category', 'Taxonomy Singular Name', 'woocommerce-pos' ),
+					'name'          => /* translators: Receipt template post type or template option label. */ _x( 'Template Categories', 'Taxonomy General Name', 'woocommerce-pos' ),
+					'singular_name' => /* translators: Receipt template post type or template option label. */ _x( 'Template Category', 'Taxonomy Singular Name', 'woocommerce-pos' ),
 				),
 				'hierarchical'      => false,
 				'public'            => false,
@@ -317,9 +317,9 @@ class Templates {
 		}
 
 		$titles = array(
-			self::TEMPLATE_THEME       => __( 'Theme Receipt Template', 'woocommerce-pos' ),
-			self::TEMPLATE_PLUGIN_PRO  => __( 'Pro Receipt Template', 'woocommerce-pos' ),
-			self::TEMPLATE_PLUGIN_CORE => __( 'Default Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_THEME       => /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_PLUGIN_PRO  => /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_PLUGIN_CORE => /* translators: Receipt template post type or template option label. */ __( 'Default Receipt Template', 'woocommerce-pos' ),
 		);
 
 		return array(
@@ -805,7 +805,7 @@ class Templates {
 
 		$starters = array(
 			'minimal-receipt'  => array(
-				'title'       => __( 'Minimal Receipt', 'woocommerce-pos' ),
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Minimal Receipt', 'woocommerce-pos' ),
 				'description' => __( 'A clean, data-driven receipt using the $receipt_data payload. Good starting point for custom templates.', 'woocommerce-pos' ),
 				'file'        => $examples_dir . 'minimal-receipt.php',
 				'type'        => 'receipt',
@@ -813,15 +813,15 @@ class Templates {
 				'engine'      => 'legacy-php',
 			),
 			'thermal-receipt'  => array(
-				'title'       => __( 'Thermal Printer Receipt', 'woocommerce-pos' ),
-				'description' => __( 'Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines.', 'woocommerce-pos' ),
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Thermal Printer Receipt', 'woocommerce-pos' ),
+				'description' => /* translators: Receipt template post type or template option label. */ __( 'Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines.', 'woocommerce-pos' ),
 				'file'        => $examples_dir . 'thermal-receipt.php',
 				'type'        => 'receipt',
 				'language'    => 'php',
 				'engine'      => 'legacy-php',
 			),
 			'gift-receipt'     => array(
-				'title'       => __( 'Gift Receipt', 'woocommerce-pos' ),
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Gift Receipt', 'woocommerce-pos' ),
 				'description' => __( 'Shows items without prices. Displays the customer note as a gift message. Useful for gift wrapping counters.', 'woocommerce-pos' ),
 				'file'        => $examples_dir . 'gift-receipt.php',
 				'type'        => 'receipt',
@@ -829,7 +829,7 @@ class Templates {
 				'engine'      => 'legacy-php',
 			),
 			'simple-receipt'   => array(
-				'title'       => __( 'Simple Receipt (Logicless)', 'woocommerce-pos' ),
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Simple Receipt (Logicless)', 'woocommerce-pos' ),
 				'description' => __( 'Full receipt using the logicless template engine with section blocks for line items, payments, and conditionals. No PHP required — just HTML and CSS.', 'woocommerce-pos' ),
 				'file'        => $examples_dir . 'simple-receipt.html',
 				'type'        => 'receipt',
@@ -1090,7 +1090,7 @@ class Templates {
 				'wcpos_template_type',
 				array(
 					'slug'        => 'receipt',
-					'description' => __( 'Receipt templates for printing orders', 'woocommerce-pos' ),
+					'description' => /* translators: Receipt template post type or template option label. */ __( 'Receipt templates for printing orders', 'woocommerce-pos' ),
 				)
 			);
 		}
@@ -1114,13 +1114,13 @@ class Templates {
 	 */
 	private function register_default_template_categories(): void {
 		$categories = array(
-			'receipt'        => __( 'Receipt', 'woocommerce-pos' ),
-			'invoice'        => __( 'Invoice', 'woocommerce-pos' ),
-			'gift-receipt'   => __( 'Gift Receipt', 'woocommerce-pos' ),
-			'credit-note'    => __( 'Credit Note', 'woocommerce-pos' ),
-			'purchase-order' => __( 'Purchase Order', 'woocommerce-pos' ),
-			'kitchen-ticket' => __( 'Kitchen Ticket', 'woocommerce-pos' ),
-			'bar-ticket'     => __( 'Bar Ticket', 'woocommerce-pos' ),
+			'receipt'        => /* translators: Receipt template post type or template option label. */ __( 'Receipt', 'woocommerce-pos' ),
+			'invoice'        => /* translators: Receipt template post type or template option label. */ __( 'Invoice', 'woocommerce-pos' ),
+			'gift-receipt'   => /* translators: Receipt template post type or template option label. */ __( 'Gift Receipt', 'woocommerce-pos' ),
+			'credit-note'    => /* translators: Receipt template post type or template option label. */ __( 'Credit Note', 'woocommerce-pos' ),
+			'purchase-order' => /* translators: Receipt template post type or template option label. */ __( 'Purchase Order', 'woocommerce-pos' ),
+			'kitchen-ticket' => /* translators: Receipt template post type or template option label. */ __( 'Kitchen Ticket', 'woocommerce-pos' ),
+			'bar-ticket'     => /* translators: Receipt template post type or template option label. */ __( 'Bar Ticket', 'woocommerce-pos' ),
 		);
 
 		foreach ( $categories as $slug => $name ) {

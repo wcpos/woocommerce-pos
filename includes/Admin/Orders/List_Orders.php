@@ -39,8 +39,8 @@ class List_Orders {
 		$selected = isset( $_GET['pos_order'] ) ? sanitize_text_field( wp_unslash( $_GET['pos_order'] ) ) : '';
 
 		$options = array(
-			'yes' => __( 'POS', 'woocommerce-pos' ),
-			'no'  => __( 'Online', 'woocommerce-pos' ),
+			'yes' => /* translators: Order list label shown in WooCommerce admin for POS orders. */ __( 'POS', 'woocommerce-pos' ),
+			'no'  => /* translators: Order list label shown in WooCommerce admin for POS orders. */ __( 'Online', 'woocommerce-pos' ),
 		);
 
 		echo '<select name="pos_order" id="pos_order">';

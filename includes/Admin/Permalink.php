@@ -66,6 +66,7 @@ class Permalink {
 	private function init(): void {
 		add_settings_field(
 			'woocommerce-pos-permalink',
+			/* translators: Permalink settings label for the POS base URL. */
 			_x( 'POS base', 'Permalink setting, eg: /pos', 'woocommerce-pos' ),
 			array( $this, 'pos_slug_input' ),
 			'permalink',

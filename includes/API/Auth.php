@@ -336,7 +336,7 @@ class Auth extends WP_REST_Controller {
 			return rest_ensure_response(
 				array(
 					'success' => false,
-					'message' => __( 'Missing required parameters.', 'woocommerce-pos' ),
+					'message' => /* translators: REST API schema field label or error message. */ __( 'Missing required parameters.', 'woocommerce-pos' ),
 				),
 				400
 			);
@@ -351,7 +351,7 @@ class Auth extends WP_REST_Controller {
 			return rest_ensure_response(
 				array(
 					'success' => true,
-					'message' => __( 'Session revoked successfully.', 'woocommerce-pos' ),
+					'message' => /* translators: REST API schema field label or error message. */ __( 'Session revoked successfully.', 'woocommerce-pos' ),
 				)
 			);
 		}
@@ -380,7 +380,7 @@ class Auth extends WP_REST_Controller {
 			return rest_ensure_response(
 				array(
 					'success' => false,
-					'message' => __( 'Missing user_id parameter.', 'woocommerce-pos' ),
+					'message' => /* translators: REST API schema field label or error message. */ __( 'Missing user_id parameter.', 'woocommerce-pos' ),
 				),
 				400
 			);
@@ -411,7 +411,7 @@ class Auth extends WP_REST_Controller {
 			return rest_ensure_response(
 				array(
 					'success' => true,
-					'message' => __( 'Sessions revoked successfully.', 'woocommerce-pos' ),
+					'message' => /* translators: REST API schema field label or error message. */ __( 'Sessions revoked successfully.', 'woocommerce-pos' ),
 				)
 			);
 		}

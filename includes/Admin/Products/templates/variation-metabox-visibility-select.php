@@ -22,7 +22,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 <div>
 	<p class="form-row form-row-full">
 		<label
-			for="variable_pos_visibility[<?php echo esc_attr( (string) $variation->ID ); ?>]"><?php esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?></label>
+			for="variable_pos_visibility[<?php echo esc_attr( (string) $variation->ID ); ?>]"><?php /* translators: Product POS visibility or barcode label in WooCommerce admin. */ esc_html_e( 'POS visibility', 'woocommerce-pos' ); ?></label>
 		<select name="variable_pos_visibility[<?php echo esc_attr( (string) $variation->ID ); ?>]">
 			<?php
 			foreach ( $this->options as $wcpos_value => $wcpos_label ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- template variables. @phpstan-ignore-line

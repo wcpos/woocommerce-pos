@@ -80,7 +80,7 @@ class Orders {
 	 * @return array
 	 */
 	public function wc_order_statuses( array $order_statuses ): array {
-		$order_statuses['wc-pos-open']    = _x( 'POS - Open', 'Order status', 'woocommerce-pos' );
+		$order_statuses['wc-pos-open']    = /* translators: POS order status label. */ _x( 'POS - Open', 'Order status', 'woocommerce-pos' );
 		$order_statuses['wc-pos-partial'] = _x( 'POS - Partial Payment', 'Order status', 'woocommerce-pos' );
 
 		return $order_statuses;
@@ -649,7 +649,7 @@ class Orders {
 		register_post_status(
 			'wc-pos-open',
 			array(
-				'label'                     => _x( 'POS - Open', 'Order status', 'woocommerce-pos' ),
+				'label'                     => /* translators: POS order status label. */ _x( 'POS - Open', 'Order status', 'woocommerce-pos' ),
 				'public'                    => true,
 				'exclude_from_search'       => false,
 				'show_in_admin_all_list'    => true,

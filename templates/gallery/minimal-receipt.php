@@ -85,16 +85,16 @@ $money = function ( float $amount ) use ( $currency ): string {
 	<?php $order_number = $order_data['number'] ?? $receipt_data['meta']['order_number'] ?? ''; ?>
 	<?php $created_at = $order_data['created']['datetime'] ?? $receipt_data['meta']['created_at_local'] ?? $receipt_data['meta']['created_at_gmt'] ?? ''; ?>
 	<div class="meta-row">
-		<span><?php esc_html_e( 'Order', 'woocommerce-pos' ); ?></span>
+		<span><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Order', 'woocommerce-pos' ); ?></span>
 		<span>#<?php echo esc_html( ltrim( (string) $order_number, '#' ) ); ?></span>
 	</div>
 	<div class="meta-row">
-		<span><?php esc_html_e( 'Date', 'woocommerce-pos' ); ?></span>
+		<span><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Date', 'woocommerce-pos' ); ?></span>
 		<span><?php echo esc_html( $created_at ); ?></span>
 	</div>
 	<?php if ( ! empty( $cashier['name'] ) ) : ?>
 		<div class="meta-row">
-			<span><?php esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></span>
+			<span><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Cashier', 'woocommerce-pos' ); ?></span>
 			<span><?php echo esc_html( $cashier['name'] ); ?></span>
 		</div>
 	<?php endif; ?>
@@ -104,9 +104,9 @@ $money = function ( float $amount ) use ( $currency ): string {
 	<table>
 		<thead>
 			<tr>
-				<th><?php esc_html_e( 'Item', 'woocommerce-pos' ); ?></th>
-				<th><?php esc_html_e( 'Qty', 'woocommerce-pos' ); ?></th>
-				<th><?php esc_html_e( 'Total', 'woocommerce-pos' ); ?></th>
+				<th><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Item', 'woocommerce-pos' ); ?></th>
+				<th><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Qty', 'woocommerce-pos' ); ?></th>
+				<th><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Total', 'woocommerce-pos' ); ?></th>
 			</tr>
 		</thead>
 		<tbody>
@@ -127,13 +127,13 @@ $money = function ( float $amount ) use ( $currency ): string {
 
 	<table class="totals">
 		<tr>
-			<td><?php esc_html_e( 'Subtotal', 'woocommerce-pos' ); ?></td>
+			<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Subtotal', 'woocommerce-pos' ); ?></td>
 			<td><?php echo esc_html( $money( $totals['subtotal_incl'] ) ); ?></td>
 		</tr>
 
 		<?php if ( $totals['discount_total_incl'] > 0 ) : ?>
 			<tr>
-				<td><?php esc_html_e( 'Discount', 'woocommerce-pos' ); ?></td>
+				<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Discount', 'woocommerce-pos' ); ?></td>
 				<td>-<?php echo esc_html( $money( $totals['discount_total_incl'] ) ); ?></td>
 			</tr>
 		<?php endif; ?>
@@ -153,7 +153,7 @@ $money = function ( float $amount ) use ( $currency ): string {
 		<?php endif; ?>
 
 		<tr class="grand-total">
-			<td><?php esc_html_e( 'Total', 'woocommerce-pos' ); ?></td>
+			<td><?php /* translators: Label shown on a POS receipt or checkout template. */ esc_html_e( 'Total', 'woocommerce-pos' ); ?></td>
 			<td><?php echo esc_html( $money( $totals['total_incl'] ) ); ?></td>
 		</tr>
 	</table>

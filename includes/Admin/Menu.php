@@ -121,7 +121,7 @@ class Menu {
 			array(
 				array(
 					'id'       => 'woocommerce-analytics-pos',
-					'title'    => __( 'POS', 'woocommerce-pos' ),
+					'title'    => /* translators: WordPress admin menu label for WCPOS. */ __( 'POS', 'woocommerce-pos' ),
 					'parent'   => 'woocommerce-analytics',
 					'path'     => '/analytics/pos',
 					'nav_args' => array(
@@ -140,7 +140,9 @@ class Menu {
 	 */
 	private function register_pos_admin(): void {
 		$this->toplevel_screen_id = add_menu_page(
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'POS', 'woocommerce-pos' ),
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'POS', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			PLUGIN_NAME,
@@ -150,7 +152,9 @@ class Menu {
 
 		$this->view_pos_screen_id = add_submenu_page(
 			PLUGIN_NAME,
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'View POS', 'woocommerce-pos' ),
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'View POS', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			PLUGIN_NAME . '-view-pos',
@@ -170,7 +174,9 @@ class Menu {
 		// Template Gallery SPA page.
 		$this->gallery_screen_id = add_submenu_page(
 			PLUGIN_NAME,
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'Templates', 'woocommerce-pos' ),
+			/* translators: WordPress admin menu label for WCPOS. */
 			__( 'Templates', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			'wcpos-templates',
@@ -181,7 +187,7 @@ class Menu {
 		// adjust submenu.
 		global $submenu;
 		$pos_submenu       = &$submenu[ PLUGIN_NAME ];
-		$pos_submenu[0][0] = __( 'Upgrade to Pro', 'woocommerce-pos' );
+		$pos_submenu[0][0] = /* translators: WordPress admin menu label for WCPOS. */ __( 'Upgrade to Pro', 'woocommerce-pos' );
 		$pos_submenu[0][2] = self::get_upgrade_tracking_url(
 			'menu_submenu',
 			admin_url( 'admin.php?page=' . PLUGIN_NAME )
