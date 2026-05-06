@@ -282,13 +282,14 @@ inline styles on the wrapping element.
 		</div>
 
 		<!--
-			Order barcode — the receipt-renderer pipeline converts <barcode> elements into a centered <div> with
+			Order barcode — uses {{presentation_hints.order_barcode_type}} for {{order.number}}. The receipt-renderer
+			pipeline converts <barcode> elements into a centered <div> with
 			the SVG inside; we cap that wrapper's width and float it to the
 			right via flex.
 		-->
 		<div style="display: flex; justify-content: flex-end;">
 			<div style="width: 220px;">
-				<barcode type="code128" height="40">{{order.number}}</barcode>
+				<barcode type="{{#presentation_hints.order_barcode_type}}{{presentation_hints.order_barcode_type}}{{/presentation_hints.order_barcode_type}}{{^presentation_hints.order_barcode_type}}code128{{/presentation_hints.order_barcode_type}}" height="40">{{order.number}}</barcode>
 			</div>
 		</div>
 	</div>
