@@ -104,7 +104,22 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'meta', $payload );
 		$this->assertArrayNotHasKey( 'receipt', $payload );
 		$this->assertArrayHasKey( 'wc_status', $payload['order'] );
+		$this->assertArrayHasKey( 'status_label', $payload['order'] );
 		$this->assertArrayHasKey( 'created_via', $payload['order'] );
+	}
+
+	/**
+	 * Test status_label is populated using wc_get_order_status_name().
+	 */
+	public function test_build_populates_status_label_from_wc_helper(): void {
+		$order = OrderHelper::create_order();
+		$order->set_status( 'on-hold' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertSame( 'on-hold', $payload['order']['wc_status'] );
+		$this->assertSame( wc_get_order_status_name( 'on-hold' ), $payload['order']['status_label'] );
 	}
 
 	/**

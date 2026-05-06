@@ -278,6 +278,10 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => __( 'WC Status', 'woocommerce-pos' ),
 					),
+					'status_label' => array(
+						'type'  => 'string',
+						'label' => __( 'Status Label', 'woocommerce-pos' ),
+					),
 					'created_via'  => array(
 						'type'  => 'string',
 						'label' => __( 'Created Via', 'woocommerce-pos' ),
@@ -1351,6 +1355,7 @@ class Receipt_Data_Schema {
 				'currency'      => 'USD',
 				'customer_note' => '',
 				'wc_status'     => 'completed',
+				'status_label'  => 'Completed',
 				'created_via'   => 'woocommerce-pos',
 				'created'       => $created,
 				'paid'          => $paid,
