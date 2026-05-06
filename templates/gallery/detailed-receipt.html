@@ -19,7 +19,6 @@ ReceiptDataSchema:
     change_total
   - refunds[]: id, date, refunded_by_name, reason, lines[]
   - payments[]: method_title, amount, transaction_id, tendered, change
-  - receipt.printed: datetime in footer
   - presentation_hints: locale via formatReceiptData
 
 The fiscal block is intentionally omitted; the slot is replaced with an
@@ -31,7 +30,7 @@ qty, unit_excl, tax, tax_amount, taxable_excl, taxable_incl, tax_summary,
 discount, reference, subtotal, subtotal_excl_tax, total_excl, total_tax,
 total, paid, tendered, change, returned_items, total_refunded, customer_note,
 terms_and_conditions, thank_you_purchase, tax_invoice, tax_invoice_retain,
-printed, customer_tax_id}. All keys live in Receipt_I18n_Labels::get_labels()
+customer_tax_id}. All keys live in Receipt_I18n_Labels::get_labels()
 and ReceiptI18nSchema.
 -->
 <div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px; max-width: 800px; margin: 0 auto;">
@@ -315,9 +314,6 @@ and ReceiptI18nSchema.
 		<div>
 			{{#store.opening_hours}}<strong>{{store.opening_hours}}</strong>{{/store.opening_hours}}
 			{{#store.opening_hours_notes}}<br>{{store.opening_hours_notes}}{{/store.opening_hours_notes}}
-		</div>
-		<div style="text-align: right;">
-			{{#receipt.printed.datetime}}{{i18n.printed}} {{receipt.printed.datetime}}{{/receipt.printed.datetime}}
 		</div>
 	</footer>
 

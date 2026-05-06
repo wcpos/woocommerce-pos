@@ -64,7 +64,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_section_iterates_over_array(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name' => 'Widget',
@@ -91,7 +91,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_section_empty_array_produces_no_output(): void {
 		$data = array(
-			'meta' => array( 'currency' => 'USD' ),
+			'order' => array( 'currency' => 'USD' ),
 			'fees' => array(),
 		);
 
@@ -110,7 +110,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_inverted_section_shows_for_empty_array(): void {
 		$data = array(
-			'meta' => array( 'currency' => 'USD' ),
+			'order' => array( 'currency' => 'USD' ),
 			'fees' => array(),
 		);
 
@@ -127,7 +127,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_inverted_section_hidden_for_non_empty_array(): void {
 		$data = array(
-			'meta' => array( 'currency' => 'USD' ),
+			'order' => array( 'currency' => 'USD' ),
 			'fees' => array(
 				array( 'label' => 'Service Fee' ),
 			),
@@ -146,7 +146,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_truthy_section_shows_for_non_empty_string(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'store' => array( 'phone' => '555-1234' ),
 		);
 
@@ -163,7 +163,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_truthy_section_hidden_for_empty_string(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'store' => array( 'phone' => '' ),
 		);
 
@@ -180,7 +180,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_inverted_section_shows_for_missing_key(): void {
 		$data = array(
-			'meta' => array( 'currency' => 'USD' ),
+			'order' => array( 'currency' => 'USD' ),
 		);
 
 		$output = $this->render(
@@ -198,7 +198,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_dot_reference_for_scalar_array(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'store' => array(
 				'address_lines' => array( '123 Main St', 'Suite 100', 'Anytown 12345' ),
 			),
@@ -219,9 +219,9 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_context_fallback_to_parent(): void {
 		$data = array(
-			'meta'  => array(
-				'currency'     => 'USD',
-				'order_number' => '1042',
+			'order' => array(
+				'currency' => 'USD',
+				'number'   => '1042',
 			),
 			'lines' => array(
 				array( 'name' => 'Widget' ),
@@ -229,7 +229,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		);
 
 		$output = $this->render(
-			'{{#lines}}<div>{{name}} (Order #{{meta.order_number}})</div>{{/lines}}',
+			'{{#lines}}<div>{{name}} (Order #{{order.number}})</div>{{/lines}}',
 			$data
 		);
 
@@ -241,7 +241,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_dot_path_section_name(): void {
 		$data = array(
-			'meta'     => array( 'currency' => 'USD' ),
+			'order'     => array( 'currency' => 'USD' ),
 			'customer' => array(
 				'billing_address' => array(
 					'first_name' => 'John',
@@ -266,7 +266,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_nested_section_iteration(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name'  => 'Widget',
@@ -307,7 +307,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_deep_nesting_renders(): void {
 		$data = array(
-			'meta' => array( 'currency' => 'USD' ),
+			'order' => array( 'currency' => 'USD' ),
 			'a'    => array(
 				array(
 					'b' => array(
@@ -341,7 +341,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_money_fields_auto_formatted(): void {
 		$data = array(
-			'meta'   => array( 'currency' => 'USD' ),
+			'order'   => array( 'currency' => 'USD' ),
 			'totals' => array(
 				'total_incl' => 12.5,
 			),
@@ -364,7 +364,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_money_fields_formatted_inside_sections(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name'           => 'Widget',
@@ -387,7 +387,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_non_money_fields_not_formatted(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name' => 'Widget',
@@ -412,7 +412,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_standalone_tags_no_blank_lines(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array( 'name' => 'Widget' ),
 			),
@@ -428,7 +428,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 * Test empty template outputs comment.
 	 */
 	public function test_empty_template_renders_comment(): void {
-		$output = $this->render( '', array( 'meta' => array( 'currency' => 'USD' ) ) );
+		$output = $this->render( '', array( 'order' => array( 'currency' => 'USD' ) ) );
 		$this->assertStringContainsString( 'Empty logicless receipt template', $output );
 	}
 
@@ -439,7 +439,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_unclosed_section_throws_exception(): void {
 		$data = array(
-			'meta'  => array( 'currency' => 'USD' ),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(),
 		);
 
@@ -458,7 +458,7 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 * Test missing placeholder key produces empty string.
 	 */
 	public function test_missing_key_produces_empty_string(): void {
-		$data   = array( 'meta' => array( 'currency' => 'USD' ) );
+		$data   = array( 'order' => array( 'currency' => 'USD' ) );
 		$output = $this->render( 'Hello {{nonexistent.key}}!', $data );
 
 		$this->assertSame( 'Hello !', $output );
@@ -469,21 +469,19 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_basic_placeholder_substitution(): void {
 		$data = array(
-			'meta'    => array(
-				'currency'     => 'USD',
-				'order_number' => '999',
-			),
-			'receipt' => array(
-				'mode' => 'live',
+			'order' => array(
+				'currency'  => 'USD',
+				'number'    => '999',
+				'wc_status' => 'completed',
 			),
 		);
 
 		$output = $this->render(
-			'<h1>{{meta.order_number}}</h1><p>{{receipt.mode}}</p>',
+			'<h1>{{order.number}}</h1><p>{{order.wc_status}}</p>',
 			$data
 		);
 
 		$this->assertStringContainsString( '999', $output );
-		$this->assertStringContainsString( 'live', $output );
+		$this->assertStringContainsString( 'completed', $output );
 	}
 }

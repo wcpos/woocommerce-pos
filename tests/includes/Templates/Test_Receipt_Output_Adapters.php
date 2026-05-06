@@ -33,10 +33,11 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	 */
 	private function get_fixture_payload(): array {
 		return array(
-			'meta'   => array(
-				'order_number'   => '1001',
-				'currency'       => 'USD',
-				'created_at_gmt' => '2026-02-19 10:00:00',
+			'order'  => array(
+				'id'       => 1001,
+				'number'   => '1001',
+				'currency' => 'USD',
+				'created'  => array( 'datetime' => '2026-02-19 10:00:00' ),
 			),
 			'store'  => array(
 				'name' => 'WCPOS Fixture Store',
@@ -228,8 +229,8 @@ class Test_Receipt_Output_Adapters extends WC_REST_Unit_Test_Case {
 	 * Test TSPL adapter sanitizes order number in text commands.
 	 */
 	public function test_tspl_output_adapter_sanitizes_order_number_in_text(): void {
-		$receipt_data                         = $this->get_fixture_payload();
-		$receipt_data['meta']['order_number'] = '10"01';
+		$receipt_data                       = $this->get_fixture_payload();
+		$receipt_data['order']['number']    = '10"01';
 		$adapter                              = new Tspl_Output_Adapter();
 		$output                               = $adapter->transform( $receipt_data );
 

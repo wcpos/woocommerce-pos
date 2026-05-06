@@ -47,9 +47,9 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_logicless_renderer_replaces_placeholders(): void {
 		$order        = OrderHelper::create_order();
-		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order );
 		$template     = array(
-			'content' => '<h1>{{meta.order_number}}</h1><p>{{receipt.mode}}</p>',
+			'content' => '<h1>{{order.number}}</h1><p>{{order.currency}}</p>',
 		);
 
 		$renderer = new Logicless_Renderer();
@@ -58,17 +58,17 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$output = ob_get_clean();
 
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
-		$this->assertStringContainsString( 'live', $output );
+		$this->assertStringContainsString( (string) $order->get_currency(), $output );
 	}
 
 	/**
-	 * Test logicless renderer can replace semantic order and receipt placeholders.
+	 * Test logicless renderer can replace semantic order placeholders.
 	 */
 	public function test_logicless_renderer_replaces_semantic_date_placeholders(): void {
 		$order        = OrderHelper::create_order();
-		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order );
 		$template     = array(
-			'content' => '<h1>{{order.number}}</h1><p>{{order.created.datetime_full}}</p><p>{{receipt.mode}}</p>',
+			'content' => '<h1>{{order.number}}</h1><p>{{order.created.datetime_full}}</p>',
 		);
 
 		$renderer = new Logicless_Renderer();
@@ -77,7 +77,6 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$output = ob_get_clean();
 
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
-		$this->assertStringContainsString( 'live', $output );
 
 		$datetime_full = $receipt_data['order']['created']['datetime_full'];
 		$this->assertNotSame( '', $datetime_full );
@@ -92,9 +91,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	public function test_logicless_renderer_handles_array_value_without_error(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = array(
-			'meta'     => array(
-				'currency' => 'USD',
-			),
+			'order'     => array( 'currency' => 'USD' ),
 			'customer' => array(
 				'name'            => 'John Doe',
 				'billing_address' => array(
@@ -123,9 +120,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	public function test_logicless_renderer_iterates_array_sections(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = array(
-			'meta'  => array(
-				'currency' => 'USD',
-			),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name' => 'Widget',
@@ -157,9 +152,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	public function test_logicless_renderer_formats_money_fields(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = array(
-			'meta'   => array(
-				'currency' => 'USD',
-			),
+			'order'   => array( 'currency' => 'USD' ),
 			'totals' => array(
 				'total_incl' => 19.99,
 				'subtotal_incl'    => 19.99,
@@ -207,9 +200,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	public function test_logicless_renderer_handles_nested_arrays_in_lines(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = array(
-			'meta'  => array(
-				'currency' => 'USD',
-			),
+			'order'  => array( 'currency' => 'USD' ),
 			'lines' => array(
 				array(
 					'name'            => 'Widget',
@@ -245,9 +236,7 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	public function test_logicless_renderer_strips_html_comments(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = array(
-			'meta' => array(
-				'currency' => 'USD',
-			),
+			'order' => array( 'currency' => 'USD' ),
 		);
 
 		$template = array(

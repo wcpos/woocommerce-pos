@@ -33,8 +33,9 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 		$data = $method->invoke( $receipt, $order, 'fiscal' );
 
 		$this->assertIsArray( $data );
-		$this->assertArrayHasKey( 'meta', $data );
-		$this->assertEquals( 'live', $data['receipt']['mode'] );
+		$this->assertArrayHasKey( 'order', $data );
+		$this->assertArrayNotHasKey( 'meta', $data );
+		$this->assertArrayNotHasKey( 'receipt', $data );
 	}
 
 	/**

@@ -924,7 +924,7 @@ class Templates_Controller extends WP_REST_Controller {
 			$receipt_data = ( new Preview_Receipt_Builder() )->build( $pos_store );
 		}
 
-		$currency       = $receipt_data['order']['currency'] ?? $receipt_data['meta']['currency'] ?? 'USD';
+		$currency       = $receipt_data['order']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
 		// Determine engine.

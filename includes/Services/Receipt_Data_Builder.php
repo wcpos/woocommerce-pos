@@ -18,28 +18,14 @@ class Receipt_Data_Builder {
 	 * Build a canonical receipt payload.
 	 *
 	 * @param WC_Abstract_Order $order     Receipt order.
-	 * @param string            $mode      Receipt mode.
+	 * @param string            $mode      Reserved for caller compatibility; the receipt mode is
+	 *                                     carried in the request, not the payload.
 	 * @param object|null       $pos_store POS store object. Falls back to order meta or default.
 	 *
 	 * @return array
 	 */
 	public function build( WC_Abstract_Order $order, string $mode = 'live', $pos_store = null ): array {
-		$meta = array(
-			'schema_version'   => Receipt_Data_Schema::VERSION,
-			'created_at_gmt'   => current_time( 'mysql', true ),
-			'created_at_local' => current_time( 'mysql', false ),
-			'order_id'         => $order->get_id(),
-			'order_number'     => $order->get_order_number(),
-			'currency'         => $order->get_currency(),
-			'customer_note'    => $order->get_customer_note(),
-			'wc_status'        => method_exists( $order, 'get_status' ) ? (string) $order->get_status() : '',
-			'created_via'      => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
-		);
-
-		$receipt = array(
-			'mode'    => $mode,
-			'printed' => Receipt_Date_Formatter::from_timestamp( time(), wp_timezone() ),
-		);
+		unset( $mode );
 
 		$order_data = array(
 			'id'            => $order->get_id(),
@@ -343,9 +329,7 @@ class Receipt_Data_Builder {
 		);
 
 		return array(
-			'receipt'            => $receipt,
 			'order'              => $order_data,
-			'meta'               => $meta,
 			'store'              => $store,
 			'cashier'            => $cashier,
 			'customer'           => $customer,
