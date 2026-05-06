@@ -268,7 +268,8 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	 */
 	public function test_receipt_data_builder_composes_country_aware_address(): void {
 		$previous_default_country = get_option( 'woocommerce_default_country', '' );
-		update_option( 'woocommerce_default_country', 'US:AL' );
+		$country_code             = 'US';
+		update_option( 'woocommerce_default_country', $country_code . ':AL' );
 
 		// WC strips the country line when address country matches the base — force
 		// it on so the test can verify country-name resolution end-to-end.
@@ -284,7 +285,8 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 
 			// WC_Countries::get_formatted_address ends US-format addresses with
 			// the resolved country name; never the raw "US:AL" combined token.
-			$this->assertStringContainsStringIgnoringCase( 'United States', (string) $last_line );
+			$expected_country = WC()->countries->countries[ $country_code ];
+			$this->assertStringContainsStringIgnoringCase( (string) $expected_country, (string) $last_line );
 			$this->assertStringNotContainsString( 'US:AL', implode( "\n", $address_lines ) );
 		} finally {
 			remove_filter( 'woocommerce_formatted_address_force_country_display', '__return_true' );
