@@ -39,9 +39,10 @@ Sections, top to bottom:
     and opening hours notes.
 
 To remove a section, delete the matching block. Layout uses
-<row>/<col> for two-column alignment; col widths must add up to the
-paper width (48). Indented continuation lines (e.g. "  SKU: …") are
-plain <text> nodes that span the full width.
+<row>/<col> for two-column alignment. Columns using width="*" auto-distribute
+remaining space where supported; numeric widths are optional and should
+fit within the minimum CPL (42). Indented continuation lines (e.g.
+"  SKU: …") are plain <text> nodes that span the full width.
 -->
 <receipt paper-width="48">
 
@@ -74,16 +75,16 @@ plain <text> nodes that span the full width.
   <!-- ── Order info ─────────────── -->
   <row>
     <col width="12">{{i18n.order}}:</col>
-    <col width="*" align="right">#{{order.number}}</col>
+    <col width="30" align="right">#{{order.number}}</col>
   </row>
   <row>
     <col width="12">{{i18n.date}}:</col>
-    <col width="*" align="right">{{order.created.datetime}}</col>
+    <col width="30" align="right">{{order.created.datetime}}</col>
   </row>
   {{#cashier.name}}
   <row>
     <col width="12">{{i18n.cashier}}:</col>
-    <col width="*" align="right">{{cashier.name}}</col>
+    <col width="30" align="right">{{cashier.name}}</col>
   </row>
   {{/cashier.name}}
 
@@ -116,7 +117,7 @@ plain <text> nodes that span the full width.
   <!-- ── Items ─────────────── -->
   <line />
   <row>
-    <col width="*"><bold>{{i18n.item}}</bold></col>
+    <col width="30"><bold>{{i18n.item}}</bold></col>
     <col width="12" align="right"><bold>{{i18n.total}}</bold></col>
   </row>
   <line />
@@ -130,12 +131,12 @@ plain <text> nodes that span the full width.
   {{/sku}}
   {{#discounts}}
   <row>
-    <col width="*">  @ {{unit_subtotal_incl_display}}</col>
+    <col width="30">  @ {{unit_subtotal_incl_display}}</col>
     <col width="12" align="right">-{{discounts_incl_display}}</col>
   </row>
   {{/discounts}}
   <row>
-    <col width="*">  {{qty}} x {{unit_price_incl_display}}</col>
+    <col width="30">  {{qty}} x {{unit_price_incl_display}}</col>
     <col width="12" align="right">{{line_total_incl_display}}</col>
   </row>
   {{/lines}}
@@ -143,7 +144,7 @@ plain <text> nodes that span the full width.
   <!-- ── Fees / Shipping / Order-level discounts ─────────────── -->
   {{#fees}}
   <row>
-    <col width="*">{{label}}</col>
+    <col width="28">{{label}}</col>
     <col width="14" align="right">{{total_incl_display}}</col>
   </row>
   {{#meta}}
@@ -152,7 +153,7 @@ plain <text> nodes that span the full width.
   {{/fees}}
   {{#shipping}}
   <row>
-    <col width="*">{{label}}{{#method_id}} ({{method_id}}){{/method_id}}</col>
+    <col width="28">{{label}}{{#method_id}} ({{method_id}}){{/method_id}}</col>
     <col width="14" align="right">{{total_incl_display}}</col>
   </row>
   {{#meta}}
@@ -161,7 +162,7 @@ plain <text> nodes that span the full width.
   {{/shipping}}
   {{#discounts}}
   <row>
-    <col width="*">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
+    <col width="28">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
     <col width="14" align="right">-{{total_incl_display}}</col>
   </row>
   {{#code}}
@@ -176,11 +177,11 @@ plain <text> nodes that span the full width.
   {{/tax_summary.0}}
   {{#tax_summary}}
   <row>
-    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#code}} {{code}}{{/code}}</col>
+    <col width="28">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#code}} {{code}}{{/code}}</col>
     <col width="14" align="right">{{tax_amount_display}}</col>
   </row>
   <row>
-    <col width="*">  {{i18n.taxable_excl_short}} {{taxable_amount_excl_display}}</col>
+    <col width="24">  {{i18n.taxable_excl_short}} {{taxable_amount_excl_display}}</col>
     <col width="18" align="right">{{i18n.taxable_incl_short}} {{taxable_amount_incl_display}}</col>
   </row>
   {{/tax_summary}}
@@ -188,43 +189,43 @@ plain <text> nodes that span the full width.
   <!-- ── Totals ─────────────── -->
   <line />
   <row>
-    <col width="*">{{i18n.subtotal_excl_tax}}</col>
+    <col width="28">{{i18n.subtotal_excl_tax}}</col>
     <col width="14" align="right">{{totals.subtotal_excl_display}}</col>
   </row>
   {{#totals.discount_total_incl}}
   <row>
-    <col width="*">{{i18n.discount}}</col>
+    <col width="28">{{i18n.discount}}</col>
     <col width="14" align="right">-{{totals.discount_total_incl_display}}</col>
   </row>
   {{/totals.discount_total_incl}}
   <row>
-    <col width="*">{{i18n.total_excl}}</col>
+    <col width="28">{{i18n.total_excl}}</col>
     <col width="14" align="right">{{totals.total_excl_display}}</col>
   </row>
   <row>
-    <col width="*">{{i18n.total_tax}}</col>
+    <col width="28">{{i18n.total_tax}}</col>
     <col width="14" align="right">{{totals.tax_total_display}}</col>
   </row>
   <line style="double" />
   <bold><text>{{i18n.total}}</text></bold>
   <row>
-    <col width="*"></col>
+    <col width="24"></col>
     <col width="18" align="right"><bold>{{totals.total_incl_display}}</bold></col>
   </row>
   <line style="double" />
   {{#totals.refund_total}}
   <row>
-    <col width="*">{{i18n.refunded}}</col>
+    <col width="28">{{i18n.refunded}}</col>
     <col width="14" align="right">-{{totals.refund_total_display}}</col>
   </row>
   <row>
-    <col width="*"><bold>{{i18n.net_total}}</bold></col>
+    <col width="28"><bold>{{i18n.net_total}}</bold></col>
     <col width="14" align="right"><bold>{{totals.net_total_display}}</bold></col>
   </row>
   {{/totals.refund_total}}
   {{#totals.change_total}}
   <row>
-    <col width="*">{{i18n.change}}</col>
+    <col width="28">{{i18n.change}}</col>
     <col width="14" align="right">{{totals.change_total_display}}</col>
   </row>
   {{/totals.change_total}}
@@ -237,19 +238,19 @@ plain <text> nodes that span the full width.
   {{#refunds}}
   <row>
     <col width="12"><bold>#{{id}}</bold></col>
-    <col width="*" align="right">{{#date.datetime}}{{date.datetime}}{{/date.datetime}}</col>
+    <col width="30" align="right">{{#date.datetime}}{{date.datetime}}{{/date.datetime}}</col>
   </row>
   {{#refunded_by_name}}<text>  {{refunded_by_name}}</text>{{/refunded_by_name}}
   {{#reason}}<text>  {{reason}}</text>{{/reason}}
   {{#gateway_title}}<text>  {{gateway_title}}</text>{{/gateway_title}}
   {{#lines}}
   <row>
-    <col width="*">  {{name}}{{#sku}} ({{sku}}){{/sku}}</col>
+    <col width="28">  {{name}}{{#sku}} ({{sku}}){{/sku}}</col>
     <col width="14" align="right">{{total_display}}</col>
   </row>
   {{/lines}}
   <row>
-    <col width="*"><bold>{{i18n.total_refunded}}</bold></col>
+    <col width="28"><bold>{{i18n.total_refunded}}</bold></col>
     <col width="14" align="right"><bold>{{amount_display}}</bold></col>
   </row>
   {{/refunds}}
@@ -268,19 +269,19 @@ plain <text> nodes that span the full width.
   {{/payments.0}}
   {{#payments}}
   <row>
-    <col width="*">{{method_title}}</col>
+    <col width="28">{{method_title}}</col>
     <col width="14" align="right">{{amount_display}}</col>
   </row>
   {{#transaction_id}}<text>  {{i18n.reference}}: {{transaction_id}}</text>{{/transaction_id}}
   {{#tendered}}
   <row>
-    <col width="*">  {{i18n.tendered}}</col>
+    <col width="28">  {{i18n.tendered}}</col>
     <col width="14" align="right">{{tendered_display}}</col>
   </row>
   {{/tendered}}
   {{#change}}
   <row>
-    <col width="*">  {{i18n.change}}</col>
+    <col width="28">  {{i18n.change}}</col>
     <col width="14" align="right">{{change_display}}</col>
   </row>
   {{/change}}

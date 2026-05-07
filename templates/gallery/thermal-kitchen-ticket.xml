@@ -5,14 +5,14 @@
   <line style="double" />
   <bold><text>{{order.number}}</text></bold>
   <row>
-    <col width="*">{{i18n.date}}</col>
+    <col width="24">{{i18n.date}}</col>
     <col width="18" align="right">{{order.created.datetime}}</col>
   </row>
   <line style="double" />
   {{#lines}}
   <row>
     <col width="5"><bold>x{{qty}}</bold></col>
-    <col width="*"><bold>{{name}}</bold></col>
+    <col width="37"><bold>{{name}}</bold></col>
   </row>
   {{/lines}}
   <line style="double" />
