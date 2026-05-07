@@ -38,6 +38,7 @@ class Store extends \WC_Data implements StoreInterface {
 	protected $data = array(
 		'name'                        => '',
 		'locale'                      => '',
+		'timezone'                    => '',
 		'store_address'               => '',
 		'store_address_2'             => '',
 		'store_city'                  => '',
@@ -99,6 +100,7 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	public function set_wordpress_settings() {
 		$this->set_prop( 'locale', \get_locale() );
+		$this->set_prop( 'timezone', \wp_timezone_string() );
 	}
 
 	/**
@@ -179,6 +181,20 @@ class Store extends \WC_Data implements StoreInterface {
 	 */
 	public function get_locale( $context = 'view' ) {
 		return $this->get_prop( 'locale', $context );
+	}
+
+
+	/**
+	 * Get Store timezone.
+	 *
+	 * Empty string means inherit the WordPress site timezone.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 * @return string
+	 */
+	public function get_timezone( $context = 'view' ) {
+		$value = $this->get_prop( 'timezone', $context );
+		return is_string( $value ) ? $value : '';
 	}
 
 	/**

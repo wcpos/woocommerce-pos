@@ -34,6 +34,18 @@ interface StoreInterface {
 	 */
 	public function get_locale( $context = 'view' );
 
+
+	/**
+	 * Get Store timezone.
+	 *
+	 * Empty string means inherit the WordPress site timezone.
+	 *
+	 * @param string $context What the value is for. Valid values are view and edit.
+	 *
+	 * @return string
+	 */
+	public function get_timezone( $context = 'view' );
+
 	/**
 	 * Get Store address line 1.
 	 *
