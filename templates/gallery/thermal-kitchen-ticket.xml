@@ -3,15 +3,16 @@
     <bold><size width="2" height="2">{{i18n.kitchen}}</size></bold>
   </align>
   <line style="double" />
+  <bold><text>{{order.number}}</text></bold>
   <row>
-    <col width="24"><bold><size width="2">{{order.number}}</size></bold></col>
-    <col width="24" align="right">{{order.created.datetime}}</col>
+    <col width="24">{{i18n.date}}</col>
+    <col width="18" align="right">{{order.created.datetime}}</col>
   </row>
   <line style="double" />
   {{#lines}}
   <row>
-    <col width="8"><bold><size width="2">x{{qty}}</size></bold></col>
-    <col width="40"><bold><size width="2">{{name}}</size></bold></col>
+    <col width="5"><bold>x{{qty}}</bold></col>
+    <col width="37"><bold>{{name}}</bold></col>
   </row>
   {{/lines}}
   <line style="double" />
