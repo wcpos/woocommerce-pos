@@ -7,7 +7,6 @@ import { type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
-import { StoreTaxIdsSection } from './store-tax-ids-section';
 import { TaxIdsSection } from './tax-ids-section';
 import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
@@ -16,10 +15,6 @@ import { Skeleton } from '../../components/skeleton';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
-
-type StoreDetailsBlockComponent = React.ComponentType<StoreDetailsBlockProps> & {
-	includesTaxIds?: boolean;
-};
 
 export interface StoreDefaults {
 	store_name: string;
@@ -50,12 +45,12 @@ export interface GeneralSettingsProps {
  * Pro registers `general.store_details_block` to replace the default block
  * (e.g. swap in a stores list when one or more stores have been created).
  */
-function getStoreDetailsBlockOverride(): StoreDetailsBlockComponent | null {
+function getStoreDetailsBlockOverride(): React.ComponentType<StoreDetailsBlockProps> | null {
 	const component = (window as any)?.wcpos?.settings?.getComponent?.('general.store_details_block');
 	// Accept any non-null value: plain function components, React.memo()
 	// and React.forwardRef() wrappers (both runtime objects with $$typeof),
 	// and React.lazy() wrappers.
-	return component ? (component as StoreDetailsBlockComponent) : null;
+	return component ? (component as React.ComponentType<StoreDetailsBlockProps>) : null;
 }
 
 function General() {
@@ -71,25 +66,11 @@ function General() {
 	};
 
 	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
-	const ResolvedStoreDetailsBlock: StoreDetailsBlockComponent =
-		StoreDetailsBlockOverride ?? StoreDetailsBlock;
-	// Older Pro overrides predate the Store Tax IDs move and don't render
-	// the section themselves. Detect that via the capability flag and fall
-	// back to rendering the section here so settings stay reachable across
-	// any free/Pro version skew.
-	const includesTaxIds = ResolvedStoreDetailsBlock.includesTaxIds === true;
+	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
 
 	return (
 		<>
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
-			{!includesTaxIds && (
-				<StoreTaxIdsSection
-					value={Array.isArray(data?.store_tax_ids) ? (data.store_tax_ids as TaxId[]) : null}
-					onChange={(store_tax_ids) => {
-						mutate({ store_tax_ids });
-					}}
-				/>
-			)}
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>
