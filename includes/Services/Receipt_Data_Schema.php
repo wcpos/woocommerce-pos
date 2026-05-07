@@ -310,6 +310,10 @@ class Receipt_Data_Schema {
 			'store'       => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Store', 'woocommerce-pos' ),
 				'fields' => array(
+					'id'                      => array(
+						'type'  => 'number',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Store ID', 'woocommerce-pos' ),
+					),
 					'name'                    => array(
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Store Name', 'woocommerce-pos' ),
@@ -317,10 +321,6 @@ class Receipt_Data_Schema {
 					'address_lines'           => array(
 						'type'  => 'string[]',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Address Lines', 'woocommerce-pos' ),
-					),
-					'tax_id'                  => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax ID', 'woocommerce-pos' ),
 					),
 					'phone'                   => array(
 						'type'  => 'string',
@@ -402,10 +402,6 @@ class Receipt_Data_Schema {
 					'shipping_address' => array(
 						'type'  => 'object',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Shipping Address', 'woocommerce-pos' ),
-					),
-					'tax_id'           => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax ID', 'woocommerce-pos' ),
 					),
 				),
 			),
@@ -1366,6 +1362,7 @@ class Receipt_Data_Schema {
 				'completed'     => $completed,
 			),
 			'store'   => array(
+				'id'                      => 1,
 				'name'                    => 'My Store',
 				'address'                 => array(
 					'address_1' => '123 Main St',
@@ -1376,7 +1373,6 @@ class Receipt_Data_Schema {
 					'country'   => 'US',
 				),
 				'address_lines'           => array( '123 Main St', 'Anytown, CA 90210' ),
-				'tax_id'                  => '12-3456789',
 				'tax_ids'                 => array(
 					array(
 						'type'    => 'us_ein',

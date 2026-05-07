@@ -65,6 +65,7 @@ class Receipt_Data_Builder {
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
 		);
 		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
+		$store_id              = (int) $this->get_store_value( $pos_store, 'get_id', 0 );
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
@@ -75,7 +76,6 @@ class Receipt_Data_Builder {
 		$store_phone           = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
 		$store_email           = (string) $this->get_store_value( $pos_store, 'get_email', '' );
 
-		$store_tax_id  = (string) $this->get_store_value( $pos_store, 'get_tax_id', '' );
 		$store_tax_ids = $this->get_store_value( $pos_store, 'get_tax_ids', array() );
 		if ( ! is_array( $store_tax_ids ) ) {
 			$store_tax_ids = array();
@@ -92,6 +92,7 @@ class Receipt_Data_Builder {
 		);
 
 		$store = array(
+			'id'            => $store_id,
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
 			// Structured address parts mirror customer.billing_address — templates that
 			// want country-specific layouts compose from these. address_lines[] is the
@@ -99,7 +100,6 @@ class Receipt_Data_Builder {
 			// WC_Countries::get_formatted_address() so per-country layouts are honoured.
 			'address'       => $store_address_parts,
 			'address_lines' => $this->compose_address_lines( $store_address_parts ),
-			'tax_id'        => $store_tax_id,
 			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
 			'email'         => $store_email,
@@ -156,8 +156,6 @@ class Receipt_Data_Builder {
 			'name'             => $customer_name,
 			'billing_address'  => $order->get_address( 'billing' ),
 			'shipping_address' => $order->get_address( 'shipping' ),
-			// Backward-compat scalar — first formatted tax-ID value, or empty.
-			'tax_id'           => $this->format_primary_tax_id( $tax_ids ),
 			// Structured TaxId[] — read fallback across the legacy meta-key inventory.
 			'tax_ids'          => $tax_ids,
 		);

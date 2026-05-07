@@ -11,8 +11,44 @@ interface FieldPickerProps {
 	onInsertField: (text: string) => void;
 }
 
+export interface FieldTreeEntry {
+	sectionKey: string;
+	section: FieldSchema[string];
+	children: FieldTreeEntry[];
+}
+
+export function getFieldTreeEntries(schema: FieldSchema): FieldTreeEntry[] {
+	const entries = new Map<string, FieldTreeEntry>();
+	const childEntries: FieldTreeEntry[] = [];
+
+	for (const [key, section] of Object.entries(schema)) {
+		entries.set(key, {
+			sectionKey: key,
+			section,
+			children: [],
+		});
+	}
+
+	for (const entry of entries.values()) {
+		if (!entry.sectionKey.includes('.')) continue;
+
+		const parentKey = entry.sectionKey.split('.')[0];
+		const parent = entries.get(parentKey);
+
+		if (parent) {
+			parent.children.push(entry);
+			childEntries.push(entry);
+		}
+	}
+
+	const childKeys = new Set(childEntries.map((entry) => entry.sectionKey));
+
+	return Array.from(entries.values()).filter((entry) => !childKeys.has(entry.sectionKey));
+}
+
 export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps) {
 	const [search, setSearch] = useState('');
+	const entries = getFieldTreeEntries(schema);
 
 	return (
 		<div
@@ -26,11 +62,12 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 				<SearchField value={search} onChange={setSearch} />
 			</div>
 			<div className="wcpos:p-2">
-				{Object.entries(schema).map(([key, section]) => (
+				{entries.map(({ sectionKey, section, children }) => (
 					<FieldTreeNode
-						key={key}
-						sectionKey={key}
+						key={sectionKey}
+						sectionKey={sectionKey}
 						section={section}
+						children={children}
 						searchFilter={search}
 						onInsertField={onInsertField}
 					/>

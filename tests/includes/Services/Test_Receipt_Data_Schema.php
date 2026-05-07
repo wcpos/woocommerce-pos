@@ -322,6 +322,11 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree   = Receipt_Data_Schema::get_field_tree();
 		$fields = $tree['store']['fields'];
 
+		$this->assertArrayHasKey( 'id', $fields );
+		$this->assertSame( 'number', $fields['id']['type'] );
+
+		$this->assertArrayNotHasKey( 'tax_id', $fields );
+
 		$this->assertArrayHasKey( 'logo', $fields );
 		$this->assertSame( 'string', $fields['logo']['type'] );
 
@@ -348,6 +353,21 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_field_tree exposes only structured tax ID arrays in the v1 contract.
+	 */
+	public function test_get_field_tree_exposes_structured_tax_ids_without_scalar_shortcuts(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$this->assertArrayHasKey( 'store.tax_ids', $tree );
+		$this->assertArrayHasKey( 'customer.tax_ids', $tree );
+		$this->assertTrue( $tree['store.tax_ids']['is_array'] ?? false );
+		$this->assertTrue( $tree['customer.tax_ids']['is_array'] ?? false );
+
+		$this->assertArrayNotHasKey( 'tax_id', $tree['store']['fields'] );
+		$this->assertArrayNotHasKey( 'tax_id', $tree['customer']['fields'] );
+	}
+
+	/**
 	 * Test get_mock_receipt_data includes new store fields.
 	 */
 	public function test_get_mock_receipt_data_includes_new_store_fields(): void {
@@ -358,7 +378,10 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'opening_hours_vertical', $store );
 		$this->assertArrayHasKey( 'opening_hours_inline', $store );
 		$this->assertArrayHasKey( 'opening_hours_notes', $store );
+		$this->assertArrayHasKey( 'id', $store );
 		$this->assertArrayHasKey( 'tax_ids', $store );
+		$this->assertArrayNotHasKey( 'tax_id', $store );
+		$this->assertIsInt( $store['id'] );
 		$this->assertIsString( $store['opening_hours_vertical'] );
 		$this->assertIsString( $store['opening_hours_inline'] );
 		$this->assertIsString( $store['opening_hours_notes'] );
@@ -427,9 +450,12 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertSame( 'array', $schema['properties']['customer']['properties']['tax_ids']['type'] );
 		$this->assertSame( 'object', $schema['properties']['customer']['properties']['tax_ids']['items']['type'] );
 		$this->assertSame( 'string', $schema['properties']['customer']['properties']['tax_ids']['items']['properties']['value']['type'] );
+		$this->assertArrayNotHasKey( 'tax_id', $schema['properties']['customer']['properties'] );
+		$this->assertSame( 'number', $schema['properties']['store']['properties']['id']['type'] );
 		$this->assertSame( 'array', $schema['properties']['store']['properties']['tax_ids']['type'] );
 		$this->assertSame( 'object', $schema['properties']['store']['properties']['tax_ids']['items']['type'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['tax_ids']['items']['properties']['value']['type'] );
+		$this->assertArrayNotHasKey( 'tax_id', $schema['properties']['store']['properties'] );
 		$this->assertSame( 'string', $schema['properties']['store']['properties']['name']['type'] );
 		$this->assertEquals( array( 'number', 'string' ), $schema['properties']['totals']['properties']['total']['type'] );
 		$this->assertSame( 'object', $schema['properties']['refunds']['items']['properties']['date']['type'] );
@@ -459,5 +485,10 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertIsArray( $data['totals'] );
 		$this->assertIsArray( $data['payments'] );
 		$this->assertIsArray( $data['refunds'] );
+		$this->assertArrayHasKey( 'id', $data['store'] );
+		$this->assertArrayHasKey( 'tax_ids', $data['store'] );
+		$this->assertArrayHasKey( 'tax_ids', $data['customer'] );
+		$this->assertArrayNotHasKey( 'tax_id', $data['store'] );
+		$this->assertArrayNotHasKey( 'tax_id', $data['customer'] );
 	}
 }
