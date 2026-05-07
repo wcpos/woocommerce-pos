@@ -33,6 +33,11 @@ class Receipt_Data_Schema {
 	);
 
 	/**
+	 * Receipt data schema contract version.
+	 */
+	const SCHEMA_VERSION = '1.4.0';
+
+	/**
 	 * Money keys that must be present in totals.
 	 */
 	const TOTAL_MONEY_KEYS = array(
@@ -1142,6 +1147,7 @@ class Receipt_Data_Schema {
 		$schema = array(
 			'$schema'              => 'https://json-schema.org/draft/2020-12/schema',
 			'$id'                  => 'https://wcpos.com/schemas/receipt-data.schema.json',
+			'x-schema-version'     => self::SCHEMA_VERSION,
 			'title'                => 'ReceiptData',
 			'type'                 => 'object',
 			'additionalProperties' => true,
