@@ -344,8 +344,14 @@ function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): numbe
 
 	// Keep this algorithm aligned with @wcpos/receipt-renderer: fixed columns
 	// keep their explicit width, while width="*" columns share the remaining
-	// printable cells for the active receipt CPL. The last star gets any
-	// remainder so rows always resolve exactly to the target width.
+	// printable cells for the active receipt CPL. Star columns are clamped to a
+	// one-character minimum on purpose. If fixed columns already consume nearly
+	// all available CPL, a row with multiple star columns is over-constrained;
+	// shrinking a star to 0ch would silently delete a semantic column from the
+	// preview. Letting the row overflow by the few impossible cells is the same
+	// trade-off as the ESC/POS renderer: preserve authored columns, and surface
+	// over-constrained templates in diagnostics/tests instead of pretending they
+	// fit by making a column disappear.
 	const remaining = Math.max(0, totalColumns - fixedTotal);
 	const starWidth = starCount > 0 ? Math.floor(remaining / starCount) : 0;
 	const starRemainder = starCount > 0 ? remaining - starWidth * starCount : 0;

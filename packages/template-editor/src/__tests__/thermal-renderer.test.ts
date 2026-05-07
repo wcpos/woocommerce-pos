@@ -33,4 +33,15 @@ describe('thermal renderer star columns', () => {
 		expect(html).toContain('flex: 0 0 34ch');
 		expect(html).toContain('flex: 0 0 14ch');
 	});
+
+	it('keeps over-constrained star columns visible instead of resolving them to zero width', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width="48"><row><col width="47">Fixed</col><col width="*">A</col><col width="*" align="right">B</col></row></receipt>',
+			{}
+		);
+
+		expect(html).toContain('flex: 0 0 47ch');
+		expect(html).toContain('flex: 0 0 1ch');
+		expect(html).not.toContain('flex: 0 0 0ch');
+	});
 });
