@@ -35,7 +35,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.4.0';
+	const SCHEMA_VERSION = '1.0.0';
 
 	/**
 	 * Money keys that must be present in totals.

@@ -41,4 +41,4 @@ export const receiptDataRequiredKeys = [
 	"i18n"
 ] as const;
 export type ReceiptDataRequiredKey = (typeof receiptDataRequiredKeys)[number];
-export const receiptDataSchemaVersion = "1.4.0" as const;
+export const receiptDataSchemaVersion = "1.0.0" as const;
