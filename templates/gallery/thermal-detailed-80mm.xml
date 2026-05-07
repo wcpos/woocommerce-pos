@@ -88,10 +88,9 @@ plain <text> nodes that span the full width.
   {{/cashier.name}}
 
   <!-- ── Bill-to ─────────────── -->
-  {{#customer.name}}
   <line />
   <bold>{{i18n.bill_to}}</bold>
-  <text>{{customer.name}}</text>
+  {{#customer.name}}<text>{{customer.name}}</text>{{/customer.name}}
   {{#customer.billing_address.company}}<text>{{customer.billing_address.company}}</text>{{/customer.billing_address.company}}
   {{#customer.billing_address.address_1}}<text>{{customer.billing_address.address_1}}{{#customer.billing_address.address_2}}, {{customer.billing_address.address_2}}{{/customer.billing_address.address_2}}</text>{{/customer.billing_address.address_1}}
   {{#customer.billing_address.city}}<text>{{customer.billing_address.postcode}} {{customer.billing_address.city}}{{#customer.billing_address.state}}, {{customer.billing_address.state}}{{/customer.billing_address.state}}{{#customer.billing_address.country}}, {{customer.billing_address.country}}{{/customer.billing_address.country}}</text>{{/customer.billing_address.city}}
@@ -103,7 +102,6 @@ plain <text> nodes that span the full width.
   {{^customer.tax_ids}}
   {{#customer.tax_id}}<text>{{i18n.customer_tax_id}}: {{customer.tax_id}}</text>{{/customer.tax_id}}
   {{/customer.tax_ids}}
-  {{/customer.name}}
 
   <!-- ── Ship-to ─────────────── -->
   {{#customer.shipping_address.address_1}}
