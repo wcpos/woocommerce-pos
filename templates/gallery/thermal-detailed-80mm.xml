@@ -59,9 +59,6 @@ plain <text> nodes that span the full width.
     {{#store.tax_ids}}
     <text>{{#label}}{{label}}: {{/label}}{{value}}</text>
     {{/store.tax_ids}}
-    {{^store.tax_ids}}
-    {{#store.tax_id}}<text>Tax ID: {{store.tax_id}}</text>{{/store.tax_id}}
-    {{/store.tax_ids}}
   </align>
   <line />
 
