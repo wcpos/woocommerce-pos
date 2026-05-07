@@ -1272,8 +1272,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test totals.net_total stays at 0 (Mustache-falsy) when no refunds exist
-	 * so the detailed-receipt section guard `{{#totals.net_total}}` collapses.
+	 * Test totals.net_total stays at 0 when no refunds exist. The detailed-receipt
+	 * section guard `{{#totals.refund_total}}` is what hides the Refunded / Net rows
+	 * in the no-refund case, so net_total is never displayed here.
 	 */
 	public function test_build_net_total_is_zero_when_no_refunds(): void {
 		$product = new \WC_Product_Simple();
@@ -1290,5 +1291,53 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$this->assertArrayHasKey( 'net_total', $payload['totals'] );
 		$this->assertEqualsWithDelta( 0.0, (float) $payload['totals']['net_total'], 0.001 );
+	}
+
+	/**
+	 * Test that a fully-refunded order produces net_total === 0 AND that the
+	 * formatted display string is non-empty. The detailed-receipt template only
+	 * gates the Refunded / Net rows on `refund_total`, so a full refund must
+	 * still render "Net Total $0.00" rather than an empty span.
+	 */
+	public function test_build_full_refund_renders_zero_net_total_with_nonempty_display(): void {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Fully refunded' );
+		$product->set_regular_price( '15.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->save();
+
+		$line_item    = array_values( $order->get_items() )[0];
+		$line_item_id = $line_item->get_id();
+
+		wc_create_refund(
+			array(
+				'amount'     => '15.00',
+				'order_id'   => $order->get_id(),
+				'line_items' => array(
+					$line_item_id => array(
+						'qty'          => 1,
+						'refund_total' => 15.00,
+						'refund_tax'   => array(),
+					),
+				),
+			)
+		);
+
+		$payload   = $this->builder->build( wc_get_order( $order->get_id() ), 'live' );
+		$currency  = $payload['order']['currency'] ?? 'USD';
+		$formatted = Receipt_Data_Schema::format_money_fields( $payload, $currency );
+
+		// Full refund: refund_total === total, so net_total clamps to 0.
+		$this->assertEqualsWithDelta( 0.0, (float) $payload['totals']['net_total'], 0.001 );
+		$this->assertGreaterThan( 0.0, (float) $payload['totals']['refund_total'] );
+
+		// Critically, net_total_display must NOT be blank — otherwise the template
+		// renders the "Net Total" label with an empty amount on full refunds.
+		$this->assertArrayHasKey( 'net_total_display', $formatted['totals'] );
+		$this->assertNotSame( '', $formatted['totals']['net_total_display'] );
 	}
 }

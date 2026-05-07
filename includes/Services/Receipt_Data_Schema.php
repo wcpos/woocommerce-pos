@@ -70,7 +70,6 @@ class Receipt_Data_Schema {
 		'discount_total_incl',
 		'discount_total_excl',
 		'refund_total',
-		'net_total',
 		'total_refunded',
 	);
 
