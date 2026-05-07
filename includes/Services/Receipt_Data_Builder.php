@@ -349,7 +349,7 @@ class Receipt_Data_Builder {
 			'totals'             => $totals,
 			'tax_summary'        => $this->get_tax_summary( $order ),
 			'payments'           => $payments,
-			'refunds'            => $this->get_refunds( $order, $display_incl ),
+			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone ),
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
@@ -491,7 +491,8 @@ class Receipt_Data_Builder {
 			try {
 				return new DateTimeZone( $timezone );
 			} catch ( \Exception $error ) {
-				// Fall through to the site timezone for stale or invalid store meta.
+				// Use the site timezone for stale or invalid store meta.
+				return wp_timezone();
 			}
 		}
 
@@ -759,12 +760,13 @@ class Receipt_Data_Builder {
 	/**
 	 * Build refunds[] block from $order->get_refunds().
 	 *
-	 * @param WC_Abstract_Order $order        Order object.
-	 * @param bool              $display_incl Whether totals should be tax-inclusive (matches shop tax display).
+	 * @param WC_Abstract_Order $order         Order object.
+	 * @param bool              $display_incl  Whether totals should be tax-inclusive (matches shop tax display).
+	 * @param DateTimeZone      $date_timezone Receipt timezone.
 	 *
 	 * @return array
 	 */
-	private function get_refunds( WC_Abstract_Order $order, bool $display_incl ): array {
+	private function get_refunds( WC_Abstract_Order $order, bool $display_incl, DateTimeZone $date_timezone ): array {
 		$refunds = array();
 
 		if ( ! method_exists( $order, 'get_refunds' ) ) {
