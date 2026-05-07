@@ -514,11 +514,90 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 		$response = $this->server->dispatch( $request );
 		$data     = $response->get_data();
-		$order    = wc_get_order( $data['id'] );
 
 		$this->assertEquals( 201, $response->get_status(), 'Response: ' . wp_json_encode( $data ) );
+		$this->assertArrayHasKey( 'id', $data );
+		$order = wc_get_order( $data['id'] );
+		$this->assertNotFalse( $order );
 		$this->assertEquals( '2026-05-07T12:30:45', $data['date_created_gmt'] );
 		$this->assertEquals( strtotime( $client_date_gmt ), $order->get_date_created()->getTimestamp() );
+	}
+
+	public function test_create_guest_order_rejects_invalid_client_date_created_gmt(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'payment_method'   => 'pos_cash',
+					'date_created_gmt' => 'not-a-date',
+					'line_items'       => array(
+						array(
+							'product_id' => 1,
+							'quantity'   => 1,
+						),
+					),
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'woocommerce_pos_rest_invalid_date_created_gmt', $data['code'] );
+	}
+
+	public function test_create_guest_order_rejects_non_utc_client_date_created_gmt(): void {
+		foreach ( array( '2026-05-07T12:30:45-05:00', '2026-05-07T12:30:45' ) as $client_date_gmt ) {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body(
+				wp_json_encode(
+					array(
+						'payment_method'   => 'pos_cash',
+						'date_created_gmt' => $client_date_gmt,
+						'line_items'       => array(
+							array(
+								'product_id' => 1,
+								'quantity'   => 1,
+							),
+						),
+					)
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertEquals( 400, $response->get_status() );
+			$this->assertEquals( 'woocommerce_pos_rest_invalid_date_created_gmt', $data['code'] );
+		}
+	}
+
+	public function test_create_guest_order_rejects_client_date_created_gmt_more_than_24_hours_in_future(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'payment_method'   => 'pos_cash',
+					'date_created_gmt' => gmdate( 'Y-m-d\TH:i:s\Z', time() + ( 2 * DAY_IN_SECONDS ) ),
+					'line_items'       => array(
+						array(
+							'product_id' => 1,
+							'quantity'   => 1,
+						),
+					),
+				)
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'woocommerce_pos_rest_future_date_created_gmt', $data['code'] );
 	}
 
 	public function test_create_guest_order_with_billing_info(): void {

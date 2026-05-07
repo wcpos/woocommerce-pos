@@ -441,8 +441,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	 * transaction time instead of the sync time.
 	 *
 	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
-	 * @param WP_REST_Request $request  Request object.
-	 * @param bool            $creating Whether a new order is being created.
+	 * @param WP_REST_Request  $request  Request object.
+	 * @param bool             $creating Whether a new order is being created.
 	 *
 	 * @return WC_Data|WP_Error
 	 */
@@ -471,6 +471,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $order;
 		}
 
+		if ( 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/i', $client_date_gmt ) ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$timestamp = rest_parse_date( $client_date_gmt, true );
 
 		if ( false === $timestamp ) {
@@ -481,7 +489,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
-		$maximum_future_timestamp = current_time( 'timestamp', true ) + DAY_IN_SECONDS;
+		$maximum_future_timestamp = time() + DAY_IN_SECONDS;
 
 		if ( $timestamp > $maximum_future_timestamp ) {
 			return new WP_Error(
