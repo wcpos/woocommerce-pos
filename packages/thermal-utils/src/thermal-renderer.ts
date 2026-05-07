@@ -68,7 +68,7 @@ interface RowNode {
 }
 interface ColNode {
 	type: 'col';
-	width: number;
+	width: number | '*';
 	align: 'left' | 'right';
 	children: ThermalNode[];
 }
@@ -227,9 +227,14 @@ function parseRowChildren(row: Element): ColNode[] {
 	const cols: ColNode[] = [];
 	for (const child of Array.from(row.children)) {
 		if (child.tagName.toLowerCase() === 'col') {
+			const rawWidth = child.getAttribute('width');
 			cols.push({
 				type: 'col',
-				width: intAttr(child, 'width', 12),
+				// width="*" is intentional gallery-template syntax: the column absorbs
+				// whatever CPL remains after fixed columns. Do not collapse it to the
+				// numeric fallback; doing so recreates the 12ch preview bug that made
+				// 42/48-CPL thermal templates diverge between preview and ESC/POS output.
+				width: rawWidth === '*' ? '*' : intAttr(child, 'width', 12),
 				align: enumAttr(child, 'align', ['left', 'right'] as const, 'left'),
 				children: parseChildren(child),
 			});
@@ -270,33 +275,36 @@ function escapeHtml(str: string): string {
 		.replace(/\//g, '&#x2F;');
 }
 
-function renderNodes(nodes: ThermalNode[]): string {
-	return nodes.map(renderNode).join('');
+function renderNodes(nodes: ThermalNode[], columns: number): string {
+	return nodes.map((node) => renderNode(node, columns)).join('');
 }
 
-function renderNode(node: ThermalNode): string {
+function renderNode(node: ThermalNode, columns: number): string {
 	switch (node.type) {
 		case 'raw-text':
 			return escapeHtml(node.value);
 		case 'text':
-			return `<div>${renderNodes(node.children)}</div>`;
+			return `<div>${renderNodes(node.children, columns)}</div>`;
 		case 'bold':
-			return `<strong>${renderNodes(node.children)}</strong>`;
+			return `<strong>${renderNodes(node.children, columns)}</strong>`;
 		case 'underline':
-			return `<span style="text-decoration: underline">${renderNodes(node.children)}</span>`;
+			return `<span style="text-decoration: underline">${renderNodes(node.children, columns)}</span>`;
 		case 'invert':
-			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children)}</span>`;
+			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children, columns)}</span>`;
 		case 'size': {
-			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children)}</span>`;
+			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
 		}
 		case 'align':
-			return `<div style="text-align: ${node.mode}">${renderNodes(node.children)}</div>`;
+			return `<div style="text-align: ${node.mode}">${renderNodes(node.children, columns)}</div>`;
 		case 'row': {
-			const cols = node.children.map(renderCol).join('');
+			const widths = resolveRowWidths(node.children, columns);
+			const cols = node.children
+				.map((col, index) => renderCol(col, widths[index] ?? 0, columns))
+				.join('');
 			return `<div style="display: flex; max-width: 100%; overflow: hidden">${cols}</div>`;
 		}
 		case 'col':
-			return renderCol(node);
+			return renderCol(node, node.width === '*' ? 12 : node.width, columns);
 		case 'line':
 			if (node.style === 'double') {
 				return '<hr style="border: none; border-top: 3px double #000; margin: 4px 0" />';
@@ -316,19 +324,48 @@ function renderNode(node: ThermalNode): string {
 		case 'drawer':
 			return '';
 		case 'receipt':
-			return renderNodes(node.children);
+			return renderNodes(node.children, node.paperWidth);
 		default:
 			return '';
 	}
 }
 
-function renderCol(node: ColNode): string {
-	return `<span style="flex: 0 0 ${node.width}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children)}</span>`;
+function resolveRowWidths(cols: readonly ColNode[], totalColumns: number): number[] {
+	let fixedTotal = 0;
+	let starCount = 0;
+
+	for (const col of cols) {
+		if (col.width === '*') {
+			starCount++;
+		} else {
+			fixedTotal += col.width;
+		}
+	}
+
+	// Keep this algorithm aligned with @wcpos/receipt-renderer: fixed columns
+	// keep their explicit width, while width="*" columns share the remaining
+	// printable cells for the active receipt CPL. The last star gets any
+	// remainder so rows always resolve exactly to the target width.
+	const remaining = Math.max(0, totalColumns - fixedTotal);
+	const starWidth = starCount > 0 ? Math.floor(remaining / starCount) : 0;
+	const starRemainder = starCount > 0 ? remaining - starWidth * starCount : 0;
+
+	let starIndex = 0;
+	return cols.map((col) => {
+		if (col.width !== '*') return col.width;
+		starIndex++;
+		const extra = starIndex === starCount ? starRemainder : 0;
+		return Math.max(1, starWidth + extra);
+	});
+}
+
+function renderCol(node: ColNode, width: number, columns: number): string {
+	return `<span style="flex: 0 0 ${width}ch; min-width: 0; text-align: ${node.align}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">${renderNodes(node.children, columns)}</span>`;
 }
 
 function renderHtml(ast: ReceiptNode): string {
 	const width = ast.paperWidth;
-	const inner = renderNodes(ast.children);
+	const inner = renderNodes(ast.children, ast.paperWidth);
 	return `<div style="width: ${width}ch; font-family: 'Courier New', Courier, monospace; font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin: 0 auto; overflow: hidden; white-space: pre-wrap; word-break: break-all; box-sizing: content-box">${inner}</div>`;
 }
 

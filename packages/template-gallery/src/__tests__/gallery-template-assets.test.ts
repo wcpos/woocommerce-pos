@@ -74,6 +74,20 @@ describe('gallery template assets', () => {
 		}
 	});
 
+	it('keeps 80mm thermal rows flexible across 42 and 48 CPL printers', () => {
+		const thermalFiles = [
+			'thermal-simple-80mm.xml',
+			'thermal-kitchen-ticket.xml',
+			'thermal-detailed-80mm.xml',
+		];
+
+		for (const filename of thermalFiles) {
+			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
+
+			expect(content, filename).toContain('width="*"');
+		}
+	});
+
 	it('does not ship hardcoded tax-invoice retention boilerplate', () => {
 		const taxInvoiceTemplates = ['detailed-receipt.html', 'tax-invoice.html'];
 
