@@ -71,9 +71,6 @@ plain <text> nodes that span the full width.
     {{#order.status_label}}
     <text>[ {{order.status_label}} ]</text>
     {{/order.status_label}}
-    {{^order.status_label}}
-    {{#order.wc_status}}<text>[ {{order.wc_status}} ]</text>{{/order.wc_status}}
-    {{/order.status_label}}
   </align>
   <line />
 
@@ -269,14 +266,16 @@ plain <text> nodes that span the full width.
   {{/order.customer_note}}
 
   <!-- ── Payments ─────────────── -->
+  {{#payments.0}}
   <line />
   <bold>{{i18n.paid}}</bold>
+  {{/payments.0}}
   {{#payments}}
   <row>
     <col width="32">{{method_title}}</col>
     <col width="16" align="right">{{amount_display}}</col>
   </row>
-  {{#transaction_id}}<text>  Ref: {{transaction_id}}</text>{{/transaction_id}}
+  {{#transaction_id}}<text>  {{i18n.reference}}: {{transaction_id}}</text>{{/transaction_id}}
   {{#tendered}}
   <row>
     <col width="32">  {{i18n.tendered}}</col>
