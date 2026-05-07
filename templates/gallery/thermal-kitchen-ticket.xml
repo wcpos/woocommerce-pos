@@ -1,18 +1,20 @@
 <receipt paper-width="48">
+  <!-- width="*" is deliberate: item names get the remaining CPL after qty/date
+       columns instead of being frozen to a 42-CPL-only numeric width. -->
   <align mode="center">
     <bold><size width="2" height="2">{{i18n.kitchen}}</size></bold>
   </align>
   <line style="double" />
   <bold><text>{{order.number}}</text></bold>
   <row>
-    <col width="24">{{i18n.date}}</col>
+    <col width="*">{{i18n.date}}</col>
     <col width="18" align="right">{{order.created.datetime}}</col>
   </row>
   <line style="double" />
   {{#lines}}
   <row>
     <col width="5"><bold>x{{qty}}</bold></col>
-    <col width="37"><bold>{{name}}</bold></col>
+    <col width="*"><bold>{{name}}</bold></col>
   </row>
   {{/lines}}
   <line style="double" />
