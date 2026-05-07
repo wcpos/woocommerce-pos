@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WP_UnitTestCase;
 
@@ -172,6 +173,25 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		foreach ( array( 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ) as $field ) {
 			$this->assertArrayHasKey( $field, $tree['store.address']['fields'], "store.address missing {$field}" );
+		}
+	}
+
+	/**
+	 * Test i18n field picker exposes every canonical receipt label.
+	 */
+	public function test_get_field_tree_i18n_fields_match_receipt_labels(): void {
+		$tree        = Receipt_Data_Schema::get_field_tree();
+		$label_keys  = array_keys( Receipt_I18n_Labels::get_labels() );
+		$field_keys  = array_keys( $tree['i18n']['fields'] );
+
+		sort( $label_keys );
+		sort( $field_keys );
+
+		$this->assertEquals( $label_keys, $field_keys );
+
+		foreach ( $tree['i18n']['fields'] as $key => $field ) {
+			$this->assertSame( 'string', $field['type'], "i18n.{$key} should be a string field" );
+			$this->assertNotEmpty( $field['label'], "i18n.{$key} should have a picker label" );
 		}
 	}
 
