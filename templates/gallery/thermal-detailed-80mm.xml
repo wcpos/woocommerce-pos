@@ -54,7 +54,8 @@ break the cross-printer layout contract. Indented continuation lines
   <align mode="center"><image src="{{store.logo}}" width="200" /></align>
   {{/store.logo}}
   <align mode="center">
-    <bold><size width="2" height="2">{{store.name}}</size></bold>
+    <!-- Styled containers do not create printer line breaks; wrap headings in <text>. -->
+    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
     {{#store.address_lines}}
     <text>{{.}}</text>
     {{/store.address_lines}}
@@ -68,7 +69,8 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Document title + status ─────────────── -->
   <align mode="center">
-    <bold><size width="2">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</size></bold>
+    <!-- <text> intentionally makes the styled fiscal heading a block line. -->
+    <bold><size width="2"><text>{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</text></size></bold>
     {{#order.status_label}}
     <text>[ {{order.status_label}} ]</text>
     {{/order.status_label}}
@@ -93,7 +95,7 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Bill-to ─────────────── -->
   <line />
-  <bold>{{i18n.bill_to}}</bold>
+  <bold><text>{{i18n.bill_to}}</text></bold>
   {{#customer.name}}<text>{{customer.name}}</text>{{/customer.name}}
   {{#customer.billing_address.company}}<text>{{customer.billing_address.company}}</text>{{/customer.billing_address.company}}
   {{#customer.billing_address.address_1}}<text>{{customer.billing_address.address_1}}{{#customer.billing_address.address_2}}, {{customer.billing_address.address_2}}{{/customer.billing_address.address_2}}</text>{{/customer.billing_address.address_1}}
@@ -110,7 +112,7 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Ship-to ─────────────── -->
   {{#customer.shipping_address.address_1}}
   <line />
-  <bold>{{i18n.ship_to}}</bold>
+  <bold><text>{{i18n.ship_to}}</text></bold>
   <text>{{customer.shipping_address.first_name}} {{customer.shipping_address.last_name}}</text>
   {{#customer.shipping_address.company}}<text>{{customer.shipping_address.company}}</text>{{/customer.shipping_address.company}}
   <text>{{customer.shipping_address.address_1}}{{#customer.shipping_address.address_2}}, {{customer.shipping_address.address_2}}{{/customer.shipping_address.address_2}}</text>
@@ -125,7 +127,7 @@ break the cross-printer layout contract. Indented continuation lines
   </row>
   <line />
   {{#lines}}
-  <bold>{{name}}</bold>
+  <bold><text>{{name}}</text></bold>
   {{#meta}}
   <text>  {{key}}: {{value}}</text>
   {{/meta}}
@@ -176,7 +178,7 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Tax summary ─────────────── -->
   {{#tax_summary.0}}
   <line />
-  <bold>{{i18n.tax_summary}}</bold>
+  <bold><text>{{i18n.tax_summary}}</text></bold>
   {{/tax_summary.0}}
   {{#tax_summary}}
   <row>
@@ -236,7 +238,7 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Refunds ─────────────── -->
   {{#refunds.0}}
   <line />
-  <bold>{{i18n.returned_items}}</bold>
+  <bold><text>{{i18n.returned_items}}</text></bold>
   {{/refunds.0}}
   {{#refunds}}
   <row>
@@ -261,14 +263,14 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Customer note ─────────────── -->
   {{#order.customer_note}}
   <line />
-  <bold>{{i18n.customer_note}}</bold>
+  <bold><text>{{i18n.customer_note}}</text></bold>
   <text>{{order.customer_note}}</text>
   {{/order.customer_note}}
 
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
   <line />
-  <bold>{{i18n.paid}}</bold>
+  <bold><text>{{i18n.paid}}</text></bold>
   {{/payments.0}}
   {{#payments}}
   <row>
@@ -306,7 +308,7 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Terms & conditions ─────────────── -->
   {{#store.policies_and_conditions}}
   <line />
-  <bold>{{i18n.terms_and_conditions}}</bold>
+  <bold><text>{{i18n.terms_and_conditions}}</text></bold>
   <text>{{store.policies_and_conditions}}</text>
   {{/store.policies_and_conditions}}
 
@@ -320,7 +322,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{#store.opening_hours}}
   <line />
   <align mode="center">
-    <bold>{{i18n.opening_hours}}</bold>
+    <bold><text>{{i18n.opening_hours}}</text></bold>
     <text>{{store.opening_hours}}</text>
   </align>
   {{/store.opening_hours}}
