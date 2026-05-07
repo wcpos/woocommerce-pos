@@ -1,44 +1,44 @@
 {
-	"name": "@wcpos/template-editor",
-	"version": "0.1.0",
-	"private": true,
-	"scripts": {
-		"build": "vite build",
-		"dev": "vite build --watch --mode development",
-		"lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
-		"test": "vitest run --passWithNoTests",
-		"test:watch": "vitest"
-	},
-	"dependencies": {
-		"@codemirror/autocomplete": "^6.18.6",
-		"@codemirror/commands": "^6.10.2",
-		"@codemirror/lang-html": "^6.4.9",
-		"@codemirror/lang-php": "^6.0.1",
-		"@codemirror/language": "^6.11.0",
-		"@codemirror/search": "^6.5.10",
-		"@codemirror/state": "^6.5.2",
-		"@codemirror/view": "^6.36.5",
-		"@wcpos/i18n": "workspace:*",
-		"@wcpos/thermal-utils": "workspace:*",
-		"@wcpos/ui": "workspace:*",
-		"@wordpress/api-fetch": "^7.39.0",
-		"codemirror": "^6.0.1",
-		"mustache": "^4.2.0",
-		"react": "18.3.1",
-		"react-dom": "18.3.1"
-	},
-	"devDependencies": {
-		"@tailwindcss/vite": "^4.1.18",
-		"@types/mustache": "^4.2.5",
-		"@types/react": "^18.3.18",
-		"@types/react-dom": "^18.3.7",
-		"@vitejs/plugin-react": "^6.0.1",
-		"@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
-		"eslint": "^10.0.3",
-		"tailwindcss": "^4.1.18",
-		"typescript": "^6.0.2",
-		"vite": "^8.0.0",
-		"vitest": "^4.0.18"
-	},
-	"packageManager": "pnpm@10.8.0"
+  "name": "@wcpos/template-editor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch --mode development",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.2",
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/lang-php": "^6.0.2",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/search": "^6.7.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.42.0",
+    "@wcpos/i18n": "workspace:*",
+    "@wcpos/thermal-utils": "workspace:*",
+    "@wcpos/ui": "workspace:*",
+    "@wordpress/api-fetch": "^7.45.0",
+    "codemirror": "^6.0.1",
+    "mustache": "^4.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/mustache": "^4.2.6",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
+    "eslint": "^10.3.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vitest": "^4.1.5"
+  },
+  "packageManager": "pnpm@10.8.0"
 }
