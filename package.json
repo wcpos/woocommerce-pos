@@ -50,6 +50,7 @@
   },
   "pnpm": {
     "overrides": {
+      "@wordpress/env>@wp-playground/cli": "3.1.28",
       "@wordpress/upload-media": "0.24.0",
       "@asamuzakjp/css-color>lru-cache": "11.2.5",
       "@asamuzakjp/dom-selector>lru-cache": "11.2.5",

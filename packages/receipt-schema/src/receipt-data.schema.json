@@ -1,13 +1,12 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$id": "https://wcpos.com/schemas/receipt-data.schema.json",
+	"x-schema-version": "1.0.0",
 	"title": "ReceiptData",
 	"type": "object",
 	"additionalProperties": true,
 	"required": [
-		"receipt",
 		"order",
-		"meta",
 		"store",
 		"cashier",
 		"customer",
@@ -24,100 +23,6 @@
 		"i18n"
 	],
 	"properties": {
-		"receipt": {
-			"type": "object",
-			"additionalProperties": true,
-			"properties": {
-				"mode": {
-					"type": "string",
-					"description": "Mode"
-				},
-				"printed": {
-					"type": "object",
-					"additionalProperties": true,
-					"properties": {
-						"datetime": {
-							"type": "string",
-							"description": "Date & Time"
-						},
-						"date": {
-							"type": "string",
-							"description": "Date"
-						},
-						"time": {
-							"type": "string",
-							"description": "Time"
-						},
-						"datetime_short": {
-							"type": "string",
-							"description": "Short Date & Time"
-						},
-						"datetime_long": {
-							"type": "string",
-							"description": "Long Date & Time"
-						},
-						"datetime_full": {
-							"type": "string",
-							"description": "Full Date & Time"
-						},
-						"date_short": {
-							"type": "string",
-							"description": "Short Date"
-						},
-						"date_long": {
-							"type": "string",
-							"description": "Long Date"
-						},
-						"date_full": {
-							"type": "string",
-							"description": "Full Date"
-						},
-						"date_ymd": {
-							"type": "string",
-							"description": "YYYY-MM-DD"
-						},
-						"date_dmy": {
-							"type": "string",
-							"description": "DD/MM/YYYY"
-						},
-						"date_mdy": {
-							"type": "string",
-							"description": "MM/DD/YYYY"
-						},
-						"weekday_short": {
-							"type": "string",
-							"description": "Weekday Short"
-						},
-						"weekday_long": {
-							"type": "string",
-							"description": "Weekday Long"
-						},
-						"day": {
-							"type": "string",
-							"description": "Day"
-						},
-						"month": {
-							"type": "string",
-							"description": "Month Number"
-						},
-						"month_short": {
-							"type": "string",
-							"description": "Month Short"
-						},
-						"month_long": {
-							"type": "string",
-							"description": "Month Long"
-						},
-						"year": {
-							"type": "string",
-							"description": "Year"
-						}
-					},
-					"description": "Receipt Printed"
-				}
-			},
-			"description": "Receipt"
-		},
 		"order": {
 			"type": "object",
 			"additionalProperties": true,
@@ -141,6 +46,10 @@
 				"wc_status": {
 					"type": "string",
 					"description": "WC Status"
+				},
+				"status_label": {
+					"type": "string",
+					"description": "Status Label"
 				},
 				"created_via": {
 					"type": "string",
@@ -398,25 +307,6 @@
 			},
 			"description": "Order"
 		},
-		"meta": {
-			"type": "object",
-			"additionalProperties": true,
-			"properties": {
-				"schema_version": {
-					"type": "string",
-					"const": "1.4.0",
-					"description": "Receipt data schema version."
-				},
-				"wc_status": {
-					"type": "string",
-					"description": "WooCommerce order status (e.g. processing, completed, refunded)."
-				},
-				"created_via": {
-					"type": "string",
-					"description": "How the order was created (e.g. woocommerce-pos, checkout, admin, rest-api)."
-				}
-			}
-		},
 		"store": {
 			"type": "object",
 			"additionalProperties": true,
@@ -522,6 +412,37 @@
 							}
 						}
 					}
+				},
+				"address": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"address_1": {
+							"type": "string",
+							"description": "Address line 1"
+						},
+						"address_2": {
+							"type": "string",
+							"description": "Address line 2"
+						},
+						"city": {
+							"type": "string",
+							"description": "City"
+						},
+						"state": {
+							"type": "string",
+							"description": "State / Region"
+						},
+						"postcode": {
+							"type": "string",
+							"description": "Postcode"
+						},
+						"country": {
+							"type": "string",
+							"description": "Country"
+						}
+					},
+					"description": "Store Address"
 				}
 			},
 			"description": "Store"
@@ -994,26 +915,26 @@
 					],
 					"description": "Tax Total"
 				},
-				"grand_total": {
+				"total": {
 					"type": [
 						"number",
 						"string"
 					],
-					"description": "Grand Total"
+					"description": "Total"
 				},
-				"grand_total_incl": {
+				"total_incl": {
 					"type": [
 						"number",
 						"string"
 					],
-					"description": "Grand Total (incl tax)"
+					"description": "Total (incl. tax)"
 				},
-				"grand_total_excl": {
+				"total_excl": {
 					"type": [
 						"number",
 						"string"
 					],
-					"description": "Grand Total (excl tax)"
+					"description": "Total (excl. tax)"
 				},
 				"paid_total": {
 					"type": [
@@ -1471,6 +1392,14 @@
 					"type": "string",
 					"description": "Date"
 				},
+				"invoice_no": {
+					"type": "string",
+					"description": "Invoice No."
+				},
+				"reference": {
+					"type": "string",
+					"description": "Reference"
+				},
 				"cashier": {
 					"type": "string",
 					"description": "Cashier"
@@ -1479,13 +1408,521 @@
 					"type": "string",
 					"description": "Customer"
 				},
+				"customer_tax_id": {
+					"type": "string",
+					"description": "Customer Tax ID"
+				},
+				"customer_tax_ids": {
+					"type": "string",
+					"description": "Customer Tax IDs"
+				},
+				"tax_id_eu_vat": {
+					"type": "string",
+					"description": "VAT Number"
+				},
+				"tax_id_gb_vat": {
+					"type": "string",
+					"description": "VAT Number"
+				},
+				"tax_id_sa_vat": {
+					"type": "string",
+					"description": "VAT Number"
+				},
+				"tax_id_au_abn": {
+					"type": "string",
+					"description": "ABN"
+				},
+				"tax_id_br_cpf": {
+					"type": "string",
+					"description": "CPF"
+				},
+				"tax_id_br_cnpj": {
+					"type": "string",
+					"description": "CNPJ"
+				},
+				"tax_id_in_gst": {
+					"type": "string",
+					"description": "GSTIN"
+				},
+				"tax_id_it_cf": {
+					"type": "string",
+					"description": "Codice Fiscale"
+				},
+				"tax_id_it_piva": {
+					"type": "string",
+					"description": "Partita IVA"
+				},
+				"tax_id_es_nif": {
+					"type": "string",
+					"description": "NIF"
+				},
+				"tax_id_ar_cuit": {
+					"type": "string",
+					"description": "CUIT"
+				},
+				"tax_id_ca_gst_hst": {
+					"type": "string",
+					"description": "GST/HST"
+				},
+				"tax_id_us_ein": {
+					"type": "string",
+					"description": "EIN"
+				},
+				"tax_id_other": {
+					"type": "string",
+					"description": "Tax ID"
+				},
+				"store_tax_ids": {
+					"type": "string",
+					"description": "Tax IDs"
+				},
+				"store_tax_id_label_eu_vat": {
+					"type": "string",
+					"description": "VAT ID"
+				},
+				"store_tax_id_label_gb_vat": {
+					"type": "string",
+					"description": "VAT No."
+				},
+				"store_tax_id_label_sa_vat": {
+					"type": "string",
+					"description": "VAT No."
+				},
+				"store_tax_id_label_au_abn": {
+					"type": "string",
+					"description": "ABN"
+				},
+				"store_tax_id_label_br_cpf": {
+					"type": "string",
+					"description": "CPF"
+				},
+				"store_tax_id_label_br_cnpj": {
+					"type": "string",
+					"description": "CNPJ"
+				},
+				"store_tax_id_label_in_gst": {
+					"type": "string",
+					"description": "GSTIN"
+				},
+				"store_tax_id_label_it_cf": {
+					"type": "string",
+					"description": "Codice Fiscale"
+				},
+				"store_tax_id_label_it_piva": {
+					"type": "string",
+					"description": "P.IVA"
+				},
+				"store_tax_id_label_es_nif": {
+					"type": "string",
+					"description": "NIF"
+				},
+				"store_tax_id_label_ar_cuit": {
+					"type": "string",
+					"description": "CUIT"
+				},
+				"store_tax_id_label_ca_gst_hst": {
+					"type": "string",
+					"description": "GST/HST No."
+				},
+				"store_tax_id_label_us_ein": {
+					"type": "string",
+					"description": "EIN"
+				},
+				"store_tax_id_label_de_ust_id": {
+					"type": "string",
+					"description": "USt-IdNr."
+				},
+				"store_tax_id_label_de_steuernummer": {
+					"type": "string",
+					"description": "Steuernummer"
+				},
+				"store_tax_id_label_de_hrb": {
+					"type": "string",
+					"description": "HRB"
+				},
+				"store_tax_id_label_nl_kvk": {
+					"type": "string",
+					"description": "KVK"
+				},
+				"store_tax_id_label_fr_siret": {
+					"type": "string",
+					"description": "SIRET"
+				},
+				"store_tax_id_label_fr_siren": {
+					"type": "string",
+					"description": "SIREN"
+				},
+				"store_tax_id_label_gb_company": {
+					"type": "string",
+					"description": "Company No."
+				},
+				"store_tax_id_label_ch_uid": {
+					"type": "string",
+					"description": "UID"
+				},
+				"store_tax_id_label_other": {
+					"type": "string",
+					"description": "Tax ID"
+				},
+				"customer_tax_id_label_eu_vat": {
+					"type": "string",
+					"description": "VAT ID"
+				},
+				"customer_tax_id_label_gb_vat": {
+					"type": "string",
+					"description": "VAT No."
+				},
+				"customer_tax_id_label_sa_vat": {
+					"type": "string",
+					"description": "VAT No."
+				},
+				"customer_tax_id_label_au_abn": {
+					"type": "string",
+					"description": "ABN"
+				},
+				"customer_tax_id_label_br_cpf": {
+					"type": "string",
+					"description": "CPF"
+				},
+				"customer_tax_id_label_br_cnpj": {
+					"type": "string",
+					"description": "CNPJ"
+				},
+				"customer_tax_id_label_in_gst": {
+					"type": "string",
+					"description": "GSTIN"
+				},
+				"customer_tax_id_label_it_cf": {
+					"type": "string",
+					"description": "Codice Fiscale"
+				},
+				"customer_tax_id_label_it_piva": {
+					"type": "string",
+					"description": "P.IVA"
+				},
+				"customer_tax_id_label_es_nif": {
+					"type": "string",
+					"description": "NIF"
+				},
+				"customer_tax_id_label_ar_cuit": {
+					"type": "string",
+					"description": "CUIT"
+				},
+				"customer_tax_id_label_ca_gst_hst": {
+					"type": "string",
+					"description": "GST/HST No."
+				},
+				"customer_tax_id_label_us_ein": {
+					"type": "string",
+					"description": "EIN"
+				},
+				"customer_tax_id_label_de_ust_id": {
+					"type": "string",
+					"description": "USt-IdNr."
+				},
+				"customer_tax_id_label_de_steuernummer": {
+					"type": "string",
+					"description": "Steuernummer"
+				},
+				"customer_tax_id_label_de_hrb": {
+					"type": "string",
+					"description": "HRB"
+				},
+				"customer_tax_id_label_nl_kvk": {
+					"type": "string",
+					"description": "KVK"
+				},
+				"customer_tax_id_label_fr_siret": {
+					"type": "string",
+					"description": "SIRET"
+				},
+				"customer_tax_id_label_fr_siren": {
+					"type": "string",
+					"description": "SIREN"
+				},
+				"customer_tax_id_label_gb_company": {
+					"type": "string",
+					"description": "Company No."
+				},
+				"customer_tax_id_label_ch_uid": {
+					"type": "string",
+					"description": "UID"
+				},
+				"customer_tax_id_label_other": {
+					"type": "string",
+					"description": "Tax ID"
+				},
+				"prepared_for": {
+					"type": "string",
+					"description": "Prepared For"
+				},
+				"processed_by": {
+					"type": "string",
+					"description": "Processed by"
+				},
+				"bill_to": {
+					"type": "string",
+					"description": "Bill To"
+				},
+				"ship_to": {
+					"type": "string",
+					"description": "Ship To"
+				},
+				"billing_address": {
+					"type": "string",
+					"description": "Billing Address"
+				},
+				"item": {
+					"type": "string",
+					"description": "Item"
+				},
+				"sku": {
+					"type": "string",
+					"description": "SKU"
+				},
+				"qty": {
+					"type": "string",
+					"description": "Qty"
+				},
+				"unit_price": {
+					"type": "string",
+					"description": "Unit Price"
+				},
+				"unit_excl": {
+					"type": "string",
+					"description": "Unit (excl.)"
+				},
+				"total_excl": {
+					"type": "string",
+					"description": "Total (excl.)"
+				},
+				"discount": {
+					"type": "string",
+					"description": "Discount"
+				},
+				"packed": {
+					"type": "string",
+					"description": "Packed"
+				},
+				"item_short": {
+					"type": "string",
+					"description": "Item"
+				},
+				"sku_short": {
+					"type": "string",
+					"description": "SKU"
+				},
+				"qty_short": {
+					"type": "string",
+					"description": "Qty"
+				},
+				"unit_excl_short": {
+					"type": "string",
+					"description": "Unit excl."
+				},
+				"tax_rate_short": {
+					"type": "string",
+					"description": "Tax %"
+				},
+				"tax_amount_short": {
+					"type": "string",
+					"description": "Tax"
+				},
+				"total_incl_tax_short": {
+					"type": "string",
+					"description": "Total incl."
+				},
+				"taxable_excl_short": {
+					"type": "string",
+					"description": "Taxable excl."
+				},
+				"taxable_incl_short": {
+					"type": "string",
+					"description": "Taxable incl."
+				},
 				"subtotal": {
 					"type": "string",
 					"description": "Subtotal"
 				},
+				"subtotal_excl_tax": {
+					"type": "string",
+					"description": "Subtotal (excl. tax)"
+				},
 				"total": {
 					"type": "string",
 					"description": "Total"
+				},
+				"total_tax": {
+					"type": "string",
+					"description": "Total Tax"
+				},
+				"total_incl_tax": {
+					"type": "string",
+					"description": "Total (incl. tax)"
+				},
+				"grand_total_incl_tax": {
+					"type": "string",
+					"description": "Grand Total (incl. tax)"
+				},
+				"tax": {
+					"type": "string",
+					"description": "Tax"
+				},
+				"paid": {
+					"type": "string",
+					"description": "Paid"
+				},
+				"tendered": {
+					"type": "string",
+					"description": "Tendered"
+				},
+				"change": {
+					"type": "string",
+					"description": "Change"
+				},
+				"tax_summary": {
+					"type": "string",
+					"description": "Tax Summary"
+				},
+				"taxable_excl": {
+					"type": "string",
+					"description": "Taxable (excl.)"
+				},
+				"tax_amount": {
+					"type": "string",
+					"description": "Tax Amount"
+				},
+				"taxable_incl": {
+					"type": "string",
+					"description": "Taxable (incl.)"
+				},
+				"invoice": {
+					"type": "string",
+					"description": "Invoice"
+				},
+				"tax_invoice": {
+					"type": "string",
+					"description": "Tax Invoice"
+				},
+				"quote": {
+					"type": "string",
+					"description": "Quote"
+				},
+				"receipt": {
+					"type": "string",
+					"description": "Receipt"
+				},
+				"gift_receipt": {
+					"type": "string",
+					"description": "Gift Receipt"
+				},
+				"credit_note": {
+					"type": "string",
+					"description": "Credit Note"
+				},
+				"packing_slip": {
+					"type": "string",
+					"description": "Packing Slip"
+				},
+				"returned_items": {
+					"type": "string",
+					"description": "Returned Items"
+				},
+				"amount": {
+					"type": "string",
+					"description": "Amount"
+				},
+				"total_refunded": {
+					"type": "string",
+					"description": "Total Refunded"
+				},
+				"refunded": {
+					"type": "string",
+					"description": "Refunded"
+				},
+				"net_total": {
+					"type": "string",
+					"description": "Net Total"
+				},
+				"customer_note": {
+					"type": "string",
+					"description": "Customer Note"
+				},
+				"terms_and_conditions": {
+					"type": "string",
+					"description": "Terms & Conditions"
+				},
+				"a_message_for_you": {
+					"type": "string",
+					"description": "A message for you"
+				},
+				"thank_you": {
+					"type": "string",
+					"description": "Thank you!"
+				},
+				"thank_you_purchase": {
+					"type": "string",
+					"description": "Thank you for your purchase!"
+				},
+				"thank_you_shopping": {
+					"type": "string",
+					"description": "Thank you for shopping with us!"
+				},
+				"thank_you_business": {
+					"type": "string",
+					"description": "Thank you for your business."
+				},
+				"gift_return_policy": {
+					"type": "string",
+					"description": "Items may be returned or exchanged within 30 days with this receipt."
+				},
+				"quote_validity": {
+					"type": "string",
+					"description": "This quote is valid for 30 days from the date of issue. Prices are subject to change after the validity period. This is not a receipt or confirmation of purchase."
+				},
+				"quote_not_receipt": {
+					"type": "string",
+					"description": "This is a quote, not a receipt"
+				},
+				"return_retain_receipt": {
+					"type": "string",
+					"description": "Please retain this receipt for your records."
+				},
+				"kitchen": {
+					"type": "string",
+					"description": "KITCHEN"
+				},
+				"signature": {
+					"type": "string",
+					"description": "Signature"
+				},
+				"document_type": {
+					"type": "string",
+					"description": "Document Type"
+				},
+				"copy": {
+					"type": "string",
+					"description": "Copy"
+				},
+				"copy_number": {
+					"type": "string",
+					"description": "Copy No."
+				},
+				"status": {
+					"type": "string",
+					"description": "Status"
+				},
+				"completed": {
+					"type": "string",
+					"description": "Completed"
+				},
+				"printed": {
+					"type": "string",
+					"description": "Printed"
+				},
+				"opening_hours": {
+					"type": "string",
+					"description": "Opening Hours"
 				}
 			},
 			"description": "Labels (i18n)"

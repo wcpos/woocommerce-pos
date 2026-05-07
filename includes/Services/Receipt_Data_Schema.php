@@ -33,6 +33,11 @@ class Receipt_Data_Schema {
 	);
 
 	/**
+	 * Receipt data schema contract version.
+	 */
+	const SCHEMA_VERSION = '1.0.0';
+
+	/**
 	 * Money keys that must be present in totals.
 	 */
 	const TOTAL_MONEY_KEYS = array(
@@ -1018,38 +1023,30 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
-			// Note: field_tree is for the template editor picker — include commonly used keys.
-			// Full list is in Receipt_I18n_Labels::get_labels().
 			'i18n'        => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Labels (i18n)', 'woocommerce-pos' ),
-				'fields' => array(
-					'order'    => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Order', 'woocommerce-pos' ),
-					),
-					'date'     => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Date', 'woocommerce-pos' ),
-					),
-					'cashier'  => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Cashier', 'woocommerce-pos' ),
-					),
-					'customer' => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Customer', 'woocommerce-pos' ),
-					),
-					'subtotal' => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal', 'woocommerce-pos' ),
-					),
-					'total'    => array(
-						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
-					),
-				),
+				'fields' => self::get_i18n_field_tree_fields(),
 			),
 		);
+	}
+
+
+	/**
+	 * Get field metadata for every canonical i18n receipt label.
+	 *
+	 * @return array<string, array{type: string, label: string}>
+	 */
+	private static function get_i18n_field_tree_fields(): array {
+		$fields = array();
+
+		foreach ( Receipt_I18n_Labels::get_labels() as $key => $label ) {
+			$fields[ $key ] = array(
+				'type'  => 'string',
+				'label' => $label,
+			);
+		}
+
+		return $fields;
 	}
 
 	/**
@@ -1150,6 +1147,7 @@ class Receipt_Data_Schema {
 		$schema = array(
 			'$schema'              => 'https://json-schema.org/draft/2020-12/schema',
 			'$id'                  => 'https://wcpos.com/schemas/receipt-data.schema.json',
+			'x-schema-version'     => self::SCHEMA_VERSION,
 			'title'                => 'ReceiptData',
 			'type'                 => 'object',
 			'additionalProperties' => true,

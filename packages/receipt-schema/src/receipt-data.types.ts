@@ -6,9 +6,7 @@ export type ReceiptValue = ReceiptScalar | ReceiptValue[] | { [key: string]: Rec
 export type ReceiptObject = { [key: string]: ReceiptValue };
 
 export interface ReceiptData {
-	"receipt": ReceiptObject | ReceiptObject[];
 	"order": ReceiptObject | ReceiptObject[];
-	"meta": ReceiptObject | ReceiptObject[];
 	"store": ReceiptObject | ReceiptObject[];
 	"cashier": ReceiptObject | ReceiptObject[];
 	"customer": ReceiptObject | ReceiptObject[];
@@ -26,9 +24,7 @@ export interface ReceiptData {
 }
 
 export const receiptDataRequiredKeys = [
-	"receipt",
 	"order",
-	"meta",
 	"store",
 	"cashier",
 	"customer",
@@ -45,4 +41,4 @@ export const receiptDataRequiredKeys = [
 	"i18n"
 ] as const;
 export type ReceiptDataRequiredKey = (typeof receiptDataRequiredKeys)[number];
-export const receiptDataSchemaVersion = "1.4.0" as const;
+export const receiptDataSchemaVersion = "1.0.0" as const;
