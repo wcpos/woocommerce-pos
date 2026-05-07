@@ -1,5 +1,8 @@
 import * as React from 'react';
 
+import { Button } from './button';
+import { CountrySelect } from './country-select';
+import { Select, type OptionProps } from './select';
 import {
 	Table,
 	TableBody,
@@ -8,9 +11,8 @@ import {
 	TableHeader,
 	TableHeaderRow,
 	TableRow,
-} from '@wcpos/ui';
-
-import { Button, CountrySelect, Select, TextInput, type OptionProps } from './ui';
+} from './table';
+import { TextInput } from './text-input';
 
 export interface TaxId {
 	type: string;
@@ -23,7 +25,7 @@ export interface TaxIdsFieldHandle {
 	addRow: () => void;
 }
 
-interface TaxIdsLabels {
+export interface TaxIdsLabels {
 	add: string;
 	type: string;
 	value: string;
@@ -37,8 +39,8 @@ interface TaxIdsLabels {
 	empty: string;
 }
 
-interface TaxIdsFieldProps {
-	value: TaxId[];
+export interface TaxIdsFieldProps {
+	value: TaxId[] | null | undefined;
 	onChange: (value: TaxId[]) => void;
 	labels: TaxIdsLabels;
 }
@@ -312,7 +314,7 @@ function TaxIdRow({ taxId, labels, onChangeField, onRemove }: TaxIdRowProps) {
  * (rendered below the table) and via an imperative `addRow` handle so
  * consumers can also place an Add button in a section header.
  */
-const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
+export const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 	function TaxIdsField({ value, onChange, labels }, ref) {
 		const taxIds = React.useMemo(
 			() => (Array.isArray(value) ? value.map(normalizeTaxId) : []),
@@ -468,5 +470,3 @@ const TaxIdsField = React.forwardRef<TaxIdsFieldHandle, TaxIdsFieldProps>(
 		);
 	}
 );
-
-export default TaxIdsField;

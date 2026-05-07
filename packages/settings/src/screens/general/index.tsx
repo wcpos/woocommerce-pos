@@ -3,7 +3,7 @@ import * as React from 'react';
 import { isNumber, isString } from 'lodash';
 
 import { PrivacyInfoModal } from '@wcpos/consent';
-import { Button, Callout } from '@wcpos/ui';
+import { Callout, TaxIdsField, type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
@@ -12,10 +12,6 @@ import UserSelect from './user-select';
 import { FormRow, FormSection } from '../../components/form';
 import Label from '../../components/label';
 import { Skeleton } from '../../components/skeleton';
-import TaxIdsField, {
-	type TaxId,
-	type TaxIdsFieldHandle,
-} from '../../components/tax-ids-field';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
@@ -62,7 +58,6 @@ function getStoreDetailsBlockOverride(): React.ComponentType<StoreDetailsBlockPr
 function General() {
 	const { data, mutate } = useSettingsApi('general');
 	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
-	const taxIdsFieldRef = React.useRef<TaxIdsFieldHandle>(null);
 
 	const storeDefaults: StoreDefaults = {
 		store_name: '',
@@ -72,6 +67,8 @@ function General() {
 		...(data?.store_defaults ?? {}),
 	};
 
+	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
+	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
 	const storeTaxIdsDescription = (
 		<>
 			{t('settings.store_tax_ids_section_description')}{' '}
@@ -86,20 +83,12 @@ function General() {
 		</>
 	);
 
-	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
-	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
-
 	return (
 		<>
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
 			<FormSection
 				title={t('settings.store_tax_ids_section_title')}
 				description={storeTaxIdsDescription}
-				headerRight={
-					<Button variant="outline" onClick={() => taxIdsFieldRef.current?.addRow()}>
-						{t('settings.store_tax_ids_add')}
-					</Button>
-				}
 				divider
 			>
 				<Callout
@@ -110,8 +99,7 @@ function General() {
 					{t('settings.store_tax_ids_tip')}
 				</Callout>
 				<TaxIdsField
-					ref={taxIdsFieldRef}
-					value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : []}
+					value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : null}
 					onChange={(store_tax_ids) => {
 						mutate({ store_tax_ids });
 					}}

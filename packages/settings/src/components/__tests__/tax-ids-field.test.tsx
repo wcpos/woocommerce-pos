@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import TaxIdsField from '../tax-ids-field';
+import { TaxIdsField } from '@wcpos/ui';
 
 const baseLabels = {
 	add: 'Add tax ID',
@@ -42,6 +42,34 @@ function commitDraftValue(value: string) {
 describe('TaxIdsField addRow defaults', () => {
 	afterEach(() => {
 		delete (window as any).wcpos;
+	});
+
+	it('treats null as an empty tax ID list when adding the first row', () => {
+		setStoreCountry(undefined);
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={null} onChange={onChange} labels={baseLabels} />);
+
+		expect(screen.getByText(baseLabels.empty)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('NULL1');
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenCalledWith([{ type: 'other', value: 'NULL1' }]);
+	});
+
+	it('treats undefined as an empty tax ID list when adding the first row', () => {
+		setStoreCountry(undefined);
+		const onChange = vi.fn();
+
+		render(<TaxIdsField value={undefined} onChange={onChange} labels={baseLabels} />);
+
+		expect(screen.getByText(baseLabels.empty)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
+		commitDraftValue('UNDEFINED1');
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange).toHaveBeenCalledWith([{ type: 'other', value: 'UNDEFINED1' }]);
 	});
 
 	it('uses the country-specific type for DE stores (de_ust_id)', () => {

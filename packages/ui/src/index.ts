@@ -54,3 +54,10 @@ export {
 	type TableHeadProps,
 	type TableCellProps,
 } from './table';
+export {
+	TaxIdsField,
+	type TaxId,
+	type TaxIdsFieldHandle,
+	type TaxIdsFieldProps,
+	type TaxIdsLabels,
+} from './tax-ids-field';
