@@ -12,6 +12,11 @@ export const SnackbarContext = React.createContext<SnackbarContextValue | null>(
 
 interface SnackbarProviderProps {
 	children: React.ReactNode;
+	/**
+	 * Optional element used to calculate the fixed snackbar slot's horizontal
+	 * bounds. Defaults to the provider's own wrapper.
+	 */
+	boundsElement?: HTMLElement | null;
 }
 
 let snackbarCounter = 0;
@@ -43,7 +48,7 @@ function generateSnackbarId(): string {
  * explicit id when you need to overwrite a specific in-flight snackbar (e.g.
  * replacing a "Saving…" message with "Saved" under the same id).
  */
-export function SnackbarProvider({ children }: SnackbarProviderProps) {
+export function SnackbarProvider({ children, boundsElement }: SnackbarProviderProps) {
 	const [snackbars, setSnackbars] = React.useState<SnackbarProps[]>([]);
 	const containerRef = React.useRef<HTMLDivElement>(null);
 	const [bounds, setBounds] = React.useState<{ left: number; width: number } | null>(null);
@@ -51,20 +56,21 @@ export function SnackbarProvider({ children }: SnackbarProviderProps) {
 	React.useEffect(() => {
 		const el = containerRef.current;
 		if (!el) return;
+		const boundsEl = boundsElement ?? el;
 		const update = () => {
-			const rect = el.getBoundingClientRect();
+			const rect = boundsEl.getBoundingClientRect();
 			setBounds({ left: rect.left, width: rect.width });
 		};
 		update();
 		const observer =
 			typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
-		observer?.observe(el);
+		observer?.observe(boundsEl);
 		window.addEventListener('resize', update);
 		return () => {
 			observer?.disconnect();
 			window.removeEventListener('resize', update);
 		};
-	}, []);
+	}, [boundsElement]);
 
 	const addSnackbar = React.useCallback((snackbar: AddSnackbarInput) => {
 		const id = snackbar.id ?? generateSnackbarId();

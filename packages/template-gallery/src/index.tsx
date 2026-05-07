@@ -22,7 +22,7 @@ function Root() {
 			)}
 		>
 			<QueryClientProvider client={queryClient}>
-				<SnackbarProvider>
+				<SnackbarProvider boundsElement={document.getElementById('wpcontent')}>
 					<RouterProvider router={router} />
 				</SnackbarProvider>
 			</QueryClientProvider>
