@@ -294,7 +294,7 @@ plain <text> nodes that span the full width.
   <!-- ── Order barcode ─────────────── -->
   <feed lines="1" />
   <align mode="center">
-    <barcode type="code128" height="60">{{order.number}}</barcode>
+    <barcode type="code128" height="40">{{order.number}}</barcode>
   </align>
 
   <!-- ── Personal note ─────────────── -->

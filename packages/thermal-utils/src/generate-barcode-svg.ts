@@ -42,7 +42,14 @@ export function generateBarcodeSvg(
 			height,
 			includetext: bcid !== 'qrcode',
 		});
-		return `<div style="text-align: center; padding: 8px 0">${svg}</div>`;
+		// Constrain the SVG to its container so it never overflows narrow
+		// thermal columns. bwip-js emits explicit pt-based width/height; the
+		// inline style overrides that and lets the browser scale to fit.
+		const responsiveSvg = svg.replace(
+			/<svg\b/,
+			'<svg style="max-width: 100%; height: auto"',
+		);
+		return `<div style="text-align: center; padding: 8px 0">${responsiveSvg}</div>`;
 	} catch (error) {
 		console.warn(`Barcode generation failed for type="${type}":`, error);
 		return `<div style="text-align: center; padding: 8px 0; color: #999; font-size: 10px">Barcode error</div>`;
