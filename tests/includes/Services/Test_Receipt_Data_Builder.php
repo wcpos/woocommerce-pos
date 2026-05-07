@@ -109,6 +109,26 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test order date sections use store timezone when available.
+	 */
+	public function test_build_formats_order_dates_in_store_timezone(): void {
+		$order = wc_create_order();
+		$order->set_date_created( strtotime( '2026-05-07 00:30:00 UTC' ) );
+		$order->save();
+
+		$pos_store = new class() {
+			public function get_timezone(): string {
+				return 'America/New_York';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		$this->assertSame( '2026-05-06', $payload['order']['created']['date_ymd'] );
+		$this->assertSame( 'America/New_York', $payload['presentation_hints']['timezone'] );
+	}
+
+	/**
 	 * Test status_label is populated using wc_get_order_status_name().
 	 */
 	public function test_build_populates_status_label_from_wc_helper(): void {

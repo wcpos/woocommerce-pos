@@ -88,6 +88,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'id',
 			'name',
 			'locale',
+			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
 			'store_address',

@@ -47,6 +47,7 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'id',
 			'name',
 			'locale',
+			'timezone',
 			'default_customer',
 			'default_customer_is_cashier',
 			'store_address',
