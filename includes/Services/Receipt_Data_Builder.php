@@ -100,6 +100,7 @@ class Receipt_Data_Builder {
 			// WC_Countries::get_formatted_address() so per-country layouts are honoured.
 			'address'       => $store_address_parts,
 			'address_lines' => $this->compose_address_lines( $store_address_parts ),
+			'tax_id'        => $this->format_primary_tax_id( $store_tax_ids ),
 			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
 			'email'         => $store_email,
