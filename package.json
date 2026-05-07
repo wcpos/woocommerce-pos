@@ -40,12 +40,12 @@
   },
   "homepage": "https://wcpos.com",
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
-    "@wordpress/env": "^11.1.0",
+    "@playwright/test": "^1.59.1",
+    "@wordpress/env": "^11.5.0",
     "jsdoc": "^4.0.5",
     "newman": "^6.2.2",
     "taffydb": "^2.7.3",
-    "turbo": "^2.8.7",
+    "turbo": "^2.9.9",
     "wp-hookdoc": "0.2.0"
   },
   "pnpm": {

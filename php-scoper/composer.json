@@ -2,16 +2,16 @@
   "require-dev": {
     "humbug/php-scoper": "0.16.2"
   },
-	"require": {
+  "require": {
     "php": ">=7.4",
     "ext-json": "*",
-    "firebase/php-jwt": "v6.9.0",
-    "phpfastcache/phpfastcache": "^8.1"
+    "firebase/php-jwt": "^6.10.0",
+    "phpfastcache/phpfastcache": "^8.1.4"
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
   "config": {
-		"platform": {
+    "platform": {
       "php": "7.4"
     },
     "preferred-install": "dist",

@@ -13,27 +13,27 @@
   "dependencies": {
     "@wcpos/i18n": "workspace:*",
     "@wcpos/ui": "workspace:*",
-    "@wordpress/api-fetch": "^7.39.0",
-    "@wordpress/url": "^4.39.0",
+    "@wordpress/api-fetch": "^7.45.0",
+    "@wordpress/url": "^4.45.0",
     "classnames": "^2.5.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
-    "@tailwindcss/vite": "^4.1.18",
+    "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@types/react": "^18.3.18",
+    "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
-    "jsdom": "^29.0.0",
-    "prettier": "^3.8.1",
-    "prettier-plugin-tailwindcss": "^0.7.2",
-    "tailwindcss": "^4.1.18",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.0",
-    "vitest": "^4.0.18"
+    "jsdom": "^29.1.1",
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vitest": "^4.1.5"
   },
   "packageManager": "pnpm@10.8.0"
 }
