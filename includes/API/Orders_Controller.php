@@ -16,6 +16,7 @@ if ( ! class_exists( 'WC_REST_Orders_Controller' ) ) {
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Abstract_Order;
+use WC_Data;
 use WC_Email_Customer_Invoice;
 use WC_Order_Item;
 use WC_Order_Item_Fee;
@@ -416,11 +417,83 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		// Set the creating flag, used in woocommerce_before_order_object_save.
 		$this->is_creating = true;
 
-		// Proceed with the parent method to handle the creation.
-		$response = parent::create_item( $request );
+		add_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10, 3 );
+
+		try {
+			// Proceed with the parent method to handle the creation.
+			$response = parent::create_item( $request );
+		} finally {
+			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+		}
+
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
 
 		return $response;
+	}
+
+	/**
+	 * Preserve client-provided order creation time for offline-created orders.
+	 *
+	 * WooCommerce marks date_created/date_created_gmt as read-only in the REST
+	 * schema, so those fields are removed before the parent controller prepares
+	 * the order. WCPOS clients can create orders offline and later sync the full
+	 * local document; read the raw JSON payload here so the server keeps the
+	 * transaction time instead of the sync time.
+	 *
+	 * @param WC_Data|WP_Error $order    Order object prepared by WooCommerce.
+	 * @param WP_REST_Request $request  Request object.
+	 * @param bool            $creating Whether a new order is being created.
+	 *
+	 * @return WC_Data|WP_Error
+	 */
+	public function wcpos_preserve_client_created_date_gmt( $order, WP_REST_Request $request, bool $creating ) {
+		if ( ! $creating || is_wp_error( $order ) ) {
+			return $order;
+		}
+
+		$body = $request->get_json_params();
+
+		if ( ! isset( $body['date_created_gmt'] ) ) {
+			return $order;
+		}
+
+		if ( ! is_scalar( $body['date_created_gmt'] ) ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$client_date_gmt = wc_clean( wp_unslash( (string) $body['date_created_gmt'] ) );
+
+		if ( '' === $client_date_gmt ) {
+			return $order;
+		}
+
+		$timestamp = rest_parse_date( $client_date_gmt, true );
+
+		if ( false === $timestamp ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_invalid_date_created_gmt',
+				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$maximum_future_timestamp = current_time( 'timestamp', true ) + DAY_IN_SECONDS;
+
+		if ( $timestamp > $maximum_future_timestamp ) {
+			return new WP_Error(
+				'woocommerce_pos_rest_future_date_created_gmt',
+				__( 'date_created_gmt cannot be more than 24 hours in the future.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$order->set_date_created( $timestamp );
+
+		return $order;
 	}
 
 	/**
