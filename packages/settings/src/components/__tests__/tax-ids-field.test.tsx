@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import TaxIdsField from '../tax-ids-field';
+import { TaxIdsField } from '@wcpos/ui';
 
 const baseLabels = {
 	add: 'Add tax ID',
