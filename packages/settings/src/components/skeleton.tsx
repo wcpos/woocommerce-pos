@@ -1,5 +1,7 @@
 import { Skeleton } from '@wcpos/ui';
 
+import { t } from '../translations';
+
 export { Skeleton };
 
 /**
@@ -7,7 +9,7 @@ export { Skeleton };
  */
 export function FormSkeleton({ rows = 5 }: { rows?: number }) {
 	return (
-		<div className="wcpos:pb-4 wcpos:mb-4" role="status" aria-label="Loading">
+		<div className="wcpos:pb-4 wcpos:mb-4" role="status" aria-label={t('common.loading')}>
 			<div className="wcpos:space-y-0">
 				{Array.from({ length: rows }).map((_, i) => (
 					<div
@@ -39,7 +41,7 @@ export function FormSkeleton({ rows = 5 }: { rows?: number }) {
  */
 export function CardGridSkeleton({ cards = 4 }: { cards?: number }) {
 	return (
-		<div role="status" aria-label="Loading">
+		<div role="status" aria-label={t('common.loading')}>
 			{/* Search bar skeleton */}
 			<div className="wcpos:mb-4">
 				<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />
@@ -78,7 +80,7 @@ export function CardGridSkeleton({ cards = 4 }: { cards?: number }) {
  */
 export function ListSkeleton({ rows = 8 }: { rows?: number }) {
 	return (
-		<div role="status" aria-label="Loading">
+		<div role="status" aria-label={t('common.loading')}>
 			{/* Filter bar */}
 			<div className="wcpos:flex wcpos:gap-2 wcpos:mb-4">
 				{Array.from({ length: 3 }).map((_, i) => (
@@ -107,7 +109,7 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
  */
 export function AccessSkeleton() {
 	return (
-		<div role="status" aria-label="Loading">
+		<div role="status" aria-label={t('common.loading')}>
 			<div className="wcpos:p-4">
 				<Skeleton className="wcpos:h-10 wcpos:w-full wcpos:rounded-md" />
 			</div>
@@ -142,7 +144,7 @@ export function AccessSkeleton() {
  */
 export function SessionsSkeleton() {
 	return (
-		<div className="wcpos:p-4" role="status" aria-label="Loading">
+		<div className="wcpos:p-4" role="status" aria-label={t('common.loading')}>
 			<Skeleton className="wcpos:h-10 wcpos:w-full wcpos:rounded-md wcpos:mb-3" />
 			<div className="wcpos:grid wcpos:grid-cols-[minmax(0,18rem)_1fr] wcpos:gap-4">
 				<div className="wcpos:space-y-2 wcpos:border-r wcpos:border-gray-200 wcpos:pr-4">
@@ -195,7 +197,7 @@ export function SessionsSkeleton() {
  */
 export function LicenseSkeleton() {
 	return (
-		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4" role="status" aria-label="Loading">
+		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4" role="status" aria-label={t('common.loading')}>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Skeleton className="wcpos:h-4" width="90px" />
 			</div>
