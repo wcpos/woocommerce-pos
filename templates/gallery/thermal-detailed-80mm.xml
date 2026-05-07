@@ -252,7 +252,7 @@ plain <text> nodes that span the full width.
   {{#lines}}
   <row>
     <col width="32">  {{name}}{{#sku}} ({{sku}}){{/sku}}</col>
-    <col width="16" align="right">{{qty}} x {{total_display}}</col>
+    <col width="16" align="right">{{total_display}}</col>
   </row>
   {{/lines}}
   <row>
