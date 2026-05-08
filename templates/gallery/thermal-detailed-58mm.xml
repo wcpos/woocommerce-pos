@@ -113,7 +113,7 @@ the star to the remaining 32-CPL space at render time.
   <line />
   <row>
     <col width="*"><bold>{{i18n.item}}</bold></col>
-    <col width="10" align="right"><bold>{{i18n.total}}</bold></col>
+    <col width="12" align="right"><bold>{{i18n.total}}</bold></col>
   </row>
   <line />
   {{#lines}}
