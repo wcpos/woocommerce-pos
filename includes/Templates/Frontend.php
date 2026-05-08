@@ -126,7 +126,10 @@ class Frontend {
 		);
 
 		$user                 = wp_get_current_user();
-		$cdn_base_url         = $development ? 'http://localhost:4567/build/' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build/';
+		// No trailing slash: Metro's runtime concatenates `cdnBaseUrl` with leading-slash paths
+		// (`/_expo/...`, `/assets/...`); a trailing slash here would produce `//`, which jsDelivr
+		// 301-redirects with a year-long cache, breaking lazy chunk loads in the browser.
+		$cdn_base_url         = $development ? 'http://localhost:4567/build' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.8/build';
 		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
@@ -149,7 +152,7 @@ class Frontend {
 
 		$vars = array(
 			'version'        => VERSION,
-			'manifest'       => $cdn_base_url . 'metadata.json?v=' . VERSION,
+			'manifest'       => $cdn_base_url . '/metadata.json?v=' . VERSION,
 			'homepage'       => woocommerce_pos_url(),
 			'logout_url'     => $this->pos_logout_url(),
 			'site'           => array(
@@ -253,7 +256,7 @@ class Frontend {
 
 						function loadBundles(index) {
 								if (index >= bundles.length) return;
-								var source = cdnBaseUrl + bundles[index];
+								var source = cdnBaseUrl + '/' + bundles[index];
 								getScript(source, function() {
 										loadBundles(index + 1);
 								}, function(error) {
@@ -262,7 +265,7 @@ class Frontend {
 						}
 
 						if (data.fileMetadata.web.css) {
-								loadCSS(cdnBaseUrl + data.fileMetadata.web.css, function() {
+								loadCSS(cdnBaseUrl + '/' + data.fileMetadata.web.css, function() {
 										loadBundles(0);
 								});
 						} else {
