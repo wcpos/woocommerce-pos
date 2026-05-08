@@ -504,6 +504,42 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test missing historical store IDs do not mix in current store details.
+	 */
+	public function test_build_does_not_hydrate_default_store_for_missing_historical_store(): void {
+		$missing_store_id      = 987654;
+		$original_store_address = get_option( 'woocommerce_store_address' );
+		$order                 = OrderHelper::create_order();
+		$order->update_meta_data( '_pos_store', $missing_store_id );
+		$order->save();
+
+		$store_filter = static function ( $store, $the_store ) use ( $missing_store_id ) {
+			if ( $missing_store_id === (int) $the_store ) {
+				return false;
+			}
+
+			return $store;
+		};
+
+		try {
+			update_option( 'woocommerce_store_address', '1 Current Store Road' );
+			add_filter( 'woocommerce_pos_get_store', $store_filter, 10, 3 );
+
+			$payload = $this->builder->build( $order, 'live' );
+			$store   = $payload['store'];
+
+			$this->assertSame( $missing_store_id, $store['id'] );
+			// translators: %d: Historical POS store ID that no longer exists.
+			$expected_store_name = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_store_id );
+			$this->assertSame( $expected_store_name, $store['name'] );
+			$this->assertSame( '', $store['address']['address_1'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter, 10 );
+			update_option( 'woocommerce_store_address', $original_store_address );
+		}
+	}
+
+	/**
 	 * Test the order section includes rich date data for created/paid/completed/printed.
 	 */
 	public function test_build_includes_order_date_sections(): void {

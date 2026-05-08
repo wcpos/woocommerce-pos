@@ -48,11 +48,11 @@ class Receipt_Data_Builder {
 				$missing_order_store_id = $order_store_id;
 			}
 		}
-		if ( ! \is_object( $pos_store ) ) {
+		if ( ! \is_object( $pos_store ) && 0 === $missing_order_store_id ) {
 			$pos_store = wcpos_get_store();
 		}
 		if ( ! \is_object( $pos_store ) ) {
-			$pos_store = new Store();
+			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
 
 		$date_timezone = $this->resolve_store_timezone( $pos_store );
