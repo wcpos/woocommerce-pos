@@ -748,8 +748,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'DE', $payload['store']['tax_ids'][0]['country'] );
 		$this->assertSame( 'VAT ID', $payload['store']['tax_ids'][0]['label'] );
 
-		// Back-compat scalar still emitted.
-		$this->assertSame( 'DE123456789', $payload['store']['tax_id'] );
+		$this->assertArrayNotHasKey( 'tax_id', $payload['store'] );
 	}
 
 	/**
@@ -761,7 +760,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$payload = $this->builder->build( $order, 'live' );
 
 		$this->assertSame( array(), $payload['store']['tax_ids'] );
-		$this->assertSame( '', $payload['store']['tax_id'] );
+		$this->assertArrayNotHasKey( 'tax_id', $payload['store'] );
 	}
 
 	/**
