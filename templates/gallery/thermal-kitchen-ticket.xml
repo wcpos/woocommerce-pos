@@ -2,7 +2,7 @@
   <!-- width="*" is deliberate: item names get the remaining CPL after qty/date
        columns instead of being frozen to a 42-CPL-only numeric width. -->
   <align mode="center">
-    <bold><size width="2" height="2">{{i18n.kitchen}}</size></bold>
+    <bold><size width="2" height="2"><text>{{i18n.kitchen}}</text></size></bold>
   </align>
   <line style="double" />
   <bold><text>{{order.number}}</text></bold>
