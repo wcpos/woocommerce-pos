@@ -990,4 +990,65 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertNotSame( '', $data['order']['completed']['datetime'] );
 		$this->assertNotSame( '', $data['order']['printed']['datetime'] );
 	}
+
+	/**
+	 * Test preview honors the per-store timezone for order dates and presentation hints.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_uses_store_timezone_for_order_dates(): void {
+		$store_filter_factory = static function ( string $timezone ): callable {
+			return static function () use ( $timezone ) {
+				return new class( $timezone ) {
+					private $timezone;
+
+					public function __construct( string $timezone ) {
+						$this->timezone = $timezone;
+					}
+
+					public function get_currency(): string {
+						return '';
+					}
+
+					public function get_locale(): string {
+						return '';
+					}
+
+					public function get_timezone(): string {
+						return $this->timezone;
+					}
+				};
+			};
+		};
+
+		$auckland_filter = $store_filter_factory( 'Pacific/Auckland' );
+		$honolulu_filter = $store_filter_factory( 'Pacific/Honolulu' );
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $auckland_filter );
+			$auckland = $this->builder->build();
+			remove_filter( 'woocommerce_pos_get_store', $auckland_filter );
+
+			add_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+			$honolulu = $this->builder->build();
+			remove_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+
+			$this->assertSame( 'Pacific/Auckland', $auckland['presentation_hints']['timezone'] );
+			$this->assertSame( 'Pacific/Honolulu', $honolulu['presentation_hints']['timezone'] );
+			// 2024-01-15 10:30 UTC is 2024-01-15 23:30 NZDT vs 2024-01-15 00:30 HST,
+			// so created.time differs and the day-of-month boundary stays on the 15th
+			// for both — proving the timezone is wired through the date formatter.
+			$this->assertNotSame(
+				$auckland['order']['created']['time'],
+				$honolulu['order']['created']['time']
+			);
+			$this->assertNotSame(
+				$auckland['order']['created']['datetime'],
+				$honolulu['order']['created']['datetime']
+			);
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $auckland_filter );
+			remove_filter( 'woocommerce_pos_get_store', $honolulu_filter );
+		}
+	}
 }

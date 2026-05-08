@@ -646,9 +646,9 @@ class Preview_Receipt_Builder {
 			'customer_note' => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
 			'wc_status'     => 'completed',
 			'created_via'   => 'woocommerce-pos',
-			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, wp_timezone() ),
-			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, wp_timezone() ),
-			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, wp_timezone() ),
+			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, $date_timezone ),
+			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, $date_timezone ),
+			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, $date_timezone ),
 			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
 		);
 
@@ -731,7 +731,7 @@ class Preview_Receipt_Builder {
 
 		$refunds = array();
 
-		$presentation_hints = $this->build_presentation_hints( $currency, $tax_enabled, $prices_include_tax );
+		$presentation_hints = $this->build_presentation_hints( $currency, $tax_enabled, $prices_include_tax, $date_timezone );
 
 		$fiscal = array(
 			'immutable_id'      => '12345:42',
@@ -969,13 +969,19 @@ class Preview_Receipt_Builder {
 	/**
 	 * Build price, currency, locale, and tax presentation hints for renderers.
 	 *
-	 * @param string $currency            Currency code used by the preview data.
-	 * @param bool   $tax_enabled         Whether taxes are enabled for this store.
-	 * @param bool   $prices_include_tax  Whether entered prices include tax.
+	 * @param string       $currency            Currency code used by the preview data.
+	 * @param bool         $tax_enabled         Whether taxes are enabled for this store.
+	 * @param bool         $prices_include_tax  Whether entered prices include tax.
+	 * @param DateTimeZone $date_timezone       Store timezone resolved for this preview payload.
 	 *
 	 * @return array<string,mixed>
 	 */
-	private function build_presentation_hints( string $currency, bool $tax_enabled, bool $prices_include_tax ): array {
+	private function build_presentation_hints(
+		string $currency,
+		bool $tax_enabled,
+		bool $prices_include_tax,
+		DateTimeZone $date_timezone
+	): array {
 		$tax_display_mode = $this->resolve_store_string(
 			'get_tax_total_display',
 			get_option( 'woocommerce_tax_total_display', 'itemized' )
@@ -990,6 +996,7 @@ class Preview_Receipt_Builder {
 			),
 			'order_barcode_type'       => $this->resolve_order_barcode_type(),
 			'locale'                   => $this->resolve_locale(),
+			'timezone'                 => $date_timezone->getName(),
 			'currency_position'        => $this->resolve_store_string(
 				'get_currency_position',
 				get_option( 'woocommerce_currency_pos', 'left' )
