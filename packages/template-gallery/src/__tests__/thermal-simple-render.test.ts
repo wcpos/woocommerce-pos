@@ -98,6 +98,67 @@ describe('thermal simple templates render with sample data', () => {
 			expect(html).toContain('Thank you for your purchase!');
 			expect(html).toContain('My Store Pty Ltd');
 			expect(html).toContain('<svg');
+			if (file === 'thermal-simple-58mm.xml') {
+				const rendered = document.createElement('div');
+				rendered.innerHTML = html;
+				const subtotalAmount = [...rendered.querySelectorAll('span')].find(
+					(span) => span.textContent === '$49.97',
+				);
+				expect((rendered.firstElementChild as HTMLElement).style.width).toBe('32ch');
+				expect((rendered.querySelector('img') as HTMLImageElement).style.maxWidth).toBe('160px');
+				expect(rendered.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 171 109');
+				expect(subtotalAmount?.getAttribute('style')).toContain('flex: 0 0 12ch');
+			}
+		});
+
+		it(`${file} hides optional blocks and renders line discounts`, () => {
+			const xml = fs.readFileSync(path.join(galleryDir, file), 'utf8');
+			const edgeData = {
+				...sampleData,
+				store: {
+					...sampleData.store,
+					logo: undefined,
+					phone: '',
+					email: undefined,
+					tax_ids: [],
+					footer_imprint: undefined,
+				},
+				order: {
+					...sampleData.order,
+					customer_note: undefined,
+				},
+				lines: [
+					{
+						...sampleData.lines[0],
+						name: 'Discounted Item',
+						sku: 'DISC-001',
+						unit_subtotal_incl_display: '$20.00',
+						unit_price_incl_display: '$15.00',
+						discounts_incl_display: '$5.00',
+						line_total_incl_display: '$15.00',
+						discounts: [{ label: 'Promo' }],
+					},
+				],
+			};
+
+			const html = renderThermalPreview(xml, edgeData);
+			const rendered = document.createElement('div');
+			rendered.innerHTML = html;
+			const renderedText = rendered.textContent ?? '';
+			expect(rendered.querySelector('img')).toBeNull();
+			for (const hidden of [
+				'+1 (555) 123-4567',
+				'hello@mystore.com',
+				'EIN',
+				'12-3456789',
+				'Customer Note',
+				'My Store Pty Ltd',
+			]) {
+				expect(renderedText).not.toContain(hidden);
+			}
+			for (const discountText of ['Discounted Item', 'DISC-001', '@ $20.00', '-$5.00', '$15.00']) {
+				expect(renderedText).toContain(discountText);
+			}
 		});
 	}
 });
