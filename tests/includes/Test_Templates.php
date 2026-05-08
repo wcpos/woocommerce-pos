@@ -574,6 +574,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertContains( 'thermal-simple-80mm', $keys );
 		$this->assertContains( 'thermal-simple-58mm', $keys );
 		$this->assertContains( 'thermal-detailed-80mm', $keys );
+		$this->assertContains( 'thermal-detailed-58mm', $keys );
 		$this->assertContains( 'thermal-kitchen-ticket', $keys );
 	}
 
