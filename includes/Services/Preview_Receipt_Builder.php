@@ -10,6 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use DateTimeZone;
 use WCPOS\WooCommercePOS\Abstracts\Store;
 
 /**
@@ -636,6 +637,7 @@ class Preview_Receipt_Builder {
 		$created_timestamp   = strtotime( '2024-01-15 10:30:00 UTC' );
 		$paid_timestamp      = strtotime( '2024-01-15 10:35:00 UTC' );
 		$completed_timestamp = strtotime( '2024-01-15 10:42:00 UTC' );
+		$date_timezone       = $this->resolve_store_timezone();
 
 		$order = array(
 			'id'            => 1234,
@@ -647,7 +649,7 @@ class Preview_Receipt_Builder {
 			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, wp_timezone() ),
 			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, wp_timezone() ),
 			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, wp_timezone() ),
-			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), wp_timezone() ),
+			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
 		);
 
 		$store = $this->get_store_info();
@@ -915,6 +917,25 @@ class Preview_Receipt_Builder {
 		}
 
 		return $pos_store->{$getter}();
+	}
+
+	/**
+	 * Resolve the preview receipt timezone from the store, falling back to the site timezone.
+	 *
+	 * @return DateTimeZone
+	 */
+	private function resolve_store_timezone(): DateTimeZone {
+		$timezone = (string) $this->get_store_value( $this->pos_store, 'get_timezone', '' );
+
+		if ( '' !== $timezone ) {
+			try {
+				return new DateTimeZone( $timezone );
+			} catch ( \Exception $error ) {
+				return wp_timezone();
+			}
+		}
+
+		return wp_timezone();
 	}
 
 	/**
