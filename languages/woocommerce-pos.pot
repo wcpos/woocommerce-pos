@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-08T14:18:03+00:00\n"
+"POT-Creation-Date: 2026-05-08T15:20:56+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1305,8 +1305,8 @@ msgstr ""
 
 #. translators: Sample receipt label or value used in receipt template previews.
 #. translators: Standalone label used in printed receipt templates.
-#: includes/Services/Preview_Receipt_Builder.php:1328
-#: includes/Services/Preview_Receipt_Builder.php:1353
+#: includes/Services/Preview_Receipt_Builder.php:1335
+#: includes/Services/Preview_Receipt_Builder.php:1360
 #: includes/Services/Receipt_I18n_Labels.php:162
 msgid "Tax"
 msgstr ""
