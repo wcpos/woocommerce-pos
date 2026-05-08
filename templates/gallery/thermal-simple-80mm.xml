@@ -1,54 +1,101 @@
+<!--
+Simple Thermal Receipt (80mm) — clean, no-fuss receipt for 80mm printers.
+
+Compared to the detailed 80mm template this drops bill-to/ship-to blocks,
+refund and tax-rate breakdowns, terms and opening hours. What remains is
+the information a typical store owner expects on every receipt: store
+identity, order info, items, totals, payments, order barcode and a
+thank-you note. Optional sections (logo, tax IDs, customer note, footer
+imprint) auto-disappear when the underlying data is empty.
+
+Layout uses width="*" for the label column so the same template renders
+correctly on both 42- and 48-CPL 80mm printers; do not replace these
+star columns with hard-coded widths.
+-->
 <receipt paper-width="48">
-  <!-- width="*" is deliberate: flexible columns absorb remaining CPL so this
-       80mm template can render cleanly on both 42- and 48-CPL printers. -->
+
+  <!-- ── Logo + store identity ─────────────── -->
+  {{#store.logo}}
+  <align mode="center"><image src="{{store.logo}}" width="200" /></align>
+  {{/store.logo}}
   <align mode="center">
-    <bold><size width="2" height="2">{{store.name}}</size></bold>
-    <text>{{store.address_lines.0}}</text>
-    <text>{{store.phone}}</text>
+    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
+    {{#store.address_lines}}
+    <text>{{.}}</text>
+    {{/store.address_lines}}
+    {{#store.phone}}<text>Phone: {{store.phone}}</text>{{/store.phone}}
+    {{#store.email}}<text>Email: {{store.email}}</text>{{/store.email}}
+    {{#store.tax_ids}}
+    <text>{{#label}}{{label}}: {{/label}}{{value}}</text>
+    {{/store.tax_ids}}
   </align>
   <line />
+
+  <!-- ── Order info ─────────────── -->
   <row>
-    <col width="12">{{order.number}}</col>
+    <col width="12">{{i18n.order}}:</col>
+    <col width="*" align="right">#{{order.number}}</col>
+  </row>
+  <row>
+    <col width="12">{{i18n.date}}:</col>
     <col width="*" align="right">{{order.created.datetime}}</col>
   </row>
+  {{#cashier.name}}
+  <row>
+    <col width="12">{{i18n.cashier}}:</col>
+    <col width="*" align="right">{{cashier.name}}</col>
+  </row>
+  {{/cashier.name}}
+  {{#customer.name}}
+  <row>
+    <col width="12">{{i18n.customer}}:</col>
+    <col width="*" align="right">{{customer.name}}</col>
+  </row>
+  {{/customer.name}}
+
+  <!-- ── Items ─────────────── -->
   <line />
   {{#lines}}
-  <bold>{{name}}</bold>
+  <bold><text>{{name}}</text></bold>
+  {{#sku}}<text>  SKU: {{sku}}</text>{{/sku}}
   {{#discounts}}
   <row>
-    <col width="*">x{{qty}} @ {{unit_subtotal_incl_display}}</col>
+    <col width="*">  @ {{unit_subtotal_incl_display}}</col>
     <col width="12" align="right">-{{discounts_incl_display}}</col>
   </row>
   {{/discounts}}
   <row>
-    <col width="5">x{{qty}}</col>
-    <col width="*">@ {{unit_price_incl_display}}</col>
+    <col width="*">  {{qty}} x {{unit_price_incl_display}}</col>
     <col width="12" align="right">{{line_total_incl_display}}</col>
   </row>
   {{/lines}}
-  <line />
-  <row>
-    <col width="*">{{i18n.subtotal}}</col>
-    <col width="14" align="right">{{totals.subtotal_incl_display}}</col>
-  </row>
-  {{#shipping}}
-  <row>
-    <col width="*">{{label}}</col>
-    <col width="14" align="right">{{total_incl_display}}</col>
-  </row>
-  {{/shipping}}
+
+  <!-- ── Fees / Shipping / Order-level discounts ─────────────── -->
   {{#fees}}
   <row>
     <col width="*">{{label}}</col>
     <col width="14" align="right">{{total_incl_display}}</col>
   </row>
   {{/fees}}
-  {{#discounts}}
+  {{#shipping}}
   <row>
     <col width="*">{{label}}</col>
+    <col width="14" align="right">{{total_incl_display}}</col>
+  </row>
+  {{/shipping}}
+  {{#discounts}}
+  <row>
+    <col width="*">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
     <col width="14" align="right">-{{total_incl_display}}</col>
   </row>
   {{/discounts}}
+
+  <!-- ── Totals ─────────────── -->
+  <line />
+  <row>
+    <col width="*">{{i18n.subtotal}}</col>
+    <col width="14" align="right">{{totals.subtotal_incl_display}}</col>
+  </row>
   {{#tax_summary}}
   <row>
     <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
@@ -60,7 +107,20 @@
     <col width="*"><bold>{{i18n.total}}</bold></col>
     <col width="14" align="right"><bold>{{totals.total_incl_display}}</bold></col>
   </row>
+  <line style="double" />
+
+  <!-- ── Customer note ─────────────── -->
+  {{#order.customer_note}}
   <line />
+  <bold><text>{{i18n.customer_note}}</text></bold>
+  <text>{{order.customer_note}}</text>
+  {{/order.customer_note}}
+
+  <!-- ── Payments ─────────────── -->
+  {{#payments.0}}
+  <line />
+  <bold><text>{{i18n.paid}}</text></bold>
+  {{/payments.0}}
   {{#payments}}
   <row>
     <col width="*">{{method_title}}</col>
@@ -79,13 +139,26 @@
   </row>
   {{/change}}
   {{/payments}}
-  <feed lines="2" />
+
+  <!-- ── Order barcode ─────────────── -->
+  <feed lines="1" />
   <align mode="center">
     <barcode type="code128" height="60">{{order.number}}</barcode>
   </align>
+
+  <!-- ── Personal note ─────────────── -->
   <feed lines="1" />
   <align mode="center">
-    <text>{{i18n.thank_you}}</text>
+    {{#store.personal_notes}}<text>{{store.personal_notes}}</text>{{/store.personal_notes}}
+    {{^store.personal_notes}}<text>{{i18n.thank_you_purchase}}</text>{{/store.personal_notes}}
   </align>
+
+  <!-- ── Footer imprint ─────────────── -->
+  {{#store.footer_imprint}}
+  <line />
+  <align mode="center"><text>{{store.footer_imprint}}</text></align>
+  {{/store.footer_imprint}}
+
+  <feed lines="2" />
   <cut />
 </receipt>
