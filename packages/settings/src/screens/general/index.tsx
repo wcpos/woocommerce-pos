@@ -3,7 +3,7 @@ import * as React from 'react';
 import { isNumber, isString } from 'lodash';
 
 import { PrivacyInfoModal } from '@wcpos/consent';
-import { Callout, TaxIdsField, type TaxId } from '@wcpos/ui';
+import { type TaxId } from '@wcpos/ui';
 
 import BarcodeSelect from './barcode-select';
 import { StoreDetailsBlock, type StoreDetailsBlockProps } from './store-details-block';
@@ -15,8 +15,6 @@ import { Skeleton } from '../../components/skeleton';
 import { Toggle, Checkbox } from '../../components/ui';
 import useSettingsApi from '../../hooks/use-settings-api';
 import { t } from '../../translations';
-
-const STORE_TAX_IDS_DOCS_URL = 'https://wcpos.com/docs/store-tax-ids';
 
 export interface StoreDefaults {
 	store_name: string;
@@ -69,55 +67,10 @@ function General() {
 
 	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
 	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
-	const storeTaxIdsDescription = (
-		<>
-			{t('settings.store_tax_ids_section_description')}{' '}
-			<a
-				href={STORE_TAX_IDS_DOCS_URL}
-				target="_blank"
-				rel="noreferrer noopener"
-				className="wcpos:text-wp-admin-theme-color wcpos:underline"
-			>
-				{t('settings.store_tax_ids_learn_more')}
-			</a>
-		</>
-	);
 
 	return (
 		<>
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
-			<FormSection
-				title={t('settings.store_tax_ids_section_title')}
-				description={storeTaxIdsDescription}
-				divider
-			>
-				<Callout
-					status="info"
-					title={t('settings.store_tax_ids_callout_title')}
-					className="wcpos:mb-4"
-				>
-					{t('settings.store_tax_ids_tip')}
-				</Callout>
-				<TaxIdsField
-					value={Array.isArray(data?.store_tax_ids) ? data.store_tax_ids : null}
-					onChange={(store_tax_ids) => {
-						mutate({ store_tax_ids });
-					}}
-					labels={{
-						add: t('settings.store_tax_ids_add'),
-						type: t('settings.store_tax_ids_type'),
-						value: t('settings.store_tax_ids_value'),
-						country: t('settings.store_tax_ids_country'),
-						countryPlaceholder: t('settings.store_tax_ids_country_placeholder'),
-						countrySearchPlaceholder: t('settings.store_tax_ids_country_search'),
-						countryNoResults: t('settings.store_tax_ids_country_no_results'),
-						countryClear: t('settings.store_tax_ids_country_none'),
-						label: t('settings.store_tax_ids_label'),
-						remove: t('settings.store_tax_ids_remove'),
-						empty: t('settings.store_tax_ids_empty'),
-					}}
-				/>
-			</FormSection>
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.pos_only_products_tip')}>
@@ -203,7 +156,7 @@ function General() {
 					<TaxIdsSection />
 				</React.Suspense>
 			</FormSection>
-			<FormSection title={t('settings.privacy_section_title')}>
+			<FormSection title={t('settings.privacy_section_title')} divider>
 				<FormRow>
 					<Label>
 						<Toggle
