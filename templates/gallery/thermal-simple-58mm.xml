@@ -1,83 +1,145 @@
+<!--
+Simple Thermal Receipt (58mm) — clean, no-fuss receipt for narrow 58mm
+printers. Same shape as the 80mm Simple template, with column widths
+and the logo trimmed for 32-character paper.
+
+Most blocks are wrapped in {{#section}}…{{/section}} guards, so optional
+sections (logo, tax IDs, customer note, footer imprint) auto-disappear
+when the underlying data is empty. Layout uses width="*" for the label
+column and a fixed amount column on the right; do not replace the star
+columns with hard-coded numeric widths.
+-->
 <receipt paper-width="32">
+
+  <!-- ── Logo + store identity ─────────────── -->
+  {{#store.logo}}
+  <align mode="center"><image src="{{store.logo}}" width="160" /></align>
+  {{/store.logo}}
   <align mode="center">
-    <bold><size width="2" height="2">{{store.name}}</size></bold>
-    <text>{{store.address_lines.0}}</text>
-    <text>{{store.phone}}</text>
+    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
+    {{#store.address_lines}}
+    <text>{{.}}</text>
+    {{/store.address_lines}}
+    {{#store.phone}}<text>Phone: {{store.phone}}</text>{{/store.phone}}
+    {{#store.email}}<text>Email: {{store.email}}</text>{{/store.email}}
+    {{#store.tax_ids}}
+    <text>{{#label}}{{label}}: {{/label}}{{value}}</text>
+    {{/store.tax_ids}}
   </align>
   <line />
-  <text>{{order.number}}</text>
-  <text>{{order.created.datetime}}</text>
+
+  <!-- ── Order info ─────────────── -->
+  <text>{{i18n.order}}: #{{order.number}}</text>
+  <text>{{i18n.date}}: {{order.created.datetime}}</text>
+  {{#cashier.name}}<text>{{i18n.cashier}}: {{cashier.name}}</text>{{/cashier.name}}
+  {{#customer.name}}<text>{{i18n.customer}}: {{customer.name}}</text>{{/customer.name}}
+
+  <!-- ── Items ─────────────── -->
   <line />
   {{#lines}}
-  <bold>{{name}}</bold>
+  <bold><text>{{name}}</text></bold>
+  {{#sku}}<text>  SKU: {{sku}}</text>{{/sku}}
   {{#discounts}}
   <row>
-    <col width="16">x{{qty}} @ {{unit_subtotal_incl_display}}</col>
-    <col width="16" align="right">-{{discounts_incl_display}}</col>
+    <col width="*">  @ {{unit_subtotal_incl_display}}</col>
+    <col width="12" align="right">-{{discounts_incl_display}}</col>
   </row>
   {{/discounts}}
   <row>
-    <col width="6">x{{qty}}</col>
-    <col width="10">@ {{unit_price_incl_display}}</col>
-    <col width="16" align="right">{{line_total_incl_display}}</col>
+    <col width="*">  {{qty}} x {{unit_price_incl_display}}</col>
+    <col width="12" align="right">{{line_total_incl_display}}</col>
   </row>
   {{/lines}}
-  <line />
-  <row>
-    <col width="16">{{i18n.subtotal}}</col>
-    <col width="16" align="right">{{totals.subtotal_incl_display}}</col>
-  </row>
-  {{#shipping}}
-  <row>
-    <col width="16">{{label}}</col>
-    <col width="16" align="right">{{total_incl_display}}</col>
-  </row>
-  {{/shipping}}
+
+  <!-- ── Fees / Shipping / Order-level discounts ─────────────── -->
   {{#fees}}
   <row>
-    <col width="16">{{label}}</col>
-    <col width="16" align="right">{{total_incl_display}}</col>
+    <col width="*">{{label}}</col>
+    <col width="12" align="right">{{total_incl_display}}</col>
   </row>
   {{/fees}}
+  {{#shipping}}
+  <row>
+    <col width="*">{{label}}</col>
+    <col width="12" align="right">{{total_incl_display}}</col>
+  </row>
+  {{/shipping}}
   {{#discounts}}
   <row>
-    <col width="16">{{label}}</col>
-    <col width="16" align="right">-{{total_incl_display}}</col>
+    <col width="*">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
+    <col width="12" align="right">-{{total_incl_display}}</col>
   </row>
   {{/discounts}}
+
+  <!-- ── Totals ─────────────── -->
+  <line />
+  <row>
+    <col width="*">{{i18n.subtotal}}</col>
+    <col width="12" align="right">{{totals.subtotal_incl_display}}</col>
+  </row>
   {{#tax_summary}}
   <row>
-    <col width="16">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
-    <col width="16" align="right">{{tax_amount_display}}</col>
+    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
+    <col width="12" align="right">{{tax_amount_display}}</col>
   </row>
   {{/tax_summary}}
   <line style="double" />
   <row>
-    <col width="16"><bold>{{i18n.total}}</bold></col>
-    <col width="16" align="right"><bold>{{totals.total_incl_display}}</bold></col>
+    <col width="*"><bold>{{i18n.total}}</bold></col>
+    <col width="12" align="right"><bold>{{totals.total_incl_display}}</bold></col>
   </row>
+  <line style="double" />
+
+  <!-- ── Customer note ─────────────── -->
+  {{#order.customer_note}}
   <line />
+  <bold><text>{{i18n.customer_note}}</text></bold>
+  <text>{{order.customer_note}}</text>
+  {{/order.customer_note}}
+
+  <!-- ── Payments ─────────────── -->
+  {{#payments.0}}
+  <line />
+  <bold><text>{{i18n.paid}}</text></bold>
+  {{/payments.0}}
   {{#payments}}
   <row>
-    <col width="16">{{method_title}}</col>
-    <col width="16" align="right">{{amount_display}}</col>
+    <col width="*">{{method_title}}</col>
+    <col width="12" align="right">{{amount_display}}</col>
   </row>
   {{#tendered}}
   <row>
-    <col width="16">  {{i18n.tendered}}</col>
-    <col width="16" align="right">{{tendered_display}}</col>
+    <col width="*">  {{i18n.tendered}}</col>
+    <col width="12" align="right">{{tendered_display}}</col>
   </row>
   {{/tendered}}
   {{#change}}
   <row>
-    <col width="16">  {{i18n.change}}</col>
-    <col width="16" align="right">{{change_display}}</col>
+    <col width="*">  {{i18n.change}}</col>
+    <col width="12" align="right">{{change_display}}</col>
   </row>
   {{/change}}
   {{/payments}}
-  <feed lines="2" />
+
+  <!-- ── Order barcode ─────────────── -->
+  <feed lines="1" />
   <align mode="center">
-    <text>{{i18n.thank_you}}</text>
+    <barcode type="code128" height="40">{{order.number}}</barcode>
   </align>
+
+  <!-- ── Personal note ─────────────── -->
+  <feed lines="1" />
+  <align mode="center">
+    {{#store.personal_notes}}<text>{{store.personal_notes}}</text>{{/store.personal_notes}}
+    {{^store.personal_notes}}<text>{{i18n.thank_you_purchase}}</text>{{/store.personal_notes}}
+  </align>
+
+  <!-- ── Footer imprint ─────────────── -->
+  {{#store.footer_imprint}}
+  <line />
+  <align mode="center"><text>{{store.footer_imprint}}</text></align>
+  {{/store.footer_imprint}}
+
+  <feed lines="2" />
   <cut />
 </receipt>
