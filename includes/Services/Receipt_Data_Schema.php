@@ -307,6 +307,10 @@ class Receipt_Data_Schema {
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Order Completed', 'woocommerce-pos' ),
 				'fields' => self::get_date_field_tree_fields(),
 			),
+			'order.printed' => array(
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Receipt Printed', 'woocommerce-pos' ),
+				'fields' => self::get_date_field_tree_fields(),
+			),
 			'store'       => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Store', 'woocommerce-pos' ),
 				'fields' => array(
@@ -1347,6 +1351,7 @@ class Receipt_Data_Schema {
 		$created   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:30:00 UTC' ) );
 		$paid      = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:35:00 UTC' ) );
 		$completed = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:42:00 UTC' ) );
+		$printed   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:45:00 UTC' ) );
 
 		return array(
 			'order'   => array(
@@ -1360,6 +1365,7 @@ class Receipt_Data_Schema {
 				'created'       => $created,
 				'paid'          => $paid,
 				'completed'     => $completed,
+				'printed'       => $printed,
 			),
 			'store'   => array(
 				'id'                      => 1,

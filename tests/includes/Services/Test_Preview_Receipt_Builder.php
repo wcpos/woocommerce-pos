@@ -156,6 +156,51 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The printed timestamp should use the store timezone, not the site timezone.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_uses_store_timezone_for_printed_date(): void {
+		$original_timezone  = get_option( 'timezone_string' );
+		$original_gmt_offset = get_option( 'gmt_offset' );
+		$store_timezone     = new \DateTimeZone( 'Pacific/Kiritimati' );
+		$site_timezone      = new \DateTimeZone( 'Etc/GMT+12' );
+		$store              = new class() {
+			public function get_timezone(): string {
+				return 'Pacific/Kiritimati';
+			}
+		};
+
+		try {
+			update_option( 'timezone_string', 'Etc/GMT+12' );
+			update_option( 'gmt_offset', -12 );
+
+			$before = time();
+			$data   = $this->builder->build( $store );
+			$after  = time();
+
+			$expected_store_dates = array_unique(
+				array(
+					( new \DateTimeImmutable( '@' . $before ) )->setTimezone( $store_timezone )->format( 'Y-m-d' ),
+					( new \DateTimeImmutable( '@' . $after ) )->setTimezone( $store_timezone )->format( 'Y-m-d' ),
+				)
+			);
+			$site_dates           = array_unique(
+				array(
+					( new \DateTimeImmutable( '@' . $before ) )->setTimezone( $site_timezone )->format( 'Y-m-d' ),
+					( new \DateTimeImmutable( '@' . $after ) )->setTimezone( $site_timezone )->format( 'Y-m-d' ),
+				)
+			);
+
+			$this->assertContains( $data['order']['printed']['date_ymd'], $expected_store_dates );
+			$this->assertNotContains( $data['order']['printed']['date_ymd'], $site_dates );
+		} finally {
+			update_option( 'timezone_string', $original_timezone );
+			update_option( 'gmt_offset', $original_gmt_offset );
+		}
+	}
+
+	/**
 	 * Store-level price and tax presentation settings should drive preview hints
 	 * so changing a store refreshes formatted amounts without relying on globals.
 	 *
@@ -939,8 +984,10 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'created', $data['order'] );
 		$this->assertArrayHasKey( 'paid', $data['order'] );
 		$this->assertArrayHasKey( 'completed', $data['order'] );
+		$this->assertArrayHasKey( 'printed', $data['order'] );
 		$this->assertNotSame( '', $data['order']['created']['datetime'] );
 		$this->assertNotSame( '', $data['order']['paid']['datetime_full'] );
 		$this->assertNotSame( '', $data['order']['completed']['datetime'] );
+		$this->assertNotSame( '', $data['order']['printed']['datetime'] );
 	}
 }
