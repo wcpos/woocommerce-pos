@@ -46,7 +46,13 @@ the star to the remaining 32-CPL space at render time.
   <align mode="center"><image src="{{store.logo}}" width="160" /></align>
   {{/store.logo}}
   <align mode="center">
-    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
+    <!-- Only the height is doubled (not the width): at 32 columns a width-doubled
+         store name longer than 16 characters overflows, and ESC/POS printers
+         tend to drop the space at the wrap boundary AND continue the next text
+         node on the wrapped line — the HTML preview hides this because <size>
+         maps to a CSS scale, not to columns. Use a normal-width, double-height
+         heading so any realistic store name fits cleanly on 58mm paper. -->
+    <bold><size height="2"><text>{{store.name}}</text></size></bold>
     {{#store.address_lines}}
     <text>{{.}}</text>
     {{/store.address_lines}}
