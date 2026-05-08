@@ -285,11 +285,11 @@ export function TaxIdsSection() {
 	}, [detection.composed_write_map, detection.default_write_map]);
 
 	return (
-		<div className="wcpos:mt-4 wcpos:pt-4 wcpos:border-t wcpos:border-gray-200">
+		<div className="wcpos:mt-4">
 			<h4 className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900 wcpos:m-0 wcpos:mb-1">
 				{t('tax_ids.section_title')}
 			</h4>
-			<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:mb-3">
+			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-3">
 				{t('tax_ids.section_intro')} <DocsLink />
 			</p>
 

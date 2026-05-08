@@ -28,7 +28,7 @@ export function FormRow({ label, htmlFor, description, children, className }: Fo
 			<div className="wcpos:flex-1 wcpos:min-w-0">
 				{children}
 				{description && (
-					<p className="wcpos:mt-1 wcpos:text-sm wcpos:text-gray-500">{description}</p>
+					<p className="wcpos:mt-1 wcpos:text-xs wcpos:text-gray-500">{description}</p>
 				)}
 			</div>
 		</div>

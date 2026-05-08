@@ -40,7 +40,7 @@ export function FormSection({
 	return (
 		<div
 			className={classNames(
-				divider ? 'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6' : 'wcpos:pb-4 wcpos:mb-4',
+				divider ? 'wcpos:border-b wcpos:border-gray-200 wcpos:pb-6 wcpos:pt-4' : 'wcpos:pb-4 wcpos:mb-4',
 				className
 			)}
 		>
@@ -49,10 +49,10 @@ export function FormSection({
 					className={classNames(
 						'wcpos:mb-3',
 						hasHeaderRight &&
-							classNames(
-								'wcpos:flex wcpos:items-center',
-								hasHeading ? 'wcpos:justify-between' : 'wcpos:justify-end'
-							)
+						classNames(
+							'wcpos:flex wcpos:items-center',
+							hasHeading ? 'wcpos:justify-between' : 'wcpos:justify-end'
+						)
 					)}
 				>
 					{hasHeading && (
