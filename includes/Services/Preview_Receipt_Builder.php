@@ -647,6 +647,7 @@ class Preview_Receipt_Builder {
 			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, wp_timezone() ),
 			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, wp_timezone() ),
 			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, wp_timezone() ),
+			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), wp_timezone() ),
 		);
 
 		$store = $this->get_store_info();

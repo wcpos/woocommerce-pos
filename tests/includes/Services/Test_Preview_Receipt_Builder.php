@@ -939,8 +939,10 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'created', $data['order'] );
 		$this->assertArrayHasKey( 'paid', $data['order'] );
 		$this->assertArrayHasKey( 'completed', $data['order'] );
+		$this->assertArrayHasKey( 'printed', $data['order'] );
 		$this->assertNotSame( '', $data['order']['created']['datetime'] );
 		$this->assertNotSame( '', $data['order']['paid']['datetime_full'] );
 		$this->assertNotSame( '', $data['order']['completed']['datetime'] );
+		$this->assertNotSame( '', $data['order']['printed']['datetime'] );
 	}
 }

@@ -57,6 +57,9 @@ class Receipt_Data_Builder {
 			'created'       => $this->format_wc_datetime_in_timezone( $order->get_date_created(), $date_timezone ),
 			'paid'          => $this->format_wc_datetime_in_timezone( $order->get_date_paid(), $date_timezone ),
 			'completed'     => $this->format_wc_datetime_in_timezone( $order->get_date_completed(), $date_timezone ),
+			// Render-time timestamp: refreshed on every build() call so reprints
+			// show the actual print time, not a value persisted to the database.
+			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
 		);
 
 		$display_incl = 'incl' === $this->resolve_store_option_string(

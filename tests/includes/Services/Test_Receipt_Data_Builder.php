@@ -504,7 +504,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test the order section includes rich date data for created/paid/completed.
+	 * Test the order section includes rich date data for created/paid/completed/printed.
 	 */
 	public function test_build_includes_order_date_sections(): void {
 		$order   = wc_get_order( OrderHelper::create_order() );
@@ -515,7 +515,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( (string) $order->get_currency(), $payload['order']['currency'] );
 		$this->assertSame( (string) $order->get_customer_note(), $payload['order']['customer_note'] );
 
-		foreach ( array( 'created', 'paid', 'completed' ) as $field ) {
+		foreach ( array( 'created', 'paid', 'completed', 'printed' ) as $field ) {
 			$this->assertArrayHasKey( $field, $payload['order'] );
 			$this->assertArrayHasKey( 'datetime_full', $payload['order'][ $field ] );
 			$this->assertArrayHasKey( 'date_ymd', $payload['order'][ $field ] );
@@ -540,6 +540,25 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertSame( '', $payload['order']['paid']['date_long'] );
 		$this->assertSame( '', $payload['order']['completed']['datetime'] );
 		$this->assertSame( '', $payload['order']['completed']['weekday_long'] );
+	}
+
+	/**
+	 * Test order.printed is populated at render time even when paid/completed are blank.
+	 */
+	public function test_build_order_printed_is_render_time(): void {
+		$order = wc_create_order();
+		$order->set_currency( 'USD' );
+		$order->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		// Printed has data despite the order having no paid/completed dates,
+		// proving it's render-time rather than derived from order metadata.
+		$this->assertArrayHasKey( 'printed', $payload['order'] );
+		$this->assertNotSame( '', $payload['order']['printed']['datetime'] );
+		$this->assertNotSame( '', $payload['order']['printed']['date_ymd'] );
+		$this->assertSame( '', $payload['order']['paid']['datetime'] );
+		$this->assertSame( '', $payload['order']['completed']['datetime'] );
 	}
 
 	/**

@@ -303,6 +303,89 @@
 						}
 					},
 					"description": "Order Completed"
+				},
+				"printed": {
+					"type": "object",
+					"additionalProperties": true,
+					"properties": {
+						"datetime": {
+							"type": "string",
+							"description": "Date & Time"
+						},
+						"date": {
+							"type": "string",
+							"description": "Date"
+						},
+						"time": {
+							"type": "string",
+							"description": "Time"
+						},
+						"datetime_short": {
+							"type": "string",
+							"description": "Short Date & Time"
+						},
+						"datetime_long": {
+							"type": "string",
+							"description": "Long Date & Time"
+						},
+						"datetime_full": {
+							"type": "string",
+							"description": "Full Date & Time"
+						},
+						"date_short": {
+							"type": "string",
+							"description": "Short Date"
+						},
+						"date_long": {
+							"type": "string",
+							"description": "Long Date"
+						},
+						"date_full": {
+							"type": "string",
+							"description": "Full Date"
+						},
+						"date_ymd": {
+							"type": "string",
+							"description": "YYYY-MM-DD"
+						},
+						"date_dmy": {
+							"type": "string",
+							"description": "DD/MM/YYYY"
+						},
+						"date_mdy": {
+							"type": "string",
+							"description": "MM/DD/YYYY"
+						},
+						"weekday_short": {
+							"type": "string",
+							"description": "Weekday Short"
+						},
+						"weekday_long": {
+							"type": "string",
+							"description": "Weekday Long"
+						},
+						"day": {
+							"type": "string",
+							"description": "Day"
+						},
+						"month": {
+							"type": "string",
+							"description": "Month Number"
+						},
+						"month_short": {
+							"type": "string",
+							"description": "Month Short"
+						},
+						"month_long": {
+							"type": "string",
+							"description": "Month Long"
+						},
+						"year": {
+							"type": "string",
+							"description": "Year"
+						}
+					},
+					"description": "Receipt Printed"
 				}
 			},
 			"description": "Order"
