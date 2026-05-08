@@ -9,6 +9,7 @@ const previewKeys = new Set([
 	'return-receipt',
 	'standard-receipt',
 	'tax-invoice',
+	'thermal-detailed-58mm',
 	'thermal-detailed-80mm',
 	'thermal-kitchen-ticket',
 	'thermal-simple-58mm',
