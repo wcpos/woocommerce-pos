@@ -77,6 +77,7 @@ export default defineConfig(({ mode }) => {
 		test: {
 			globals: true,
 			environment: 'jsdom',
+			setupFiles: [path.resolve(__dirname, 'src/vitest.setup.ts')],
 		},
 	};
 });

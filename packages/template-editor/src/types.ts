@@ -1,6 +1,9 @@
 export interface FieldInfo {
-	type: 'string' | 'string[]' | 'number' | 'money';
+	type: 'string' | 'string[]' | 'number' | 'money' | 'object' | 'array' | 'boolean';
 	label: string;
+	nullable?: boolean;
+	is_array?: boolean;
+	fields?: Record<string, FieldInfo>;
 }
 
 export interface SectionInfo {

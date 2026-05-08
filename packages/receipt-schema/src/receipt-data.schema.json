@@ -311,6 +311,10 @@
 			"type": "object",
 			"additionalProperties": true,
 			"properties": {
+				"id": {
+					"type": "number",
+					"description": "Store ID"
+				},
 				"name": {
 					"type": "string",
 					"description": "Store Name"
@@ -321,10 +325,6 @@
 					"items": {
 						"type": "string"
 					}
-				},
-				"tax_id": {
-					"type": "string",
-					"description": "Tax ID"
 				},
 				"phone": {
 					"type": "string",
@@ -481,10 +481,6 @@
 				"shipping_address": {
 					"type": "object",
 					"description": "Shipping Address"
-				},
-				"tax_id": {
-					"type": "string",
-					"description": "Tax ID"
 				},
 				"tax_ids": {
 					"type": "array",

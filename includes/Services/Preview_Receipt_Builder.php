@@ -780,6 +780,7 @@ class Preview_Receipt_Builder {
 	 */
 	private function get_store_info(): array {
 		$pos_store = $this->pos_store;
+		$store_id        = (int) $this->get_store_value( $pos_store, 'get_id', 0 );
 		$store_name      = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		$store_address   = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2 = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
@@ -789,7 +790,6 @@ class Preview_Receipt_Builder {
 		$store_state     = (string) $this->get_store_value( $pos_store, 'get_store_state', '' );
 		$store_phone     = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
 		$store_email     = (string) $this->get_store_value( $pos_store, 'get_email', '' );
-		$store_tax_id    = (string) $this->get_store_value( $pos_store, 'get_tax_id', '' );
 		$store_tax_ids   = $this->get_store_value( $pos_store, 'get_tax_ids', array() );
 		$store_tax_ids   = is_array( $store_tax_ids ) ? $store_tax_ids : array();
 		$store_tax_ids   = self::with_store_tax_id_labels( $store_tax_ids );
@@ -804,10 +804,10 @@ class Preview_Receipt_Builder {
 		);
 
 		$store = array(
+			'id'            => $store_id,
 			'name'          => '' !== $store_name ? $store_name : get_bloginfo( 'name' ),
 			'address'       => $store_address_parts,
 			'address_lines' => $this->compose_address_lines( $store_address_parts ),
-			'tax_id'        => $store_tax_id,
 			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
 			'email'         => $store_email,
@@ -1096,26 +1096,12 @@ class Preview_Receipt_Builder {
 		);
 
 		$tax_ids = self::sample_tax_ids_for_country( $country );
-		$primary = '';
-		if ( ! empty( $tax_ids ) ) {
-			$primary_country = isset( $tax_ids[0]['country'] ) ? (string) $tax_ids[0]['country'] : '';
-			$primary_value   = (string) $tax_ids[0]['value'];
-			$is_vat          = \in_array(
-				$tax_ids[0]['type'],
-				array( Tax_Id_Types::TYPE_EU_VAT, Tax_Id_Types::TYPE_GB_VAT ),
-				true
-			);
-			$primary         = ( $is_vat && '' !== $primary_country && ! preg_match( '/^[A-Z]{2}/', $primary_value ) )
-				? $primary_country . $primary_value
-				: $primary_value;
-		}
 
 		return array(
 			'id'               => 42,
 			'name'             => $sample['first_name'] . ' ' . $sample['last_name'],
 			'billing_address'  => $billing,
 			'shipping_address' => $shipping,
-			'tax_id'           => $primary,
 			'tax_ids'          => $tax_ids,
 		);
 	}

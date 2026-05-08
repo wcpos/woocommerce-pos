@@ -56,7 +56,12 @@ describe('gallery template assets', () => {
 
 		for (const filename of thermalFiles) {
 			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
-			expect(content).toContain('<bold>{{name}}</bold>');
+			const xml = new DOMParser().parseFromString(content, 'text/xml');
+			const boldProductName = Array.from(xml.querySelectorAll('bold')).some(
+				(element) => element.textContent?.trim() === '{{name}}'
+			);
+
+			expect(boldProductName, filename).toBe(true);
 		}
 	});
 
