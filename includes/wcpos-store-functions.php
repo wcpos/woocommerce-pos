@@ -46,6 +46,7 @@ if ( ! \function_exists( 'wcpos_get_stores' ) ) {
  * @since 1.4.0
  *
  * @param mixed $the_store Post object or post ID of the product.
+ * @param array $args      Optional lookup args.
  * @return Store|null|false
  */
 if ( ! \function_exists( 'wcpos_get_store' ) ) {
@@ -53,12 +54,13 @@ if ( ! \function_exists( 'wcpos_get_store' ) ) {
 	 * Main function for returning store.
 	 *
 	 * @param mixed $the_store Post object or post ID of the product.
+	 * @param array $args      Optional lookup args.
 	 * @return Store|null|false
 	 */
-	function wcpos_get_store( $the_store = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+	function wcpos_get_store( $the_store = false, array $args = array() ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 		$store = new Store();
 
-		return apply_filters( 'woocommerce_pos_get_store', $store, $the_store );
+		return apply_filters( 'woocommerce_pos_get_store', $store, $the_store, $args );
 	}
 }
 
@@ -71,6 +73,7 @@ if ( ! \function_exists( 'wcpos_get_store' ) ) {
  * @since 1.4.0
  *
  * @param mixed $the_store Post object or post ID of the product.
+ * @param array $args      Optional lookup args.
  * @return Store|null|false
  */
 if ( ! \function_exists( 'wcpos_get_store_name' ) ) {
@@ -78,10 +81,15 @@ if ( ! \function_exists( 'wcpos_get_store_name' ) ) {
 	 * Helper to get the store name by ID.
 	 *
 	 * @param mixed $the_store Post object or post ID of the product.
+	 * @param array $args      Optional lookup args.
 	 * @return string
 	 */
-	function wcpos_get_store_name( $the_store = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
-		$store = wcpos_get_store( $the_store );
+	function wcpos_get_store_name( $the_store = false, array $args = array() ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+		$store = wcpos_get_store( $the_store, $args );
+
+		if ( ! \is_object( $store ) || ! \method_exists( $store, 'get_name' ) ) {
+			return '';
+		}
 
 		return $store->get_name();
 	}

@@ -34,15 +34,25 @@ class Receipt_Data_Builder {
 			$status_label = (string) wc_get_order_status_name( $wc_status );
 		}
 
+		$order_store_id         = (int) $order->get_meta( '_pos_store' );
+		$missing_order_store_id = 0;
 		if ( null === $pos_store ) {
-			$order_store_id = (int) $order->get_meta( '_pos_store' );
-			$pos_store      = $order_store_id > 0 ? wcpos_get_store( $order_store_id ) : wcpos_get_store();
+			$pos_store = $order_store_id > 0 ? wcpos_get_store(
+				$order_store_id,
+				array(
+					'status' => array( 'publish', 'trash' ),
+				)
+			) : wcpos_get_store();
+
+			if ( $order_store_id > 0 && ! \is_object( $pos_store ) ) {
+				$missing_order_store_id = $order_store_id;
+			}
 		}
-		if ( ! \is_object( $pos_store ) ) {
+		if ( ! \is_object( $pos_store ) && 0 === $missing_order_store_id ) {
 			$pos_store = wcpos_get_store();
 		}
 		if ( ! \is_object( $pos_store ) ) {
-			$pos_store = new Store();
+			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
 
 		$date_timezone = $this->resolve_store_timezone( $pos_store );
@@ -70,6 +80,11 @@ class Receipt_Data_Builder {
 		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
 		$store_id              = (int) $this->get_store_value( $pos_store, 'get_id', 0 );
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
+		if ( $missing_order_store_id > 0 ) {
+			$store_id = $missing_order_store_id;
+			// translators: %d: Historical POS store ID that no longer exists.
+			$store_name = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
+		}
 		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
 		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
 		$store_city            = (string) $this->get_store_value( $pos_store, 'get_store_city', '' );
