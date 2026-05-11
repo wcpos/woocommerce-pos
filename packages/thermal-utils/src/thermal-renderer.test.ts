@@ -21,6 +21,17 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).toContain('flex: 0 0 14ch');
 	});
 
+
+	it('falls back when numeric attributes are empty or whitespace', () => {
+		const html = renderThermalPreview(
+			'<receipt paper-width=""><image src="https://example.test/logo.png" width=" "/></receipt>',
+			{},
+		);
+
+		expect(root(html).style.width).toBe('48ch');
+		expect(html).toContain('16.67ch');
+	});
+
 	it('renders single, dashed, dotted, and double divider styles', () => {
 		const html = renderThermalPreview(
 			'<receipt><line/><line style="dashed"/><line style="dotted"/><line style="double"/></receipt>',

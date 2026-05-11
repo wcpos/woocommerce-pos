@@ -107,6 +107,7 @@ interface DrawerNode {
 // -- XML Parser --
 
 function safeInteger(value: unknown, fallback: number, min: number, max: number): number {
+	if (typeof value === 'string' && value.trim() === '') return fallback;
 	const n = typeof value === 'number' ? value : Number(value);
 	return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
 }
@@ -329,7 +330,7 @@ function renderNode(node: ThermalNode, columns: number): string {
 			return `<hr style="border: none; border-top: ${borderTop}; margin: 4px 0" />`;
 		}
 		case 'barcode':
-			// node.height is in screen pixels (default 40); bwip-js height is in mm, so divide by 4.
+			// node.height is in screen pixels (default 40); bwip-js height is in mm, so divide by 10.
 			return generateBarcodeSvg(node.value, { type: node.barcodeType ?? 'code128', height: node.height / 10, scale: 2, kind: 'barcode', paperWidthChars: columns });
 		case 'qrcode':
 			return generateBarcodeSvg(node.value, { type: 'qrcode', scale: node.size, kind: 'qrcode', paperWidthChars: columns });
