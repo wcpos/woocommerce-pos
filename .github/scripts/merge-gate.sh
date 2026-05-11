@@ -99,7 +99,7 @@ check_bucket() {
 
 bucket_is_pass() {
   local bucket="$1" state="$2"
-  [[ "$bucket" == "pass" || "$bucket" == "skipping" || "$state" == "SUCCESS" || "$state" == "success" ]]
+  [[ "$bucket" == "pass" || "$state" == "SUCCESS" || "$state" == "success" ]]
 }
 
 bucket_is_failure() {

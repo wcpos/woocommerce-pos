@@ -154,7 +154,7 @@ run_case "translation version plus extra code does not bypass" fail \
   MOCK_PATCH="$translation_extra_code_patch" \
   MOCK_CODERABBIT="missing"
 
-run_case "human PR allows skipping bucket" pass \
+run_case "human PR rejects skipped required check" fail \
   PR_AUTHOR="kilbot" \
   PR_TITLE="feat: normal change" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
