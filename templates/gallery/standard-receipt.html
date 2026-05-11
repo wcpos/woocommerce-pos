@@ -44,11 +44,18 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{/store.tax_ids}}
 		</div>
 		<div style="flex: 0 0 auto; text-align: right;">
+			{{#order.status_label}}
+			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px;">
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{order.status_label}}
+			</div>
+			{{/order.status_label}}
+			{{^order.status_label}}
 			{{#order.wc_status}}
 			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px;">
-				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{order.wc_status}}
 			</div>
 			{{/order.wc_status}}
+			{{/order.status_label}}
 			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
 			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
