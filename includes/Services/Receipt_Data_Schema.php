@@ -586,6 +586,10 @@ class Receipt_Data_Schema {
 						'type'  => 'array',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Item Meta', 'woocommerce-pos' ),
 					),
+					'attributes'         => array(
+						'type'  => 'array',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Product Attributes', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'fees'        => array(

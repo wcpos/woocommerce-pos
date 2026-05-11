@@ -91,6 +91,26 @@ is_allowed_pot_pr() {
   [[ "$changed_files" == "$POT_FILE" ]]
 }
 
+requires_php_tests() {
+  local file
+  while IFS= read -r file; do
+    case "$file" in
+      *.php|composer.json|composer.lock|.github/test-matrix.json|.github/scripts/generate-matrix.sh|.github/scripts/get-woocommerce-stable-version.sh|.github/scripts/merge-gate.sh|.github/scripts/test-merge-gate.sh|.github/scripts/test-push-js-strings.sh|.github/workflows/push-js-strings.yml|.github/workflows/merge-gate.yml|.github/workflows/tests-js.yml|.github/workflows/tests-php.yml)
+        return 0
+        ;;
+    esac
+  done <<< "$(pr_diff_names)"
+
+  return 1
+}
+
+is_allowed_skipped_check() {
+  local check_name="$1" bucket="$2" state="$3"
+  [[ "$check_name" == "Smoke Test (Latest Stable)" ]] || return 1
+  [[ "$bucket" == "skipping" || "$state" == "SKIPPED" || "$state" == "skipped" ]] || return 1
+  ! requires_php_tests
+}
+
 check_bucket() {
   local check_name="$1"
   gh pr checks "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json name,bucket,state \
@@ -129,9 +149,13 @@ wait_for_checks() {
       if bucket_is_pass "$bucket" "$state"; then
         log "✓ $check passed"
       elif bucket_is_failure "$bucket" "$state"; then
-        log "✗ $check failed ($bucket/$state)"
-        any_failed=true
-        all_pass=false
+        if is_allowed_skipped_check "$check" "$bucket" "$state"; then
+          log "↷ $check skipped because no PHP-test files changed"
+        else
+          log "✗ $check failed ($bucket/$state)"
+          any_failed=true
+          all_pass=false
+        fi
       else
         log "… $check pending ($bucket/$state)"
         all_pass=false

@@ -1,49 +1,117 @@
 <!--
-Gift Receipt — items without prices, with gift message.
+Gift Receipt — Classic Invoice layout.
 
-Shows item names and quantities only. Displays the customer note
-as a gift message. Includes order reference for returns.
+Centred store masthead, GIFT RECEIPT title between hairline rules,
+order meta strip, ruled item table (Item / SKU / Qty — no prices),
+product attributes listed under each item name, gift message in a
+left-bar block quote, and a footer with return policy and a repeated
+order reference.
+
+Designed for clean black-and-white printing on any office printer.
+
+Uses the logicless template engine with section blocks:
+  {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+  {{^key}}...{{/key}}  — show block when value is empty/falsy
+  {{.}}                — current value (for arrays of strings)
+  {{key.path}}         — dot-path placeholder substitution
+
+Note: Logicless output passes through wp_kses_post, which strips
+<style>, <head>, and document-level tags. Use inline styles only.
+
+@see https://docs.wcpos.com/templates/receipt-data-reference
 -->
-<div style="box-sizing: border-box; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #333; padding: 30px;">
+<div style="box-sizing: border-box; font-family: Georgia, 'Times New Roman', serif; font-size: 13px; line-height: 1.55; color: #111; padding: 44px 56px; background: #fff;">
 
-	<div style="text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e8e0d4;">
+	<!-- ── Header: centred logo + store identity ─────────────── -->
+	<div style="text-align: center;">
 		{{#store.logo}}
 		<div style="margin-bottom: 10px;">
-			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 160px; height: auto;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 140px; height: auto; display: inline-block;">
 		</div>
 		{{/store.logo}}
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 3px; color: #999; margin-bottom: 6px;">{{i18n.gift_receipt}}</div>
-		<div style="font-size: 22px; font-weight: 400; font-style: italic;">{{store.name}}</div>
+		<div style="font-size: 24px; font-weight: 600; letter-spacing: 0.01em;">{{store.name}}</div>
+		{{#store.address_lines}}
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #4b4b4b; margin-top: 2px;">{{.}}</div>
+		{{/store.address_lines}}
+		{{#store.phone}}
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #4b4b4b; margin-top: 2px;">{{store.phone}}{{#store.email}} &middot; {{store.email}}{{/store.email}}</div>
+		{{/store.phone}}
+		{{^store.phone}}
+		{{#store.email}}
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #4b4b4b; margin-top: 2px;">{{store.email}}</div>
+		{{/store.email}}
+		{{/store.phone}}
+		{{#store.tax_ids}}
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; color: #6b6b6b; margin-top: 2px; letter-spacing: 0.02em;">{{label}}: {{value}}</div>
+		{{/store.tax_ids}}
 	</div>
 
-	{{#lines}}
-	<div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #d4c8b8;">
-		<span style="flex: 1;">{{name}}</span>
-		{{#qty}}<span style="color: #888; font-size: 13px; flex-shrink: 0; margin-left: 12px;">x{{qty}}</span>{{/qty}}
+	<!-- ── Document title between hairline rules ─────────────── -->
+	<div style="display: flex; align-items: center; gap: 18px; margin: 26px 0 6px;">
+		<div style="flex: 1; height: 1px; background: #111;"></div>
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; letter-spacing: 0.42em; text-transform: uppercase; color: #111; font-weight: 600;">{{i18n.gift_receipt}}</div>
+		<div style="flex: 1; height: 1px; background: #111;"></div>
 	</div>
-	{{/lines}}
 
+	<!-- ── Order meta strip ─────────────── -->
+	<div style="display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 14px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px;">
+		<div><span style="color: #6b6b6b;">{{i18n.order}}</span> &nbsp;<strong>#{{order.number}}</strong></div>
+		<div><span style="color: #6b6b6b;">{{i18n.date}}</span> &nbsp;<strong>{{order.created.datetime_long}}</strong></div>
+		{{#cashier.name}}
+		<div><span style="color: #6b6b6b;">{{i18n.cashier}}</span> &nbsp;<strong>{{cashier.name}}</strong></div>
+		{{/cashier.name}}
+		{{#customer.name}}
+		<div><span style="color: #6b6b6b;">{{i18n.customer}}</span> &nbsp;<strong>{{customer.name}}</strong></div>
+		{{/customer.name}}
+	</div>
+
+	<!-- ── Items: name + attributes + SKU + qty (no prices) ─────────────── -->
+	<table style="width: 100%; border-collapse: collapse; margin-top: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+		<thead>
+			<tr>
+				<th style="text-align: left; padding: 10px 8px 10px 0; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b6b6b; border-top: 1.5px solid #111; border-bottom: 1px solid #111; font-weight: 600;">{{i18n.item}}</th>
+				<th style="text-align: left; padding: 10px 8px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b6b6b; border-top: 1.5px solid #111; border-bottom: 1px solid #111; font-weight: 600; width: 130px; white-space: nowrap;">{{i18n.sku}}</th>
+				<th style="text-align: right; padding: 10px 0 10px 8px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #6b6b6b; border-top: 1.5px solid #111; border-bottom: 1px solid #111; font-weight: 600; width: 56px; white-space: nowrap;">{{i18n.qty}}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr>
+				<td style="padding: 10px 8px 10px 0; vertical-align: top; border-bottom: 1px solid #e5e5e5;">
+					<div style="font-size: 14px; color: #111;">{{name}}</div>
+					{{#attributes}}<div style="font-size: 11px; color: #6b6b6b; margin-top: 2px;">{{key}}: {{value}}</div>{{/attributes}}
+				</td>
+				<td style="padding: 10px 8px; vertical-align: top; border-bottom: 1px solid #e5e5e5; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; color: #6b6b6b;">{{#sku}}{{sku}}{{/sku}}</td>
+				<td style="padding: 10px 0 10px 8px; vertical-align: top; border-bottom: 1px solid #e5e5e5; text-align: right; font-variant-numeric: tabular-nums; font-size: 14px;">{{qty}}</td>
+			</tr>
+			{{/lines}}
+		</tbody>
+	</table>
+
+	<!-- ── Gift message (only when present) ─────────────── -->
 	{{#order.customer_note}}
-	<div style="margin: 24px 0; padding: 20px; background: #faf8f5; border: 1px dotted #d4c8b8; border-radius: 4px; text-align: center; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; font-style: normal; margin-bottom: 8px;">{{i18n.a_message_for_you}}</div>
-		{{order.customer_note}}
+	<div style="margin-top: 22px; padding-left: 14px; border-left: 3px solid #111;">
+		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: #6b6b6b; font-weight: 600; margin-bottom: 6px;">{{i18n.a_message_for_you}}</div>
+		<div style="font-style: italic; font-size: 15px; line-height: 1.6; white-space: pre-wrap;">{{order.customer_note}}</div>
 	</div>
 	{{/order.customer_note}}
 
+	<!-- ── Personal notes (only when present) ─────────────── -->
 	{{#store.personal_notes}}
-	<div style="text-align: center; margin-top: 16px; font-size: 12px; color: #888; font-style: italic; line-height: 1.6; white-space: pre-wrap;">
-		{{store.personal_notes}}
-	</div>
+	<div style="margin-top: 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #4b4b4b; line-height: 1.55; white-space: pre-wrap;">{{store.personal_notes}}</div>
 	{{/store.personal_notes}}
 
-	<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e0d4; text-align: center; font-size: 11px; color: #999;">
-		{{#store.footer_imprint}}
-		<div style="margin-bottom: 8px;">{{store.footer_imprint}}</div>
-		{{/store.footer_imprint}}
-		{{^store.footer_imprint}}
-		<div style="margin-bottom: 8px;">{{i18n.gift_return_policy}}</div>
-		{{/store.footer_imprint}}
-		<div>{{order.created.datetime}} &middot; #{{order.number}}</div>
+	<!-- ── Footer: return policy + repeated order reference ─────────────── -->
+	<div style="margin-top: 30px; padding-top: 14px; border-top: 1px solid #111; display: flex; justify-content: space-between; align-items: baseline; gap: 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; color: #4b4b4b;">
+		<div style="flex: 1; line-height: 1.55; white-space: pre-wrap;">
+			{{#store.policies_and_conditions}}{{store.policies_and_conditions}}{{/store.policies_and_conditions}}
+			{{^store.policies_and_conditions}}{{i18n.gift_return_policy}}{{/store.policies_and_conditions}}
+		</div>
+		<div style="font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap;">#{{order.number}} &middot; {{order.created.date_ymd}}</div>
 	</div>
+
+	{{#store.footer_imprint}}
+	<div style="margin-top: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; color: #6b6b6b; text-align: center; white-space: pre-wrap;">{{store.footer_imprint}}</div>
+	{{/store.footer_imprint}}
 
 </div>

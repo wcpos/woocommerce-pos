@@ -688,6 +688,8 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertArrayHasKey( 'qty', $line );
 			$this->assertArrayHasKey( 'unit_price_incl', $line );
 			$this->assertArrayHasKey( 'line_total_incl', $line );
+			$this->assertArrayHasKey( 'attributes', $line );
+			$this->assertIsArray( $line['attributes'] );
 			$this->assertNotEmpty( $line['name'] );
 			$this->assertGreaterThan( 0, $line['qty'] );
 		}

@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
@@ -190,6 +191,28 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'unit_price_excl', $line );
 		$this->assertArrayHasKey( 'line_total_incl', $line );
 		$this->assertArrayHasKey( 'line_total_excl', $line );
+	}
+
+	/**
+	 * Test line items expose product attributes separately from formatted order-item meta.
+	 */
+	public function test_build_line_items_separate_product_attributes_from_order_item_meta(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation     = wc_get_product( $variation_ids[0] );
+		$order         = OrderHelper::create_order( array( 'product' => $variation ) );
+		$item          = array_values( $order->get_items( 'line_item' ) )[0];
+
+		$item->add_meta_data( 'Gift wrap', '+$5.00', true );
+		$item->save();
+
+		$payload = $this->builder->build( $order, 'live' );
+		$line    = $payload['lines'][0];
+
+		$this->assertArrayHasKey( 'attributes', $line );
+		$this->assertNotEmpty( $line['attributes'] );
+		$this->assertContains( 'Gift wrap', array_column( $line['meta'], 'key' ) );
+		$this->assertNotContains( 'Gift wrap', array_column( $line['attributes'], 'key' ) );
 	}
 
 	/**

@@ -759,6 +759,20 @@
 								"null"
 							]
 						}
+					},
+					"attributes": {
+						"type": "array",
+						"description": "Product Attributes",
+						"items": {
+							"type": [
+								"string",
+								"number",
+								"boolean",
+								"object",
+								"array",
+								"null"
+							]
+						}
 					}
 				},
 				"description": "Line Items"
