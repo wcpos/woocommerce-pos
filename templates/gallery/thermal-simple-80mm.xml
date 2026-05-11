@@ -111,14 +111,14 @@ star columns with hard-coded widths.
 
   <!-- ── Customer note ─────────────── -->
   {{#order.customer_note}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.customer_note}}</text></bold>
   <text>{{order.customer_note}}</text>
   {{/order.customer_note}}
 
   <!-- ── Payments ─────────────── -->
   {{#payments.0}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.paid}}</text></bold>
   {{/payments.0}}
   {{#payments}}
@@ -155,7 +155,7 @@ star columns with hard-coded widths.
 
   <!-- ── Footer imprint ─────────────── -->
   {{#store.footer_imprint}}
-  <line />
+  <line style="dotted" />
   <align mode="center"><text>{{store.footer_imprint}}</text></align>
   {{/store.footer_imprint}}
 

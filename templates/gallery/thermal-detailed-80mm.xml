@@ -75,7 +75,7 @@ break the cross-printer layout contract. Indented continuation lines
     <text>[ {{order.status_label}} ]</text>
     {{/order.status_label}}
   </align>
-  <line />
+  <line style="dashed" />
 
   <!-- ── Order info ─────────────── -->
   <row>
@@ -94,7 +94,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{/cashier.name}}
 
   <!-- ── Bill-to ─────────────── -->
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.bill_to}}</text></bold>
   {{#customer.name}}<text>{{customer.name}}</text>{{/customer.name}}
   {{#customer.billing_address.company}}<text>{{customer.billing_address.company}}</text>{{/customer.billing_address.company}}
@@ -111,7 +111,7 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Ship-to ─────────────── -->
   {{#customer.shipping_address.address_1}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.ship_to}}</text></bold>
   <text>{{customer.shipping_address.first_name}} {{customer.shipping_address.last_name}}</text>
   {{#customer.shipping_address.company}}<text>{{customer.shipping_address.company}}</text>{{/customer.shipping_address.company}}
@@ -125,7 +125,7 @@ break the cross-printer layout contract. Indented continuation lines
     <col width="*"><bold>{{i18n.item}}</bold></col>
     <col width="12" align="right"><bold>{{i18n.total}}</bold></col>
   </row>
-  <line />
+  <line style="dashed" />
   {{#lines}}
   <bold><text>{{name}}</text></bold>
   {{#meta}}
@@ -177,7 +177,7 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Tax summary ─────────────── -->
   {{#tax_summary.0}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.tax_summary}}</text></bold>
   {{/tax_summary.0}}
   {{#tax_summary}}
@@ -192,7 +192,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{/tax_summary}}
 
   <!-- ── Totals ─────────────── -->
-  <line />
+  <line style="dashed" />
   <row>
     <col width="*">{{i18n.subtotal_excl_tax}}</col>
     <col width="14" align="right">{{totals.subtotal_excl_display}}</col>
@@ -237,7 +237,7 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Refunds ─────────────── -->
   {{#refunds.0}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.returned_items}}</text></bold>
   {{/refunds.0}}
   {{#refunds}}
@@ -262,7 +262,7 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Customer note ─────────────── -->
   {{#order.customer_note}}
-  <line />
+  <line style="dashed" />
   <bold><text>{{i18n.customer_note}}</text></bold>
   <text>{{order.customer_note}}</text>
   {{/order.customer_note}}
@@ -307,20 +307,20 @@ break the cross-printer layout contract. Indented continuation lines
 
   <!-- ── Terms & conditions ─────────────── -->
   {{#store.policies_and_conditions}}
-  <line />
+  <line style="dotted" />
   <bold><text>{{i18n.terms_and_conditions}}</text></bold>
   <text>{{store.policies_and_conditions}}</text>
   {{/store.policies_and_conditions}}
 
   <!-- ── Footer imprint ─────────────── -->
   {{#store.footer_imprint}}
-  <line />
+  <line style="dotted" />
   <align mode="center"><text>{{store.footer_imprint}}</text></align>
   {{/store.footer_imprint}}
 
   <!-- ── Opening hours ─────────────── -->
   {{#store.opening_hours}}
-  <line />
+  <line style="dotted" />
   <align mode="center">
     <bold><text>{{i18n.opening_hours}}</text></bold>
     <text>{{store.opening_hours}}</text>
