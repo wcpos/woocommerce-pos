@@ -760,6 +760,21 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$totals['paid_total'],
 			'paid_total should equal total_incl'
 		);
+
+		// Item-count summaries must match the lines array so templates can
+		// rely on the same field across live and preview pipelines.
+		$this->assertArrayHasKey( 'total_qty', $totals );
+		$this->assertArrayHasKey( 'line_count', $totals );
+		$this->assertEquals(
+			array_sum( array_column( $data['lines'], 'qty' ) ),
+			$totals['total_qty'],
+			'total_qty should equal the sum of line item quantities'
+		);
+		$this->assertEquals(
+			\count( $data['lines'] ),
+			$totals['line_count'],
+			'line_count should equal the number of line items'
+		);
 	}
 
 	/**
