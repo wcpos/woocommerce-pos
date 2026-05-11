@@ -1042,6 +1042,14 @@
 						"string"
 					],
 					"description": "Net Total"
+				},
+				"total_qty": {
+					"type": "number",
+					"description": "Total Quantity"
+				},
+				"line_count": {
+					"type": "number",
+					"description": "Line Count"
 				}
 			},
 			"description": "Totals"
@@ -1747,6 +1755,10 @@
 					"type": "string",
 					"description": "Ship To"
 				},
+				"billed_to": {
+					"type": "string",
+					"description": "Billed To"
+				},
 				"billing_address": {
 					"type": "string",
 					"description": "Billing Address"
@@ -1782,6 +1794,14 @@
 				"packed": {
 					"type": "string",
 					"description": "Packed"
+				},
+				"packed_by": {
+					"type": "string",
+					"description": "Packed By"
+				},
+				"signed_name": {
+					"type": "string",
+					"description": "Name"
 				},
 				"item_short": {
 					"type": "string",
