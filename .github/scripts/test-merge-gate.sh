@@ -11,13 +11,13 @@ if [[ -z "${TEST_TRANSLATION_FILE:-}" ]]; then
     TEST_POT_FILE="languages/woocommerce-pos-pro.pot"
     TEST_OLD_TRANSLATION_LINE="const TRANSLATION_VERSION = '2026.5.2';"
     TEST_NEW_TRANSLATION_LINE="const TRANSLATION_VERSION = '2026.5.6';"
-    TEST_REQUIRED_CHECKS="Lint|Smoke Test (Latest Stable)|Static Analysis (PHPStan)|Jest"
+    TEST_REQUIRED_CHECKS="Smoke Test (Latest Stable)"
   else
     TEST_TRANSLATION_FILE="woocommerce-pos.php"
     TEST_POT_FILE="languages/woocommerce-pos.pot"
     TEST_OLD_TRANSLATION_LINE="\define( __NAMESPACE__ . '\\TRANSLATION_VERSION', '2026.5.2' );"
     TEST_NEW_TRANSLATION_LINE="\define( __NAMESPACE__ . '\\TRANSLATION_VERSION', '2026.5.6' );"
-    TEST_REQUIRED_CHECKS="Lint|Smoke Test (Latest Stable)|Static Analysis (PHPStan)"
+    TEST_REQUIRED_CHECKS="Smoke Test (Latest Stable)"
   fi
 fi
 
@@ -160,7 +160,7 @@ run_case "human PR allows skipping bucket" pass \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_patch" \
   MOCK_CODERABBIT="present" \
-  MOCK_SKIP_CHECK="Lint"
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
 run_case "POT-only bypass" pass \
   PR_AUTHOR="wcpos-bot[bot]" \

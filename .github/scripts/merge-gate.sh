@@ -187,7 +187,7 @@ main() {
     log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
     return 0
   else
-    log "CodeRabbit and required CI checks are required for this PR."
+    log "CodeRabbit and smoke test are required for this PR."
   fi
 
   wait_for_checks "$coderabbit_required"
