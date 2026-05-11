@@ -54,6 +54,10 @@ if [[ "$args" == pr\ checks* ]]; then
     printf 'fail\tFAILURE\n'
     exit 0
   fi
+  if [[ "${MOCK_SKIP_CHECK:-}" == "$check_name" ]]; then
+    printf 'skipping\tSKIPPED\n'
+    exit 0
+  fi
   if [[ "$check_name" == "CodeRabbit" && "${MOCK_CODERABBIT:-missing}" == "missing" ]]; then
     exit 0
   fi
@@ -144,6 +148,14 @@ run_case "translation version plus extra code does not bypass" fail \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_extra_code_patch" \
   MOCK_CODERABBIT="missing"
+
+run_case "human PR allows skipping bucket" pass \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
+  MOCK_CODERABBIT="present" \
+  MOCK_SKIP_CHECK="Lint"
 
 run_case "POT-only bypass" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
