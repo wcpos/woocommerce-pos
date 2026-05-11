@@ -1050,6 +1050,7 @@ class Templates_Controller extends WP_REST_Controller {
 			'engine'           => $template['engine'] ?? 'logicless',
 			'template_content' => isset( $template['content'] ) && \is_string( $template['content'] ) ? $template['content'] : '',
 			'receipt_data'     => $receipt_data,
+			'paper_width'      => $template['paper_width'] ?? null,
 			'order_id'         => $order_id,
 			'template_id'      => is_numeric( $template_id ) ? (int) $template_id : (string) $template_id,
 		);
