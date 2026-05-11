@@ -46,6 +46,10 @@ if [[ "$args" == pr\ diff* && "$args" == *--patch* ]]; then
 fi
 
 if [[ "$args" == pr\ checks* ]]; then
+  if [[ "${MOCK_NO_CHECKS_EXPECTED:-false}" == "true" ]]; then
+    echo "merge gate should not query PR checks for this case" >&2
+    exit 65
+  fi
   check_name="$(printf '%s' "$args" | sed -n 's/.*select(.name == "\([^"]*\)").*/\1/p')"
   if [[ -z "$check_name" ]]; then
     exit 0
@@ -125,7 +129,8 @@ run_case "translation-version bypass" pass \
   PR_TITLE="chore: update translation version to 2026.5.6" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_patch" \
-  MOCK_CODERABBIT="missing"
+  MOCK_CODERABBIT="missing" \
+  MOCK_NO_CHECKS_EXPECTED="true"
 
 run_case "human PR requires CodeRabbit" fail \
   PR_AUTHOR="kilbot" \
@@ -162,6 +167,7 @@ run_case "POT-only bypass" pass \
   PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
   MOCK_CHANGED_FILES="$TEST_POT_FILE" \
   MOCK_PATCH="$pot_patch" \
-  MOCK_CODERABBIT="missing"
+  MOCK_CODERABBIT="missing" \
+  MOCK_NO_CHECKS_EXPECTED="true"
 
 echo "merge-gate tests passed"

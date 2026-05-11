@@ -181,13 +181,13 @@ main() {
   local coderabbit_required=true
 
   if is_allowed_translation_version_pr; then
-    log "Validated automated translation-version PR; CodeRabbit is not required."
-    coderabbit_required=false
+    log "Validated automated translation-version PR; merge gate passes without waiting for CodeRabbit or full CI."
+    return 0
   elif is_allowed_pot_pr; then
-    log "Validated automated POT-only PR; CodeRabbit is not required."
-    coderabbit_required=false
+    log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
+    return 0
   else
-    log "CodeRabbit is required for this PR."
+    log "CodeRabbit and required CI checks are required for this PR."
   fi
 
   wait_for_checks "$coderabbit_required"
