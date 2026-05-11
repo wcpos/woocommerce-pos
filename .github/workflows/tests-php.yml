@@ -10,6 +10,9 @@ on:
       - ".github/test-matrix.json"
       - ".github/scripts/generate-matrix.sh"
       - ".github/scripts/get-woocommerce-stable-version.sh"
+      - ".github/scripts/merge-gate.sh"
+      - ".github/scripts/test-merge-gate.sh"
+      - ".github/workflows/merge-gate.yml"
       - ".github/workflows/tests-php.yml"
   pull_request:
     branches:
@@ -40,6 +43,9 @@ jobs:
               - '.github/test-matrix.json'
               - '.github/scripts/generate-matrix.sh'
               - '.github/scripts/get-woocommerce-stable-version.sh'
+              - '.github/scripts/merge-gate.sh'
+              - '.github/scripts/test-merge-gate.sh'
+              - '.github/workflows/merge-gate.yml'
               - '.github/workflows/tests-php.yml'
 
       - name: Detect translation-version-only PR

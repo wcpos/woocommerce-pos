@@ -99,12 +99,12 @@ check_bucket() {
 
 bucket_is_pass() {
   local bucket="$1" state="$2"
-  [[ "$bucket" == "pass" || "$bucket" == "skipping" || "$state" == "SUCCESS" || "$state" == "success" ]]
+  [[ "$bucket" == "pass" || "$state" == "SUCCESS" || "$state" == "success" ]]
 }
 
 bucket_is_failure() {
   local bucket="$1" state="$2"
-  [[ "$bucket" == "fail" || "$bucket" == "cancel" || "$state" == "FAILURE" || "$state" == "ERROR" || "$state" == "failure" || "$state" == "error" || "$state" == "CANCELLED" || "$state" == "cancelled" ]]
+  [[ "$bucket" == "fail" || "$bucket" == "cancel" || "$bucket" == "skipping" || "$state" == "FAILURE" || "$state" == "ERROR" || "$state" == "failure" || "$state" == "error" || "$state" == "CANCELLED" || "$state" == "cancelled" || "$state" == "SKIPPED" || "$state" == "skipped" ]]
 }
 
 wait_for_checks() {
