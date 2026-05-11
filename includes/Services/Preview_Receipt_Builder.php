@@ -446,10 +446,20 @@ class Preview_Receipt_Builder {
 	 */
 	const FALLBACK_PRODUCTS = array(
 		array(
-			'name'  => 'Premium Widget',
-			'price' => 29.99,
-			'sku'   => 'WIDGET-001',
-			'meta'  => array(
+			'name'       => 'Premium Widget',
+			'price'      => 29.99,
+			'sku'        => 'WIDGET-001',
+			'meta'       => array(
+				array(
+					'key'   => 'Size',
+					'value' => 'Large',
+				),
+				array(
+					'key'   => 'Color',
+					'value' => 'Midnight Blue',
+				),
+			),
+			'attributes' => array(
 				array(
 					'key'   => 'Size',
 					'value' => 'Large',
@@ -461,10 +471,16 @@ class Preview_Receipt_Builder {
 			),
 		),
 		array(
-			'name'  => 'Standard Gadget',
-			'price' => 15.50,
-			'sku'   => 'GADGET-002',
-			'meta'  => array(
+			'name'       => 'Standard Gadget',
+			'price'      => 15.50,
+			'sku'        => 'GADGET-002',
+			'meta'       => array(
+				array(
+					'key'   => 'Material',
+					'value' => 'Stainless Steel',
+				),
+			),
+			'attributes' => array(
 				array(
 					'key'   => 'Material',
 					'value' => 'Stainless Steel',
@@ -472,10 +488,11 @@ class Preview_Receipt_Builder {
 			),
 		),
 		array(
-			'name'  => 'Deluxe Component',
-			'price' => 42.00,
-			'sku'   => 'COMP-003',
-			'meta'  => array(),
+			'name'       => 'Deluxe Component',
+			'price'      => 42.00,
+			'sku'        => 'COMP-003',
+			'meta'       => array(),
+			'attributes' => array(),
 		),
 	);
 
@@ -560,6 +577,7 @@ class Preview_Receipt_Builder {
 				'line_total_excl'    => $line_total_excl,
 				'taxes'              => array(),
 				'meta'               => $product['meta'] ?? array(),
+				'attributes'         => $product['attributes'] ?? array(),
 			);
 
 			$lines_total_excl += $line_total_excl;
@@ -1293,10 +1311,11 @@ class Preview_Receipt_Builder {
 				}
 
 				$result[] = array(
-					'name'  => $product->get_name(),
-					'price' => $price,
-					'sku'   => $product->get_sku() ? $product->get_sku() : '',
-					'meta'  => $meta,
+					'name'       => $product->get_name(),
+					'price'      => $price,
+					'sku'        => $product->get_sku() ? $product->get_sku() : '',
+					'meta'       => $meta,
+					'attributes' => $meta,
 				);
 			}
 		}

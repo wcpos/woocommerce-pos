@@ -162,6 +162,30 @@ run_case "human PR rejects skipped required check" fail \
   MOCK_CODERABBIT="present" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
+run_case "human PR allows skipped smoke test for non-PHP changes" pass \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: redesign gift receipt" \
+  MOCK_CHANGED_FILES="templates/gallery/gift-receipt.html" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="present" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "human PR rejects skipped smoke test for composer lock changes" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="chore: update dependencies" \
+  MOCK_CHANGED_FILES="composer.lock" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="present" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "human PR still requires CodeRabbit for non-PHP changes" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: redesign gift receipt" \
+  MOCK_CHANGED_FILES="templates/gallery/gift-receipt.html" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
 run_case "POT-only bypass" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
   PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \

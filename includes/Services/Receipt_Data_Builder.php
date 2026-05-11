@@ -242,6 +242,7 @@ class Receipt_Data_Builder {
 				'total_refunded'     => $total_refunded,
 				'taxes'              => $this->get_line_taxes( $item ),
 				'meta'               => $this->get_item_meta_pairs( $item ),
+				'attributes'         => $this->get_product_attribute_pairs( $item ),
 			);
 		}
 
@@ -746,6 +747,61 @@ class Receipt_Data_Builder {
 			$pairs[] = array(
 				'key'   => wp_strip_all_tags( $meta_entry->display_key ),
 				'value' => wp_strip_all_tags( $meta_entry->display_value ),
+			);
+		}
+
+		return $pairs;
+	}
+
+	/**
+	 * Extract product attributes without order-item add-on metadata.
+	 *
+	 * @param \WC_Order_Item_Product $item Order product item.
+	 *
+	 * @return array
+	 */
+	private function get_product_attribute_pairs( \WC_Order_Item_Product $item ): array {
+		$product = $item->get_product();
+		$pairs   = array();
+
+		if ( ! $product instanceof \WC_Product ) {
+			return $pairs;
+		}
+
+		if ( $product instanceof \WC_Product_Variation ) {
+			foreach ( $product->get_variation_attributes() as $attribute_key => $attribute_value ) {
+				if ( '' === (string) $attribute_value ) {
+					continue;
+				}
+
+				$taxonomy = preg_replace( '/^attribute_/', '', (string) $attribute_key );
+				$value    = $product->get_attribute( $taxonomy );
+				$pairs[]  = array(
+					'key'   => wp_strip_all_tags( wc_attribute_label( $taxonomy, $product ) ),
+					'value' => wp_strip_all_tags( '' !== $value ? $value : (string) $attribute_value ),
+				);
+			}
+
+			return $pairs;
+		}
+
+		foreach ( $product->get_attributes() as $attribute ) {
+			if ( ! $attribute instanceof \WC_Product_Attribute || ! $attribute->get_visible() ) {
+				continue;
+			}
+
+			$values = $attribute->is_taxonomy()
+				? wc_get_product_terms( $product->get_id(), $attribute->get_name(), array( 'fields' => 'names' ) )
+				: $attribute->get_options();
+			$values = array_filter( array_map( 'wp_strip_all_tags', array_map( 'strval', $values ) ) );
+
+			if ( empty( $values ) ) {
+				continue;
+			}
+
+			$pairs[] = array(
+				'key'   => wp_strip_all_tags( wc_attribute_label( $attribute->get_name(), $product ) ),
+				'value' => implode( ', ', $values ),
 			);
 		}
 
