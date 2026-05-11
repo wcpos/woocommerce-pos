@@ -655,6 +655,8 @@ class Preview_Receipt_Builder {
 			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, $date_timezone ),
 			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, $date_timezone ),
 			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
+			'needs_payment' => false,
+			'payment_url'   => '',
 		);
 
 		$store = $this->get_store_info();

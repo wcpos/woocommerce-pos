@@ -164,6 +164,7 @@ class Receipt_I18n_Labels {
 			'grand_total_incl_tax'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
 			'tax'                    => /* translators: Standalone label used in printed receipt templates. */ __( 'Tax', 'woocommerce-pos' ),
 			'paid'                   => /* translators: Standalone label used in printed receipt templates. */ __( 'Paid', 'woocommerce-pos' ),
+			'paid_via'               => /* translators: Label prefix used before a payment method in printed receipt templates. */ __( 'Paid via', 'woocommerce-pos' ),
 			'tendered'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Tendered', 'woocommerce-pos' ),
 			'change'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Change', 'woocommerce-pos' ),
 
@@ -193,6 +194,17 @@ class Receipt_I18n_Labels {
 			'customer_note'          => /* translators: Standalone label used in printed receipt templates. */ __( 'Customer Note', 'woocommerce-pos' ),
 			'terms_and_conditions'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Terms & Conditions', 'woocommerce-pos' ),
 			'a_message_for_you'      => __( 'A message for you', 'woocommerce-pos' ),
+			'details'                => /* translators: Standalone label used in printed receipt templates — column heading for invoice meta (issued date, cashier, currency). */ __( 'Details', 'woocommerce-pos' ),
+			'issued'                 => /* translators: Standalone label used in printed receipt templates — date the invoice was issued. */ __( 'Issued', 'woocommerce-pos' ),
+
+			// Payment instructions — used by the Invoice template to render a
+			// "How to pay" panel guarded by {{#order.needs_payment}}.
+			'amount_due'             => /* translators: Standalone label used in printed receipt templates — large amount-due heading on unpaid invoices. */ __( 'Amount due', 'woocommerce-pos' ),
+			'how_to_pay'             => /* translators: Standalone label used in printed receipt templates — section heading for payment instructions on unpaid invoices. */ __( 'How to pay', 'woocommerce-pos' ),
+			'bank_transfer'          => /* translators: Standalone label used in printed receipt templates — subheading for the bank-transfer column under "How to pay". */ __( 'Bank transfer', 'woocommerce-pos' ),
+			'pay_online'             => /* translators: Standalone label used in printed receipt templates — subheading for the online-payment column under "How to pay". */ __( 'Pay online', 'woocommerce-pos' ),
+			'scan_qr_or_visit'       => /* translators: Standalone label used in printed receipt templates — instruction shown next to a pay-now QR code, followed by the payment URL. */ __( 'Scan the QR code, or visit:', 'woocommerce-pos' ),
+			'account'                => /* translators: Standalone label used in printed receipt templates — bank-transfer field label for the account name. */ __( 'Account', 'woocommerce-pos' ),
 
 			// Footers.
 			'thank_you'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Thank you!', 'woocommerce-pos' ),

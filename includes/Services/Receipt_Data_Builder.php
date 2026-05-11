@@ -70,6 +70,12 @@ class Receipt_Data_Builder {
 			// Render-time timestamp: refreshed on every build() call so reprints
 			// show the actual print time, not a value persisted to the database.
 			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
+			// Payment fields — templates can render a "How to pay" section guarded
+			// by {{#order.needs_payment}}…{{/order.needs_payment}}. payment_url is
+			// always populated (WC's order-pay endpoint accepts the key regardless
+			// of status); the boolean controls whether to show it.
+			'needs_payment' => method_exists( $order, 'needs_payment' ) ? (bool) $order->needs_payment() : false,
+			'payment_url'   => method_exists( $order, 'get_checkout_payment_url' ) ? (string) $order->get_checkout_payment_url() : '',
 		);
 
 		$display_incl = 'incl' === $this->resolve_store_option_string(

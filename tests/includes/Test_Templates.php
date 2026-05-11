@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests;
 
+use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
 use WP_UnitTestCase;
 
@@ -115,6 +116,79 @@ class Test_Templates extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
 			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
 		}
+	}
+
+	/**
+	 * Test invoice template hides paid-payment summary while payment is still due.
+	 */
+	public function test_invoice_template_hides_payments_when_order_needs_payment(): void {
+		$rendered = $this->render_invoice_template(
+			array(
+				'needs_payment' => true,
+				'payment_url'   => 'https://example.test/pay',
+			)
+		);
+
+		$this->assertStringContainsString( 'Bank transfer', $rendered );
+		$this->assertStringNotContainsString( 'Paid via Cash', $rendered );
+	}
+
+	/**
+	 * Test invoice template renders localized paid-payment summary for paid orders.
+	 */
+	public function test_invoice_template_renders_paid_via_label_for_paid_orders(): void {
+		$rendered = $this->render_invoice_template(
+			array(
+				'needs_payment' => false,
+				'payment_url'   => '',
+			)
+		);
+
+		$this->assertStringContainsString( 'Paid via Cash', $rendered );
+		$this->assertStringNotContainsString( 'Bank transfer', $rendered );
+	}
+
+	/**
+	 * Render the invoice gallery template with minimal receipt data.
+	 *
+	 * @param array $overrides Nested data overrides.
+	 */
+	private function render_invoice_template( array $order_overrides = array() ): string {
+		$template = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/invoice.html' );
+
+		if ( false === $template ) {
+			$this->fail( 'Invoice template must be readable.' );
+		}
+
+		$mustache = new \Mustache\Engine();
+		$data     = array(
+			'store'    => array( 'name' => 'Test Store' ),
+			'customer' => array( 'name' => 'Ada Lovelace' ),
+			'order'    => array_replace(
+				array(
+					'number'        => '1001',
+					'needs_payment' => false,
+					'payment_url'   => '',
+					'created'       => array( 'datetime' => '2026-05-11 10:00' ),
+					'status_label'  => 'Completed',
+				),
+				$order_overrides
+			),
+			'totals'   => array(
+				'subtotal_incl_display' => '$10.00',
+				'total_incl_display'    => '$10.00',
+			),
+			'payments' => array(
+				array(
+					'method_title'   => 'Cash',
+					'transaction_id' => '',
+					'amount_display' => '$10.00',
+				),
+			),
+			'i18n'     => Receipt_I18n_Labels::get_labels(),
+		);
+
+		return $mustache->render( $template, $data );
 	}
 
 	/**
