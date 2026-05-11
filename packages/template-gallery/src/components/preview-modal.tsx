@@ -1,10 +1,11 @@
 import * as React from 'react';
 
-import { renderThermalPreview } from '@wcpos/thermal-utils';
+import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
 import { Button } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
 import { t } from '../translations';
+import type { PreviewResponse } from '../types';
 import { PreviewToggle } from './preview-toggle';
 
 interface PreviewModalProps {
@@ -21,24 +22,26 @@ function ThermalPreviewContent({
 	templateContent,
 	receiptData,
 	templateName,
+	paperWidth,
 }: {
 	templateContent: string;
 	receiptData: Record<string, unknown>;
 	templateName: string;
+	paperWidth?: string | null;
 }) {
-	const html = React.useMemo(() => {
+	const srcdoc = React.useMemo(() => {
 		try {
-			return renderThermalPreview(templateContent, receiptData);
+			return buildPreviewFrameHtml({
+				bodyHtml: renderThermalPreview(templateContent, receiptData),
+				paperWidth,
+			});
 		} catch {
-			return `<div style="color:red;padding:16px;">${t('modal.render_error')}</div>`;
+			return buildPreviewFrameHtml({
+				bodyHtml: `<div style="color:red;padding:16px;">${t('modal.render_error')}</div>`,
+				paperWidth,
+			});
 		}
-	}, [templateContent, receiptData]);
-
-	const srcdoc = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;flex-direction:column;align-items:center;">${html}</body>
-</html>`;
+	}, [templateContent, receiptData, paperWidth]);
 
 	return (
 		<iframe
@@ -48,6 +51,29 @@ function ThermalPreviewContent({
 			sandbox="allow-same-origin"
 		/>
 	);
+}
+
+
+export function buildPreviewModalSrcDoc(preview: PreviewResponse): string {
+	if (preview.engine === 'thermal' && preview.template_content && preview.receipt_data) {
+		return buildPreviewFrameHtml({
+			bodyHtml: renderThermalPreview(preview.template_content, preview.receipt_data),
+			paperWidth: preview.paper_width,
+		});
+	}
+
+	if (preview.preview_html) {
+		return isFullHtmlDocument(preview.preview_html)
+			? preview.preview_html
+			: buildPreviewFrameHtml({ bodyHtml: preview.preview_html, paperWidth: preview.paper_width });
+	}
+
+	return '';
+}
+
+function isFullHtmlDocument(html: string): boolean {
+	const h = html.trimStart().toLowerCase();
+	return h.startsWith('<!doctype') || h.startsWith('<html');
 }
 
 export function PreviewModal({
@@ -184,16 +210,11 @@ export function PreviewModal({
 							templateContent={preview.template_content}
 							receiptData={preview.receipt_data}
 							templateName={templateName}
+							paperWidth={preview.paper_width}
 						/>
 					) : preview?.preview_html ? (
 						<iframe
-							srcDoc={(() => { const h = preview.preview_html.trimStart().toLowerCase(); return h.startsWith('<!doctype') || h.startsWith('<html'); })()
-								? preview.preview_html
-								: `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${preview.preview_html}</body>
-</html>`}
+							srcDoc={buildPreviewModalSrcDoc(preview)}
 							title={t('modal.preview_title', { templateName })}
 							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							sandbox="allow-same-origin"

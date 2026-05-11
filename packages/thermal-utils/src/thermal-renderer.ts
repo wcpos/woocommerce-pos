@@ -74,7 +74,7 @@ interface ColNode {
 }
 interface LineNode {
 	type: 'line';
-	style: 'single' | 'double';
+	style: 'single' | 'dashed' | 'dotted' | 'double';
 }
 interface BarcodeNode {
 	type: 'barcode';
@@ -106,11 +106,16 @@ interface DrawerNode {
 
 // -- XML Parser --
 
+function safeInteger(value: unknown, fallback: number, min: number, max: number): number {
+	if (typeof value === 'string' && value.trim() === '') return fallback;
+	const n = typeof value === 'number' ? value : Number(value);
+	return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.trunc(n))) : fallback;
+}
+
 function intAttr(el: Element, name: string, fallback: number): number {
 	const raw = el.getAttribute(name);
 	if (raw == null) return fallback;
-	const n = parseInt(raw, 10);
-	return Number.isNaN(n) ? fallback : n;
+	return safeInteger(raw, fallback, 0, Number.MAX_SAFE_INTEGER);
 }
 
 function enumAttr<T extends string>(
@@ -178,7 +183,7 @@ function parseChildren(parent: Element): ThermalNode[] {
 			case 'line':
 				nodes.push({
 					type: 'line',
-					style: enumAttr(el, 'style', ['single', 'double'] as const, 'single'),
+					style: enumAttr(el, 'style', ['single', 'dashed', 'dotted', 'double'] as const, 'single'),
 				});
 				break;
 			case 'barcode':
@@ -275,6 +280,26 @@ function escapeHtml(str: string): string {
 		.replace(/\//g, '&#x2F;');
 }
 
+function safeImageSrc(src: string): string {
+	const trimmed = src.trim();
+	if (!trimmed) return '';
+	const cleaned = trimmed.replace(/[\u0000-\u001F\u007F\s]+/g, '');
+	const normalized = cleaned.toLowerCase();
+	const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(cleaned);
+	const allowedAbsolute =
+		normalized.startsWith('http://') ||
+		normalized.startsWith('https://') ||
+		normalized.startsWith('data:image/');
+	const allowedRelative = !hasScheme && !normalized.startsWith('//');
+	if (!allowedAbsolute && !allowedRelative) return '';
+	return escapeHtml(cleaned);
+}
+
+function dotsToCh(dots: number, paperWidthChars: number): number {
+	const dotBudget = paperWidthChars >= 40 ? 576 : 384;
+	return (dots * paperWidthChars) / dotBudget;
+}
+
 function renderNodes(nodes: ThermalNode[], columns: number): string {
 	return nodes.map((node) => renderNode(node, columns)).join('');
 }
@@ -292,7 +317,7 @@ function renderNode(node: ThermalNode, columns: number): string {
 		case 'invert':
 			return `<span style="background: #000; color: #fff; padding: 0 4px">${renderNodes(node.children, columns)}</span>`;
 		case 'size': {
-			return `<span style="transform: scale(${node.width}, ${node.height}); transform-origin: left top; display: inline-block; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
+			return `<span style="font-size: ${node.width}em; line-height: 1.2; max-width: 100%; overflow-wrap: break-word; word-break: break-word">${renderNodes(node.children, columns)}</span>`;
 		}
 		case 'align':
 			return `<div style="text-align: ${node.mode}">${renderNodes(node.children, columns)}</div>`;
@@ -305,18 +330,23 @@ function renderNode(node: ThermalNode, columns: number): string {
 		}
 		case 'col':
 			return renderCol(node, node.width === '*' ? 12 : node.width, columns);
-		case 'line':
-			if (node.style === 'double') {
-				return '<hr style="border: none; border-top: 3px double #000; margin: 4px 0" />';
-			}
-			return '<hr style="border: none; border-top: 1px dashed #000; margin: 4px 0" />';
+		case 'line': {
+			const borderTop = node.style === 'double'
+				? '3px double #000'
+				: `1px ${node.style === 'dashed' || node.style === 'dotted' ? node.style : 'solid'} #000`;
+			return `<hr style="border: none; border-top: ${borderTop}; margin: 4px 0" />`;
+		}
 		case 'barcode':
-			// node.height is in screen pixels (default 40); bwip-js height is in mm, so divide by 4.
-			return generateBarcodeSvg(node.value, { type: node.barcodeType ?? 'code128', height: node.height / 4 });
+			// node.height is in screen pixels (default 40); bwip-js height is in mm, so divide by 10.
+			return generateBarcodeSvg(node.value, { type: node.barcodeType ?? 'code128', height: node.height / 10, scale: 2, kind: 'barcode', paperWidthChars: columns });
 		case 'qrcode':
-			return generateBarcodeSvg(node.value, { type: 'qr', scale: node.size });
-		case 'image':
-			return `<div style="text-align: center; padding: 8px 0"><img src="${escapeHtml(node.src)}" style="max-width: ${node.width}px; height: auto" /></div>`;
+			return generateBarcodeSvg(node.value, { type: 'qrcode', scale: node.size, kind: 'qrcode', paperWidthChars: columns });
+		case 'image': {
+			const safeSrc = safeImageSrc(node.src);
+			if (!safeSrc) return '';
+			const widthCh = dotsToCh(Math.max(1, Math.min(2000, node.width)), columns);
+			return `<div style="text-align: center; padding: 8px 0"><img src="${safeSrc}" style="width: min(100%, ${widthCh.toFixed(2)}ch); height: auto" /></div>`;
+		}
 		case 'cut':
 			return '<div style="border-top: 1px dashed #ccc; margin: 12px 0; position: relative"><span style="position: absolute; top: -8px; left: -4px; font-size: 14px">&#9986;</span></div>';
 		case 'feed':

@@ -289,6 +289,7 @@ export function App({ config }: AppProps) {
 						sampleData={preview.data}
 						loading={preview.loading}
 						sourcePicker={previewToggle}
+						paperWidth={paperWidth}
 					/>
 				) : engine === 'logicless' ? (
 					<LivePreview
