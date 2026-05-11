@@ -1,0 +1,39 @@
+name: Merge Gate
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+
+jobs:
+  merge-gate:
+    name: ✅ Merge Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout trusted base scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Evaluate merge policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_GATE_REQUIRED_CHECKS: Lint|Smoke Test (Latest Stable)|Static Analysis (PHPStan)
+          MERGE_GATE_TRANSLATION_FILE: woocommerce-pos.php
+          MERGE_GATE_POT_FILE: languages/woocommerce-pos.pot
+        run: .github/scripts/merge-gate.sh
