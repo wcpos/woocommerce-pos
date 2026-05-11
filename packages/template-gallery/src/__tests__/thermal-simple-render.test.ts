@@ -105,8 +105,8 @@ describe('thermal simple templates render with sample data', () => {
 					(span) => span.textContent === '$49.97',
 				);
 				expect((rendered.firstElementChild as HTMLElement).style.width).toBe('32ch');
-				expect((rendered.querySelector('img') as HTMLImageElement).style.maxWidth).toBe('160px');
-				expect(rendered.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 171 109');
+				expect((rendered.querySelector('img') as HTMLImageElement).getAttribute('style')).toContain('width: min(100%,');
+				expect(rendered.querySelector('svg')?.getAttribute('style')).toContain('width: min(100%,');
 				expect(subtotalAmount?.getAttribute('style')).toContain('flex: 0 0 12ch');
 			}
 		});

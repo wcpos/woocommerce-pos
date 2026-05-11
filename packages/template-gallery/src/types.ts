@@ -72,6 +72,7 @@ export interface PreviewResponse {
 	engine?: string;
 	template_content?: string;
 	receipt_data?: Record<string, unknown>;
+	paper_width?: string | null;
 	order_id: number;
 	template_id: number | string;
 }
