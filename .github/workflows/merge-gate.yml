@@ -33,7 +33,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-          MERGE_GATE_REQUIRED_CHECKS: Lint|Smoke Test (Latest Stable)|Static Analysis (PHPStan)
+          MERGE_GATE_REQUIRED_CHECKS: Smoke Test (Latest Stable)
           MERGE_GATE_TRANSLATION_FILE: woocommerce-pos.php
           MERGE_GATE_POT_FILE: languages/woocommerce-pos.pot
         run: .github/scripts/merge-gate.sh

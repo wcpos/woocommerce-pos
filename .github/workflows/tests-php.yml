@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       php: ${{ steps.filter.outputs.php }}
+      translation_version_only: ${{ steps.translation-version.outputs.translation_version_only || 'false' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
@@ -40,6 +41,59 @@ jobs:
               - '.github/scripts/generate-matrix.sh'
               - '.github/scripts/get-woocommerce-stable-version.sh'
               - '.github/workflows/tests-php.yml'
+
+      - name: Detect translation-version-only PR
+        id: translation-version
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          TRANSLATION_FILE: woocommerce-pos.php
+        run: |
+          set -euo pipefail
+          echo "translation_version_only=false" >> "$GITHUB_OUTPUT"
+
+          if [[ "$PR_AUTHOR" != 'translations-ci[bot]' && "$PR_AUTHOR" != 'app/translations-ci' ]]; then
+            exit 0
+          fi
+          if [[ ! "$PR_TITLE" =~ ^chore:\ update\ translation\ version\ to\ [0-9]{4}\.[0-9]+\.[0-9]+$ ]]; then
+            exit 0
+          fi
+
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
+          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          if (( ${#changed_files[@]} != 1 )) || [[ "${changed_files[0]}" != "$TRANSLATION_FILE" ]]; then
+            exit 0
+          fi
+
+          changed_lines="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- "$TRANSLATION_FILE" | awk '
+            /^diff --git / { next }
+            /^index / { next }
+            /^@@ / { next }
+            /^--- / { next }
+            /^\+\+\+ / { next }
+            /^[+-]/ { print }
+          ')"
+          if [[ -z "$changed_lines" ]]; then
+            exit 0
+          fi
+
+          while IFS= read -r line; do
+            [[ -n "$line" ]] || continue
+            if [[ "$line" == *TRANSLATION_VERSION* && "$line" =~ ^[+-] ]]; then
+              continue
+            fi
+            exit 0
+          done <<< "$changed_lines"
+
+          echo "translation_version_only=true" >> "$GITHUB_OUTPUT"
+
+      - name: Default translation-version-only output
+        id: translation-version-default
+        if: github.event_name != 'pull_request'
+        run: echo "translation_version_only=false" >> "$GITHUB_OUTPUT"
 
   resolve-node-dependencies:
     name: Resolve Node Dependencies
@@ -79,7 +133,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.php == 'true' || github.event_name == 'workflow_dispatch'
+    if: (needs.changes.outputs.php == 'true' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -112,7 +166,7 @@ jobs:
     name: Static Analysis (PHPStan)
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.php == 'true' || github.event_name == 'workflow_dispatch'
+    if: (needs.changes.outputs.php == 'true' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -146,7 +200,7 @@ jobs:
   smoke-test:
     name: Smoke Test (Latest Stable)
     runs-on: ubuntu-latest
-    needs: [changes, lint, resolve-node-dependencies]
+    needs: [changes, resolve-node-dependencies]
     if: needs.changes.outputs.php == 'true' || github.event_name == 'workflow_dispatch'
 
     outputs:
@@ -314,8 +368,8 @@ jobs:
   generate-matrix:
     name: Generate Test Matrix
     runs-on: ubuntu-latest
-    needs: smoke-test
-    if: needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch'
+    needs: [changes, smoke-test]
+    if: (needs.smoke-test.result == 'success' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'
 
     permissions:
       contents: read
@@ -486,8 +540,8 @@ jobs:
   coverage:
     name: Code Coverage (WP ${{ needs.smoke-test.outputs.wp_version }}, WC ${{ needs.smoke-test.outputs.wc_version }})
     runs-on: ubuntu-latest
-    needs: [smoke-test, resolve-node-dependencies]
-    if: needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch'
+    needs: [changes, smoke-test, resolve-node-dependencies]
+    if: (needs.smoke-test.result == 'success' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
