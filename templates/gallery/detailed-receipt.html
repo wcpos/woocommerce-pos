@@ -322,6 +322,11 @@ inline styles on the wrapping element.
 			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
 		</div>
 		{{/store.opening_hours}}
+		{{^store.opening_hours}}{{#store.opening_hours_notes}}
+		<div style="text-align: center;">
+			<div>{{store.opening_hours_notes}}</div>
+		</div>
+		{{/store.opening_hours_notes}}{{/store.opening_hours}}
 		{{#order.printed.datetime}}
 		<div style="text-align: right;">
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.printed}}</div>
