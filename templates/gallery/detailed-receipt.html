@@ -311,24 +311,24 @@ inline styles on the wrapping element.
 	</div>
 	{{/store.policies_and_conditions}}
 
-	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; font-size: 11px; color: #6b7280;">
-		<div>
+	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 24px; font-size: 11px; color: #6b7280;">
+		<div style="flex: 1 1 0; min-width: 0;">
 			{{#store.footer_imprint}}{{store.footer_imprint}}{{/store.footer_imprint}}
 		</div>
 		{{#store.opening_hours}}
-		<div style="text-align: center;">
+		<div style="flex: 1 1 0; min-width: 0; text-align: center;">
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.opening_hours}}</div>
 			<div style="color: #374151;">{{store.opening_hours}}</div>
 			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
 		</div>
 		{{/store.opening_hours}}
 		{{^store.opening_hours}}{{#store.opening_hours_notes}}
-		<div style="text-align: center;">
+		<div style="flex: 1 1 0; min-width: 0; text-align: center;">
 			<div>{{store.opening_hours_notes}}</div>
 		</div>
 		{{/store.opening_hours_notes}}{{/store.opening_hours}}
 		{{#order.printed.datetime}}
-		<div style="text-align: right;">
+		<div style="flex: 1 1 0; min-width: 0; text-align: right;">
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.printed}}</div>
 			<div style="color: #374151;">{{order.printed.datetime}}</div>
 		</div>
