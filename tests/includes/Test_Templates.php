@@ -544,7 +544,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'standard-receipt' );
 
 		$this->assertEquals( 'standard-receipt', get_post_meta( $post_id, '_template_gallery_key', true ) );
-		$this->assertEquals( 1, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
+		$this->assertEquals( 2, (int) get_post_meta( $post_id, '_template_gallery_version', true ) );
 		$this->assertEquals( 'logicless', get_post_meta( $post_id, '_template_engine', true ) );
 
 		wp_delete_post( $post_id, true );

@@ -1,77 +1,184 @@
 <!--
 Packing Slip — fulfillment companion.
 
-Items and quantities only, no pricing.
-Shipping address prominent for warehouse use.
+Items and quantities only, no pricing. Shipping address is the focal
+point so warehouse staff can dispatch at a glance.
+
+Sections, top to bottom:
+
+  - Header — store logo, name, address, contact details, plus the
+    order status badge, document title, order number and date.
+  - Ship-to + Order — emphasized shipping address with the customer's
+    phone and the shipping method / tracking number(s) pulled from
+    the order's shipping line meta. Order meta column shows date,
+    status, cashier and a short bill-to reference.
+  - Items table — line name (with variation attributes via the
+    {{#meta}}…{{/meta}} section), SKU, quantity and a packed checkbox
+    column. Footer row shows totals.total_qty and totals.line_count.
+  - Customer note — highlighted callout, only shown when a note was
+    left on the order.
+  - Sign-off + barcode — three blank lines for the picker to record
+    name, date and signature, alongside a code128 barcode of the
+    order number for scan-on-dispatch.
+  - Footer — order number + receipt print time.
+
+To remove a section, delete the matching block. To restyle, edit the
+inline styles on the wrapping element.
 -->
-<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #333; padding: 40px;">
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
 
-	<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px;">
-		<div>
-			{{#store.logo}}
-			<div style="margin-bottom: 8px;">
-				<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 180px; height: auto;">
-			</div>
-			{{/store.logo}}
-			<div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">{{store.name}}</div>
+	<!-- ── Header: logo + store / doc title + meta ─────────────── -->
+	<header style="display: flex; align-items: center; gap: 22px; padding-bottom: 18px; border-bottom: 2px solid #111827;">
+		{{#store.logo}}
+		<div style="flex: 0 0 auto;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="width: 88px; height: auto; display: block;">
+		</div>
+		{{/store.logo}}
+		<div style="flex: 1 1 auto; min-width: 0;">
+			<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em;">{{store.name}}</div>
 			{{#store.address_lines}}
-			<div style="font-size: 12px; color: #666;">{{.}}</div>
+			<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
 			{{/store.address_lines}}
+			{{#store.phone}}<div style="color: #6b7280; font-size: 12px;">{{store.phone}}{{#store.email}} · {{store.email}}{{/store.email}}</div>{{/store.phone}}
+			{{^store.phone}}{{#store.email}}<div style="color: #6b7280; font-size: 12px;">{{store.email}}</div>{{/store.email}}{{/store.phone}}
 		</div>
-		<div style="text-align: right;">
-			<div style="font-size: 24px; font-weight: 300; color: #888; text-transform: uppercase; letter-spacing: 2px;">{{i18n.packing_slip}}</div>
-			<div style="font-size: 12px; margin-top: 8px; color: #666;">
-				<div>Order #{{order.number}}</div>
-				<div>{{order.created.datetime}}</div>
+		<div style="flex: 0 0 auto; text-align: right;">
+			{{#order.wc_status}}
+			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase;">
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}
 			</div>
+			{{/order.wc_status}}
+			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase; margin-top: 8px;">{{i18n.packing_slip}}</div>
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
+		</div>
+	</header>
+
+	<!-- ── Ship-to / Order meta ─────────────── -->
+	<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 28px; margin-top: 22px;">
+
+		<div style="padding: 18px 20px; border: 2px solid #111827; border-radius: 10px;">
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.ship_to}}</div>
+			{{#customer.shipping_address.address_1}}
+			<div style="font-weight: 700; font-size: 16px; margin-bottom: 2px;">{{customer.shipping_address.first_name}} {{customer.shipping_address.last_name}}</div>
+			{{#customer.shipping_address.company}}<div style="color: #6b7280; margin-bottom: 6px;">{{customer.shipping_address.company}}</div>{{/customer.shipping_address.company}}
+			<div style="font-size: 13px;">
+				<div>{{customer.shipping_address.address_1}}</div>
+				{{#customer.shipping_address.address_2}}<div>{{customer.shipping_address.address_2}}</div>{{/customer.shipping_address.address_2}}
+				<div>{{customer.shipping_address.postcode}} {{customer.shipping_address.city}}{{#customer.shipping_address.state}}, {{customer.shipping_address.state}}{{/customer.shipping_address.state}}</div>
+				{{#customer.shipping_address.country}}<div>{{customer.shipping_address.country}}</div>{{/customer.shipping_address.country}}
+			</div>
+			{{#customer.shipping_address.phone}}<div style="color: #6b7280; font-size: 12px; margin-top: 8px;">{{customer.shipping_address.phone}}</div>{{/customer.shipping_address.phone}}
+			{{/customer.shipping_address.address_1}}
+			{{^customer.shipping_address.address_1}}
+			<div style="font-weight: 700; font-size: 16px; margin-bottom: 2px;">{{customer.name}}</div>
+			{{/customer.shipping_address.address_1}}
+
+			{{#shipping.0}}
+			<div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #d1d5db; font-size: 12px;">
+				{{#shipping}}
+				<div style="font-weight: 600;">{{label}}{{#method_id}} <span style="color: #6b7280; font-size: 11px; font-weight: 400;">({{method_id}})</span>{{/method_id}}</div>
+				{{#meta}}<div style="color: #6b7280; font-size: 11px; margin-top: 2px;"><strong>{{key}}</strong> {{value}}</div>{{/meta}}
+				{{/shipping}}
+			</div>
+			{{/shipping.0}}
+		</div>
+
+		<div style="font-size: 12px;">
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.order}}</div>
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.date}}</span><span>{{order.created.datetime}}</span></div>
+			{{#order.wc_status}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;">
+				<span style="color: #6b7280;">{{i18n.status}}</span>
+				<span>{{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}</span>
+			</div>
+			{{/order.wc_status}}
+			{{#cashier.name}}<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.cashier}}</span><span>{{cashier.name}}</span></div>{{/cashier.name}}
+			{{#customer.billing_address.address_1}}
+			<div style="border-top: 1px solid #e5e7eb; margin-top: 8px; padding-top: 6px;">
+				<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; font-weight: 700;">{{i18n.billed_to}}</div>
+				<div>{{customer.name}}</div>
+				{{#customer.billing_address.email}}<div style="color: #6b7280; font-size: 11px;">{{customer.billing_address.email}}</div>{{/customer.billing_address.email}}
+			</div>
+			{{/customer.billing_address.address_1}}
 		</div>
 	</div>
 
-	{{#customer.shipping_address.address_1}}
-	<div style="margin-bottom: 24px; padding: 16px; border: 2px solid #333; border-radius: 6px;">
-		<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 6px;">{{i18n.ship_to}}</div>
-		{{#customer.name}}<div style="font-weight: 600; font-size: 15px; margin-bottom: 4px;">{{customer.name}}</div>{{/customer.name}}
-		<div style="font-size: 13px;">
-			<div>{{customer.shipping_address.address_1}}</div>
-			{{#customer.shipping_address.address_2}}<div>{{customer.shipping_address.address_2}}</div>{{/customer.shipping_address.address_2}}
-			<div>{{customer.shipping_address.city}} {{customer.shipping_address.postcode}}</div>
-			<div>{{customer.shipping_address.state}} {{customer.shipping_address.country}}</div>
-		</div>
-	</div>
-	{{/customer.shipping_address.address_1}}
-
-	<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+	<!-- ── Items table ─────────────── -->
+	<table style="width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px;">
 		<thead>
-			<tr style="border-bottom: 2px solid #333;">
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.item}}</th>
-				<th style="text-align: left; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.sku}}</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">{{i18n.qty}}</th>
-				<th style="text-align: center; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; width: 60px;">{{i18n.packed}}</th>
+			<tr>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.item_short}}</th>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.sku_short}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.qty_short}}</th>
+				<th style="text-align: center; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; width: 70px;">{{i18n.packed}}</th>
 			</tr>
 		</thead>
 		<tbody>
 			{{#lines}}
-			<tr style="border-bottom: 1px solid #eee;">
-				<td style="padding: 10px 4px; font-weight: 500;">{{name}}</td>
-				<td style="padding: 10px 4px; color: #888; font-size: 12px;">{{sku}}</td>
-				<td style="padding: 10px 4px; text-align: center; font-size: 15px; font-weight: 600;">{{qty}}</td>
-				<td style="padding: 10px 4px; text-align: center;">
-					<span style="display: inline-block; width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 3px;"></span>
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+					<div style="font-weight: 600;">{{name}}</div>
+					{{#meta}}<div style="color: #6b7280; font-size: 11px;">{{key}}: {{value}}</div>{{/meta}}
+				</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280; font-size: 11px; white-space: nowrap;">{{sku}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">{{qty}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: center;">
+					<span style="display: inline-block; width: 20px; height: 20px; border: 2px solid #9ca3af; border-radius: 4px;"></span>
 				</td>
 			</tr>
 			{{/lines}}
 		</tbody>
+		<tfoot>
+			<tr>
+				<td colspan="2" style="padding: 10px 6px; border-top: 2px solid #111827; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.total}}</td>
+				<td style="padding: 10px 6px; border-top: 2px solid #111827; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums;">{{totals.total_qty}}</td>
+				<td style="padding: 10px 6px; border-top: 2px solid #111827; text-align: center; color: #6b7280; font-size: 11px; font-variant-numeric: tabular-nums;">{{totals.line_count}}</td>
+			</tr>
+		</tfoot>
 	</table>
 
+	<!-- ── Customer note ─────────────── -->
 	{{#order.customer_note}}
-	<div style="margin-top: 16px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; font-size: 12px;">
-		<div style="font-weight: 600; margin-bottom: 4px;">{{i18n.customer_note}}:</div>
-		<div style="white-space: pre-wrap;">{{order.customer_note}}</div>
+	<div style="margin-top: 24px; padding: 16px 18px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; font-size: 12px; line-height: 1.5; color: #1f2937;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; font-weight: 700;">{{i18n.customer_note}}</div>
+		<div style="color: #92400e; white-space: pre-wrap;">{{order.customer_note}}</div>
 	</div>
 	{{/order.customer_note}}
 
-	<div style="margin-top: 32px; text-align: center; font-size: 11px; color: #999;">
-		Order #{{order.number}} &middot; {{order.created.datetime}}
+	<!-- ── Sign-off + barcode ─────────────── -->
+	<div style="display: grid; grid-template-columns: 1fr 220px; gap: 28px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; align-items: end;">
+		<div style="font-size: 12px;">
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 18px; font-weight: 700;">{{i18n.packed_by}}</div>
+			<div style="display: flex; gap: 24px;">
+				<div style="flex: 1;">
+					<div style="border-bottom: 1px solid #9ca3af; height: 22px;"></div>
+					<div style="color: #6b7280; font-size: 11px; margin-top: 4px;">{{i18n.signed_name}}</div>
+				</div>
+				<div style="flex: 1;">
+					<div style="border-bottom: 1px solid #9ca3af; height: 22px;"></div>
+					<div style="color: #6b7280; font-size: 11px; margin-top: 4px;">{{i18n.date}}</div>
+				</div>
+				<div style="flex: 1;">
+					<div style="border-bottom: 1px solid #9ca3af; height: 22px;"></div>
+					<div style="color: #6b7280; font-size: 11px; margin-top: 4px;">{{i18n.signature}}</div>
+				</div>
+			</div>
+		</div>
+
+		<!--
+			Order barcode — the receipt-renderer pipeline converts <barcode> elements
+			into a centered <div> with the SVG inside; the grid column caps its width.
+		-->
+		<div style="text-align: center;">
+			<barcode type="code128" height="40">{{order.number}}</barcode>
+		</div>
 	</div>
+
+	<!-- ── Footer ─────────────── -->
+	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; gap: 24px; font-size: 11px; color: #6b7280;">
+		<div>Order #{{order.number}}</div>
+		{{#order.printed.datetime}}<div>{{i18n.printed}} {{order.printed.datetime}}</div>{{/order.printed.datetime}}
+	</footer>
 
 </div>

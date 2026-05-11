@@ -733,6 +733,14 @@ class Receipt_Data_Schema {
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Net Total', 'woocommerce-pos' ),
 					),
+					'total_qty'           => array(
+						'type'  => 'number',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Quantity', 'woocommerce-pos' ),
+					),
+					'line_count'          => array(
+						'type'  => 'number',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Count', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'tax_summary' => array(

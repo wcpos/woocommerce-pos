@@ -129,6 +129,7 @@ class Receipt_I18n_Labels {
 			// Addresses.
 			'bill_to'                => /* translators: Standalone label used in printed receipt templates. */ __( 'Bill To', 'woocommerce-pos' ),
 			'ship_to'                => /* translators: Standalone label used in printed receipt templates. */ __( 'Ship To', 'woocommerce-pos' ),
+			'billed_to'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Billed To', 'woocommerce-pos' ),
 			'billing_address'        => /* translators: Standalone label used in printed receipt templates. */ __( 'Billing Address', 'woocommerce-pos' ),
 
 			// Table headers.
@@ -140,6 +141,8 @@ class Receipt_I18n_Labels {
 			'total_excl'             => /* translators: Standalone label used in printed receipt templates. */ __( 'Total (excl.)', 'woocommerce-pos' ),
 			'discount'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Discount', 'woocommerce-pos' ),
 			'packed'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Packed', 'woocommerce-pos' ),
+			'packed_by'              => /* translators: Standalone label used in printed receipt templates — heading above a signature block where the warehouse picker signs/dates the slip. */ __( 'Packed By', 'woocommerce-pos' ),
+			'signed_name'            => /* translators: Standalone label used in printed receipt templates — sublabel under a blank signature line indicating the printed name field. */ __( 'Name', 'woocommerce-pos' ),
 
 			// Short receipt table headers.
 			'item_short'             => /* translators: Short receipt table header for product/item name. Keep very short, ideally 3–8 characters. */ _x( 'Item', 'short receipt table header', 'woocommerce-pos' ),
