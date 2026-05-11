@@ -1,11 +1,11 @@
 {
     "key": "minimal-receipt",
     "title": "Minimal / Modern",
-    "description": "Contemporary receipt with monospace typography and generous whitespace. No dividers or decoration.",
+    "description": "Compact receipt with a centered store header, bold double-border order band and dense item rows. Same essentials as Standard, less vertical space.",
     "type": "receipt",
     "category": "receipt",
     "engine": "logicless",
     "output_type": "html",
     "paper_width": null,
-    "version": 1
+    "version": 2
 }
