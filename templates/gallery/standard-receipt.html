@@ -1,7 +1,16 @@
 <!--
 Standard Receipt — Default POS Receipt Template.
 
-Demonstrates the logicless template engine with section blocks:
+A clean, streamlined receipt that covers the essentials most stores
+need: store identity (with logo when present), order number / date /
+cashier, itemized lines (name × qty + total), a single tax line,
+payments and change, and a footer imprint. It deliberately leaves
+out per-line SKU / unit price / tax columns, the bill-to / ship-to
+grid, per-rate VAT breakdown, refunds, customer note, barcode, terms
+and opening hours. Reach for the Detailed Receipt when you need any
+of those.
+
+Uses the logicless template engine with section blocks:
   {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
   {{^key}}...{{/key}}  — show block when value is empty/falsy
   {{.}}                — current value (for arrays of strings)
@@ -15,158 +24,104 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 @see https://docs.wcpos.com/templates/receipt-data-reference
 -->
-<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #333; padding: 24px;">
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
 
-	<!-- Store Header -->
-	<div style="text-align: center; margin-bottom: 20px;">
+	<!-- ── Header: logo + store info + order meta ─────────────── -->
+	<header style="display: flex; align-items: flex-start; gap: 22px; padding-bottom: 18px; border-bottom: 2px solid #111827;">
 		{{#store.logo}}
-		<div style="margin-bottom: 10px;">
-			<img src="{{store.logo}}" alt="{{store.name}}" style="max-width: 200px; height: auto;">
+		<div style="flex: 0 0 auto;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="width: 88px; height: auto; display: block;">
 		</div>
 		{{/store.logo}}
-		<div style="font-size: 22px; font-weight: 700; margin-bottom: 6px;">{{store.name}}</div>
-		{{#store.address_lines}}
-		<div style="font-size: 12px; color: #666; line-height: 1.5;">{{.}}</div>
-		{{/store.address_lines}}
-		{{#store.phone}}
-		<div style="font-size: 12px; color: #666; margin-top: 2px;">{{store.phone}}</div>
-		{{/store.phone}}
-		{{#store.tax_ids}}
-		<div style="font-size: 12px; color: #666; margin-top: 2px;">{{label}}: {{value}}</div>
-		{{/store.tax_ids}}
-		{{#store.opening_hours}}
-		<div style="font-size: 11px; color: #666; margin-top: 4px; white-space: pre-line;">{{store.opening_hours}}</div>
-		{{/store.opening_hours}}
+		<div style="flex: 1 1 auto; min-width: 0;">
+			<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
+			{{/store.address_lines}}
+			{{#store.phone}}<div style="color: #6b7280; font-size: 12px;">{{store.phone}}</div>{{/store.phone}}
+			{{#store.tax_ids}}
+			<div style="color: #6b7280; font-size: 12px;">{{#label}}{{label}} {{/label}}{{value}}</div>
+			{{/store.tax_ids}}
+		</div>
+		<div style="flex: 0 0 auto; text-align: right;">
+			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{i18n.receipt}}</div>
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
+			{{#cashier.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.cashier}}: {{cashier.name}}</div>{{/cashier.name}}
+			{{#customer.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.customer}}: {{customer.name}}</div>{{/customer.name}}
+		</div>
+	</header>
+
+	<!-- ── Items ─────────────── -->
+	<table style="width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px;">
+		<thead>
+			<tr>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.item_short}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.qty_short}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.total}}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{name}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{qty}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{line_total_incl_display}}</td>
+			</tr>
+			{{/lines}}
+			{{#fees}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/fees}}
+			{{#shipping}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/shipping}}
+			{{#discounts}}
+			<tr style="color: #15803d;">
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{i18n.discount}}{{#label}} · {{label}}{{/label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right;">—</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">-{{total_incl_display}}</td>
+			</tr>
+			{{/discounts}}
+		</tbody>
+	</table>
+
+	<!-- ── Totals (right-aligned, no per-rate breakdown) ─────────────── -->
+	<div style="margin-top: 20px; max-width: 280px; margin-left: auto; font-size: 13px;">
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
+		{{#totals.tax_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+		{{/totals.tax_total}}
+		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
 	</div>
 
-	<!-- Divider -->
-	<div style="border-top: 1px solid #e2e2e2; margin: 20px 0;"></div>
-
-	<!-- Order Meta -->
-	<div style="margin-bottom: 20px;">
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{i18n.order}}</span>
-			<span>#{{order.number}}</span>
-		</div>
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{i18n.date}}</span>
-			<span>{{order.created.datetime}}</span>
-		</div>
-		{{#cashier.name}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{i18n.cashier}}</span>
-			<span>{{cashier.name}}</span>
-		</div>
-		{{/cashier.name}}
-		{{#customer.name}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{i18n.customer}}</span>
-			<span>{{customer.name}}</span>
-		</div>
-		{{/customer.name}}
-	</div>
-
-	<!-- Divider -->
-	<div style="border-top: 1px solid #e2e2e2; margin: 20px 0;"></div>
-
-	<!-- Line Items -->
-	<div style="margin-bottom: 20px;">
-		{{#lines}}
-		<div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 13px;">
-			<span>{{name}} <span style="color: #999; font-size: 12px;">&times; {{qty}}</span></span>
-			<span style="white-space: nowrap; margin-left: 12px;">{{line_total_incl_display}}</span>
-		</div>
-		{{/lines}}
-	</div>
-
-	<!-- Divider -->
-	<div style="border-top: 1px solid #e2e2e2; margin: 20px 0;"></div>
-
-	<!-- Totals Section -->
-	<div style="background: #f8f8f8; border-radius: 6px; padding: 14px 16px; margin-bottom: 20px;">
-
-		{{#fees}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{label}}</span>
-			<span>{{total_incl_display}}</span>
-		</div>
-		{{/fees}}
-
-		{{#shipping}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{label}}</span>
-			<span>{{total_incl_display}}</span>
-		</div>
-		{{/shipping}}
-
-		{{#discounts}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #16a34a;">
-			<span>{{label}}</span>
-			<span>-{{total_incl_display}}</span>
-		</div>
-		{{/discounts}}
-
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{i18n.subtotal}}</span>
-			<span>{{totals.subtotal_incl_display}}</span>
-		</div>
-
-		{{#tax_summary}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span>
-			<span>{{tax_amount_display}}</span>
-		</div>
-		{{/tax_summary}}
-
-		<!-- Total -->
-		<div style="display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; font-size: 18px; padding-top: 10px; border-top: 2px solid #333; margin-top: 10px;">
-			<span>{{i18n.total}}</span>
-			<span>{{totals.total_incl_display}}</span>
-		</div>
-	</div>
-
-	<!-- Divider -->
-	<div style="border-top: 1px solid #e2e2e2; margin: 20px 0;"></div>
-
-	<!-- Payments -->
-	<div style="margin-bottom: 20px;">
+	<!-- ── Payments ─────────────── -->
+	{{#payments.0}}
+	<div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
 		{{#payments}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;">
-			<span style="color: #555;">{{method_title}}</span>
-			<span>{{amount_display}}</span>
-		</div>
-		{{#tendered}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
-			<span style="padding-left: 8px;">{{i18n.tendered}}</span>
-			<span>{{tendered_display}}</span>
-		</div>
-		{{/tendered}}
-		{{#change}}
-		<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #888;">
-			<span style="padding-left: 8px;">{{i18n.change}}</span>
-			<span>{{change_display}}</span>
-		</div>
-		{{/change}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
+		{{#tendered}}<div style="font-size: 11px; color: #6b7280; padding-left: 4px; display: flex; justify-content: space-between;"><span>{{i18n.tendered}}</span><span style="font-variant-numeric: tabular-nums;">{{tendered_display}}</span></div>{{/tendered}}
+		{{#change}}<div style="font-size: 11px; color: #6b7280; padding-left: 4px; display: flex; justify-content: space-between;"><span>{{i18n.change}}</span><span style="font-variant-numeric: tabular-nums;">{{change_display}}</span></div>{{/change}}
 		{{/payments}}
 	</div>
+	{{/payments.0}}
 
-	<!-- Footer -->
+	<!-- ── Footer ─────────────── -->
+	<div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic;">
+		{{#store.personal_notes}}{{store.personal_notes}}{{/store.personal_notes}}
+		{{^store.personal_notes}}{{i18n.thank_you_purchase}}{{/store.personal_notes}}
+	</div>
 	{{#store.footer_imprint}}
-	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
-		{{store.footer_imprint}}
-	</div>
-	{{/store.footer_imprint}}
-	{{^store.footer_imprint}}
-	{{^customer.name}}
-	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
-		{{i18n.thank_you_purchase}}
-	</div>
-	{{/customer.name}}
-	{{#customer.name}}
-	<div style="text-align: center; margin-top: 24px; font-size: 13px; color: #999;">
-		Thank you, {{customer.name}}!
-	</div>
-	{{/customer.name}}
+	<div style="margin-top: 10px; text-align: center; font-size: 11px; color: #6b7280;">{{store.footer_imprint}}</div>
 	{{/store.footer_imprint}}
 
 </div>
