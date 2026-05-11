@@ -12,8 +12,7 @@ Sections, top to bottom:
   - Header — store logo, name, address, contact details and tax IDs,
     plus the order status badge, document title, order number and date.
   - Bill-to / Ship-to / Order — customer billing and shipping
-    addresses, customer tax IDs, cashier name, order status and
-    receipt print time.
+    addresses, customer tax IDs, cashier name and order status.
   - Items table — line items with variation attributes, SKU, quantity,
     unit price excl. tax, tax rate, tax amount, and line total incl.
     tax. Fees, shipping (with carrier / tracking meta) and discounts
@@ -30,7 +29,8 @@ Sections, top to bottom:
     number for scan-on-return.
   - Personal note — italic message centered at the bottom (falls back
     to "Thank you for your purchase").
-  - Terms & footer — store policies, opening hours and footer imprint.
+  - Terms & footer — store policies, footer imprint, opening hours
+    and receipt print time.
 
 To remove a section, delete the matching block. To restyle, edit the
 inline styles on the wrapping element.
@@ -109,9 +109,6 @@ inline styles on the wrapping element.
 				<span>{{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}</span>
 			</div>
 			{{/order.wc_status}}
-			{{#order.printed.datetime}}
-			<div style="display: flex; justify-content: space-between;"><span style="color: #6b7280;">{{i18n.printed}}</span><span>{{order.printed.datetime}}</span></div>
-			{{/order.printed.datetime}}
 		</div>
 	</div>
 
@@ -318,13 +315,24 @@ inline styles on the wrapping element.
 		<div>
 			{{#store.footer_imprint}}{{store.footer_imprint}}{{/store.footer_imprint}}
 		</div>
-		<div style="text-align: right;">
-			{{#store.opening_hours}}
+		{{#store.opening_hours}}
+		<div style="text-align: center;">
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.opening_hours}}</div>
 			<div style="color: #374151;">{{store.opening_hours}}</div>
-			{{/store.opening_hours}}
 			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
 		</div>
+		{{/store.opening_hours}}
+		{{^store.opening_hours}}{{#store.opening_hours_notes}}
+		<div style="text-align: center;">
+			<div>{{store.opening_hours_notes}}</div>
+		</div>
+		{{/store.opening_hours_notes}}{{/store.opening_hours}}
+		{{#order.printed.datetime}}
+		<div style="text-align: right;">
+			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.printed}}</div>
+			<div style="color: #374151;">{{order.printed.datetime}}</div>
+		</div>
+		{{/order.printed.datetime}}
 	</footer>
 
 </div>
