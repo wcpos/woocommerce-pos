@@ -94,16 +94,13 @@ Note: Logicless output passes through wp_kses_post, which strips
 	</table>
 
 	<!-- ── Totals (right-aligned, no per-rate breakdown) ─────────────── -->
-	<div style="display: grid; grid-template-columns: 1fr 280px; gap: 28px; margin-top: 20px;">
-		<div></div>
-		<div style="font-size: 13px;">
-			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
-			{{#tax_summary}}
-			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span><span style="font-variant-numeric: tabular-nums;">{{tax_amount_display}}</span></div>
-			{{/tax_summary}}
-			<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
-			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
-		</div>
+	<div style="margin-top: 20px; max-width: 280px; margin-left: auto; font-size: 13px;">
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
+		{{#totals.tax_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+		{{/totals.tax_total}}
+		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
 	</div>
 
 	<!-- ── Payments ─────────────── -->

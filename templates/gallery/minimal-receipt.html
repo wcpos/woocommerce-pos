@@ -31,9 +31,26 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</div>
 		{{/store.logo}}
 		<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em;">{{store.name}}</div>
+		{{#store.tax_ids}}
+		<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{#label}}{{label}} {{/label}}{{value}}</div>
+		{{/store.tax_ids}}
+		{{#store.address_lines.0}}
+		{{#store.phone}}
 		<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">
-			{{#store.address_lines}}{{.}} · {{/store.address_lines}}{{#store.phone}}{{store.phone}}{{/store.phone}}
+			{{#store.address_lines}}{{.}} · {{/store.address_lines}}{{store.phone}}
 		</div>
+		{{/store.phone}}
+		{{^store.phone}}
+		{{#store.address_lines}}
+		<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
+		{{/store.address_lines}}
+		{{/store.phone}}
+		{{/store.address_lines.0}}
+		{{^store.address_lines.0}}
+		{{#store.phone}}
+		<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{store.phone}}</div>
+		{{/store.phone}}
+		{{/store.address_lines.0}}
 	</div>
 
 	<!-- ── Order band: bold double border ─────────────── -->
@@ -43,7 +60,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			<strong>#{{order.number}}</strong>
 		</div>
 		<div style="color: #6b7280;">
-			{{order.created.datetime}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}
+			{{order.created.datetime}}{{#cashier.name}} · {{i18n.cashier}}: {{cashier.name}}{{/cashier.name}}{{#customer.name}} · {{i18n.customer}}: {{customer.name}}{{/customer.name}}
 		</div>
 	</div>
 
@@ -78,9 +95,9 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<!-- ── Totals (inline, right-aligned) ─────────────── -->
 	<div style="margin-top: 18px; max-width: 280px; margin-left: auto; font-size: 13px;">
 		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
-		{{#tax_summary}}
-		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</span><span style="font-variant-numeric: tabular-nums;">{{tax_amount_display}}</span></div>
-		{{/tax_summary}}
+		{{#totals.tax_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+		{{/totals.tax_total}}
 		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
 	</div>
@@ -88,10 +105,10 @@ Note: Logicless output passes through wp_kses_post, which strips
 	<!-- ── Payments (bordered band) ─────────────── -->
 	{{#payments.0}}
 	<div style="margin-top: 24px; padding: 14px 0; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
 		{{#payments}}
 		<div style="display: flex; justify-content: space-between; align-items: baseline;">
 			<div>
-				<span style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-right: 8px;">{{i18n.paid}}</span>
 				<strong>{{method_title}}</strong>
 			</div>
 			<div style="font-variant-numeric: tabular-nums;">{{amount_display}}</div>
