@@ -45,7 +45,9 @@ is_allowed_translation_version_pr() {
   changed_files="$(pr_diff_names)"
   [[ "$changed_files" == "$TRANSLATION_FILE" ]] || return 1
 
-  local changed_lines line added=0 removed=0
+  local changed_lines line version_line added=0 removed=0
+  local version_pattern="[0-9]{4}\.[0-9]+\.[0-9]+"
+  local version_line_pattern="^[[:space:]]*(const[[:space:]]+TRANSLATION_VERSION[[:space:]]*=[[:space:]]*'${version_pattern}'|\\\\?define\\([[:space:]]*__NAMESPACE__[[:space:]]*\\.[[:space:]]*'\\\\TRANSLATION_VERSION',[[:space:]]*'${version_pattern}'[[:space:]]*\\))[[:space:]]*;[[:space:]]*$"
   changed_lines="$({ pr_diff_patch || true; } | awk '
     /^diff --git / { next }
     /^index / { next }
@@ -62,11 +64,13 @@ is_allowed_translation_version_pr() {
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    if [[ "$line" == -*TRANSLATION_VERSION* ]]; then
-      [[ "$line" =~ [0-9]{4}\.[0-9]+\.[0-9]+ ]] || return 1
+    version_line="${line:1}"
+    if [[ "$line" == -* ]]; then
+      [[ "$version_line" =~ $version_line_pattern ]] || return 1
       removed=$((removed + 1))
-    elif [[ "$line" == +*TRANSLATION_VERSION* ]]; then
-      [[ "$line" == *"'$version'"* ]] || return 1
+    elif [[ "$line" == +* ]]; then
+      [[ "$version_line" =~ $version_line_pattern ]] || return 1
+      [[ "$version_line" == *"'$version'"* ]] || return 1
       added=$((added + 1))
     else
       log "Unexpected non-translation diff line: $line"
@@ -95,7 +99,7 @@ check_bucket() {
 
 bucket_is_pass() {
   local bucket="$1" state="$2"
-  [[ "$bucket" == "pass" || "$state" == "SUCCESS" || "$state" == "success" ]]
+  [[ "$bucket" == "pass" || "$bucket" == "skipping" || "$state" == "SUCCESS" || "$state" == "success" ]]
 }
 
 bucket_is_failure() {

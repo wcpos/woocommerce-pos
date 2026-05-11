@@ -102,6 +102,13 @@ translation_patch="diff --git a/${TEST_TRANSLATION_FILE} b/${TEST_TRANSLATION_FI
 -${TEST_OLD_TRANSLATION_LINE}
 +${TEST_NEW_TRANSLATION_LINE}"
 
+translation_extra_code_patch="diff --git a/${TEST_TRANSLATION_FILE} b/${TEST_TRANSLATION_FILE}
+--- a/${TEST_TRANSLATION_FILE}
++++ b/${TEST_TRANSLATION_FILE}
+@@ -1,3 +1,3 @@
+-${TEST_OLD_TRANSLATION_LINE}
++${TEST_NEW_TRANSLATION_LINE} eval('x');"
+
 pot_patch="diff --git a/${TEST_POT_FILE} b/${TEST_POT_FILE}
 --- a/${TEST_POT_FILE}
 +++ b/${TEST_POT_FILE}
@@ -129,6 +136,13 @@ run_case "invalid translation PR does not bypass CodeRabbit" fail \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE
 README.md" \
   MOCK_PATCH="$translation_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "translation version plus extra code does not bypass" fail \
+  PR_AUTHOR="translations-ci[bot]" \
+  PR_TITLE="chore: update translation version to 2026.5.6" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_extra_code_patch" \
   MOCK_CODERABBIT="missing"
 
 run_case "POT-only bypass" pass \
