@@ -156,6 +156,27 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test totals include item-count summaries.
+	 *
+	 * `totals.total_qty` and `totals.line_count` give packing-slip / kitchen-ticket
+	 * templates the per-order quantity summary they can't compute in Mustache.
+	 */
+	public function test_build_totals_include_item_count_summaries(): void {
+		$order   = OrderHelper::create_order();
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'total_qty', $payload['totals'] );
+		$this->assertArrayHasKey( 'line_count', $payload['totals'] );
+		$this->assertIsNumeric( $payload['totals']['total_qty'] );
+		$this->assertIsInt( $payload['totals']['line_count'] );
+
+		$expected_qty   = array_sum( array_column( $payload['lines'], 'qty' ) );
+		$expected_count = \count( $payload['lines'] );
+		$this->assertEquals( $expected_qty, $payload['totals']['total_qty'] );
+		$this->assertEquals( $expected_count, $payload['totals']['line_count'] );
+	}
+
+	/**
 	 * Test line items include tax inclusive and exclusive values.
 	 */
 	public function test_build_line_items_include_inclusive_and_exclusive_values(): void {

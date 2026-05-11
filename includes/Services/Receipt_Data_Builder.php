@@ -298,6 +298,11 @@ class Receipt_Data_Builder {
 		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
 		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
 
+		// Item count summaries — useful for packing slips and kitchen tickets
+		// where Mustache can't sum/count an array at render time.
+		$total_qty  = (float) array_sum( array_column( $lines, 'qty' ) );
+		$line_count = \count( $lines );
+
 		$tax_total = (float) $order->get_total_tax();
 		$total     = (float) $order->get_total();
 
@@ -325,6 +330,8 @@ class Receipt_Data_Builder {
 			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
 			'refund_total'         => $refund_total,
 			'net_total'            => $net_total,
+			'total_qty'            => $total_qty,
+			'line_count'           => $line_count,
 		);
 
 		$payments = array(

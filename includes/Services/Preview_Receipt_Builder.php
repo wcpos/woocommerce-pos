@@ -623,6 +623,11 @@ class Preview_Receipt_Builder {
 		$subtotal_excl = $lines_total_excl;
 		$subtotal_incl = $lines_total_incl;
 
+		// Item count summaries — matches the real builder's totals.total_qty
+		// / totals.line_count so preview mirrors the live receipt schema.
+		$total_qty  = (float) array_sum( array_column( $lines, 'qty' ) );
+		$line_count = \count( $lines );
+
 		// Taxable base: line items - discount + shipping + fee (all excl).
 		$taxable_excl = $subtotal_excl - $discount_excl + $shipping_excl + $fee_excl;
 		$total_tax    = round( $taxable_excl * $tax_rate / 100, $dp );
@@ -699,6 +704,8 @@ class Preview_Receipt_Builder {
 			'total_excl'    => $total_excl,
 			'paid_total'          => $total_incl,
 			'change_total'        => $change_total,
+			'total_qty'           => $total_qty,
+			'line_count'          => $line_count,
 		);
 
 		$taxable_amount_incl = $taxable_excl + $total_tax;
