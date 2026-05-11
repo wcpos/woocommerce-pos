@@ -44,11 +44,17 @@ Note: Logicless output passes through wp_kses_post, which strips
 			{{/store.tax_ids}}
 		</div>
 		<div style="flex: 0 0 auto; text-align: right;">
-			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{i18n.receipt}}</div>
+			{{#order.wc_status}}
+			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px;">
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{#order.status_label}}{{order.status_label}}{{/order.status_label}}{{^order.status_label}}{{order.wc_status}}{{/order.status_label}}
+			</div>
+			{{/order.wc_status}}
+			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
 			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
 			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
 			{{#cashier.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.cashier}}: {{cashier.name}}</div>{{/cashier.name}}
 			{{#customer.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.customer}}: {{customer.name}}</div>{{/customer.name}}
+			{{#customer.tax_ids}}<div style="color: #6b7280; font-size: 11px; margin-top: 2px;">{{#label}}{{label}} {{/label}}{{value}}</div>{{/customer.tax_ids}}
 		</div>
 	</header>
 
@@ -93,7 +99,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</tbody>
 	</table>
 
-	<!-- ── Totals (right-aligned, no per-rate breakdown) ─────────────── -->
+	<!-- ── Totals (right-aligned) ─────────────── -->
 	<div style="margin-top: 20px; max-width: 280px; margin-left: auto; font-size: 13px;">
 		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
 		{{#totals.tax_total}}
@@ -101,7 +107,35 @@ Note: Logicless output passes through wp_kses_post, which strips
 		{{/totals.tax_total}}
 		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
+		{{#totals.refund_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; color: #b91c1c;"><span>{{i18n.refunded}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.refund_total_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; font-weight: 600; border-top: 1px solid #e5e7eb;"><span>{{i18n.net_total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.net_total_display}}</span></div>
+		{{/totals.refund_total}}
 	</div>
+
+	<!-- ── Refunds summary (only when refunds present) ─────────────── -->
+	{{#refunds.0}}
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.returned_items}}</div>
+		{{#refunds}}
+		<div style="display: flex; justify-content: space-between; gap: 12px; padding: 4px 0;">
+			<div>
+				<strong>#{{id}}</strong>{{#date.datetime}} <span style="color: #6b7280; font-size: 11px;">· {{date.datetime}}</span>{{/date.datetime}}
+				{{#reason}}<div style="color: #6b7280; font-size: 11px;">{{reason}}</div>{{/reason}}
+			</div>
+			<div style="font-variant-numeric: tabular-nums; font-weight: 700;">{{amount_display}}</div>
+		</div>
+		{{/refunds}}
+	</div>
+	{{/refunds.0}}
+
+	<!-- ── Customer note (only when present) ─────────────── -->
+	{{#order.customer_note}}
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.customer_note}}</div>
+		<div style="color: #92400e; white-space: pre-wrap;">{{order.customer_note}}</div>
+	</div>
+	{{/order.customer_note}}
 
 	<!-- ── Payments ─────────────── -->
 	{{#payments.0}}
