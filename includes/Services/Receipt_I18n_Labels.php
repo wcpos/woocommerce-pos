@@ -164,6 +164,7 @@ class Receipt_I18n_Labels {
 			'grand_total_incl_tax'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
 			'tax'                    => /* translators: Standalone label used in printed receipt templates. */ __( 'Tax', 'woocommerce-pos' ),
 			'paid'                   => /* translators: Standalone label used in printed receipt templates. */ __( 'Paid', 'woocommerce-pos' ),
+			'paid_via'               => /* translators: Label prefix used before a payment method in printed receipt templates. */ __( 'Paid via', 'woocommerce-pos' ),
 			'tendered'               => /* translators: Standalone label used in printed receipt templates. */ __( 'Tendered', 'woocommerce-pos' ),
 			'change'                 => /* translators: Standalone label used in printed receipt templates. */ __( 'Change', 'woocommerce-pos' ),
 

@@ -188,14 +188,16 @@ Note: Logicless output passes through wp_kses_post, which strips
 	</div>
 
 	<!-- ── Payments (only when present) ─────────────── -->
+	{{^order.needs_payment}}
 	{{#payments.0}}
 	<div style="margin-bottom: 18px; padding: 14px 18px; border: 1px solid #e5e7eb; border-radius: 8px;">
 		<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 8px;">{{i18n.paid}}</div>
 		{{#payments}}
-		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px;"><span>Paid via {{method_title}}{{#transaction_id}} <span style="color: #6b7280; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">{{transaction_id}}</span>{{/transaction_id}}</span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px;"><span>{{i18n.paid_via}} {{method_title}}{{#transaction_id}} <span style="color: #6b7280; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">{{transaction_id}}</span>{{/transaction_id}}</span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
 		{{/payments}}
 	</div>
 	{{/payments.0}}
+	{{/order.needs_payment}}
 
 	<!-- ── How to pay (only when order needs payment) ─────────────── -->
 	{{#order.needs_payment}}

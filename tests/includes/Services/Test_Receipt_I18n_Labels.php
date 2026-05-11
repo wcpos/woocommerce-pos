@@ -34,6 +34,7 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'total', $labels );
 		$this->assertArrayHasKey( 'tendered', $labels );
 		$this->assertArrayHasKey( 'change', $labels );
+		$this->assertArrayHasKey( 'paid_via', $labels );
 	}
 
 	/**
