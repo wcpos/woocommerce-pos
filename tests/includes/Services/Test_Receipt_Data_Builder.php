@@ -619,6 +619,70 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Build an order with a non-zero total and a given status — WC's
+	 * needs_payment() requires both `total > 0` and a valid status, so the
+	 * empty-order helper isn't enough to exercise the new field.
+	 *
+	 * @param string $status WC order status (e.g. 'pending', 'completed').
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_order_with_total( string $status ): \WC_Order {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Test Product' );
+		$product->set_regular_price( '12.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->set_status( $status );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Test order.needs_payment is true when the order is in a status that needs payment.
+	 */
+	public function test_build_order_needs_payment_is_true_for_pending_order(): void {
+		$order = $this->create_order_with_total( 'pending' );
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'needs_payment', $payload['order'] );
+		$this->assertTrue( $payload['order']['needs_payment'] );
+	}
+
+	/**
+	 * Test order.needs_payment is false when the order is in a status that does not need payment.
+	 */
+	public function test_build_order_needs_payment_is_false_for_completed_order(): void {
+		$order = $this->create_order_with_total( 'completed' );
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'needs_payment', $payload['order'] );
+		$this->assertFalse( $payload['order']['needs_payment'] );
+	}
+
+	/**
+	 * Test order.payment_url is the WC order-pay URL and is populated regardless of status.
+	 */
+	public function test_build_order_payment_url_is_wc_checkout_payment_url(): void {
+		$order = $this->create_order_with_total( 'pending' );
+
+		$payload = $this->builder->build( $order, 'live' );
+
+		$this->assertArrayHasKey( 'payment_url', $payload['order'] );
+		$this->assertSame( $order->get_checkout_payment_url(), $payload['order']['payment_url'] );
+		// The order-pay endpoint always tacks on the pay_for_order flag and the
+		// order's payment key — without these the WC checkout-pay handler 404s.
+		$this->assertStringContainsString( 'pay_for_order=true', $payload['order']['payment_url'] );
+		$this->assertStringContainsString( 'key=' . $order->get_order_key(), $payload['order']['payment_url'] );
+	}
+
+	/**
 	 * Test legacy string opening hours remain available in live receipt payloads.
 	 */
 	public function test_build_preserves_legacy_string_opening_hours_without_notes_getter(): void {

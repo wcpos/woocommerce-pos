@@ -1,7 +1,7 @@
 {
     "key": "invoice",
     "title": "Invoice",
-    "description": "Full-page A4/Letter layout with company header, billing/shipping addresses, and detailed line items.",
+    "description": "Full-page A4/Letter invoice with bill-to/ship-to addresses, an itemised products table, and an optional \"How to pay\" panel (bank transfer + QR-encoded order-pay URL) shown when the order still needs payment.",
     "type": "receipt",
     "category": "invoice",
     "engine": "logicless",

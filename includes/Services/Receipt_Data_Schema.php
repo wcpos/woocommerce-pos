@@ -293,6 +293,14 @@ class Receipt_Data_Schema {
 						'type'  => 'string',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Created Via', 'woocommerce-pos' ),
 					),
+					'needs_payment' => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Needs Payment', 'woocommerce-pos' ),
+					),
+					'payment_url'  => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Payment URL', 'woocommerce-pos' ),
+					),
 				),
 			),
 			'order.created' => array(
@@ -1374,6 +1382,8 @@ class Receipt_Data_Schema {
 				'paid'          => $paid,
 				'completed'     => $completed,
 				'printed'       => $printed,
+				'needs_payment' => false,
+				'payment_url'   => '',
 			),
 			'store'   => array(
 				'id'                      => 1,
