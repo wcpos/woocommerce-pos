@@ -12,7 +12,10 @@ on:
       - ".github/scripts/get-woocommerce-stable-version.sh"
       - ".github/scripts/merge-gate.sh"
       - ".github/scripts/test-merge-gate.sh"
+      - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/merge-gate.yml"
+      - ".github/workflows/tests-js.yml"
       - ".github/workflows/tests-php.yml"
   pull_request:
     branches:
@@ -45,7 +48,10 @@ jobs:
               - '.github/scripts/get-woocommerce-stable-version.sh'
               - '.github/scripts/merge-gate.sh'
               - '.github/scripts/test-merge-gate.sh'
+              - '.github/scripts/test-push-js-strings.sh'
+              - '.github/workflows/push-js-strings.yml'
               - '.github/workflows/merge-gate.yml'
+              - '.github/workflows/tests-js.yml'
               - '.github/workflows/tests-php.yml'
 
       - name: Detect translation-version-only PR

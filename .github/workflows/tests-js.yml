@@ -10,6 +10,9 @@ on:
       - "**.js"
       - "**.jsx"
       - "package.json"
+      - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   pull_request:
     branches:
@@ -20,6 +23,9 @@ on:
       - "**.js"
       - "**.jsx"
       - "package.json"
+      - "packages/*/src/translations/locales/en/*.json"
+      - ".github/scripts/test-push-js-strings.sh"
+      - ".github/workflows/push-js-strings.yml"
       - ".github/workflows/tests-js.yml"
   workflow_dispatch:
 
@@ -35,6 +41,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate JS translation workflow
+        run: bash .github/scripts/test-push-js-strings.sh
 
       - name: Setup pnpm
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
