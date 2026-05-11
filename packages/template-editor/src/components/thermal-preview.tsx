@@ -1,3 +1,5 @@
+import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
+
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
 import { PreviewSkeleton } from './preview-skeleton';
@@ -8,16 +10,31 @@ interface ThermalPreviewProps {
 	sampleData: Record<string, unknown>;
 	loading?: boolean;
 	sourcePicker?: ReactNode;
+	paperWidth?: string | null;
 }
 
-export function ThermalPreview({ content, sampleData, loading, sourcePicker }: ThermalPreviewProps) {
-	const renderedHtml = useThermalPreview(content, sampleData);
+interface BuildThermalPreviewSrcDocOptions {
+	content: string;
+	sampleData: Record<string, unknown>;
+	paperWidth?: string | null;
+	bodyHtml?: string;
+}
 
-	const srcdoc = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:24px;background:#f5f5f5;display:flex;justify-content:center;">${renderedHtml}</body>
-</html>`;
+export function buildThermalPreviewSrcDoc({ content, sampleData, paperWidth, bodyHtml }: BuildThermalPreviewSrcDocOptions): string {
+	return buildPreviewFrameHtml({
+		bodyHtml: bodyHtml ?? renderThermalPreview(content, sampleData),
+		paperWidth: paperWidth ?? inferPaperWidthFromXml(content),
+	});
+}
+
+export function ThermalPreview({ content, sampleData, loading, sourcePicker, paperWidth }: ThermalPreviewProps) {
+	const renderedHtml = useThermalPreview(content, sampleData);
+	const srcdoc = buildThermalPreviewSrcDoc({
+		content,
+		sampleData,
+		paperWidth,
+		bodyHtml: renderedHtml,
+	});
 
 	return (
 		<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
@@ -36,7 +53,7 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker }: T
 						sandbox="allow-same-origin"
 						style={{
 							width: '100%',
-							maxWidth: 420,
+							maxWidth: 520,
 							border: 'none',
 							background: '#f5f5f5',
 							minHeight: 400,
@@ -47,4 +64,12 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker }: T
 			</div>
 		</div>
 	);
+}
+
+function inferPaperWidthFromXml(content: string): string | null {
+	const match = content.match(/<receipt\b[^>]*\bpaper-width=["']?(32|42|48|58mm|80mm)/i);
+	const value = match?.[1]?.toLowerCase();
+	if (value === '32' || value === '58mm') return '58mm';
+	if (value === '42' || value === '48' || value === '80mm') return '80mm';
+	return null;
 }
