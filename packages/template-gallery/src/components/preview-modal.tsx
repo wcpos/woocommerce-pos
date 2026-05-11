@@ -214,9 +214,7 @@ export function PreviewModal({
 						/>
 					) : preview?.preview_html ? (
 						<iframe
-							srcDoc={isFullHtmlDocument(preview.preview_html)
-								? preview.preview_html
-								: buildPreviewFrameHtml({ bodyHtml: preview.preview_html, paperWidth: preview.paper_width })}
+							srcDoc={buildPreviewModalSrcDoc(preview)}
 							title={t('modal.preview_title', { templateName })}
 							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							sandbox="allow-same-origin"

@@ -115,7 +115,7 @@ function safeInteger(value: unknown, fallback: number, min: number, max: number)
 function intAttr(el: Element, name: string, fallback: number): number {
 	const raw = el.getAttribute(name);
 	if (raw == null) return fallback;
-	return safeInteger(raw, fallback, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+	return safeInteger(raw, fallback, 0, Number.MAX_SAFE_INTEGER);
 }
 
 function enumAttr<T extends string>(
@@ -283,9 +283,16 @@ function escapeHtml(str: string): string {
 function safeImageSrc(src: string): string {
 	const trimmed = src.trim();
 	if (!trimmed) return '';
-	const normalized = trimmed.replace(/[\u0000-\u001F\u007F\s]+/g, '').toLowerCase();
-	if (normalized.startsWith('javascript:') || normalized.startsWith('data:text/html')) return '';
-	return escapeHtml(trimmed);
+	const cleaned = trimmed.replace(/[\u0000-\u001F\u007F\s]+/g, '');
+	const normalized = cleaned.toLowerCase();
+	const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(cleaned);
+	const allowedAbsolute =
+		normalized.startsWith('http://') ||
+		normalized.startsWith('https://') ||
+		normalized.startsWith('data:image/');
+	const allowedRelative = !hasScheme && !normalized.startsWith('//');
+	if (!allowedAbsolute && !allowedRelative) return '';
+	return escapeHtml(cleaned);
 }
 
 function dotsToCh(dots: number, paperWidthChars: number): number {

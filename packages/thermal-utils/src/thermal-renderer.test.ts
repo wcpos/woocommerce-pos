@@ -6,7 +6,11 @@ import { renderThermalPreview } from './thermal-renderer';
 function root(html: string): HTMLElement {
 	const div = document.createElement('div');
 	div.innerHTML = html;
-	return div.firstElementChild as HTMLElement;
+	const first = div.firstElementChild;
+	if (!first) {
+		throw new Error('renderThermalPreview returned no root element');
+	}
+	return first as HTMLElement;
 }
 
 describe('renderThermalPreview canonical parity', () => {
@@ -30,6 +34,26 @@ describe('renderThermalPreview canonical parity', () => {
 
 		expect(root(html).style.width).toBe('48ch');
 		expect(html).toContain('16.67ch');
+
+		const htmlWhitespacePaperWidth = renderThermalPreview(
+			'<receipt paper-width=" "><image src="https://example.test/logo.png" width=" "/></receipt>',
+			{},
+		);
+
+		expect(root(htmlWhitespacePaperWidth).style.width).toBe('48ch');
+	});
+
+	it('clamps negative numeric attributes to non-negative CSS values', () => {
+		const html = renderThermalPreview(
+			'<receipt><size width="-2">Hidden</size><feed lines="-3"/></receipt>',
+			{},
+		);
+		const receipt = root(html);
+		const size = receipt.querySelector('span') as HTMLSpanElement;
+		const feed = receipt.querySelector('div') as HTMLDivElement;
+
+		expect(size.style.fontSize).toBe('0em');
+		expect(feed.style.height).toBe('0em');
 	});
 
 	it('renders single, dashed, dotted, and double divider styles', () => {
@@ -58,15 +82,28 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).not.toContain('max-width: 200px');
 	});
 
-	it('drops unsafe image URLs instead of embedding javascript/data protocols', () => {
+	it('allows relative, http, https, and data image URLs', () => {
 		const html = renderThermalPreview(
-			'<receipt><image src="javascript:alert(1)" width="200"/><image src="data:text/html,evil" width="200"/></receipt>',
+			'<receipt><image src="/logo.png" width="200"/><image src="http://example.test/logo.png" width="200"/><image src="https://example.test/logo.png" width="200"/><image src="data:image/png;base64,aaaa" width="200"/></receipt>',
+			{},
+		);
+		const images = root(html).querySelectorAll('img');
+
+		expect(Array.from(images).map((image) => image.getAttribute('src'))).toEqual([
+			'/logo.png',
+			'http://example.test/logo.png',
+			'https://example.test/logo.png',
+			'data:image/png;base64,aaaa',
+		]);
+	});
+
+	it('drops unsafe image URLs instead of rendering image elements', () => {
+		const html = renderThermalPreview(
+			'<receipt><image src="javascript:alert(1)" width="200"/><image src="data:text/html,evil" width="200"/><image src="vbscript:msgbox(1)" width="200"/><image src="ftp://example.test/logo.png" width="200"/><image src="//example.test/logo.png" width="200"/></receipt>',
 			{},
 		);
 
-		expect(html).not.toContain('<img');
-		expect(html).not.toContain('javascript:');
-		expect(html).not.toContain('data:text/html');
+		expect(root(html).querySelectorAll('img')).toHaveLength(0);
 	});
 
 	it('renders barcode errors with diagnostic text rather than console warnings', () => {

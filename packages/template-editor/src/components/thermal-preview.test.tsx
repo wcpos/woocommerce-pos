@@ -14,4 +14,22 @@ describe('buildThermalPreviewSrcDoc', () => {
 		expect(srcDoc).toContain('width:58mm');
 		expect(srcDoc).toContain('Test receipt');
 	});
+
+	it('infers quoted paper widths with whitespace around the attribute separator', () => {
+		const srcDoc = buildThermalPreviewSrcDoc({
+			content: '<receipt paper-width = "58"><text>Test receipt</text></receipt>',
+			sampleData: {},
+		});
+
+		expect(srcDoc).toContain('width:58mm');
+	});
+
+	it('does not infer paper width from partial numeric prefixes', () => {
+		const srcDoc = buildThermalPreviewSrcDoc({
+			content: '<receipt paper-width="58wide"><text>Test receipt</text></receipt>',
+			sampleData: {},
+		});
+
+		expect(srcDoc).toContain('width:210mm');
+	});
 });

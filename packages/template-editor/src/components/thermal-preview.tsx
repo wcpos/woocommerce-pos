@@ -67,9 +67,9 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker, pap
 }
 
 function inferPaperWidthFromXml(content: string): string | null {
-	const match = content.match(/<receipt\b[^>]*\bpaper-width=["']?(32|42|48|58mm|80mm)/i);
-	const value = match?.[1]?.toLowerCase();
-	if (value === '32' || value === '58mm') return '58mm';
-	if (value === '42' || value === '48' || value === '80mm') return '80mm';
+	const match = content.match(/<receipt\b[^>]*\bpaper-width\s*=\s*(["'])(32|42|48|58|80)(?:mm)?\1/i);
+	const value = match?.[2]?.toLowerCase();
+	if (value === '32' || value === '58') return '58mm';
+	if (value === '42' || value === '48' || value === '80') return '80mm';
 	return null;
 }
