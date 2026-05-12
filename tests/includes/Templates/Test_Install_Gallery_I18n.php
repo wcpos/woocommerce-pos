@@ -52,34 +52,14 @@ class Test_Install_Gallery_I18n extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that install_gallery_template persists translated interpolated phrases.
+	 * Test that removed gallery templates cannot be installed.
 	 *
 	 * @return void
 	 */
-	public function test_install_gallery_template_translates_interpolated_phrases(): void {
-		// Force a non-English translation so we can verify install-time wiring.
-		$filter = function ( $translation, $text ) {
-			if ( 'Paid via %s' === $text ) {
-				return 'Payé via %s';
-			}
-			return $translation;
-		};
-		add_filter( 'gettext', $filter, 10, 2 );
-
+	public function test_install_gallery_template_rejects_removed_template(): void {
 		$result = Templates::install_gallery_template( 'tax-invoice' );
 
-		remove_filter( 'gettext', $filter, 10 );
-
-		$this->assertIsInt( $result, 'install_gallery_template should return a post ID.' );
-
-		$post = get_post( $result );
-		$this->assertNotNull( $post, 'Installed template post should exist.' );
-
-		// The tax invoice template contains "Paid via {{method_title}}" which should be translated.
-		$this->assertStringContainsString( 'Payé via', $post->post_content, 'Installed template content must contain translated phrase.' );
-		$this->assertStringContainsString( '{{method_title}}', $post->post_content, 'Installed template must preserve Mustache placeholders.' );
-
-		// Clean up.
-		wp_delete_post( $result, true );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'invalid_gallery_key', $result->get_error_code() );
 	}
 }

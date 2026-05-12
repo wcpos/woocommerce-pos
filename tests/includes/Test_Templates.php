@@ -461,6 +461,19 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertFalse( Templates::is_active_template( $post_id, 'receipt' ) );
 	}
 
+
+	/**
+	 * Test legacy PHP starter templates are no longer registered.
+	 */
+	public function test_legacy_php_starter_templates_are_not_registered(): void {
+		$starters = Templates::get_starter_templates();
+		$keys     = array_keys( $starters );
+
+		$this->assertNotContains( 'gift-receipt', $keys );
+		$this->assertNotContains( 'minimal-receipt', $keys );
+		$this->assertNotContains( 'thermal-receipt', $keys );
+	}
+
 	/**
 	 * Test that template category taxonomy exists.
 	 */
