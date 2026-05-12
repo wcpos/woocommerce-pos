@@ -18,8 +18,6 @@ function getEngineLabel(engine: EditorConfig['engine']): string {
 export function EditorStatusLine({ engine, line, col, lineCount, saved }: EditorStatusLineProps) {
 	return (
 		<div
-			role="status"
-			aria-live="polite"
 			className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:px-3 wcpos:py-1.5 wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:tabular-nums"
 		>
 			<span>{getEngineLabel(engine)}</span>
@@ -32,7 +30,12 @@ export function EditorStatusLine({ engine, line, col, lineCount, saved }: Editor
 					className={saved ? 'wcpos:w-1.5 wcpos:h-1.5 wcpos:rounded-full wcpos:bg-green-500' : 'wcpos:w-1.5 wcpos:h-1.5 wcpos:rounded-full wcpos:bg-amber-500'}
 					aria-hidden="true"
 				/>
-				<span className={saved ? 'wcpos:text-green-700' : 'wcpos:text-amber-700'}>
+				<span
+					role="status"
+					aria-live="polite"
+					aria-atomic="true"
+					className={saved ? 'wcpos:text-green-700' : 'wcpos:text-amber-700'}
+				>
 					{saved ? t('editor.status.saved') : t('editor.status.unsaved')}
 				</span>
 			</span>

@@ -19,14 +19,14 @@ interface ToolButtonProps {
 	children: React.ReactNode;
 }
 
-function ToolButton({ label, onClick, pressed = false, children }: ToolButtonProps) {
+function ToolButton({ label, onClick, pressed, children }: ToolButtonProps) {
 	return (
 		<Tooltip text={label}>
 			<button
 				type="button"
 				onClick={onClick}
 				aria-label={label}
-				aria-pressed={pressed}
+				aria-pressed={typeof pressed === 'boolean' ? pressed : undefined}
 				className={[
 					'wcpos:inline-flex wcpos:items-center wcpos:justify-center',
 					'wcpos:w-7 wcpos:h-7 wcpos:rounded wcpos:border-0 wcpos:cursor-pointer',

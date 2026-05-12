@@ -54,6 +54,14 @@ describe('mustacheSectionMatcher helpers', () => {
 		expect(findEnclosingPair(tags, 14)).toBeNull();
 	});
 
+	it('uses half-open bounds when checking whether the cursor is on a tag', () => {
+		const text = '{{#a}}x{{/a}}';
+		const tags = readTagsFromText(text);
+
+		expect(findEnclosingPair(tags, tags[0].to)).toBeNull();
+		expect(findEnclosingPair(tags, tags[1].from)).not.toBeNull();
+	});
+
 	it('returns null when a section has no matching close', () => {
 		const text = '{{#unclosed}}\n{{name}}';
 		const tags = readTagsFromText(text);

@@ -42,7 +42,7 @@ function readAllTags(state: EditorState): SectionTag[] {
 }
 
 export function findEnclosingPair(tags: SectionTag[], cursor: number): [SectionTag, SectionTag] | null {
-	const cursorTag = tags.find((tag) => cursor >= tag.from && cursor <= tag.to);
+	const cursorTag = tags.find((tag) => cursor >= tag.from && cursor < tag.to);
 	if (!cursorTag) return null;
 
 	if (cursorTag.kind === '#' || cursorTag.kind === '^') {
