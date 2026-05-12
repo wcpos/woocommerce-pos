@@ -31,10 +31,23 @@ describe('buildPreviewFrameHtml', () => {
 		expect(html).toContain('width:58mm');
 	});
 
-	it('uses A4 sizing for html/default previews', () => {
+	it('uses A4 physical dimensions without shrinking to iframe width', () => {
 		const html = buildPreviewFrameHtml({ bodyHtml: '<main>Invoice</main>', paperWidth: null });
 
 		expect(html).toContain('width:210mm');
-		expect(html).toContain('<main>Invoice</main>');
+		expect(html).toContain('min-height:297mm');
+		expect(html).not.toContain('max-width:100%');
+		expect(html).not.toContain('max-width: 100%');
+	});
+
+	it('keeps preview chrome CSS scoped away from template content', () => {
+		const html = buildPreviewFrameHtml({
+			bodyHtml: '<section style="display:flex;justify-content:space-between"><span>A</span><span>B</span></section>',
+			paperWidth: 'a4',
+		});
+
+		expect(html).toContain('overflow:auto');
+		expect(html).not.toContain('*{box-sizing:border-box;}');
+		expect(html).toContain('display:flex;justify-content:space-between');
 	});
 });

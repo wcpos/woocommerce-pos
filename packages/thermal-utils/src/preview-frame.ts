@@ -23,11 +23,11 @@ export function buildPreviewFrameHtml({ bodyHtml, paperWidth }: BuildPreviewFram
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 html,body{margin:0;padding:0;background:#f5f5f5;color:#000;}
-*{box-sizing:border-box;}
-body{min-height:100vh;padding:24px;display:flex;justify-content:center;align-items:flex-start;}
-.wcpos-preview-paper{width:${paperWidthCss};min-height:${paperMinHeight};max-width:100%;background:#fff;color:#000;}
+body{min-height:100vh;padding:24px;overflow:auto;}
+.wcpos-preview-viewport{min-width:max-content;display:flex;justify-content:center;align-items:flex-start;}
+.wcpos-preview-paper{width:${paperWidthCss};min-height:${paperMinHeight};background:#fff;color:#000;}
 </style>
 </head>
-<body><div class="wcpos-preview-paper">${bodyHtml}</div></body>
+<body><div class="wcpos-preview-viewport"><div class="wcpos-preview-paper">${bodyHtml}</div></div></body>
 </html>`;
 }
