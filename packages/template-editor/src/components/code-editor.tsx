@@ -1,6 +1,8 @@
-import { useLayoutEffect } from 'react';
-import { useCodemirror } from '../hooks/use-codemirror';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCodemirror, type CursorInfo } from '../hooks/use-codemirror';
 import type { EditorConfig } from '../types';
+import { EditorToolbar } from './editor-toolbar';
+import { EditorStatusLine } from './editor-status-line';
 
 interface CodeEditorProps {
 	initialDoc: string;
@@ -9,11 +11,31 @@ interface CodeEditorProps {
 	onInsertRef?: React.MutableRefObject<((text: string) => void) | null>;
 }
 
+const UNSAVED_SETTLE_MS = 800;
+
 export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEditorProps) {
-	const { containerRef, insertAtCursor } = useCodemirror({
+	const [wrap, setWrap] = useState(true);
+	const [cursor, setCursor] = useState<CursorInfo>({ line: 1, col: 1, lineCount: 1 });
+	const [unsaved, setUnsaved] = useState(false);
+	const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	const handleChange = useCallback((content: string) => {
+		onChange(content);
+		setUnsaved(true);
+		if (settleTimer.current) clearTimeout(settleTimer.current);
+		settleTimer.current = setTimeout(() => setUnsaved(false), UNSAVED_SETTLE_MS);
+	}, [onChange]);
+
+	useEffect(() => () => {
+		if (settleTimer.current) clearTimeout(settleTimer.current);
+	}, []);
+
+	const { containerRef, viewRef, insertAtCursor } = useCodemirror({
 		initialDoc,
 		engine,
-		onChange,
+		wrap,
+		onChange: handleChange,
+		onCursorChange: setCursor,
 	});
 
 	useLayoutEffect(() => {
@@ -22,11 +44,23 @@ export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEd
 		}
 	}, [onInsertRef, insertAtCursor]);
 
+	const toggleWrap = useCallback(() => setWrap((current) => !current), []);
+
 	return (
-		<div
-			ref={containerRef}
-			className="wcpos:flex-1 wcpos:min-w-0 wcpos:overflow-auto"
-			style={{ minHeight: 300, maxHeight: 600 }}
-		/>
+		<div className="wcpos:flex-1 wcpos:min-w-0 wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:rounded-lg wcpos:overflow-hidden wcpos:bg-white">
+			<EditorToolbar viewRef={viewRef} wrap={wrap} onToggleWrap={toggleWrap} />
+			<div
+				ref={containerRef}
+				className="wcpos:flex-1 wcpos:min-w-0 wcpos:overflow-auto"
+				style={{ minHeight: 360, maxHeight: 'calc(100vh - 380px)' }}
+			/>
+			<EditorStatusLine
+				engine={engine}
+				line={cursor.line}
+				col={cursor.col}
+				lineCount={cursor.lineCount}
+				saved={!unsaved}
+			/>
+		</div>
 	);
 }
