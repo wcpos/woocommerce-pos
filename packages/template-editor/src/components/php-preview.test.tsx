@@ -8,6 +8,7 @@ import {
 	PhpPreview,
 	decodeLabel,
 	getPhpPreviewFrame,
+	getPhpPreviewIframeStyle,
 	getPhpPreviewRequestUrl,
 } from './php-preview';
 
@@ -66,15 +67,35 @@ describe('PhpPreview', () => {
 		expect(markup).not.toContain('Save &amp;amp; Preview');
 	});
 
-	it('uses preview_html as iframe srcDoc instead of iframing the REST JSON endpoint', () => {
-		expect(getPhpPreviewFrame({ preview_html: '<p>Preview HTML</p>' })).toEqual({
-			src: null,
-			srcDoc: '<p>Preview HTML</p>',
-		});
-		expect(getPhpPreviewFrame({ preview_url: 'https://example.test/receipt/1' })).toEqual({
-			src: 'https://example.test/receipt/1',
+	it('wraps partial preview_html in the shared A4 frame', () => {
+		const frame = getPhpPreviewFrame({ preview_html: '<p>Preview HTML</p>' });
+
+		expect(frame.src).toBeNull();
+		expect(frame.srcDoc).toContain('wcpos-preview-paper');
+		expect(frame.srcDoc).toContain('width:210mm');
+		expect(frame.srcDoc).toContain('<p>Preview HTML</p>');
+	});
+
+	it('does not wrap full HTML documents returned by PHP previews', () => {
+		const html = '<!DOCTYPE html><html><body><main>Full document</main></body></html>';
+		const frame = getPhpPreviewFrame({ preview_html: html });
+
+		expect(frame.srcDoc).toBe(html);
+	});
+
+	it('uses preview_url as iframe src when no preview_html exists', () => {
+		expect(getPhpPreviewFrame({ preview_url: 'https://example.test/preview' })).toEqual({
+			src: 'https://example.test/preview',
 			srcDoc: null,
 		});
+	});
+
+	it('fills the preview panel without max-width cap', () => {
+		const style = getPhpPreviewIframeStyle();
+
+		expect(style.width).toBe('100%');
+		expect(style.maxWidth).toBeUndefined();
+		expect(style.minHeight).toBe(400);
 	});
 
 	it('renders preview failure fallback when the REST preview request fails', async () => {
