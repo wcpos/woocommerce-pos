@@ -1,7 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import * as React from 'react';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildPreviewModalSrcDoc } from '../components/preview-modal';
+import { buildPreviewModalSrcDoc, PreviewModal } from '../components/preview-modal';
+import { usePreview } from '../hooks/use-preview';
 import type { PreviewResponse } from '../types';
+
+vi.mock('../hooks/use-preview', () => ({
+	usePreview: vi.fn(),
+}));
+
+const usePreviewMock = vi.mocked(usePreview);
+const mountedRoots: Root[] = [];
+
+afterEach(() => {
+	for (const root of mountedRoots) {
+		root.unmount();
+	}
+	mountedRoots.length = 0;
+	document.body.innerHTML = '';
+	vi.clearAllMocks();
+});
 
 describe('PreviewModal logicless previews', () => {
 	it('renders template_content with receipt_data instead of sanitized preview_html', () => {
@@ -22,6 +42,22 @@ describe('PreviewModal logicless previews', () => {
 		expect(srcDoc).not.toContain('style="justify-content:space-between"');
 		expect(srcDoc).toContain('Subtotal (sin impuestos)');
 		expect(srcDoc).toContain('15,00 $');
+	});
+
+	it('preserves the legacy translation helper for client-rendered logicless previews', () => {
+		const preview: PreviewResponse = {
+			engine: 'logicless',
+			template_content: '<p>{{#t}}Translated label{{/t}}</p>',
+			receipt_data: {},
+			preview_html: '<p>Translated label</p>',
+			order_id: 0,
+			template_id: 'invoice',
+		};
+
+		const srcDoc = buildPreviewModalSrcDoc(preview);
+
+		expect(srcDoc).toContain('<p>Translated label</p>');
+		expect(srcDoc).not.toContain('{{#t}}');
 	});
 
 	it('wraps preview_html fallback when source template data is missing', () => {
@@ -49,5 +85,39 @@ describe('PreviewModal logicless previews', () => {
 		};
 
 		expect(buildPreviewModalSrcDoc(preview)).toBe(fullHtml);
+	});
+
+	it('wraps legacy partial preview_html in the modal iframe fallback', async () => {
+		usePreviewMock.mockReturnValue({
+			data: {
+				engine: 'legacy-php',
+				preview_html: '<main>Legacy fallback</main>',
+				order_id: 0,
+				template_id: 'legacy',
+			},
+			isLoading: false,
+			isFetching: false,
+			isError: false,
+		} as ReturnType<typeof usePreview>);
+
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PreviewModal
+					templateId="legacy"
+					templateName="Legacy"
+					isGallery
+					onClose={() => {}}
+				/>,
+			);
+		});
+
+		const iframe = container.querySelector('iframe');
+		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
+		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 	});
 });

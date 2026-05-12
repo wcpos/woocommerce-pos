@@ -28,7 +28,10 @@ function buildRenderedPreviewFrame(preview: PreviewResponse): string {
 
 	if (preview.engine === 'logicless' && preview.template_content && preview.receipt_data) {
 		return buildPreviewFrameHtml({
-			bodyHtml: renderLogiclessPreview(preview.template_content, preview.receipt_data),
+			bodyHtml: renderLogiclessPreview(preview.template_content, {
+				t: true,
+				...preview.receipt_data,
+			}),
 			paperWidth: 'a4',
 		});
 	}
@@ -221,7 +224,7 @@ export function PreviewModal({
 						<PreviewFrameContent preview={preview} templateName={templateName} />
 					) : preview?.preview_html ? (
 						<iframe
-							srcDoc={preview.preview_html}
+							srcDoc={buildPreviewModalSrcDoc(preview)}
 							title={t('modal.preview_title', { templateName })}
 							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
 							sandbox="allow-same-origin"
