@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-12T11:59:15+00:00\n"
+"POT-Creation-Date: 2026-05-12T13:51:05+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -917,12 +917,12 @@ msgid "Template type."
 msgstr ""
 
 #: includes/API/Templates_Controller.php:96
-#: includes/API/Templates_Controller.php:1272
+#: includes/API/Templates_Controller.php:1278
 msgid "Filter by template type."
 msgstr ""
 
 #: includes/API/Templates_Controller.php:102
-#: includes/API/Templates_Controller.php:1294
+#: includes/API/Templates_Controller.php:1300
 msgid "Filter by template category slug."
 msgstr ""
 
@@ -1028,59 +1028,59 @@ msgstr ""
 msgid "Store not found."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1000
+#: includes/API/Templates_Controller.php:1006
 msgid "Mustache template syntax error. Check your template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1017
+#: includes/API/Templates_Controller.php:1023
 msgid "Preview failed. Check the template for PHP errors."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1258
+#: includes/API/Templates_Controller.php:1264
 msgid "Current page of the collection."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1265
+#: includes/API/Templates_Controller.php:1271
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1280
+#: includes/API/Templates_Controller.php:1286
 msgid "Scope under which the request is made."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1288
+#: includes/API/Templates_Controller.php:1294
 msgid "Search templates by title or description."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1300
+#: includes/API/Templates_Controller.php:1306
 msgid "Limit to templates modified after this ISO 8601 date."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1306
+#: includes/API/Templates_Controller.php:1312
 msgid "Limit results to templates resolved for a specific store."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1475
+#: includes/API/Templates_Controller.php:1481
 msgid "Sorry, you cannot list templates."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1484
+#: includes/API/Templates_Controller.php:1490
 msgid "Sorry, you are not allowed to edit templates."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1503
+#: includes/API/Templates_Controller.php:1509
 msgid "Sorry, you cannot view this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1512
+#: includes/API/Templates_Controller.php:1518
 msgid "Sorry, you are not allowed to edit this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1533
+#: includes/API/Templates_Controller.php:1539
 msgid "Sorry, you cannot preview this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1552
+#: includes/API/Templates_Controller.php:1558
 msgid "Sorry, you cannot update templates."
 msgstr ""
 
