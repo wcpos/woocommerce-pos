@@ -65,8 +65,6 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:387
 #: includes/Services/Receipt_I18n_Labels.php:50
 #: includes/Templates/Payment.php:338
-#: templates/gallery/minimal-receipt.php:97
-#: templates/gallery/thermal-receipt.php:141
 #: templates/receipt.php:120
 msgid "Cashier"
 msgstr ""
@@ -1164,7 +1162,6 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:738
 #: includes/Services/Receipt_Data_Schema.php:814
 #: includes/Services/Receipt_I18n_Labels.php:169
-#: templates/gallery/thermal-receipt.php:209
 #: templates/receipt.php:257
 msgid "Change"
 msgstr ""
@@ -1278,7 +1275,6 @@ msgstr ""
 #: includes/Services/Receipt_I18n_Labels.php:95
 #: includes/Services/Receipt_I18n_Labels.php:124
 #: includes/Services/Tax_Id_Types.php:300
-#: templates/gallery/thermal-receipt.php:102
 msgid "Tax ID"
 msgstr ""
 
@@ -1298,8 +1294,6 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Preview_Receipt_Builder.php:885
 #: includes/Services/Receipt_I18n_Labels.php:211
-#: templates/gallery/minimal-receipt.php:179
-#: templates/gallery/thermal-receipt.php:227
 msgid "Thank you for your purchase!"
 msgstr ""
 
@@ -1332,7 +1326,6 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:266
 #: includes/Services/Receipt_I18n_Labels.php:44
 #: includes/Templates/Adapters/Html_Output_Adapter.php:36
-#: templates/gallery/minimal-receipt.php:88
 msgid "Order"
 msgstr ""
 
@@ -1490,7 +1483,6 @@ msgstr ""
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_Data_Schema.php:400
 #: includes/Services/Receipt_I18n_Labels.php:51
-#: templates/gallery/thermal-receipt.php:145
 #: templates/receipt.php:126
 msgid "Customer"
 msgstr ""
@@ -1653,8 +1645,6 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:543
 #: includes/Services/Receipt_Data_Schema.php:694
 #: includes/Services/Receipt_I18n_Labels.php:159
-#: templates/gallery/minimal-receipt.php:130
-#: templates/gallery/thermal-receipt.php:166
 msgid "Subtotal"
 msgstr ""
 
@@ -1742,8 +1732,6 @@ msgstr ""
 #: includes/Services/Receipt_Data_Schema.php:677
 #: includes/Services/Receipt_Data_Schema.php:722
 #: includes/Services/Receipt_I18n_Labels.php:161
-#: templates/gallery/minimal-receipt.php:109
-#: templates/gallery/minimal-receipt.php:156
 msgid "Total"
 msgstr ""
 
@@ -1948,7 +1936,6 @@ msgstr ""
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_Data_Schema.php:810
 #: includes/Services/Receipt_I18n_Labels.php:168
-#: templates/gallery/thermal-receipt.php:205
 #: templates/receipt.php:253
 msgid "Tendered"
 msgstr ""
@@ -2189,8 +2176,6 @@ msgstr ""
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_Data_Schema.php:1085
 #: includes/Services/Receipt_I18n_Labels.php:45
-#: templates/gallery/minimal-receipt.php:92
-#: templates/gallery/thermal-receipt.php:138
 #: templates/receipt.php:114
 msgid "Date"
 msgstr ""
@@ -2513,14 +2498,12 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_I18n_Labels.php:136
-#: templates/gallery/minimal-receipt.php:107
 msgid "Item"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_I18n_Labels.php:138
-#: templates/gallery/minimal-receipt.php:108
 msgid "Qty"
 msgstr ""
 
@@ -2537,8 +2520,6 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Label shown on a POS receipt or checkout template.
 #: includes/Services/Receipt_I18n_Labels.php:142
-#: templates/gallery/minimal-receipt.php:136
-#: templates/gallery/thermal-receipt.php:172
 msgid "Discount"
 msgstr ""
 
@@ -2676,7 +2657,6 @@ msgstr ""
 #: includes/Services/Receipt_I18n_Labels.php:182
 #: includes/Templates.php:824
 #: includes/Templates.php:1119
-#: templates/gallery/gift-receipt.php:105
 msgid "Gift Receipt"
 msgstr ""
 
@@ -2709,7 +2689,6 @@ msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #: includes/Services/Receipt_I18n_Labels.php:196
-#: templates/gallery/gift-receipt.php:123
 msgid "A message for you"
 msgstr ""
 
@@ -2816,7 +2795,6 @@ msgstr ""
 #. translators: %s: tax identification number
 #. translators: %s: tax ID
 #: includes/Services/Receipt_I18n_Labels.php:255
-#: templates/gallery/thermal-receipt.php:120
 #: templates/receipt.php:97
 #, php-format
 msgid "Tax ID: %s"
@@ -3483,35 +3461,29 @@ msgid "Template contains dangerous function: %s(). This function is not allowed 
 msgstr ""
 
 #. translators: 1: amount tendered 2: change given
-#: templates/gallery/minimal-receipt.php:169
 #, php-format
 msgid "Tendered %1$s / Change %2$s"
 msgstr ""
 
 #. translators: 1: tax ID label, 2: tax identification number
-#: templates/gallery/thermal-receipt.php:108
 #, php-format
 msgid "%1$s: %2$s"
 msgstr ""
 
 #. translators: Label shown on a POS receipt or checkout template.
-#: templates/gallery/thermal-receipt.php:133
 msgid "SALES RECEIPT"
 msgstr ""
 
 #. translators: Label shown on a POS receipt or checkout template.
-#: templates/gallery/thermal-receipt.php:137
 #: templates/receipt.php:109
 msgid "Receipt #"
 msgstr ""
 
 #. translators: Label shown on a POS receipt or checkout template.
-#: templates/gallery/thermal-receipt.php:192
 msgid "TOTAL"
 msgstr ""
 
 #. translators: Label shown on a POS receipt or checkout template.
-#: templates/gallery/thermal-receipt.php:219
 msgid "Note:"
 msgstr ""
 

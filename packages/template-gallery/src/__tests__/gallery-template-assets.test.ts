@@ -94,12 +94,37 @@ describe('gallery template assets', () => {
 	});
 
 	it('does not ship hardcoded tax-invoice retention boilerplate', () => {
-		const taxInvoiceTemplates = ['detailed-receipt.html', 'tax-invoice.html'];
+		const taxInvoiceTemplates = ['detailed-receipt.html'];
 
 		for (const filename of taxInvoiceTemplates) {
 			const content = fs.readFileSync(path.join(galleryDir, filename), 'utf8');
 			expect(content, filename).not.toContain('tax_invoice_retain');
 			expect(content, filename).not.toContain('Please retain for your records');
+		}
+	});
+
+
+	it('does not expose removed gallery templates or legacy PHP examples', async () => {
+		const { getGalleryPreviewSrc } = await import('../preview-assets');
+		const removedGalleryFiles = [
+			'branded-receipt.html',
+			'branded-receipt.json',
+			'return-receipt.html',
+			'return-receipt.json',
+			'tax-invoice.html',
+			'tax-invoice.json',
+			'gift-receipt.php',
+			'minimal-receipt.php',
+			'thermal-receipt.php',
+		];
+
+		for (const removed of removedGalleryFiles) {
+			expect(fs.existsSync(path.join(galleryDir, removed)), removed).toBe(false);
+		}
+
+		for (const removedKey of ['branded-receipt', 'return-receipt', 'tax-invoice']) {
+			expect(fs.existsSync(path.join(previewDir, `${removedKey}.png`)), removedKey).toBe(false);
+			expect(getGalleryPreviewSrc(removedKey), removedKey).toBeUndefined();
 		}
 	});
 

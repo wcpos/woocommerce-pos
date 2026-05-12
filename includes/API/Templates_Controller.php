@@ -937,13 +937,9 @@ class Templates_Controller extends WP_REST_Controller {
 		// Determine engine.
 		$engine = $template['engine'] ?? 'legacy-php';
 
-		// Thermal (ESC/POS) templates: render an HTML approximation using the bundled thermal template.
-		// The ESC/POS XML cannot be displayed in a browser, so we render receipt_data as HTML instead.
+		// Thermal (ESC/POS) templates are rendered by the client using template_content + receipt_data.
 		if ( 'thermal' === $engine ) {
-			$response                 = $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id );
-			$response['preview_html'] = $this->render_thermal_html_preview( $receipt_data );
-
-			return rest_ensure_response( $response );
+			return rest_ensure_response( $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id ) );
 		}
 
 		// Non-thermal with a real order.
@@ -1056,43 +1052,6 @@ class Templates_Controller extends WP_REST_Controller {
 		);
 	}
 
-	/**
-	 * Render an HTML approximation of a thermal receipt for browser preview.
-	 *
-	 * ESC/POS thermal templates cannot be rendered in a browser, so we use the
-	 * bundled thermal-receipt.php example to produce a narrow HTML receipt from
-	 * the same receipt_data payload.
-	 *
-	 * @param array $receipt_data Raw (unformatted) canonical receipt payload.
-	 *
-	 * @return string HTML string.
-	 */
-	private function render_thermal_html_preview( array $receipt_data ): string {
-		$thermal_php_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/thermal-receipt.php';
-
-		if ( ! file_exists( $thermal_php_path ) ) {
-			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666;">'
-				. /* translators: REST API schema field label or error message. */ esc_html__( 'Thermal preview unavailable.', 'woocommerce-pos' )
-				. '</div>';
-		}
-
-		$template = array(
-			'engine'    => 'legacy-php',
-			'file_path' => $thermal_php_path,
-		);
-
-		ob_start();
-		try {
-			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
-			return ob_get_clean();
-		} catch ( \Throwable $e ) {
-			ob_end_clean();
-			Logger::log( 'error', 'Thermal HTML preview failed: ' . $e->getMessage() );
-			return '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
-				. /* translators: REST API schema field label or error message. */ esc_html__( 'Thermal preview failed.', 'woocommerce-pos' )
-				. '</div>';
-		}
-	}
 
 	/**
 	 * Render a logicless template with preview data and return the HTML string.

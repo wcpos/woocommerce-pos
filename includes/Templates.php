@@ -804,30 +804,6 @@ class Templates {
 		$examples_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
 
 		$starters = array(
-			'minimal-receipt'  => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Minimal Receipt', 'woocommerce-pos' ),
-				'description' => __( 'A clean, data-driven receipt using the $receipt_data payload. Good starting point for custom templates.', 'woocommerce-pos' ),
-				'file'        => $examples_dir . 'minimal-receipt.php',
-				'type'        => 'receipt',
-				'language'    => 'php',
-				'engine'      => 'legacy-php',
-			),
-			'thermal-receipt'  => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Thermal Printer Receipt', 'woocommerce-pos' ),
-				'description' => /* translators: Receipt template post type or template option label. */ __( 'Narrow monospace layout designed for 80mm/58mm thermal receipt printers. Includes tax ID, itemised tax breakdown, and tendered/change lines.', 'woocommerce-pos' ),
-				'file'        => $examples_dir . 'thermal-receipt.php',
-				'type'        => 'receipt',
-				'language'    => 'php',
-				'engine'      => 'legacy-php',
-			),
-			'gift-receipt'     => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Gift Receipt', 'woocommerce-pos' ),
-				'description' => __( 'Shows items without prices. Displays the customer note as a gift message. Useful for gift wrapping counters.', 'woocommerce-pos' ),
-				'file'        => $examples_dir . 'gift-receipt.php',
-				'type'        => 'receipt',
-				'language'    => 'php',
-				'engine'      => 'legacy-php',
-			),
 			'simple-receipt'   => array(
 				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Simple Receipt (Logicless)', 'woocommerce-pos' ),
 				'description' => __( 'Full receipt using the logicless template engine with section blocks for line items, payments, and conditionals. No PHP required — just HTML and CSS.', 'woocommerce-pos' ),

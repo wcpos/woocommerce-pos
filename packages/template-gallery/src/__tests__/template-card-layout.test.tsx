@@ -59,10 +59,10 @@ vi.mock('../translations', () => ({
 }));
 
 const galleryTemplate: GalleryTemplate = {
-	key: 'branded-receipt',
-	title: 'Branded Receipt',
+	key: 'standard-receipt',
+	title: 'Standard Receipt',
 	description:
-		'Print-friendly A4 receipt with store logo, tabular line items, totals, and footer details.',
+		'Default POS receipt with store identity, itemized lines, totals, payments, and footer details.',
 	type: 'receipt',
 	category: 'receipt',
 	engine: 'logicless',
@@ -132,7 +132,7 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain('<img');
 		expect(markup).toContain('aria-label="common.preview"');
 		expect(markup).toContain('alt=""');
-		expect(markup).toContain('template-gallery/previews/branded-receipt.png');
+		expect(markup).toContain('template-gallery/previews/standard-receipt.png');
 		expect(markup).toContain('wcpos:object-contain');
 		expect(markup).not.toContain('common.preview</span>');
 	});

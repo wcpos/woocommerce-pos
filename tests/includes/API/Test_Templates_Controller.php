@@ -1120,12 +1120,11 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 			$data = $response->get_data();
 			$this->assertEquals( 'thermal', $data['engine'] );
-			$this->assertArrayHasKey( 'preview_html', $data );
+			$this->assertArrayNotHasKey( 'preview_html', $data );
 			$this->assertArrayHasKey( 'template_content', $data );
 			$this->assertArrayHasKey( 'receipt_data', $data );
 			$this->assertArrayHasKey( 'paper_width', $data );
 			$this->assertSame( $thermal['paper_width'] ?? null, $data['paper_width'] );
-			$this->assertStringContainsString( '<!DOCTYPE html>', $data['preview_html'] );
 			$this->assertEquals( $thermal['content'], $data['template_content'] );
 			$this->assertArrayHasKey( 'order', $data['receipt_data'] );
 			$this->assertArrayNotHasKey( 'meta', $data['receipt_data'] );
@@ -1166,7 +1165,7 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$data = $response->get_data();
 		$this->assertEquals( 'thermal', $data['engine'] );
-		$this->assertArrayHasKey( 'preview_html', $data );
+		$this->assertArrayNotHasKey( 'preview_html', $data );
 		$this->assertArrayHasKey( 'receipt_data', $data );
 		$this->assertArrayHasKey( 'paper_width', $data );
 		$this->assertSame( $thermal['paper_width'] ?? null, $data['paper_width'] );
