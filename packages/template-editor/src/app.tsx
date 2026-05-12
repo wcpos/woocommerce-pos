@@ -265,7 +265,7 @@ export function App({ config }: AppProps) {
 	return (
 		<>
 			<TemplateInfoBar engine={engine} paperWidth={paperWidth} />
-			<div className="wcpos:flex wcpos:gap-0 wcpos:mt-4">
+			<div className="wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch">
 				{showFieldPicker && (
 					<FieldPicker
 						schema={config.fieldSchema}
