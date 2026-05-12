@@ -37,6 +37,13 @@ describe('renderLogiclessPreview', () => {
 		expect(html).toBe('<p>Visible</p>');
 	});
 
+	it('strips unterminated HTML comments without leaving comment openers', () => {
+		const html = renderLogiclessPreview('<p>{{label}}</p><!-- {{#todo}}', { label: 'Visible' });
+
+		expect(html).toBe('<p>Visible</p>');
+		expect(html).not.toContain('<!--');
+	});
+
 	it('returns a diagnostic block when Mustache rendering fails', () => {
 		const html = renderLogiclessPreview('{{#broken}}Never closed', {});
 

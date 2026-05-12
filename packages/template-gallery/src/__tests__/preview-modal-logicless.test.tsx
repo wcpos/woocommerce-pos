@@ -120,4 +120,38 @@ describe('PreviewModal logicless previews', () => {
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 	});
+
+	it('renders an empty logicless template when receipt data is present', async () => {
+		usePreviewMock.mockReturnValue({
+			data: {
+				engine: 'logicless',
+				template_content: '',
+				receipt_data: { label: 'Unused' },
+				order_id: 0,
+				template_id: 'empty',
+			},
+			isLoading: false,
+			isFetching: false,
+			isError: false,
+		} as ReturnType<typeof usePreview>);
+
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PreviewModal
+					templateId="empty"
+					templateName="Empty"
+					isGallery
+					onClose={() => {}}
+				/>,
+			);
+		});
+
+		const iframe = container.querySelector('iframe');
+		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
+	});
 });

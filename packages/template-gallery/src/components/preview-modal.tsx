@@ -19,14 +19,14 @@ interface PreviewModalProps {
 }
 
 function buildRenderedPreviewFrame(preview: PreviewResponse): string {
-	if (preview.engine === 'thermal' && preview.template_content && preview.receipt_data) {
+	if (preview.engine === 'thermal' && preview.template_content != null && preview.receipt_data) {
 		return buildPreviewFrameHtml({
 			bodyHtml: renderThermalPreview(preview.template_content, preview.receipt_data),
 			paperWidth: preview.paper_width,
 		});
 	}
 
-	if (preview.engine === 'logicless' && preview.template_content && preview.receipt_data) {
+	if (preview.engine === 'logicless' && preview.template_content != null && preview.receipt_data) {
 		return buildPreviewFrameHtml({
 			bodyHtml: renderLogiclessPreview(preview.template_content, {
 				t: true,
@@ -106,7 +106,7 @@ export function PreviewModal({
 	const canRenderFrame = Boolean(
 		preview &&
 		(preview.engine === 'thermal' || preview.engine === 'logicless') &&
-		((preview.template_content && preview.receipt_data) || preview.preview_html)
+		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
 	);
 
 	// Revert to sample if order fetch fails

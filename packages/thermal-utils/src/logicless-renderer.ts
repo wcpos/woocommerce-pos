@@ -3,7 +3,26 @@ import Mustache from 'mustache';
 import { generateBarcodeSvg } from './generate-barcode-svg';
 
 function stripHtmlComments(template: string): string {
-	return template.replace(/<!--.*?-->/gs, '');
+	let stripped = '';
+	let cursor = 0;
+
+	while (cursor < template.length) {
+		const start = template.indexOf('<!--', cursor);
+		if (start === -1) {
+			return stripped + template.slice(cursor);
+		}
+
+		stripped += template.slice(cursor, start);
+
+		const end = template.indexOf('-->', start + 4);
+		if (end === -1) {
+			return stripped;
+		}
+
+		cursor = end + 3;
+	}
+
+	return stripped;
 }
 
 function processBarcodeMarkers(html: string): string {
