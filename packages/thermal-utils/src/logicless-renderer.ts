@@ -2,6 +2,10 @@ import Mustache from 'mustache';
 
 import { generateBarcodeSvg } from './generate-barcode-svg';
 
+function stripHtmlComments(template: string): string {
+	return template.replace(/<!--.*?-->/gs, '');
+}
+
 function processBarcodeMarkers(html: string): string {
 	const doc = new DOMParser().parseFromString(html, 'text/html');
 	const markers = doc.querySelectorAll('[data-barcode]');
@@ -27,7 +31,7 @@ function processBarcodeMarkers(html: string): string {
 
 export function renderLogiclessPreview(template: string, data: Record<string, unknown>): string {
 	try {
-		const rendered = Mustache.render(template, data);
+		const rendered = Mustache.render(stripHtmlComments(template), data);
 		return processBarcodeMarkers(rendered);
 	} catch (error) {
 		console.warn('Mustache rendering error:', error);

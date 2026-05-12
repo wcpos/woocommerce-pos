@@ -30,6 +30,13 @@ describe('renderLogiclessPreview', () => {
 		expect(html).not.toContain('data-barcode="code128"');
 	});
 
+
+	it('strips HTML comments before Mustache renders template content', () => {
+		const html = renderLogiclessPreview('<!-- {{#todo}} documentation only --><p>{{label}}</p>', { label: 'Visible' });
+
+		expect(html).toBe('<p>Visible</p>');
+	});
+
 	it('returns a diagnostic block when Mustache rendering fails', () => {
 		const html = renderLogiclessPreview('{{#broken}}Never closed', {});
 
