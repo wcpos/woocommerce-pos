@@ -952,6 +952,10 @@ class Templates_Controller extends WP_REST_Controller {
 				$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id );
 
 				try {
+					// Keep preview_html for backward compatibility and diagnostics only.
+					// It is passed through wp_kses_post(), which can strip layout-critical CSS
+					// such as display:flex/display:grid. Template Studio and Template Gallery
+					// must render visual previews from template_content + receipt_data instead.
 					$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
 				} catch ( \Mustache\Exception\SyntaxException $e ) {
 					// Malformed template — still return receipt_data so the editor can render.
@@ -991,9 +995,11 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( 'logicless' === $engine ) {
 			$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, 0, $id );
 
-			// Keep sample-mode logicless previews backward-compatible for existing gallery clients.
-			// JS renderers should use template_content + receipt_data as the stable contract.
 			try {
+				// Keep preview_html for backward compatibility and diagnostics only.
+				// It is passed through wp_kses_post(), which can strip layout-critical CSS
+				// such as display:flex/display:grid. Template Studio and Template Gallery
+				// must render visual previews from template_content + receipt_data instead.
 				$response['preview_html'] = $this->render_logicless_preview( $template, $formatted_data );
 			} catch ( \Mustache\Exception\SyntaxException $e ) {
 				$response['preview_html'] = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
