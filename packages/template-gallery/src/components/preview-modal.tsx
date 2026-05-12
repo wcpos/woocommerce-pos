@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
+import { buildPreviewFrameHtml, renderLogiclessPreview, renderThermalPreview } from '@wcpos/thermal-utils';
 import { Button } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
@@ -18,30 +18,42 @@ interface PreviewModalProps {
 	onCustomize?: () => void;
 }
 
-function ThermalPreviewContent({
-	templateContent,
-	receiptData,
-	templateName,
-	paperWidth,
-}: {
-	templateContent: string;
-	receiptData: Record<string, unknown>;
-	templateName: string;
-	paperWidth?: string | null;
-}) {
+function buildRenderedPreviewFrame(preview: PreviewResponse): string {
+	if (preview.engine === 'thermal' && preview.template_content != null && preview.receipt_data) {
+		return buildPreviewFrameHtml({
+			bodyHtml: renderThermalPreview(preview.template_content, preview.receipt_data),
+			paperWidth: preview.paper_width,
+		});
+	}
+
+	if (preview.engine === 'logicless' && preview.template_content != null && preview.receipt_data) {
+		return buildPreviewFrameHtml({
+			bodyHtml: renderLogiclessPreview(preview.template_content, {
+				t: true,
+				...preview.receipt_data,
+			}),
+			paperWidth: 'a4',
+		});
+	}
+
+	return '';
+}
+
+function PreviewFrameContent({ preview, templateName }: { preview: PreviewResponse; templateName: string }) {
 	const srcdoc = React.useMemo(() => {
 		try {
-			return buildPreviewFrameHtml({
-				bodyHtml: renderThermalPreview(templateContent, receiptData),
-				paperWidth,
-			});
+			return buildPreviewModalSrcDoc(preview);
 		} catch {
 			return buildPreviewFrameHtml({
 				bodyHtml: `<div style="color:red;padding:16px;">${t('modal.render_error')}</div>`,
-				paperWidth,
+				paperWidth: preview.paper_width ?? 'a4',
 			});
 		}
-	}, [templateContent, receiptData, paperWidth]);
+	}, [preview]);
+
+	if (!srcdoc) {
+		return null;
+	}
 
 	return (
 		<iframe
@@ -55,17 +67,15 @@ function ThermalPreviewContent({
 
 
 export function buildPreviewModalSrcDoc(preview: PreviewResponse): string {
-	if (preview.engine === 'thermal' && preview.template_content && preview.receipt_data) {
-		return buildPreviewFrameHtml({
-			bodyHtml: renderThermalPreview(preview.template_content, preview.receipt_data),
-			paperWidth: preview.paper_width,
-		});
+	const renderedFrame = buildRenderedPreviewFrame(preview);
+	if (renderedFrame) {
+		return renderedFrame;
 	}
 
 	if (preview.preview_html) {
 		return isFullHtmlDocument(preview.preview_html)
 			? preview.preview_html
-			: buildPreviewFrameHtml({ bodyHtml: preview.preview_html, paperWidth: preview.paper_width });
+			: buildPreviewFrameHtml({ bodyHtml: preview.preview_html, paperWidth: preview.paper_width ?? 'a4' });
 	}
 
 	return '';
@@ -93,6 +103,11 @@ export function PreviewModal({
 	const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 	const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
 	const titleId = React.useId();
+	const canRenderFrame = Boolean(
+		preview &&
+		(preview.engine === 'thermal' || preview.engine === 'logicless') &&
+		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
+	);
 
 	// Revert to sample if order fetch fails
 	React.useEffect(() => {
@@ -205,13 +220,8 @@ export function PreviewModal({
 						<div className="wcpos:flex wcpos:flex-1 wcpos:items-center wcpos:justify-center">
 							<span className="wcpos:text-gray-400">{t('modal.loading')}</span>
 						</div>
-					) : preview?.engine === 'thermal' && preview.template_content && preview.receipt_data ? (
-						<ThermalPreviewContent
-							templateContent={preview.template_content}
-							receiptData={preview.receipt_data}
-							templateName={templateName}
-							paperWidth={preview.paper_width}
-						/>
+					) : preview && canRenderFrame ? (
+						<PreviewFrameContent preview={preview} templateName={templateName} />
 					) : preview?.preview_html ? (
 						<iframe
 							srcDoc={buildPreviewModalSrcDoc(preview)}

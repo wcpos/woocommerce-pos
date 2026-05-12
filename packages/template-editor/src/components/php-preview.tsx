@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import apiFetch from '@wordpress/api-fetch';
+import { buildPreviewFrameHtml } from '@wcpos/thermal-utils';
+import type { CSSProperties } from 'react';
 
 import { t } from '../translations';
 
@@ -30,10 +32,33 @@ export function decodeLabel(label: string): string {
 	return label.replace(/&amp;/g, '&');
 }
 
+function isFullHtmlDocument(html: string): boolean {
+	const h = html.trimStart().toLowerCase();
+	return h.startsWith('<!doctype') || h.startsWith('<html');
+}
+
+export function getPhpPreviewIframeStyle(): CSSProperties {
+	return {
+		width: '100%',
+		border: '1px solid #ddd',
+		background: '#f5f5f5',
+		minHeight: 400,
+	};
+}
+
 export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewState, 'src' | 'srcDoc'> {
+	if (response.preview_html) {
+		return {
+			src: null,
+			srcDoc: isFullHtmlDocument(response.preview_html)
+				? response.preview_html
+				: buildPreviewFrameHtml({ bodyHtml: response.preview_html, paperWidth: 'a4' }),
+		};
+	}
+
 	return {
 		src: response.preview_url ?? null,
-		srcDoc: response.preview_html ?? null,
+		srcDoc: null,
 	};
 }
 
@@ -142,7 +167,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 			<div className="wcpos:p-2 wcpos:text-xs wcpos:text-amber-700 wcpos:bg-amber-50 wcpos:border-b wcpos:border-amber-200">
 				{t('editor.php_save_notice')}
 			</div>
-			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-4">
+			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:p-4">
 				{previewState.loading ? (
 					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
 				) : (
@@ -150,7 +175,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 						key={iframeKey}
 						src={previewState.src ?? undefined}
 						srcDoc={previewState.srcDoc ?? undefined}
-						style={{ width: '100%', maxWidth: 400, border: '1px solid #ddd', background: '#fff', minHeight: 400 }}
+						style={getPhpPreviewIframeStyle()}
 						title={t('editor.template_preview')}
 					/>
 				)}
