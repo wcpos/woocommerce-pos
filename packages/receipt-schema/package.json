@@ -13,7 +13,10 @@
     "build": "node scripts/generate-receipt-schema.mjs",
     "check": "node scripts/generate-receipt-schema.mjs --check",
     "test": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "precheck": "pnpm run build",
+    "pretest": "pnpm run build",
+    "prelint": "pnpm run build"
   },
   "devDependencies": {
     "typescript": "^6.0.3"

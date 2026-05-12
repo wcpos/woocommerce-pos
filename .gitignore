@@ -52,3 +52,7 @@ docs/
 .claude/mockups/
 .claude/prompts/
 .superpowers/
+
+# Generated from includes/Services/Receipt_Data_Schema.php
+/packages/receipt-schema/src/receipt-data.schema.json
+/packages/receipt-schema/src/receipt-data.types.ts
