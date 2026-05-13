@@ -1,2 +1,20 @@
 packages:
   - "packages/*"
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - playwright-core
+blockExoticSubdeps: true
+minimumReleaseAgeIgnoreMissingTime: true
+minimumReleaseAgeStrict: false
+allowBuilds:
+  '@parcel/watcher': true
+  core-js: true
+  esbuild: true
+  fs-ext-extra-prebuilt: true
+  unrs-resolver: true
+overrides:
+  "@wordpress/env>@wp-playground/cli": "3.1.28"
+  "@wordpress/upload-media": "0.24.0"
+  "@asamuzakjp/css-color>lru-cache": "11.2.5"
+  "@asamuzakjp/dom-selector>lru-cache": "11.2.5"
+  "@asamuzakjp/nwsapi>lru-cache": "11.2.5"

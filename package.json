@@ -48,14 +48,5 @@
     "turbo": "^2.9.9",
     "wp-hookdoc": "0.2.0"
   },
-  "pnpm": {
-    "overrides": {
-      "@wordpress/env>@wp-playground/cli": "3.1.28",
-      "@wordpress/upload-media": "0.24.0",
-      "@asamuzakjp/css-color>lru-cache": "11.2.5",
-      "@asamuzakjp/dom-selector>lru-cache": "11.2.5",
-      "@asamuzakjp/nwsapi>lru-cache": "11.2.5"
-    }
-  },
-  "packageManager": "pnpm@10.8.0"
+  "packageManager": "pnpm@11.1.1"
 }

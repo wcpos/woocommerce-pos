@@ -53,5 +53,5 @@
     "webpack-cli": "^7.0.2",
     "webpack-livereload-plugin": "^3.0.2"
   },
-  "packageManager": "pnpm@10.8.0"
+  "packageManager": "pnpm@11.1.1"
 }
