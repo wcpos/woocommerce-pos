@@ -61,3 +61,8 @@ export {
 	type TaxIdsFieldProps,
 	type TaxIdsLabels,
 } from './tax-ids-field';
+export {
+	PreviewViewport,
+	type PreviewViewportProps,
+	type PreviewZoom,
+} from './preview-viewport';

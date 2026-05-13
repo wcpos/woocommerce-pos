@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import fs from 'fs';
+import path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { LivePreview, buildLivePreviewSrcDoc, getPreviewBodyClassName, getPreviewIframeStyle } from './live-preview';
@@ -12,12 +14,13 @@ describe('LivePreview helpers', () => {
 		expect(srcDoc).toContain('display:flex');
 	});
 
-	it('lets the iframe fill the preview panel with a taller default height', () => {
+	it('lets the iframe fill the preview viewport with an A4-height canvas', () => {
 		const style = getPreviewIframeStyle();
 
+		expect(style.display).toBe('block');
 		expect(style.width).toBe('100%');
 		expect(style.maxWidth).toBeUndefined();
-		expect(style.minHeight).toBe(560);
+		expect(style.minHeight).toBe(1123);
 	});
 
 	it('uses a flush preview body without p-4 padding', () => {
@@ -35,5 +38,24 @@ describe('LivePreview helpers', () => {
 
 		expect(markup).not.toContain('https://example.test/preview');
 		expect(markup).not.toContain('Open in tab');
+	});
+
+	it('renders A4 previews inside a 75% viewport canvas', () => {
+		const markup = renderToStaticMarkup(
+			<LivePreview
+				content="<p>Receipt</p>"
+				sampleData={{}}
+			/>,
+		);
+
+		expect(markup).toContain('data-testid="preview-viewport-canvas"');
+		expect(markup).toContain('transform:scale(0.75)');
+	});
+
+	it('includes shared UI source files in Tailwind generation', () => {
+		const cssPath = path.resolve(__dirname, '../index.css');
+		const css = fs.readFileSync(cssPath, 'utf8');
+
+		expect(css).toContain('@source "../../ui/src"');
 	});
 });

@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { buildPreviewFrameHtml, renderLogiclessPreview, renderThermalPreview } from '@wcpos/thermal-utils';
-import { Button } from '@wcpos/ui';
+import { Button, PreviewViewport, type PreviewZoom } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
 import { t } from '../translations';
@@ -39,6 +39,21 @@ function buildRenderedPreviewFrame(preview: PreviewResponse): string {
 	return '';
 }
 
+
+function getPreviewDefaultZoom(preview: PreviewResponse): PreviewZoom {
+	return preview.engine === 'thermal' || preview.paper_width === '58mm' || preview.paper_width === '80mm'
+		? 100
+		: 50;
+}
+
+function getPreviewIframeClassName(preview: PreviewResponse): string {
+	const minHeight = preview.engine === 'thermal' || preview.paper_width === '58mm' || preview.paper_width === '80mm'
+		? 'wcpos:min-h-[520px]'
+		: 'wcpos:min-h-[1123px]';
+
+	return `wcpos:block wcpos:w-full ${minHeight} wcpos:border-0 wcpos:bg-white`;
+}
+
 function PreviewFrameContent({ preview, templateName }: { preview: PreviewResponse; templateName: string }) {
 	const srcdoc = React.useMemo(() => {
 		try {
@@ -56,12 +71,14 @@ function PreviewFrameContent({ preview, templateName }: { preview: PreviewRespon
 	}
 
 	return (
-		<iframe
-			srcDoc={srcdoc}
-			title={t('modal.preview_title', { templateName })}
-			className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-			sandbox="allow-same-origin"
-		/>
+		<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+			<iframe
+				srcDoc={srcdoc}
+				title={t('modal.preview_title', { templateName })}
+				className={getPreviewIframeClassName(preview)}
+				sandbox="allow-same-origin"
+			/>
+		</PreviewViewport>
 	);
 }
 
@@ -181,7 +198,7 @@ export function PreviewModal({
 			<div
 				ref={dialogRef}
 				tabIndex={-1}
-				className="wcpos:bg-white wcpos:rounded-lg wcpos:shadow-xl wcpos:max-w-3xl wcpos:w-full wcpos:h-[90vh] wcpos:flex wcpos:flex-col wcpos:m-4"
+				className="wcpos:bg-white wcpos:rounded-lg wcpos:shadow-xl wcpos:max-w-4xl wcpos:w-full wcpos:h-[90vh] wcpos:flex wcpos:flex-col wcpos:m-4"
 				onClick={(e) => e.stopPropagation()}
 			>
 				{/* Header */}
@@ -223,19 +240,23 @@ export function PreviewModal({
 					) : preview && canRenderFrame ? (
 						<PreviewFrameContent preview={preview} templateName={templateName} />
 					) : preview?.preview_html ? (
-						<iframe
-							srcDoc={buildPreviewModalSrcDoc(preview)}
-							title={t('modal.preview_title', { templateName })}
-							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-							sandbox="allow-same-origin"
-						/>
+						<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+							<iframe
+								srcDoc={buildPreviewModalSrcDoc(preview)}
+								title={t('modal.preview_title', { templateName })}
+								className={getPreviewIframeClassName(preview)}
+								sandbox="allow-same-origin"
+							/>
+						</PreviewViewport>
 					) : preview?.preview_url ? (
-						<iframe
-							src={preview.preview_url}
-							title={t('modal.preview_title', { templateName })}
-							className="wcpos:w-full wcpos:flex-1 wcpos:border wcpos:border-gray-200 wcpos:rounded wcpos:bg-white"
-							sandbox="allow-scripts"
-						/>
+						<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+							<iframe
+								src={preview.preview_url}
+								title={t('modal.preview_title', { templateName })}
+								className={getPreviewIframeClassName(preview)}
+								sandbox="allow-scripts"
+							/>
+						</PreviewViewport>
 					) : (
 						<div className="wcpos:text-gray-500 wcpos:text-center wcpos:py-8">
 							{t('modal.no_preview')}

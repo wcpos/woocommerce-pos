@@ -1,4 +1,5 @@
 import { buildPreviewFrameHtml } from '@wcpos/thermal-utils';
+import { PreviewViewport } from '@wcpos/ui';
 
 import { useMustachePreview } from '../hooks/use-mustache-preview';
 import { t } from '../translations';
@@ -18,10 +19,11 @@ export function buildLivePreviewSrcDoc(renderedHtml: string): string {
 
 export function getPreviewIframeStyle(): CSSProperties {
 	return {
+		display: 'block',
 		width: '100%',
-		border: '1px solid #ddd',
-		background: '#f5f5f5',
-		minHeight: 560,
+		border: 0,
+		background: '#fff',
+		minHeight: 1123,
 	};
 }
 
@@ -47,12 +49,14 @@ export function LivePreview({ content, sampleData, loading, sourcePicker }: Live
 				{loading ? (
 					<PreviewSkeleton style={{ width: '100%', minHeight: 560 }} />
 				) : (
-					<iframe
-						srcDoc={srcdoc}
-						sandbox="allow-same-origin"
-						style={getPreviewIframeStyle()}
-						title={t('editor.template_preview')}
-					/>
+					<PreviewViewport defaultZoom={75} zoomLabel={t('editor.preview_zoom')}>
+						<iframe
+							srcDoc={srcdoc}
+							sandbox="allow-same-origin"
+							style={getPreviewIframeStyle()}
+							title={t('editor.template_preview')}
+						/>
+					</PreviewViewport>
 				)}
 			</div>
 		</div>

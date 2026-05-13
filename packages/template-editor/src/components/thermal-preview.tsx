@@ -1,4 +1,5 @@
 import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
+import { PreviewViewport } from '@wcpos/ui';
 
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
@@ -33,11 +34,11 @@ export function getThermalPreviewBodyClassName(): string {
 
 export function getThermalPreviewIframeStyle(): CSSProperties {
 	return {
+		display: 'block',
 		width: '100%',
-		maxWidth: 520,
-		border: 'none',
-		background: '#f5f5f5',
-		minHeight: 560,
+		border: 0,
+		background: '#fff',
+		minHeight: 520,
 	};
 }
 
@@ -62,12 +63,14 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker, pap
 				{loading ? (
 					<PreviewSkeleton style={{ width: '100%', maxWidth: 520, minHeight: 560 }} />
 				) : (
-					<iframe
-						srcDoc={srcdoc}
-						sandbox="allow-same-origin"
-						style={getThermalPreviewIframeStyle()}
-						title={t('editor.thermal_template_preview')}
-					/>
+					<PreviewViewport defaultZoom={100} zoomLabel={t('editor.preview_zoom')}>
+						<iframe
+							srcDoc={srcdoc}
+							sandbox="allow-same-origin"
+							style={getThermalPreviewIframeStyle()}
+							title={t('editor.thermal_template_preview')}
+						/>
+					</PreviewViewport>
 				)}
 			</div>
 		</div>
