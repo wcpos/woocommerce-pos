@@ -8,7 +8,6 @@ import type { CSSProperties, ReactNode } from 'react';
 interface LivePreviewProps {
 	content: string;
 	sampleData: Record<string, unknown>;
-	previewUrl: string;
 	loading?: boolean;
 	sourcePicker?: ReactNode;
 }
@@ -30,7 +29,7 @@ export function getPreviewBodyClassName(): string {
 	return 'wcpos:flex-1 wcpos:overflow-auto wcpos:p-0 wcpos:bg-gray-50';
 }
 
-export function LivePreview({ content, sampleData, previewUrl, loading, sourcePicker }: LivePreviewProps) {
+export function LivePreview({ content, sampleData, loading, sourcePicker }: LivePreviewProps) {
 	const renderedHtml = useMustachePreview(content, sampleData);
 	const srcdoc = buildLivePreviewSrcDoc(renderedHtml);
 
@@ -42,16 +41,6 @@ export function LivePreview({ content, sampleData, previewUrl, loading, sourcePi
 				</span>
 				<div className="wcpos:flex wcpos:items-center wcpos:gap-3">
 					{sourcePicker}
-					{previewUrl && (
-						<a
-							href={previewUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline"
-						>
-							{t('editor.open_in_tab')}
-						</a>
-					)}
 				</div>
 			</div>
 			<div className={getPreviewBodyClassName()}>

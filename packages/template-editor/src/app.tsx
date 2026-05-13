@@ -307,7 +307,6 @@ export function App({ config }: AppProps) {
 						content={content}
 						sampleData={preview.data}
 						loading={preview.loading}
-						previewUrl={config.previewUrl}
 						sourcePicker={previewToggle}
 					/>
 				) : (

@@ -156,16 +156,6 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 					>
 						{decodeLabel(t('editor.save_and_preview'))}
 					</button>
-					{previewState.src && (
-						<a
-							href={previewState.src}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="wcpos:text-xs wcpos:text-blue-600 hover:wcpos:underline wcpos:self-center"
-						>
-							{t('editor.open_in_tab')}
-						</a>
-					)}
 				</div>
 			</div>
 			<div className="wcpos:p-2 wcpos:text-xs wcpos:text-amber-700 wcpos:bg-amber-50 wcpos:border-b wcpos:border-amber-200">

@@ -22,7 +22,6 @@ vi.mock('../translations', () => ({
 		const strings: Record<string, string> = {
 			'editor.preview': 'Preview',
 			'editor.save_and_preview': 'Save &amp; Preview',
-			'editor.open_in_tab': 'Open in tab',
 			'editor.php_save_notice': 'PHP templates require saving before the preview updates.',
 			'editor.template_preview': 'Template preview',
 			'editor.loading_data': 'Loading…',
@@ -102,6 +101,28 @@ describe('PhpPreview', () => {
 	it('uses a flush preview body without p-4 padding', () => {
 		expect(getPhpPreviewBodyClassName()).not.toContain('p-4');
 		expect(getPhpPreviewBodyClassName()).toContain('p-0');
+	});
+
+	it('does not render an open-in-tab link after preview URL loads', async () => {
+		apiFetchMock.mockResolvedValueOnce({ preview_url: 'https://example.test/preview-output' });
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+			);
+		});
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(container.textContent).not.toContain('Open in tab');
+		expect(container.querySelector('a[href="https://example.test/preview-output"]')).toBeNull();
+		expect(container.querySelector('iframe')?.getAttribute('src')).toBe('https://example.test/preview-output');
 	});
 
 	it('renders preview failure fallback when the REST preview request fails', async () => {
