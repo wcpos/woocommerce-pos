@@ -24,6 +24,7 @@ vi.mock('../translations', () => ({
 			'editor.save_and_preview': 'Save &amp; Preview',
 			'editor.php_save_notice': 'PHP templates require saving before the preview updates.',
 			'editor.template_preview': 'Template preview',
+			'editor.preview_zoom': 'Preview zoom',
 			'editor.loading_data': 'Loading…',
 			'editor.preview_failed': 'Preview failed. Save the template and try again.',
 		};
@@ -90,12 +91,13 @@ describe('PhpPreview', () => {
 		});
 	});
 
-	it('fills the preview panel without max-width cap', () => {
+	it('fills the preview viewport with an A4-height canvas', () => {
 		const style = getPhpPreviewIframeStyle();
 
+		expect(style.display).toBe('block');
 		expect(style.width).toBe('100%');
 		expect(style.maxWidth).toBeUndefined();
-		expect(style.minHeight).toBe(560);
+		expect(style.minHeight).toBe(1123);
 	});
 
 	it('uses a flush preview body without p-4 padding', () => {
@@ -123,6 +125,10 @@ describe('PhpPreview', () => {
 		expect(container.textContent).not.toContain('Open in tab');
 		expect(container.querySelector('a[href="https://example.test/preview-output"]')).toBeNull();
 		expect(container.querySelector('iframe')?.getAttribute('src')).toBe('https://example.test/preview-output');
+
+		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
+		expect(canvas).toBeTruthy();
+		expect(canvas?.getAttribute('style')).toContain('transform: scale(0.75)');
 	});
 
 	it('renders preview failure fallback when the REST preview request fails', async () => {

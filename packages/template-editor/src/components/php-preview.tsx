@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import apiFetch from '@wordpress/api-fetch';
 import { buildPreviewFrameHtml } from '@wcpos/thermal-utils';
+import { PreviewViewport } from '@wcpos/ui';
 import type { CSSProperties } from 'react';
 
 import { t } from '../translations';
@@ -39,10 +40,11 @@ function isFullHtmlDocument(html: string): boolean {
 
 export function getPhpPreviewIframeStyle(): CSSProperties {
 	return {
+		display: 'block',
 		width: '100%',
-		border: '1px solid #ddd',
-		background: '#f5f5f5',
-		minHeight: 560,
+		border: 0,
+		background: '#fff',
+		minHeight: 1123,
 	};
 }
 
@@ -165,13 +167,15 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 				{previewState.loading ? (
 					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
 				) : (
-					<iframe
-						key={iframeKey}
-						src={previewState.src ?? undefined}
-						srcDoc={previewState.srcDoc ?? undefined}
-						style={getPhpPreviewIframeStyle()}
-						title={t('editor.template_preview')}
-					/>
+					<PreviewViewport defaultZoom={75} zoomLabel={t('editor.preview_zoom')}>
+						<iframe
+							key={iframeKey}
+							src={previewState.src ?? undefined}
+							srcDoc={previewState.srcDoc ?? undefined}
+							style={getPhpPreviewIframeStyle()}
+							title={t('editor.template_preview')}
+						/>
+					</PreviewViewport>
 				)}
 			</div>
 		</div>

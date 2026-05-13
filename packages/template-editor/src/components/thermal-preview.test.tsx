@@ -1,6 +1,7 @@
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { buildThermalPreviewSrcDoc, getThermalPreviewBodyClassName, getThermalPreviewIframeStyle } from './thermal-preview';
+import { ThermalPreview, buildThermalPreviewSrcDoc, getThermalPreviewBodyClassName, getThermalPreviewIframeStyle } from './thermal-preview';
 
 describe('buildThermalPreviewSrcDoc', () => {
 	it('uses the shared preview frame with physical paper width', () => {
@@ -36,11 +37,26 @@ describe('buildThermalPreviewSrcDoc', () => {
 
 describe('ThermalPreview layout helpers', () => {
 	it('uses a taller default preview iframe', () => {
-		expect(getThermalPreviewIframeStyle().minHeight).toBe(560);
+		expect(getThermalPreviewIframeStyle().display).toBe('block');
+		expect(getThermalPreviewIframeStyle().minHeight).toBe(520);
 	});
 
 	it('uses a flush preview body without p-4 padding', () => {
 		expect(getThermalPreviewBodyClassName()).not.toContain('p-4');
 		expect(getThermalPreviewBodyClassName()).toContain('p-0');
+	});
+});
+
+describe('ThermalPreview rendering', () => {
+	it('renders thermal previews inside a 100% viewport canvas', () => {
+		const markup = renderToStaticMarkup(
+			<ThermalPreview
+				content='<receipt paper-width="32"><text>Test receipt</text></receipt>'
+				sampleData={{}}
+			/>,
+		);
+
+		expect(markup).toContain('data-testid="preview-viewport-canvas"');
+		expect(markup).toContain('transform:scale(1)');
 	});
 });
