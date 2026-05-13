@@ -8,8 +8,4 @@ describe('template editor locale interpolation placeholders', () => {
 		expect(en['editor.status.line_col']).toBe('Ln {line}, Col {col}');
 		expect(en['editor.status.lines']).toBe('{count} lines');
 	});
-
-	it('does not describe the hidden textarea sync as autosave', () => {
-		expect(en['editor.status.saved']).toBe('Synced to form');
-	});
 });

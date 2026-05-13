@@ -32,8 +32,6 @@
 	"editor.toolbar.unfold_all": "Unfold all",
 	"editor.status.line_col": "Ln {line}, Col {col}",
 	"editor.status.lines": "{count} lines",
-	"editor.status.saved": "Synced to form",
-	"editor.status.unsaved": "Unsaved changes",
 	"editor.status.engine_html": "HTML & Mustache",
 	"editor.status.engine_thermal": "Thermal",
 	"editor.status.engine_php": "Legacy PHP",
