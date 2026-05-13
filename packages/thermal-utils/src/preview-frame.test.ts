@@ -21,7 +21,6 @@ describe('buildPreviewFrameHtml', () => {
 		const html = buildPreviewFrameHtml({ bodyHtml: '<div>Receipt</div>', paperWidth: '80mm' });
 
 		expect(html).toContain('width:80mm');
-		expect(html).toContain('background:#f5f5f5');
 		expect(html).toContain('<div>Receipt</div>');
 	});
 
@@ -38,6 +37,14 @@ describe('buildPreviewFrameHtml', () => {
 		expect(html).toContain('min-height:297mm');
 		expect(html).not.toContain('max-width:100%');
 		expect(html).not.toContain('max-width: 100%');
+	});
+
+	it('renders the paper flush with the iframe edges so it can be sized to the paper width', () => {
+		const html = buildPreviewFrameHtml({ bodyHtml: '<div>Receipt</div>', paperWidth: '58mm' });
+
+		expect(html).not.toContain('padding:24px');
+		expect(html).not.toContain('wcpos-preview-viewport');
+		expect(html).toContain('html,body{margin:0;padding:0');
 	});
 
 	it('keeps preview chrome CSS scoped away from template content', () => {

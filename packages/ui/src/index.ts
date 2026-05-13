@@ -63,6 +63,9 @@ export {
 } from './tax-ids-field';
 export {
 	PreviewViewport,
+	PAPER_DIMENSIONS,
+	PREVIEW_ZOOM_STEPS,
 	type PreviewViewportProps,
 	type PreviewZoom,
+	type PreviewPaperWidth,
 } from './preview-viewport';

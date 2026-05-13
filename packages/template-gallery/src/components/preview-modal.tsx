@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { buildPreviewFrameHtml, renderLogiclessPreview, renderThermalPreview } from '@wcpos/thermal-utils';
-import { Button, PreviewViewport, type PreviewZoom } from '@wcpos/ui';
+import { Button, PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
 import { t } from '../translations';
@@ -40,19 +40,13 @@ function buildRenderedPreviewFrame(preview: PreviewResponse): string {
 }
 
 
-function getPreviewDefaultZoom(preview: PreviewResponse): PreviewZoom {
-	return preview.engine === 'thermal' || preview.paper_width === '58mm' || preview.paper_width === '80mm'
-		? 100
-		: 50;
+function getPreviewPaperWidth(preview: PreviewResponse): PreviewPaperWidth {
+	if (preview.paper_width === '58mm') return '58mm';
+	if (preview.paper_width === '80mm') return '80mm';
+	return 'a4';
 }
 
-function getPreviewIframeClassName(preview: PreviewResponse): string {
-	const minHeight = preview.engine === 'thermal' || preview.paper_width === '58mm' || preview.paper_width === '80mm'
-		? 'wcpos:min-h-[520px]'
-		: 'wcpos:min-h-[1123px]';
-
-	return `wcpos:block wcpos:w-full ${minHeight} wcpos:border-0 wcpos:bg-white`;
-}
+const PREVIEW_IFRAME_CLASS = 'wcpos:block wcpos:h-full wcpos:w-full wcpos:border-0 wcpos:bg-white';
 
 function PreviewFrameContent({ preview, templateName }: { preview: PreviewResponse; templateName: string }) {
 	const srcdoc = React.useMemo(() => {
@@ -71,11 +65,15 @@ function PreviewFrameContent({ preview, templateName }: { preview: PreviewRespon
 	}
 
 	return (
-		<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+		<PreviewViewport
+			paperWidth={getPreviewPaperWidth(preview)}
+			zoomInLabel={t('modal.zoom_in')}
+			zoomOutLabel={t('modal.zoom_out')}
+		>
 			<iframe
 				srcDoc={srcdoc}
 				title={t('modal.preview_title', { templateName })}
-				className={getPreviewIframeClassName(preview)}
+				className={PREVIEW_IFRAME_CLASS}
 				sandbox="allow-same-origin"
 			/>
 		</PreviewViewport>
@@ -240,20 +238,28 @@ export function PreviewModal({
 					) : preview && canRenderFrame ? (
 						<PreviewFrameContent preview={preview} templateName={templateName} />
 					) : preview?.preview_html ? (
-						<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+						<PreviewViewport
+							paperWidth={getPreviewPaperWidth(preview)}
+							zoomInLabel={t('modal.zoom_in')}
+							zoomOutLabel={t('modal.zoom_out')}
+						>
 							<iframe
 								srcDoc={buildPreviewModalSrcDoc(preview)}
 								title={t('modal.preview_title', { templateName })}
-								className={getPreviewIframeClassName(preview)}
+								className={PREVIEW_IFRAME_CLASS}
 								sandbox="allow-same-origin"
 							/>
 						</PreviewViewport>
 					) : preview?.preview_url ? (
-						<PreviewViewport defaultZoom={getPreviewDefaultZoom(preview)} zoomLabel={t('modal.preview_zoom')}>
+						<PreviewViewport
+							paperWidth={getPreviewPaperWidth(preview)}
+							zoomInLabel={t('modal.zoom_in')}
+							zoomOutLabel={t('modal.zoom_out')}
+						>
 							<iframe
 								src={preview.preview_url}
 								title={t('modal.preview_title', { templateName })}
-								className={getPreviewIframeClassName(preview)}
+								className={PREVIEW_IFRAME_CLASS}
 								sandbox="allow-scripts"
 							/>
 						</PreviewViewport>

@@ -42,9 +42,9 @@ export function getPhpPreviewIframeStyle(): CSSProperties {
 	return {
 		display: 'block',
 		width: '100%',
+		height: '100%',
 		border: 0,
 		background: '#fff',
-		minHeight: 1123,
 	};
 }
 
@@ -65,7 +65,7 @@ export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewSt
 }
 
 export function getPhpPreviewBodyClassName(): string {
-	return 'wcpos:flex-1 wcpos:overflow-auto wcpos:p-0 wcpos:bg-gray-50';
+	return 'wcpos:flex wcpos:flex-1 wcpos:min-h-0 wcpos:flex-col wcpos:p-0 wcpos:bg-gray-50';
 }
 
 export function PhpPreview({ previewUrl }: PhpPreviewProps) {
@@ -167,7 +167,11 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 				{previewState.loading ? (
 					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
 				) : (
-					<PreviewViewport defaultZoom={75} zoomLabel={t('editor.preview_zoom')}>
+					<PreviewViewport
+						paperWidth="a4"
+						zoomInLabel={t('editor.zoom_in')}
+						zoomOutLabel={t('editor.zoom_out')}
+					>
 						<iframe
 							key={iframeKey}
 							src={previewState.src ?? undefined}

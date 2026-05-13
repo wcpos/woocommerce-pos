@@ -21,14 +21,14 @@ export function getPreviewIframeStyle(): CSSProperties {
 	return {
 		display: 'block',
 		width: '100%',
+		height: '100%',
 		border: 0,
 		background: '#fff',
-		minHeight: 1123,
 	};
 }
 
 export function getPreviewBodyClassName(): string {
-	return 'wcpos:flex-1 wcpos:overflow-auto wcpos:p-0 wcpos:bg-gray-50';
+	return 'wcpos:flex wcpos:flex-1 wcpos:min-h-0 wcpos:flex-col wcpos:p-0 wcpos:bg-gray-50';
 }
 
 export function LivePreview({ content, sampleData, loading, sourcePicker }: LivePreviewProps) {
@@ -49,7 +49,11 @@ export function LivePreview({ content, sampleData, loading, sourcePicker }: Live
 				{loading ? (
 					<PreviewSkeleton style={{ width: '100%', minHeight: 560 }} />
 				) : (
-					<PreviewViewport defaultZoom={75} zoomLabel={t('editor.preview_zoom')}>
+					<PreviewViewport
+						paperWidth="a4"
+						zoomInLabel={t('editor.zoom_in')}
+						zoomOutLabel={t('editor.zoom_out')}
+					>
 						<iframe
 							srcDoc={srcdoc}
 							sandbox="allow-same-origin"
