@@ -70,7 +70,7 @@ break the cross-printer layout contract. Indented continuation lines
   <!-- ── Document title + status ─────────────── -->
   <align mode="center">
     <!-- <text> intentionally makes the styled fiscal heading a block line. -->
-    <bold><size width="2"><text>{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</text></size></bold>
+    <bold><size width="2" height="2"><text>{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.tax_invoice}}{{/fiscal.document_label}}</text></size></bold>
     {{#order.status_label}}
     <text>[ {{order.status_label}} ]</text>
     {{/order.status_label}}
