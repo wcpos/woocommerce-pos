@@ -46,7 +46,7 @@ function resolveThermalPaperWidth(content: string, paperWidth?: string | null): 
 	const resolved = paperWidth ?? inferPaperWidthFromXml(content);
 	if (resolved === '58mm') return '58mm';
 	if (resolved === '80mm') return '80mm';
-	return '80mm';
+	return 'a4';
 }
 
 export function ThermalPreview({ content, sampleData, loading, sourcePicker, paperWidth }: ThermalPreviewProps) {

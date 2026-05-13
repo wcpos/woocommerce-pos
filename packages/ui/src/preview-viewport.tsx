@@ -77,15 +77,14 @@ export function PreviewViewport({
 		<div
 			ref={containerRef}
 			className={classNames(
-				'wcpos:relative wcpos:flex wcpos:min-h-0 wcpos:flex-1 wcpos:flex-col wcpos:overflow-auto wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-gray-100',
+				'wcpos:relative wcpos:flex wcpos:min-h-0 wcpos:flex-1 wcpos:flex-col wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-gray-100',
 				className,
 			)}
 			{...props}
 		>
 			<div
+				data-testid="preview-viewport-zoom-controls"
 				className="wcpos:absolute wcpos:top-2 wcpos:right-2 wcpos:z-10 wcpos:inline-flex wcpos:items-stretch wcpos:overflow-hidden wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:bg-white/95 wcpos:shadow-sm"
-				role="group"
-				aria-label={zoomOutLabel}
 			>
 				<button
 					type="button"
@@ -100,6 +99,8 @@ export function PreviewViewport({
 				<span
 					data-testid="preview-viewport-zoom-value"
 					className="wcpos:inline-flex wcpos:min-w-[44px] wcpos:items-center wcpos:justify-center wcpos:border-l wcpos:border-r wcpos:border-gray-200 wcpos:px-2 wcpos:text-xs wcpos:tabular-nums wcpos:text-gray-700"
+					role="status"
+					aria-label={`Zoom ${zoom}%`}
 					aria-live="polite"
 				>
 					{zoom}%
@@ -115,7 +116,10 @@ export function PreviewViewport({
 					+
 				</button>
 			</div>
-			<div className="wcpos:p-4">
+			<div
+				data-testid="preview-viewport-scroll-area"
+				className="wcpos:min-h-0 wcpos:flex-1 wcpos:overflow-auto wcpos:p-4"
+			>
 				<div
 					data-testid="preview-viewport-canvas-frame"
 					className="wcpos:mx-auto wcpos:overflow-hidden"

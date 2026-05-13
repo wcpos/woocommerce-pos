@@ -64,6 +64,36 @@ describe('PreviewViewport', () => {
 		expect(frame.style.height).toBe('1123px');
 	});
 
+	it('keeps zoom controls outside the scrollable canvas area', () => {
+		const container = renderPreviewViewport('a4');
+		const controls = container.querySelector(
+			'[data-testid="preview-viewport-zoom-controls"]',
+		) as HTMLElement;
+		const scrollArea = container.querySelector(
+			'[data-testid="preview-viewport-scroll-area"]',
+		) as HTMLElement;
+		const frame = container.querySelector('[data-testid="preview-viewport-canvas-frame"]') as HTMLElement;
+
+		expect(scrollArea.contains(frame)).toBe(true);
+		expect(scrollArea.contains(controls)).toBe(false);
+		expect(controls.parentElement).not.toBe(scrollArea);
+	});
+
+	it('does not label the zoom control wrapper as one of its child actions', () => {
+		const container = renderPreviewViewport('a4');
+		const controls = container.querySelector(
+			'[data-testid="preview-viewport-zoom-controls"]',
+		) as HTMLElement;
+
+		expect(controls.getAttribute('aria-label')).toBeNull();
+		expect(controls.getAttribute('role')).toBeNull();
+		expect(container.querySelector('button[aria-label="Zoom out"]')).toBeTruthy();
+		expect(container.querySelector('[data-testid="preview-viewport-zoom-value"]')?.getAttribute('aria-label')).toBe(
+			'Zoom 100%',
+		);
+		expect(container.querySelector('button[aria-label="Zoom in"]')).toBeTruthy();
+	});
+
 	it('uses 58mm paper dimensions when configured', () => {
 		const container = renderPreviewViewport('58mm');
 		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement;
@@ -85,6 +115,7 @@ describe('PreviewViewport', () => {
 			zoomOut.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 		});
 		expect(value.textContent).toBe('90%');
+		expect(value.getAttribute('aria-label')).toBe('Zoom 90%');
 		expect(canvas.style.transform).toBe('scale(0.9)');
 
 		act(() => {

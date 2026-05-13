@@ -75,4 +75,16 @@ describe('ThermalPreview rendering', () => {
 		expect(markup).toContain('width:302px');
 		expect(markup).toContain('height:520px');
 	});
+
+	it('uses A4 viewport dimensions when no thermal paper width can be resolved', () => {
+		const markup = renderToStaticMarkup(
+			<ThermalPreview
+				content='<receipt><text>Test receipt</text></receipt>'
+				sampleData={{}}
+			/>,
+		);
+
+		expect(markup).toContain('width:794px');
+		expect(markup).toContain('height:1123px');
+	});
 });
