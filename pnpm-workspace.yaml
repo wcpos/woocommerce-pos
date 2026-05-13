@@ -1,8 +1,11 @@
 packages:
   - "packages/*"
 minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - playwright-core
 blockExoticSubdeps: true
 minimumReleaseAgeIgnoreMissingTime: true
+minimumReleaseAgeStrict: false
 allowBuilds:
   '@parcel/watcher': true
   core-js: true

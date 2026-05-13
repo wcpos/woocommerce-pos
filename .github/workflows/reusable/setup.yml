@@ -5,9 +5,11 @@ on:
     inputs:
       node-version:
         description: Version of Node to use
+        type: string
         default: "22.x"
       pnpm-version:
         description: Version of pnpm to use
+        type: string
         default: "11.1.1"
 
 jobs:
