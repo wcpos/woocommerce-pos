@@ -1,0 +1,10 @@
+{
+    "key": "narrow-receipt",
+    "title": "Narrow Receipt",
+    "description": "Compact monospace receipt sized for narrow paper or HTML-capable thermal printers. Prints cleanly in black and white.",
+    "type": "receipt",
+    "category": "receipt",
+    "engine": "logicless",
+    "output_type": "html",
+    "version": 1
+}

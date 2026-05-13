@@ -1,0 +1,161 @@
+<!--
+Narrow Receipt — HTML version of the thermal-receipt aesthetic for browser
+printing or HTML-capable thermal printers (e.g. Sunmi/Imin WebView print path).
+
+Uses the logicless template engine with section blocks:
+  {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+  {{^key}}...{{/key}}  — show block when value is empty/falsy
+  {{.}}                — current value (for arrays of strings)
+  {{key.path}}         — dot-path placeholder substitution
+
+Money fields are auto-formatted as currency.
+All styles are inline because wp_kses_post strips <style> tags.
+
+Layout uses <table> rows (not flex) so older embedded WebViews render the
+label/value columns correctly. The receipt is pure black-on-white with
+hierarchy from font weight, size, and rules — no greys or backgrounds
+that would smear or waste ink on thermal/B&W printers.
+-->
+<div style="width: 72mm; max-width: 100%; margin: 0 auto; padding: 4mm; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; line-height: 1.4; color: #000; background: #fff;">
+	<div style="text-align: center; font-size: 16px; font-weight: 700; margin-bottom: 6px;">
+		{{store.name}}
+	</div>
+
+	{{#store.address_lines}}
+	<div style="text-align: center; font-size: 10px;">{{.}}</div>
+	{{/store.address_lines}}
+
+	{{#store.phone}}
+	<div style="text-align: center; font-size: 10px;">{{store.phone}}</div>
+	{{/store.phone}}
+
+	{{#store.tax_ids}}
+	<div style="text-align: center; font-size: 10px;">{{label}}: {{value}}</div>
+	{{/store.tax_ids}}
+
+	{{#store.opening_hours}}
+	<div style="text-align: center; font-size: 10px; white-space: pre-line; margin-top: 4px;">{{store.opening_hours}}</div>
+	{{/store.opening_hours}}
+
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+
+	<div style="text-align: center; font-weight: 700; margin-bottom: 6px;">{{i18n.receipt}}</div>
+
+	<table style="width: 100%; border-collapse: collapse; margin-bottom: 2px;">
+		<tr>
+			<td style="text-align: left;">{{i18n.order}}</td>
+			<td style="text-align: right;">#{{order.number}}</td>
+		</tr>
+		<tr>
+			<td style="text-align: left;">{{i18n.date}}</td>
+			<td style="text-align: right;">{{order.created.datetime}}</td>
+		</tr>
+		{{#cashier.name}}
+		<tr>
+			<td style="text-align: left; vertical-align: top;">{{i18n.cashier}}</td>
+			<td style="text-align: right; word-wrap: break-word;">{{cashier.name}}</td>
+		</tr>
+		{{/cashier.name}}
+		{{#customer.name}}
+		<tr>
+			<td style="text-align: left; vertical-align: top;">{{i18n.customer}}</td>
+			<td style="text-align: right; word-wrap: break-word;">{{customer.name}}</td>
+		</tr>
+		{{/customer.name}}
+	</table>
+
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+
+	{{#lines}}
+	<div style="font-weight: 700; word-wrap: break-word;">{{name}}</div>
+	<table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px;">
+		<tr>
+			<td style="text-align: left; padding-left: 8px; word-wrap: break-word; vertical-align: top;">
+				{{qty}} x {{unit_price_incl_display}}{{#sku}} ({{sku}}){{/sku}}
+			</td>
+			<td style="text-align: right; white-space: nowrap; vertical-align: top;">{{line_total_incl_display}}</td>
+		</tr>
+	</table>
+	{{/lines}}
+
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+
+	<table style="width: 100%; border-collapse: collapse;">
+		<tr>
+			<td style="text-align: left;">{{i18n.subtotal}}</td>
+			<td style="text-align: right;">{{totals.subtotal_incl_display}}</td>
+		</tr>
+
+		{{#discounts}}
+		<tr>
+			<td style="text-align: left;">{{label}}</td>
+			<td style="text-align: right;">-{{total_incl_display}}</td>
+		</tr>
+		{{/discounts}}
+
+		{{#shipping}}
+		<tr>
+			<td style="text-align: left;">{{label}}</td>
+			<td style="text-align: right;">{{total_incl_display}}</td>
+		</tr>
+		{{/shipping}}
+
+		{{#fees}}
+		<tr>
+			<td style="text-align: left;">{{label}}</td>
+			<td style="text-align: right;">{{total_incl_display}}</td>
+		</tr>
+		{{/fees}}
+
+		{{#tax_summary}}
+		<tr>
+			<td style="text-align: left;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</td>
+			<td style="text-align: right;">{{tax_amount_display}}</td>
+		</tr>
+		{{/tax_summary}}
+	</table>
+
+	<table style="width: 100%; border-collapse: collapse; font-weight: 700; font-size: 14px; border-top: 2px solid #000; margin-top: 4px;">
+		<tr>
+			<td style="text-align: left; padding-top: 4px;">{{i18n.total}}</td>
+			<td style="text-align: right; padding-top: 4px;">{{totals.total_incl_display}}</td>
+		</tr>
+	</table>
+
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+
+	<table style="width: 100%; border-collapse: collapse;">
+		{{#payments}}
+		<tr>
+			<td style="text-align: left;">{{method_title}}</td>
+			<td style="text-align: right;">{{amount_display}}</td>
+		</tr>
+		{{#tendered}}
+		<tr>
+			<td style="text-align: left; font-size: 10px; padding-left: 8px;">{{i18n.tendered}}</td>
+			<td style="text-align: right; font-size: 10px;">{{tendered_display}}</td>
+		</tr>
+		{{/tendered}}
+		{{#change}}
+		<tr>
+			<td style="text-align: left; font-size: 10px; padding-left: 8px;">{{i18n.change}}</td>
+			<td style="text-align: right; font-size: 10px;">{{change_display}}</td>
+		</tr>
+		{{/change}}
+		{{/payments}}
+	</table>
+
+	{{#order.customer_note}}
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+	<div style="font-size: 10px;">
+		<span style="font-weight: 700;">{{i18n.customer_note}}:</span>
+		{{order.customer_note}}
+	</div>
+	{{/order.customer_note}}
+
+	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />
+
+	<div style="text-align: center; font-size: 10px;">
+		{{i18n.thank_you_purchase}}
+	</div>
+</div>

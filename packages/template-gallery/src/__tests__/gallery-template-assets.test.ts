@@ -20,9 +20,9 @@ afterEach(() => {
 });
 
 describe('gallery template assets', () => {
-	it('includes a browser thermal-style receipt template', () => {
-		const jsonPath = path.join(galleryDir, 'thermal-style-receipt.json');
-		const htmlPath = path.join(galleryDir, 'thermal-style-receipt.html');
+	it('includes a narrow browser receipt template that is webview-portable and B&W', () => {
+		const jsonPath = path.join(galleryDir, 'narrow-receipt.json');
+		const htmlPath = path.join(galleryDir, 'narrow-receipt.html');
 
 		expect(fs.existsSync(jsonPath)).toBe(true);
 		expect(fs.existsSync(htmlPath)).toBe(true);
@@ -37,14 +37,18 @@ describe('gallery template assets', () => {
 		};
 		const html = fs.readFileSync(htmlPath, 'utf8');
 
-		expect(metadata.key).toBe('thermal-style-receipt');
+		expect(metadata.key).toBe('narrow-receipt');
 		expect(metadata.engine).toBe('logicless');
 		expect(metadata.type).toBe('receipt');
 		expect(metadata.category).toBe('receipt');
 		expect(metadata.output_type).toBe('html');
 		expect(metadata.version).toBe(1);
-		expect(html).toContain('font-family: monospace');
+		expect(html).toContain('monospace');
 		expect(html).toContain('{{store.name}}');
+		// Older embedded WebViews render flex unreliably; rely on tables instead.
+		expect(html).not.toContain('display: flex');
+		// Receipts must print cleanly in B&W — no grey hierarchy.
+		expect(html).not.toMatch(/color:\s*#(?:444|555|888)/);
 	});
 
 	it('uses bold product names in bundled thermal templates', () => {
