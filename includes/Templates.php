@@ -801,18 +801,7 @@ class Templates {
 	 * @return array Array of starter template definitions.
 	 */
 	public static function get_starter_templates(): array {
-		$examples_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
-
-		$starters = array(
-			'simple-receipt'   => array(
-				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Simple Receipt (Logicless)', 'woocommerce-pos' ),
-				'description' => __( 'Full receipt using the logicless template engine with section blocks for line items, payments, and conditionals. No PHP required — just HTML and CSS.', 'woocommerce-pos' ),
-				'file'        => $examples_dir . 'simple-receipt.html',
-				'type'        => 'receipt',
-				'language'    => 'html',
-				'engine'      => 'logicless',
-			),
-		);
+		$starters = array();
 
 		// Only include starters whose files actually exist.
 		return array_filter(
