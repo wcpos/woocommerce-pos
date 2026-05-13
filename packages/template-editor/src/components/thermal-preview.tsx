@@ -1,5 +1,5 @@
 import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
-import { PreviewViewport } from '@wcpos/ui';
+import { PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
@@ -29,17 +29,24 @@ export function buildThermalPreviewSrcDoc({ content, sampleData, paperWidth, bod
 }
 
 export function getThermalPreviewBodyClassName(): string {
-	return 'wcpos:flex-1 wcpos:overflow-auto wcpos:flex wcpos:justify-center wcpos:p-0 wcpos:bg-gray-50';
+	return 'wcpos:flex wcpos:flex-1 wcpos:min-h-0 wcpos:flex-col wcpos:p-0 wcpos:bg-gray-50';
 }
 
 export function getThermalPreviewIframeStyle(): CSSProperties {
 	return {
 		display: 'block',
 		width: '100%',
+		height: '100%',
 		border: 0,
 		background: '#fff',
-		minHeight: 520,
 	};
+}
+
+function resolveThermalPaperWidth(content: string, paperWidth?: string | null): PreviewPaperWidth {
+	const resolved = paperWidth ?? inferPaperWidthFromXml(content);
+	if (resolved === '58mm') return '58mm';
+	if (resolved === '80mm') return '80mm';
+	return 'a4';
 }
 
 export function ThermalPreview({ content, sampleData, loading, sourcePicker, paperWidth }: ThermalPreviewProps) {
@@ -63,7 +70,11 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker, pap
 				{loading ? (
 					<PreviewSkeleton style={{ width: '100%', maxWidth: 520, minHeight: 560 }} />
 				) : (
-					<PreviewViewport defaultZoom={100} zoomLabel={t('editor.preview_zoom')}>
+					<PreviewViewport
+						paperWidth={resolveThermalPaperWidth(content, paperWidth)}
+						zoomInLabel={t('editor.zoom_in')}
+						zoomOutLabel={t('editor.zoom_out')}
+					>
 						<iframe
 							srcDoc={srcdoc}
 							sandbox="allow-same-origin"

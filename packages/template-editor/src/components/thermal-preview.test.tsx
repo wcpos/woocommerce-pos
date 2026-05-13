@@ -36,9 +36,12 @@ describe('buildThermalPreviewSrcDoc', () => {
 });
 
 describe('ThermalPreview layout helpers', () => {
-	it('uses a taller default preview iframe', () => {
-		expect(getThermalPreviewIframeStyle().display).toBe('block');
-		expect(getThermalPreviewIframeStyle().minHeight).toBe(520);
+	it('fills the preview viewport canvas with no fixed height', () => {
+		const style = getThermalPreviewIframeStyle();
+		expect(style.display).toBe('block');
+		expect(style.width).toBe('100%');
+		expect(style.height).toBe('100%');
+		expect(style.minHeight).toBeUndefined();
 	});
 
 	it('uses a flush preview body without p-4 padding', () => {
@@ -48,7 +51,7 @@ describe('ThermalPreview layout helpers', () => {
 });
 
 describe('ThermalPreview rendering', () => {
-	it('renders thermal previews inside a 100% viewport canvas', () => {
+	it('renders 58mm thermal previews with 58mm paper dimensions', () => {
 		const markup = renderToStaticMarkup(
 			<ThermalPreview
 				content='<receipt paper-width="32"><text>Test receipt</text></receipt>'
@@ -57,6 +60,31 @@ describe('ThermalPreview rendering', () => {
 		);
 
 		expect(markup).toContain('data-testid="preview-viewport-canvas"');
-		expect(markup).toContain('transform:scale(1)');
+		expect(markup).toContain('width:219px');
+		expect(markup).toContain('height:520px');
+	});
+
+	it('renders 80mm thermal previews with 80mm paper dimensions', () => {
+		const markup = renderToStaticMarkup(
+			<ThermalPreview
+				content='<receipt paper-width="80"><text>Test receipt</text></receipt>'
+				sampleData={{}}
+			/>,
+		);
+
+		expect(markup).toContain('width:302px');
+		expect(markup).toContain('height:520px');
+	});
+
+	it('uses A4 viewport dimensions when no thermal paper width can be resolved', () => {
+		const markup = renderToStaticMarkup(
+			<ThermalPreview
+				content='<receipt><text>Test receipt</text></receipt>'
+				sampleData={{}}
+			/>,
+		);
+
+		expect(markup).toContain('width:794px');
+		expect(markup).toContain('height:1123px');
 	});
 });

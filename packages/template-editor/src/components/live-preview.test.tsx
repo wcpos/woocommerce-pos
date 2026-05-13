@@ -14,13 +14,14 @@ describe('LivePreview helpers', () => {
 		expect(srcDoc).toContain('display:flex');
 	});
 
-	it('lets the iframe fill the preview viewport with an A4-height canvas', () => {
+	it('lets the iframe fill the preview viewport canvas with no fixed height', () => {
 		const style = getPreviewIframeStyle();
 
 		expect(style.display).toBe('block');
 		expect(style.width).toBe('100%');
+		expect(style.height).toBe('100%');
 		expect(style.maxWidth).toBeUndefined();
-		expect(style.minHeight).toBe(1123);
+		expect(style.minHeight).toBeUndefined();
 	});
 
 	it('uses a flush preview body without p-4 padding', () => {
@@ -40,7 +41,7 @@ describe('LivePreview helpers', () => {
 		expect(markup).not.toContain('Open in tab');
 	});
 
-	it('renders A4 previews inside a 75% viewport canvas', () => {
+	it('renders A4 previews inside the preview viewport canvas', () => {
 		const markup = renderToStaticMarkup(
 			<LivePreview
 				content="<p>Receipt</p>"
@@ -49,7 +50,9 @@ describe('LivePreview helpers', () => {
 		);
 
 		expect(markup).toContain('data-testid="preview-viewport-canvas"');
-		expect(markup).toContain('transform:scale(0.75)');
+		// width/height of the canvas matches the A4 paper dimensions
+		expect(markup).toContain('width:794px');
+		expect(markup).toContain('height:1123px');
 	});
 
 	it('includes shared UI source files in Tailwind generation', () => {

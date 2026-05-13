@@ -120,9 +120,10 @@ describe('PreviewModal logicless previews', () => {
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
 
-		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
+		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement | null;
 		expect(canvas).toBeTruthy();
-		expect(canvas?.getAttribute('style')).toContain('transform: scale(0.5)');
+		expect(canvas?.style.width).toBe('794px');
+		expect(canvas?.style.height).toBe('1123px');
 		expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
 	});
 

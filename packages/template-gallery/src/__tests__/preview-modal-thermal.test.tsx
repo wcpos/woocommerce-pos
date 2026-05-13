@@ -42,7 +42,7 @@ describe('PreviewModal thermal previews', () => {
 		expect(srcDoc).not.toContain('<receipt');
 	});
 
-	it('renders thermal previews at 100% zoom by default', async () => {
+	it('uses 58mm paper dimensions for thermal previews', async () => {
 		usePreviewMock.mockReturnValue({
 			data: {
 				engine: 'thermal',
@@ -73,8 +73,9 @@ describe('PreviewModal thermal previews', () => {
 			);
 		});
 
-		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
+		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement | null;
 		expect(canvas).toBeTruthy();
-		expect(canvas?.getAttribute('style')).toContain('transform: scale(1)');
+		expect(canvas?.style.width).toBe('219px');
+		expect(canvas?.style.height).toBe('520px');
 	});
 });
