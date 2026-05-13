@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-12T13:51:05+00:00\n"
+"POT-Creation-Date: 2026-05-13T21:07:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -434,9 +434,9 @@ msgstr ""
 #. translators: REST API schema field label or error message.
 #: includes/Admin/Templates/List_Templates.php:589
 #: includes/Admin/Templates/List_Templates.php:637
-#: includes/Admin/Templates/Single_Template.php:371
-#: includes/Admin/Templates/Single_Template.php:404
-#: includes/Admin/Templates/Single_Template.php:462
+#: includes/Admin/Templates/Single_Template.php:385
+#: includes/Admin/Templates/Single_Template.php:418
+#: includes/Admin/Templates/Single_Template.php:476
 #: includes/API/Templates_Controller.php:460
 #: includes/API/Templates_Controller.php:511
 #: includes/API/Templates_Controller.php:687
@@ -449,14 +449,14 @@ msgstr ""
 #: includes/Admin/Templates/List_Templates.php:596
 #: includes/Admin/Templates/List_Templates.php:644
 #: includes/Admin/Templates/List_Templates.php:803
-#: includes/Admin/Templates/Single_Template.php:362
-#: includes/Admin/Templates/Single_Template.php:408
-#: includes/Admin/Templates/Single_Template.php:466
+#: includes/Admin/Templates/Single_Template.php:376
+#: includes/Admin/Templates/Single_Template.php:422
+#: includes/Admin/Templates/Single_Template.php:480
 msgid "Security check failed."
 msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:600
-#: includes/Admin/Templates/Single_Template.php:412
+#: includes/Admin/Templates/Single_Template.php:426
 msgid "You do not have permission to activate templates."
 msgstr ""
 
@@ -467,7 +467,7 @@ msgstr ""
 #. translators: Label or action in the receipt templates admin screen.
 #. translators: Error message displayed when a template cannot be found.
 #: includes/Admin/Templates/List_Templates.php:655
-#: includes/Admin/Templates/Single_Template.php:477
+#: includes/Admin/Templates/Single_Template.php:491
 #: includes/Template_Router.php:221
 #: includes/Template_Router.php:239
 msgid "Template not found."
@@ -475,7 +475,7 @@ msgstr ""
 
 #. translators: %s: original template title
 #: includes/Admin/Templates/List_Templates.php:669
-#: includes/Admin/Templates/Single_Template.php:485
+#: includes/Admin/Templates/Single_Template.php:499
 #: includes/API/Templates_Controller.php:698
 #, php-format
 msgid "Copy of %s"
@@ -483,22 +483,22 @@ msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
 #: includes/Admin/Templates/List_Templates.php:713
-#: includes/Admin/Templates/Single_Template.php:754
+#: includes/Admin/Templates/Single_Template.php:768
 msgid "Template activated successfully."
 msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:722
-#: includes/Admin/Templates/Single_Template.php:781
+#: includes/Admin/Templates/Single_Template.php:795
 msgid "Template copied successfully. You can now edit your custom template."
 msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:731
-#: includes/Admin/Templates/Single_Template.php:790
+#: includes/Admin/Templates/Single_Template.php:804
 msgid "Starter template installed. You can now customise it and activate it when ready."
 msgstr ""
 
 #: includes/Admin/Templates/List_Templates.php:740
-#: includes/Admin/Templates/Single_Template.php:799
+#: includes/Admin/Templates/Single_Template.php:813
 msgid "Failed to activate template."
 msgstr ""
 
@@ -541,93 +541,98 @@ msgid "Back to Templates"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:176
+#: includes/Admin/Templates/Single_Template.php:178
 msgid "Publish"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:186
+#: includes/Admin/Templates/Single_Template.php:188
 msgid "Template Actions"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:196
+#: includes/Admin/Templates/Single_Template.php:198
 msgid "Template Settings"
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:225
+#. translators: Label or action in the receipt templates admin screen.
+#: includes/Admin/Templates/Single_Template.php:209
+msgid "Revisions"
+msgstr ""
+
+#: includes/Admin/Templates/Single_Template.php:239
 msgid "Prints using your browser's print dialog. Renders on the device without needing a server connection."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:226
+#: includes/Admin/Templates/Single_Template.php:240
 msgid "Sends output directly to thermal printers like Epson or Star. Works offline."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:227
+#: includes/Admin/Templates/Single_Template.php:241
 msgid "Prints using your browser's print dialog. Requires a server connection to generate the receipt."
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:233
+#: includes/Admin/Templates/Single_Template.php:247
 msgid "Template Engine"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:251
+#: includes/Admin/Templates/Single_Template.php:265
 msgid "Paper Size"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:253
+#: includes/Admin/Templates/Single_Template.php:267
 msgid "80mm (Standard)"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:254
+#: includes/Admin/Templates/Single_Template.php:268
 msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:304
+#: includes/Admin/Templates/Single_Template.php:318
 msgid "Deactivate Template"
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:304
+#: includes/Admin/Templates/Single_Template.php:318
 msgid "Activate Template"
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:306
+#: includes/Admin/Templates/Single_Template.php:320
 msgid "This template is active and available for POS receipts."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:307
+#: includes/Admin/Templates/Single_Template.php:321
 msgid "This template is inactive and will not be used for POS receipts."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:358
+#: includes/Admin/Templates/Single_Template.php:372
 msgid "Invalid template status request."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:366
+#: includes/Admin/Templates/Single_Template.php:380
 msgid "You do not have permission to update templates."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:470
+#: includes/Admin/Templates/Single_Template.php:484
 msgid "You do not have permission to create templates."
 msgstr ""
 
-#: includes/Admin/Templates/Single_Template.php:496
+#: includes/Admin/Templates/Single_Template.php:510
 msgid "Failed to create template copy."
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:768
+#: includes/Admin/Templates/Single_Template.php:782
 msgid "Template status updated successfully."
 msgstr ""
 
 #. translators: Label or action in the receipt templates admin screen.
-#: includes/Admin/Templates/Single_Template.php:769
+#: includes/Admin/Templates/Single_Template.php:783
 msgid "Failed to update template status."
 msgstr ""
 
@@ -2613,7 +2618,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:178
-#: includes/Templates.php:1094
+#: includes/Templates.php:1112
 msgid "Invoice"
 msgstr ""
 
@@ -2630,21 +2635,21 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:181
-#: includes/Templates.php:1093
+#: includes/Templates.php:1111
 msgid "Receipt"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:182
-#: includes/Templates.php:1095
+#: includes/Templates.php:1113
 msgid "Gift Receipt"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:183
-#: includes/Templates.php:1096
+#: includes/Templates.php:1114
 msgid "Credit Note"
 msgstr ""
 
@@ -3133,68 +3138,58 @@ msgid "Template Category"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:320
+#: includes/Templates.php:345
 msgid "Theme Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:321
+#: includes/Templates.php:346
 msgid "Pro Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:322
+#: includes/Templates.php:347
 msgid "Default Receipt Template"
 msgstr ""
 
-#. translators: Receipt template post type or template option label.
-#: includes/Templates.php:808
-msgid "Simple Receipt (Logicless)"
-msgstr ""
-
-#. translators: Receipt template post type or template option label.
-#: includes/Templates.php:809
-msgid "Full receipt using the logicless template engine with section blocks for line items, payments, and conditionals. No PHP required — just HTML and CSS."
-msgstr ""
-
-#: includes/Templates.php:931
+#: includes/Templates.php:949
 msgid "Starter template not found."
 msgstr ""
 
-#: includes/Templates.php:938
+#: includes/Templates.php:956
 msgid "Could not read starter template file."
 msgstr ""
 
-#: includes/Templates.php:967
-#: includes/Templates.php:1048
+#: includes/Templates.php:985
+#: includes/Templates.php:1066
 msgid "Template was created but raw content could not be saved."
 msgstr ""
 
-#: includes/Templates.php:994
+#: includes/Templates.php:1012
 msgid "Gallery template not found."
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1069
+#: includes/Templates.php:1087
 msgid "Receipt templates for printing orders"
 msgstr ""
 
-#: includes/Templates.php:1080
+#: includes/Templates.php:1098
 msgid "Report templates for analytics"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1097
+#: includes/Templates.php:1115
 msgid "Purchase Order"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1098
+#: includes/Templates.php:1116
 msgid "Kitchen Ticket"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1099
+#: includes/Templates.php:1117
 msgid "Bar Ticket"
 msgstr ""
 
