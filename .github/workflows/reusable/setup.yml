@@ -5,10 +5,10 @@ on:
     inputs:
 		node-version:
 			description: Version of Node to use
-			default: "20.x"
+			default: "22.x"
 		pnpm-version:
 			description: Version of pnpm to use
-			default: "10.8.0"
+			default: "11.1.1"
 
 jobs:
   setup:
