@@ -97,7 +97,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 				<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; font-weight: 700;">{{i18n.ship_to}}</div>
 				<div>{{customer.shipping_address.first_name}} {{customer.shipping_address.last_name}}</div>
 				<div style="color: #6b7280; font-size: 11px;">{{customer.shipping_address.address_1}}{{#customer.shipping_address.address_2}}, {{customer.shipping_address.address_2}}{{/customer.shipping_address.address_2}}</div>
-				<div style="color: #6b7280; font-size: 11px;">{{customer.shipping_address.postcode}} {{customer.shipping_address.city}}{{#customer.shipping_address.country}}, {{customer.shipping_address.country}}</div>
+				<div style="color: #6b7280; font-size: 11px;">{{customer.shipping_address.postcode}} {{customer.shipping_address.city}}{{#customer.shipping_address.country}}, {{customer.shipping_address.country}}{{/customer.shipping_address.country}}</div>
 			</div>
 			{{/customer.shipping_address.address_1}}
 		</div>
