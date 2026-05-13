@@ -134,7 +134,6 @@ $i18n = $receipt_data['i18n'] ?? array();
 
 		@media print {
 			body { background: #fff; }
-			.receipt { padding: 0; max-width: none; }
 		}
 	</style>
 	<?php do_action( 'woocommerce_pos_receipt_head' ); ?>

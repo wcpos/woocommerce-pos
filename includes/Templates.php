@@ -344,7 +344,7 @@ class Templates {
 		$titles = array(
 			self::TEMPLATE_THEME       => /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
 			self::TEMPLATE_PLUGIN_PRO  => /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
-			self::TEMPLATE_PLUGIN_CORE => /* translators: Receipt template post type or template option label. */ __( 'Default Receipt Template', 'woocommerce-pos' ),
+			self::TEMPLATE_PLUGIN_CORE => /* translators: Receipt template post type or template option label. */ __( 'Legacy PHP Template', 'woocommerce-pos' ),
 		);
 
 		return array(
