@@ -1,0 +1,242 @@
+<!--
+Quote / Estimate — "Refined Modern".
+
+Pre-sale document with a clean, contemporary feel. Amber accent is
+used sparingly: a single "QUOTE" wordmark and a validity pill in the
+header, then a soft amber "Prepared For" card. Items table mirrors
+the detailed receipt's structure (SKU column, variation meta, fees,
+shipping, discounts) so it composes well with the rest of the gallery.
+
+Sections, top to bottom:
+
+  - Header — logo, store, address, tax IDs on the left; "QUOTE",
+    order number, issue date and a "valid for 30 days" pill on the
+    right.
+  - Prepared For card — billed-to address plus optional shipping
+    address and customer tax IDs.
+  - Items table — line items with SKU and variation meta. Fees,
+    shipping (with carrier/tracking meta) and discounts share the
+    table.
+  - Tax summary + totals — per-rate breakdown on the left, subtotal
+    / discount / tax / total stack on the right.
+  - Customer note — highlighted callout, only when a note was left.
+  - Terms & conditions — store policy text, with the built-in "valid
+    for 30 days" message as the fallback.
+  - Footer — imprint + opening hours + a centred "not a receipt"
+    tagline as the fallback.
+
+To remove a section, delete the matching block. To restyle, edit the
+inline styles on the wrapping element.
+
+Note: Logicless output passes through wp_kses_post, which strips
+<style>, <head>, and document-level tags. Use inline styles only.
+
+@see https://docs.wcpos.com/templates/receipt-data-reference
+-->
+<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
+
+	<!-- ── Header: logo + store info / quote meta ─────────────── -->
+	<header style="display: flex; align-items: flex-start; gap: 22px; padding-bottom: 18px; border-bottom: 1px solid #e5e7eb;">
+		{{#store.logo}}
+		<div style="flex: 0 0 auto;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="width: 80px; height: auto; display: block;">
+		</div>
+		{{/store.logo}}
+		<div style="flex: 1 1 auto; min-width: 0;">
+			<div style="font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
+			{{/store.address_lines}}
+			{{#store.phone}}<div style="color: #6b7280; font-size: 12px;">{{store.phone}}{{#store.email}} &middot; {{store.email}}{{/store.email}}</div>{{/store.phone}}
+			{{^store.phone}}{{#store.email}}<div style="color: #6b7280; font-size: 12px;">{{store.email}}</div>{{/store.email}}{{/store.phone}}
+			{{#store.tax_ids}}
+			<div style="color: #6b7280; font-size: 12px;">{{#label}}{{label}} {{/label}}{{value}}</div>
+			{{/store.tax_ids}}
+		</div>
+		<div style="flex: 0 0 auto; text-align: right;">
+			<div style="font-size: 11px; letter-spacing: 0.22em; color: #b45309; text-transform: uppercase; font-weight: 700;">{{i18n.quote}}</div>
+			<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{order.number}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 8px;">{{i18n.date}} {{order.created.datetime}}</div>
+			<div style="display: inline-block; margin-top: 10px; padding: 4px 10px; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase;">{{i18n.quote_not_receipt}}</div>
+		</div>
+	</header>
+
+	<!-- ── Prepared For / Ship to (when present) ─────────────── -->
+	<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 22px;">
+		<div style="grid-column: span 1; padding: 16px 18px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px;">
+			<div style="font-size: 10px; letter-spacing: 0.18em; color: #92400e; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.prepared_for}}</div>
+			<div style="font-weight: 600;">{{customer.name}}</div>
+			{{#customer.billing_address.company}}<div style="color: #6b7280; font-size: 12px;">{{customer.billing_address.company}}</div>{{/customer.billing_address.company}}
+			{{#customer.billing_address.address_1}}<div style="color: #4b5563; font-size: 12px; line-height: 1.55; margin-top: 2px;">{{customer.billing_address.address_1}}{{#customer.billing_address.address_2}}, {{customer.billing_address.address_2}}{{/customer.billing_address.address_2}}</div>{{/customer.billing_address.address_1}}
+			{{#customer.billing_address.city}}<div style="color: #4b5563; font-size: 12px; line-height: 1.55;">{{customer.billing_address.postcode}} {{customer.billing_address.city}}{{#customer.billing_address.state}}, {{customer.billing_address.state}}{{/customer.billing_address.state}}{{#customer.billing_address.country}}, {{customer.billing_address.country}}{{/customer.billing_address.country}}</div>{{/customer.billing_address.city}}
+			{{#customer.billing_address.email}}<div style="color: #6b7280; font-size: 11px; margin-top: 4px;">{{customer.billing_address.email}}</div>{{/customer.billing_address.email}}
+			{{#customer.billing_address.phone}}<div style="color: #6b7280; font-size: 11px;">{{customer.billing_address.phone}}</div>{{/customer.billing_address.phone}}
+			{{#customer.tax_ids}}
+			<div style="color: #6b7280; font-size: 11px; margin-top: 4px;"><strong>{{#label}}{{label}}{{/label}}{{^label}}{{type}}{{/label}}</strong> {{value}}</div>
+			{{/customer.tax_ids}}
+		</div>
+
+		<div>
+			{{#customer.shipping_address.address_1}}
+			<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.ship_to}}</div>
+			<div style="font-weight: 600;">{{customer.shipping_address.first_name}} {{customer.shipping_address.last_name}}</div>
+			{{#customer.shipping_address.company}}<div style="color: #6b7280; font-size: 12px;">{{customer.shipping_address.company}}</div>{{/customer.shipping_address.company}}
+			<div style="color: #4b5563; font-size: 12px; line-height: 1.55; margin-top: 2px;">{{customer.shipping_address.address_1}}{{#customer.shipping_address.address_2}}, {{customer.shipping_address.address_2}}{{/customer.shipping_address.address_2}}</div>
+			<div style="color: #4b5563; font-size: 12px; line-height: 1.55;">{{customer.shipping_address.postcode}} {{customer.shipping_address.city}}{{#customer.shipping_address.country}}, {{customer.shipping_address.country}}{{/customer.shipping_address.country}}</div>
+			{{/customer.shipping_address.address_1}}
+		</div>
+
+		<div>
+			<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.order}}</div>
+			<div style="font-size: 12px;">
+				<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.reference}}</span><span>#{{order.number}}</span></div>
+				<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.date}}</span><span>{{order.created.datetime}}</span></div>
+				{{#cashier.name}}<div style="display: flex; justify-content: space-between; padding: 1px 0;"><span style="color: #6b7280;">{{i18n.cashier}}</span><span>{{cashier.name}}</span></div>{{/cashier.name}}
+			</div>
+		</div>
+	</div>
+
+	<!-- ── Items ─────────────── -->
+	<table style="width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px;">
+		<thead>
+			<tr>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em;">{{i18n.item}}</th>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; white-space: nowrap;">{{i18n.sku_short}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; white-space: nowrap;">{{i18n.qty}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; white-space: nowrap;">{{i18n.unit_price}}</th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.10em; white-space: nowrap;">{{i18n.total}}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+					<div style="font-weight: 600;">{{name}}</div>
+					{{#meta}}<div style="color: #6b7280; font-size: 11px;">{{key}}: {{value}}</div>{{/meta}}
+				</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280; font-size: 11px; white-space: nowrap; font-family: 'SF Mono', Menlo, Consolas, monospace;">{{sku}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{qty}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{unit_price_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{line_total_incl_display}}</td>
+			</tr>
+			{{/lines}}
+			{{#fees}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+					<div style="font-weight: 600;">{{label}}</div>
+					{{#meta}}<div style="color: #6b7280; font-size: 11px;">{{key}}: {{value}}</div>{{/meta}}
+				</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280;">&mdash;</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/fees}}
+			{{#shipping}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+					<div style="font-weight: 600;">{{label}}{{#method_id}} <span style="color: #6b7280; font-size: 11px; font-weight: 400;">({{method_id}})</span>{{/method_id}}</div>
+					{{#meta}}<div style="color: #6b7280; font-size: 11px;">{{key}}: {{value}}</div>{{/meta}}
+				</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280;">&mdash;</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/shipping}}
+			{{#discounts}}
+			<tr style="color: #15803d;">
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">
+					<div style="font-weight: 600;">{{i18n.discount}}{{#label}} &middot; {{label}}{{/label}}</div>
+					{{#code}}<div style="font-size: 11px;">{{i18n.reference}}: {{code}}</div>{{/code}}
+				</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top;">&mdash;</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right;">&mdash;</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right;">&mdash;</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">-{{total_incl_display}}</td>
+			</tr>
+			{{/discounts}}
+		</tbody>
+	</table>
+
+	<!-- ── Tax summary + Totals ─────────────── -->
+	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 20px; align-items: start;">
+		<div>
+			{{#tax_summary.0}}
+			<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.tax_summary}}</div>
+			<table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+				<thead>
+					<tr>
+						<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 6px; border-bottom: 1px solid #e5e7eb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em;">{{i18n.tax}}</th>
+						<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 6px; border-bottom: 1px solid #e5e7eb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em;">{{i18n.taxable_excl_short}}</th>
+						<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 6px; border-bottom: 1px solid #e5e7eb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em;">{{i18n.tax_amount_short}}</th>
+					</tr>
+				</thead>
+				<tbody>
+					{{#tax_summary}}
+					<tr>
+						<td style="padding: 6px; border-bottom: 1px solid #f3f4f6;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</td>
+						<td style="padding: 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{taxable_amount_excl_display}}</td>
+						<td style="padding: 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{tax_amount_display}}</td>
+					</tr>
+					{{/tax_summary}}
+				</tbody>
+			</table>
+			{{/tax_summary.0}}
+		</div>
+
+		<div style="font-size: 13px;">
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
+			{{#totals.discount_total_incl}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.discount_total_incl_display}}</span></div>
+			{{/totals.discount_total_incl}}
+			{{#totals.tax_total}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+			{{/totals.tax_total}}
+			<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
+		</div>
+	</div>
+
+	<!-- ── Customer note ─────────────── -->
+	{{#order.customer_note}}
+	<div style="margin-top: 24px; padding: 14px 18px; border-left: 3px solid #f59e0b; background: #fffbeb; font-size: 12px; line-height: 1.55;">
+		<div style="font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #92400e; font-weight: 700; margin-bottom: 4px;">{{i18n.customer_note}}</div>
+		<div style="color: #4b5563; white-space: pre-wrap;">{{order.customer_note}}</div>
+	</div>
+	{{/order.customer_note}}
+
+	<!-- ── Terms & conditions ─────────────── -->
+	<div style="margin-top: 24px; padding: 16px 18px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 12px; line-height: 1.55;">
+		<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.terms_and_conditions}}</div>
+		{{#store.policies_and_conditions}}
+		<div style="color: #4b5563; white-space: pre-wrap;">{{store.policies_and_conditions}}</div>
+		{{/store.policies_and_conditions}}
+		{{^store.policies_and_conditions}}
+		<div style="color: #4b5563;">{{i18n.quote_validity}}</div>
+		{{/store.policies_and_conditions}}
+	</div>
+
+	<!-- ── Footer: imprint + opening hours + tagline ─────────────── -->
+	<footer style="margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5e7eb; display: flex; align-items: flex-start; gap: 24px; font-size: 11px; color: #6b7280;">
+		<div style="flex: 1 1 0; min-width: 0;">
+			{{#store.footer_imprint}}{{store.footer_imprint}}{{/store.footer_imprint}}
+		</div>
+		{{#store.opening_hours}}
+		<div style="flex: 1 1 0; min-width: 0; text-align: center;">
+			<div style="font-size: 10px; letter-spacing: 0.18em; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px;">{{i18n.opening_hours}}</div>
+			<div style="color: #374151;">{{store.opening_hours}}</div>
+			{{#store.opening_hours_notes}}<div>{{store.opening_hours_notes}}</div>{{/store.opening_hours_notes}}
+		</div>
+		{{/store.opening_hours}}
+		{{^store.opening_hours}}{{#store.opening_hours_notes}}
+		<div style="flex: 1 1 0; min-width: 0; text-align: center;">
+			<div>{{store.opening_hours_notes}}</div>
+		</div>
+		{{/store.opening_hours_notes}}{{/store.opening_hours}}
+		<div style="flex: 1 1 0; min-width: 0; text-align: right; color: #b45309; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase;">
+			{{i18n.quote_not_receipt}}
+		</div>
+	</footer>
+
+</div>
