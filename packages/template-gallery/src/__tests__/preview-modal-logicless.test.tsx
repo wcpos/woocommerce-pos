@@ -119,6 +119,11 @@ describe('PreviewModal logicless previews', () => {
 		const iframe = container.querySelector('iframe');
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 		expect(iframe?.getAttribute('srcdoc')).toContain('<main>Legacy fallback</main>');
+
+		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
+		expect(canvas).toBeTruthy();
+		expect(canvas?.getAttribute('style')).toContain('transform: scale(0.5)');
+		expect(iframe?.getAttribute('srcdoc')).toContain('width:210mm');
 	});
 
 	it('renders an empty logicless template when receipt data is present', async () => {
