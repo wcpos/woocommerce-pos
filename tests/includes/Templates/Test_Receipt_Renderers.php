@@ -379,13 +379,14 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$renderer = new Logicless_Renderer();
 		ob_start();
 		$renderer->render( $template, $order, $receipt_data );
-		$output = ob_get_clean();
+		$output = str_replace( ' ', '', ob_get_clean() );
 
-		$this->assertStringContainsString( 'print-color-adjust:exact', str_replace( ' ', '', $output ) );
-		$this->assertStringContainsString( '-webkit-print-color-adjust:exact', str_replace( ' ', '', $output ) );
+		$this->assertStringContainsString( ';print-color-adjust:exact', $output );
+		$this->assertStringContainsString( '-webkit-print-color-adjust:exact', $output );
 
-		$leaked = wp_kses_post( '<div style="print-color-adjust: exact;"></div>' );
+		$leaked = wp_kses_post( '<div style="-webkit-print-color-adjust: exact; print-color-adjust: exact;"></div>' );
 		$this->assertStringNotContainsString( 'print-color-adjust', $leaked, 'safe_style_css filter must not leak past render().' );
+		$this->assertStringNotContainsString( '-webkit-print-color-adjust', $leaked, 'safe_style_css filter must not leak past render().' );
 	}
 
 	/**
