@@ -151,7 +151,7 @@ class Test_Templates extends WP_UnitTestCase {
 	/**
 	 * Render the invoice gallery template with minimal receipt data.
 	 *
-	 * @param array $overrides Nested data overrides.
+	 * @param array $order_overrides Nested data overrides for the order section.
 	 */
 	private function render_invoice_template( array $order_overrides = array() ): string {
 		$template = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/invoice.html' );
@@ -472,6 +472,7 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertNotContains( 'gift-receipt', $keys );
 		$this->assertNotContains( 'minimal-receipt', $keys );
 		$this->assertNotContains( 'thermal-receipt', $keys );
+		$this->assertNotContains( 'simple-receipt', $keys );
 	}
 
 	/**

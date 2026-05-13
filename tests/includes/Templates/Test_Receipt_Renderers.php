@@ -301,13 +301,13 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test logicless renderer with the full simple receipt template and real order data.
+	 * Test logicless renderer with the full standard receipt template and real order data.
 	 */
 	public function test_logicless_renderer_full_receipt_no_error(): void {
 		$order        = OrderHelper::create_order();
 		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
 
-		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/simple-receipt.html';
+		$template_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/standard-receipt.html';
 		$this->assertFileExists( $template_path );
 
 		$template = array(
