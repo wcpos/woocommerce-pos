@@ -66,6 +66,12 @@ export function TemplateTags({ template }: TemplateTagsProps) {
 					&#9888; {t('tags.legacy_php')}
 				</Chip>
 			)}
+
+			{'direction' in template && template.direction === 'rtl' && (
+				<Chip variant="neutral" title={t('tags.rtl_tip')}>
+					{t('tags.rtl')}
+				</Chip>
+			)}
 		</div>
 	);
 }

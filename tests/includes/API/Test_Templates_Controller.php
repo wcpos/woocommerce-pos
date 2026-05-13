@@ -1540,4 +1540,51 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 			}
 		}
 	}
+
+	/**
+	 * Test gallery includes both RTL templates with direction="rtl".
+	 */
+	public function test_gallery_includes_rtl_templates(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertIsArray( $data );
+
+		$by_key = array();
+		foreach ( $data as $template ) {
+			$by_key[ $template['key'] ] = $template;
+		}
+
+		$this->assertArrayHasKey( 'standard-receipt-rtl', $by_key );
+		$this->assertArrayHasKey( 'thermal-simple-80mm-rtl', $by_key );
+		$this->assertEquals( 'rtl', $by_key['standard-receipt-rtl']['direction'] );
+		$this->assertEquals( 'rtl', $by_key['thermal-simple-80mm-rtl']['direction'] );
+	}
+
+	/**
+	 * Test legacy gallery templates default to direction="ltr".
+	 */
+	public function test_gallery_legacy_templates_default_to_ltr_direction(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/gallery' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertIsArray( $data );
+
+		$standard_receipt = null;
+		foreach ( $data as $template ) {
+			if ( 'standard-receipt' === $template['key'] ) {
+				$standard_receipt = $template;
+				break;
+			}
+		}
+
+		$this->assertNotNull( $standard_receipt );
+		$this->assertEquals( 'ltr', $standard_receipt['direction'] );
+	}
 }

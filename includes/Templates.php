@@ -864,6 +864,10 @@ class Templates {
 				continue;
 			}
 
+			$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
+				? 'rtl'
+				: 'ltr';
+
 			$templates[] = array_merge(
 				$metadata,
 				array(

@@ -55,6 +55,7 @@ export interface GalleryTemplate {
 	engine: string;
 	output_type: string;
 	paper_width: string | null;
+	direction: 'ltr' | 'rtl';
 	version: number;
 	content?: string;
 	is_premade: true;

@@ -1,0 +1,171 @@
+<!--
+Simple Thermal Receipt 80mm (RTL) — Right-to-left counterpart to
+thermal-simple-80mm.xml. Mirrored for Arabic, Hebrew, Persian and Urdu.
+
+ESC/POS is character-cell based with no true bidi: what's mirrored here
+is column alignment and label/amount order. The label column is on the
+right (align="right") and the amount/value column is on the left
+(align="left"), so the receipt reads naturally for an RTL audience when
+the printer renders Arabic glyphs right-to-left.
+
+Printer requirement: this template prints Arabic, Hebrew, Persian or
+Urdu glyphs only if your thermal printer supports an Arabic codepage
+(CP864 or Windows-1256). Most modern thermal printers from Epson, Star,
+Bixolon and Xprinter support this — check your printer's manual before
+ordering. Codepage selection happens printer-side and is not switched
+from PHP.
+
+Layout uses width="*" for the flexible column so the same template
+renders correctly on both 42- and 48-CPL 80mm printers; do not replace
+these star columns with hard-coded widths.
+-->
+<receipt paper-width="48">
+
+  <!-- ── Logo + store identity ─────────────── -->
+  {{#store.logo}}
+  <align mode="center"><image src="{{store.logo}}" width="200" /></align>
+  {{/store.logo}}
+  <align mode="center">
+    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
+    {{#store.address_lines}}
+    <text>{{.}}</text>
+    {{/store.address_lines}}
+    {{#store.phone}}<text>Phone: {{store.phone}}</text>{{/store.phone}}
+    {{#store.email}}<text>Email: {{store.email}}</text>{{/store.email}}
+    {{#store.tax_ids}}
+    <text>{{value}}{{#label}} :{{label}}{{/label}}</text>
+    {{/store.tax_ids}}
+  </align>
+  <line />
+
+  <!-- ── Order info (label on the right, value on the left) ─────────────── -->
+  <row>
+    <col width="*">#{{order.number}}</col>
+    <col width="12" align="right">:{{i18n.order}}</col>
+  </row>
+  <row>
+    <col width="*">{{order.created.datetime}}</col>
+    <col width="12" align="right">:{{i18n.date}}</col>
+  </row>
+  {{#cashier.name}}
+  <row>
+    <col width="*">{{cashier.name}}</col>
+    <col width="12" align="right">:{{i18n.cashier}}</col>
+  </row>
+  {{/cashier.name}}
+  {{#customer.name}}
+  <row>
+    <col width="*">{{customer.name}}</col>
+    <col width="12" align="right">:{{i18n.customer}}</col>
+  </row>
+  {{/customer.name}}
+
+  <!-- ── Items (amount on the left, qty x unit price on the right) ─────────────── -->
+  <line />
+  {{#lines}}
+  <bold><text>{{name}}</text></bold>
+  {{#sku}}<text>{{sku}} :SKU  </text>{{/sku}}
+  {{#discounts}}
+  <row>
+    <col width="12">-{{discounts_incl_display}}</col>
+    <col width="*" align="right">{{unit_subtotal_incl_display}} @  </col>
+  </row>
+  {{/discounts}}
+  <row>
+    <col width="12">{{line_total_incl_display}}</col>
+    <col width="*" align="right">{{qty}} x {{unit_price_incl_display}}  </col>
+  </row>
+  {{/lines}}
+
+  <!-- ── Fees / Shipping / Order-level discounts ─────────────── -->
+  {{#fees}}
+  <row>
+    <col width="14">{{total_incl_display}}</col>
+    <col width="*" align="right">{{label}}</col>
+  </row>
+  {{/fees}}
+  {{#shipping}}
+  <row>
+    <col width="14">{{total_incl_display}}</col>
+    <col width="*" align="right">{{label}}</col>
+  </row>
+  {{/shipping}}
+  {{#discounts}}
+  <row>
+    <col width="14">-{{total_incl_display}}</col>
+    <col width="*" align="right">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
+  </row>
+  {{/discounts}}
+
+  <!-- ── Totals ─────────────── -->
+  <line />
+  <row>
+    <col width="14">{{totals.subtotal_incl_display}}</col>
+    <col width="*" align="right">{{i18n.subtotal}}</col>
+  </row>
+  {{#tax_summary}}
+  <row>
+    <col width="14">{{tax_amount_display}}</col>
+    <col width="*" align="right">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
+  </row>
+  {{/tax_summary}}
+  <line style="double" />
+  <row>
+    <col width="14"><bold>{{totals.total_incl_display}}</bold></col>
+    <col width="*" align="right"><bold>{{i18n.total}}</bold></col>
+  </row>
+  <line style="double" />
+
+  <!-- ── Customer note ─────────────── -->
+  {{#order.customer_note}}
+  <line style="dashed" />
+  <bold><text>{{i18n.customer_note}}</text></bold>
+  <text>{{order.customer_note}}</text>
+  {{/order.customer_note}}
+
+  <!-- ── Payments ─────────────── -->
+  {{#payments.0}}
+  <line style="dashed" />
+  <bold><text>{{i18n.paid}}</text></bold>
+  {{/payments.0}}
+  {{#payments}}
+  <row>
+    <col width="14">{{amount_display}}</col>
+    <col width="*" align="right">{{method_title}}</col>
+  </row>
+  {{#tendered}}
+  <row>
+    <col width="14">{{tendered_display}}</col>
+    <col width="*" align="right">{{i18n.tendered}}  </col>
+  </row>
+  {{/tendered}}
+  {{#change}}
+  <row>
+    <col width="14">{{change_display}}</col>
+    <col width="*" align="right">{{i18n.change}}  </col>
+  </row>
+  {{/change}}
+  {{/payments}}
+
+  <!-- ── Order barcode ─────────────── -->
+  <feed lines="1" />
+  <align mode="center">
+    <barcode type="code128" height="60">{{order.number}}</barcode>
+  </align>
+
+  <!-- ── Personal note ─────────────── -->
+  <feed lines="1" />
+  <align mode="center">
+    {{#store.personal_notes}}<text>{{store.personal_notes}}</text>{{/store.personal_notes}}
+    {{^store.personal_notes}}<text>{{i18n.thank_you_purchase}}</text>{{/store.personal_notes}}
+  </align>
+
+  <!-- ── Footer imprint ─────────────── -->
+  {{#store.footer_imprint}}
+  <line style="dotted" />
+  <align mode="center"><text>{{store.footer_imprint}}</text></align>
+  {{/store.footer_imprint}}
+
+  <feed lines="2" />
+  <cut />
+</receipt>
