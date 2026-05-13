@@ -3,12 +3,12 @@ name: Build
 on:
   workflow_call:
     inputs:
-		node-version:
-			description: Version of Node to use
-			default: "22.x"
-		pnpm-version:
-			description: Version of pnpm to use
-			default: "11.1.1"
+      node-version:
+        description: Version of Node to use
+        default: "22.x"
+      pnpm-version:
+        description: Version of pnpm to use
+        default: "11.1.1"
 
 jobs:
   setup:
