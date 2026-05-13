@@ -13,7 +13,7 @@ vi.mock('../translations', () => ({
 			'editor.search_fields_placeholder': 'Search fields...',
 			'editor.search_fields_label': 'Search fields',
 			'editor.clear_search': 'Clear search',
-			'editor.no_field_matches': 'No fields match "{{query}}".',
+			'editor.no_field_matches': 'No fields match "{query}".',
 			'editor.insert': 'Insert',
 			'editor.insert_loop_block': 'Insert loop block',
 			'editor.loop': 'loop',
@@ -22,7 +22,7 @@ vi.mock('../translations', () => ({
 		const template = strings[key] ?? key;
 		if (!params) return template;
 		return Object.entries(params).reduce(
-			(acc, [k, v]) => acc.replace(new RegExp(`{{${k}}}`, 'g'), String(v)),
+			(acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
 			template,
 		);
 	},
@@ -210,6 +210,24 @@ describe('FieldPicker', () => {
 
 		expect(container.textContent).toContain('Order');
 		expect(container.textContent).not.toContain('No fields match');
+	});
+
+
+	it('does not cap its own height so it can match the editor column', async () => {
+		const schema: FieldSchema = {
+			order: {
+				label: 'Order',
+				fields: { number: { type: 'number', label: 'Number' } },
+			},
+		};
+
+		const { container, root, onInsertField } = renderPicker(schema);
+
+		await act(async () => {
+			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+		});
+
+		expect(container.firstElementChild?.getAttribute('style') ?? '').not.toContain('max-height');
 	});
 
 	it('shows a field count next to non-array sections', async () => {

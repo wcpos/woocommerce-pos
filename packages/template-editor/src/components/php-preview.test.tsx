@@ -9,6 +9,7 @@ import {
 	decodeLabel,
 	getPhpPreviewFrame,
 	getPhpPreviewIframeStyle,
+	getPhpPreviewBodyClassName,
 	getPhpPreviewRequestUrl,
 } from './php-preview';
 
@@ -95,7 +96,12 @@ describe('PhpPreview', () => {
 
 		expect(style.width).toBe('100%');
 		expect(style.maxWidth).toBeUndefined();
-		expect(style.minHeight).toBe(400);
+		expect(style.minHeight).toBe(560);
+	});
+
+	it('uses a flush preview body without p-4 padding', () => {
+		expect(getPhpPreviewBodyClassName()).not.toContain('p-4');
+		expect(getPhpPreviewBodyClassName()).toContain('p-0');
 	});
 
 	it('renders preview failure fallback when the REST preview request fails', async () => {

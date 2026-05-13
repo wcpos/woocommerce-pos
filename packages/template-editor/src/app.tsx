@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
 import { CodeEditor } from './components/code-editor';
 import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
@@ -136,6 +136,14 @@ interface AppProps {
 	config: EditorConfig;
 }
 
+export function getEditorLayoutStyle(): CSSProperties {
+	return {
+		height: 'calc(100vh - 320px)',
+		minHeight: 440,
+		maxHeight: 720,
+	};
+}
+
 export function App({ config }: AppProps) {
 	const defaultDoc = getDefaultDoc(config.postContent, config.engine);
 
@@ -265,7 +273,10 @@ export function App({ config }: AppProps) {
 	return (
 		<>
 			<TemplateInfoBar engine={engine} paperWidth={paperWidth} />
-			<div className="wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch">
+			<div
+				className="wcpos:flex wcpos:gap-3 wcpos:mt-4 wcpos:items-stretch"
+				style={getEditorLayoutStyle()}
+			>
 				{showFieldPicker && (
 					<FieldPicker
 						schema={config.fieldSchema}

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { undo, redo } from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
-import { foldAll, unfoldAll } from '@codemirror/language';
+import { foldAll, unfoldAll, foldable, foldEffect, foldedRanges } from '@codemirror/language';
 import type { EditorView } from '@codemirror/view';
 import { Tooltip } from '@wcpos/ui';
 import { t } from '../translations';
@@ -43,6 +43,43 @@ function ToolButton({ label, onClick, pressed, children }: ToolButtonProps) {
 }
 
 // Lightweight 14px icons — currentColor.
+
+function getFoldedRangeKeys(view: EditorView): Set<string> {
+	const keys = new Set<string>();
+	foldedRanges(view.state).between(0, view.state.doc.length, (from, to) => {
+		keys.add(`${from}:${to}`);
+	});
+	return keys;
+}
+
+export function runFoldAllRecursively(view: EditorView): boolean {
+	const existingRanges = getFoldedRangeKeys(view);
+	const effects = [];
+	const seenRanges = new Set(existingRanges);
+
+	for (let pos = 0; pos < view.state.doc.length;) {
+		const line = view.lineBlockAt(pos);
+		const range = foldable(view.state, line.from, line.to);
+
+		if (range) {
+			const key = `${range.from}:${range.to}`;
+			if (!seenRanges.has(key)) {
+				seenRanges.add(key);
+				effects.push(foldEffect.of(range));
+			}
+		}
+
+		pos = line.to + 1;
+	}
+
+	if (effects.length) {
+		view.dispatch({ effects });
+		return true;
+	}
+
+	return foldAll(view);
+}
+
 const Icons = {
 	undo: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -74,12 +111,14 @@ const Icons = {
 	),
 	fold: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-			<path d="M3 4 L7 8 L11 4 M3 12 L7 8 L11 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M3 3.5 H11 M3 7 H11 M3 10.5 H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+			<path d="M5 5 L7 7 L9 5 M5 8.5 L7 10.5 L9 8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
 		</svg>
 	),
 	unfold: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-			<path d="M3 10 L7 6 L11 10 M3 2 L7 6 M11 2 L7 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M3 3.5 H11 M3 7 H11 M3 10.5 H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+			<path d="M5 9 L7 7 L9 9 M5 5 L7 3 L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
 		</svg>
 	),
 };
@@ -115,7 +154,7 @@ export function EditorToolbar({ viewRef, wrap, onToggleWrap }: EditorToolbarProp
 
 			<span className="wcpos:w-px wcpos:h-5 wcpos:bg-gray-200 wcpos:mx-1" aria-hidden="true" />
 
-			<ToolButton label={t('editor.toolbar.fold_all')} onClick={withView(foldAll)}>
+			<ToolButton label={t('editor.toolbar.fold_all')} onClick={withView(runFoldAllRecursively)}>
 				{Icons.fold}
 			</ToolButton>
 			<ToolButton label={t('editor.toolbar.unfold_all')} onClick={withView(unfoldAll)}>

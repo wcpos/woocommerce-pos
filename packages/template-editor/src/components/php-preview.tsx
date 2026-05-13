@@ -42,7 +42,7 @@ export function getPhpPreviewIframeStyle(): CSSProperties {
 		width: '100%',
 		border: '1px solid #ddd',
 		background: '#f5f5f5',
-		minHeight: 400,
+		minHeight: 560,
 	};
 }
 
@@ -60,6 +60,10 @@ export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewSt
 		src: response.preview_url ?? null,
 		srcDoc: null,
 	};
+}
+
+export function getPhpPreviewBodyClassName(): string {
+	return 'wcpos:flex-1 wcpos:overflow-auto wcpos:p-0 wcpos:bg-gray-50';
 }
 
 export function PhpPreview({ previewUrl }: PhpPreviewProps) {
@@ -132,15 +136,15 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 
 	if (!previewUrl) {
 		return (
-			<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500">
+			<div className="wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:flex wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500 wcpos:rounded-lg">
 				{t('editor.no_orders')}
 			</div>
 		);
 	}
 
 	return (
-		<div className="wcpos:border wcpos:border-gray-300 wcpos:bg-gray-50 wcpos:flex wcpos:flex-col">
-			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-white">
+		<div className="wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:flex wcpos:flex-col wcpos:rounded-lg wcpos:overflow-hidden">
+			<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-3 wcpos:py-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50">
 				<span className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase">
 					{t('editor.preview')}
 				</span>
@@ -167,7 +171,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 			<div className="wcpos:p-2 wcpos:text-xs wcpos:text-amber-700 wcpos:bg-amber-50 wcpos:border-b wcpos:border-amber-200">
 				{t('editor.php_save_notice')}
 			</div>
-			<div className="wcpos:flex-1 wcpos:overflow-auto wcpos:p-4">
+			<div className={getPhpPreviewBodyClassName()}>
 				{previewState.loading ? (
 					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
 				) : (

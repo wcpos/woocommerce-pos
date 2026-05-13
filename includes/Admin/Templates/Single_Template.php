@@ -161,9 +161,11 @@ class Single_Template {
 	/**
 	 * Add meta boxes.
 	 *
+	 * @param \WP_Post|null $post Post object.
+	 *
 	 * @return void
 	 */
-	public function add_meta_boxes(): void {
+	public function add_meta_boxes( ?\WP_Post $post = null ): void {
 		// Remove default taxonomy metaboxes — consolidated into Template Settings.
 		remove_meta_box( 'wcpos_template_typediv', 'wcpos_template', 'side' );
 		remove_meta_box( 'wcpos_template_categorydiv', 'wcpos_template', 'side' );
@@ -199,6 +201,18 @@ class Single_Template {
 			'side',
 			'high'
 		);
+
+		if ( $post instanceof \WP_Post && wp_get_post_revisions( $post->ID ) ) {
+			add_meta_box(
+				'revisionsdiv',
+				/* translators: Label or action in the receipt templates admin screen. */
+				__( 'Revisions', 'woocommerce-pos' ),
+				'post_revisions_meta_box',
+				'wcpos_template',
+				'normal',
+				'low'
+			);
+		}
 	}
 
 	/**
