@@ -60,7 +60,7 @@ export function PreviewViewport({
 					style={{
 						width: inverseWidth,
 						transform: `scale(${scale})`,
-						transformOrigin: 'top center',
+						transformOrigin: 'top left',
 					}}
 				>
 					{children}

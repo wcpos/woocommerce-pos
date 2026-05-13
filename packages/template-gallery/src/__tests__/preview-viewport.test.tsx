@@ -42,7 +42,7 @@ describe('PreviewViewport', () => {
 		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
 		expect(canvas?.getAttribute('style')).toContain('width: 200%');
 		expect(canvas?.getAttribute('style')).toContain('transform: scale(0.5)');
-		expect(canvas?.getAttribute('style')).toContain('transform-origin: top center');
+		expect(canvas?.getAttribute('style')).toContain('transform-origin: top left');
 	});
 
 	it('lets users switch zoom levels', () => {
