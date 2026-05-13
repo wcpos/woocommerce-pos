@@ -60,7 +60,7 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker, pap
 			</div>
 			<div className={getThermalPreviewBodyClassName()}>
 				{loading ? (
-					<PreviewSkeleton style={{ width: '100%', maxWidth: 420, minHeight: 560 }} />
+					<PreviewSkeleton style={{ width: '100%', maxWidth: 520, minHeight: 560 }} />
 				) : (
 					<iframe
 						srcDoc={srcdoc}
