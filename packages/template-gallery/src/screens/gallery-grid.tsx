@@ -22,7 +22,13 @@ import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
 function matchesFilters(
-	template: { title: string; category: string; engine?: string; output_type?: string },
+	template: {
+		title: string;
+		category: string;
+		engine?: string;
+		output_type?: string;
+		direction?: 'ltr' | 'rtl';
+	},
 	filters: FilterState,
 ): boolean {
 	if (filters.search && !template.title.toLowerCase().includes(filters.search.toLowerCase())) {
@@ -40,6 +46,10 @@ function matchesFilters(
 			template.engine === 'thermal';
 		if (filters.output === 'escpos' && !isThermal) return false;
 		if (filters.output === 'html' && isThermal) return false;
+	}
+
+	if (filters.direction !== 'all' && template.direction !== filters.direction) {
+		return false;
 	}
 
 	return true;

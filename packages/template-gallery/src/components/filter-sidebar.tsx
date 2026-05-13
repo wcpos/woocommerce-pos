@@ -4,12 +4,14 @@ export interface FilterState {
 	search: string;
 	categories: string[];
 	output: 'all' | 'html' | 'escpos';
+	direction: 'all' | 'ltr' | 'rtl';
 }
 
 export const DEFAULT_FILTERS: FilterState = {
 	search: '',
 	categories: [],
 	output: 'all',
+	direction: 'all',
 };
 
 interface FilterSidebarProps {
@@ -65,7 +67,8 @@ function isFiltered(filters: FilterState): boolean {
 	return (
 		filters.search !== '' ||
 		filters.categories.length > 0 ||
-		filters.output !== 'all'
+		filters.output !== 'all' ||
+		filters.direction !== 'all'
 	);
 }
 
@@ -176,6 +179,24 @@ export function FilterSidebar({
 					onChange({
 						...filters,
 						output: v as FilterState['output'],
+					})
+				}
+			/>
+
+			{/* Direction */}
+			<RadioGroup
+				label={t('filter.direction')}
+				name="filter-direction"
+				value={filters.direction}
+				options={[
+					{ value: 'all', label: t('filter.all') },
+					{ value: 'ltr', label: t('filter.ltr') },
+					{ value: 'rtl', label: t('filter.rtl') },
+				]}
+				onChange={(v) =>
+					onChange({
+						...filters,
+						direction: v as FilterState['direction'],
 					})
 				}
 			/>

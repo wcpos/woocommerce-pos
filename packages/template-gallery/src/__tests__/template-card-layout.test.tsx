@@ -7,7 +7,7 @@ import { TemplateCard } from '../components/template-card';
 import type { GalleryTemplate } from '../types';
 
 vi.mock('../components/filter-sidebar', () => ({
-	DEFAULT_FILTERS: { search: '', categories: [], output: 'all' },
+	DEFAULT_FILTERS: { search: '', categories: [], output: 'all', direction: 'all' },
 	FilterSidebar: () => <div data-testid="filter-sidebar" />,
 }));
 
@@ -68,6 +68,7 @@ const galleryTemplate: GalleryTemplate = {
 	engine: 'logicless',
 	output_type: 'html',
 	paper_width: null,
+	direction: 'ltr',
 	version: 1,
 	is_premade: true,
 	is_virtual: true,

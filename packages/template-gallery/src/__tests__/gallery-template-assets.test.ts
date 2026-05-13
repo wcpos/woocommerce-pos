@@ -146,4 +146,105 @@ describe('gallery template assets', () => {
 		}
 	});
 
+	it('ships the RTL HTML template with logical properties and direction=rtl', () => {
+		const jsonPath = path.join(galleryDir, 'standard-receipt-rtl.json');
+		const htmlPath = path.join(galleryDir, 'standard-receipt-rtl.html');
+
+		expect(fs.existsSync(jsonPath)).toBe(true);
+		expect(fs.existsSync(htmlPath)).toBe(true);
+
+		const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
+			key: string;
+			direction: string;
+			engine: string;
+			output_type: string;
+		};
+		const html = fs.readFileSync(htmlPath, 'utf8');
+
+		expect(metadata.key).toBe('standard-receipt-rtl');
+		expect(metadata.direction).toBe('rtl');
+		expect(metadata.engine).toBe('logicless');
+		expect(metadata.output_type).toBe('html');
+
+		// Outer wrapper carries dir + unicode-bidi for mixed-script safety.
+		expect(html).toContain('dir="rtl"');
+		expect(html).toContain('unicode-bidi: plaintext');
+
+		// Uses logical text-align values; physical ones would break under either direction.
+		expect(html).toContain('text-align: start');
+		expect(html).toContain('text-align: end');
+
+		// Strip the comment block (which mentions the convention) before grepping for
+		// physical-property regressions in the actual markup.
+		const body = html.replace(/<!--[\s\S]*?-->/g, '');
+		expect(body).not.toContain('text-align: left');
+		expect(body).not.toContain('text-align: right');
+		expect(body).not.toContain('margin-left: auto');
+		expect(body).toContain('margin-inline-start: auto');
+	});
+
+	it('ships the RTL thermal template with mirrored columns and codepage caveat', () => {
+		const jsonPath = path.join(galleryDir, 'thermal-simple-80mm-rtl.json');
+		const xmlPath = path.join(galleryDir, 'thermal-simple-80mm-rtl.xml');
+
+		expect(fs.existsSync(jsonPath)).toBe(true);
+		expect(fs.existsSync(xmlPath)).toBe(true);
+
+		const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
+			key: string;
+			direction: string;
+			engine: string;
+			output_type: string;
+			paper_width: string;
+			description: string;
+		};
+		const xml = fs.readFileSync(xmlPath, 'utf8');
+
+		expect(metadata.key).toBe('thermal-simple-80mm-rtl');
+		expect(metadata.direction).toBe('rtl');
+		expect(metadata.engine).toBe('thermal');
+		expect(metadata.output_type).toBe('escpos');
+		expect(metadata.paper_width).toBe('80mm');
+		// Description must mention the printer codepage requirement so users
+		// aren't surprised when buying a printer for an Arabic store.
+		expect(metadata.description).toMatch(/CP864|Windows-1256/);
+
+		// Strip XML comments before parsing — the renderer does the same.
+		const stripped = xml.replace(/<!--[\s\S]*?-->/g, '');
+		const parsed = new DOMParser().parseFromString(stripped, 'text/xml');
+		expect(parsed.getElementsByTagName('parsererror').length).toBe(0);
+
+		// Preserves the 42/48 CPL flexibility convention.
+		expect(xml).toContain('width="*"');
+		// Product name still bold (same invariant as the LTR thermal templates).
+		const boldProductName = Array.from(parsed.querySelectorAll('bold')).some(
+			(element) => element.textContent?.trim() === '{{name}}'
+		);
+		expect(boldProductName).toBe(true);
+
+		// Mirrored layout: label column (the * width column) is right-aligned,
+		// amount column (the fixed-width column) is implicitly left-aligned.
+		const rows = parsed.querySelectorAll('row');
+		expect(rows.length).toBeGreaterThan(0);
+		let mirroredRowCount = 0;
+		for (const row of Array.from(rows)) {
+			const cols = row.querySelectorAll('col');
+			if (cols.length !== 2) {
+				continue;
+			}
+			const first = cols[0];
+			const second = cols[1];
+			// Mirrored shape: fixed-width amount column on the left (no align attr
+			// or align="left"), star-width label column on the right with align="right".
+			if (
+				first.getAttribute('width') !== '*' &&
+				second.getAttribute('width') === '*' &&
+				second.getAttribute('align') === 'right'
+			) {
+				mirroredRowCount++;
+			}
+		}
+		expect(mirroredRowCount).toBeGreaterThan(0);
+	});
+
 });

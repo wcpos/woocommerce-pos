@@ -1,0 +1,174 @@
+<!--
+Standard Receipt (RTL) — Right-to-left counterpart to standard-receipt.html.
+
+Designed for Arabic, Hebrew, Persian and Urdu sites. The shipped strings
+already translate via the standard i18n pipeline — only the layout is
+mirrored here.
+
+Convention: use CSS logical properties (text-align: start/end,
+margin-inline-start/end, padding-inline-start/end) so each rule resolves
+correctly under dir="rtl" without manual flipping per call site. Do NOT
+re-introduce physical text-align: left/right or margin-left/right —
+they break under either direction.
+
+unicode-bidi: plaintext is applied to the outer wrapper and to any field
+that may contain mixed Arabic/Hebrew/Persian/Urdu and Latin runs (store
+name, customer note, personal notes, footer imprint), so embedded Latin
+phone numbers and brand names render in their natural direction.
+
+Uses the logicless template engine with section blocks:
+  {{#key}}...{{/key}}  — iterate arrays or show block for truthy values
+  {{^key}}...{{/key}}  — show block when value is empty/falsy
+  {{.}}                — current value (for arrays of strings)
+  {{key.path}}         — dot-path placeholder substitution
+
+Money fields are auto-formatted as currency.
+No PHP required — just HTML, CSS, and placeholder variables.
+
+Note: Logicless output passes through wp_kses_post, which strips
+<style>, <head>, and document-level tags. Use inline styles only.
+
+@see https://docs.wcpos.com/templates/receipt-data-reference
+-->
+<div dir="rtl" style="box-sizing: border-box; font-family: 'Tahoma', 'Segoe UI', 'Cairo', 'Amiri', 'Geeza Pro', system-ui, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px; unicode-bidi: plaintext;">
+
+	<!-- ── Header: logo + store info + order meta ─────────────── -->
+	<header style="display: flex; align-items: flex-start; gap: 22px; padding-bottom: 18px; border-bottom: 2px solid #111827;">
+		{{#store.logo}}
+		<div style="flex: 0 0 auto;">
+			<img src="{{store.logo}}" alt="{{store.name}}" style="width: 88px; height: auto; display: block;">
+		</div>
+		{{/store.logo}}
+		<div style="flex: 1 1 auto; min-width: 0;">
+			<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em; unicode-bidi: plaintext;">{{store.name}}</div>
+			{{#store.address_lines}}
+			<div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
+			{{/store.address_lines}}
+			{{#store.phone}}<div style="color: #6b7280; font-size: 12px;">{{store.phone}}</div>{{/store.phone}}
+			{{#store.tax_ids}}
+			<div style="color: #6b7280; font-size: 12px;">{{#label}}{{label}} {{/label}}{{value}}</div>
+			{{/store.tax_ids}}
+		</div>
+		<div style="flex: 0 0 auto; text-align: end;">
+			{{#order.status_label}}
+			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px;">
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{order.status_label}}
+			</div>
+			{{/order.status_label}}
+			{{^order.status_label}}
+			{{#order.wc_status}}
+			<div style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-weight: 700; font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px;">
+				<span style="width: 6px; height: 6px; border-radius: 50%; background: #6b7280;"></span> {{order.wc_status}}
+			</div>
+			{{/order.wc_status}}
+			{{/order.status_label}}
+			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.receipt}}{{/fiscal.document_label}}</div>
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
+			<div style="color: #6b7280; font-size: 12px; margin-top: 6px;">{{order.created.datetime}}</div>
+			{{#cashier.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.cashier}}: {{cashier.name}}</div>{{/cashier.name}}
+			{{#customer.name}}<div style="color: #6b7280; font-size: 12px;">{{i18n.customer}}: {{customer.name}}</div>{{/customer.name}}
+			{{#customer.tax_ids}}<div style="color: #6b7280; font-size: 11px; margin-top: 2px;">{{#label}}{{label}} {{/label}}{{value}}</div>{{/customer.tax_ids}}
+		</div>
+	</header>
+
+	<!-- ── Items ─────────────── -->
+	<table style="width: 100%; border-collapse: collapse; margin-top: 22px; font-size: 13px;">
+		<thead>
+			<tr>
+				<th style="text-align: start; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.item_short}}</th>
+				<th style="text-align: end; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.qty_short}}</th>
+				<th style="text-align: end; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;">{{i18n.total}}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{{#lines}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{name}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{qty}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{line_total_incl_display}}</td>
+			</tr>
+			{{/lines}}
+			{{#fees}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/fees}}
+			{{#shipping}}
+			<tr>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">1</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+			</tr>
+			{{/shipping}}
+			{{#discounts}}
+			<tr style="color: #15803d;">
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{i18n.discount}}{{#label}} · {{label}}{{/label}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end;">—</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">-{{total_incl_display}}</td>
+			</tr>
+			{{/discounts}}
+		</tbody>
+	</table>
+
+	<!-- ── Totals (flush to visual end edge — left under RTL) ─────────────── -->
+	<div style="margin-top: 20px; max-width: 280px; margin-inline-start: auto; font-size: 13px;">
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
+		{{#totals.tax_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+		{{/totals.tax_total}}
+		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
+		{{#totals.refund_total}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; color: #b91c1c;"><span>{{i18n.refunded}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.refund_total_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; font-weight: 600; border-top: 1px solid #e5e7eb;"><span>{{i18n.net_total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.net_total_display}}</span></div>
+		{{/totals.refund_total}}
+	</div>
+
+	<!-- ── Refunds summary (only when refunds present) ─────────────── -->
+	{{#refunds.0}}
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.returned_items}}</div>
+		{{#refunds}}
+		<div style="display: flex; justify-content: space-between; gap: 12px; padding: 4px 0;">
+			<div>
+				<strong>#{{id}}</strong>{{#date.datetime}} <span style="color: #6b7280; font-size: 11px;">· {{date.datetime}}</span>{{/date.datetime}}
+				{{#reason}}<div style="color: #6b7280; font-size: 11px;">{{reason}}</div>{{/reason}}
+			</div>
+			<div style="font-variant-numeric: tabular-nums; font-weight: 700;">{{amount_display}}</div>
+		</div>
+		{{/refunds}}
+	</div>
+	{{/refunds.0}}
+
+	<!-- ── Customer note (only when present) ─────────────── -->
+	{{#order.customer_note}}
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.customer_note}}</div>
+		<div style="color: #92400e; white-space: pre-wrap; unicode-bidi: plaintext;">{{order.customer_note}}</div>
+	</div>
+	{{/order.customer_note}}
+
+	<!-- ── Payments ─────────────── -->
+	{{#payments.0}}
+	<div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb;">
+		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{i18n.paid}}</div>
+		{{#payments}}
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span><strong>{{method_title}}</strong></span><span style="font-variant-numeric: tabular-nums;">{{amount_display}}</span></div>
+		{{#tendered}}<div style="font-size: 11px; color: #6b7280; padding-inline-start: 4px; display: flex; justify-content: space-between;"><span>{{i18n.tendered}}</span><span style="font-variant-numeric: tabular-nums;">{{tendered_display}}</span></div>{{/tendered}}
+		{{#change}}<div style="font-size: 11px; color: #6b7280; padding-inline-start: 4px; display: flex; justify-content: space-between;"><span>{{i18n.change}}</span><span style="font-variant-numeric: tabular-nums;">{{change_display}}</span></div>{{/change}}
+		{{/payments}}
+	</div>
+	{{/payments.0}}
+
+	<!-- ── Footer ─────────────── -->
+	<div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic; unicode-bidi: plaintext;">
+		{{#store.personal_notes}}{{store.personal_notes}}{{/store.personal_notes}}
+		{{^store.personal_notes}}{{i18n.thank_you_purchase}}{{/store.personal_notes}}
+	</div>
+	{{#store.footer_imprint}}
+	<div style="margin-top: 10px; text-align: center; font-size: 11px; color: #6b7280; unicode-bidi: plaintext;">{{store.footer_imprint}}</div>
+	{{/store.footer_imprint}}
+
+</div>

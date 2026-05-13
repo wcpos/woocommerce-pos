@@ -6,11 +6,13 @@ const previewKeys = new Set([
 	'packing-slip',
 	'quote',
 	'standard-receipt',
+	'standard-receipt-rtl',
 	'thermal-detailed-58mm',
 	'thermal-detailed-80mm',
 	'thermal-kitchen-ticket',
 	'thermal-simple-58mm',
 	'thermal-simple-80mm',
+	'thermal-simple-80mm-rtl',
 	'narrow-receipt',
 ]);
 
