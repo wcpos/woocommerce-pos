@@ -39,8 +39,6 @@ $i18n = $receipt_data['i18n'] ?? array();
 		}
 		.receipt {
 			box-sizing: border-box;
-			max-width: 720px;
-			margin: 0 auto;
 			padding: 32px 36px;
 		}
 
