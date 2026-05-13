@@ -805,4 +805,122 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertContains( 42, $retrieved );
 		$this->assertContains( 99, $retrieved );
 	}
+
+	/**
+	 * Test save_raw_post_content refuses to write to non-template post types.
+	 *
+	 * The bypass MUST NOT be usable on plain posts or pages — raw HTML stored
+	 * there would surface unfiltered on the front-end and become a stored-XSS
+	 * vector.
+	 */
+	public function test_save_raw_post_content_refuses_non_template_post_type(): void {
+		// Arrange: a plain post (not a wcpos_template).
+		$post_id = self::factory()->post->create( array( 'post_content' => 'original' ) );
+
+		// Act: attempt the bypass.
+		$result = Templates::save_raw_post_content( $post_id, '<script>alert(1)</script>' );
+
+		// Assert: rejected, content untouched.
+		$this->assertFalse( $result );
+		$this->assertEquals( 'original', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Test save_raw_post_content refuses templates whose engine is legacy-php.
+	 *
+	 * Legacy-php template content is executed via include() by Legacy_Php_Renderer.
+	 * Bypassing kses there would let stored code execute server-side — RCE.
+	 */
+	public function test_save_raw_post_content_refuses_legacy_php_engine(): void {
+		// Arrange: a wcpos_template marked as legacy-php.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_content' => 'original',
+			)
+		);
+		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+
+		// Act: attempt the bypass with PHP-looking content.
+		$result = Templates::save_raw_post_content( $post_id, '<?php phpinfo(); ?>' );
+
+		// Assert: rejected, content untouched.
+		$this->assertFalse( $result );
+		$this->assertEquals( 'original', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Test save_raw_post_content refuses templates with no engine meta.
+	 *
+	 * A template without `_template_engine` is unclassified — the safe default
+	 * is to refuse the bypass rather than guess.
+	 */
+	public function test_save_raw_post_content_refuses_missing_engine_meta(): void {
+		// Arrange: a wcpos_template with NO engine meta set.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_content' => 'original',
+			)
+		);
+
+		// Act.
+		$result = Templates::save_raw_post_content( $post_id, '<div>raw</div>' );
+
+		// Assert: rejected, content untouched.
+		$this->assertFalse( $result );
+		$this->assertEquals( 'original', get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Test save_raw_post_content accepts logicless templates and stores raw content.
+	 *
+	 * Regression: the happy path must still work after the new guards are added.
+	 */
+	public function test_save_raw_post_content_accepts_logicless_engine(): void {
+		// Arrange.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_content' => 'original',
+			)
+		);
+		update_post_meta( $post_id, '_template_engine', 'logicless' );
+
+		// Content that wp_kses_post would strip (the print-color-adjust CSS property
+		// is not in core's safe_style_css allowlist).
+		$raw = '<div style="print-color-adjust: exact; background: #f3f4f6;">total</div>';
+
+		// Act.
+		$result = Templates::save_raw_post_content( $post_id, $raw );
+
+		// Assert.
+		$this->assertTrue( $result );
+		$this->assertEquals( $raw, get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Test save_raw_post_content accepts thermal templates and stores raw XML.
+	 *
+	 * Regression: thermal-engine output is ESC/POS XML that wp_kses would mangle.
+	 */
+	public function test_save_raw_post_content_accepts_thermal_engine(): void {
+		// Arrange.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_content' => 'original',
+			)
+		);
+		update_post_meta( $post_id, '_template_engine', 'thermal' );
+
+		$raw = '<receipt><align mode="center"><text>STORE</text></align></receipt>';
+
+		// Act.
+		$result = Templates::save_raw_post_content( $post_id, $raw );
+
+		// Assert.
+		$this->assertTrue( $result );
+		$this->assertEquals( $raw, get_post( $post_id )->post_content );
+	}
 }

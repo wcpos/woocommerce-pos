@@ -206,15 +206,40 @@ class Templates {
 	 * that strip unknown HTML/XML tags from template markup. This method writes
 	 * raw content via $wpdb->update() to preserve the original markup.
 	 *
-	 * SECURITY: Only use for non-PHP engines (logicless, thermal). PHP templates
-	 * are executed via include, so their content must remain filtered by wp_kses.
+	 * SECURITY: this bypass is self-defending. It refuses to write unless:
 	 *
-	 * @param int    $post_id Post ID.
+	 *   1. The target post type is `wcpos_template` — prevents accidental use on
+	 *      any other post type (post, page, etc.) where raw HTML would become a
+	 *      stored-XSS vector.
+	 *   2. The post's `_template_engine` meta is in OFFLINE_CAPABLE_ENGINES
+	 *      (logicless, thermal). legacy-php templates are executed via include
+	 *      and MUST stay kses-filtered to prevent code injection.
+	 *
+	 * Callers are still responsible for capability checks; this function only
+	 * enforces the structural invariants needed for safe storage. Reads from the
+	 * stored content remain responsible for sanitisation at render time (see
+	 * Logicless_Renderer::render() which applies wp_kses_post to output).
+	 *
+	 * @param int    $post_id Post ID. Must reference an existing `wcpos_template` post.
 	 * @param string $content Raw template content to save.
 	 *
-	 * @return bool True on success, false on failure.
+	 * @return bool True on success, false if the guards rejected the call or the DB write failed.
 	 */
 	public static function save_raw_post_content( int $post_id, string $content ): bool {
+		// Refuse anything that isn't a WCPOS template — the bypass is only safe
+		// for content that flows through the WCPOS render pipeline.
+		if ( 'wcpos_template' !== get_post_type( $post_id ) ) {
+			return false;
+		}
+
+		// Refuse engines whose render path executes code (legacy-php) or that
+		// haven't been classified yet (missing meta). OFFLINE_CAPABLE_ENGINES is
+		// the explicit allowlist of engines whose output is re-sanitised at render.
+		$engine = get_post_meta( $post_id, '_template_engine', true );
+		if ( ! \in_array( $engine, self::OFFLINE_CAPABLE_ENGINES, true ) ) {
+			return false;
+		}
+
 		global $wpdb;
 
 		$result = $wpdb->update(
