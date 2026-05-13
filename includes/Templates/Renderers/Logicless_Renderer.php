@@ -69,6 +69,21 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 
 		$output = $mustache->render( $content, $formatted_data );
 
-		echo wp_kses_post( $output );
+		// Allow print-color-adjust in inline styles so background fills survive print.
+		// wp_kses_post drops CSS properties not on the safe_style_css allowlist by default.
+		$allow_print_color_adjust = function ( array $styles ): array {
+			$styles[] = 'print-color-adjust';
+			$styles[] = '-webkit-print-color-adjust';
+
+			return $styles;
+		};
+
+		add_filter( 'safe_style_css', $allow_print_color_adjust );
+
+		try {
+			echo wp_kses_post( $output );
+		} finally {
+			remove_filter( 'safe_style_css', $allow_print_color_adjust );
+		}
 	}
 }
