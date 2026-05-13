@@ -32,7 +32,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 @see https://docs.wcpos.com/templates/receipt-data-reference
 -->
-<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
+<div style="box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
 
 	<!-- ── Header: logo + store info + invoice meta ─────────────── -->
 	<header style="display: flex; align-items: flex-start; gap: 22px; margin-bottom: 28px;">
@@ -56,11 +56,11 @@ Note: Logicless output passes through wp_kses_post, which strips
 			<div style="font-size: 11px; letter-spacing: 0.22em; color: #6b7280; text-transform: uppercase;">{{#fiscal.document_label}}{{fiscal.document_label}}{{/fiscal.document_label}}{{^fiscal.document_label}}{{i18n.invoice}}{{/fiscal.document_label}}</div>
 			<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; line-height: 1;">#{{order.number}}</div>
 			{{#order.status_label}}
-			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #111827; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.status_label}}</div>
+			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.status_label}}</div>
 			{{/order.status_label}}
 			{{^order.status_label}}
 			{{#order.wc_status}}
-			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #111827; color: #fff; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.wc_status}}</div>
+			<div style="display: inline-block; margin-top: 10px; padding: 3px 10px; background: #f3f4f6; color: #1f2937; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;">{{order.wc_status}}</div>
 			{{/order.wc_status}}
 			{{/order.status_label}}
 		</div>
@@ -179,8 +179,8 @@ Note: Logicless output passes through wp_kses_post, which strips
 			</div>
 
 			{{#order.needs_payment}}
-			<div style="margin-top: 12px; padding: 14px 18px; background: #111827; color: #fff; border-radius: 8px;">
-				<div style="font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: #9ca3af;">{{i18n.amount_due}}</div>
+			<div style="margin-top: 12px; padding: 14px 18px; background: #f3f4f6; color: #111827; border-radius: 8px;">
+				<div style="font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: #6b7280;">{{i18n.amount_due}}</div>
 				<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; line-height: 1; font-variant-numeric: tabular-nums;">{{#totals.net_total}}{{totals.net_total_display}}{{/totals.net_total}}{{^totals.net_total}}{{totals.total_incl_display}}{{/totals.net_total}}</div>
 			</div>
 			{{/order.needs_payment}}

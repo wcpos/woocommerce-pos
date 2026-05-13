@@ -322,6 +322,70 @@ class Test_Receipt_Renderers extends WC_REST_Unit_Test_Case {
 		$this->assertNotEmpty( $output );
 		$this->assertStringContainsString( (string) $order->get_order_number(), $output );
 		$this->assertStringNotContainsString( '{{', $output );
+		$this->assertStringContainsString( 'print-color-adjust', $output, 'Gallery wrapper must keep print-color-adjust through kses.' );
+	}
+
+	/**
+	 * Test every gallery HTML template keeps print-color-adjust after rendering.
+	 *
+	 * Browsers strip background colours by default at print time. The gallery wrapper relies
+	 * on print-color-adjust: exact (inherited from the outer div) so that light tints and the
+	 * gift-receipt rule/border still render on paper. If a future template forgets to declare
+	 * the property on its outer wrapper, this test catches it.
+	 */
+	public function test_every_gallery_html_template_declares_print_color_adjust(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+		$html_files  = glob( $gallery_dir . '*.html' );
+		$this->assertNotEmpty( $html_files, 'Gallery should contain at least one HTML template.' );
+
+		foreach ( $html_files as $path ) {
+			$template = array(
+				'content' => file_get_contents( $path ),
+			);
+
+			$renderer = new Logicless_Renderer();
+			ob_start();
+			$renderer->render( $template, $order, $receipt_data );
+			$output = ob_get_clean();
+
+			$this->assertStringContainsString(
+				'print-color-adjust',
+				$output,
+				sprintf( '%s must declare print-color-adjust on its outer wrapper.', basename( $path ) )
+			);
+		}
+	}
+
+	/**
+	 * Test logicless renderer preserves print-color-adjust through wp_kses_post.
+	 *
+	 * Gallery templates declare print-color-adjust: exact on their outer wrapper so that
+	 * background fills survive browser print (browsers strip backgrounds by default).
+	 * That CSS property is NOT on the WordPress safe_style_css allowlist, so the renderer
+	 * must hook the filter while sanitising, then remove it again to avoid leaking the
+	 * permission into other kses_post calls in the same request.
+	 */
+	public function test_logicless_renderer_preserves_print_color_adjust(): void {
+		$order        = OrderHelper::create_order();
+		$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+
+		$template = array(
+			'content' => '<div style="-webkit-print-color-adjust: exact; print-color-adjust: exact; background: #f3f4f6;">total {{order.number}}</div>',
+		);
+
+		$renderer = new Logicless_Renderer();
+		ob_start();
+		$renderer->render( $template, $order, $receipt_data );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'print-color-adjust:exact', str_replace( ' ', '', $output ) );
+		$this->assertStringContainsString( '-webkit-print-color-adjust:exact', str_replace( ' ', '', $output ) );
+
+		$leaked = wp_kses_post( '<div style="print-color-adjust: exact;"></div>' );
+		$this->assertStringNotContainsString( 'print-color-adjust', $leaked, 'safe_style_css filter must not leak past render().' );
 	}
 
 	/**
