@@ -39,7 +39,12 @@ describe('PreviewViewport', () => {
 		expect(container.querySelector('iframe')?.getAttribute('title')).toBe('Preview iframe');
 		expect(container.querySelector('button[aria-pressed="true"]')?.textContent).toBe('50%');
 
+		const frame = container.querySelector('[data-testid="preview-viewport-canvas-frame"]');
+		expect(frame?.className).toContain('wcpos:w-full');
+		expect(frame?.className).toContain('wcpos:overflow-hidden');
+
 		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]');
+		expect(canvas?.parentElement).toBe(frame);
 		expect(canvas?.getAttribute('style')).toContain('width: 200%');
 		expect(canvas?.getAttribute('style')).toContain('transform: scale(0.5)');
 		expect(canvas?.getAttribute('style')).toContain('transform-origin: top left');

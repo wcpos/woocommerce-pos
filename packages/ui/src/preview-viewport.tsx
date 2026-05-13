@@ -55,15 +55,20 @@ export function PreviewViewport({
 			</div>
 			<div className="wcpos:min-h-0 wcpos:flex-1 wcpos:overflow-auto wcpos:rounded wcpos:border wcpos:border-gray-200 wcpos:bg-gray-100 wcpos:p-4">
 				<div
-					data-testid="preview-viewport-canvas"
-					className={classNames('wcpos:mx-auto', contentClassName)}
-					style={{
-						width: inverseWidth,
-						transform: `scale(${scale})`,
-						transformOrigin: 'top left',
-					}}
+					data-testid="preview-viewport-canvas-frame"
+					className="wcpos:mx-auto wcpos:w-full wcpos:overflow-hidden"
 				>
-					{children}
+					<div
+						data-testid="preview-viewport-canvas"
+						className={contentClassName}
+						style={{
+							width: inverseWidth,
+							transform: `scale(${scale})`,
+							transformOrigin: 'top left',
+						}}
+					>
+						{children}
+					</div>
 				</div>
 			</div>
 		</div>
