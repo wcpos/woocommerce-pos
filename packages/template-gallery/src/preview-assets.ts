@@ -11,7 +11,7 @@ const previewKeys = new Set([
 	'thermal-kitchen-ticket',
 	'thermal-simple-58mm',
 	'thermal-simple-80mm',
-	'thermal-style-receipt',
+	'narrow-receipt',
 ]);
 
 function getPreviewBaseUrl(): string | undefined {
