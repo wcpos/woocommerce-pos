@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildThermalPreviewSrcDoc } from './thermal-preview';
+import { buildThermalPreviewSrcDoc, getThermalPreviewBodyClassName, getThermalPreviewIframeStyle } from './thermal-preview';
 
 describe('buildThermalPreviewSrcDoc', () => {
 	it('uses the shared preview frame with physical paper width', () => {
@@ -31,5 +31,16 @@ describe('buildThermalPreviewSrcDoc', () => {
 		});
 
 		expect(srcDoc).toContain('width:210mm');
+	});
+});
+
+describe('ThermalPreview layout helpers', () => {
+	it('uses a taller default preview iframe', () => {
+		expect(getThermalPreviewIframeStyle().minHeight).toBe(560);
+	});
+
+	it('uses a flush preview body without p-4 padding', () => {
+		expect(getThermalPreviewBodyClassName()).not.toContain('p-4');
+		expect(getThermalPreviewBodyClassName()).toContain('p-0');
 	});
 });

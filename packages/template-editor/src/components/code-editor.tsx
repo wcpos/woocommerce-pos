@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { useCodemirror, type CursorInfo } from '../hooks/use-codemirror';
 import type { EditorConfig } from '../types';
 import { EditorToolbar } from './editor-toolbar';
@@ -11,24 +11,12 @@ interface CodeEditorProps {
 	onInsertRef?: React.MutableRefObject<((text: string) => void) | null>;
 }
 
-const UNSAVED_SETTLE_MS = 800;
-
 export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEditorProps) {
 	const [wrap, setWrap] = useState(true);
 	const [cursor, setCursor] = useState<CursorInfo>({ line: 1, col: 1, lineCount: 1 });
-	const [unsaved, setUnsaved] = useState(false);
-	const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
 	const handleChange = useCallback((content: string) => {
 		onChange(content);
-		setUnsaved(true);
-		if (settleTimer.current) clearTimeout(settleTimer.current);
-		settleTimer.current = setTimeout(() => setUnsaved(false), UNSAVED_SETTLE_MS);
 	}, [onChange]);
-
-	useEffect(() => () => {
-		if (settleTimer.current) clearTimeout(settleTimer.current);
-	}, []);
 
 	const { containerRef, viewRef, insertAtCursor } = useCodemirror({
 		initialDoc,
@@ -59,7 +47,6 @@ export function CodeEditor({ initialDoc, engine, onChange, onInsertRef }: CodeEd
 				line={cursor.line}
 				col={cursor.col}
 				lineCount={cursor.lineCount}
-				saved={!unsaved}
 			/>
 		</div>
 	);

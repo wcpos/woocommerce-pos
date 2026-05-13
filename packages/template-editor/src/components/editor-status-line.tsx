@@ -6,7 +6,6 @@ interface EditorStatusLineProps {
 	line: number;
 	col: number;
 	lineCount: number;
-	saved: boolean;
 }
 
 function getEngineLabel(engine: EditorConfig['engine']): string {
@@ -15,7 +14,7 @@ function getEngineLabel(engine: EditorConfig['engine']): string {
 	return t('editor.status.engine_html');
 }
 
-export function EditorStatusLine({ engine, line, col, lineCount, saved }: EditorStatusLineProps) {
+export function EditorStatusLine({ engine, line, col, lineCount }: EditorStatusLineProps) {
 	return (
 		<div
 			className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:px-3 wcpos:py-1.5 wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:tabular-nums"
@@ -25,20 +24,6 @@ export function EditorStatusLine({ engine, line, col, lineCount, saved }: Editor
 			<span>{t('editor.status.line_col', { line, col })}</span>
 			<span className="wcpos:text-gray-300" aria-hidden="true">·</span>
 			<span>{t('editor.status.lines', { count: lineCount })}</span>
-			<span className="wcpos:ml-auto wcpos:flex wcpos:items-center wcpos:gap-1.5">
-				<span
-					className={saved ? 'wcpos:w-1.5 wcpos:h-1.5 wcpos:rounded-full wcpos:bg-green-500' : 'wcpos:w-1.5 wcpos:h-1.5 wcpos:rounded-full wcpos:bg-amber-500'}
-					aria-hidden="true"
-				/>
-				<span
-					role="status"
-					aria-live="polite"
-					aria-atomic="true"
-					className={saved ? 'wcpos:text-green-700' : 'wcpos:text-amber-700'}
-				>
-					{saved ? t('editor.status.saved') : t('editor.status.unsaved')}
-				</span>
-			</span>
 		</div>
 	);
 }

@@ -71,8 +71,7 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 
 	return (
 		<div
-			className="wcpos:w-60 wcpos:shrink-0 wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden"
-			style={{ maxHeight: 600 }}
+			className="wcpos:w-60 wcpos:shrink-0 wcpos:self-stretch wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden"
 		>
 			<div className="wcpos:p-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:shrink-0">
 				<div className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:mb-2 wcpos:px-1">
