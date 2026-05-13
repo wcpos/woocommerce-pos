@@ -48,7 +48,7 @@ function matchesFilters(
 		if (filters.output === 'html' && isThermal) return false;
 	}
 
-	if (filters.direction !== 'all' && template.direction !== filters.direction) {
+	if (filters.direction !== 'all' && (template.direction ?? 'ltr') !== filters.direction) {
 		return false;
 	}
 

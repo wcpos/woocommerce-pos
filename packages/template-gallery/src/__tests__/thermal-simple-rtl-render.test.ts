@@ -95,14 +95,12 @@ describe('thermal-simple-80mm-rtl renders with Arabic sample data', () => {
 		const wrapper = document.createElement('div');
 		wrapper.innerHTML = html;
 
-		// The first DOM child whose visible textContent is the total label must
-		// appear AFTER the amount in DOM order, because RTL templates lay the
-		// label out as the rightmost column.
-		const text = wrapper.textContent ?? '';
-		const labelIndex = text.indexOf('الإجمالي');
-		const amountIndex = text.indexOf('٢٠٧٫٠٠ ر.س');
-		expect(labelIndex).toBeGreaterThan(-1);
-		expect(amountIndex).toBeGreaterThan(-1);
+		const totalLine = Array.from(wrapper.querySelectorAll('div[style*="display: flex"]'))
+			.map((element) => element.textContent?.trim() ?? '')
+			.find((text) => text.includes('الإجمالي') && text.includes('٢٠٧٫٠٠ ر.س'));
+		expect(totalLine).toBeTruthy();
+		const labelIndex = totalLine!.indexOf('الإجمالي');
+		const amountIndex = totalLine!.indexOf('٢٠٧٫٠٠ ر.س');
 		expect(amountIndex).toBeLessThan(labelIndex);
 	});
 });

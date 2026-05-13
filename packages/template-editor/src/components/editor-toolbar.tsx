@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { undo, redo } from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
-import { foldAll, unfoldAll, foldable, foldEffect, foldedRanges } from '@codemirror/language';
+import { foldAll, unfoldAll, foldable, foldEffect, foldedRanges, forceParsing } from '@codemirror/language';
 import type { EditorView } from '@codemirror/view';
 import { Tooltip } from '@wcpos/ui';
 import { t } from '../translations';
@@ -53,6 +53,7 @@ function getFoldedRangeKeys(view: EditorView): Set<string> {
 }
 
 export function runFoldAllRecursively(view: EditorView): boolean {
+	forceParsing(view, view.state.doc.length);
 	const existingRanges = getFoldedRangeKeys(view);
 	const effects = [];
 	const seenRanges = new Set(existingRanges);

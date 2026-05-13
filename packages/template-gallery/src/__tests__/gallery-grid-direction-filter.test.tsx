@@ -30,9 +30,16 @@ const rtlTemplate: GalleryTemplate = {
 	direction: 'rtl',
 };
 
+const { direction: _direction, ...legacyTemplate } = {
+	...ltrTemplate,
+	key: 'legacy-receipt',
+	title: 'Legacy Receipt',
+	description: 'Payload without direction',
+};
+
 vi.mock('../hooks/use-gallery-templates', () => ({
 	useGalleryTemplates: () => ({
-		data: [ltrTemplate, rtlTemplate],
+		data: [ltrTemplate, rtlTemplate, legacyTemplate],
 	}),
 	useInstallGalleryTemplate: () => ({
 		isPending: false,
@@ -109,20 +116,23 @@ describe('GalleryGrid direction filter', () => {
 
 		expect(text()).toContain('Standard Receipt');
 		expect(text()).toContain('Standard Receipt (RTL)');
+		expect(text()).toContain('Legacy Receipt');
 
 		clickDirection(container, 'rtl');
 
 		expect(text()).not.toMatch(/Standard Receipt(?!\s*\(RTL\))/);
 		expect(text()).toContain('Standard Receipt (RTL)');
+		expect(text()).not.toContain('Legacy Receipt');
 	});
 
-	it('hides RTL templates when filter=ltr', () => {
+	it('hides RTL templates and keeps missing-direction templates when filter=ltr', () => {
 		const container = mountGrid();
 
 		clickDirection(container, 'ltr');
 
 		const text = container.textContent ?? '';
 		expect(text).toContain('Standard Receipt');
+		expect(text).toContain('Legacy Receipt');
 		expect(text).not.toContain('Standard Receipt (RTL)');
 	});
 });

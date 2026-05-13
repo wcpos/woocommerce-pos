@@ -30,8 +30,8 @@ these star columns with hard-coded widths.
     {{#store.address_lines}}
     <text>{{.}}</text>
     {{/store.address_lines}}
-    {{#store.phone}}<text>{{store.phone}} :Phone</text>{{/store.phone}}
-    {{#store.email}}<text>{{store.email}} :Email</text>{{/store.email}}
+    {{#store.phone}}<text>Phone: {{store.phone}}</text>{{/store.phone}}
+    {{#store.email}}<text>Email: {{store.email}}</text>{{/store.email}}
     {{#store.tax_ids}}
     <text>{{value}}{{#label}} :{{label}}{{/label}}</text>
     {{/store.tax_ids}}

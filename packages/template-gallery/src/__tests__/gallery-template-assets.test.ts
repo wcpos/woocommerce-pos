@@ -6,6 +6,16 @@ const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
 const previewDir = path.join(repoRoot, 'assets', 'img', 'template-gallery', 'previews');
 
+function removeComments(root: Document): void {
+	const walker = root.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+	const comments: Comment[] = [];
+	let node = walker.nextNode();
+	while (node) {
+		comments.push(node as Comment);
+		node = walker.nextNode();
+	}
+	comments.forEach((comment) => comment.remove());
+}
 
 beforeEach(() => {
 	(window as Window & { wcpos?: { templateGallery?: { previewBaseUrl?: string } } }).wcpos = {
@@ -174,9 +184,10 @@ describe('gallery template assets', () => {
 		expect(html).toContain('text-align: start');
 		expect(html).toContain('text-align: end');
 
-		// Strip the comment block (which mentions the convention) before grepping for
-		// physical-property regressions in the actual markup.
-		const body = html.replace(/<!--[\s\S]*?-->/g, '');
+		// Ignore comments that document the convention before checking actual markup.
+		const parsedHtml = new DOMParser().parseFromString(html, 'text/html');
+		removeComments(parsedHtml);
+		const body = parsedHtml.body.innerHTML;
 		expect(body).not.toContain('text-align: left');
 		expect(body).not.toContain('text-align: right');
 		expect(body).not.toContain('margin-left: auto');
@@ -208,10 +219,11 @@ describe('gallery template assets', () => {
 		// Description must mention the printer codepage requirement so users
 		// aren't surprised when buying a printer for an Arabic store.
 		expect(metadata.description).toMatch(/CP864|Windows-1256/);
+		expect(xml).toContain('Phone: {{store.phone}}');
+		expect(xml).toContain('Email: {{store.email}}');
 
-		// Strip XML comments before parsing — the renderer does the same.
-		const stripped = xml.replace(/<!--[\s\S]*?-->/g, '');
-		const parsed = new DOMParser().parseFromString(stripped, 'text/xml');
+		const parsed = new DOMParser().parseFromString(xml, 'text/xml');
+		removeComments(parsed);
 		expect(parsed.getElementsByTagName('parsererror').length).toBe(0);
 
 		// Preserves the 42/48 CPL flexibility convention.
