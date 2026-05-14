@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WP_UnitTestCase;
 
@@ -197,12 +198,16 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			add_filter( 'woocommerce_pos_get_store', $store_filter );
 
 			$data = $this->builder->build();
+			$expected_created = Receipt_Date_Formatter::from_timestamp(
+				strtotime( '2024-01-15 10:30:00 UTC' ),
+				new \DateTimeZone( 'Europe/Madrid' ),
+				'es_ES'
+			);
 
 			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
-			$this->assertStringContainsString( 'ene', strtolower( $data['order']['created']['datetime'] ) );
-			$this->assertStringNotContainsString( 'jan', strtolower( $data['order']['created']['datetime'] ) );
-			$this->assertStringStartsWith( '15/01/24', $data['order']['created']['datetime_short'] );
-			$this->assertStringNotContainsString( 'am', strtolower( $data['order']['created']['time'] ) );
+			$this->assertEquals( $expected_created, $data['order']['created'] );
+			$this->assertStringNotContainsString( 'AM', $data['order']['created']['time'] );
+			$this->assertStringNotContainsString( 'PM', $data['order']['created']['time'] );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 		}

@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_REST_Unit_Test_Case;
@@ -347,12 +348,16 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		};
 
 		$payload = $this->builder->build( $order, 'live', $pos_store );
+		$expected_created = Receipt_Date_Formatter::from_timestamp(
+			$order->get_date_created()->getTimestamp(),
+			new \DateTimeZone( 'Europe/Madrid' ),
+			'es_ES'
+		);
 
 		$this->assertEquals( 'es_ES', $payload['presentation_hints']['locale'] );
-		$this->assertStringContainsString( 'ene', strtolower( $payload['order']['created']['datetime'] ) );
-		$this->assertStringNotContainsString( 'jan', strtolower( $payload['order']['created']['datetime'] ) );
-		$this->assertStringStartsWith( '15/01/26', $payload['order']['created']['datetime_short'] );
-		$this->assertStringNotContainsString( 'am', strtolower( $payload['order']['created']['time'] ) );
+		$this->assertEquals( $expected_created, $payload['order']['created'] );
+		$this->assertStringNotContainsString( 'AM', $payload['order']['created']['time'] );
+		$this->assertStringNotContainsString( 'PM', $payload['order']['created']['time'] );
 	}
 
 	/**
