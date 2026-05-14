@@ -158,6 +158,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'wc_status', $payload['order'] );
 		$this->assertArrayHasKey( 'status_label', $payload['order'] );
 		$this->assertArrayHasKey( 'created_via', $payload['order'] );
+		$this->assertSame( ! empty( $payload['tax_summary'] ), $payload['has_tax_summary'] );
 	}
 
 	/**
@@ -569,6 +570,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$payload = $this->builder->build( $order, 'live' );
 		$row     = $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_id );
 
+		$this->assertTrue( $payload['has_tax_summary'] );
 		$this->assertEqualsWithDelta( 40.91, (float) $row['taxable_amount_excl'], 0.01 );
 		$this->assertNotEqualsWithDelta( (float) $row['tax_amount'] / 0.10, (float) $row['taxable_amount_excl'], 0.001 );
 	}

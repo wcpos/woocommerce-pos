@@ -32,6 +32,7 @@ class Receipt_Data_Schema {
 		'totals',
 		'tax',
 		'tax_summary',
+		'has_tax_summary',
 		'payments',
 		'refunds',
 		'fiscal',
@@ -792,6 +793,11 @@ class Receipt_Data_Schema {
 					),
 				),
 			),
+			'has_tax_summary' => array(
+				'type'   => 'boolean',
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Has Tax Summary', 'woocommerce-pos' ),
+				'fields' => array(),
+			),
 			'tax_summary' => array(
 				'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Summary', 'woocommerce-pos' ),
 				'is_array' => true,
@@ -1233,6 +1239,13 @@ class Receipt_Data_Schema {
 	 * @return array<string, mixed>
 	 */
 	private static function get_default_section_schema( string $key ): array {
+		if ( 'has_tax_summary' === $key ) {
+			return array(
+				'type'        => 'boolean',
+				'description' => 'Whether tax_summary contains at least one row.',
+			);
+		}
+
 		if ( \in_array( $key, array( 'lines', 'fees', 'shipping', 'discounts', 'tax_summary', 'payments', 'refunds' ), true ) ) {
 			return array(
 				'type'                 => 'array',
@@ -1293,6 +1306,11 @@ class Receipt_Data_Schema {
 		}
 
 		$target['description'] = isset( $section['label'] ) ? (string) $section['label'] : $path;
+
+		if ( isset( $section['type'] ) && empty( $section['fields'] ) && empty( $segments ) ) {
+			$target = self::field_metadata_to_json_schema( $section );
+			return;
+		}
 
 		if ( ! empty( $section['is_array'] ) && ! $target_is_collection_item ) {
 			$target['type']  = 'array';
@@ -1411,6 +1429,7 @@ class Receipt_Data_Schema {
 		$printed   = Receipt_Date_Formatter::from_timestamp( strtotime( '2024-01-15 10:45:00 UTC' ) );
 
 		return array(
+			'has_tax_summary' => true,
 			'order'   => array(
 				'id'            => 1001,
 				'number'        => '1001',

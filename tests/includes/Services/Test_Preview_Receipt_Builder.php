@@ -748,6 +748,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertNotEmpty( $data['shipping'], 'Shipping section should not be empty' );
 			$this->assertNotEmpty( $data['discounts'], 'Discounts section should not be empty' );
 			$this->assertNotEmpty( $data['tax_summary'], 'Tax summary section should not be empty' );
+			$this->assertTrue( $data['has_tax_summary'], 'Tax summary guard should be true when tax summary rows exist' );
 			$this->assertNotEmpty( $data['payments'], 'Payments section should not be empty' );
 		} finally {
 			update_option( 'woocommerce_calc_taxes', $original_calc_taxes );

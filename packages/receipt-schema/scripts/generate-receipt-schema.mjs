@@ -26,7 +26,24 @@ if (typeof schemaVersion !== 'string' || schemaVersion.length === 0) {
 	throw new Error('Receipt data schema version is missing. Set x-schema-version in Receipt_Data_Schema::get_json_schema().');
 }
 
-const typeSource = `// Generated from WCPOS\\WooCommercePOS\\Services\\Receipt_Data_Schema::get_json_schema().\n// Do not edit by hand. Run \`pnpm --filter @wcpos/receipt-schema build\`.\n\nexport type ReceiptScalar = string | number | boolean | null;\nexport type ReceiptValue = ReceiptScalar | ReceiptValue[] | { [key: string]: ReceiptValue };\nexport type ReceiptObject = { [key: string]: ReceiptValue };\n\nexport interface ReceiptData {\n${requiredKeys.map((key) => `\t${JSON.stringify(key)}: ReceiptObject | ReceiptObject[];`).join('\n')}\n}\n\nexport const receiptDataRequiredKeys = ${JSON.stringify(requiredKeys, null, '\t')} as const;\nexport type ReceiptDataRequiredKey = (typeof receiptDataRequiredKeys)[number];\nexport const receiptDataSchemaVersion = ${JSON.stringify(schemaVersion)} as const;\n`;
+const typeForRequiredKey = (key) => {
+	const property = schema.properties?.[key] ?? {};
+	const type = property.type;
+
+	if (type === 'boolean') {
+		return 'boolean';
+	}
+	if (type === 'string') {
+		return 'string';
+	}
+	if (type === 'number' || type === 'integer') {
+		return 'number';
+	}
+
+	return 'ReceiptObject | ReceiptObject[]';
+};
+
+const typeSource = `// Generated from WCPOS\\WooCommercePOS\\Services\\Receipt_Data_Schema::get_json_schema().\n// Do not edit by hand. Run \`pnpm --filter @wcpos/receipt-schema build\`.\n\nexport type ReceiptScalar = string | number | boolean | null;\nexport type ReceiptValue = ReceiptScalar | ReceiptValue[] | { [key: string]: ReceiptValue };\nexport type ReceiptObject = { [key: string]: ReceiptValue };\n\nexport interface ReceiptData {\n${requiredKeys.map((key) => `\t${JSON.stringify(key)}: ${typeForRequiredKey(key)};`).join('\n')}\n}\n\nexport const receiptDataRequiredKeys = ${JSON.stringify(requiredKeys, null, '\t')} as const;\nexport type ReceiptDataRequiredKey = (typeof receiptDataRequiredKeys)[number];\nexport const receiptDataSchemaVersion = ${JSON.stringify(schemaVersion)} as const;\n`;
 
 function assertCurrent(path, expected) {
 	let actual = '';

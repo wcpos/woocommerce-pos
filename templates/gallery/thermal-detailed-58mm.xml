@@ -172,10 +172,10 @@ the star to the remaining 32-CPL space at render time.
   {{/discounts}}
 
   <!-- ── Tax summary ─────────────── -->
-  {{#tax_summary.0}}
+  {{#has_tax_summary}}
   <line style="dashed" />
   <bold><text>{{#tax.display_excl}}{{i18n.tax_summary}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</text></bold>
-  {{/tax_summary.0}}
+  {{/has_tax_summary}}
   {{#tax_summary}}
   <row>
     <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#code}} {{code}}{{/code}}</col>
