@@ -1260,6 +1260,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$coupon_a->set_code( 'CODE_A' );
 		$coupon_a->set_amount( 5 );
 		$coupon_a->set_discount_type( 'fixed_cart' );
+		$coupon_a->set_description( 'Band discount 25–75' );
 		$coupon_a->save();
 
 		$coupon_b = new \WC_Coupon();
@@ -1283,9 +1284,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$this->assertArrayNotHasKey( 'codes', $discount );
 		}
 
-		$codes = array_column( $payload['discounts'], 'code' );
-		$this->assertContains( wc_format_coupon_code( 'CODE_A' ), $codes );
-		$this->assertContains( wc_format_coupon_code( 'CODE_B' ), $codes );
+		$discounts_by_code = array_column( $payload['discounts'], null, 'code' );
+		$this->assertArrayHasKey( wc_format_coupon_code( 'CODE_A' ), $discounts_by_code );
+		$this->assertArrayHasKey( wc_format_coupon_code( 'CODE_B' ), $discounts_by_code );
+		$this->assertSame( 'Band discount 25–75', $discounts_by_code[ wc_format_coupon_code( 'CODE_A' ) ]['label'] );
+		$this->assertSame( '', $discounts_by_code[ wc_format_coupon_code( 'CODE_B' ) ]['label'] );
 	}
 
 	/**

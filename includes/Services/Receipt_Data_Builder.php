@@ -290,7 +290,7 @@ class Receipt_Data_Builder {
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
 			$discounts[] = array(
-				'label'      => $coupon_item->get_code(),
+				'label'      => $this->get_coupon_label( $coupon_item ),
 				'code'       => $coupon_item->get_code(),
 				'total'      => $display_incl ? $coupon_incl : $coupon_excl,
 				'total_incl' => $coupon_incl,
@@ -385,6 +385,38 @@ class Receipt_Data_Builder {
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
 		);
+	}
+
+
+	/**
+	 * Resolve an optional human-facing coupon label for a receipt discount row.
+	 *
+	 * Coupons are identified by code; the code is already exposed as
+	 * `discounts[].code`. Only use the description as `label` when it is a distinct,
+	 * user-authored description so templates do not duplicate the code.
+	 *
+	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
+	 * @return string
+	 */
+	private function get_coupon_label( \WC_Order_Item_Coupon $coupon_item ): string {
+		$code = (string) $coupon_item->get_code();
+		if ( '' === $code ) {
+			return '';
+		}
+
+		try {
+			$coupon = new \WC_Coupon( $code );
+		} catch ( \Exception $exception ) {
+			return '';
+		}
+
+		if ( ! $coupon->get_id() ) {
+			return '';
+		}
+
+		$label = trim( wp_strip_all_tags( (string) $coupon->get_description() ) );
+
+		return $label !== $code ? $label : '';
 	}
 
 	/**
