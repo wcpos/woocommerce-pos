@@ -269,9 +269,9 @@ $i18n = $receipt_data['i18n'] ?? array();
 								?>
 								&middot; <?php echo esc_html( $discount['label'] ); ?><?php endif; ?>
 							<?php
-							if ( ! empty( $discount['codes'] ) ) :
+							if ( ! empty( $discount['code'] ) ) :
 								?>
-								(<?php echo esc_html( $discount['codes'] ); ?>)<?php endif; ?>
+								(<?php echo esc_html( $discount['code'] ); ?>)<?php endif; ?>
 						</div>
 					</td>
 					<td class="num">&mdash;</td>

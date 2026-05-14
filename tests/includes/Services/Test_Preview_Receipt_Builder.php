@@ -57,18 +57,17 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 
 	/**
-	 * Preview discounts expose both singular code and display codes fields.
+	 * Preview discounts expose one canonical coupon code field.
 	 *
 	 * @covers ::build
 	 */
-	public function test_preview_discounts_include_code_and_codes_fields(): void {
+	public function test_preview_discounts_include_only_canonical_code_field(): void {
 		$data = $this->builder->build();
 
 		$this->assertNotEmpty( $data['discounts'] );
 		$this->assertArrayHasKey( 'code', $data['discounts'][0] );
-		$this->assertArrayHasKey( 'codes', $data['discounts'][0] );
+		$this->assertArrayNotHasKey( 'codes', $data['discounts'][0] );
 		$this->assertSame( 'SUMMER10', $data['discounts'][0]['code'] );
-		$this->assertSame( 'SUMMER10', $data['discounts'][0]['codes'] );
 	}
 
 	/**

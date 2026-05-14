@@ -289,12 +289,9 @@ class Receipt_Data_Builder {
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
-			// `code` is the canonical single coupon code for this row; `codes`
-			// remains as a display-friendly alias used by existing templates.
 			$discounts[] = array(
 				'label'      => $coupon_item->get_code(),
 				'code'       => $coupon_item->get_code(),
-				'codes'      => $coupon_item->get_code(),
 				'total'      => $display_incl ? $coupon_incl : $coupon_excl,
 				'total_incl' => $coupon_incl,
 				'total_excl' => $coupon_excl,
