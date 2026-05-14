@@ -26,22 +26,38 @@ function stripHtmlComments(template: string): string {
 	return stripped;
 }
 
+function numericAttribute(el: Element, name: string, fallback: number): number {
+	const value = el.getAttribute(name);
+	if (value === null) return fallback;
+
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function processBarcodeMarkers(html: string): string {
 	const doc = new DOMParser().parseFromString(html, 'text/html');
-	const markers = doc.querySelectorAll('[data-barcode]');
+	const markers = doc.querySelectorAll('[data-barcode], barcode, qrcode');
 
 	if (markers.length === 0) {
 		return html;
 	}
 
 	markers.forEach((el) => {
-		const type = el.getAttribute('data-barcode') || 'qr';
-		const value = el.getAttribute('data-value') || '';
+		const tagName = el.tagName.toLowerCase();
+		const rawType = tagName === 'qrcode' ? 'qrcode' : el.getAttribute('data-barcode') || el.getAttribute('type') || 'qr';
+		const type = rawType.trim().toLowerCase();
+		const value = el.getAttribute('data-value') || el.textContent || '';
+		const kind = type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode';
 
-		if (value) {
+		if (value.trim()) {
+			const rawHeight = numericAttribute(el, 'height', 40);
+			const rawScale = numericAttribute(el, kind === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 4 : 2);
+
 			el.outerHTML = generateBarcodeSvg(value, {
 				type,
-				kind: type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode',
+				kind,
+				height: kind === 'barcode' ? rawHeight / 10 : rawHeight,
+				scale: kind === 'qrcode' ? Math.max(rawScale, 4) : rawScale,
 			});
 		}
 	});

@@ -1,0 +1,280 @@
+{
+  "description": "Shared Coffee Monster paid retail receipt data used as the default gallery preview fixture.",
+  "overrides": {
+    "order": {
+      "id": 1234,
+      "number": "POS-1234",
+      "currency": "USD",
+      "customer_note": "Please gift wrap the ceramic mug.",
+      "wc_status": "completed",
+      "status_label": "Completed",
+      "created_via": "woocommerce-pos",
+      "needs_payment": false,
+      "payment_url": ""
+    },
+    "store": {
+      "id": 1,
+      "name": "Coffee Monster",
+      "logo": "{{asset:coffee-monster-logo}}",
+      "address": {
+        "address_1": "123 Bean Street",
+        "address_2": "Unit 4",
+        "city": "Portland",
+        "state": "OR",
+        "postcode": "97205",
+        "country": "US"
+      },
+      "address_lines": [
+        "123 Bean Street, Unit 4",
+        "Portland, OR 97205"
+      ],
+      "tax_ids": [
+        {
+          "type": "us_ein",
+          "label": "EIN",
+          "value": "12-3456789",
+          "country": "US"
+        }
+      ],
+      "phone": "+1 (503) 555-0142",
+      "email": "hello@coffeemonster.example",
+      "opening_hours": "Mon–Fri 7:00 AM – 6:00 PM\nSat–Sun 8:00 AM – 4:00 PM",
+      "opening_hours_vertical": "Mon 7:00 AM – 6:00 PM\nTue 7:00 AM – 6:00 PM\nWed 7:00 AM – 6:00 PM\nThu 7:00 AM – 6:00 PM\nFri 7:00 AM – 6:00 PM\nSat 8:00 AM – 4:00 PM\nSun 8:00 AM – 4:00 PM",
+      "opening_hours_inline": "Mon–Fri 7:00 AM – 6:00 PM, Sat–Sun 8:00 AM – 4:00 PM",
+      "opening_hours_notes": "Closed on public holidays",
+      "personal_notes": "Thanks for feeding the monster.",
+      "policies_and_conditions": "Returns accepted within 30 days with original receipt. Beans and perishable items are final sale once opened.",
+      "footer_imprint": "Follow us @coffeemonster"
+    },
+    "customer": {
+      "id": 42,
+      "name": "Sarah Johnson",
+      "billing_address": {
+        "first_name": "Sarah",
+        "last_name": "Johnson",
+        "company": "",
+        "address_1": "456 Oak Avenue",
+        "address_2": "Suite 200",
+        "city": "Portland",
+        "state": "OR",
+        "postcode": "97209",
+        "country": "US",
+        "email": "sarah.johnson@example.com",
+        "phone": "(555) 987-6543"
+      },
+      "shipping_address": {
+        "first_name": "Sarah",
+        "last_name": "Johnson",
+        "company": "",
+        "address_1": "456 Oak Avenue",
+        "address_2": "Suite 200",
+        "city": "Portland",
+        "state": "OR",
+        "postcode": "97209",
+        "country": "US"
+      },
+      "tax_ids": []
+    },
+    "cashier": {
+      "id": 7,
+      "name": "Jane Smith"
+    },
+    "lines": [
+      {
+        "key": "1",
+        "sku": "CM-BEANS-250",
+        "name": "House Espresso Beans",
+        "qty": 2,
+        "unit_subtotal": 14.5,
+        "unit_subtotal_incl": 14.5,
+        "unit_subtotal_excl": 14.5,
+        "unit_price": 13.05,
+        "unit_price_incl": 13.05,
+        "unit_price_excl": 13.05,
+        "line_subtotal": 29,
+        "line_subtotal_incl": 29,
+        "line_subtotal_excl": 29,
+        "discounts": 2.9,
+        "discounts_incl": 2.9,
+        "discounts_excl": 2.9,
+        "line_total": 26.1,
+        "line_total_incl": 26.1,
+        "line_total_excl": 26.1,
+        "qty_refunded": 0,
+        "total_refunded": 0,
+        "taxes": [],
+        "meta": [
+          {
+            "key": "Grind",
+            "value": "Whole bean"
+          }
+        ],
+        "attributes": [
+          {
+            "key": "Grind",
+            "value": "Whole bean"
+          }
+        ]
+      },
+      {
+        "key": "2",
+        "sku": "CM-MUG-BLK",
+        "name": "Black Ceramic Mug",
+        "qty": 1,
+        "unit_subtotal": 18,
+        "unit_subtotal_incl": 18,
+        "unit_subtotal_excl": 18,
+        "unit_price": 16.2,
+        "unit_price_incl": 16.2,
+        "unit_price_excl": 16.2,
+        "line_subtotal": 18,
+        "line_subtotal_incl": 18,
+        "line_subtotal_excl": 18,
+        "discounts": 1.8,
+        "discounts_incl": 1.8,
+        "discounts_excl": 1.8,
+        "line_total": 16.2,
+        "line_total_incl": 16.2,
+        "line_total_excl": 16.2,
+        "qty_refunded": 1,
+        "total_refunded": 7.25,
+        "taxes": [],
+        "meta": [
+          {
+            "key": "Size",
+            "value": "12 oz"
+          }
+        ],
+        "attributes": [
+          {
+            "key": "Size",
+            "value": "12 oz"
+          }
+        ]
+      },
+      {
+        "key": "3",
+        "sku": "CM-CROISSANT",
+        "name": "Almond Croissant",
+        "qty": 1,
+        "unit_subtotal": 5.75,
+        "unit_subtotal_incl": 5.75,
+        "unit_subtotal_excl": 5.75,
+        "unit_price": 5.17,
+        "unit_price_incl": 5.17,
+        "unit_price_excl": 5.17,
+        "line_subtotal": 5.75,
+        "line_subtotal_incl": 5.75,
+        "line_subtotal_excl": 5.75,
+        "discounts": 0.58,
+        "discounts_incl": 0.58,
+        "discounts_excl": 0.58,
+        "line_total": 5.17,
+        "line_total_incl": 5.17,
+        "line_total_excl": 5.17,
+        "qty_refunded": 0,
+        "total_refunded": 0,
+        "taxes": [],
+        "meta": [],
+        "attributes": []
+      }
+    ],
+    "discounts": [
+      {
+        "label": "Summer Sale (10%)",
+        "code": "SUMMER10",
+        "total": 5.28,
+        "total_incl": 5.28,
+        "total_excl": 5.28
+      }
+    ],
+    "fees": [
+      {
+        "label": "Gift Wrapping",
+        "total": 2.5,
+        "total_incl": 2.5,
+        "total_excl": 2.5,
+        "taxes": [],
+        "meta": []
+      }
+    ],
+    "shipping": [
+      {
+        "label": "Flat Rate Shipping",
+        "method_id": "flat_rate",
+        "total": 10,
+        "total_incl": 10,
+        "total_excl": 10,
+        "taxes": [],
+        "meta": []
+      }
+    ],
+    "totals": {
+      "subtotal": 52.75,
+      "subtotal_incl": 52.75,
+      "subtotal_excl": 52.75,
+      "discount_total": 5.28,
+      "discount_total_incl": 5.28,
+      "discount_total_excl": 5.28,
+      "tax_total": 0,
+      "total": 59.97,
+      "total_incl": 59.97,
+      "total_excl": 59.97,
+      "paid_total": 59.97,
+      "change_total": 0.03,
+      "total_qty": 4,
+      "line_count": 3,
+      "refund_total": 7.25,
+      "net_total": 52.72
+    },
+    "tax_summary": [],
+    "has_tax_summary": false,
+    "payments": [
+      {
+        "method_id": "pos_cash",
+        "method_title": "Cash",
+        "amount": 59.97,
+        "transaction_id": "",
+        "tendered": 60,
+        "change": 0.03
+      }
+    ],
+    "refunds": [
+      {
+        "id": 987,
+        "date": {
+          "date": "2024-01-16",
+          "time": "11:12 AM",
+          "datetime": "Jan 16, 2024, 11:12 AM",
+          "timestamp": 1705403520
+        },
+        "amount": 7.25,
+        "subtotal": 7.25,
+        "tax_total": 0,
+        "shipping_total": 0,
+        "shipping_tax": 0,
+        "reason": "Changed mind about the mug.",
+        "refunded_by_id": 7,
+        "refunded_by_name": "Jane Smith",
+        "refunded_payment": true,
+        "destination": "original_payment",
+        "gateway_id": "pos_cash",
+        "gateway_title": "Cash",
+        "processing_mode": "manual",
+        "lines": [
+          {
+            "name": "Black Ceramic Mug",
+            "sku": "CM-MUG-BLK",
+            "qty": 1,
+            "total": 7.25,
+            "total_incl": 7.25,
+            "total_excl": 7.25,
+            "taxes": []
+          }
+        ],
+        "fees": [],
+        "shipping": []
+      }
+    ]
+  }
+}

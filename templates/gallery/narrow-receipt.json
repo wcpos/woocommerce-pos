@@ -6,5 +6,6 @@
     "category": "receipt",
     "engine": "logicless",
     "output_type": "html",
-    "version": 1
+    "version": 1,
+    "preview_data": "base-receipt"
 }

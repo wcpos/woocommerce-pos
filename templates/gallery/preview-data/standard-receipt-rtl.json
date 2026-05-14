@@ -1,0 +1,176 @@
+{
+  "extends": "base-receipt",
+  "description": "Arabic RTL paid receipt preview with localized store, customer, address, products, and payment labels.",
+  "overrides": {
+    "presentation_hints": {
+      "locale": "ar",
+      "direction": "rtl"
+    },
+    "order": {
+      "number": "POS-١٢٣٤",
+      "currency": "AED",
+      "status_label": "مكتمل"
+    },
+    "store": {
+      "name": "وحش القهوة",
+      "address": {
+        "address_1": "شارع القهوة ١٢٣",
+        "address_2": "",
+        "city": "دبي",
+        "state": "",
+        "postcode": "",
+        "country": "AE"
+      },
+      "address_lines": [
+        "شارع القهوة ١٢٣",
+        "دبي، الإمارات العربية المتحدة"
+      ],
+      "phone": "+971 4 555 0142",
+      "personal_notes": "شكراً لتسوقكم معنا.",
+      "footer_imprint": "تابعونا @coffeemonster"
+    },
+    "customer": {
+      "name": "ليلى أحمد",
+      "billing_address": {
+        "first_name": "ليلى",
+        "last_name": "أحمد",
+        "address_1": "شارع النخيل ٤٥",
+        "address_2": "",
+        "city": "دبي",
+        "state": "",
+        "postcode": "",
+        "country": "AE",
+        "email": "layla.ahmed@example.com",
+        "phone": "+971 50 555 0188"
+      },
+      "shipping_address": {
+        "first_name": "ليلى",
+        "last_name": "أحمد",
+        "address_1": "شارع النخيل ٤٥",
+        "address_2": "",
+        "city": "دبي",
+        "state": "",
+        "postcode": "",
+        "country": "AE"
+      }
+    },
+    "lines": [
+      {
+        "key": "1",
+        "sku": "CM-BEANS-250",
+        "name": "حبوب إسبرسو منزلية",
+        "qty": 2,
+        "unit_price": 52,
+        "line_total": 104,
+        "meta": [
+          {
+            "key": "الطحن",
+            "value": "حبوب كاملة"
+          }
+        ],
+        "attributes": [
+          {
+            "key": "الطحن",
+            "value": "حبوب كاملة"
+          }
+        ],
+        "unit_subtotal": 52,
+        "unit_subtotal_incl": 52,
+        "unit_subtotal_excl": 52,
+        "unit_price_incl": 52,
+        "unit_price_excl": 52,
+        "line_subtotal": 104,
+        "line_subtotal_incl": 104,
+        "line_subtotal_excl": 104,
+        "discounts": 0,
+        "discounts_incl": 0,
+        "discounts_excl": 0,
+        "line_total_incl": 104,
+        "line_total_excl": 104,
+        "qty_refunded": 0,
+        "total_refunded": 0,
+        "taxes": []
+      },
+      {
+        "key": "2",
+        "sku": "CM-MUG-BLK",
+        "name": "كوب سيراميك أسود",
+        "qty": 1,
+        "unit_price": 66,
+        "line_total": 66,
+        "meta": [],
+        "attributes": [],
+        "unit_subtotal": 66,
+        "unit_subtotal_incl": 66,
+        "unit_subtotal_excl": 66,
+        "unit_price_incl": 66,
+        "unit_price_excl": 66,
+        "line_subtotal": 66,
+        "line_subtotal_incl": 66,
+        "line_subtotal_excl": 66,
+        "discounts": 0,
+        "discounts_incl": 0,
+        "discounts_excl": 0,
+        "line_total_incl": 66,
+        "line_total_excl": 66,
+        "qty_refunded": 0,
+        "total_refunded": 0,
+        "taxes": []
+      }
+    ],
+    "payments": [
+      {
+        "method_id": "pos_card",
+        "method_title": "بطاقة",
+        "amount": 170,
+        "transaction_id": "AUTH-AR-123"
+      }
+    ],
+    "discounts": [],
+    "fees": [],
+    "shipping": [],
+    "totals": {
+      "subtotal": 170,
+      "subtotal_incl": 170,
+      "subtotal_excl": 170,
+      "discount_total": 0,
+      "discount_total_incl": 0,
+      "discount_total_excl": 0,
+      "tax_total": 0,
+      "total": 170,
+      "total_incl": 170,
+      "total_excl": 170,
+      "paid_total": 170,
+      "change_total": 0,
+      "total_qty": 3,
+      "line_count": 2,
+      "refund_total": 0,
+      "net_total": 0
+    },
+    "tax_summary": [],
+    "has_tax_summary": false,
+    "i18n": {
+      "receipt": "إيصال",
+      "order": "طلب",
+      "date": "التاريخ",
+      "cashier": "أمين الصندوق",
+      "customer": "العميل",
+      "customer_note": "ملاحظة العميل",
+      "item_short": "الصنف",
+      "qty_short": "الكمية",
+      "subtotal": "المجموع الفرعي",
+      "discount": "الخصم",
+      "total_tax": "إجمالي الضريبة",
+      "included_tax": "ضريبة مشمولة",
+      "total": "الإجمالي",
+      "paid": "مدفوع",
+      "tendered": "المبلغ المستلم",
+      "change": "الباقي",
+      "refunded": "مسترد",
+      "returned_items": "العناصر المرتجعة",
+      "net_total": "الصافي",
+      "thank_you_purchase": "شكراً لشرائكم"
+    },
+    "refunds": []
+  }
+}

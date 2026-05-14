@@ -31,6 +31,39 @@ describe('renderLogiclessPreview', () => {
 	});
 
 
+
+	it('replaces raw barcode tags with generated barcode HTML', () => {
+		const html = renderLogiclessPreview(
+			'<barcode type="code128" height="40">{{order.number}}</barcode><barcode type="qrcode" scale="2">{{order.payment_url}}</barcode>',
+			{ order: { number: 'POS-1234', payment_url: 'https://example.test/pay' } },
+		);
+
+		expect(html).toContain('data-barcode-kind="barcode"');
+		expect(html).toContain('data-barcode-value="POS-1234"');
+		expect(html).toContain('data-barcode-kind="qrcode"');
+		expect(html).toContain('data-barcode-value="https://example.test/pay"');
+		expect(html).toContain('<svg');
+		expect(html).not.toContain('<barcode');
+
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		const barcodeSvg = doc.querySelector('[data-barcode-kind=\"barcode\"] svg');
+		const qrSvg = doc.querySelector('[data-barcode-kind=\"qrcode\"] svg');
+		const barcodeViewBox = barcodeSvg?.getAttribute('viewBox')?.split(' ').map(Number) ?? [];
+		const qrViewBox = qrSvg?.getAttribute('viewBox')?.split(' ').map(Number) ?? [];
+
+		expect(barcodeViewBox[2]).toBeGreaterThan(barcodeViewBox[3] * 2);
+		expect(qrViewBox[2]).toBe(qrViewBox[3]);
+		expect(qrViewBox[2]).toBeGreaterThan(60);
+	});
+
+	it('uses size attributes for QR markers declared with data-barcode', () => {
+		const data = { order: { payment_url: 'https://example.test/pay' } };
+		const rawQr = renderLogiclessPreview('<qrcode size="5">{{order.payment_url}}</qrcode>', data);
+		const dataQr = renderLogiclessPreview('<div data-barcode="qrcode" size="5">{{order.payment_url}}</div>', data);
+
+		expect(dataQr).toBe(rawQr);
+	});
+
 	it('strips HTML comments before Mustache renders template content', () => {
 		const html = renderLogiclessPreview('<!-- {{#todo}} documentation only --><p>{{label}}</p>', { label: 'Visible' });
 

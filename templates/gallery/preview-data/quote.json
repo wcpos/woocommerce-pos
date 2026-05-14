@@ -1,0 +1,27 @@
+{
+  "extends": "base-receipt",
+  "description": "Quote/estimate preview with pre-sale status, no payment, and validity terms.",
+  "overrides": {
+    "order": {
+      "id": 3021,
+      "number": "Q-3021",
+      "wc_status": "pending",
+      "status_label": "Quote",
+      "customer_note": "Estimate for office coffee subscription.",
+      "needs_payment": false,
+      "payment_url": ""
+    },
+    "payments": [],
+    "quote": {
+      "valid_until": "2024-02-15",
+      "terms": "Quote valid for 30 days. Prices may change after expiry."
+    },
+    "totals": {
+      "paid_total": 0,
+      "change_total": 0,
+      "refund_total": 0,
+      "net_total": 0
+    },
+    "refunds": []
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "extends": "base-receipt",
+  "description": "Packing slip preview with fulfillment-oriented shipping address, quantities, and no pricing/payment emphasis.",
+  "overrides": {
+    "order": {
+      "number": "PKG-1234",
+      "customer_note": "Leave package with reception if customer is out."
+    },
+    "customer": {
+      "name": "Sarah Johnson",
+      "shipping_address": {
+        "first_name": "Sarah",
+        "last_name": "Johnson",
+        "company": "Oak Avenue Studios",
+        "address_1": "456 Oak Avenue",
+        "address_2": "Suite 200",
+        "city": "Portland",
+        "state": "OR",
+        "postcode": "97209",
+        "country": "US"
+      }
+    },
+    "discounts": [],
+    "fees": [],
+    "payments": [],
+    "refunds": [],
+    "totals": {
+      "refund_total": 0,
+      "net_total": 0
+    }
+  }
+}

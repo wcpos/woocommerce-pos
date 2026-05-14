@@ -1074,6 +1074,64 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Test preview returns sample data for a gallery template key.
 	 */
+	/**
+	 * Test invoice gallery preview uses unpaid invoice fixture data.
+	 */
+	public function test_preview_invoice_gallery_template_uses_unpaid_fixture_data(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/invoice/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'receipt_data', $data );
+		$this->assertEquals( 'INV-2048', $data['receipt_data']['order']['number'] );
+		$this->assertEquals( 'pending', $data['receipt_data']['order']['wc_status'] );
+		$this->assertTrue( $data['receipt_data']['order']['needs_payment'] );
+		$this->assertEquals( array(), $data['receipt_data']['payments'] );
+		$this->assertEquals( 'FAKE SAMPLE IBAN', $data['receipt_data']['invoice']['bank_details']['iban'] );
+	}
+
+	/**
+	 * Test installed invoice preview keeps the gallery fixture profile.
+	 */
+	public function test_preview_installed_invoice_template_uses_unpaid_fixture_data(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'invoice' );
+
+		try {
+			$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+
+			$data = $response->get_data();
+			$this->assertArrayHasKey( 'receipt_data', $data );
+			$this->assertEquals( 'INV-2048', $data['receipt_data']['order']['number'] );
+			$this->assertTrue( $data['receipt_data']['order']['needs_payment'] );
+			$this->assertEquals( array(), $data['receipt_data']['payments'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+		}
+	}
+
+	/**
+	 * Test RTL gallery preview uses localized RTL fixture data.
+	 */
+	public function test_preview_rtl_gallery_template_uses_rtl_fixture_data(): void {
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/standard-receipt-rtl/preview' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'receipt_data', $data );
+		$this->assertEquals( 'rtl', $data['receipt_data']['presentation_hints']['direction'] );
+		$this->assertEquals( 'ar', $data['receipt_data']['presentation_hints']['locale'] );
+		$this->assertEquals( 'وحش القهوة', $data['receipt_data']['store']['name'] );
+		$this->assertEquals( 'ليلى أحمد', $data['receipt_data']['customer']['name'] );
+		$this->assertEquals( 'حبوب إسبرسو منزلية', $data['receipt_data']['lines'][0]['name'] );
+	}
+
 	public function test_preview_returns_data_for_gallery_template(): void {
 		$gallery = \WCPOS\WooCommercePOS\Templates::get_gallery_templates();
 		if ( empty( $gallery ) ) {

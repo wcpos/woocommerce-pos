@@ -5,6 +5,16 @@ import path from 'path';
 const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
 const previewDir = path.join(repoRoot, 'assets', 'img', 'template-gallery', 'previews');
+const previewDataDir = path.join(galleryDir, 'preview-data');
+
+
+function readPngDimensions(filePath: string): { width: number; height: number } {
+	const buffer = fs.readFileSync(filePath);
+	return {
+		width: buffer.readUInt32BE(16),
+		height: buffer.readUInt32BE(20),
+	};
+}
 
 function removeComments(root: Document): void {
 	const walker = root.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
@@ -153,6 +163,20 @@ describe('gallery template assets', () => {
 		}
 	});
 
+	it('maps every bundled gallery template to a committed preview data fixture', () => {
+		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
+
+		for (const filename of metadataFiles) {
+			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
+				key: string;
+				preview_data?: string;
+			};
+
+			expect(metadata.preview_data, metadata.key).toBeTruthy();
+			expect(fs.existsSync(path.join(previewDataDir, `${metadata.preview_data}.json`)), metadata.key).toBe(true);
+		}
+	});
+
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
@@ -164,6 +188,25 @@ describe('gallery template assets', () => {
 
 			expect(fs.existsSync(path.join(previewDir, `${metadata.key}.png`)), metadata.key).toBe(true);
 			expect(getGalleryPreviewSrc(metadata.key), metadata.key).toBe(`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${metadata.key}.png`);
+		}
+	});
+
+
+	it('uses natural receipt paper widths for thermal preview images', () => {
+		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
+
+		for (const filename of metadataFiles) {
+			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
+				key: string;
+				engine?: string;
+				paper_width?: string;
+			};
+
+			if (metadata.engine !== 'thermal') continue;
+
+			const expectedWidth = metadata.paper_width === '58mm' ? 274 : 398;
+			const dimensions = readPngDimensions(path.join(previewDir, `${metadata.key}.png`));
+			expect(dimensions.width, metadata.key).toBe(expectedWidth);
 		}
 	});
 

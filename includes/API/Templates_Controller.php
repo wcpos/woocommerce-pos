@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Preview_Fixture_Loader;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
@@ -927,7 +928,12 @@ class Templates_Controller extends WP_REST_Controller {
 			$receipt_data = ( new Receipt_Data_Builder() )->build( $order, 'live', $request_pos_store );
 		} else {
 			$pos_store = null === $request_pos_store ? wcpos_get_store() : $request_pos_store;
-			$receipt_data = ( new Preview_Receipt_Builder() )->build( $pos_store );
+			$preview_data_profile = isset( $template['preview_data'] ) && is_string( $template['preview_data'] )
+				? $template['preview_data']
+				: null;
+			$receipt_data = null !== $preview_data_profile
+				? ( new Receipt_Preview_Fixture_Loader() )->build( $preview_data_profile, $pos_store )
+				: ( new Preview_Receipt_Builder() )->build( $pos_store );
 		}
 
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';

@@ -1,0 +1,19 @@
+{
+  "extends": "base-receipt",
+  "description": "Gift receipt preview with item names, customer note as gift message, and no visible price/payment emphasis.",
+  "overrides": {
+    "order": {
+      "number": "GIFT-1234",
+      "customer_note": "Happy birthday — enjoy the coffee treats!"
+    },
+    "discounts": [],
+    "fees": [],
+    "shipping": [],
+    "payments": [],
+    "refunds": [],
+    "totals": {
+      "refund_total": 0,
+      "net_total": 0
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "extends": "base-receipt",
+  "description": "Prep-focused kitchen ticket data with modifiers, table/customer label, and no commerce sections.",
+  "overrides": {
+    "order": {
+      "number": "K-1042",
+      "customer_note": "Table 7 — rush order."
+    },
+    "customer": {
+      "name": "Table 7"
+    },
+    "lines": [
+      {
+        "key": "1",
+        "sku": "CM-LATTE",
+        "name": "Oat Milk Latte",
+        "qty": 2,
+        "meta": [
+          {
+            "key": "Milk",
+            "value": "Oat"
+          },
+          {
+            "key": "Temperature",
+            "value": "Extra hot"
+          }
+        ],
+        "attributes": [
+          {
+            "key": "Milk",
+            "value": "Oat"
+          },
+          {
+            "key": "Temperature",
+            "value": "Extra hot"
+          }
+        ]
+      },
+      {
+        "key": "2",
+        "sku": "CM-TOASTIE",
+        "name": "Cheese Toastie",
+        "qty": 1,
+        "meta": [
+          {
+            "key": "Modifier",
+            "value": "No tomato"
+          },
+          {
+            "key": "Prep note",
+            "value": "Cut in half"
+          }
+        ],
+        "attributes": [
+          {
+            "key": "Modifier",
+            "value": "No tomato"
+          },
+          {
+            "key": "Prep note",
+            "value": "Cut in half"
+          }
+        ]
+      }
+    ],
+    "discounts": [],
+    "shipping": [],
+    "fees": [],
+    "payments": [],
+    "refunds": [],
+    "totals": {
+      "refund_total": 0,
+      "net_total": 0
+    }
+  }
+}

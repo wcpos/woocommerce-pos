@@ -39,6 +39,13 @@ class Templates {
 	const OFFLINE_CAPABLE_ENGINES = array( 'logicless', 'thermal' );
 
 	/**
+	 * Per-request cache of installed gallery template preview data profiles.
+	 *
+	 * @var array<string,string|null>
+	 */
+	private static $gallery_preview_data_cache = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -282,6 +289,15 @@ class Templates {
 		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
 		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
 		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+		$preview_data    = null;
+		if ( \is_string( $gallery_key ) && '' !== $gallery_key ) {
+			if ( ! array_key_exists( $gallery_key, self::$gallery_preview_data_cache ) ) {
+				$gallery_template = self::get_gallery_template_by_key( $gallery_key );
+				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_template['preview_data'] ?? null;
+			}
+
+			$preview_data = self::$gallery_preview_data_cache[ $gallery_key ];
+		}
 		$paper_width     = get_post_meta( $template_id, '_template_paper_width', true );
 		$category        = self::get_template_category( $template_id );
 
@@ -301,6 +317,7 @@ class Templates {
 			'is_virtual'      => false,
 			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
 			'gallery_key'     => $gallery_key ? $gallery_key : null,
+			'preview_data'    => $preview_data,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
 			'status'          => $post->post_status,
 			'source'          => 'custom',

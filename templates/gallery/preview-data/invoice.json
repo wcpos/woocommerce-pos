@@ -1,0 +1,34 @@
+{
+  "extends": "base-receipt",
+  "description": "Unpaid invoice preview with payment terms, billing details, and fake bank-transfer placeholders.",
+  "overrides": {
+    "order": {
+      "id": 2048,
+      "number": "INV-2048",
+      "wc_status": "pending",
+      "status_label": "Pending payment",
+      "customer_note": "Invoice for catering deposit.",
+      "needs_payment": true,
+      "payment_url": "https://example.com/pay/inv-2048"
+    },
+    "payments": [],
+    "totals": {
+      "paid_total": 0,
+      "change_total": 0,
+      "refund_total": 0,
+      "net_total": 0
+    },
+    "invoice": {
+      "issue_date": "2024-01-15",
+      "due_date": "2024-01-30",
+      "payment_terms": "Payment due within 15 days.",
+      "bank_details": {
+        "account_name": "Coffee Monster Ltd",
+        "iban": "FAKE SAMPLE IBAN",
+        "bic": "FAKE SAMPLE BIC",
+        "reference": "INV-2048"
+      }
+    },
+    "refunds": []
+  }
+}
