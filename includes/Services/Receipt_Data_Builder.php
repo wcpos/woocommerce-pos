@@ -352,6 +352,8 @@ class Receipt_Data_Builder {
 			),
 		);
 
+		$tax_summary = $this->get_tax_summary( $order );
+
 		$fiscal = array(
 			'immutable_id'      => '',
 			'receipt_number'    => '',
@@ -378,7 +380,8 @@ class Receipt_Data_Builder {
 			'discounts'          => $discounts,
 			'totals'             => $totals,
 			'tax'                => $tax,
-			'tax_summary'        => $this->get_tax_summary( $order ),
+			'tax_summary'        => $tax_summary,
+			'has_tax_summary'    => ! empty( $tax_summary ),
 			'payments'           => $payments,
 			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone ),
 			'fiscal'             => $fiscal,

@@ -812,6 +812,7 @@ class Preview_Receipt_Builder {
 			'totals'             => $totals,
 			'tax'                => $tax,
 			'tax_summary'        => $tax_summary,
+			'has_tax_summary'    => ! empty( $tax_summary ),
 			'payments'           => $payments,
 			'refunds'            => $refunds,
 			'fiscal'             => $fiscal,

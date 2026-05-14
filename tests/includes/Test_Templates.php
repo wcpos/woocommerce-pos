@@ -112,7 +112,7 @@ class Test_Templates extends WP_UnitTestCase {
 			$label   = basename( $template );
 
 			$this->assertNotFalse( $content, 'Unable to read gallery template: ' . $template );
-			$this->assertStringNotContainsString( 'has_tax_summary', $content, $label );
+			$this->assertStringNotContainsString( 'tax_summary.0', $content, $label );
 			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
 			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
 		}

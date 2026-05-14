@@ -949,6 +949,38 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test preview data exposes the tax-summary guard from the receipt contract.
+	 */
+	public function test_preview_tax_summary_uses_contract_helper(): void {
+		$original_calc_taxes = get_option( 'woocommerce_calc_taxes' );
+		$post_id = $this->create_template( 'Preview Template' );
+
+		try {
+			update_option( 'woocommerce_calc_taxes', 'yes' );
+			wp_update_post(
+				array(
+					'ID'           => $post_id,
+					'post_content' => '{{#has_tax_summary}}contract helper{{/has_tax_summary}}',
+				)
+			);
+
+			$request  = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+
+			$data = $response->get_data();
+			$this->assertArrayHasKey( 'receipt_data', $data );
+			$this->assertArrayHasKey( 'has_tax_summary', $data['receipt_data'] );
+			$this->assertTrue( $data['receipt_data']['has_tax_summary'] );
+			$this->assertStringContainsString( 'contract helper', $data['preview_html'] );
+		} finally {
+			update_option( 'woocommerce_calc_taxes', $original_calc_taxes );
+			wp_delete_post( $post_id, true );
+		}
+	}
+
+	/**
 	 * Test logicless preview can include temporary Phase 1 legacy HTML diagnostics.
 	 */
 	public function test_preview_logicless_can_include_legacy_html_diagnostic(): void {

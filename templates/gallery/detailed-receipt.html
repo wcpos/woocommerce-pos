@@ -188,7 +188,7 @@ inline styles on the wrapping element.
 	<!-- ── VAT breakdown + Summary ─────────────── -->
 	<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px; margin-top: 20px; align-items: start;">
 		<div>
-			{{#tax_summary.0}}
+			{{#has_tax_summary}}
 			<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px;">{{#tax.display_excl}}{{i18n.tax_summary}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</div>
 			<table style="width: 100%; border-collapse: collapse; font-size: 12px;">
 				<thead>
@@ -210,7 +210,7 @@ inline styles on the wrapping element.
 					{{/tax_summary}}
 				</tbody>
 			</table>
-			{{/tax_summary.0}}
+			{{/has_tax_summary}}
 		</div>
 
 		<div style="font-size: 13px;">

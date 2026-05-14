@@ -43,9 +43,6 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		$currency       = $receipt_data['order']['currency'] ?? 'USD';
 		$formatted_data = Receipt_Data_Schema::format_money_fields( $receipt_data, $currency );
 
-		// Add boolean helpers for array sections so templates can gate wrappers.
-		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
-
 		// Safety net: if a template uses {{#t}}...{{/t}} markers (from gallery source),
 		// setting t = true makes Mustache pass the inner text through unchanged.
 		$formatted_data['t'] = true;

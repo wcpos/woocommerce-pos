@@ -945,8 +945,7 @@ class Templates_Controller extends WP_REST_Controller {
 		if ( $order ) {
 			if ( 'logicless' === $engine ) {
 				// Server-render HTML for gallery/store-edit, keep receipt_data for the editor.
-				$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
-				$formatted_data['t']               = true;
+				$formatted_data['t'] = true;
 
 				$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, $order_id, $id );
 
@@ -989,7 +988,6 @@ class Templates_Controller extends WP_REST_Controller {
 		}
 
 		// Sample data (no real order): render server-side for all engines.
-		$formatted_data['has_tax_summary'] = ! empty( $formatted_data['tax_summary'] );
 
 		if ( 'logicless' === $engine ) {
 			$response = $this->prepare_non_legacy_preview_response( $template, $formatted_data, 0, $id );

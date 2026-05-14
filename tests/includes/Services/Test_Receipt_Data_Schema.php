@@ -467,6 +467,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 
 		$this->assertArrayHasKey( 'code', $schema['properties']['discounts']['items']['properties'] );
 		$this->assertArrayNotHasKey( 'codes', $schema['properties']['discounts']['items']['properties'] );
+		$this->assertSame( 'boolean', $schema['properties']['has_tax_summary']['type'] );
 		$this->assertSame( 'array', $schema['properties']['lines']['type'] );
 		$this->assertSame( 'array', $schema['properties']['refunds']['type'] );
 		$this->assertSame( 'object', $schema['properties']['lines']['items']['type'] );
