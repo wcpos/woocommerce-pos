@@ -183,6 +183,8 @@ export function FilterSidebar({
 				}
 			/>
 
+			<hr className="wcpos:border-0 wcpos:border-t wcpos:border-gray-200 wcpos:m-0" />
+
 			{/* Direction */}
 			<RadioGroup
 				label={t('filter.direction')}
