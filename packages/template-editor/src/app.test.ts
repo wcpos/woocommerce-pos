@@ -27,8 +27,12 @@ describe('starter shells', () => {
 	});
 
 	it('thermal starter uses formatted money keys and localized labels at every paper width', () => {
-		for (const paperWidth of ['80mm', '58mm']) {
+		for (const [paperWidth, expectedChars] of [
+			['80mm', 48],
+			['58mm', 32],
+		] as const) {
 			const shell = getThermalStarterShell(paperWidth);
+			expect(shell).toContain(`paper-width="${expectedChars}"`);
 			expect(shell).toContain('{{line_total_display}}');
 			expect(shell).toContain('{{totals.total_incl_display}}');
 			expect(shell).not.toContain('{{line_total_incl}}');

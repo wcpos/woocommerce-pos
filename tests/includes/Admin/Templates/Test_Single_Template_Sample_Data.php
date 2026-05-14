@@ -34,13 +34,17 @@ class Test_Single_Template_Sample_Data extends WC_REST_Unit_Test_Case {
 
 		// Assert: grand total has a formatted companion next to the numeric value.
 		$this->assertArrayHasKey( 'totals', $sample );
+		$this->assertArrayHasKey( 'total_incl', $sample['totals'] );
 		$this->assertArrayHasKey( 'total_incl_display', $sample['totals'] );
 		$this->assertIsString( $sample['totals']['total_incl_display'] );
 		$this->assertIsNumeric( $sample['totals']['total_incl'] );
 
 		// Assert: line items have a formatted companion too.
+		$this->assertArrayHasKey( 'lines', $sample );
 		$this->assertNotEmpty( $sample['lines'] );
+		$this->assertArrayHasKey( 0, $sample['lines'] );
 		$first_line = $sample['lines'][0];
+		$this->assertArrayHasKey( 'line_total', $first_line );
 		$this->assertArrayHasKey( 'line_total_display', $first_line );
 		$this->assertIsString( $first_line['line_total_display'] );
 		$this->assertIsNumeric( $first_line['line_total'] );
