@@ -30,11 +30,11 @@ describe('buildPreviewFrameHtml', () => {
 		expect(html).toContain('width:58mm');
 	});
 
-	it('uses A4 physical dimensions without shrinking to iframe width', () => {
+	it('uses A4 physical width and lets the height grow with the content', () => {
 		const html = buildPreviewFrameHtml({ bodyHtml: '<main>Invoice</main>', paperWidth: null });
 
 		expect(html).toContain('width:210mm');
-		expect(html).toContain('min-height:297mm');
+		expect(html).not.toContain('min-height');
 		expect(html).not.toContain('max-width:100%');
 		expect(html).not.toContain('max-width: 100%');
 	});

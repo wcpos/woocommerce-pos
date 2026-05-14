@@ -14,7 +14,8 @@ export function normalizePreviewPaperWidth(value: string | null | undefined): Pr
 export function buildPreviewFrameHtml({ bodyHtml, paperWidth }: BuildPreviewFrameHtmlOptions): string {
 	const normalized = normalizePreviewPaperWidth(paperWidth);
 	const paperWidthCss = normalized === 'a4' ? '210mm' : normalized;
-	const paperMinHeight = normalized === 'a4' ? '297mm' : 'auto';
+	// No fixed paper height: the preview viewport measures and sizes to the
+	// rendered content, so a 297mm A4 min-height would only add empty space.
 
 	return `<!DOCTYPE html>
 <html>
@@ -24,7 +25,7 @@ export function buildPreviewFrameHtml({ bodyHtml, paperWidth }: BuildPreviewFram
 <style>
 html,body{margin:0;padding:0;background:#fff;color:#000;}
 body{overflow:auto;}
-.wcpos-preview-paper{width:${paperWidthCss};min-height:${paperMinHeight};background:#fff;color:#000;}
+.wcpos-preview-paper{width:${paperWidthCss};background:#fff;color:#000;}
 </style>
 </head>
 <body><div class="wcpos-preview-paper">${bodyHtml}</div></body>
