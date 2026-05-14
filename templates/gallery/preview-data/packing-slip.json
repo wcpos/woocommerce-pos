@@ -22,6 +22,11 @@
     },
     "discounts": [],
     "fees": [],
-    "payments": []
+    "payments": [],
+    "refunds": [],
+    "totals": {
+      "refund_total": 0,
+      "net_total": 0
+    }
   }
 }

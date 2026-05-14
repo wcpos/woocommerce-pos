@@ -154,7 +154,7 @@ class Receipt_Preview_Fixture_Loader {
 		}
 
 		if ( '{{asset:coffee-monster-logo}}' === $value ) {
-			return trailingslashit( PLUGIN_URL ) . 'assets/img/template-gallery/preview-assets/coffee-monster-logo.svg';
+			return trailingslashit( PLUGIN_URL ) . 'assets/img/template-gallery/preview-assets/coffee-monster.png';
 		}
 
 		return $value;

@@ -9,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
-const targetWidth = 312;
+const a4PreviewWidth = 312;
+const thermalPreviewWidths = { '58mm': 219, '80mm': 302 };
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
@@ -41,7 +42,7 @@ fs.writeFileSync(
 <style>
 html,body{margin:0;padding:0;background:#f3f4f6;color:#000;}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
-#capture{width:${targetWidth}px;background:#fff;color:#000;overflow:hidden;}
+#capture{background:#fff;color:#000;overflow:hidden;}
 #wcpos-preview-paper{background:#fff;color:#000;transform-origin:top left;}
 img{max-width:100%;}
 </style>
@@ -82,7 +83,9 @@ const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
 const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
 const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
-const scale = ${targetWidth} / nativeWidth;
+const captureWidth = payload.engine === 'thermal' ? ${JSON.stringify(thermalPreviewWidths)}[normalizedPaperWidth] : ${a4PreviewWidth};
+const scale = captureWidth / nativeWidth;
+capture.style.width = captureWidth + 'px';
 paper.style.width = nativeWidth + 'px';
 paper.style.transform = 'scale(' + scale + ')';
 paper.innerHTML = bodyHtml;
@@ -113,7 +116,7 @@ const baseUrl = server.resolvedUrls?.local?.[0];
 if (!baseUrl) throw new Error('Unable to start Vite preview server');
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: targetWidth, height: 1400 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 900, height: 1400 }, deviceScaleFactor: 1 });
 
 try {
 	for (const payload of payloads) {

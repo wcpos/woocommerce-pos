@@ -18,7 +18,10 @@
     },
     "totals": {
       "paid_total": 0,
-      "change_total": 0
-    }
+      "change_total": 0,
+      "refund_total": 0,
+      "net_total": 0
+    },
+    "refunds": []
   }
 }

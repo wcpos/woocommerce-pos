@@ -104,10 +104,16 @@
         "total_refunded": 0,
         "taxes": [],
         "meta": [
-          { "key": "Grind", "value": "Whole bean" }
+          {
+            "key": "Grind",
+            "value": "Whole bean"
+          }
         ],
         "attributes": [
-          { "key": "Grind", "value": "Whole bean" }
+          {
+            "key": "Grind",
+            "value": "Whole bean"
+          }
         ]
       },
       {
@@ -130,14 +136,20 @@
         "line_total": 16.2,
         "line_total_incl": 16.2,
         "line_total_excl": 16.2,
-        "qty_refunded": 0,
-        "total_refunded": 0,
+        "qty_refunded": 1,
+        "total_refunded": 7.25,
         "taxes": [],
         "meta": [
-          { "key": "Size", "value": "12 oz" }
+          {
+            "key": "Size",
+            "value": "12 oz"
+          }
         ],
         "attributes": [
-          { "key": "Size", "value": "12 oz" }
+          {
+            "key": "Size",
+            "value": "12 oz"
+          }
         ]
       },
       {
@@ -211,7 +223,9 @@
       "paid_total": 59.97,
       "change_total": 0.03,
       "total_qty": 4,
-      "line_count": 3
+      "line_count": 3,
+      "refund_total": 7.25,
+      "net_total": 52.72
     },
     "tax_summary": [],
     "has_tax_summary": false,
@@ -225,6 +239,42 @@
         "change": 0.03
       }
     ],
-    "refunds": []
+    "refunds": [
+      {
+        "id": 987,
+        "date": {
+          "date": "2024-01-16",
+          "time": "11:12 AM",
+          "datetime": "Jan 16, 2024, 11:12 AM",
+          "timestamp": 1705403520
+        },
+        "amount": 7.25,
+        "subtotal": 7.25,
+        "tax_total": 0,
+        "shipping_total": 0,
+        "shipping_tax": 0,
+        "reason": "Changed mind about the mug.",
+        "refunded_by_id": 7,
+        "refunded_by_name": "Jane Smith",
+        "refunded_payment": true,
+        "destination": "original_payment",
+        "gateway_id": "pos_cash",
+        "gateway_title": "Cash",
+        "processing_mode": "manual",
+        "lines": [
+          {
+            "name": "Black Ceramic Mug",
+            "sku": "CM-MUG-BLK",
+            "qty": 1,
+            "total": 7.25,
+            "total_incl": 7.25,
+            "total_excl": 7.25,
+            "taxes": []
+          }
+        ],
+        "fees": [],
+        "shipping": []
+      }
+    ]
   }
 }

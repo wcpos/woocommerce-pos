@@ -143,7 +143,9 @@
       "paid_total": 170,
       "change_total": 0,
       "total_qty": 3,
-      "line_count": 2
+      "line_count": 2,
+      "refund_total": 0,
+      "net_total": 0
     },
     "tax_summary": [],
     "has_tax_summary": false,
@@ -168,6 +170,7 @@
       "returned_items": "العناصر المرتجعة",
       "net_total": "الصافي",
       "thank_you_purchase": "شكراً لشرائكم"
-    }
+    },
+    "refunds": []
   }
 }

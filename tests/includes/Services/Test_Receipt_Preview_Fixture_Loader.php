@@ -28,10 +28,14 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 		$data = ( new Receipt_Preview_Fixture_Loader() )->build( 'base-receipt' );
 
 		$this->assertSame( 'Coffee Monster', $data['store']['name'] );
-		$this->assertStringContainsString( 'assets/img/template-gallery/preview-assets/coffee-monster-logo.svg', $data['store']['logo'] );
+		$this->assertStringContainsString( 'assets/img/template-gallery/preview-assets/coffee-monster.png', $data['store']['logo'] );
 		$this->assertSame( 'POS-1234', $data['order']['number'] );
 		$this->assertSame( 'House Espresso Beans', $data['lines'][0]['name'] );
 		$this->assertSame( 'Grind', $data['lines'][0]['meta'][0]['key'] );
+		$this->assertSame( 7.25, $data['totals']['refund_total'] );
+		$this->assertSame( 52.72, $data['totals']['net_total'] );
+		$this->assertSame( 'Changed mind about the mug.', $data['refunds'][0]['reason'] );
+		$this->assertSame( 'Black Ceramic Mug', $data['refunds'][0]['lines'][0]['name'] );
 	}
 
 	/**

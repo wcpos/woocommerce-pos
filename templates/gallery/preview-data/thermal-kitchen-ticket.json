@@ -16,12 +16,24 @@
         "name": "Oat Milk Latte",
         "qty": 2,
         "meta": [
-          { "key": "Milk", "value": "Oat" },
-          { "key": "Temperature", "value": "Extra hot" }
+          {
+            "key": "Milk",
+            "value": "Oat"
+          },
+          {
+            "key": "Temperature",
+            "value": "Extra hot"
+          }
         ],
         "attributes": [
-          { "key": "Milk", "value": "Oat" },
-          { "key": "Temperature", "value": "Extra hot" }
+          {
+            "key": "Milk",
+            "value": "Oat"
+          },
+          {
+            "key": "Temperature",
+            "value": "Extra hot"
+          }
         ]
       },
       {
@@ -30,18 +42,35 @@
         "name": "Cheese Toastie",
         "qty": 1,
         "meta": [
-          { "key": "Modifier", "value": "No tomato" },
-          { "key": "Prep note", "value": "Cut in half" }
+          {
+            "key": "Modifier",
+            "value": "No tomato"
+          },
+          {
+            "key": "Prep note",
+            "value": "Cut in half"
+          }
         ],
         "attributes": [
-          { "key": "Modifier", "value": "No tomato" },
-          { "key": "Prep note", "value": "Cut in half" }
+          {
+            "key": "Modifier",
+            "value": "No tomato"
+          },
+          {
+            "key": "Prep note",
+            "value": "Cut in half"
+          }
         ]
       }
     ],
     "discounts": [],
     "shipping": [],
     "fees": [],
-    "payments": []
+    "payments": [],
+    "refunds": [],
+    "totals": {
+      "refund_total": 0,
+      "net_total": 0
+    }
   }
 }

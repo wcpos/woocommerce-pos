@@ -31,6 +31,21 @@ describe('renderLogiclessPreview', () => {
 	});
 
 
+
+	it('replaces raw barcode tags with generated barcode HTML', () => {
+		const html = renderLogiclessPreview(
+			'<barcode type="code128" height="40">{{order.number}}</barcode><barcode type="qrcode" scale="2">{{order.payment_url}}</barcode>',
+			{ order: { number: 'POS-1234', payment_url: 'https://example.test/pay' } },
+		);
+
+		expect(html).toContain('data-barcode-kind="barcode"');
+		expect(html).toContain('data-barcode-value="POS-1234"');
+		expect(html).toContain('data-barcode-kind="qrcode"');
+		expect(html).toContain('data-barcode-value="https://example.test/pay"');
+		expect(html).toContain('<svg');
+		expect(html).not.toContain('<barcode');
+	});
+
 	it('strips HTML comments before Mustache renders template content', () => {
 		const html = renderLogiclessPreview('<!-- {{#todo}} documentation only --><p>{{label}}</p>', { label: 'Visible' });
 

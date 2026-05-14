@@ -182,7 +182,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			</div>
 
 			{{#order.needs_payment}}
-			<div style="margin-top: 12px; padding: 14px 18px; background: #f3f4f6; color: #111827; border-radius: 8px;">
+			<div style="margin-top: 12px; padding: 14px 18px; background: #f3f4f6; color: #111827; border-radius: 8px; text-align: right;">
 				<div style="font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: #6b7280;">{{i18n.amount_due}}</div>
 				<div style="font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; line-height: 1; font-variant-numeric: tabular-nums;">{{#totals.net_total}}{{totals.net_total_display}}{{/totals.net_total}}{{^totals.net_total}}{{totals.total_incl_display}}{{/totals.net_total}}</div>
 			</div>

@@ -14,7 +14,9 @@
     "payments": [],
     "totals": {
       "paid_total": 0,
-      "change_total": 0
+      "change_total": 0,
+      "refund_total": 0,
+      "net_total": 0
     },
     "invoice": {
       "issue_date": "2024-01-15",
@@ -26,6 +28,7 @@
         "bic": "FAKE SAMPLE BIC",
         "reference": "INV-2048"
       }
-    }
+    },
+    "refunds": []
   }
 }
