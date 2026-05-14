@@ -103,4 +103,20 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 403, $response->get_status() );
 	}
+
+	/**
+	 * Test endpoint returns a capability-specific error for POS users that cannot manage WCPOS.
+	 */
+	public function test_get_item_returns_capability_error_when_user_cannot_manage_pos(): void {
+		$order      = OrderHelper::create_order();
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier_id );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 'wcpos_rest_insufficient_permissions', $data['code'] );
+	}
 }

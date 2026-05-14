@@ -129,7 +129,7 @@ class Receipts_Controller extends WP_REST_Controller {
 	public function get_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
 			return new WP_Error(
-				'wcpos_rest_cannot_view',
+				'wcpos_rest_insufficient_permissions',
 				__( 'Sorry, you cannot view receipts.', 'woocommerce-pos' ),
 				array( 'status' => rest_authorization_required_code() )
 			);
