@@ -317,6 +317,34 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test the tax summary never prints the internal WooCommerce tax-rate id.
+	 *
+	 * The tax_summary[].code field carries the WooCommerce tax-rate database id, which is
+	 * meaningless on a customer receipt. Templates must render the label and
+	 * rate, never the id.
+	 */
+	public function test_tax_summary_does_not_print_internal_rate_id(): void {
+		// Arrange / Act / Assert — the detailed thermal templates put the rate id
+		// directly after the rate via the {{/rate}}{{#code}} adjacency.
+		foreach ( array( 'thermal-detailed-58mm.xml', 'thermal-detailed-80mm.xml' ) as $filename ) {
+			$content = $this->read_gallery_template( $filename );
+			$this->assertStringNotContainsString(
+				'{{/rate}}{{#code}}',
+				$content,
+				sprintf( '%s tax summary must not print the internal tax-rate id after the rate.', $filename )
+			);
+		}
+
+		// detailed-receipt.html prints it beside the label as "{{#code}} · {{code}}".
+		$detailed_html = $this->read_gallery_template( 'detailed-receipt.html' );
+		$this->assertStringNotContainsString(
+			'{{#code}} · ',
+			$detailed_html,
+			'detailed-receipt.html tax summary must not print the internal tax-rate id beside the label.'
+		);
+	}
+
+	/**
 	 * Test detailed-receipt.html omits the Total Tax row when the order has no tax.
 	 */
 	public function test_detailed_receipt_hides_tax_row_when_order_has_no_tax(): void {

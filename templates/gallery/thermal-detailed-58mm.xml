@@ -21,7 +21,8 @@ Sections, top to bottom:
     the coupon code as a reference.
   - Tax summary — per-rate breakdown with net (taxable excl.) and
     gross (taxable incl.) stacked under each rate (the 80mm sibling
-    shows them side-by-side; 32 columns is too narrow for that).
+    shows the net base inline on the rate line; 32 columns keeps
+    them stacked).
   - Totals — subtotal (excl.), discount, total (excl.), tax, total
     (incl.), refund and net total (when refunded), and change.
   - Refunds — one block per refund with id, date, who refunded it,
@@ -178,7 +179,7 @@ the star to the remaining 32-CPL space at render time.
   {{/has_tax_summary}}
   {{#tax_summary}}
   <row>
-    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#code}} {{code}}{{/code}}</col>
+    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
     <col width="12" align="right">{{tax_amount_display}}</col>
   </row>
   <row>
