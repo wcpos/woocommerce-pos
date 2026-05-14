@@ -109,7 +109,7 @@ that would smear or waste ink on thermal/B&W printers.
 
 		{{#tax_summary}}
 		<tr>
-			<td style="text-align: left;">{{label}}{{#rate}} ({{rate}}%){{/rate}}</td>
+			<td style="text-align: left;">{{#tax.display_excl}}{{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}: {{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_incl}}</td>
 			<td style="text-align: right;">{{tax_amount_display}}</td>
 		</tr>
 		{{/tax_summary}}

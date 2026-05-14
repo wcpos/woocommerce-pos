@@ -171,7 +171,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.discount}}{{#code}} ({{code}}){{/code}}</span><span style="font-variant-numeric: tabular-nums;">-{{total_display}}</span></div>
 				{{/discounts}}
 				{{#totals.tax_total}}
-				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+				<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
 				{{/totals.tax_total}}
 				<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 				<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>

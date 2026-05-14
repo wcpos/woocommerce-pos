@@ -24,6 +24,7 @@ const sampleData = {
 		created: { datetime: '2026-05-08 14:30' },
 		customer_note: '',
 	},
+	tax: { display_excl: true, display_incl: false },
 	lines: [
 		{
 			name: 'T-Shirt',
@@ -70,6 +71,8 @@ const sampleData = {
 		customer: 'Customer',
 		subtotal: 'Subtotal',
 		total: 'Total',
+		total_tax: 'Total Tax',
+		included_tax: 'Tax included',
 		discount: 'Discount',
 		tendered: 'Tendered',
 		change: 'Change',
@@ -98,11 +101,18 @@ describe('thermal simple templates render with sample data', () => {
 			expect(html).toContain('$49.97');
 			expect(html).toContain('$53.96');
 			expect(html).toContain('Sales Tax');
+			expect(html).not.toContain('Tax included: Sales Tax');
 			expect(html).toContain('Cash');
 			expect(html).toContain('$6.04');
 			expect(html).toContain('Thank you for your purchase!');
 			expect(html).toContain('My Store Pty Ltd');
 			expect(html).toContain('<svg');
+			const inclusiveHtml = renderThermalPreview(xml, {
+				...sampleData,
+				tax: { display_excl: false, display_incl: true },
+			});
+			expect(inclusiveHtml).toContain('Tax included: Sales Tax');
+
 			if (file === 'thermal-simple-58mm.xml') {
 				const rendered = document.createElement('div');
 				rendered.innerHTML = html;

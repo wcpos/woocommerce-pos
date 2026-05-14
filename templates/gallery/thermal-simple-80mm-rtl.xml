@@ -106,7 +106,7 @@ these star columns with hard-coded widths.
   {{#tax_summary}}
   <row>
     <col width="14">{{tax_amount_display}}</col>
-    <col width="*" align="right">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
+    <col width="*" align="right">{{#tax.display_excl}}{{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}: {{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_incl}}</col>
   </row>
   {{/tax_summary}}
   <line style="double" />

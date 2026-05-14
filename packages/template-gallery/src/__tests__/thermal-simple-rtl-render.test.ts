@@ -24,6 +24,7 @@ const arabicData = {
 		created: { datetime: '٢٠٢٦/٠٥/١٣ ١٤:٣٢' },
 		customer_note: '',
 	},
+	tax: { display_excl: true, display_incl: false },
 	lines: [
 		{
 			name: 'قميص قطن',
@@ -66,6 +67,7 @@ const arabicData = {
 		customer: 'العميل',
 		subtotal: 'المجموع الفرعي',
 		total: 'الإجمالي',
+		included_tax: 'شامل الضريبة',
 		discount: 'خصم',
 		tendered: 'المدفوع',
 		change: 'الباقي',
