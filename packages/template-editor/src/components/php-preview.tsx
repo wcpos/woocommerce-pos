@@ -15,18 +15,29 @@ interface PhpPreviewProps {
 export interface PhpPreviewResponse {
 	preview_url?: string;
 	preview_html?: string;
+	requires_order?: boolean;
 }
 
 interface PreviewState {
 	src: string | null;
 	srcDoc: string | null;
 	loading: boolean;
+	requiresOrder: boolean;
 }
 
 export function getPhpPreviewRequestUrl(previewUrl: string): string {
 	if (!previewUrl) return previewUrl;
-	const separator = previewUrl.includes('?') ? '&' : '?';
-	return previewUrl.includes('wcpos=') ? previewUrl : `${previewUrl}${separator}wcpos=1`;
+
+	let url = previewUrl;
+	// Legacy-php previews must run against a real WC_Order. Request the latest
+	// POS order; the REST endpoint replies with requires_order when none exists.
+	if (!url.includes('order_id=')) {
+		url += `${url.includes('?') ? '&' : '?'}order_id=latest`;
+	}
+	if (!url.includes('wcpos=')) {
+		url += `${url.includes('?') ? '&' : '?'}wcpos=1`;
+	}
+	return url;
 }
 
 export function decodeLabel(label: string): string {
@@ -75,6 +86,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 		src: null,
 		srcDoc: null,
 		loading: Boolean(previewUrl),
+		requiresOrder: false,
 	});
 
 	const loadPreview = useCallback(() => {
@@ -91,9 +103,21 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 			.then((response) => {
 				if (requestId !== requestIdRef.current) return;
 
+				if (response.requires_order) {
+					setPreviewState({
+						src: null,
+						srcDoc: null,
+						loading: false,
+						requiresOrder: true,
+					});
+					setIframeKey((k) => k + 1);
+					return;
+				}
+
 				setPreviewState({
 					...getPhpPreviewFrame(response),
 					loading: false,
+					requiresOrder: false,
 				});
 				setIframeKey((k) => k + 1);
 			})
@@ -104,6 +128,7 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 					src: null,
 					srcDoc: `<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">${t('editor.preview_failed')}</div>`,
 					loading: false,
+					requiresOrder: false,
 				});
 				setIframeKey((k) => k + 1);
 			});
@@ -166,6 +191,10 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 			<div className={getPhpPreviewBodyClassName()}>
 				{previewState.loading ? (
 					<div className="wcpos:text-sm wcpos:text-gray-500">{t('editor.loading_data')}</div>
+				) : previewState.requiresOrder ? (
+					<div className="wcpos:flex wcpos:flex-1 wcpos:items-center wcpos:justify-center wcpos:p-6 wcpos:text-sm wcpos:text-gray-500 wcpos:text-center">
+						{t('editor.no_orders')}
+					</div>
 				) : (
 					<PreviewViewport
 						paperWidth="a4"

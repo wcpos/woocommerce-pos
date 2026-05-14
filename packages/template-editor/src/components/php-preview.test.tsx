@@ -28,6 +28,7 @@ vi.mock('../translations', () => ({
 			'editor.zoom_out': 'Zoom out',
 			'editor.loading_data': 'Loading…',
 			'editor.preview_failed': 'Preview failed. Save the template and try again.',
+			'editor.no_orders': 'No POS orders found. Create an order in the POS to preview templates.',
 		};
 		return strings[key] ?? key;
 	},
@@ -49,12 +50,15 @@ afterEach(() => {
 });
 
 describe('PhpPreview', () => {
-	it('adds wcpos=1 when fetching the REST preview URL', () => {
+	it('requests the latest order and adds wcpos=1 when fetching the REST preview URL', () => {
 		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview')).toBe(
-			'https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1',
+			'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1',
 		);
 		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest')).toBe(
 			'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1',
+		);
+		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1')).toBe(
+			'https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1&order_id=latest',
 		);
 	});
 
@@ -152,9 +156,32 @@ describe('PhpPreview', () => {
 		});
 
 		expect(apiFetchMock).toHaveBeenCalledWith({
-			url: 'https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1',
+			url: 'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1',
 			method: 'GET',
 		});
 		expect(container.innerHTML).toContain('Preview failed. Save the template and try again.');
+	});
+
+	it('shows the create-an-order message when the preview requires a real order', async () => {
+		apiFetchMock.mockResolvedValueOnce({ engine: 'legacy-php', requires_order: true });
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+			);
+		});
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(container.textContent).toContain(
+			'No POS orders found. Create an order in the POS to preview templates.',
+		);
+		expect(container.querySelector('iframe')).toBeNull();
 	});
 });
