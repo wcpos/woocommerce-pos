@@ -47,8 +47,8 @@ describe('starter shells', () => {
 		// logicless and legacy-php render full A4 in the browser print dialog —
 		// they must use page padding, not a narrow centered max-width column.
 		for (const shell of [STARTER_SHELLS.logicless, STARTER_SHELLS['legacy-php']]) {
-			expect(shell).toContain('padding: 32px 36px');
-			expect(shell).not.toContain('max-width: 380px');
+			expect(shell).toMatch(/padding:\s*32px\s+36px\b/);
+			expect(shell).not.toMatch(/max-width:\s*380px\b/);
 		}
 	});
 
