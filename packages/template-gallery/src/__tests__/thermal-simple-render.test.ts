@@ -48,6 +48,7 @@ const sampleData = {
 	fees: [],
 	shipping: [],
 	discounts: [],
+	has_tax_summary: true,
 	tax_summary: [{ label: 'Sales Tax', rate: 8, tax_amount_display: '$3.99' }],
 	totals: {
 		subtotal_display: '$49.97',
