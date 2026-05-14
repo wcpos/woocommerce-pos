@@ -204,7 +204,7 @@ describe('gallery template assets', () => {
 
 			if (metadata.engine !== 'thermal') continue;
 
-			const expectedWidth = metadata.paper_width === '58mm' ? 320 : 512;
+			const expectedWidth = metadata.paper_width === '58mm' ? 219 : 302;
 			const dimensions = readPngDimensions(path.join(previewDir, `${metadata.key}.png`));
 			expect(dimensions.width, metadata.key).toBe(expectedWidth);
 		}

@@ -10,7 +10,7 @@ const repoRoot = path.resolve(path.dirname(__filename), '..');
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 312;
-const thermalPreviewWidths = { '58mm': 320, '80mm': 512 };
+const thermalPreviewWidths = { '58mm': 219, '80mm': 302 };
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
