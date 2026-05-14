@@ -392,8 +392,8 @@ class Receipt_Data_Builder {
 	 * Resolve an optional human-facing coupon label for a receipt discount row.
 	 *
 	 * Coupons are identified by code; the code is already exposed as
-	 * `discounts[].code`. Only use the description as `label` when it is a distinct,
-	 * user-authored description so templates do not duplicate the code.
+	 * `discounts[].code`. Prefer a distinct, user-authored description, but
+	 * fall back to the code so templates that render `label` always have text.
 	 *
 	 * @param \WC_Order_Item_Coupon $coupon_item Coupon order item.
 	 * @return string
@@ -407,16 +407,16 @@ class Receipt_Data_Builder {
 		try {
 			$coupon = new \WC_Coupon( $code );
 		} catch ( \Exception $exception ) {
-			return '';
+			return $code;
 		}
 
 		if ( ! $coupon->get_id() ) {
-			return '';
+			return $code;
 		}
 
 		$label = trim( wp_strip_all_tags( (string) $coupon->get_description() ) );
 
-		return $label !== $code ? $label : '';
+		return '' !== $label && 0 !== strcasecmp( $label, $code ) ? $label : $code;
 	}
 
 	/**
