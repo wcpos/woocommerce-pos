@@ -567,6 +567,7 @@ class Preview_Receipt_Builder {
 				'sku'                => $product['sku'],
 				'name'               => $product['name'],
 				'qty'                => (float) $qty,
+				'qty_refunded'       => 0.0,
 				'unit_subtotal'      => $unit_price_rounded,
 				'unit_subtotal_incl' => round( $unit_incl, $dp ),
 				'unit_subtotal_excl' => round( $unit_excl, $dp ),
@@ -582,6 +583,7 @@ class Preview_Receipt_Builder {
 				'line_total'         => $display_incl ? $line_total_incl : $line_total_excl,
 				'line_total_incl'    => $line_total_incl,
 				'line_total_excl'    => $line_total_excl,
+				'total_refunded'     => 0.0,
 				'taxes'              => array(),
 				'meta'               => $product['meta'] ?? array(),
 				'attributes'         => $product['attributes'] ?? array(),
@@ -696,15 +698,20 @@ class Preview_Receipt_Builder {
 				'total'      => $display_incl ? $fee_incl : $fee_excl,
 				'total_incl' => $fee_incl,
 				'total_excl' => $fee_excl,
+				'taxes'      => array(),
+				'meta'       => array(),
 			),
 		);
 
 		$shipping = array(
 			array(
 				'label'      => $shipping_label,
+				'method_id'  => 'flat_rate',
 				'total'      => $display_incl ? $shipping_incl : $shipping_excl,
 				'total_incl' => $shipping_incl,
 				'total_excl' => $shipping_excl,
+				'taxes'      => array(),
+				'meta'       => array(),
 			),
 		);
 
@@ -746,6 +753,7 @@ class Preview_Receipt_Builder {
 					'code'                => $tax_code,
 					'rate'                => $tax_rate,
 					'label'               => $tax_label,
+					'compound'            => false,
 					'taxable_amount_excl' => $taxable_excl,
 					'tax_amount'          => $total_tax,
 					'taxable_amount_incl' => $taxable_amount_incl,
@@ -983,7 +991,7 @@ class Preview_Receipt_Builder {
 			'country'    => $country,
 		);
 
-		$tax_ids = self::sample_tax_ids_for_country( $country );
+		$tax_ids = self::sample_tax_ids_for_country( $country, $this->store_resolver->resolve_locale() );
 
 		return array(
 			'id'               => 42,
@@ -1001,10 +1009,11 @@ class Preview_Receipt_Builder {
 	 * countries without a representative sample.
 	 *
 	 * @param string $country ISO 3166-1 alpha-2 country code.
+	 * @param string $locale  Receipt locale.
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
-	private static function sample_tax_ids_for_country( string $country ): array {
+	private static function sample_tax_ids_for_country( string $country, string $locale = '' ): array {
 		$country = strtoupper( $country );
 
 		$samples = array(
@@ -1087,7 +1096,18 @@ class Preview_Receipt_Builder {
 			),
 		);
 
-		return $samples[ $country ] ?? array();
+		$tax_ids = $samples[ $country ] ?? array();
+		$labels  = Receipt_I18n_Labels::get_labels( $locale );
+
+		return array_map(
+			static function ( array $tax_id ) use ( $labels ): array {
+				$type            = (string) $tax_id['type'];
+				$tax_id['label'] = $labels[ 'customer_tax_id_label_' . $type ] ?? $labels['customer_tax_id_label_other'];
+
+				return $tax_id;
+			},
+			$tax_ids
+		);
 	}
 
 	/**

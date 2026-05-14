@@ -80,8 +80,24 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 
 		$this->assertEmpty(
 			$missing,
-			'Published field-tree fields must be represented by at least one builder payload sample.'
+			sprintf( 'Published field-tree fields must be represented by at least one builder payload sample: %s', implode( ', ', $missing ) )
 		);
+	}
+
+	/**
+	 * Test populated array payloads require matching leaf paths.
+	 */
+	public function test_populated_array_payload_paths_require_leaf_coverage(): void {
+		$payload_paths = array(
+			'customer.tax_ids',
+			'customer.tax_ids[]',
+			'customer.tax_ids[].type',
+			'customer.tax_ids[].value',
+		);
+
+		$this->assertTrue( $this->is_field_tree_path_represented_by_payloads( 'customer.tax_ids[].value', $payload_paths ) );
+		$this->assertFalse( $this->is_field_tree_path_represented_by_payloads( 'customer.tax_ids[].label', $payload_paths ) );
+		$this->assertTrue( $this->is_field_tree_path_represented_by_payloads( 'fiscal.extra_fields[].label', array( 'fiscal.extra_fields', 'fiscal.extra_fields[]' ) ) );
 	}
 
 
@@ -118,7 +134,7 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 		$line_item    = array_values( $order->get_items() )[0];
 		$line_item_id = $line_item->get_id();
 
-		wc_create_refund(
+		$refund = wc_create_refund(
 			array(
 				'amount'     => '10.00',
 				'reason'     => 'Contract coverage refund',
@@ -133,7 +149,13 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 			)
 		);
 
-		return wc_get_order( $order->get_id() );
+		$this->assertNotWPError( $refund );
+		$this->assertInstanceOf( \WC_Order_Refund::class, $refund );
+
+		$reloaded_order = wc_get_order( $order->get_id() );
+		$this->assertInstanceOf( \WC_Order::class, $reloaded_order );
+
+		return $reloaded_order;
 	}
 
 	/**
@@ -315,6 +337,11 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 			array_pop( $segments );
 			$container = implode( '.', $segments );
 			if ( '[]' === substr( $container, -2 ) && in_array( $container, $payload_paths, true ) ) {
+				foreach ( $payload_paths as $payload_path ) {
+					if ( 0 === strpos( $payload_path, $container . '.' ) ) {
+						return false;
+					}
+				}
 				return true;
 			}
 		}
