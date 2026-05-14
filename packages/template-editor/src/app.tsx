@@ -90,11 +90,9 @@ export const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
 /**
  * Custom Receipt Template (PHP)
  *
- * Two variables are available:
- *   $receipt_data — array of all receipt info (store, order, lines, totals, i18n…). Prefer this.
- *   $order        — the WC_Order object, also available for advanced needs.
- *
- * Escape text with esc_html() and format money with wc_price().
+ * Receives $receipt_data — an array with all receipt info (store, order,
+ * lines, totals, i18n…). Escape text with esc_html() and format money
+ * with wc_price().
  */
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -114,15 +112,17 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_
 
 	<div style="text-align: center; margin-bottom: 12px;">
 		<div style="font-size: 18px; font-weight: 700;"><?php echo esc_html( $receipt_data['store']['name'] ?? '' ); ?></div>
-		<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
-			<div style="color: #6b7280; font-size: 11px;"><?php echo esc_html( $address_line ); ?></div>
-		<?php endforeach; ?>
+		<?php if ( ! empty( $receipt_data['store']['address_lines'] ) ) : ?>
+			<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
+				<div style="color: #6b7280; font-size: 11px;"><?php echo esc_html( $address_line ); ?></div>
+			<?php endforeach; ?>
+		<?php endif; ?>
 	</div>
 
 	<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
 
 	<p style="margin: 0 0 10px; font-size: 11px; color: #6b7280;">
-		<?php echo esc_html( $i18n['order'] ?? __( 'Order', 'woocommerce' ) ); ?>
+		<?php echo esc_html( $i18n['order'] ?? __( 'Order', 'woocommerce-pos' ) ); ?>
 		#<?php echo esc_html( $receipt_data['order']['number'] ?? '' ); ?>
 		&mdash; <?php echo esc_html( $receipt_data['order']['created']['datetime'] ?? '' ); ?>
 	</p>
@@ -140,7 +140,7 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_
 
 	<table style="width: 100%;">
 		<tr>
-			<td><strong><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce' ) ); ?></strong></td>
+			<td><strong><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce-pos' ) ); ?></strong></td>
 			<td style="text-align: right;"><strong><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total_incl'] ?? 0, $currency_args ) ); ?></strong></td>
 		</tr>
 	</table>
