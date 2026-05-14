@@ -78,7 +78,7 @@ export function generateBarcodeSvg(value: string, options: BarcodeOptions = {}):
 			bcid,
 			text,
 			scale: safeInteger(scale, 3, 1, 20),
-			height: safeInteger(height, 10, 1, 600),
+			...(bcid === 'qrcode' ? {} : { height: safeInteger(height, 10, 1, 600) }),
 			includetext: bcid !== 'qrcode',
 		});
 		return `<div data-barcode-kind="${kind}" data-barcode-value="${escapeHtml(text)}" style="text-align: center; padding: 8px 0">${constrainSvg(svg, paperWidthChars, kind)}</div>`;

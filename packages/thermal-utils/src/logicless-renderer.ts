@@ -49,11 +49,14 @@ function processBarcodeMarkers(html: string): string {
 		const kind = type === 'qr' || type === 'qrcode' ? 'qrcode' : 'barcode';
 
 		if (value.trim()) {
+			const rawHeight = numericAttribute(el, 'height', 40);
+			const rawScale = numericAttribute(el, tagName === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 4 : 2);
+
 			el.outerHTML = generateBarcodeSvg(value, {
 				type,
 				kind,
-				height: numericAttribute(el, 'height', 10),
-				scale: numericAttribute(el, kind === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 3 : 2),
+				height: kind === 'barcode' ? rawHeight / 10 : rawHeight,
+				scale: kind === 'qrcode' ? Math.max(rawScale, 4) : rawScale,
 			});
 		}
 	});

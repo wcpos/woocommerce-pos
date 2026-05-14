@@ -44,6 +44,16 @@ describe('renderLogiclessPreview', () => {
 		expect(html).toContain('data-barcode-value="https://example.test/pay"');
 		expect(html).toContain('<svg');
 		expect(html).not.toContain('<barcode');
+
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		const barcodeSvg = doc.querySelector('[data-barcode-kind=\"barcode\"] svg');
+		const qrSvg = doc.querySelector('[data-barcode-kind=\"qrcode\"] svg');
+		const barcodeViewBox = barcodeSvg?.getAttribute('viewBox')?.split(' ').map(Number) ?? [];
+		const qrViewBox = qrSvg?.getAttribute('viewBox')?.split(' ').map(Number) ?? [];
+
+		expect(barcodeViewBox[2]).toBeGreaterThan(barcodeViewBox[3] * 2);
+		expect(qrViewBox[2]).toBe(qrViewBox[3]);
+		expect(qrViewBox[2]).toBeGreaterThan(60);
 	});
 
 	it('uses size attributes for QR markers declared with data-barcode', () => {

@@ -10,7 +10,7 @@ const repoRoot = path.resolve(path.dirname(__filename), '..');
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
 const a4PreviewWidth = 312;
-const thermalPreviewWidths = { '58mm': 219, '80mm': 302 };
+const thermalPreviewWidths = { '58mm': 320, '80mm': 512 };
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
@@ -84,7 +84,7 @@ const capture = document.getElementById('capture');
 const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
 const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
 const captureWidth = payload.engine === 'thermal' ? ${JSON.stringify(thermalPreviewWidths)}[normalizedPaperWidth] : ${a4PreviewWidth};
-const scale = captureWidth / nativeWidth;
+const scale = payload.engine === 'thermal' ? 1 : captureWidth / nativeWidth;
 capture.style.width = captureWidth + 'px';
 paper.style.width = nativeWidth + 'px';
 paper.style.transform = 'scale(' + scale + ')';
