@@ -23,22 +23,36 @@ jobs:
 
       - name: 🔖 Check if version has changed
         id: check_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(grep -oP "Version:\s*\K\d+(\.\d+)*(-\w+)?(\.\d+)?" woocommerce-pos.php)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           git fetch --prune --unshallow
           LAST_TAG=$(git describe --tags --abbrev=0)
-          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_ENV
+          echo "LAST_TAG=$LAST_TAG" >> "$GITHUB_ENV"
           if [[ "v$VERSION" == "$LAST_TAG" ]]; then
             echo "Version has not changed. Skipping release..."
-            echo "release=false" >> $GITHUB_OUTPUT
+            {
+              echo "release=false"
+              echo "create_release=false"
+            } >> "$GITHUB_OUTPUT"
+          elif gh release view "v$VERSION" --json isDraft >/dev/null 2>&1; then
+            echo "Draft or published release v$VERSION already exists. Reusing it..."
+            {
+              echo "release=true"
+              echo "create_release=false"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "Version has changed. Creating new release..."
-            echo "release=true" >> $GITHUB_OUTPUT
+            {
+              echo "release=true"
+              echo "create_release=true"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: 📦 Create Release
-        if: steps.check_version.outputs.release == 'true'
+        if: steps.check_version.outputs.create_release == 'true'
         id: create_release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1
         env:
@@ -88,10 +102,23 @@ jobs:
       - name: 📝 Request Release Notes from CodeRabbit
         if: steps.check_version.outputs.release == 'true'
         run: |
+          EXISTING_ISSUE=$(gh issue list \
+            --state open \
+            --search "\"Generate release notes for v${{ env.VERSION }}\" in:title" \
+            --json number \
+            --jq '.[0].number // ""')
+
+          if [[ -n "$EXISTING_ISSUE" ]]; then
+            echo "Release notes issue already exists: #$EXISTING_ISSUE"
+            exit 0
+          fi
+
           # Prepend version context to the template
-          echo "**Release:** v${{ env.VERSION }}" > /tmp/release_request.md
-          echo "**Previous Tag:** ${{ env.LAST_TAG }}" >> /tmp/release_request.md
-          echo "" >> /tmp/release_request.md
+          {
+            echo "**Release:** v${{ env.VERSION }}"
+            echo "**Previous Tag:** ${{ env.LAST_TAG }}"
+            echo ""
+          } > /tmp/release_request.md
           cat .github/RELEASE_NOTES_REQUEST.md >> /tmp/release_request.md
           
           gh issue create \
