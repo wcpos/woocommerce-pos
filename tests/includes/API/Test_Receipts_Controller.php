@@ -117,7 +117,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 
 		$this->assertEquals( 403, $response->get_status() );
-		$this->assertEquals( 'woocommerce_pos_rest_forbidden', $data['code'] );
+		$this->assertEquals( 'wcpos_rest_insufficient_permissions', $data['code'] );
 	}
 
 	/**
