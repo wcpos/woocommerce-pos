@@ -1,6 +1,7 @@
 import Mustache from 'mustache';
 
 import { generateBarcodeSvg } from './generate-barcode-svg';
+import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 function stripHtmlComments(template: string): string {
 	let stripped = '';
@@ -50,7 +51,7 @@ function processBarcodeMarkers(html: string): string {
 
 export function renderLogiclessPreview(template: string, data: Record<string, unknown>): string {
 	try {
-		const rendered = Mustache.render(stripHtmlComments(template), data);
+		const rendered = Mustache.render(stripHtmlComments(template), sanitizeReceiptDataForRendering(data));
 		return processBarcodeMarkers(rendered);
 	} catch (error) {
 		console.warn('Mustache rendering error:', error);

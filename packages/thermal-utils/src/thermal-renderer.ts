@@ -4,6 +4,7 @@
  */
 import Mustache from 'mustache';
 import { generateBarcodeSvg } from './generate-barcode-svg';
+import { sanitizeReceiptDataForRendering } from './receipt-data';
 
 // -- AST Types --
 
@@ -411,7 +412,7 @@ export function renderThermalPreview(
 	template: string,
 	data: Record<string, unknown>,
 ): string {
-	const resolved = Mustache.render(template, data);
+	const resolved = Mustache.render(template, sanitizeReceiptDataForRendering(data));
 	const ast = parseXml(resolved);
 	return renderHtml(ast);
 }

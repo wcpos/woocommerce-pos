@@ -268,6 +268,27 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test line-item receipt meta excludes private/internal order item meta.
+	 */
+	public function test_build_line_items_exclude_private_order_item_meta(): void {
+		$product = ProductHelper::create_simple_product();
+		$order   = OrderHelper::create_order( array( 'product' => $product ) );
+		$item    = array_values( $order->get_items( 'line_item' ) )[0];
+
+		$item->add_meta_data( 'Gift wrap', '+$5.00', true );
+		$item->add_meta_data( '_woocommerce_pos_data', '{"price":"35","regular_price":"45","tax_status":"taxable"}', true );
+		$item->add_meta_data( '_woocommerce_pos_uuid', 'ee59a549-7d74-492d-80d7-b9735d539a5b', true );
+		$item->save();
+
+		$payload   = $this->builder->build( $order, 'live' );
+		$meta_keys = array_column( $payload['lines'][0]['meta'], 'key' );
+
+		$this->assertContains( 'Gift wrap', $meta_keys );
+		$this->assertNotContains( '_woocommerce_pos_data', $meta_keys );
+		$this->assertNotContains( '_woocommerce_pos_uuid', $meta_keys );
+	}
+
+	/**
 	 * Test presentation hints follow WooCommerce tax display settings.
 	 */
 	public function test_build_presentation_hints_reflect_tax_settings(): void {
