@@ -366,10 +366,30 @@ class Receipt_I18n_Labels {
 			if ( 1 === count( $config['variables'] ) ) {
 				$translated = str_replace( '%s', $config['variables'][0], $translated );
 			}
+			$translated = self::normalize_contact_label_phrase( $english, $translated );
 
 			$content = str_replace( $english, $translated, $content );
 		}
 
 		return $content;
+	}
+
+	/**
+	 * Keep receipt contact labels consistent after copy-time translation.
+	 *
+	 * @param string $english    Source phrase.
+	 * @param string $translated Translated phrase.
+	 * @return string
+	 */
+	private static function normalize_contact_label_phrase( string $english, string $translated ): string {
+		if ( 'Email: {{store.email}}' === $english ) {
+			return preg_replace( '/\s*:\s*/', ': ', $translated, 1 ) ?? $translated;
+		}
+
+		if ( 'Phone: {{store.phone}}' === $english ) {
+			return preg_replace( '/\s*:\s*/', ': ', $translated, 1 ) ?? $translated;
+		}
+
+		return $translated;
 	}
 }

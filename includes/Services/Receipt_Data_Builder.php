@@ -609,6 +609,10 @@ class Receipt_Data_Builder {
 		}
 
 		foreach ( $formatted_meta as $meta_entry ) {
+			if ( isset( $meta_entry->key ) && '_' === substr( (string) $meta_entry->key, 0, 1 ) ) {
+				continue;
+			}
+
 			$pairs[] = array(
 				'key'   => wp_strip_all_tags( $meta_entry->display_key ),
 				'value' => wp_strip_all_tags( $meta_entry->display_value ),

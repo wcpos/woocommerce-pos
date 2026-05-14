@@ -116,4 +116,27 @@ describe('renderThermalPreview canonical parity', () => {
 		expect(html).toContain('Barcode error');
 		expect(html).toContain('not-an-ean');
 	});
+
+	it('does not render private line item meta entries', () => {
+		const html = renderThermalPreview(
+			'<receipt>{{#lines}}<text>{{name}}</text>{{#meta}}<text>{{key}}: {{value}}</text>{{/meta}}{{/lines}}</receipt>',
+			{
+				lines: [
+					{
+						name: 'Hoodie with Pocket',
+						meta: [
+							{ key: '_woocommerce_pos_data', value: '{"price":"35"}' },
+							{ key: '_woocommerce_pos_uuid', value: 'ee59a549-7d74-492d-80d7-b9735d539a5b' },
+							{ key: 'Gift wrap', value: 'Yes' },
+						],
+					},
+				],
+			},
+		);
+
+		expect(html).toContain('Hoodie with Pocket');
+		expect(html).toContain('Gift wrap');
+		expect(html).not.toContain('_woocommerce_pos_data');
+		expect(html).not.toContain('_woocommerce_pos_uuid');
+	});
 });

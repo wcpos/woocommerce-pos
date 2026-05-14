@@ -50,4 +50,27 @@ describe('renderLogiclessPreview', () => {
 		expect(html).toContain('Template rendering error');
 		expect(html).toContain('color:red');
 	});
+
+	it('does not render private line item meta entries', () => {
+		const html = renderLogiclessPreview(
+			'{{#lines}}<p>{{name}}</p>{{#meta}}<div>{{key}}: {{value}}</div>{{/meta}}{{/lines}}',
+			{
+				lines: [
+					{
+						name: 'Hoodie with Pocket',
+						meta: [
+							{ key: '_woocommerce_pos_data', value: '{"price":"35"}' },
+							{ key: '_woocommerce_pos_uuid', value: 'ee59a549-7d74-492d-80d7-b9735d539a5b' },
+							{ key: 'Gift wrap', value: 'Yes' },
+						],
+					},
+				],
+			},
+		);
+
+		expect(html).toContain('Hoodie with Pocket');
+		expect(html).toContain('Gift wrap');
+		expect(html).not.toContain('_woocommerce_pos_data');
+		expect(html).not.toContain('_woocommerce_pos_uuid');
+	});
 });

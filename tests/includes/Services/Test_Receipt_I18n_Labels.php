@@ -104,6 +104,34 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test contact label translations keep receipt spacing consistent.
+	 */
+	public function test_translate_interpolated_phrases_normalizes_contact_label_spacing(): void {
+		$filter = function ( $translation, $text ) {
+			if ( 'Email: %s' === $text ) {
+				return 'E-mail : %s';
+			}
+			if ( 'Phone: %s' === $text ) {
+				return 'Phone : %s';
+			}
+			return $translation;
+		};
+		add_filter( 'gettext', $filter, 10, 2 );
+
+		try {
+			$content = '<text>Email: {{store.email}}</text><text>Phone: {{store.phone}}</text>';
+			$result  = Receipt_I18n_Labels::translate_interpolated_phrases( $content );
+
+			$this->assertStringContainsString( 'E-mail: {{store.email}}', $result );
+			$this->assertStringContainsString( 'Phone: {{store.phone}}', $result );
+			$this->assertStringNotContainsString( 'E-mail :', $result );
+			$this->assertStringNotContainsString( 'Phone :', $result );
+		} finally {
+			remove_filter( 'gettext', $filter, 10 );
+		}
+	}
+
+	/**
 	 * Test translate_interpolated_phrases ignores unknown phrases.
 	 */
 	public function test_translate_interpolated_phrases_ignores_unknown_phrases(): void {
