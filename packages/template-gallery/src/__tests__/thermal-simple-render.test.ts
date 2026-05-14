@@ -112,6 +112,8 @@ describe('thermal simple templates render with sample data', () => {
 				tax: { display_excl: false, display_incl: true },
 			});
 			expect(inclusiveHtml).toContain('Tax included: Sales Tax');
+			expect(inclusiveHtml).not.toContain('Total Tax');
+			expect(inclusiveHtml).not.toContain('Tax Summary');
 
 			if (file === 'thermal-simple-58mm.xml') {
 				const rendered = document.createElement('div');

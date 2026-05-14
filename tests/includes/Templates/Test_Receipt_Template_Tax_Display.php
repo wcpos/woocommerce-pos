@@ -286,8 +286,16 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 			$content = $this->read_gallery_template( $filename );
 
 			// Assert — exclusive receipts use additive wording, inclusive receipts use informational wording.
-			$this->assertStringContainsString( '{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}', $content, sprintf( '%s must show Total Tax only for tax-exclusive display mode.', $filename ) );
-			$this->assertStringContainsString( '{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}', $content, sprintf( '%s must show Tax included for tax-inclusive display mode.', $filename ) );
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_excl\s*\}\}\s*\{\{\s*i18n\.total_tax\s*\}\}\s*\{\{\s*\/\s*tax\.display_excl\s*\}\}/',
+				$content,
+				sprintf( '%s must show Total Tax only for tax-exclusive display mode.', $filename )
+			);
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_incl\s*\}\}\s*\{\{\s*i18n\.included_tax\s*\}\}\s*\{\{\s*\/\s*tax\.display_incl\s*\}\}/',
+				$content,
+				sprintf( '%s must show Tax included for tax-inclusive display mode.', $filename )
+			);
 		}
 
 		foreach ( $tax_summary_templates as $filename ) {
@@ -295,8 +303,16 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 			$content = $this->read_gallery_template( $filename );
 
 			// Assert — tax-summary rows/headings need access to both wordings.
-			$this->assertStringContainsString( '{{#tax.display_excl}}', $content, sprintf( '%s tax summary must branch for tax-exclusive display mode.', $filename ) );
-			$this->assertStringContainsString( '{{#tax.display_incl}}{{i18n.included_tax}}', $content, sprintf( '%s tax summary must branch to included-tax wording for tax-inclusive display mode.', $filename ) );
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_excl\s*\}\}/',
+				$content,
+				sprintf( '%s tax summary must branch for tax-exclusive display mode.', $filename )
+			);
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_incl\s*\}\}\s*\{\{\s*i18n\.included_tax\s*\}\}/',
+				$content,
+				sprintf( '%s tax summary must branch to included-tax wording for tax-inclusive display mode.', $filename )
+			);
 		}
 	}
 
