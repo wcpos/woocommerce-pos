@@ -160,4 +160,37 @@ describe('PreviewModal logicless previews', () => {
 		const iframe = container.querySelector('iframe');
 		expect(iframe?.getAttribute('srcdoc')).toContain('wcpos-preview-paper');
 	});
+
+	it('shows the create-an-order message for a legacy-php response that requires a real order', async () => {
+		usePreviewMock.mockReturnValue({
+			data: {
+				engine: 'legacy-php',
+				requires_order: true,
+				order_id: 0,
+				template_id: 'legacy',
+			},
+			isLoading: false,
+			isFetching: false,
+			isError: false,
+		} as ReturnType<typeof usePreview>);
+
+		const container = document.createElement('div');
+		const root = createRoot(container);
+		mountedRoots.push(root);
+		document.body.appendChild(container);
+
+		await act(async () => {
+			root.render(
+				<PreviewModal
+					templateId="legacy"
+					templateName="Legacy"
+					isGallery
+					onClose={() => {}}
+				/>,
+			);
+		});
+
+		expect(container.querySelector('iframe')).toBeNull();
+		expect(container.textContent).toContain('Create a POS order first');
+	});
 });
