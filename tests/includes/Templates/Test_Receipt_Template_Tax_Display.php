@@ -326,7 +326,7 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 	public function test_tax_summary_does_not_print_internal_rate_id(): void {
 		// Arrange / Act / Assert — the detailed thermal templates put the rate id
 		// directly after the rate via the {{/rate}}{{#code}} adjacency.
-		foreach ( array( 'thermal-detailed-58mm.xml', 'thermal-detailed-80mm.xml' ) as $filename ) {
+		foreach ( self::DETAILED_THERMAL_TEMPLATES as $filename ) {
 			$content = $this->read_gallery_template( $filename );
 			$this->assertStringNotContainsString(
 				'{{/rate}}{{#code}}',
