@@ -15,87 +15,140 @@ const PAPER_WIDTH_CHARS: Record<string, number> = {
 	'58mm': 32,
 };
 
-function getThermalStarterShell(paperWidth: string): string {
+export function getThermalStarterShell(paperWidth: string): string {
 	const chars = PAPER_WIDTH_CHARS[paperWidth] ?? 48;
 	const half = Math.floor(chars / 2);
 	return `<receipt paper-width="${chars}">
   <align mode="center">
-    <bold><size width="2" height="2">{{store.name}}</size></bold>
-    <text>{{store.address_lines.0}}</text>
+    <bold><size width="2" height="2"><text>{{store.name}}</text></size></bold>
+    {{#store.address_lines}}
+    <text>{{.}}</text>
+    {{/store.address_lines}}
   </align>
   <line />
   <row>
-    <col width="${half}">Order #{{order.number}}</col>
+    <col width="${half}">{{i18n.order}} #{{order.number}}</col>
     <col width="${half}" align="right">{{order.created.datetime}}</col>
   </row>
   <line />
   {{#lines}}
   <row>
     <col width="${half}">{{name}} x{{qty}}</col>
-    <col width="${half}" align="right">{{line_total_incl}}</col>
+    <col width="${half}" align="right">{{line_total_display}}</col>
   </row>
   {{/lines}}
   <line />
   <row>
-    <col width="${half}"><bold>Total</bold></col>
-    <col width="${half}" align="right"><bold>{{totals.total_incl}}</bold></col>
+    <col width="${half}"><bold>{{i18n.total}}</bold></col>
+    <col width="${half}" align="right"><bold>{{totals.total_incl_display}}</bold></col>
   </row>
+  <feed lines="1" />
+  <align mode="center"><text>{{i18n.thank_you_purchase}}</text></align>
   <feed lines="3" />
   <cut />
 </receipt>`;
 }
 
-const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
-	logicless: `<div style="font-family: Arial, sans-serif; font-size: 13px; color: #333; padding: 24px; max-width: 380px; margin: 0 auto;">
+export const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
+	logicless: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2937; padding: 24px; max-width: 380px; margin: 0 auto;">
 
-  <h1 style="font-size: 16px; text-align: center; margin: 0 0 4px;">{{store.name}}</h1>
-  <p style="text-align: center; margin: 0 0 16px; color: #666; font-size: 11px;">{{store.address_lines.0}}</p>
+  <div style="text-align: center; margin-bottom: 12px;">
+    <div style="font-size: 18px; font-weight: 700;">{{store.name}}</div>
+    {{#store.address_lines}}
+    <div style="color: #6b7280; font-size: 11px;">{{.}}</div>
+    {{/store.address_lines}}
+  </div>
 
-  <hr style="border: none; border-top: 1px solid #ddd; margin: 0 0 12px;">
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
 
-  <p style="margin: 0 0 12px; font-size: 11px; color: #666;">
-    Order #{{order.number}} &mdash; {{order.created.datetime}}
-  </p>
+  <p style="margin: 0 0 10px; font-size: 11px; color: #6b7280;">{{i18n.order}} #{{order.number}} &mdash; {{order.created.datetime}}</p>
 
-  <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px;">
+  <table style="width: 100%; border-collapse: collapse; margin: 0 0 10px;">
     {{#lines}}
     <tr>
       <td style="padding: 3px 0;">{{name}} &times;{{qty}}</td>
-      <td style="padding: 3px 0; text-align: right;">{{line_total_incl}}</td>
+      <td style="padding: 3px 0; text-align: right;">{{line_total_display}}</td>
     </tr>
     {{/lines}}
   </table>
 
-  <hr style="border: none; border-top: 1px solid #ddd; margin: 0 0 12px;">
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
 
   <table style="width: 100%;">
     <tr>
-      <td><strong>Total</strong></td>
-      <td style="text-align: right;"><strong>{{totals.total_incl}}</strong></td>
+      <td><strong>{{i18n.total}}</strong></td>
+      <td style="text-align: right;"><strong>{{totals.total_incl_display}}</strong></td>
     </tr>
   </table>
 
-  <p style="text-align: center; margin: 20px 0 0; font-size: 11px; color: #666;">Thank you for your purchase!</p>
+  <p style="text-align: center; margin: 18px 0 0; font-size: 11px; color: #6b7280;">{{i18n.thank_you_purchase}}</p>
 </div>`,
 
 	thermal: getThermalStarterShell('80mm'),
 
 	'legacy-php': `<?php
 /**
- * Custom Receipt Template
+ * Custom Receipt Template (PHP)
  *
- * @var WC_Order $order The WooCommerce order object.
+ * Receives $receipt_data — an array with all receipt info (store, order,
+ * lines, totals, i18n…). Escape text with esc_html() and format money
+ * with wc_price().
  */
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+$i18n          = $receipt_data['i18n'] ?? array();
+$currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_woocommerce_currency() );
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Receipt</title>
+	<meta charset="utf-8">
+	<title>Receipt</title>
+	<?php do_action( 'woocommerce_pos_receipt_head' ); ?>
 </head>
-<body style="font-family: Arial, sans-serif; font-size: 13px; padding: 24px; max-width: 380px; margin: 0 auto;">
-  <h1><?php echo esc_html( get_bloginfo( 'name' ) ); ?></h1>
-  <p>Order #<?php echo esc_html( $order->get_order_number() ); ?></p>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2937; padding: 24px; max-width: 380px; margin: 0 auto;">
+
+	<div style="text-align: center; margin-bottom: 12px;">
+		<div style="font-size: 18px; font-weight: 700;"><?php echo esc_html( $receipt_data['store']['name'] ?? '' ); ?></div>
+		<?php if ( ! empty( $receipt_data['store']['address_lines'] ) ) : ?>
+			<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
+				<div style="color: #6b7280; font-size: 11px;"><?php echo esc_html( $address_line ); ?></div>
+			<?php endforeach; ?>
+		<?php endif; ?>
+	</div>
+
+	<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
+
+	<p style="margin: 0 0 10px; font-size: 11px; color: #6b7280;">
+		<?php echo esc_html( $i18n['order'] ?? __( 'Order', 'woocommerce-pos' ) ); ?>
+		#<?php echo esc_html( $receipt_data['order']['number'] ?? '' ); ?>
+		&mdash; <?php echo esc_html( $receipt_data['order']['created']['datetime'] ?? '' ); ?>
+	</p>
+
+	<table style="width: 100%; border-collapse: collapse; margin: 0 0 10px;">
+		<?php foreach ( $receipt_data['lines'] as $line ) : ?>
+			<tr>
+				<td style="padding: 3px 0;"><?php echo esc_html( $line['name'] ?? '' ); ?> &times;<?php echo esc_html( $line['qty'] ?? 0 ); ?></td>
+				<td style="padding: 3px 0; text-align: right;"><?php echo wp_kses_post( wc_price( $line['line_total'] ?? 0, $currency_args ) ); ?></td>
+			</tr>
+		<?php endforeach; ?>
+	</table>
+
+	<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
+
+	<table style="width: 100%;">
+		<tr>
+			<td><strong><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce-pos' ) ); ?></strong></td>
+			<td style="text-align: right;"><strong><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total_incl'] ?? 0, $currency_args ) ); ?></strong></td>
+		</tr>
+	</table>
+
+	<p style="text-align: center; margin: 18px 0 0; font-size: 11px; color: #6b7280;">
+		<?php echo esc_html( $i18n['thank_you_purchase'] ?? __( 'Thank you for your purchase!', 'woocommerce-pos' ) ); ?>
+	</p>
+
 </body>
 </html>`,
 };
