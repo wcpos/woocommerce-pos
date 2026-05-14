@@ -5,7 +5,6 @@ import path from 'path';
 import { renderThermalPreview } from '@wcpos/thermal-utils';
 
 const galleryDir = path.resolve(__dirname, '../../../../templates/gallery');
-const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-80mm.xml'), 'utf8');
 
 // tax_summary[].code is the WooCommerce tax-rate database id. The receipt must
 // never print it, so the fixture uses a distinctive sentinel that cannot
@@ -70,6 +69,7 @@ const sampleData = {
 
 describe('thermal-detailed-80mm tax summary', () => {
 	it('renders one compact line per tax rate without the internal rate id', () => {
+		const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-80mm.xml'), 'utf8');
 		const html = renderThermalPreview(xml, sampleData);
 
 		// Heading uses the additive wording in tax-exclusive display mode.
@@ -91,6 +91,7 @@ describe('thermal-detailed-80mm tax summary', () => {
 	});
 
 	it('omits the inline net base when a rate has no taxable amount', () => {
+		const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-80mm.xml'), 'utf8');
 		const html = renderThermalPreview(xml, {
 			...sampleData,
 			tax_summary: [
@@ -110,6 +111,7 @@ describe('thermal-detailed-80mm tax summary', () => {
 	});
 
 	it('uses included-tax wording when the receipt display mode is tax-inclusive', () => {
+		const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-80mm.xml'), 'utf8');
 		const html = renderThermalPreview(xml, {
 			...sampleData,
 			tax: { display_excl: false, display_incl: true },
