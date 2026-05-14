@@ -250,6 +250,73 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test gallery templates branch tax wording for included vs additive tax displays.
+	 */
+	public function test_gallery_templates_branch_tax_wording_by_display_mode(): void {
+		// Arrange.
+		$labels = Receipt_I18n_Labels::get_labels();
+
+		$this->assertArrayHasKey( 'included_tax', $labels, 'Receipt i18n labels must expose included_tax for inclusive-price receipts.' );
+		$this->assertSame( 'Tax included', $labels['included_tax'], 'Default included-tax label should follow WooCommerce receipt wording.' );
+
+		$total_tax_templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+		);
+
+		$tax_summary_templates = array(
+			'detailed-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		foreach ( $total_tax_templates as $filename ) {
+			// Act.
+			$content = $this->read_gallery_template( $filename );
+
+			// Assert — exclusive receipts use additive wording, inclusive receipts use informational wording.
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_excl\s*\}\}\s*\{\{\s*i18n\.total_tax\s*\}\}\s*\{\{\s*\/\s*tax\.display_excl\s*\}\}/',
+				$content,
+				sprintf( '%s must show Total Tax only for tax-exclusive display mode.', $filename )
+			);
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_incl\s*\}\}\s*\{\{\s*i18n\.included_tax\s*\}\}\s*\{\{\s*\/\s*tax\.display_incl\s*\}\}/',
+				$content,
+				sprintf( '%s must show Tax included for tax-inclusive display mode.', $filename )
+			);
+		}
+
+		foreach ( $tax_summary_templates as $filename ) {
+			// Act.
+			$content = $this->read_gallery_template( $filename );
+
+			// Assert — tax-summary rows/headings need access to both wordings.
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_excl\s*\}\}/',
+				$content,
+				sprintf( '%s tax summary must branch for tax-exclusive display mode.', $filename )
+			);
+			$this->assertMatchesRegularExpression(
+				'/\{\{\s*#\s*tax\.display_incl\s*\}\}\s*\{\{\s*i18n\.included_tax\s*\}\}/',
+				$content,
+				sprintf( '%s tax summary must branch to included-tax wording for tax-inclusive display mode.', $filename )
+			);
+		}
+	}
+
+	/**
 	 * Test detailed-receipt.html omits the Total Tax row when the order has no tax.
 	 */
 	public function test_detailed_receipt_hides_tax_row_when_order_has_no_tax(): void {

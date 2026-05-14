@@ -85,7 +85,7 @@ columns with hard-coded numeric widths.
   </row>
   {{#tax_summary}}
   <row>
-    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}</col>
+    <col width="*">{{#tax.display_excl}}{{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}: {{label}}{{#rate}} ({{rate}}%){{/rate}}{{/tax.display_incl}}</col>
     <col width="12" align="right">{{tax_amount_display}}</col>
   </row>
   {{/tax_summary}}

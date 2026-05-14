@@ -174,7 +174,7 @@ the star to the remaining 32-CPL space at render time.
   <!-- ── Tax summary ─────────────── -->
   {{#tax_summary.0}}
   <line style="dashed" />
-  <bold><text>{{i18n.tax_summary}}</text></bold>
+  <bold><text>{{#tax.display_excl}}{{i18n.tax_summary}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</text></bold>
   {{/tax_summary.0}}
   {{#tax_summary}}
   <row>
@@ -209,7 +209,7 @@ the star to the remaining 32-CPL space at render time.
     <col width="12" align="right">{{totals.total_excl_display}}</col>
   </row>
   <row>
-    <col width="*">{{i18n.total_tax}}</col>
+    <col width="*">{{#tax.display_excl}}{{i18n.total_tax}}{{/tax.display_excl}}{{#tax.display_incl}}{{i18n.included_tax}}{{/tax.display_incl}}</col>
     <col width="12" align="right">{{totals.tax_total_display}}</col>
   </row>
   {{/totals.tax_total}}

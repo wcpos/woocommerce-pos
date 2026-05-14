@@ -160,6 +160,7 @@ class Receipt_I18n_Labels {
 			'subtotal_excl_tax'      => /* translators: Standalone label used in printed receipt templates. */ __( 'Subtotal (excl. tax)', 'woocommerce-pos' ),
 			'total'                  => /* translators: Standalone label used in printed receipt templates. */ __( 'Total', 'woocommerce-pos' ),
 			'total_tax'              => /* translators: Standalone label used in printed receipt templates. */ __( 'Total Tax', 'woocommerce-pos' ),
+			'included_tax'           => /* translators: Standalone label used in printed receipt templates for tax amounts already included in displayed prices. */ __( 'Tax included', 'woocommerce-pos' ),
 			'total_incl_tax'         => /* translators: Standalone label used in printed receipt templates. */ __( 'Total (incl. tax)', 'woocommerce-pos' ),
 			'grand_total_incl_tax'   => /* translators: Standalone label used in printed receipt templates. */ __( 'Grand Total (incl. tax)', 'woocommerce-pos' ),
 			'tax'                    => /* translators: Standalone label used in printed receipt templates. */ __( 'Tax', 'woocommerce-pos' ),

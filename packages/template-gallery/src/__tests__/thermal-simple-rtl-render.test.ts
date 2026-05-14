@@ -24,6 +24,7 @@ const arabicData = {
 		created: { datetime: '٢٠٢٦/٠٥/١٣ ١٤:٣٢' },
 		customer_note: '',
 	},
+	tax: { display_excl: true, display_incl: false },
 	lines: [
 		{
 			name: 'قميص قطن',
@@ -66,6 +67,7 @@ const arabicData = {
 		customer: 'العميل',
 		subtotal: 'المجموع الفرعي',
 		total: 'الإجمالي',
+		included_tax: 'شامل الضريبة',
 		discount: 'خصم',
 		tendered: 'المدفوع',
 		change: 'الباقي',
@@ -93,6 +95,13 @@ describe('thermal-simple-80mm-rtl renders with Arabic sample data', () => {
 		expect(html).toContain('1827');
 		// Latin prefix on the order number renders inline alongside Arabic digits.
 		expect(html).toContain('#1827');
+
+		const inclusiveHtml = renderThermalPreview(xml, {
+			...arabicData,
+			tax: { display_excl: false, display_incl: true },
+		});
+		expect(inclusiveHtml).toContain('شامل الضريبة');
+		expect(inclusiveHtml).not.toMatch(/>\s*ضريبة القيمة المضافة \(15%\)\s*</);
 	});
 
 	it('places label column on the right and amount column on the left for the totals row', () => {
@@ -107,5 +116,18 @@ describe('thermal-simple-80mm-rtl renders with Arabic sample data', () => {
 		const labelIndex = totalLine!.indexOf('الإجمالي');
 		const amountIndex = totalLine!.indexOf('٢٠٧٫٠٠ ر.س');
 		expect(amountIndex).toBeLessThan(labelIndex);
+
+		const inclusiveHtml = renderThermalPreview(xml, {
+			...arabicData,
+			tax: { display_excl: false, display_incl: true },
+		});
+		const inclusiveWrapper = document.createElement('div');
+		inclusiveWrapper.innerHTML = inclusiveHtml;
+		const inclusiveTaxLine = Array.from(inclusiveWrapper.querySelectorAll('div[style*="display: flex"]'))
+			.map((element) => element.textContent?.trim() ?? '')
+			.find((text) => text.includes('شامل الضريبة') && text.includes('ضريبة القيمة المضافة'));
+		expect(inclusiveTaxLine).toBeTruthy();
+		expect(inclusiveTaxLine).toContain('شامل الضريبة');
+		expect(inclusiveTaxLine).not.toMatch(/^٢٧٫٠٠ ر\.س\s*ضريبة القيمة المضافة \(15%\)$/);
 	});
 });
