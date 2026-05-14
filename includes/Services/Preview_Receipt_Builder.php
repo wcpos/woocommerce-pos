@@ -708,13 +708,10 @@ class Preview_Receipt_Builder {
 			),
 		);
 
-		// `code` mirrors the live builder's canonical single coupon field;
-		// `codes` is the display-friendly alias used by existing templates.
 		$discounts = array(
 			array(
 				'label'      => $discount_label,
 				'code'       => 'SUMMER10',
-				'codes'      => 'SUMMER10',
 				'total'      => $display_incl ? $discount_incl : $discount_excl,
 				'total_incl' => $discount_incl,
 				'total_excl' => $discount_excl,

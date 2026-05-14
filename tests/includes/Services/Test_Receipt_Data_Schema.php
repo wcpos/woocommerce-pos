@@ -465,6 +465,8 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	public function test_get_json_schema_maps_field_tree_types(): void {
 		$schema = Receipt_Data_Schema::get_json_schema();
 
+		$this->assertArrayHasKey( 'code', $schema['properties']['discounts']['items']['properties'] );
+		$this->assertArrayNotHasKey( 'codes', $schema['properties']['discounts']['items']['properties'] );
 		$this->assertSame( 'array', $schema['properties']['lines']['type'] );
 		$this->assertSame( 'array', $schema['properties']['refunds']['type'] );
 		$this->assertSame( 'object', $schema['properties']['lines']['items']['type'] );
