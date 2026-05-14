@@ -274,4 +274,50 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 			'detailed-receipt.html must not render the Total Tax row when the order has no tax.'
 		);
 	}
+
+	/**
+	 * Test detailed-receipt.html keeps the formal tax-invoice fields and is not neutral-swapped.
+	 */
+	public function test_detailed_receipt_html_uses_tax_invoice_fields(): void {
+		// Arrange / Act.
+		$content = $this->read_gallery_template( 'detailed-receipt.html' );
+
+		// Assert — the detailed family is a formal tax invoice: tax-exclusive unit
+		// price and subtotal, with the tax rows guarded. It must not adopt the
+		// adaptive family's neutral fields.
+		$this->assertStringContainsString( '{{unit_price_excl_display}}', $content, 'detailed-receipt.html must show tax-exclusive unit prices.' );
+		$this->assertStringContainsString( '{{totals.subtotal_excl_display}}', $content, 'detailed-receipt.html must show a tax-exclusive subtotal.' );
+		$this->assertStringContainsString( '{{#totals.tax_total}}', $content, 'detailed-receipt.html must guard the tax rows so they collapse when there is no tax.' );
+		$this->assertStringNotContainsString( '{{unit_price_display}}', $content, 'detailed-receipt.html must not use the neutral unit_price field.' );
+		$this->assertStringNotContainsString( '{{totals.subtotal_display}}', $content, 'detailed-receipt.html must not use the neutral subtotal field.' );
+	}
+
+	/**
+	 * Test no gallery template renders the neutral totals.total as a grand total.
+	 *
+	 * The neutral totals.total resolves to a pre-tax figure for tax-exclusive
+	 * stores, so it is never a valid headline total — templates must use
+	 * totals.total_incl for the grand total.
+	 */
+	public function test_no_gallery_template_uses_neutral_grand_total(): void {
+		// Arrange.
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+		$files       = array_merge(
+			(array) glob( $gallery_dir . '*.html' ),
+			(array) glob( $gallery_dir . '*.xml' )
+		);
+		$this->assertNotEmpty( $files, 'Gallery should contain template files.' );
+
+		foreach ( $files as $path ) {
+			// Act.
+			$content = (string) file_get_contents( $path );
+
+			// Assert.
+			$this->assertStringNotContainsString(
+				'{{totals.total_display}}',
+				$content,
+				sprintf( '%s must use totals.total_incl for the grand total, not the neutral (pre-tax for excl stores) totals.total.', basename( $path ) )
+			);
+		}
+	}
 }
