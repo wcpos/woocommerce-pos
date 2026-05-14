@@ -1,6 +1,9 @@
 <!--
 Invoice — full-page A4/Letter layout.
 
+IMPORTANT: Sample bank details below are fake placeholders. Replace
+them with your own account details before using this invoice template.
+
 Designed for unpaid invoices first: when the order's `needs_payment`
 flag is true, a "How to pay" panel renders with bank-transfer details
 and a Pay-online QR code linking to WooCommerce's order-pay URL. For
@@ -19,7 +22,7 @@ Sections, top to bottom:
     when present; totals stack right-aligned; bold dark "Amount due"
     hero card pulls the total figure (only when unpaid).
   - How to pay — only when {{order.needs_payment}}. Two columns:
-    bank-transfer details (edit to your store's), and a Pay-online QR
+    fake bank-transfer placeholders (edit to your store's), and a Pay-online QR
     encoding {{order.payment_url}} (WC's order-pay endpoint) with the
     URL printed beside it.
   - Footer — personal note / thank-you + footer imprint.
@@ -208,8 +211,8 @@ Note: Logicless output passes through wp_kses_post, which strips
 				<div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">{{i18n.bank_transfer}}</div>
 				<table style="border-collapse: collapse; font-size: 12px; line-height: 1.65;">
 					<tr><td style="color: #6b7280; padding-right: 14px;">{{i18n.account}}</td><td>{{store.name}}</td></tr>
-					<tr><td style="color: #6b7280; padding-right: 14px;">IBAN</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">GB29 NWBK 6016 1331 9268 19</td></tr>
-					<tr><td style="color: #6b7280; padding-right: 14px;">BIC</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">NWBKGB2L</td></tr>
+					<tr><td style="color: #6b7280; padding-right: 14px;">FAKE SAMPLE IBAN</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">XX00 FAKE 0000 0000 0000 00</td></tr>
+					<tr><td style="color: #6b7280; padding-right: 14px;">FAKE SAMPLE BIC</td><td style="font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px;">FAKEBANKXXX</td></tr>
 					<tr><td style="color: #6b7280; padding-right: 14px;">{{i18n.reference}}</td><td><strong>#{{order.number}}</strong></td></tr>
 				</table>
 			</div>
