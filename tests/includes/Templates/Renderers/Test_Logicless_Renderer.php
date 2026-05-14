@@ -191,6 +191,34 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( 'Walk-in customer', $output );
 	}
 
+
+	/**
+	 * Test tax display booleans are consumable by logicless templates.
+	 */
+	public function test_tax_display_boolean_sections_select_expected_branch(): void {
+		$base = array(
+			'order' => array( 'currency' => 'USD' ),
+			'tax'   => array(
+				'display'            => 'incl',
+				'display_incl'       => true,
+				'display_excl'       => false,
+				'breakdown'          => 'itemized',
+				'breakdown_hidden'   => false,
+				'breakdown_single'   => false,
+				'breakdown_itemized' => true,
+			),
+		);
+		$template = '{{#tax.display_incl}}includes tax{{/tax.display_incl}}{{^tax.display_incl}}plus tax{{/tax.display_incl}}';
+
+		$this->assertSame( 'includes tax', $this->render( $template, $base ) );
+
+		$base['tax']['display']      = 'excl';
+		$base['tax']['display_incl'] = false;
+		$base['tax']['display_excl'] = true;
+
+		$this->assertSame( 'plus tax', $this->render( $template, $base ) );
+	}
+
 	// ─── Task 4: Dot-path sections, {{.}} reference, context fallback ───
 
 	/**

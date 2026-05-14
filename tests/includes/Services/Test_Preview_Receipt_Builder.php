@@ -294,7 +294,11 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertEquals( ',', $hints['price_decimal_separator'] );
 			$this->assertEquals( 0, $hints['price_num_decimals'] );
 			$this->assertEquals( '税込', $hints['price_display_suffix'] );
-			$this->assertEquals( 'single', $hints['display_tax'] );
+			$this->assertArrayNotHasKey( 'display_tax', $hints );
+			$this->assertSame( 'incl', $data['tax']['display'] );
+			$this->assertTrue( $data['tax']['display_incl'] );
+			$this->assertSame( 'single', $data['tax']['breakdown'] );
+			$this->assertTrue( $data['tax']['breakdown_single'] );
 			$this->assertTrue( $hints['prices_entered_with_tax'] );
 			$this->assertEquals( 'yes', $hints['rounding_mode'] );
 			$this->assertContains( $hints['order_barcode_type'], array( 'code128', 'qrcode', 'ean13', 'ean8', 'upca' ) );
@@ -312,6 +316,37 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			update_option( 'woocommerce_tax_round_at_subtotal', $original_tax_rounding );
 			update_option( 'woocommerce_prices_include_tax', $original_prices_tax );
 		}
+	}
+
+
+	/**
+	 * Preview tax section exposes branchable display and breakdown states.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_tax_section_reflects_store_tax_settings(): void {
+		$store = new class() {
+			public function get_tax_display_cart(): string {
+				return 'incl';
+			}
+
+			public function get_calc_taxes(): string {
+				return 'yes';
+			}
+
+			public function get_tax_total_display(): string {
+				return 'itemized';
+			}
+		};
+
+		$data = $this->builder->build( $store );
+
+		$this->assertSame( 'incl', $data['tax']['display'] );
+		$this->assertTrue( $data['tax']['display_incl'] );
+		$this->assertFalse( $data['tax']['display_excl'] );
+		$this->assertSame( 'itemized', $data['tax']['breakdown'] );
+		$this->assertTrue( $data['tax']['breakdown_itemized'] );
+		$this->assertArrayNotHasKey( 'display_tax', $data['presentation_hints'] );
 	}
 
 	/**

@@ -13,6 +13,12 @@ namespace WCPOS\WooCommercePOS\Services;
 class Receipt_Data_Schema {
 	/**
 	 * Top-level keys required in a receipt payload.
+	 *
+	 * `presentation_hints` is required but internal: builders use it for
+	 * formatting inputs such as locale, timezone, currency placement, and
+	 * decimal separators. Template-facing mode signals belong in subject
+	 * sections like `tax` when they are data-derived, not freely choosable by
+	 * the template author, and required for logicless template branching.
 	 */
 	const REQUIRED_KEYS = array(
 		'order',
@@ -24,6 +30,7 @@ class Receipt_Data_Schema {
 		'shipping',
 		'discounts',
 		'totals',
+		'tax',
 		'tax_summary',
 		'payments',
 		'refunds',
@@ -752,6 +759,40 @@ class Receipt_Data_Schema {
 					'line_count'          => array(
 						'type'  => 'number',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Count', 'woocommerce-pos' ),
+					),
+				),
+			),
+
+			'tax'         => array(
+				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax', 'woocommerce-pos' ),
+				'fields' => array(
+					'display'            => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Display Mode', 'woocommerce-pos' ),
+					),
+					'display_incl'       => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Display Is Inclusive', 'woocommerce-pos' ),
+					),
+					'display_excl'       => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Display Is Exclusive', 'woocommerce-pos' ),
+					),
+					'breakdown'          => array(
+						'type'  => 'string',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Breakdown Mode', 'woocommerce-pos' ),
+					),
+					'breakdown_hidden'   => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Breakdown Hidden', 'woocommerce-pos' ),
+					),
+					'breakdown_single'   => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Breakdown Single', 'woocommerce-pos' ),
+					),
+					'breakdown_itemized' => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Breakdown Itemized', 'woocommerce-pos' ),
 					),
 				),
 			),
