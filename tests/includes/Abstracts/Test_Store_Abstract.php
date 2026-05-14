@@ -126,7 +126,6 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'personal_notes',
 			'policies_and_conditions',
 			'footer_imprint',
-			'order_barcode_type',
 			'tax_ids',
 		);
 	}
@@ -348,14 +347,6 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$this->assertEquals( 'itemized', $tax_total_display ); // Default value
 	}
 
-	/**
-	 * Store exposes a default order barcode type.
-	 */
-	public function test_get_order_barcode_type(): void {
-		$order_barcode_type = $this->store->get_order_barcode_type();
-		$this->assertIsString( $order_barcode_type );
-		$this->assertEquals( 'code128', $order_barcode_type );
-	}
 
 	public function test_get_default_customer(): void {
 		$customer = $this->store->get_default_customer();

@@ -84,7 +84,6 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 			'personal_notes',
 			'policies_and_conditions',
 			'footer_imprint',
-			'order_barcode_type',
 			'tax_ids',
 			'_links',
 		);
@@ -107,6 +106,8 @@ class Test_Stores_API extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEmpty( array_diff( $response_fields, $expected_response_fields ), 'These fields were not expected in the WCPOS API response: ' . print_r( array_diff( $response_fields, $expected_response_fields ), true ) );
 		$this->assertArrayHasKey( 'tax_ids', $data );
 		$this->assertIsArray( $data['tax_ids'] );
+		$this->assertArrayNotHasKey( 'order_barcode_type', $data, 'Store API response must not include the vestigial order_barcode_type field rejected by app schemas.' );
+
 		foreach ( $data['tax_ids'] as $tax_id ) {
 			$this->assertIsArray( $tax_id );
 			$this->assertArrayHasKey( 'type', $tax_id );
