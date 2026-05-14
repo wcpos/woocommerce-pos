@@ -48,6 +48,7 @@ const sampleData = {
 		customer_note: 'Please gift wrap.',
 		status_label: 'Completed',
 	},
+	tax: { display_excl: true, display_incl: false },
 	fiscal: { document_label: 'Tax Invoice' },
 	lines: [
 		{
@@ -73,6 +74,7 @@ const sampleData = {
 	totals: {
 		subtotal_excl_display: '$40.00',
 		total_excl_display: '$40.00',
+		tax_total: 3.2,
 		tax_total_display: '$3.20',
 		total_incl_display: '$43.20',
 		change_total: '6.80',
@@ -101,6 +103,7 @@ const sampleData = {
 		subtotal_excl_tax: 'Subtotal (excl. tax)',
 		total_excl: 'Total (excl.)',
 		total_tax: 'Total Tax',
+		included_tax: 'Tax included',
 		total: 'Total',
 		discount: 'Discount',
 		tendered: 'Tendered',
@@ -183,5 +186,18 @@ describe('thermal-detailed-58mm renders all detailed sections', () => {
 		expect(html).toContain('My Store Pty Ltd');
 		expect(html).toContain('Opening Hours');
 		expect(html).toContain('Closed on public holidays');
+	});
+
+
+	it('uses included-tax wording when the receipt display mode is tax-inclusive', () => {
+		const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-58mm.xml'), 'utf8');
+		const html = renderThermalPreview(xml, {
+			...sampleData,
+			tax: { display_excl: false, display_incl: true },
+		});
+
+		expect(html).toContain('Tax included');
+		expect(html).not.toContain('Tax Summary');
+		expect(html).not.toContain('Total Tax');
 	});
 });

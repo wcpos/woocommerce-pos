@@ -24,19 +24,24 @@ const sampleData = {
 		created: { datetime: '2026-05-08 14:30' },
 		customer_note: '',
 	},
+	tax: { display_excl: true, display_incl: false },
 	lines: [
 		{
 			name: 'T-Shirt',
 			sku: 'TSH-001',
 			qty: 2,
+			unit_price_display: '$19.99',
 			unit_price_incl_display: '$19.99',
+			line_total_display: '$39.98',
 			line_total_incl_display: '$39.98',
 		},
 		{
 			name: 'Coffee Mug',
 			sku: 'MUG-001',
 			qty: 1,
+			unit_price_display: '$9.99',
 			unit_price_incl_display: '$9.99',
+			line_total_display: '$9.99',
 			line_total_incl_display: '$9.99',
 		},
 	],
@@ -45,6 +50,7 @@ const sampleData = {
 	discounts: [],
 	tax_summary: [{ label: 'Sales Tax', rate: 8, tax_amount_display: '$3.99' }],
 	totals: {
+		subtotal_display: '$49.97',
 		subtotal_incl_display: '$49.97',
 		total_incl_display: '$53.96',
 	},
@@ -65,6 +71,8 @@ const sampleData = {
 		customer: 'Customer',
 		subtotal: 'Subtotal',
 		total: 'Total',
+		total_tax: 'Total Tax',
+		included_tax: 'Tax included',
 		discount: 'Discount',
 		tendered: 'Tendered',
 		change: 'Change',
@@ -93,11 +101,18 @@ describe('thermal simple templates render with sample data', () => {
 			expect(html).toContain('$49.97');
 			expect(html).toContain('$53.96');
 			expect(html).toContain('Sales Tax');
+			expect(html).not.toContain('Tax included: Sales Tax');
 			expect(html).toContain('Cash');
 			expect(html).toContain('$6.04');
 			expect(html).toContain('Thank you for your purchase!');
 			expect(html).toContain('My Store Pty Ltd');
 			expect(html).toContain('<svg');
+			const inclusiveHtml = renderThermalPreview(xml, {
+				...sampleData,
+				tax: { display_excl: false, display_incl: true },
+			});
+			expect(inclusiveHtml).toContain('Tax included: Sales Tax');
+
 			if (file === 'thermal-simple-58mm.xml') {
 				const rendered = document.createElement('div');
 				rendered.innerHTML = html;
@@ -132,9 +147,13 @@ describe('thermal simple templates render with sample data', () => {
 						...sampleData.lines[0],
 						name: 'Discounted Item',
 						sku: 'DISC-001',
+						unit_subtotal_display: '$20.00',
 						unit_subtotal_incl_display: '$20.00',
+						unit_price_display: '$15.00',
 						unit_price_incl_display: '$15.00',
+						discounts_display: '$5.00',
 						discounts_incl_display: '$5.00',
+						line_total_display: '$15.00',
 						line_total_incl_display: '$15.00',
 						discounts: [{ label: 'Promo' }],
 					},
