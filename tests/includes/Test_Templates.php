@@ -544,6 +544,24 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'engine', $template );
 		$this->assertArrayHasKey( 'content', $template );
 		$this->assertArrayHasKey( 'version', $template );
+		$this->assertArrayHasKey( 'preview_data', $template );
+	}
+
+	/**
+	 * Test every gallery preview_data profile has a matching JSON fixture.
+	 */
+	public function test_gallery_template_preview_data_profiles_have_fixture_files(): void {
+		$templates = Templates::get_gallery_templates();
+		$this->assertNotEmpty( $templates, 'Expected at least one gallery template.' );
+
+		foreach ( $templates as $template ) {
+			$profile = $template['preview_data'] ?? '';
+			$this->assertNotEmpty( $profile, $template['key'] . ' should declare preview_data.' );
+			$this->assertFileExists(
+				\WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/preview-data/' . $profile . '.json',
+				$template['key'] . ' preview_data profile should exist.'
+			);
+		}
 	}
 
 	/**
@@ -587,6 +605,20 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertTrue( $template['is_premade'] );
 		$this->assertEquals( 2, $template['gallery_version'] );
 		$this->assertEquals( 'standard-receipt', $template['gallery_key'] );
+	}
+
+	/**
+	 * Test installed gallery templates expose their preview data profile.
+	 */
+	public function test_get_template_includes_gallery_preview_data_profile(): void {
+		$post_id = \WCPOS\WooCommercePOS\Templates::install_gallery_template( 'invoice' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertEquals( 'invoice', $template['gallery_key'] );
+		$this->assertEquals( 'invoice', $template['preview_data'] );
+
+		wp_delete_post( $post_id, true );
 	}
 
 	/**

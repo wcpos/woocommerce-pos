@@ -17,6 +17,7 @@ export interface Template {
 	is_active: boolean;
 	offline_capable: boolean;
 	gallery_key: string | null;
+	preview_data?: string | null;
 	gallery_version: number;
 	source: 'custom';
 	menu_order: number;
@@ -58,6 +59,7 @@ export interface GalleryTemplate {
 	direction: 'ltr' | 'rtl';
 	version: number;
 	content?: string;
+	preview_data?: string;
 	is_premade: true;
 	is_virtual: true;
 	source: 'gallery';

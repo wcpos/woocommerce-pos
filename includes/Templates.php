@@ -282,6 +282,11 @@ class Templates {
 		$output_type     = get_post_meta( $template_id, '_template_output_type', true );
 		$tax_display     = get_post_meta( $template_id, '_template_tax_display', true );
 		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
+		$preview_data    = null;
+		if ( \is_string( $gallery_key ) && '' !== $gallery_key ) {
+			$gallery_template = self::get_gallery_template_by_key( $gallery_key );
+			$preview_data     = $gallery_template['preview_data'] ?? null;
+		}
 		$paper_width     = get_post_meta( $template_id, '_template_paper_width', true );
 		$category        = self::get_template_category( $template_id );
 
@@ -301,6 +306,7 @@ class Templates {
 			'is_virtual'      => false,
 			'is_premade'      => (bool) get_post_meta( $template_id, '_template_is_premade', true ),
 			'gallery_key'     => $gallery_key ? $gallery_key : null,
+			'preview_data'    => $preview_data,
 			'gallery_version' => (int) get_post_meta( $template_id, '_template_gallery_version', true ),
 			'status'          => $post->post_status,
 			'source'          => 'custom',

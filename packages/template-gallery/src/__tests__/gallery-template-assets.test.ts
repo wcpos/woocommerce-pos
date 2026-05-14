@@ -5,6 +5,7 @@ import path from 'path';
 const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
 const previewDir = path.join(repoRoot, 'assets', 'img', 'template-gallery', 'previews');
+const previewDataDir = path.join(galleryDir, 'preview-data');
 
 function removeComments(root: Document): void {
 	const walker = root.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
@@ -150,6 +151,20 @@ describe('gallery template assets', () => {
 		for (const removedKey of ['branded-receipt', 'return-receipt', 'tax-invoice']) {
 			expect(fs.existsSync(path.join(previewDir, `${removedKey}.png`)), removedKey).toBe(false);
 			expect(getGalleryPreviewSrc(removedKey), removedKey).toBeUndefined();
+		}
+	});
+
+	it('maps every bundled gallery template to a committed preview data fixture', () => {
+		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
+
+		for (const filename of metadataFiles) {
+			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
+				key: string;
+				preview_data?: string;
+			};
+
+			expect(metadata.preview_data, metadata.key).toBeTruthy();
+			expect(fs.existsSync(path.join(previewDataDir, `${metadata.preview_data}.json`)), metadata.key).toBe(true);
 		}
 	});
 
