@@ -76,4 +76,7 @@ export interface PreviewResponse {
 	paper_width?: string | null;
 	order_id: number;
 	template_id: number | string;
+	// Legacy-php previews with no real POS order return nothing renderable;
+	// the modal falls back to the "create a POS order" message.
+	requires_order?: boolean;
 }

@@ -978,6 +978,36 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test legacy-php preview without a real order returns the requires_order flag.
+	 *
+	 * Legacy-php templates execute arbitrary PHP that expects a real WC_Order in
+	 * scope; sample receipt data cannot stand in for one. The editor must prompt
+	 * for a POS order rather than render with a null order.
+	 */
+	public function test_preview_legacy_php_without_order_returns_requires_order(): void {
+		// Arrange.
+		$post_id = $this->create_template( 'Legacy PHP Preview Template' );
+		update_post_meta( $post_id, '_template_engine', 'legacy-php' );
+
+		// Act.
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/' . $post_id . '/preview' );
+		$request->set_param( 'order_id', 'latest' );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertEquals( 'legacy-php', $data['engine'] );
+		$this->assertTrue( $data['requires_order'] );
+		$this->assertEquals( 0, $data['order_id'] );
+		$this->assertEquals( $post_id, $data['template_id'] );
+		$this->assertArrayNotHasKey( 'preview_html', $data );
+
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
 	 * Test preview returns a URL when order_id is provided.
 	 */
 	public function test_preview_returns_url_with_order_id(): void {
@@ -1037,9 +1067,10 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		// Without order_id, non-legacy templates return data for JS consumers.
+		// Without order_id, legacy-php requires a real order; other engines return data for JS consumers.
 		if ( 'legacy-php' === ( $target['engine'] ?? 'legacy-php' ) ) {
-			$this->assertArrayHasKey( 'preview_html', $data );
+			$this->assertTrue( $data['requires_order'] );
+			$this->assertArrayNotHasKey( 'preview_html', $data );
 		} else {
 			$this->assertArrayHasKey( 'template_content', $data );
 			$this->assertArrayHasKey( 'receipt_data', $data );

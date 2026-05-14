@@ -13,7 +13,6 @@ use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
-use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WP_Error;
 use WP_Query;
 use WP_REST_Controller;
@@ -1010,26 +1009,15 @@ class Templates_Controller extends WP_REST_Controller {
 			return rest_ensure_response( $response );
 		}
 
-		// Legacy-php: render server-side with raw (unformatted) receipt_data so the template
-		// can use wc_price() and other WC formatting functions as expected.
-		ob_start();
-		try {
-			( new Legacy_Php_Renderer() )->render( $template, null, $receipt_data );
-			$html = ob_get_clean();
-		} catch ( \Throwable $e ) {
-			ob_end_clean();
-			Logger::log( 'error', 'Legacy PHP sample-data preview failed: ' . $e->getMessage() );
-			$html = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c00;">'
-				. esc_html__( 'Preview failed. Check the template for PHP errors.', 'woocommerce-pos' )
-				. '</div>';
-		}
-
+		// Legacy-php templates execute arbitrary PHP that expects a real WC_Order
+		// in scope. Sample receipt data cannot stand in for one, so signal the
+		// editor to prompt for a POS order instead of rendering with a null order.
 		return rest_ensure_response(
 			array(
-				'engine'       => 'legacy-php',
-				'preview_html' => $html,
-				'order_id'     => 0,
-				'template_id'  => $id,
+				'engine'         => 'legacy-php',
+				'requires_order' => true,
+				'order_id'       => 0,
+				'template_id'    => $id,
 			)
 		);
 	}
