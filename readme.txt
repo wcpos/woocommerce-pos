@@ -2,8 +2,8 @@
 Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
-Tested up to: 6.8
-Stable tag: 1.8.14
+Tested up to: 6.9
+Stable tag: 1.8.15
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -92,6 +92,15 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.8.15 - 2026/05/14 =
+- **Added the Receipt Data v1 contract for custom templates** — receipt data now exposes branchable tax-display fields, a tax-summary guard, robust totals, i18n labels, fiscal/refund context, and richer store/customer/line metadata for custom receipt templates.
+- **Redesigned the receipt template gallery and editor previews** — added refreshed A4, invoice, quote, packing slip, gift receipt, detailed thermal, simple thermal, and RTL templates, with shared preview rendering, scaled paper viewports, and safer PHP preview behavior.
+- **Fixed tax-inclusive receipt wording and tax summary calculations** — templates can now distinguish tax-inclusive vs tax-exclusive stores, and tax summaries use real post-discount taxable bases instead of reverse-calculating from rounded tax amounts.
+- **Fixed desktop app store sync validation** — removed the vestigial `order_barcode_type` field that could cause store documents to be rejected by app schemas.
+- **Improved receipt discounts and coupons** — each coupon discount is emitted as its own row, `discounts[].code` is the canonical coupon reference, and `discounts[].label` uses a distinct coupon description when available.
+- **Improved store details and tax ID settings** — consolidated Store Details and Tax IDs in settings, aligned tax ID schema handling, and preserved compatibility for older Pro overrides.
+- **Hardened template and CI safeguards** — added field-tree/payload contract coverage, schema checks, safer raw template-content guards, and stricter merge-gate handling.
 
 = 1.8.14 - 2026/02/19 =
 - **Hardened DB migration locking** — upgrade now uses the WordPress core upgrader lock (`WP_Upgrading`) with an atomic acquisition check and a shutdown fallback, preventing concurrent migrations on high-traffic sites ([#540](https://github.com/wcpos/woocommerce-pos/pull/540))
