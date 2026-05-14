@@ -115,7 +115,7 @@ class Receipt_Store_Resolver {
 	public function resolve_price_num_decimals(): int {
 		$value = $this->get_store_value( 'get_price_number_of_decimals', wc_get_price_decimals() );
 
-		return '' !== (string) $value ? (int) $value : wc_get_price_decimals();
+		return is_numeric( $value ) && (float) $value >= 0 ? (int) $value : wc_get_price_decimals();
 	}
 
 	/**

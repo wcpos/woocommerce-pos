@@ -131,6 +131,39 @@ class Test_Receipt_Store_Resolver extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Invalid store decimal settings fall back to WooCommerce defaults.
+	 */
+	public function test_resolve_price_num_decimals_falls_back_for_invalid_store_values(): void {
+		$original_num_decimals = get_option( 'woocommerce_price_num_decimals' );
+
+		try {
+			update_option( 'woocommerce_price_num_decimals', '2' );
+
+			foreach ( array( 'invalid', -1, '-0.5', '' ) as $value ) {
+				$store = new class( $value ) {
+					private $value;
+
+					public function __construct( $value ) {
+						$this->value = $value;
+					}
+
+					public function get_price_number_of_decimals() {
+						return $this->value;
+					}
+				};
+
+				$this->assertSame( 2, ( new Receipt_Store_Resolver( $store ) )->resolve_price_num_decimals() );
+			}
+		} finally {
+			if ( false === $original_num_decimals ) {
+				delete_option( 'woocommerce_price_num_decimals' );
+			} else {
+				update_option( 'woocommerce_price_num_decimals', $original_num_decimals );
+			}
+		}
+	}
+
+	/**
 	 * Address lines use WooCommerce country-specific formatting.
 	 */
 	public function test_compose_address_lines_uses_woocommerce_formatting(): void {
