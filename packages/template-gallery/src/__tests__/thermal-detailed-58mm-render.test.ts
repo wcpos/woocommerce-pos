@@ -73,6 +73,7 @@ const sampleData = {
 			taxable_amount_incl_display: '$43.20',
 		},
 	],
+	has_tax_summary: true,
 	totals: {
 		subtotal_excl_display: '$40.00',
 		total_excl_display: '$40.00',
