@@ -17,7 +17,7 @@ Sections, top to bottom:
   - Order info — order number, date and cashier.
   - Bill-to / Ship-to — customer name, billing address, contact
     details and tax IDs; shipping address renders separately when set.
-  - Items — name, variation attributes, SKU, qty × unit price (incl.
+  - Items — name, variation attributes, SKU, qty × unit price (excl.
     tax) and line total. Per-line discounts show the original price
     and discount amount above the qty line.
   - Fees / Shipping / Discounts — fees and shipping rows show their
@@ -136,13 +136,13 @@ break the cross-printer layout contract. Indented continuation lines
   {{/sku}}
   {{#discounts}}
   <row>
-    <col width="*">  @ {{unit_subtotal_incl_display}}</col>
-    <col width="12" align="right">-{{discounts_incl_display}}</col>
+    <col width="*">  @ {{unit_subtotal_excl_display}}</col>
+    <col width="12" align="right">-{{discounts_excl_display}}</col>
   </row>
   {{/discounts}}
   <row>
-    <col width="*">  {{qty}} x {{unit_price_incl_display}}</col>
-    <col width="12" align="right">{{line_total_incl_display}}</col>
+    <col width="*">  {{qty}} x {{unit_price_excl_display}}</col>
+    <col width="12" align="right">{{line_total_excl_display}}</col>
   </row>
   {{/lines}}
 
@@ -150,7 +150,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{#fees}}
   <row>
     <col width="*">{{label}}</col>
-    <col width="14" align="right">{{total_incl_display}}</col>
+    <col width="14" align="right">{{total_excl_display}}</col>
   </row>
   {{#meta}}
   <text>  {{key}}: {{value}}</text>
@@ -159,7 +159,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{#shipping}}
   <row>
     <col width="*">{{label}}{{#method_id}} ({{method_id}}){{/method_id}}</col>
-    <col width="14" align="right">{{total_incl_display}}</col>
+    <col width="14" align="right">{{total_excl_display}}</col>
   </row>
   {{#meta}}
   <text>  {{key}}: {{value}}</text>
@@ -168,7 +168,7 @@ break the cross-printer layout contract. Indented continuation lines
   {{#discounts}}
   <row>
     <col width="*">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
-    <col width="14" align="right">-{{total_incl_display}}</col>
+    <col width="14" align="right">-{{total_excl_display}}</col>
   </row>
   {{#code}}
   <text>  {{i18n.reference}}: {{code}}</text>
@@ -197,12 +197,13 @@ break the cross-printer layout contract. Indented continuation lines
     <col width="*">{{i18n.subtotal_excl_tax}}</col>
     <col width="14" align="right">{{totals.subtotal_excl_display}}</col>
   </row>
-  {{#totals.discount_total_incl}}
+  {{#totals.discount_total_excl}}
   <row>
     <col width="*">{{i18n.discount}}</col>
-    <col width="14" align="right">-{{totals.discount_total_incl_display}}</col>
+    <col width="14" align="right">-{{totals.discount_total_excl_display}}</col>
   </row>
-  {{/totals.discount_total_incl}}
+  {{/totals.discount_total_excl}}
+  {{#totals.tax_total}}
   <row>
     <col width="*">{{i18n.total_excl}}</col>
     <col width="14" align="right">{{totals.total_excl_display}}</col>
@@ -211,6 +212,7 @@ break the cross-printer layout contract. Indented continuation lines
     <col width="*">{{i18n.total_tax}}</col>
     <col width="14" align="right">{{totals.tax_total_display}}</col>
   </row>
+  {{/totals.tax_total}}
   <line style="double" />
   <bold><text>{{i18n.total}}</text></bold>
   <row>

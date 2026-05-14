@@ -219,9 +219,11 @@ inline styles on the wrapping element.
 			{{#totals.discount_total_incl}}
 			<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.discount_total_incl_display}}</span></div>
 			{{/totals.discount_total_incl}}
+			{{#totals.tax_total}}
 			<div style="border-top: 1px solid #e5e7eb; margin: 8px 0;"></div>
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_excl}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_excl_display}}</span></div>
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
+			{{/totals.tax_total}}
 			<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
 			<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
 			{{#totals.refund_total}}

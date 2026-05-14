@@ -67,32 +67,32 @@ these star columns with hard-coded widths.
   {{#sku}}<text>{{sku}} :SKU  </text>{{/sku}}
   {{#discounts}}
   <row>
-    <col width="12">-{{discounts_incl_display}}</col>
-    <col width="*" align="right">{{unit_subtotal_incl_display}} @  </col>
+    <col width="12">-{{discounts_display}}</col>
+    <col width="*" align="right">{{unit_subtotal_display}} @  </col>
   </row>
   {{/discounts}}
   <row>
-    <col width="12">{{line_total_incl_display}}</col>
-    <col width="*" align="right">{{qty}} x {{unit_price_incl_display}}  </col>
+    <col width="12">{{line_total_display}}</col>
+    <col width="*" align="right">{{qty}} x {{unit_price_display}}  </col>
   </row>
   {{/lines}}
 
   <!-- ── Fees / Shipping / Order-level discounts ─────────────── -->
   {{#fees}}
   <row>
-    <col width="14">{{total_incl_display}}</col>
+    <col width="14">{{total_display}}</col>
     <col width="*" align="right">{{label}}</col>
   </row>
   {{/fees}}
   {{#shipping}}
   <row>
-    <col width="14">{{total_incl_display}}</col>
+    <col width="14">{{total_display}}</col>
     <col width="*" align="right">{{label}}</col>
   </row>
   {{/shipping}}
   {{#discounts}}
   <row>
-    <col width="14">-{{total_incl_display}}</col>
+    <col width="14">-{{total_display}}</col>
     <col width="*" align="right">{{i18n.discount}}{{#label}}: {{label}}{{/label}}</col>
   </row>
   {{/discounts}}
@@ -100,7 +100,7 @@ these star columns with hard-coded widths.
   <!-- ── Totals ─────────────── -->
   <line />
   <row>
-    <col width="14">{{totals.subtotal_incl_display}}</col>
+    <col width="14">{{totals.subtotal_display}}</col>
     <col width="*" align="right">{{i18n.subtotal}}</col>
   </row>
   {{#tax_summary}}
