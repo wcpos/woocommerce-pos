@@ -108,7 +108,10 @@ export function PreviewViewport({
 			}
 			resizeObserver?.disconnect();
 			resizeObserver = null;
-			if (!doc?.body) return;
+			if (!doc?.body) {
+				setContentSize((prev) => (prev === null ? prev : null));
+				return;
+			}
 			// Zero the UA body margin and hide overflow so the measurement
 			// reflects the document itself, not a transient scrollbar.
 			if (!doc.getElementById('wcpos-preview-reset')) {
@@ -138,6 +141,7 @@ export function PreviewViewport({
 				if (iframe.contentDocument?.readyState === 'complete') handleLoad();
 			} catch {
 				// cross-origin — leave it to the paper-dimension fallback
+				setContentSize((prev) => (prev === null ? prev : null));
 			}
 		};
 

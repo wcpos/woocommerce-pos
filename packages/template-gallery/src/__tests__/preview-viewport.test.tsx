@@ -124,6 +124,43 @@ describe('PreviewViewport', () => {
 		expect(canvas.style.height).toBe('940px');
 	});
 
+	it('falls back to paper dimensions when a measured iframe becomes unmeasurable', () => {
+		const container = renderPreviewViewport('80mm');
+		const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+		const doc = iframe.contentDocument;
+		if (!doc?.body) {
+			throw new Error('expected the iframe to expose a same-origin document');
+		}
+
+		Object.defineProperty(doc.body, 'scrollWidth', { configurable: true, value: 360 });
+		Object.defineProperty(doc.body, 'scrollHeight', { configurable: true, value: 940 });
+
+		act(() => {
+			iframe.dispatchEvent(new Event('load'));
+		});
+
+		const canvas = container.querySelector(
+			'[data-testid="preview-viewport-canvas"]',
+		) as HTMLElement;
+		expect(canvas.style.width).toBe('360px');
+		expect(canvas.style.height).toBe('940px');
+
+		Object.defineProperty(iframe, 'contentDocument', {
+			configurable: true,
+			get() {
+				throw new Error('Cross-origin iframe');
+			},
+		});
+
+		act(() => {
+			iframe.setAttribute('src', 'https://example.test/preview');
+			iframe.dispatchEvent(new Event('load'));
+		});
+
+		expect(canvas.style.width).toBe('302px');
+		expect(canvas.style.height).toBe('520px');
+	});
+
 	it('zooms through 10% steps when + and − are clicked', () => {
 		const container = renderPreviewViewport('a4');
 		const zoomOut = container.querySelector('button[aria-label="Zoom out"]') as HTMLButtonElement;
