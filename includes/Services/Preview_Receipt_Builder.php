@@ -670,6 +670,7 @@ class Preview_Receipt_Builder {
 		$paid_timestamp      = strtotime( '2024-01-15 10:35:00 UTC' );
 		$completed_timestamp = strtotime( '2024-01-15 10:42:00 UTC' );
 		$date_timezone       = $this->store_resolver->resolve_store_timezone();
+		$date_locale         = $this->store_resolver->resolve_locale();
 
 		$order = array(
 			'id'            => 1234,
@@ -678,10 +679,10 @@ class Preview_Receipt_Builder {
 			'customer_note' => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
 			'wc_status'     => 'completed',
 			'created_via'   => 'woocommerce-pos',
-			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, $date_timezone ),
-			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, $date_timezone ),
-			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, $date_timezone ),
-			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
+			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, $date_timezone, $date_locale ),
+			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, $date_timezone, $date_locale ),
+			'completed'     => Receipt_Date_Formatter::from_timestamp( $completed_timestamp, $date_timezone, $date_locale ),
+			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone, $date_locale ),
 			'needs_payment' => false,
 			'payment_url'   => '',
 		);

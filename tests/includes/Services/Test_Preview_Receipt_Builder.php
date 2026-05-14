@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Services;
 
 use WCPOS\WooCommercePOS\Services\Preview_Receipt_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WP_UnitTestCase;
 
@@ -165,6 +166,49 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$data = $this->builder->build();
 
 			$this->assertEquals( 'de_DE', $data['presentation_hints']['locale'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+		}
+	}
+
+
+	/**
+	 * Preview receipt dates should use the store locale, not the site locale.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_formats_order_dates_with_store_locale(): void {
+		$store_filter = static function () {
+			return new class() {
+				public function get_currency(): string {
+					return '';
+				}
+
+				public function get_locale(): string {
+					return 'es_ES';
+				}
+
+				public function get_timezone(): string {
+					return 'Europe/Madrid';
+				}
+			};
+		};
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data = $this->builder->build();
+			$expected_created = Receipt_Date_Formatter::from_timestamp(
+				strtotime( '2024-01-15 10:30:00 UTC' ),
+				new \DateTimeZone( 'Europe/Madrid' ),
+				'es_ES'
+			);
+
+			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
+			$this->assertEquals( $expected_created, $data['order']['created'] );
+			$normalized_time = strtolower( $data['order']['created']['time'] );
+			$this->assertStringNotContainsString( 'am', $normalized_time );
+			$this->assertStringNotContainsString( 'pm', $normalized_time );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 		}

@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
+use WCPOS\WooCommercePOS\Services\Receipt_Date_Formatter;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 use WC_REST_Unit_Test_Case;
@@ -346,6 +347,39 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 'fr_FR', $payload['presentation_hints']['locale'] );
 		// Currency stays from the order, not the store.
 		$this->assertEquals( $order->get_currency(), $payload['order']['currency'] );
+	}
+
+
+	/**
+	 * Existing-order receipt dates should use the store locale, not the site locale.
+	 */
+	public function test_build_formats_order_dates_with_store_locale(): void {
+		$order = wc_create_order();
+		$order->set_date_created( strtotime( '2026-01-15 10:30:00 UTC' ) );
+		$order->save();
+
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return 'es_ES';
+			}
+
+			public function get_timezone(): string {
+				return 'Europe/Madrid';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+		$expected_created = Receipt_Date_Formatter::from_timestamp(
+			$order->get_date_created()->getTimestamp(),
+			new \DateTimeZone( 'Europe/Madrid' ),
+			'es_ES'
+		);
+
+		$this->assertEquals( 'es_ES', $payload['presentation_hints']['locale'] );
+		$this->assertEquals( $expected_created, $payload['order']['created'] );
+		$normalized_time = strtolower( $payload['order']['created']['time'] );
+		$this->assertStringNotContainsString( 'am', $normalized_time );
+		$this->assertStringNotContainsString( 'pm', $normalized_time );
 	}
 
 	/**

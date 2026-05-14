@@ -145,6 +145,7 @@ class Receipt_Date_Formatter {
 		return self::run_intl_with_fallback(
 			$date,
 			$timezone,
+			$locale,
 			$fallback_pattern,
 			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style ) {
 				return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
@@ -167,6 +168,7 @@ class Receipt_Date_Formatter {
 		return self::run_intl_with_fallback(
 			$date,
 			$timezone,
+			$locale,
 			$fallback_pattern,
 			static function ( string $timezone_name ) use ( $locale, $pattern ) {
 				return new IntlDateFormatter( $locale, self::INTL_NONE, self::INTL_NONE, $timezone_name, null, $pattern );
@@ -179,15 +181,16 @@ class Receipt_Date_Formatter {
 	 *
 	 * @param DateTimeInterface $date             Date to format.
 	 * @param DateTimeZone      $timezone         Date timezone.
+	 * @param string            $locale           Locale code.
 	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
 	 * @param callable          $make_formatter   Callback receiving timezone name, returns IntlDateFormatter.
 	 *
 	 * @return string
 	 */
-	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $fallback_pattern, callable $make_formatter ): string {
+	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $fallback_pattern, callable $make_formatter ): string {
 		$timezone_name = $timezone->getName();
 		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
-			return self::format_fallback( $date, $fallback_pattern );
+			return self::format_fallback( $date, $fallback_pattern, $locale );
 		}
 
 		if ( class_exists( IntlDateFormatter::class ) ) {
@@ -198,11 +201,11 @@ class Receipt_Date_Formatter {
 					return (string) $formatted;
 				}
 			} catch ( \Throwable $error ) {
-				return self::format_fallback( $date, $fallback_pattern );
+				return self::format_fallback( $date, $fallback_pattern, $locale );
 			}
 		}
 
-		return self::format_fallback( $date, $fallback_pattern );
+		return self::format_fallback( $date, $fallback_pattern, $locale );
 	}
 
 	/**
@@ -221,11 +224,21 @@ class Receipt_Date_Formatter {
 	 *
 	 * @param DateTimeInterface $date    Date to format.
 	 * @param string            $pattern wp_date()/DateTime pattern.
+	 * @param string            $locale  Locale code.
 	 *
 	 * @return string
 	 */
-	private static function format_fallback( DateTimeInterface $date, string $pattern ): string {
+	private static function format_fallback( DateTimeInterface $date, string $pattern, string $locale ): string {
 		if ( function_exists( 'wp_date' ) ) {
+			$current_locale = function_exists( 'get_locale' ) ? (string) get_locale() : '';
+			if ( '' !== $locale && $locale !== $current_locale && function_exists( 'switch_to_locale' ) && switch_to_locale( $locale ) ) {
+				try {
+					return wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() );
+				} finally {
+					restore_previous_locale();
+				}
+			}
+
 			return wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() );
 		}
 
