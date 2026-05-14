@@ -310,6 +310,10 @@ export function App({ config }: AppProps) {
 						sourcePicker={previewToggle}
 					/>
 				) : (
+					// Legacy-php renders server-side PHP against a real WC_Order, so it
+					// has no Sample Data | Order toggle — $order->-based templates would
+					// fatal on sample data with no order. It previews the latest POS
+					// order; refresh by saving the template (see php_save_notice).
 					<PhpPreview previewUrl={config.previewUrl} />
 				)}
 			</div>

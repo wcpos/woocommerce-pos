@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	PhpPreview,
-	decodeLabel,
 	getPhpPreviewFrame,
 	getPhpPreviewIframeStyle,
 	getPhpPreviewBodyClassName,
@@ -21,8 +20,7 @@ vi.mock('../translations', () => ({
 	t: (key: string) => {
 		const strings: Record<string, string> = {
 			'editor.preview': 'Preview',
-			'editor.save_and_preview': 'Save &amp; Preview',
-			'editor.php_save_notice': 'PHP templates require saving before the preview updates.',
+			'editor.php_save_notice': 'This preview shows your last saved version with your latest POS order — save the template to refresh it.',
 			'editor.template_preview': 'Template preview',
 			'editor.zoom_in': 'Zoom in',
 			'editor.zoom_out': 'Zoom out',
@@ -62,15 +60,14 @@ describe('PhpPreview', () => {
 		);
 	});
 
-	it('decodes escaped ampersands before React renders the button label', () => {
-		expect(decodeLabel('Save &amp; Preview')).toBe('Save & Preview');
-
+	it('renders the preview header and save notice without a Save button', () => {
 		const markup = renderToStaticMarkup(
 			<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
 		);
 
-		expect(markup).toContain('Save &amp; Preview');
-		expect(markup).not.toContain('Save &amp;amp; Preview');
+		expect(markup).toContain('Preview');
+		expect(markup).toContain('save the template to refresh it');
+		expect(markup).not.toContain('<button');
 	});
 
 	it('wraps partial preview_html in the shared A4 frame', () => {
