@@ -50,7 +50,7 @@ function processBarcodeMarkers(html: string): string {
 
 		if (value.trim()) {
 			const rawHeight = numericAttribute(el, 'height', 40);
-			const rawScale = numericAttribute(el, tagName === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 4 : 2);
+			const rawScale = numericAttribute(el, kind === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 4 : 2);
 
 			el.outerHTML = generateBarcodeSvg(value, {
 				type,
