@@ -55,7 +55,8 @@ class Receipt_Data_Builder {
 			$pos_store = $missing_order_store_id > 0 ? new \stdClass() : new Store();
 		}
 
-		$date_timezone = $this->resolve_store_timezone( $pos_store );
+		$store_resolver = new Receipt_Store_Resolver( $pos_store );
+		$date_timezone  = $store_resolver->resolve_store_timezone();
 		$order_data    = array(
 			'id'            => $order->get_id(),
 			'number'        => (string) $order->get_order_number(),
@@ -78,34 +79,33 @@ class Receipt_Data_Builder {
 			'payment_url'   => method_exists( $order, 'get_checkout_payment_url' ) ? (string) $order->get_checkout_payment_url() : '',
 		);
 
-		$display_incl = 'incl' === $this->resolve_store_option_string(
-			$pos_store,
+		$display_incl       = 'incl' === $store_resolver->resolve_store_option_string(
 			'get_tax_display_cart',
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
 		);
-		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
-		$tax                = $this->build_tax_section( $pos_store );
-		$store_id              = (int) $this->get_store_value( $pos_store, 'get_id', 0 );
-		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
+		$presentation_hints = $store_resolver->build_presentation_hints( (string) $order->get_currency() );
+		$tax                = $store_resolver->build_tax_section();
+		$store_id              = (int) $store_resolver->get_store_value( 'get_id', 0 );
+		$store_name            = (string) $store_resolver->get_store_value( 'get_name', '' );
 		if ( $missing_order_store_id > 0 ) {
 			$store_id = $missing_order_store_id;
 			// translators: %d: Historical POS store ID that no longer exists.
 			$store_name = sprintf( __( 'Store #%d', 'woocommerce-pos' ), $missing_order_store_id );
 		}
-		$store_address         = (string) $this->get_store_value( $pos_store, 'get_store_address', '' );
-		$store_address_2       = (string) $this->get_store_value( $pos_store, 'get_store_address_2', '' );
-		$store_city            = (string) $this->get_store_value( $pos_store, 'get_store_city', '' );
-		$store_postcode        = (string) $this->get_store_value( $pos_store, 'get_store_postcode', '' );
-		$store_country         = (string) $this->get_store_value( $pos_store, 'get_store_country', '' );
-		$store_state           = (string) $this->get_store_value( $pos_store, 'get_store_state', '' );
-		$store_phone           = (string) $this->get_store_value( $pos_store, 'get_phone', '' );
-		$store_email           = (string) $this->get_store_value( $pos_store, 'get_email', '' );
+		$store_address         = (string) $store_resolver->get_store_value( 'get_store_address', '' );
+		$store_address_2       = (string) $store_resolver->get_store_value( 'get_store_address_2', '' );
+		$store_city            = (string) $store_resolver->get_store_value( 'get_store_city', '' );
+		$store_postcode        = (string) $store_resolver->get_store_value( 'get_store_postcode', '' );
+		$store_country         = (string) $store_resolver->get_store_value( 'get_store_country', '' );
+		$store_state           = (string) $store_resolver->get_store_value( 'get_store_state', '' );
+		$store_phone           = (string) $store_resolver->get_store_value( 'get_phone', '' );
+		$store_email           = (string) $store_resolver->get_store_value( 'get_email', '' );
 
-		$store_tax_ids = $this->get_store_value( $pos_store, 'get_tax_ids', array() );
+		$store_tax_ids = $store_resolver->get_store_value( 'get_tax_ids', array() );
 		if ( ! is_array( $store_tax_ids ) ) {
 			$store_tax_ids = array();
 		}
-		$store_tax_ids = self::with_store_tax_id_labels( $store_tax_ids, $presentation_hints['locale'] ?? '' );
+		$store_tax_ids = Receipt_Store_Resolver::with_store_tax_id_labels( $store_tax_ids, $presentation_hints['locale'] ?? '' );
 
 		$store_address_parts = array(
 			'address_1' => $store_address,
@@ -124,16 +124,16 @@ class Receipt_Data_Builder {
 			// pre-formatted default for templates that just iterate, composed via
 			// WC_Countries::get_formatted_address() so per-country layouts are honoured.
 			'address'       => $store_address_parts,
-			'address_lines' => $this->compose_address_lines( $store_address_parts ),
+			'address_lines' => Receipt_Store_Resolver::compose_address_lines( $store_address_parts ),
 			'tax_ids'       => $store_tax_ids,
 			'phone'         => $store_phone,
 			'email'         => $store_email,
 		);
 
-		$opening_hours_raw       = $this->get_store_value( $pos_store, 'get_opening_hours', array() );
-		$personal_notes          = (string) $this->get_store_value( $pos_store, 'get_personal_notes', '' );
-		$policies_and_conditions = (string) $this->get_store_value( $pos_store, 'get_policies_and_conditions', '' );
-		$footer_imprint          = (string) $this->get_store_value( $pos_store, 'get_footer_imprint', '' );
+		$opening_hours_raw       = $store_resolver->get_store_value( 'get_opening_hours', array() );
+		$personal_notes          = (string) $store_resolver->get_store_value( 'get_personal_notes', '' );
+		$policies_and_conditions = (string) $store_resolver->get_store_value( 'get_policies_and_conditions', '' );
+		$footer_imprint          = (string) $store_resolver->get_store_value( 'get_footer_imprint', '' );
 
 		$store['logo']                    = Store_Logo_Resolver::resolve( $pos_store );
 		if ( ! empty( $opening_hours_raw ) && \is_array( $opening_hours_raw ) ) {
@@ -149,7 +149,7 @@ class Receipt_Data_Builder {
 			$store['opening_hours_vertical'] = null;
 			$store['opening_hours_inline']   = null;
 		}
-		$opening_hours_notes              = (string) $this->get_store_value( $pos_store, 'get_opening_hours_notes', '' );
+		$opening_hours_notes              = (string) $store_resolver->get_store_value( 'get_opening_hours_notes', '' );
 		$store['opening_hours_notes']     = '' !== $opening_hours_notes ? $opening_hours_notes : null;
 		$store['personal_notes']          = $personal_notes ? $personal_notes : null;
 		$store['policies_and_conditions'] = $policies_and_conditions ? $policies_and_conditions : null;
@@ -466,116 +466,6 @@ class Receipt_Data_Builder {
 		return $bases;
 	}
 
-	/**
-	 * Build template-facing tax mode signals.
-	 *
-	 * @param object $pos_store POS store object.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private function build_tax_section( $pos_store ): array {
-		$display = 'incl' === $this->resolve_store_option_string(
-			$pos_store,
-			'get_tax_display_cart',
-			get_option( 'woocommerce_tax_display_cart', 'excl' )
-		) ? 'incl' : 'excl';
-
-		$tax_enabled = 'yes' === $this->resolve_store_option_string(
-			$pos_store,
-			'get_calc_taxes',
-			get_option( 'woocommerce_calc_taxes', 'no' )
-		);
-		$breakdown   = $tax_enabled ? $this->resolve_store_option_string(
-			$pos_store,
-			'get_tax_total_display',
-			get_option( 'woocommerce_tax_total_display', 'itemized' )
-		) : 'hidden';
-
-		if ( ! in_array( $breakdown, array( 'hidden', 'single', 'itemized' ), true ) ) {
-			$breakdown = 'itemized';
-		}
-
-		return array(
-			'display'            => $display,
-			'display_incl'       => 'incl' === $display,
-			'display_excl'       => 'excl' === $display,
-			'breakdown'          => $breakdown,
-			'breakdown_hidden'   => 'hidden' === $breakdown,
-			'breakdown_single'   => 'single' === $breakdown,
-			'breakdown_itemized' => 'itemized' === $breakdown,
-		);
-	}
-
-	/**
-	 * Compose `address_lines[]` using the country's WC address format.
-	 *
-	 * Defers to `WC_Countries::get_formatted_address()` so per-country layouts
-	 * are honoured (UK puts postcode on its own line, JP/CN reverse the
-	 * address order, US uses `{city}, {state_code} {postcode}`, etc.).
-	 *
-	 * Empty placeholder rows are stripped — callers don't need to pre-filter
-	 * blank fields.
-	 *
-	 * @param array<string,string> $fields Store address fields:
-	 *                                     `address_1`, `address_2`, `city`,
-	 *                                     `state`, `postcode`, `country`.
-	 * @return array<int,string>
-	 */
-	private function compose_address_lines( array $fields ): array {
-		$country = isset( $fields['country'] ) ? (string) $fields['country'] : '';
-
-		// Delegate to WC's formatter so per-country address layouts are honoured.
-		// Country falls back to the WC default when missing — bypasses the
-		// country-specific format and returns the generic layout, which is
-		// what the existing test expectations have always relied on.
-		$formatted = WC()->countries->get_formatted_address(
-			array(
-				'first_name' => '',
-				'last_name'  => '',
-				'company'    => '',
-				'address_1'  => $fields['address_1'] ?? '',
-				'address_2'  => $fields['address_2'] ?? '',
-				'city'       => $fields['city'] ?? '',
-				'state'      => $fields['state'] ?? '',
-				'postcode'   => $fields['postcode'] ?? '',
-				'country'    => $country,
-			),
-			"\n"
-		);
-
-		$lines = preg_split( '/\r?\n/', (string) $formatted );
-		if ( ! is_array( $lines ) ) {
-			return array();
-		}
-
-		return array_values(
-			array_filter(
-				array_map( 'trim', $lines ),
-				static function ( string $line ): bool {
-					return '' !== $line;
-				}
-			)
-		);
-	}
-
-	/**
-	 * Safely read a value from a POS store object.
-	 *
-	 * @param mixed  $pos_store Store object.
-	 * @param string $getter    Getter method name.
-	 * @param mixed  $fallback  Fallback value.
-	 *
-	 * @return mixed
-	 */
-	private function get_store_value( $pos_store, string $getter, $fallback ) {
-		if ( ! \is_object( $pos_store ) || ! method_exists( $pos_store, $getter ) ) {
-			return $fallback;
-		}
-
-		return $pos_store->{$getter}();
-	}
-
-
 
 	/**
 	 * Format a WooCommerce date in a resolved receipt timezone.
@@ -593,125 +483,6 @@ class Receipt_Data_Builder {
 		return Receipt_Date_Formatter::from_timestamp( $date->getTimestamp(), $timezone );
 	}
 
-	/**
-	 * Resolve the receipt timezone from the store, falling back to the site timezone.
-	 *
-	 * @param object $pos_store POS store object.
-	 *
-	 * @return DateTimeZone
-	 */
-	private function resolve_store_timezone( $pos_store ): DateTimeZone {
-		$timezone = (string) $this->get_store_value( $pos_store, 'get_timezone', '' );
-
-		if ( '' !== $timezone ) {
-			try {
-				return new DateTimeZone( $timezone );
-			} catch ( \Exception $error ) {
-				// Use the site timezone for stale or invalid store meta.
-				return wp_timezone();
-			}
-		}
-
-		return wp_timezone();
-	}
-
-	/**
-	 * Build price, currency, locale, and tax presentation hints for renderers.
-	 *
-	 * Existing-order receipts keep the order currency as the financial record,
-	 * but presentation settings follow the POS store when available.
-	 *
-	 * @param object $pos_store POS store object.
-	 * @param string $currency  Order currency code.
-	 *
-	 * @return array<string,mixed>
-	 */
-	private function build_presentation_hints( $pos_store, string $currency ): array {
-		$store_locale = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
-
-		return array(
-			'prices_entered_with_tax'  => 'yes' === $this->resolve_store_option_string(
-				$pos_store,
-				'get_prices_include_tax',
-				wc_prices_include_tax() ? 'yes' : 'no'
-			),
-			'rounding_mode'            => $this->resolve_store_option_string(
-				$pos_store,
-				'get_tax_round_at_subtotal',
-				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
-			),
-			// Currency stays from the order (financial record). Locale and price formatting
-			// follow the store so presentation matches the store's region/settings.
-			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),
-			'timezone'                 => $this->resolve_store_timezone( $pos_store )->getName(),
-			'currency_position'        => $this->resolve_store_option_string(
-				$pos_store,
-				'get_currency_position',
-				get_option( 'woocommerce_currency_pos', 'left' )
-			),
-			'currency_symbol'          => get_woocommerce_currency_symbol( $currency ),
-			'price_thousand_separator' => $this->resolve_store_string(
-				$pos_store,
-				'get_price_thousand_separator',
-				wc_get_price_thousand_separator()
-			),
-			'price_decimal_separator'  => $this->resolve_store_string(
-				$pos_store,
-				'get_price_decimal_separator',
-				wc_get_price_decimal_separator()
-			),
-			'price_num_decimals'       => $this->resolve_price_num_decimals( $pos_store ),
-			'price_display_suffix'     => $this->resolve_store_string(
-				$pos_store,
-				'get_price_display_suffix',
-				get_option( 'woocommerce_price_display_suffix', '' )
-			),
-		);
-	}
-
-	/**
-	 * Resolve a string setting from the store with a WooCommerce fallback.
-	 *
-	 * @param object $pos_store POS store object.
-	 * @param string $getter    Store getter method.
-	 * @param mixed  $fallback  Fallback value.
-	 *
-	 * @return string
-	 */
-	private function resolve_store_string( $pos_store, string $getter, $fallback ): string {
-		$value = $this->get_store_value( $pos_store, $getter, null );
-
-		return null !== $value ? (string) $value : (string) $fallback;
-	}
-
-	/**
-	 * Resolve an enum-like store setting with a WooCommerce fallback.
-	 *
-	 * @param object $pos_store POS store object.
-	 * @param string $getter    Store getter method.
-	 * @param mixed  $fallback  Fallback value.
-	 *
-	 * @return string
-	 */
-	private function resolve_store_option_string( $pos_store, string $getter, $fallback ): string {
-		$value = $this->get_store_value( $pos_store, $getter, null );
-
-		return null !== $value && '' !== (string) $value ? (string) $value : (string) $fallback;
-	}
-
-
-	/**
-	 * Resolve the number of price decimals from the store with WC fallback.
-	 *
-	 * @param object $pos_store POS store object.
-	 *
-	 * @return int
-	 */
-	private function resolve_price_num_decimals( $pos_store ): int {
-		$value = $this->get_store_value( $pos_store, 'get_price_number_of_decimals', wc_get_price_decimals() );
-
-		return '' !== (string) $value ? (int) $value : wc_get_price_decimals();
-	}
 
 	/**
 	 * Build line tax rows.
@@ -1012,16 +783,6 @@ class Receipt_Data_Builder {
 		return $refunds;
 	}
 
-	/**
-	 * Ensure store tax IDs include display labels for logicless templates.
-	 *
-	 * @param array<int,array<string,mixed>> $tax_ids Store tax IDs.
-	 * @param string                         $locale  Receipt locale.
-	 * @return array<int,array<string,mixed>>
-	 */
-	private static function with_store_tax_id_labels( array $tax_ids, string $locale = '' ): array {
-		return self::with_tax_id_labels( $tax_ids, 'store', $locale );
-	}
 
 	/**
 	 * Ensure customer tax IDs include display labels for logicless templates.
