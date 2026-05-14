@@ -55,7 +55,9 @@ const sampleData = {
 			sku: 'TSH-001',
 			qty: 2,
 			unit_price_incl_display: '$19.99',
+			unit_price_excl_display: '$20.00',
 			line_total_incl_display: '$39.98',
+			line_total_excl_display: '$40.00',
 		},
 	],
 	fees: [],
@@ -73,6 +75,7 @@ const sampleData = {
 	totals: {
 		subtotal_excl_display: '$40.00',
 		total_excl_display: '$40.00',
+		tax_total: 3.2,
 		tax_total_display: '$3.20',
 		total_incl_display: '$43.20',
 		change_total: '6.80',
