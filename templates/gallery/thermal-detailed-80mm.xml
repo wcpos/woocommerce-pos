@@ -23,8 +23,8 @@ Sections, top to bottom:
   - Fees / Shipping / Discounts — fees and shipping rows show their
     own meta (carrier, tracking, etc.); order-level discounts show
     the coupon code as a reference.
-  - Tax summary — per-rate breakdown with net (taxable excl.) and
-    gross (taxable incl.) under each rate.
+  - Tax summary — one line per tax rate: rate label and percent, the
+    net amount it was applied to (after "@"), and the tax charged.
   - Totals — subtotal (excl.), discount, total (excl.), tax, total
     (incl.), refund and net total (when refunded), and change.
   - Refunds — one block per refund with id, date, who refunded it,
@@ -182,12 +182,8 @@ break the cross-printer layout contract. Indented continuation lines
   {{/has_tax_summary}}
   {{#tax_summary}}
   <row>
-    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#code}} {{code}}{{/code}}</col>
+    <col width="*">{{label}}{{#rate}} ({{rate}}%){{/rate}}{{#taxable_amount_excl_display}} @ {{taxable_amount_excl_display}}{{/taxable_amount_excl_display}}</col>
     <col width="14" align="right">{{tax_amount_display}}</col>
-  </row>
-  <row>
-    <col width="*">  {{i18n.taxable_excl_short}} {{taxable_amount_excl_display}}</col>
-    <col width="18" align="right">{{i18n.taxable_incl_short}} {{taxable_amount_incl_display}}</col>
   </row>
   {{/tax_summary}}
 
