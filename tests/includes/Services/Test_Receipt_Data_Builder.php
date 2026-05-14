@@ -372,10 +372,6 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			public function get_prices_include_tax(): string {
 				return 'yes';
 			}
-
-			public function get_order_barcode_type(): string {
-				return ' EAN8 ';
-			}
 		};
 
 		$payload = $this->builder->build( $order, 'live', $pos_store );
@@ -395,9 +391,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertTrue( $payload['tax']['breakdown_single'] );
 		$this->assertTrue( $hints['prices_entered_with_tax'] );
 		$this->assertEquals( 'yes', $hints['rounding_mode'] );
-		$this->assertContains( $hints['order_barcode_type'], array( 'code128', 'qrcode', 'ean13', 'ean8', 'upca' ) );
-		$this->assertSame( 'ean8', $hints['order_barcode_type'] );
-		$this->assertNotSame( 'code128', $hints['order_barcode_type'] );
+		$this->assertArrayNotHasKey( 'order_barcode_type', $hints );
 	}
 
 	/**
@@ -415,10 +409,6 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			public function get_price_display_suffix(): string {
 				return '';
 			}
-
-			public function get_order_barcode_type(): string {
-				return ' unknown ';
-			}
 		};
 
 		try {
@@ -430,7 +420,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 			$this->assertSame( '', $hints['price_thousand_separator'] );
 			$this->assertSame( '', $hints['price_display_suffix'] );
-			$this->assertSame( 'code128', $hints['order_barcode_type'] );
+			$this->assertArrayNotHasKey( 'order_barcode_type', $hints );
 		} finally {
 			update_option( 'woocommerce_price_thousand_sep', $original_thousand_sep );
 			update_option( 'woocommerce_price_display_suffix', $original_price_suffix );

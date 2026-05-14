@@ -55,6 +55,22 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		}
 	}
 
+
+	/**
+	 * Preview discounts expose both singular code and display codes fields.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_discounts_include_code_and_codes_fields(): void {
+		$data = $this->builder->build();
+
+		$this->assertNotEmpty( $data['discounts'] );
+		$this->assertArrayHasKey( 'code', $data['discounts'][0] );
+		$this->assertArrayHasKey( 'codes', $data['discounts'][0] );
+		$this->assertSame( 'SUMMER10', $data['discounts'][0]['code'] );
+		$this->assertSame( 'SUMMER10', $data['discounts'][0]['codes'] );
+	}
+
 	/**
 	 * Test that store info uses WooCommerce settings.
 	 *
@@ -266,10 +282,6 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 				public function get_calc_taxes(): string {
 					return 'yes';
 				}
-
-				public function get_order_barcode_type(): string {
-					return 'ean13';
-				}
 			};
 		};
 
@@ -301,9 +313,7 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertTrue( $data['tax']['breakdown_single'] );
 			$this->assertTrue( $hints['prices_entered_with_tax'] );
 			$this->assertEquals( 'yes', $hints['rounding_mode'] );
-			$this->assertContains( $hints['order_barcode_type'], array( 'code128', 'qrcode', 'ean13', 'ean8', 'upca' ) );
-			$this->assertSame( 'ean13', $hints['order_barcode_type'] );
-			$this->assertNotSame( 'code128', $hints['order_barcode_type'] );
+			$this->assertArrayNotHasKey( 'order_barcode_type', $hints );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 			update_option( 'woocommerce_currency_pos', $original_currency_pos );
@@ -349,37 +359,6 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'display_tax', $data['presentation_hints'] );
 	}
 
-	/**
-	 * Unknown or blank store barcode types should fall back to Code 128.
-	 *
-	 * @covers ::build
-	 */
-	public function test_preview_normalizes_order_barcode_type(): void {
-		foreach (
-			array(
-				' QRCode ' => 'qrcode',
-				''         => 'code128',
-				'unknown'  => 'code128',
-			) as $raw => $expected
-		) {
-			$store = $this->getMockBuilder( \stdClass::class )
-				->addMethods( array( 'get_order_barcode_type' ) )
-				->getMock();
-			$store->method( 'get_order_barcode_type' )->willReturn( $raw );
-
-			$store_filter = static function () use ( $store ) {
-				return $store;
-			};
-
-			try {
-				add_filter( 'woocommerce_pos_get_store', $store_filter );
-				$data = $this->builder->build();
-				$this->assertSame( $expected, $data['presentation_hints']['order_barcode_type'] );
-			} finally {
-				remove_filter( 'woocommerce_pos_get_store', $store_filter );
-			}
-		}
-	}
 
 	/**
 	 * Explicit blank store formatting values should override non-empty globals.

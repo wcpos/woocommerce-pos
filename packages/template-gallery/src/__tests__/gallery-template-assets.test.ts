@@ -107,6 +107,17 @@ describe('gallery template assets', () => {
 		}
 	});
 
+
+	it('marks invoice bank-transfer details as fake editable placeholders', () => {
+		const content = fs.readFileSync(path.join(galleryDir, 'invoice.html'), 'utf8');
+
+		expect(content).toContain('IMPORTANT: Sample bank details below are fake placeholders');
+		expect(content).toContain('FAKE SAMPLE IBAN');
+		expect(content).toContain('FAKE SAMPLE BIC');
+		expect(content).not.toContain('GB29 NWBK 6016 1331 9268 19');
+		expect(content).not.toContain('NWBKGB2L');
+	});
+
 	it('does not ship hardcoded tax-invoice retention boilerplate', () => {
 		const taxInvoiceTemplates = ['detailed-receipt.html'];
 
