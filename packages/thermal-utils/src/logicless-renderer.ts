@@ -53,7 +53,7 @@ function processBarcodeMarkers(html: string): string {
 				type,
 				kind,
 				height: numericAttribute(el, 'height', 10),
-				scale: numericAttribute(el, tagName === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 3 : 2),
+				scale: numericAttribute(el, kind === 'qrcode' ? 'size' : 'scale', kind === 'qrcode' ? 3 : 2),
 			});
 		}
 	});

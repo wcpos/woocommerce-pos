@@ -46,6 +46,14 @@ describe('renderLogiclessPreview', () => {
 		expect(html).not.toContain('<barcode');
 	});
 
+	it('uses size attributes for QR markers declared with data-barcode', () => {
+		const data = { order: { payment_url: 'https://example.test/pay' } };
+		const rawQr = renderLogiclessPreview('<qrcode size="2">{{order.payment_url}}</qrcode>', data);
+		const dataQr = renderLogiclessPreview('<div data-barcode="qrcode" size="2">{{order.payment_url}}</div>', data);
+
+		expect(dataQr).toBe(rawQr);
+	});
+
 	it('strips HTML comments before Mustache renders template content', () => {
 		const html = renderLogiclessPreview('<!-- {{#todo}} documentation only --><p>{{label}}</p>', { label: 'Visible' });
 
