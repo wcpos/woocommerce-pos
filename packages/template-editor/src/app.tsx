@@ -50,38 +50,54 @@ export function getThermalStarterShell(paperWidth: string): string {
 }
 
 export const STARTER_SHELLS: Record<EditorConfig['engine'], string> = {
-	logicless: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2937; padding: 24px; max-width: 380px; margin: 0 auto;">
+	logicless: `<div style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; padding: 32px 36px;">
 
-  <div style="text-align: center; margin-bottom: 12px;">
-    <div style="font-size: 18px; font-weight: 700;">{{store.name}}</div>
-    {{#store.address_lines}}
-    <div style="color: #6b7280; font-size: 11px;">{{.}}</div>
-    {{/store.address_lines}}
+  <header style="display: flex; align-items: flex-start; gap: 22px; padding-bottom: 18px; border-bottom: 2px solid #111827;">
+    <div style="flex: 1 1 auto; min-width: 0;">
+      <div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em;">{{store.name}}</div>
+      {{#store.address_lines}}
+      <div style="margin-top: 2px; color: #6b7280; font-size: 12px;">{{.}}</div>
+      {{/store.address_lines}}
+    </div>
+    <div style="flex: 0 0 auto; text-align: right;">
+      <div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;">{{i18n.order}}</div>
+      <div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#{{order.number}}</div>
+      <div style="margin-top: 6px; color: #6b7280; font-size: 12px;">{{order.created.datetime}}</div>
+    </div>
+  </header>
+
+  <table style="width: 100%; border-collapse: collapse; margin-top: 22px;">
+    <thead>
+      <tr>
+        <th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.item_short}}</th>
+        <th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.qty_short}}</th>
+        <th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">{{i18n.total}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#lines}}
+      <tr>
+        <td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; font-weight: 600;">{{name}}</td>
+        <td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{qty}}</td>
+        <td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{line_total_display}}</td>
+      </tr>
+      {{/lines}}
+    </tbody>
+  </table>
+
+  <div style="margin-top: 20px; margin-left: auto; max-width: 280px;">
+    <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+      <span style="color: #6b7280;">{{i18n.subtotal}}</span>
+      <span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_display}}</span>
+    </div>
+    <div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+    <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;">
+      <span>{{i18n.total}}</span>
+      <span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span>
+    </div>
   </div>
 
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
-
-  <p style="margin: 0 0 10px; font-size: 11px; color: #6b7280;">{{i18n.order}} #{{order.number}} &mdash; {{order.created.datetime}}</p>
-
-  <table style="width: 100%; border-collapse: collapse; margin: 0 0 10px;">
-    {{#lines}}
-    <tr>
-      <td style="padding: 3px 0;">{{name}} &times;{{qty}}</td>
-      <td style="padding: 3px 0; text-align: right;">{{line_total_display}}</td>
-    </tr>
-    {{/lines}}
-  </table>
-
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
-
-  <table style="width: 100%;">
-    <tr>
-      <td><strong>{{i18n.total}}</strong></td>
-      <td style="text-align: right;"><strong>{{totals.total_incl_display}}</strong></td>
-    </tr>
-  </table>
-
-  <p style="text-align: center; margin: 18px 0 0; font-size: 11px; color: #6b7280;">{{i18n.thank_you_purchase}}</p>
+  <div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic;">{{i18n.thank_you_purchase}}</div>
 </div>`,
 
 	thermal: getThermalStarterShell('80mm'),
@@ -108,46 +124,56 @@ $currency_args = array( 'currency' => $receipt_data['order']['currency'] ?? get_
 	<title>Receipt</title>
 	<?php do_action( 'woocommerce_pos_receipt_head' ); ?>
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2937; padding: 24px; max-width: 380px; margin: 0 auto;">
+<body style="box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.45; color: #1f2937; margin: 0; padding: 32px 36px;">
 
-	<div style="text-align: center; margin-bottom: 12px;">
-		<div style="font-size: 18px; font-weight: 700;"><?php echo esc_html( $receipt_data['store']['name'] ?? '' ); ?></div>
-		<?php if ( ! empty( $receipt_data['store']['address_lines'] ) ) : ?>
-			<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
-				<div style="color: #6b7280; font-size: 11px;"><?php echo esc_html( $address_line ); ?></div>
+	<header style="display: flex; align-items: flex-start; gap: 22px; padding-bottom: 18px; border-bottom: 2px solid #111827;">
+		<div style="flex: 1 1 auto; min-width: 0;">
+			<div style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em;"><?php echo esc_html( $receipt_data['store']['name'] ?? '' ); ?></div>
+			<?php if ( ! empty( $receipt_data['store']['address_lines'] ) ) : ?>
+				<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
+					<div style="margin-top: 2px; color: #6b7280; font-size: 12px;"><?php echo esc_html( $address_line ); ?></div>
+				<?php endforeach; ?>
+			<?php endif; ?>
+		</div>
+		<div style="flex: 0 0 auto; text-align: right;">
+			<div style="font-size: 11px; letter-spacing: 0.16em; color: #6b7280; text-transform: uppercase;"><?php echo esc_html( $i18n['order'] ?? __( 'Order', 'woocommerce-pos' ) ); ?></div>
+			<div style="font-size: 22px; font-weight: 700; margin-top: 2px;">#<?php echo esc_html( $receipt_data['order']['number'] ?? '' ); ?></div>
+			<div style="margin-top: 6px; color: #6b7280; font-size: 12px;"><?php echo esc_html( $receipt_data['order']['created']['datetime'] ?? '' ); ?></div>
+		</div>
+	</header>
+
+	<table style="width: 100%; border-collapse: collapse; margin-top: 22px;">
+		<thead>
+			<tr>
+				<th style="text-align: left; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;"><?php echo esc_html( $i18n['item_short'] ?? __( 'Item', 'woocommerce-pos' ) ); ?></th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;"><?php echo esc_html( $i18n['qty_short'] ?? __( 'Qty', 'woocommerce-pos' ) ); ?></th>
+				<th style="text-align: right; font-weight: 600; color: #6b7280; padding: 8px 6px; border-bottom: 1px solid #e5e7eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;"><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce-pos' ) ); ?></th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php foreach ( $receipt_data['lines'] as $line ) : ?>
+				<tr>
+					<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; font-weight: 600;"><?php echo esc_html( $line['name'] ?? '' ); ?></td>
+					<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;"><?php echo esc_html( $line['qty'] ?? 0 ); ?></td>
+					<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;"><?php echo wp_kses_post( wc_price( $line['line_total'] ?? 0, $currency_args ) ); ?></td>
+				</tr>
 			<?php endforeach; ?>
-		<?php endif; ?>
+		</tbody>
+	</table>
+
+	<div style="margin-top: 20px; margin-left: auto; max-width: 280px;">
+		<div style="display: flex; justify-content: space-between; padding: 2px 0;">
+			<span style="color: #6b7280;"><?php echo esc_html( $i18n['subtotal'] ?? __( 'Subtotal', 'woocommerce-pos' ) ); ?></span>
+			<span style="font-variant-numeric: tabular-nums;"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['subtotal'] ?? 0, $currency_args ) ); ?></span>
+		</div>
+		<div style="border-top: 2px solid #111827; margin: 8px 0;"></div>
+		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;">
+			<span><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce-pos' ) ); ?></span>
+			<span style="font-variant-numeric: tabular-nums;"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total_incl'] ?? 0, $currency_args ) ); ?></span>
+		</div>
 	</div>
 
-	<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
-
-	<p style="margin: 0 0 10px; font-size: 11px; color: #6b7280;">
-		<?php echo esc_html( $i18n['order'] ?? __( 'Order', 'woocommerce-pos' ) ); ?>
-		#<?php echo esc_html( $receipt_data['order']['number'] ?? '' ); ?>
-		&mdash; <?php echo esc_html( $receipt_data['order']['created']['datetime'] ?? '' ); ?>
-	</p>
-
-	<table style="width: 100%; border-collapse: collapse; margin: 0 0 10px;">
-		<?php foreach ( $receipt_data['lines'] as $line ) : ?>
-			<tr>
-				<td style="padding: 3px 0;"><?php echo esc_html( $line['name'] ?? '' ); ?> &times;<?php echo esc_html( $line['qty'] ?? 0 ); ?></td>
-				<td style="padding: 3px 0; text-align: right;"><?php echo wp_kses_post( wc_price( $line['line_total'] ?? 0, $currency_args ) ); ?></td>
-			</tr>
-		<?php endforeach; ?>
-	</table>
-
-	<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 0 0 10px;">
-
-	<table style="width: 100%;">
-		<tr>
-			<td><strong><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce-pos' ) ); ?></strong></td>
-			<td style="text-align: right;"><strong><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total_incl'] ?? 0, $currency_args ) ); ?></strong></td>
-		</tr>
-	</table>
-
-	<p style="text-align: center; margin: 18px 0 0; font-size: 11px; color: #6b7280;">
-		<?php echo esc_html( $i18n['thank_you_purchase'] ?? __( 'Thank you for your purchase!', 'woocommerce-pos' ) ); ?>
-	</p>
+	<div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280; font-size: 12px; font-style: italic;"><?php echo esc_html( $i18n['thank_you_purchase'] ?? __( 'Thank you for your purchase!', 'woocommerce-pos' ) ); ?></div>
 
 </body>
 </html>`,

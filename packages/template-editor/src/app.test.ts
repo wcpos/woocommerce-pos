@@ -43,6 +43,15 @@ describe('starter shells', () => {
 		}
 	});
 
+	it('A4 starters use a full-page layout, not a fixed-width receipt-roll cage', () => {
+		// logicless and legacy-php render full A4 in the browser print dialog —
+		// they must use page padding, not a narrow centered max-width column.
+		for (const shell of [STARTER_SHELLS.logicless, STARTER_SHELLS['legacy-php']]) {
+			expect(shell).toMatch(/padding:\s*32px\s+36px\b/);
+			expect(shell).not.toMatch(/max-width:\s*380px\b/);
+		}
+	});
+
 	it('legacy-php starter renders from $receipt_data, not the WC_Order', () => {
 		const shell = STARTER_SHELLS['legacy-php'];
 		// Reads the canonical $receipt_data payload and formats money with wc_price().
