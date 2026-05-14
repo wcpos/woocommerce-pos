@@ -64,6 +64,7 @@ const sampleData = {
 	fees: [],
 	shipping: [],
 	discounts: [],
+	has_tax_summary: true,
 	tax_summary: [
 		{
 			label: 'Sales Tax',

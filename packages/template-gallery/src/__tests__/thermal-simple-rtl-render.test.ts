@@ -48,6 +48,7 @@ const arabicData = {
 	fees: [],
 	shipping: [],
 	discounts: [],
+	has_tax_summary: true,
 	tax_summary: [{ label: 'ضريبة القيمة المضافة', rate: 15, tax_amount_display: '٢٧٫٠٠ ر.س' }],
 	totals: {
 		subtotal_display: '١٨٠٫٠٠ ر.س',
