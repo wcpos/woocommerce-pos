@@ -350,9 +350,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 
 		$this->assertEquals( 'es_ES', $payload['presentation_hints']['locale'] );
 		$this->assertStringContainsString( 'ene', strtolower( $payload['order']['created']['datetime'] ) );
-		$this->assertStringNotContainsString( 'Jan', $payload['order']['created']['datetime'] );
+		$this->assertStringNotContainsString( 'jan', strtolower( $payload['order']['created']['datetime'] ) );
 		$this->assertStringStartsWith( '15/01/26', $payload['order']['created']['datetime_short'] );
-		$this->assertStringNotContainsString( 'AM', $payload['order']['created']['time'] );
+		$this->assertStringNotContainsString( 'am', strtolower( $payload['order']['created']['time'] ) );
 	}
 
 	/**

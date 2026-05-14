@@ -262,7 +262,7 @@ class Receipt_Date_Formatter {
 
 		return 1 === preg_match( '/\b(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\b/', $formatted )
 			|| 1 === preg_match( '/\b(?:AM|PM)\b/i', $formatted )
-			|| 1 === preg_match( '/^\d{1,2}\/\d{1,2}\/\d{2,4}(?:\D|$)/', $formatted );
+			|| 1 === preg_match( '/^(?:0?[1-9]|1[0-2])\/(?:1[3-9]|2\d|3[01])\/\d{2,4}(?:\D|$)/', $formatted );
 	}
 
 	/**
