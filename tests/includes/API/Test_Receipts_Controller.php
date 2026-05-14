@@ -99,8 +99,39 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		wp_set_current_user( 0 );
 
-		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
 		$response = $this->server->dispatch( $request );
 		$this->assertEquals( 403, $response->get_status() );
+	}
+
+	/**
+	 * Test endpoint returns a permission error for users without POS access.
+	 */
+	public function test_get_item_returns_permission_error_when_user_cannot_access_pos(): void {
+		$order         = OrderHelper::create_order();
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $subscriber_id );
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 'wcpos_rest_insufficient_permissions', $data['code'] );
+	}
+
+	/**
+	 * Test cashiers can retrieve live receipts.
+	 */
+	public function test_get_item_allows_cashier(): void {
+		$order      = OrderHelper::create_order();
+		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier_id );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() );
+		$request->set_param( 'mode', 'live' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
 	}
 }
