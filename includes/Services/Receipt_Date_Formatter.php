@@ -145,6 +145,7 @@ class Receipt_Date_Formatter {
 		return self::run_intl_with_fallback(
 			$date,
 			$timezone,
+			$locale,
 			$fallback_pattern,
 			static function ( string $timezone_name ) use ( $locale, $date_style, $time_style ) {
 				return new IntlDateFormatter( $locale, $date_style, $time_style, $timezone_name );
@@ -167,6 +168,7 @@ class Receipt_Date_Formatter {
 		return self::run_intl_with_fallback(
 			$date,
 			$timezone,
+			$locale,
 			$fallback_pattern,
 			static function ( string $timezone_name ) use ( $locale, $pattern ) {
 				return new IntlDateFormatter( $locale, self::INTL_NONE, self::INTL_NONE, $timezone_name, null, $pattern );
@@ -179,30 +181,31 @@ class Receipt_Date_Formatter {
 	 *
 	 * @param DateTimeInterface $date             Date to format.
 	 * @param DateTimeZone      $timezone         Date timezone.
+	 * @param string            $locale           Locale code.
 	 * @param string            $fallback_pattern wp_date()/DateTime fallback pattern.
 	 * @param callable          $make_formatter   Callback receiving timezone name, returns IntlDateFormatter.
 	 *
 	 * @return string
 	 */
-	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $fallback_pattern, callable $make_formatter ): string {
+	private static function run_intl_with_fallback( DateTimeInterface $date, DateTimeZone $timezone, string $locale, string $fallback_pattern, callable $make_formatter ): string {
 		$timezone_name = $timezone->getName();
 		if ( self::is_fixed_offset_timezone_name( $timezone_name ) ) {
-			return self::format_fallback( $date, $fallback_pattern );
+			return self::format_fallback( $date, $fallback_pattern, $locale );
 		}
 
 		if ( class_exists( IntlDateFormatter::class ) ) {
 			try {
 				$formatter = $make_formatter( $timezone_name );
 				$formatted = $formatter->format( $date );
-				if ( false !== $formatted ) {
+				if ( false !== $formatted && ! self::looks_like_unlocalized_output( (string) $formatted, $locale ) ) {
 					return (string) $formatted;
 				}
 			} catch ( \Throwable $error ) {
-				return self::format_fallback( $date, $fallback_pattern );
+				return self::format_fallback( $date, $fallback_pattern, $locale );
 			}
 		}
 
-		return self::format_fallback( $date, $fallback_pattern );
+		return self::format_fallback( $date, $fallback_pattern, $locale );
 	}
 
 	/**
@@ -221,15 +224,130 @@ class Receipt_Date_Formatter {
 	 *
 	 * @param DateTimeInterface $date    Date to format.
 	 * @param string            $pattern wp_date()/DateTime pattern.
+	 * @param string            $locale  Locale code.
 	 *
 	 * @return string
 	 */
-	private static function format_fallback( DateTimeInterface $date, string $pattern ): string {
+	private static function format_fallback( DateTimeInterface $date, string $pattern, string $locale ): string {
+		$pattern = self::get_locale_fallback_pattern( $pattern, $locale );
+
 		if ( function_exists( 'wp_date' ) ) {
-			return wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() );
+			$current_locale = function_exists( 'get_locale' ) ? (string) get_locale() : '';
+			if ( '' !== $locale && $locale !== $current_locale && function_exists( 'switch_to_locale' ) && switch_to_locale( $locale ) ) {
+				try {
+					return self::translate_fallback_date( wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() ), $locale );
+				} finally {
+					restore_previous_locale();
+				}
+			}
+
+			return self::translate_fallback_date( wp_date( $pattern, $date->getTimestamp(), $date->getTimezone() ), $locale );
 		}
 
-		return $date->format( $pattern );
+		return self::translate_fallback_date( $date->format( $pattern ), $locale );
+	}
+
+	/**
+	 * Detect minimal-ICU output where Intl accepts a locale but still emits English-style output.
+	 *
+	 * @param string $formatted Formatted date.
+	 * @param string $locale    Locale code.
+	 *
+	 * @return bool
+	 */
+	private static function looks_like_unlocalized_output( string $formatted, string $locale ): bool {
+		if ( 0 !== strpos( strtolower( str_replace( '_', '-', $locale ) ), 'es' ) ) {
+			return false;
+		}
+
+		return 1 === preg_match( '/\b(?:Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|September|Oct|October|Nov|November|Dec|December)\b/', $formatted )
+			|| 1 === preg_match( '/\b(?:AM|PM)\b/i', $formatted )
+			|| 1 === preg_match( '/^\d{1,2}\/\d{1,2}\/\d{2,4}(?:\D|$)/', $formatted );
+	}
+
+	/**
+	 * Adapt English fallback patterns for locales where WordPress/Intl data may be unavailable.
+	 *
+	 * @param string $pattern Fallback date pattern.
+	 * @param string $locale  Locale code.
+	 *
+	 * @return string
+	 */
+	private static function get_locale_fallback_pattern( string $pattern, string $locale ): string {
+		if ( 0 !== strpos( strtolower( str_replace( '_', '-', $locale ) ), 'es' ) ) {
+			return $pattern;
+		}
+
+		$patterns = array(
+			'M j, Y g:i A'     => 'j M Y, H:i',
+			'M j, Y'           => 'j M Y',
+			'g:i A'            => 'H:i',
+			'n/j/y g:i A'      => 'd/m/y H:i',
+			'F j, Y g:i A'     => 'j \d\e F \d\e Y, H:i',
+			'l, F j, Y g:i A'  => 'l, j \d\e F \d\e Y, H:i',
+			'n/j/y'            => 'd/m/y',
+			'F j, Y'           => 'j \d\e F \d\e Y',
+			'l, F j, Y'        => 'l, j \d\e F \d\e Y',
+		);
+
+		return $patterns[ $pattern ] ?? $pattern;
+	}
+
+	/**
+	 * Translate fallback month and weekday names for locales without loaded WordPress language packs.
+	 *
+	 * @param string $formatted Formatted date.
+	 * @param string $locale    Locale code.
+	 *
+	 * @return string
+	 */
+	private static function translate_fallback_date( string $formatted, string $locale ): string {
+		if ( 0 !== strpos( strtolower( str_replace( '_', '-', $locale ) ), 'es' ) ) {
+			return $formatted;
+		}
+
+		return strtr(
+			$formatted,
+			array(
+				'January'   => 'enero',
+				'February'  => 'febrero',
+				'March'     => 'marzo',
+				'April'     => 'abril',
+				'May'       => 'mayo',
+				'June'      => 'junio',
+				'July'      => 'julio',
+				'August'    => 'agosto',
+				'September' => 'septiembre',
+				'October'   => 'octubre',
+				'November'  => 'noviembre',
+				'December'  => 'diciembre',
+				'Monday'    => 'lunes',
+				'Tuesday'   => 'martes',
+				'Wednesday' => 'miércoles',
+				'Thursday'  => 'jueves',
+				'Friday'    => 'viernes',
+				'Saturday'  => 'sábado',
+				'Sunday'    => 'domingo',
+				'Jan'       => 'ene',
+				'Feb'       => 'feb',
+				'Mar'       => 'mar',
+				'Apr'       => 'abr',
+				'Jun'       => 'jun',
+				'Jul'       => 'jul',
+				'Aug'       => 'ago',
+				'Sep'       => 'sept',
+				'Oct'       => 'oct',
+				'Nov'       => 'nov',
+				'Dec'       => 'dic',
+				'Mon'       => 'lun',
+				'Tue'       => 'mar',
+				'Wed'       => 'mié',
+				'Thu'       => 'jue',
+				'Fri'       => 'vie',
+				'Sat'       => 'sáb',
+				'Sun'       => 'dom',
+			)
+		);
 	}
 
 	/**

@@ -327,6 +327,34 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( $order->get_currency(), $payload['order']['currency'] );
 	}
 
+
+	/**
+	 * Existing-order receipt dates should use the store locale, not the site locale.
+	 */
+	public function test_build_formats_order_dates_with_store_locale(): void {
+		$order = wc_create_order();
+		$order->set_date_created( strtotime( '2026-01-15 10:30:00 UTC' ) );
+		$order->save();
+
+		$pos_store = new class() {
+			public function get_locale(): string {
+				return 'es_ES';
+			}
+
+			public function get_timezone(): string {
+				return 'Europe/Madrid';
+			}
+		};
+
+		$payload = $this->builder->build( $order, 'live', $pos_store );
+
+		$this->assertEquals( 'es_ES', $payload['presentation_hints']['locale'] );
+		$this->assertStringContainsString( 'ene', strtolower( $payload['order']['created']['datetime'] ) );
+		$this->assertStringNotContainsString( 'Jan', $payload['order']['created']['datetime'] );
+		$this->assertStringStartsWith( '15/01/26', $payload['order']['created']['datetime_short'] );
+		$this->assertStringNotContainsString( 'AM', $payload['order']['created']['time'] );
+	}
+
 	/**
 	 * Existing-order receipts should keep the order currency while taking
 	 * price-formatting and tax-presentation hints from the selected store.

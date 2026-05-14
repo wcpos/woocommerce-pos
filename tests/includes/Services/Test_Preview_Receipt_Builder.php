@@ -170,6 +170,44 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		}
 	}
 
+
+	/**
+	 * Preview receipt dates should use the store locale, not the site locale.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_formats_order_dates_with_store_locale(): void {
+		$store_filter = static function () {
+			return new class() {
+				public function get_currency(): string {
+					return '';
+				}
+
+				public function get_locale(): string {
+					return 'es_ES';
+				}
+
+				public function get_timezone(): string {
+					return 'Europe/Madrid';
+				}
+			};
+		};
+
+		try {
+			add_filter( 'woocommerce_pos_get_store', $store_filter );
+
+			$data = $this->builder->build();
+
+			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
+			$this->assertStringContainsString( 'ene', strtolower( $data['order']['created']['datetime'] ) );
+			$this->assertStringNotContainsString( 'Jan', $data['order']['created']['datetime'] );
+			$this->assertStringStartsWith( '15/01/24', $data['order']['created']['datetime_short'] );
+			$this->assertStringNotContainsString( 'AM', $data['order']['created']['time'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_get_store', $store_filter );
+		}
+	}
+
 	/**
 	 * The printed timestamp should use the store timezone, not the site timezone.
 	 *

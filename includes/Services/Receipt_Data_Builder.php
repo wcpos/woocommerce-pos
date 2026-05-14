@@ -57,6 +57,7 @@ class Receipt_Data_Builder {
 
 		$store_resolver = new Receipt_Store_Resolver( $pos_store );
 		$date_timezone  = $store_resolver->resolve_store_timezone();
+		$date_locale    = $store_resolver->resolve_locale();
 		$order_data    = array(
 			'id'            => $order->get_id(),
 			'number'        => (string) $order->get_order_number(),
@@ -65,12 +66,12 @@ class Receipt_Data_Builder {
 			'wc_status'     => $wc_status,
 			'status_label'  => $status_label,
 			'created_via'   => method_exists( $order, 'get_created_via' ) ? (string) $order->get_created_via() : '',
-			'created'       => $this->format_wc_datetime_in_timezone( $order->get_date_created(), $date_timezone ),
-			'paid'          => $this->format_wc_datetime_in_timezone( $order->get_date_paid(), $date_timezone ),
-			'completed'     => $this->format_wc_datetime_in_timezone( $order->get_date_completed(), $date_timezone ),
+			'created'       => $this->format_wc_datetime_in_timezone( $order->get_date_created(), $date_timezone, $date_locale ),
+			'paid'          => $this->format_wc_datetime_in_timezone( $order->get_date_paid(), $date_timezone, $date_locale ),
+			'completed'     => $this->format_wc_datetime_in_timezone( $order->get_date_completed(), $date_timezone, $date_locale ),
 			// Render-time timestamp: refreshed on every build() call so reprints
 			// show the actual print time, not a value persisted to the database.
-			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone ),
+			'printed'       => Receipt_Date_Formatter::from_timestamp( time(), $date_timezone, $date_locale ),
 			// Payment fields — templates can render a "How to pay" section guarded
 			// by {{#order.needs_payment}}…{{/order.needs_payment}}. payment_url is
 			// always populated (WC's order-pay endpoint accepts the key regardless
@@ -383,7 +384,7 @@ class Receipt_Data_Builder {
 			'tax_summary'        => $tax_summary,
 			'has_tax_summary'    => ! empty( $tax_summary ),
 			'payments'           => $payments,
-			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone ),
+			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone, $date_locale ),
 			'fiscal'             => $fiscal,
 			'presentation_hints' => $presentation_hints,
 			'i18n'               => Receipt_I18n_Labels::get_labels( $presentation_hints['locale'] ?? '' ),
@@ -504,15 +505,16 @@ class Receipt_Data_Builder {
 	 *
 	 * @param \WC_DateTime|null $date     WooCommerce date.
 	 * @param DateTimeZone      $timezone Receipt timezone.
+	 * @param string            $locale   Receipt locale.
 	 *
 	 * @return array<string,string>
 	 */
-	private function format_wc_datetime_in_timezone( $date, DateTimeZone $timezone ): array {
+	private function format_wc_datetime_in_timezone( $date, DateTimeZone $timezone, string $locale = '' ): array {
 		if ( ! $date ) {
 			return Receipt_Date_Formatter::empty();
 		}
 
-		return Receipt_Date_Formatter::from_timestamp( $date->getTimestamp(), $timezone );
+		return Receipt_Date_Formatter::from_timestamp( $date->getTimestamp(), $timezone, $locale );
 	}
 
 
@@ -679,10 +681,11 @@ class Receipt_Data_Builder {
 	 * @param WC_Abstract_Order $order         Order object.
 	 * @param bool              $display_incl  Whether totals should be tax-inclusive (matches shop tax display).
 	 * @param DateTimeZone      $date_timezone Receipt timezone.
+	 * @param string            $date_locale   Receipt locale.
 	 *
 	 * @return array
 	 */
-	private function get_refunds( WC_Abstract_Order $order, bool $display_incl, DateTimeZone $date_timezone ): array {
+	private function get_refunds( WC_Abstract_Order $order, bool $display_incl, DateTimeZone $date_timezone, string $date_locale = '' ): array {
 		$refunds = array();
 
 		if ( ! method_exists( $order, 'get_refunds' ) ) {
@@ -792,7 +795,7 @@ class Receipt_Data_Builder {
 
 			$refunds[] = array(
 				'id'               => (int) $refund->get_id(),
-				'date'             => $this->format_wc_datetime_in_timezone( $refund->get_date_created(), $date_timezone ),
+				'date'             => $this->format_wc_datetime_in_timezone( $refund->get_date_created(), $date_timezone, $date_locale ),
 				'amount'           => abs( (float) $refund->get_amount() ),
 				'subtotal'         => method_exists( $refund, 'get_subtotal' ) ? abs( (float) $refund->get_subtotal() ) : 0.0,
 				'tax_total'        => method_exists( $refund, 'get_total_tax' ) ? abs( (float) $refund->get_total_tax() ) : 0.0,
