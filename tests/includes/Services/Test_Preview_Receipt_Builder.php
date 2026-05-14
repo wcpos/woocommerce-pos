@@ -206,8 +206,9 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 
 			$this->assertEquals( 'es_ES', $data['presentation_hints']['locale'] );
 			$this->assertEquals( $expected_created, $data['order']['created'] );
-			$this->assertStringNotContainsString( 'AM', $data['order']['created']['time'] );
-			$this->assertStringNotContainsString( 'PM', $data['order']['created']['time'] );
+			$normalized_time = strtolower( $data['order']['created']['time'] );
+			$this->assertStringNotContainsString( 'am', $normalized_time );
+			$this->assertStringNotContainsString( 'pm', $normalized_time );
 		} finally {
 			remove_filter( 'woocommerce_pos_get_store', $store_filter );
 		}
