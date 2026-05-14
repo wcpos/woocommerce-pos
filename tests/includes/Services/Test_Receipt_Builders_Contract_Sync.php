@@ -33,6 +33,8 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 		$this->assertSame( array_keys( $live['presentation_hints'] ), array_keys( $preview['presentation_hints'] ) );
 		$this->assertArrayNotHasKey( 'display_tax', $live['presentation_hints'] );
 		$this->assertArrayNotHasKey( 'display_tax', $preview['presentation_hints'] );
+		$this->assertArrayNotHasKey( 'order_barcode_type', $live['presentation_hints'] );
+		$this->assertArrayNotHasKey( 'order_barcode_type', $preview['presentation_hints'] );
 	}
 
 	/**

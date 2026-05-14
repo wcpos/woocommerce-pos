@@ -677,7 +677,7 @@ class Receipt_Data_Schema {
 					),
 					'codes'      => array(
 						'type'  => 'string',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Codes', 'woocommerce-pos' ),
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Coupon Codes Display Text', 'woocommerce-pos' ),
 					),
 					'total'      => array(
 						'type'  => 'money',

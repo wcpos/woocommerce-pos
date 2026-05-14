@@ -289,6 +289,8 @@ class Receipt_Data_Builder {
 			$coupon_excl = (float) $coupon_item->get_discount();
 			$coupon_tax  = (float) $coupon_item->get_discount_tax();
 			$coupon_incl = $coupon_excl + $coupon_tax;
+			// `code` is the canonical single coupon code for this row; `codes`
+			// remains as a display-friendly alias used by existing templates.
 			$discounts[] = array(
 				'label'      => $coupon_item->get_code(),
 				'code'       => $coupon_item->get_code(),
@@ -638,7 +640,6 @@ class Receipt_Data_Builder {
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
-			'order_barcode_type'       => $this->resolve_order_barcode_type( $pos_store ),
 			// Currency stays from the order (financial record). Locale and price formatting
 			// follow the store so presentation matches the store's region/settings.
 			'locale'                   => '' !== $store_locale ? $store_locale : get_locale(),
@@ -698,18 +699,6 @@ class Receipt_Data_Builder {
 		return null !== $value && '' !== (string) $value ? (string) $value : (string) $fallback;
 	}
 
-	/**
-	 * Resolve the order barcode type from the store with a safe default.
-	 *
-	 * @param object $pos_store POS store object.
-	 *
-	 * @return string
-	 */
-	private function resolve_order_barcode_type( $pos_store ): string {
-		return Receipt_Barcode_Types::normalize_order_barcode_type(
-			$this->resolve_store_option_string( $pos_store, 'get_order_barcode_type', Receipt_Barcode_Types::DEFAULT_ORDER_BARCODE_TYPE )
-		);
-	}
 
 	/**
 	 * Resolve the number of price decimals from the store with WC fallback.

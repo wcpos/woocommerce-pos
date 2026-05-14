@@ -701,9 +701,12 @@ class Preview_Receipt_Builder {
 			),
 		);
 
+		// `code` mirrors the live builder's canonical single coupon field;
+		// `codes` is the display-friendly alias used by existing templates.
 		$discounts = array(
 			array(
 				'label'      => $discount_label,
+				'code'       => 'SUMMER10',
 				'codes'      => 'SUMMER10',
 				'total'      => $display_incl ? $discount_incl : $discount_excl,
 				'total_incl' => $discount_incl,
@@ -1051,7 +1054,6 @@ class Preview_Receipt_Builder {
 				'get_tax_round_at_subtotal',
 				get_option( 'woocommerce_tax_round_at_subtotal', 'no' )
 			),
-			'order_barcode_type'       => $this->resolve_order_barcode_type(),
 			'locale'                   => $this->resolve_locale(),
 			'timezone'                 => $date_timezone->getName(),
 			'currency_position'        => $this->resolve_store_string(
@@ -1089,16 +1091,6 @@ class Preview_Receipt_Builder {
 		return null !== $value ? (string) $value : (string) $fallback;
 	}
 
-	/**
-	 * Resolve the order barcode type from the store with a safe default.
-	 *
-	 * @return string
-	 */
-	private function resolve_order_barcode_type(): string {
-		return Receipt_Barcode_Types::normalize_order_barcode_type(
-			$this->resolve_store_string( 'get_order_barcode_type', Receipt_Barcode_Types::DEFAULT_ORDER_BARCODE_TYPE )
-		);
-	}
 
 	/**
 	 * Resolve the number of price decimals from the store with WC fallback.
