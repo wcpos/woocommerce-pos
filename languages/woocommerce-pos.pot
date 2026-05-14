@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-14T21:42:04+00:00\n"
+"POT-Creation-Date: 2026-05-14T23:39:52+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -118,8 +118,8 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #: includes/Admin/Menu.php:178
 #: includes/Admin/Menu.php:180
-#: includes/Templates.php:60
-#: includes/Templates.php:65
+#: includes/Templates.php:67
+#: includes/Templates.php:72
 msgid "Templates"
 msgstr ""
 
@@ -329,8 +329,8 @@ msgstr ""
 #. translators: Label or action in the receipt templates admin screen.
 #. translators: Receipt template post type or template option label.
 #: includes/Admin/Templates/List_Templates.php:406
-#: includes/Templates.php:61
-#: includes/Templates.php:88
+#: includes/Templates.php:68
+#: includes/Templates.php:95
 msgid "Template"
 msgstr ""
 
@@ -436,11 +436,11 @@ msgstr ""
 #: includes/Admin/Templates/Single_Template.php:385
 #: includes/Admin/Templates/Single_Template.php:418
 #: includes/Admin/Templates/Single_Template.php:476
-#: includes/API/Templates_Controller.php:459
-#: includes/API/Templates_Controller.php:510
-#: includes/API/Templates_Controller.php:686
-#: includes/API/Templates_Controller.php:784
-#: includes/API/Templates_Controller.php:876
+#: includes/API/Templates_Controller.php:460
+#: includes/API/Templates_Controller.php:511
+#: includes/API/Templates_Controller.php:687
+#: includes/API/Templates_Controller.php:785
+#: includes/API/Templates_Controller.php:877
 msgid "Invalid template ID."
 msgstr ""
 
@@ -475,7 +475,7 @@ msgstr ""
 #. translators: %s: original template title
 #: includes/Admin/Templates/List_Templates.php:669
 #: includes/Admin/Templates/Single_Template.php:499
-#: includes/API/Templates_Controller.php:697
+#: includes/API/Templates_Controller.php:698
 #, php-format
 msgid "Copy of %s"
 msgstr ""
@@ -916,171 +916,171 @@ msgid "You do not have permissions to view this data."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:76
+#: includes/API/Templates_Controller.php:77
 msgid "Template type."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:95
-#: includes/API/Templates_Controller.php:1264
+#: includes/API/Templates_Controller.php:96
+#: includes/API/Templates_Controller.php:1270
 msgid "Filter by template type."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:101
-#: includes/API/Templates_Controller.php:1286
+#: includes/API/Templates_Controller.php:102
+#: includes/API/Templates_Controller.php:1292
 msgid "Filter by template category slug."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:120
+#: includes/API/Templates_Controller.php:121
 msgid "Template type for ordering."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:128
+#: includes/API/Templates_Controller.php:129
 msgid "Array of templates to update."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:151
+#: includes/API/Templates_Controller.php:152
 msgid "Ordered array of all template IDs (int for database, string for virtual)."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:158
+#: includes/API/Templates_Controller.php:159
 msgid "Array of virtual template IDs to disable."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:163
+#: includes/API/Templates_Controller.php:164
 msgid "Array of virtual template IDs to enable."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:181
+#: includes/API/Templates_Controller.php:182
 msgid "Gallery template key to install."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:201
+#: includes/API/Templates_Controller.php:202
 msgid "Unique identifier for the template (numeric for database, string for virtual)."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:245
+#: includes/API/Templates_Controller.php:246
 msgid "Template ID to copy."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:263
+#: includes/API/Templates_Controller.php:264
 msgid "Template ID to preview."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:268
+#: includes/API/Templates_Controller.php:269
 msgid "Order ID or \"latest\" for most recent POS order. Omit for sample data."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:274
+#: includes/API/Templates_Controller.php:275
 msgid "POS store ID for store-specific data."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:280
+#: includes/API/Templates_Controller.php:281
 msgid "Include temporary PHP-rendered HTML diagnostics for logicless previews."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:301
+#: includes/API/Templates_Controller.php:302
 msgid "Template ID to delete."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:485
+#: includes/API/Templates_Controller.php:486
 msgid "No active template found."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:550
+#: includes/API/Templates_Controller.php:551
 msgid "Template not found after update."
 msgstr ""
 
 #. translators: %d: batch item index.
-#: includes/API/Templates_Controller.php:610
+#: includes/API/Templates_Controller.php:611
 #, php-format
 msgid "Batch item %d must include a numeric id."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:744
+#: includes/API/Templates_Controller.php:745
 msgid "Failed to save copied template content."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:754
+#: includes/API/Templates_Controller.php:755
 msgid "Failed to retrieve copied template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:792
+#: includes/API/Templates_Controller.php:793
 msgid "Built-in templates cannot be deleted."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:802
+#: includes/API/Templates_Controller.php:803
 msgid "Failed to delete template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:836
+#: includes/API/Templates_Controller.php:837
 msgid "Template was installed but could not be retrieved."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:906
+#: includes/API/Templates_Controller.php:907
 msgid "Order not found or is not a POS order."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Templates_Controller.php:920
+#: includes/API/Templates_Controller.php:921
 msgid "Store not found."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1003
+#: includes/API/Templates_Controller.php:1009
 msgid "Mustache template syntax error. Check your template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1250
+#: includes/API/Templates_Controller.php:1256
 msgid "Current page of the collection."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1257
+#: includes/API/Templates_Controller.php:1263
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1272
+#: includes/API/Templates_Controller.php:1278
 msgid "Scope under which the request is made."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1280
+#: includes/API/Templates_Controller.php:1286
 msgid "Search templates by title or description."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1292
+#: includes/API/Templates_Controller.php:1298
 msgid "Limit to templates modified after this ISO 8601 date."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1298
+#: includes/API/Templates_Controller.php:1304
 msgid "Limit results to templates resolved for a specific store."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1467
+#: includes/API/Templates_Controller.php:1473
 msgid "Sorry, you cannot list templates."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1476
+#: includes/API/Templates_Controller.php:1482
 msgid "Sorry, you are not allowed to edit templates."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1495
+#: includes/API/Templates_Controller.php:1501
 msgid "Sorry, you cannot view this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1504
+#: includes/API/Templates_Controller.php:1510
 msgid "Sorry, you are not allowed to edit this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1525
+#: includes/API/Templates_Controller.php:1531
 msgid "Sorry, you cannot preview this template."
 msgstr ""
 
-#: includes/API/Templates_Controller.php:1544
+#: includes/API/Templates_Controller.php:1550
 msgid "Sorry, you cannot update templates."
 msgstr ""
 
@@ -2656,7 +2656,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:179
-#: includes/Templates.php:1112
+#: includes/Templates.php:1129
 msgid "Invoice"
 msgstr ""
 
@@ -2673,7 +2673,7 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:182
-#: includes/Templates.php:1111
+#: includes/Templates.php:1128
 #: templates/receipt.php:186
 msgid "Receipt"
 msgstr ""
@@ -2681,14 +2681,14 @@ msgstr ""
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:183
-#: includes/Templates.php:1113
+#: includes/Templates.php:1130
 msgid "Gift Receipt"
 msgstr ""
 
 #. translators: Standalone label used in printed receipt templates.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:184
-#: includes/Templates.php:1114
+#: includes/Templates.php:1131
 msgid "Credit Note"
 msgstr ""
 
@@ -2937,297 +2937,297 @@ msgid "Invalid visibility option provided"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:58
+#: includes/Templates.php:65
 msgctxt "Post Type General Name"
 msgid "Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:59
+#: includes/Templates.php:66
 msgctxt "Post Type Singular Name"
 msgid "Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:62
+#: includes/Templates.php:69
 msgid "Template Archives"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:63
+#: includes/Templates.php:70
 msgid "Template Attributes"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:64
+#: includes/Templates.php:71
 msgid "Parent Template:"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:66
+#: includes/Templates.php:73
 msgid "Add New Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:67
+#: includes/Templates.php:74
 msgid "Add New"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:68
+#: includes/Templates.php:75
 msgid "New Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:69
+#: includes/Templates.php:76
 msgid "Edit Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:70
+#: includes/Templates.php:77
 msgid "Update Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:71
+#: includes/Templates.php:78
 msgid "View Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:72
+#: includes/Templates.php:79
 msgid "View Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:73
+#: includes/Templates.php:80
 msgid "Search Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:74
+#: includes/Templates.php:81
 msgid "Not found"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:75
+#: includes/Templates.php:82
 msgid "Not found in Trash"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:76
+#: includes/Templates.php:83
 msgid "Featured Image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:77
+#: includes/Templates.php:84
 msgid "Set featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:78
+#: includes/Templates.php:85
 msgid "Remove featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:79
+#: includes/Templates.php:86
 msgid "Use as featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:80
+#: includes/Templates.php:87
 msgid "Insert into template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:81
+#: includes/Templates.php:88
 msgid "Uploaded to this template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:82
+#: includes/Templates.php:89
 msgid "Templates list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:83
+#: includes/Templates.php:90
 msgid "Templates list navigation"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:84
+#: includes/Templates.php:91
 msgid "Filter templates list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:89
+#: includes/Templates.php:96
 msgid "POS Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:129
+#: includes/Templates.php:136
 msgctxt "Taxonomy General Name"
 msgid "Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:130
+#: includes/Templates.php:137
 msgctxt "Taxonomy Singular Name"
 msgid "Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:131
+#: includes/Templates.php:138
 msgid "Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:132
+#: includes/Templates.php:139
 msgid "All Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:133
+#: includes/Templates.php:140
 msgid "Parent Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:134
+#: includes/Templates.php:141
 msgid "Parent Template Type:"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:135
+#: includes/Templates.php:142
 msgid "New Template Type Name"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:136
+#: includes/Templates.php:143
 msgid "Add New Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:137
+#: includes/Templates.php:144
 msgid "Edit Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:138
+#: includes/Templates.php:145
 msgid "Update Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:139
+#: includes/Templates.php:146
 msgid "View Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:140
+#: includes/Templates.php:147
 msgid "Separate template types with commas"
 msgstr ""
 
-#: includes/Templates.php:141
+#: includes/Templates.php:148
 msgid "Add or remove template types"
 msgstr ""
 
-#: includes/Templates.php:142
+#: includes/Templates.php:149
 msgid "Choose from the most used"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:143
+#: includes/Templates.php:150
 msgid "Popular Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:144
+#: includes/Templates.php:151
 msgid "Search Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:145
+#: includes/Templates.php:152
 msgid "Not Found"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:146
+#: includes/Templates.php:153
 msgid "No template types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:147
+#: includes/Templates.php:154
 msgid "Template types list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:148
+#: includes/Templates.php:155
 msgid "Template types list navigation"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:180
+#: includes/Templates.php:187
 msgctxt "Taxonomy General Name"
 msgid "Template Categories"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:181
+#: includes/Templates.php:188
 msgctxt "Taxonomy Singular Name"
 msgid "Template Category"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:345
+#: includes/Templates.php:362
 msgid "Theme Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:346
+#: includes/Templates.php:363
 msgid "Pro Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:347
+#: includes/Templates.php:364
 msgid "Legacy PHP Template"
 msgstr ""
 
-#: includes/Templates.php:949
+#: includes/Templates.php:966
 msgid "Starter template not found."
 msgstr ""
 
-#: includes/Templates.php:956
+#: includes/Templates.php:973
 msgid "Could not read starter template file."
 msgstr ""
 
-#: includes/Templates.php:985
-#: includes/Templates.php:1066
+#: includes/Templates.php:1002
+#: includes/Templates.php:1083
 msgid "Template was created but raw content could not be saved."
 msgstr ""
 
-#: includes/Templates.php:1012
+#: includes/Templates.php:1029
 msgid "Gallery template not found."
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1087
+#: includes/Templates.php:1104
 msgid "Receipt templates for printing orders"
 msgstr ""
 
-#: includes/Templates.php:1098
+#: includes/Templates.php:1115
 msgid "Report templates for analytics"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1115
+#: includes/Templates.php:1132
 msgid "Purchase Order"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1116
+#: includes/Templates.php:1133
 msgid "Kitchen Ticket"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1117
+#: includes/Templates.php:1134
 msgid "Bar Ticket"
 msgstr ""
 
