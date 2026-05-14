@@ -1260,6 +1260,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$coupon_a->set_code( 'CODE_A' );
 		$coupon_a->set_amount( 5 );
 		$coupon_a->set_discount_type( 'fixed_cart' );
+		$coupon_a->set_description( 'Band discount 25–75' );
 		$coupon_a->save();
 
 		$coupon_b = new \WC_Coupon();
@@ -1268,24 +1269,36 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$coupon_b->set_discount_type( 'fixed_cart' );
 		$coupon_b->save();
 
+		$coupon_c = new \WC_Coupon();
+		$coupon_c->set_code( 'CODE_C' );
+		$coupon_c->set_amount( 7 );
+		$coupon_c->set_discount_type( 'fixed_cart' );
+		$coupon_c->set_description( 'CODE_C' );
+		$coupon_c->save();
+
 		$order = wc_create_order();
 		$order->add_product( $product, 1 );
 		$order->apply_coupon( 'CODE_A' );
 		$order->apply_coupon( 'CODE_B' );
+		$order->apply_coupon( 'CODE_C' );
 		$order->calculate_totals();
 		$order->save();
 
 		$payload = $this->builder->build( $order, 'live' );
 
-		$this->assertCount( 2, $payload['discounts'] );
+		$this->assertCount( 3, $payload['discounts'] );
 		foreach ( $payload['discounts'] as $discount ) {
 			$this->assertArrayHasKey( 'code', $discount );
 			$this->assertArrayNotHasKey( 'codes', $discount );
 		}
 
-		$codes = array_column( $payload['discounts'], 'code' );
-		$this->assertContains( wc_format_coupon_code( 'CODE_A' ), $codes );
-		$this->assertContains( wc_format_coupon_code( 'CODE_B' ), $codes );
+		$discounts_by_code = array_column( $payload['discounts'], null, 'code' );
+		$this->assertArrayHasKey( wc_format_coupon_code( 'CODE_A' ), $discounts_by_code );
+		$this->assertArrayHasKey( wc_format_coupon_code( 'CODE_B' ), $discounts_by_code );
+		$this->assertArrayHasKey( wc_format_coupon_code( 'CODE_C' ), $discounts_by_code );
+		$this->assertSame( 'Band discount 25–75', $discounts_by_code[ wc_format_coupon_code( 'CODE_A' ) ]['label'] );
+		$this->assertSame( wc_format_coupon_code( 'CODE_B' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_B' ) ]['label'] );
+		$this->assertSame( wc_format_coupon_code( 'CODE_C' ), $discounts_by_code[ wc_format_coupon_code( 'CODE_C' ) ]['label'] );
 	}
 
 	/**
