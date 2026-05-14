@@ -123,8 +123,8 @@ Note: Logicless output passes through wp_kses_post, which strips
 				</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280; font-size: 11px; white-space: nowrap;">{{sku}}</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{qty}}</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{unit_price_incl_display}}</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{line_total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{unit_price_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{line_total_display}}</td>
 			</tr>
 			{{/lines}}
 			{{#fees}}
@@ -135,8 +135,8 @@ Note: Logicless output passes through wp_kses_post, which strips
 				</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280;">&mdash;</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">1</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_display}}</td>
 			</tr>
 			{{/fees}}
 			{{#shipping}}
@@ -147,8 +147,8 @@ Note: Logicless output passes through wp_kses_post, which strips
 				</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280;">&mdash;</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">1</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-variant-numeric: tabular-nums;">{{total_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">{{total_display}}</td>
 			</tr>
 			{{/shipping}}
 			{{#discounts}}
@@ -160,7 +160,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; color: #6b7280;">&mdash;</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; color: #6b7280;">&mdash;</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; color: #6b7280;">&mdash;</td>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">-{{total_incl_display}}</td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; vertical-align: top; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;">-{{total_display}}</td>
 			</tr>
 			{{/discounts}}
 		</tbody>
@@ -193,10 +193,10 @@ Note: Logicless output passes through wp_kses_post, which strips
 		</div>
 
 		<div style="font-size: 13px;">
-			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_incl_display}}</span></div>
-			{{#totals.discount_total_incl}}
-			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.discount_total_incl_display}}</span></div>
-			{{/totals.discount_total_incl}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.subtotal}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.subtotal_display}}</span></div>
+			{{#totals.discount_total}}
+			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.discount}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.discount_total_display}}</span></div>
+			{{/totals.discount_total}}
 			{{#totals.tax_total}}
 			<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span style="color: #6b7280;">{{i18n.total_tax}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.tax_total_display}}</span></div>
 			{{/totals.tax_total}}

@@ -71,9 +71,9 @@ that would smear or waste ink on thermal/B&W printers.
 	<table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px;">
 		<tr>
 			<td style="text-align: left; padding-left: 8px; word-wrap: break-word; vertical-align: top;">
-				{{qty}} x {{unit_price_incl_display}}{{#sku}} ({{sku}}){{/sku}}
+				{{qty}} x {{unit_price_display}}{{#sku}} ({{sku}}){{/sku}}
 			</td>
-			<td style="text-align: right; white-space: nowrap; vertical-align: top;">{{line_total_incl_display}}</td>
+			<td style="text-align: right; white-space: nowrap; vertical-align: top;">{{line_total_display}}</td>
 		</tr>
 	</table>
 	{{/lines}}
@@ -83,27 +83,27 @@ that would smear or waste ink on thermal/B&W printers.
 	<table style="width: 100%; border-collapse: collapse;">
 		<tr>
 			<td style="text-align: left;">{{i18n.subtotal}}</td>
-			<td style="text-align: right;">{{totals.subtotal_incl_display}}</td>
+			<td style="text-align: right;">{{totals.subtotal_display}}</td>
 		</tr>
 
 		{{#discounts}}
 		<tr>
 			<td style="text-align: left;">{{label}}</td>
-			<td style="text-align: right;">-{{total_incl_display}}</td>
+			<td style="text-align: right;">-{{total_display}}</td>
 		</tr>
 		{{/discounts}}
 
 		{{#shipping}}
 		<tr>
 			<td style="text-align: left;">{{label}}</td>
-			<td style="text-align: right;">{{total_incl_display}}</td>
+			<td style="text-align: right;">{{total_display}}</td>
 		</tr>
 		{{/shipping}}
 
 		{{#fees}}
 		<tr>
 			<td style="text-align: left;">{{label}}</td>
-			<td style="text-align: right;">{{total_incl_display}}</td>
+			<td style="text-align: right;">{{total_display}}</td>
 		</tr>
 		{{/fees}}
 
