@@ -13,7 +13,7 @@ import type { StoreDefaults } from './index';
 
 const UPGRADE_URL = 'https://wcpos.com/pro';
 const UPGRADE_PLACEMENT = 'general_store_details';
-const STORE_TAX_IDS_DOCS_URL = 'https://wcpos.com/docs/store-tax-ids';
+const STORE_TAX_IDS_DOCS_URL = 'https://docs.wcpos.com/settings/wp-admin/store-tax-ids';
 
 export interface StoreDetailsBlockProps {
 	data?: {
