@@ -63,7 +63,7 @@ interface TaxIdsDetection {
 	types: string[];
 }
 
-const DOCS_URL = 'https://wcpos.com/docs/tax-ids';
+const DOCS_URL = 'https://docs.wcpos.com/settings/wp-admin/customer-tax-ids';
 
 type Source = 'plugin' | 'default' | 'override';
 
