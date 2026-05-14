@@ -84,6 +84,7 @@ class Receipt_Data_Builder {
 			get_option( 'woocommerce_tax_display_cart', 'excl' )
 		);
 		$presentation_hints = $this->build_presentation_hints( $pos_store, (string) $order->get_currency() );
+		$tax                = $this->build_tax_section( $pos_store );
 		$store_id              = (int) $this->get_store_value( $pos_store, 'get_id', 0 );
 		$store_name            = (string) $this->get_store_value( $pos_store, 'get_name', '' );
 		if ( $missing_order_store_id > 0 ) {
@@ -377,6 +378,7 @@ class Receipt_Data_Builder {
 			'shipping'           => $shipping,
 			'discounts'          => $discounts,
 			'totals'             => $totals,
+			'tax'                => $tax,
 			'tax_summary'        => $this->get_tax_summary( $order ),
 			'payments'           => $payments,
 			'refunds'            => $this->get_refunds( $order, $display_incl, $date_timezone ),
@@ -396,18 +398,17 @@ class Receipt_Data_Builder {
 	private function get_tax_summary( WC_Abstract_Order $order ): array {
 		$summary = array();
 
-		foreach ( $order->get_items( 'tax' ) as $tax_item ) {
-			$tax_amount = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
-			$rate       = (float) $tax_item->get_rate_percent();
-			$taxable_excl = $rate > 0 ? $tax_amount / ( $rate / 100 ) : null;
-			$taxable_incl = null;
+		$taxable_bases = $this->get_taxable_bases_by_rate_id( $order );
 
-			if ( null !== $taxable_excl ) {
-				$taxable_incl = $taxable_excl + $tax_amount;
-			}
+		foreach ( $order->get_items( 'tax' ) as $tax_item ) {
+			$tax_amount   = (float) $tax_item->get_tax_total() + (float) $tax_item->get_shipping_tax_total();
+			$rate         = (float) $tax_item->get_rate_percent();
+			$rate_id      = (string) $tax_item->get_rate_id();
+			$taxable_excl = $taxable_bases[ $rate_id ] ?? null;
+			$taxable_incl = null !== $taxable_excl ? $taxable_excl + $tax_amount : null;
 
 			$summary[] = array(
-				'code'                => (string) $tax_item->get_rate_id(),
+				'code'                => $rate_id,
 				'rate'                => $rate > 0 ? $rate : null,
 				'label'               => $tax_item->get_label( $order ),
 				'compound'            => method_exists( $tax_item, 'is_compound' ) ? (bool) $tax_item->is_compound() : false,
@@ -418,6 +419,89 @@ class Receipt_Data_Builder {
 		}
 
 		return $summary;
+	}
+
+
+	/**
+	 * Sum post-discount pre-tax item totals by tax rate id.
+	 *
+	 * A line taxed by multiple rates contributes its full net total to each
+	 * applicable rate. Compound rates intentionally use the pure pre-tax net
+	 * base for the v1 contract.
+	 *
+	 * @param WC_Abstract_Order $order Order object.
+	 *
+	 * @return array<string,float>
+	 */
+	private function get_taxable_bases_by_rate_id( WC_Abstract_Order $order ): array {
+		$bases = array();
+
+		foreach ( array( 'line_item', 'fee', 'shipping' ) as $item_type ) {
+			foreach ( $order->get_items( $item_type ) as $item ) {
+				if ( ! method_exists( $item, 'get_taxes' ) || ! method_exists( $item, 'get_total' ) ) {
+					continue;
+				}
+
+				$raw_taxes = $item->get_taxes();
+				$totals    = isset( $raw_taxes['total'] ) && is_array( $raw_taxes['total'] ) ? $raw_taxes['total'] : array();
+				$base      = (float) $item->get_total();
+
+				foreach ( $totals as $rate_id => $tax_amount ) {
+					if ( '' === (string) $rate_id || '' === (string) $tax_amount ) {
+						continue;
+					}
+
+					$key = (string) $rate_id;
+					if ( ! array_key_exists( $key, $bases ) ) {
+						$bases[ $key ] = 0.0;
+					}
+
+					$bases[ $key ] += $base;
+				}
+			}
+		}
+
+		return $bases;
+	}
+
+	/**
+	 * Build template-facing tax mode signals.
+	 *
+	 * @param object $pos_store POS store object.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function build_tax_section( $pos_store ): array {
+		$display = 'incl' === $this->resolve_store_option_string(
+			$pos_store,
+			'get_tax_display_cart',
+			get_option( 'woocommerce_tax_display_cart', 'excl' )
+		) ? 'incl' : 'excl';
+
+		$tax_enabled = 'yes' === $this->resolve_store_option_string(
+			$pos_store,
+			'get_calc_taxes',
+			get_option( 'woocommerce_calc_taxes', 'no' )
+		);
+		$breakdown   = $tax_enabled ? $this->resolve_store_option_string(
+			$pos_store,
+			'get_tax_total_display',
+			get_option( 'woocommerce_tax_total_display', 'itemized' )
+		) : 'hidden';
+
+		if ( ! in_array( $breakdown, array( 'hidden', 'single', 'itemized' ), true ) ) {
+			$breakdown = 'itemized';
+		}
+
+		return array(
+			'display'            => $display,
+			'display_incl'       => 'incl' === $display,
+			'display_excl'       => 'excl' === $display,
+			'breakdown'          => $breakdown,
+			'breakdown_hidden'   => 'hidden' === $breakdown,
+			'breakdown_single'   => 'single' === $breakdown,
+			'breakdown_itemized' => 'itemized' === $breakdown,
+		);
 	}
 
 	/**
@@ -541,20 +625,9 @@ class Receipt_Data_Builder {
 	 * @return array<string,mixed>
 	 */
 	private function build_presentation_hints( $pos_store, string $currency ): array {
-		$tax_enabled      = 'yes' === $this->resolve_store_option_string(
-			$pos_store,
-			'get_calc_taxes',
-			get_option( 'woocommerce_calc_taxes', 'no' )
-		);
-		$tax_display_mode = $this->resolve_store_option_string(
-			$pos_store,
-			'get_tax_total_display',
-			get_option( 'woocommerce_tax_total_display', 'itemized' )
-		);
-		$store_locale     = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
+		$store_locale = (string) $this->get_store_value( $pos_store, 'get_locale', '' );
 
 		return array(
-			'display_tax'              => $tax_enabled ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
 			'prices_entered_with_tax'  => 'yes' === $this->resolve_store_option_string(
 				$pos_store,
 				'get_prices_include_tax',

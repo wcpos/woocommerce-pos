@@ -759,6 +759,7 @@ class Preview_Receipt_Builder {
 		$refunds = array();
 
 		$presentation_hints = $this->build_presentation_hints( $currency, $tax_enabled, $prices_include_tax, $date_timezone );
+		$tax                = $this->build_tax_section( $tax_enabled );
 
 		$fiscal = array(
 			'immutable_id'      => '12345:42',
@@ -794,6 +795,7 @@ class Preview_Receipt_Builder {
 			'shipping'           => $shipping,
 			'discounts'          => $discounts,
 			'totals'             => $totals,
+			'tax'                => $tax,
 			'tax_summary'        => $tax_summary,
 			'payments'           => $payments,
 			'refunds'            => $refunds,
@@ -993,6 +995,40 @@ class Preview_Receipt_Builder {
 		return '' !== $store_locale ? $store_locale : $fallback;
 	}
 
+
+	/**
+	 * Build template-facing tax mode signals.
+	 *
+	 * @param bool $tax_enabled Whether taxes are enabled for this store.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function build_tax_section( bool $tax_enabled ): array {
+		$display = 'incl' === $this->resolve_store_string(
+			'get_tax_display_cart',
+			get_option( 'woocommerce_tax_display_cart', 'excl' )
+		) ? 'incl' : 'excl';
+
+		$breakdown = $tax_enabled ? $this->resolve_store_string(
+			'get_tax_total_display',
+			get_option( 'woocommerce_tax_total_display', 'itemized' )
+		) : 'hidden';
+
+		if ( ! in_array( $breakdown, array( 'hidden', 'single', 'itemized' ), true ) ) {
+			$breakdown = 'itemized';
+		}
+
+		return array(
+			'display'            => $display,
+			'display_incl'       => 'incl' === $display,
+			'display_excl'       => 'excl' === $display,
+			'breakdown'          => $breakdown,
+			'breakdown_hidden'   => 'hidden' === $breakdown,
+			'breakdown_single'   => 'single' === $breakdown,
+			'breakdown_itemized' => 'itemized' === $breakdown,
+		);
+	}
+
 	/**
 	 * Build price, currency, locale, and tax presentation hints for renderers.
 	 *
@@ -1009,13 +1045,7 @@ class Preview_Receipt_Builder {
 		bool $prices_include_tax,
 		DateTimeZone $date_timezone
 	): array {
-		$tax_display_mode = $this->resolve_store_string(
-			'get_tax_total_display',
-			get_option( 'woocommerce_tax_total_display', 'itemized' )
-		);
-
 		return array(
-			'display_tax'              => $tax_enabled ? ( $tax_display_mode ? $tax_display_mode : 'itemized' ) : 'hidden',
 			'prices_entered_with_tax'  => $prices_include_tax,
 			'rounding_mode'            => $this->resolve_store_string(
 				'get_tax_round_at_subtotal',

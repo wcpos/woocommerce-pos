@@ -413,6 +413,27 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		}
 	}
 
+
+	/**
+	 * Test field tree exposes the branchable tax section contract.
+	 */
+	public function test_get_field_tree_exposes_tax_section_contract(): void {
+		$tree = Receipt_Data_Schema::get_field_tree();
+
+		$this->assertArrayHasKey( 'tax', $tree );
+		$this->assertSame(
+			array( 'display', 'display_incl', 'display_excl', 'breakdown', 'breakdown_hidden', 'breakdown_single', 'breakdown_itemized' ),
+			array_keys( $tree['tax']['fields'] )
+		);
+		$this->assertSame( 'string', $tree['tax']['fields']['display']['type'] );
+		$this->assertSame( 'boolean', $tree['tax']['fields']['display_incl']['type'] );
+		$this->assertSame( 'boolean', $tree['tax']['fields']['display_excl']['type'] );
+		$this->assertSame( 'string', $tree['tax']['fields']['breakdown']['type'] );
+		$this->assertSame( 'boolean', $tree['tax']['fields']['breakdown_hidden']['type'] );
+		$this->assertSame( 'boolean', $tree['tax']['fields']['breakdown_single']['type'] );
+		$this->assertSame( 'boolean', $tree['tax']['fields']['breakdown_itemized']['type'] );
+	}
+
 	/**
 	 * Test JSON schema declares the canonical envelope.
 	 */

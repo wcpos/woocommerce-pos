@@ -91,6 +91,57 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		return $order;
 	}
 
+
+	/**
+	 * Reset tax options for deterministic tax-summary fixtures.
+	 *
+	 * @param string $prices_include_tax Whether prices include tax.
+	 */
+	private function set_tax_fixture_options( string $prices_include_tax = 'no' ): void {
+		update_option( 'woocommerce_calc_taxes', 'yes' );
+		update_option( 'woocommerce_tax_based_on', 'base' );
+		update_option( 'woocommerce_default_country', 'US:CA' );
+		update_option( 'woocommerce_prices_include_tax', $prices_include_tax );
+		update_option( 'woocommerce_tax_display_cart', 'excl' );
+		update_option( 'woocommerce_tax_total_display', 'itemized' );
+	}
+
+	/**
+	 * Create a taxable simple product with the supplied regular price.
+	 *
+	 * @param string $price Product price.
+	 *
+	 * @return \WC_Product_Simple
+	 */
+	private function create_taxable_product_with_price( string $price ): \WC_Product_Simple {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Tax Fixture Product' );
+		$product->set_regular_price( $price );
+		$product->set_price( $price );
+		$product->set_tax_status( 'taxable' );
+		$product->save();
+
+		return $product;
+	}
+
+	/**
+	 * Get a tax summary row by rate id.
+	 *
+	 * @param array<int,array<string,mixed>> $summary Tax summary rows.
+	 * @param int                           $rate_id Rate ID.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function get_tax_summary_row_by_rate_id( array $summary, int $rate_id ): array {
+		foreach ( $summary as $row ) {
+			if ( (string) $rate_id === (string) $row['code'] ) {
+				return $row;
+			}
+		}
+
+		$this->fail( 'Missing tax summary row for rate ' . $rate_id );
+	}
+
 	/**
 	 * Test canonical payload includes required top-level keys.
 	 */
@@ -222,8 +273,37 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order   = $this->create_taxed_order( 'itemized', 'yes' );
 		$payload = $this->builder->build( $order, 'live' );
 
-		$this->assertEquals( 'itemized', $payload['presentation_hints']['display_tax'] );
+		$this->assertArrayNotHasKey( 'display_tax', $payload['presentation_hints'] );
+		$this->assertSame( 'excl', $payload['tax']['display'] );
+		$this->assertFalse( $payload['tax']['display_incl'] );
+		$this->assertTrue( $payload['tax']['display_excl'] );
+		$this->assertSame( 'itemized', $payload['tax']['breakdown'] );
+		$this->assertTrue( $payload['tax']['breakdown_itemized'] );
 		$this->assertTrue( $payload['presentation_hints']['prices_entered_with_tax'] );
+	}
+
+
+	/**
+	 * Test tax section exposes branchable hidden/single/itemized states.
+	 */
+	public function test_build_tax_section_reflects_tax_breakdown_modes(): void {
+		$order = $this->create_taxed_order( 'single', 'no' );
+
+		$single = $this->builder->build( $order, 'live' );
+		$this->assertSame( 'single', $single['tax']['breakdown'] );
+		$this->assertTrue( $single['tax']['breakdown_single'] );
+		$this->assertFalse( $single['tax']['breakdown_hidden'] );
+		$this->assertFalse( $single['tax']['breakdown_itemized'] );
+
+		update_option( 'woocommerce_tax_total_display', 'itemized' );
+		$itemized = $this->builder->build( $order, 'live' );
+		$this->assertSame( 'itemized', $itemized['tax']['breakdown'] );
+		$this->assertTrue( $itemized['tax']['breakdown_itemized'] );
+
+		update_option( 'woocommerce_calc_taxes', 'no' );
+		$hidden = $this->builder->build( $order, 'live' );
+		$this->assertSame( 'hidden', $hidden['tax']['breakdown'] );
+		$this->assertTrue( $hidden['tax']['breakdown_hidden'] );
 	}
 
 	/**
@@ -308,7 +388,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( ',', $hints['price_decimal_separator'] );
 		$this->assertEquals( 3, $hints['price_num_decimals'] );
 		$this->assertEquals( 'inkl. MwSt.', $hints['price_display_suffix'] );
-		$this->assertEquals( 'single', $hints['display_tax'] );
+		$this->assertArrayNotHasKey( 'display_tax', $hints );
+		$this->assertSame( 'incl', $payload['tax']['display'] );
+		$this->assertTrue( $payload['tax']['display_incl'] );
+		$this->assertSame( 'single', $payload['tax']['breakdown'] );
+		$this->assertTrue( $payload['tax']['breakdown_single'] );
 		$this->assertTrue( $hints['prices_entered_with_tax'] );
 		$this->assertEquals( 'yes', $hints['rounding_mode'] );
 		$this->assertContains( $hints['order_barcode_type'], array( 'code128', 'qrcode', 'ean13', 'ean8', 'upca' ) );
@@ -401,7 +485,11 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 			$payload = $this->builder->build( $order, 'live', $pos_store );
 			$hints   = $payload['presentation_hints'];
 
-			$this->assertEquals( 'single', $hints['display_tax'] );
+			$this->assertArrayNotHasKey( 'display_tax', $hints );
+			$this->assertSame( 'incl', $payload['tax']['display'] );
+			$this->assertTrue( $payload['tax']['display_incl'] );
+			$this->assertSame( 'single', $payload['tax']['breakdown'] );
+			$this->assertTrue( $payload['tax']['breakdown_single'] );
 			$this->assertTrue( $hints['prices_entered_with_tax'] );
 			$this->assertEquals( 'yes', $hints['rounding_mode'] );
 			$this->assertEquals( 'right', $hints['currency_position'] );
@@ -469,25 +557,139 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Test tax summary reports taxable base values instead of tax-only values.
+	 * Test tax summary uses real net base for tax-inclusive prices.
 	 */
-	public function test_build_tax_summary_uses_taxable_base_amounts(): void {
-		$order   = $this->create_taxed_order( 'single', 'no' );
+	public function test_build_tax_summary_uses_real_net_base_for_tax_inclusive_prices(): void {
+		$this->set_tax_fixture_options( 'yes' );
+		$rate_id = TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'US',
+				'rate'     => '10.000',
+				'name'     => 'US Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+		$product = $this->create_taxable_product_with_price( '45.00' );
+		$order   = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+
+		$payload = $this->builder->build( $order, 'live' );
+		$row     = $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_id );
+
+		$this->assertEqualsWithDelta( 40.91, (float) $row['taxable_amount_excl'], 0.01 );
+		$this->assertNotEqualsWithDelta( (float) $row['tax_amount'] / 0.10, (float) $row['taxable_amount_excl'], 0.001 );
+	}
+
+	/**
+	 * Test tax summary uses post-discount line totals as taxable base.
+	 */
+	public function test_build_tax_summary_uses_post_discount_line_base(): void {
+		$this->set_tax_fixture_options( 'no' );
+		$rate_id = TaxHelper::create_tax_rate(
+			array(
+				'country'  => 'US',
+				'rate'     => '10.000',
+				'name'     => 'US Tax',
+				'priority' => 1,
+				'compound' => false,
+				'shipping' => true,
+			)
+		);
+		$product = $this->create_taxable_product_with_price( '100.00' );
+		$coupon  = new \WC_Coupon();
+		$coupon->set_code( 'twenty-off' );
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( 20 );
+		$coupon->save();
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->apply_coupon( $coupon );
+		$order->calculate_totals( true );
+
+		$payload = $this->builder->build( $order, 'live' );
+		$row     = $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_id );
+
+		$this->assertEqualsWithDelta( 80.00, (float) $row['taxable_amount_excl'], 0.01 );
+	}
+
+	/**
+	 * Test each rate receives the full line base when multiple rates apply.
+	 */
+	public function test_build_tax_summary_counts_full_line_base_for_each_rate(): void {
+		$this->set_tax_fixture_options( 'no' );
+		$rate_a = TaxHelper::create_tax_rate(
+			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'State Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
+		);
+		$rate_b = TaxHelper::create_tax_rate(
+			array( 'country' => 'US', 'rate' => '5.000', 'name' => 'Local Tax', 'priority' => 2, 'compound' => false, 'shipping' => true )
+		);
+		$product = $this->create_taxable_product_with_price( '100.00' );
+		$order   = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+
 		$payload = $this->builder->build( $order, 'live' );
 
-		$this->assertNotEmpty( $payload['tax_summary'] );
-		$summary = $payload['tax_summary'][0];
+		$this->assertEqualsWithDelta( 100.00, (float) $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_a )['taxable_amount_excl'], 0.01 );
+		$this->assertEqualsWithDelta( 100.00, (float) $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_b )['taxable_amount_excl'], 0.01 );
+	}
 
-		$this->assertArrayHasKey( 'tax_amount', $summary );
-		$this->assertArrayHasKey( 'taxable_amount_excl', $summary );
-		$this->assertArrayHasKey( 'taxable_amount_incl', $summary );
-		$this->assertNotNull( $summary['taxable_amount_excl'] );
-		$this->assertGreaterThan( (float) $summary['tax_amount'], (float) $summary['taxable_amount_excl'] );
-		$this->assertEqualsWithDelta(
-			(float) $summary['taxable_amount_excl'] + (float) $summary['tax_amount'],
-			(float) $summary['taxable_amount_incl'],
-			0.01
+	/**
+	 * Test taxable fees and shipping contribute to the tax summary base.
+	 */
+	public function test_build_tax_summary_includes_taxable_fees_and_shipping(): void {
+		$this->set_tax_fixture_options( 'no' );
+		$rate_id = TaxHelper::create_tax_rate(
+			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'US Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
 		);
+		$product = $this->create_taxable_product_with_price( '100.00' );
+		$order   = wc_create_order();
+		$order->add_product( $product, 1 );
+
+		$fee = new \WC_Order_Item_Fee();
+		$fee->set_name( 'Taxed Fee' );
+		$fee->set_amount( 2.50 );
+		$fee->set_total( 2.50 );
+		$fee->set_tax_status( 'taxable' );
+		$order->add_item( $fee );
+
+		$shipping = new \WC_Order_Item_Shipping();
+		$shipping->set_method_title( 'Taxed Shipping' );
+		$shipping->set_method_id( 'flat_rate' );
+		$shipping->set_total( 10.00 );
+		$order->add_item( $shipping );
+		$order->calculate_totals( true );
+
+		$payload = $this->builder->build( $order, 'live' );
+		$row     = $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $rate_id );
+
+		$this->assertEqualsWithDelta( 112.50, (float) $row['taxable_amount_excl'], 0.01 );
+	}
+
+	/**
+	 * Test compound tax rows use pure pre-tax net base for v1.
+	 */
+	public function test_build_tax_summary_compound_rate_uses_pre_tax_net_base(): void {
+		$this->set_tax_fixture_options( 'no' );
+		TaxHelper::create_tax_rate(
+			array( 'country' => 'US', 'rate' => '10.000', 'name' => 'Base Tax', 'priority' => 1, 'compound' => false, 'shipping' => true )
+		);
+		$compound_rate = TaxHelper::create_tax_rate(
+			array( 'country' => 'US', 'rate' => '5.000', 'name' => 'Compound Tax', 'priority' => 2, 'compound' => true, 'shipping' => true )
+		);
+		$product = $this->create_taxable_product_with_price( '100.00' );
+		$order   = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+
+		$payload = $this->builder->build( $order, 'live' );
+		$row     = $this->get_tax_summary_row_by_rate_id( $payload['tax_summary'], $compound_rate );
+
+		$this->assertTrue( $row['compound'] );
+		$this->assertEqualsWithDelta( 100.00, (float) $row['taxable_amount_excl'], 0.01 );
 	}
 
 	/**
