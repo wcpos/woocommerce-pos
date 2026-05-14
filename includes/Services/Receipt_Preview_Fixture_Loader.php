@@ -130,6 +130,10 @@ class Receipt_Preview_Fixture_Loader {
 	 * @return bool True for associative arrays.
 	 */
 	private static function is_assoc( array $value ): bool {
+		if ( array() === $value ) {
+			return false;
+		}
+
 		return array_keys( $value ) !== range( 0, count( $value ) - 1 );
 	}
 

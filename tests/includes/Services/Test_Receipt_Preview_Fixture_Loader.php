@@ -103,6 +103,32 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Empty array overrides replace inherited associative sections.
+	 *
+	 * @covers ::deep_merge
+	 */
+	public function test_empty_array_override_replaces_associative_section(): void {
+		$merge = new \ReflectionMethod( Receipt_Preview_Fixture_Loader::class, 'deep_merge' );
+		$merge->setAccessible( true );
+
+		$data = $merge->invoke(
+			null,
+			array(
+				'invoice' => array(
+					'bank_details' => array(
+						'iban' => 'FAKE SAMPLE IBAN',
+					),
+				),
+			),
+			array(
+				'invoice' => array(),
+			)
+		);
+
+		$this->assertSame( array(), $data['invoice'] );
+	}
+
+	/**
 	 * Missing fixture profiles fall back to base data instead of breaking previews.
 	 *
 	 * @covers ::build

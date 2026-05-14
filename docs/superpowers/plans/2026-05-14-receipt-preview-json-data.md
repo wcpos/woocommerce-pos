@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Add JSON fixtures and loader
+## Task 1: Add JSON fixtures and loader
 
 **Files:**
 - Create: `templates/gallery/preview-data/base-receipt.json`
@@ -26,7 +26,7 @@
 - [ ] Add JSON fixtures, logo SVG, and the fixture loader.
 - [ ] Run the same targeted test and confirm it passes.
 
-### Task 2: Wire gallery metadata and preview endpoint
+## Task 2: Wire gallery metadata and preview endpoint
 
 **Files:**
 - Modify: `templates/gallery/*.json`
@@ -39,7 +39,7 @@
 - [ ] Update gallery JSON metadata with profile keys and use `Receipt_Preview_Fixture_Loader` for sample gallery previews.
 - [ ] Run targeted tests and confirm they pass.
 
-### Task 3: Frontend asset/test alignment
+## Task 3: Frontend asset/test alignment
 
 **Files:**
 - Modify: `packages/template-gallery/src/__tests__/gallery-template-assets.test.ts`

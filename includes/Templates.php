@@ -39,6 +39,13 @@ class Templates {
 	const OFFLINE_CAPABLE_ENGINES = array( 'logicless', 'thermal' );
 
 	/**
+	 * Per-request cache of installed gallery template preview data profiles.
+	 *
+	 * @var array<string,string|null>
+	 */
+	private static $gallery_preview_data_cache = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -284,8 +291,12 @@ class Templates {
 		$gallery_key     = get_post_meta( $template_id, '_template_gallery_key', true );
 		$preview_data    = null;
 		if ( \is_string( $gallery_key ) && '' !== $gallery_key ) {
-			$gallery_template = self::get_gallery_template_by_key( $gallery_key );
-			$preview_data     = $gallery_template['preview_data'] ?? null;
+			if ( ! array_key_exists( $gallery_key, self::$gallery_preview_data_cache ) ) {
+				$gallery_template = self::get_gallery_template_by_key( $gallery_key );
+				self::$gallery_preview_data_cache[ $gallery_key ] = $gallery_template['preview_data'] ?? null;
+			}
+
+			$preview_data = self::$gallery_preview_data_cache[ $gallery_key ];
 		}
 		$paper_width     = get_post_meta( $template_id, '_template_paper_width', true );
 		$category        = self::get_template_category( $template_id );
