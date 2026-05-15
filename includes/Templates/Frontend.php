@@ -129,7 +129,7 @@ class Frontend {
 		// No trailing slash: Metro's runtime concatenates `cdnBaseUrl` with leading-slash paths
 		// (`/_expo/...`, `/assets/...`); a trailing slash here would produce `//`, which jsDelivr
 		// 301-redirects with a year-long cache, breaking lazy chunk loads in the browser.
-		$cdn_base_url         = $development ? 'http://localhost:4567/build' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.9/build';
+		$cdn_base_url         = $development ? 'http://localhost:4567/build' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@v1.8.18/build';
 		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
