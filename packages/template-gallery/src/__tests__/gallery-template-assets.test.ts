@@ -24,14 +24,9 @@ const THERMAL_58MM_KEYS = new Set([
 ]);
 
 // All thermal templates (need a preview PNG sized to 58mm or 80mm).
-const THERMAL_KEYS = new Set([
-	'thermal-detailed-58mm',
-	'thermal-detailed-80mm',
-	'thermal-kitchen-ticket',
-	'thermal-simple-58mm',
-	'thermal-simple-80mm',
-	'thermal-simple-80mm-rtl',
-]);
+const THERMAL_KEYS = new Set(
+	getBundledGalleryKeys().filter((key) => key.startsWith('thermal-'))
+);
 
 function findContentFile(key: string): string | null {
 	for (const ext of ['html', 'xml', 'php']) {
@@ -267,10 +262,12 @@ describe('gallery template assets', () => {
 			}
 			const first = cols[0];
 			const second = cols[1];
+			const firstWidth = first.getAttribute('width');
 			// Mirrored shape: fixed-width amount column on the left (no align attr
 			// or align="left"), star-width label column on the right with align="right".
 			if (
-				first.getAttribute('width') !== '*' &&
+				firstWidth !== null &&
+				/^\d+$/.test(firstWidth) &&
 				second.getAttribute('width') === '*' &&
 				second.getAttribute('align') === 'right'
 			) {
