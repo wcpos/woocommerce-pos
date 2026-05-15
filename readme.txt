@@ -27,20 +27,24 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 📱 [iOS (TestFlight)](https://testflight.apple.com/join/JGBdVRrW)
 📱 [Android (Google Play)](https://play.google.com/apps/testing/com.wcpos.main)
 
-= ✨ FEATURES = 
+= ✨ FEATURES =
 * **Cross-platform:** Accessible via browser, desktop, iOS & Android _(mobile apps in beta)_
 * **Offline Storage:** Fast product search and order processing
 * **Flexible Cart:** Add products not listed in WooCommerce
 * **Barcode Support:** Scan products directly into the cart
-* **Custom Receipts:** Tailor receipt templates with PHP
+* **Receipt Templates:** Pick from a built-in gallery — receipts, invoices, quotes, packing slips, gift receipts, kitchen tickets — or design your own
+* **Thermal Printing:** Print directly to 58mm and 80mm thermal printers over network, Bluetooth, or USB
+* **Customer Tax IDs:** Built-in field for VAT, ABN, GST, and other regional tax numbers
 * **Multilingual:** Available in most major languages
 * **Built-in Support:** Access live chat for instant help
 
-= 🔓 PRO FEATURES = 
+= 🔓 PRO FEATURES =
 * **Stock Management:** quickly adjust stock levels, pricing and more
 * **Order Management:** re-open and print receipts for older orders
 * **Customer Management:** create new customers and edit customer details
 * **Payment Gateways:** use any gateway for checkout
+* **Coupons:** apply coupons at the POS with search, coupon pills, and sequential discounts
+* **Refunds:** refund POS orders directly from the till
 * **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
 * **Stores:** Manage locations with unique tax settings, pricing and receipts
 * **Priority [Discord support](https://wcpos.com/discord):** one-on-one support via private chat
