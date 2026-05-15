@@ -3,7 +3,7 @@ import { Skeleton } from '@wcpos/ui';
 export { Skeleton };
 
 export const GALLERY_GRID_WRAPPER_CLASS = 'wcpos:flex-1 wcpos:min-w-0';
-export const GALLERY_GRID_CLASS = 'wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,260px),400px))] wcpos:gap-4';
+export const GALLERY_GRID_CLASS = 'wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,240px),400px))] wcpos:gap-4';
 
 /**
  * Skeleton for the gallery grid page: templates table + card grid.
