@@ -46,14 +46,14 @@ export function TemplateCard(props: TemplateCardProps) {
 				type="button"
 				onClick={onPreview}
 				aria-label={t('common.preview')}
-				className="wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0 wcpos:overflow-hidden"
+				className="wcpos:group wcpos:aspect-[4/3] wcpos:bg-gray-50 wcpos:flex wcpos:items-center wcpos:justify-center wcpos:cursor-pointer wcpos:border-0 wcpos:p-0 wcpos:overflow-hidden"
 			>
 				{previewSrc ? (
 					<img
 						src={previewSrc}
 						alt=""
 						loading="lazy"
-						className="wcpos:w-full wcpos:h-full wcpos:object-contain"
+						className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top group-hover:wcpos:object-bottom wcpos:transition-[object-position] wcpos:duration-[3000ms] wcpos:ease-linear motion-reduce:wcpos:transition-none motion-reduce:wcpos:duration-0"
 					/>
 				) : (
 					<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>
