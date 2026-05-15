@@ -110,23 +110,33 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			$entries['thermal-simple-80mm-rtl']['description']
 		);
 	}
+
 	/**
-	 * Test registry metadata matches the existing JSON catalogue during migration.
+	 * Test registry keys match the bundled gallery content files.
 	 */
-	public function test_registry_matches_existing_json_catalogue_before_deletion(): void {
-		$entries = Gallery_Registry::all();
+	public function test_registry_keys_match_content_file_basenames(): void {
+		$gallery_dir = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/';
+		$html_files = glob( $gallery_dir . '*.html' );
+		$php_files  = glob( $gallery_dir . '*.php' );
+		$xml_files  = glob( $gallery_dir . '*.xml' );
 
-		foreach ( self::EXPECTED_KEYS as $key ) {
-			$json_file = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $key . '.json';
-			if ( ! file_exists( $json_file ) ) {
-				$this->markTestSkipped( 'Gallery JSON catalogue has already been deleted.' );
-			}
+		$content_files = array_merge(
+			false === $html_files ? array() : $html_files,
+			false === $php_files ? array() : $php_files,
+			false === $xml_files ? array() : $xml_files
+		);
 
-			$json = json_decode( file_get_contents( $json_file ), true );
-			$this->assertIsArray( $json, $key . ' JSON should decode.' );
-			unset( $json['key'] );
+		$content_keys = array_map(
+			static function ( string $file ): string {
+				return pathinfo( $file, PATHINFO_FILENAME );
+			},
+			$content_files
+		);
 
-			$this->assertEquals( $json, $entries[ $key ], $key . ' registry metadata should match JSON metadata.' );
-		}
+		$registry_keys = array_keys( Gallery_Registry::all() );
+		sort( $content_keys );
+		sort( $registry_keys );
+
+		$this->assertEquals( $content_keys, $registry_keys );
 	}
 }
