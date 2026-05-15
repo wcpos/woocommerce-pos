@@ -110,4 +110,23 @@ class Test_Gallery_Registry extends WP_UnitTestCase {
 			$entries['thermal-simple-80mm-rtl']['description']
 		);
 	}
+	/**
+	 * Test registry metadata matches the existing JSON catalogue during migration.
+	 */
+	public function test_registry_matches_existing_json_catalogue_before_deletion(): void {
+		$entries = Gallery_Registry::all();
+
+		foreach ( self::EXPECTED_KEYS as $key ) {
+			$json_file = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $key . '.json';
+			if ( ! file_exists( $json_file ) ) {
+				$this->markTestSkipped( 'Gallery JSON catalogue has already been deleted.' );
+			}
+
+			$json = json_decode( file_get_contents( $json_file ), true );
+			$this->assertIsArray( $json, $key . ' JSON should decode.' );
+			unset( $json['key'] );
+
+			$this->assertEquals( $json, $entries[ $key ], $key . ' registry metadata should match JSON metadata.' );
+		}
+	}
 }
