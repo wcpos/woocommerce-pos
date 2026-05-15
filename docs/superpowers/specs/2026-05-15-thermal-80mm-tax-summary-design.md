@@ -8,7 +8,7 @@ Redesign the per-rate tax summary block on `thermal-detailed-80mm.xml` so it sto
 
 The tax summary in `thermal-detailed-80mm.xml` (lines 178-192) has two distinct defects, both visible on a normal receipt:
 
-```
+```text
 Tax included
 US (10%) 4                                4,52 €
   Taxable excl. 45,22 €    Taxable incl. 49…
@@ -75,13 +75,13 @@ After:
 
 Renders as:
 
-```
+```text
 Tax Summary
 US (10%) @ 45,22 €                        4,52 €
 VAT (20%) @ 30,00 €                       6,00 €
 ```
 
-The `{{#taxable_amount_excl_display}}` guard wraps the ` @ <base>` fragment so it disappears cleanly when the data builder has no net base for a rate (`taxable_amount_excl` can be `null` — `Receipt_Data_Builder.php:442`), consistent with the template's "blocks disappear when data is empty" design.
+The `{{#taxable_amount_excl_display}}` guard wraps the `@ <base>` fragment so it disappears cleanly when the data builder has no net base for a rate (`taxable_amount_excl` can be `null` — `Receipt_Data_Builder.php:442`), consistent with the template's "blocks disappear when data is empty" design.
 
 The `{{#has_tax_summary}}` heading block (lines 179-182) is unchanged.
 
@@ -121,7 +121,7 @@ On line 205, drop the `{{#code}} · {{code}}{{/code}}` fragment so the tax cell 
 - `packages/template-gallery/src/__tests__/thermal-detailed-80mm-render.test.ts` (new)
   - render test mirroring `thermal-detailed-58mm-render.test.ts`, asserting the compact tax line renders and the rate-id does not appear
 - `tests/includes/Templates/Test_Receipt_Template_Tax_Display.php`
-  - add content-level assertions that the tax summary no longer prints the rate-id: the `{{#rate}} ({{rate}}%){{/rate}}{{#code}}` adjacency in the two thermal templates, and the `{{#code}} · ` fragment in `detailed-receipt.html`
+  - add content-level assertions that the tax summary no longer prints the rate-id: the `{{#rate}} ({{rate}}%){{/rate}}{{#code}}` adjacency in the two thermal templates, and the `{{#code}} ·` fragment in `detailed-receipt.html`
 
 ## Error Handling / Risk
 
@@ -129,7 +129,7 @@ Low risk — this is a presentational change to gallery template files, with no 
 
 Considerations:
 
-- A rate row with no net base: the `{{#taxable_amount_excl_display}}` guard collapses the inline ` @ <base>` fragment cleanly, provided the money formatter yields an empty `taxable_amount_excl_display` for a `null` base — confirm this when building the render-test fixture.
+- A rate row with no net base: the `{{#taxable_amount_excl_display}}` guard collapses the inline `@ <base>` fragment cleanly, provided the money formatter yields an empty `taxable_amount_excl_display` for a `null` base — confirm this when building the render-test fixture.
 - Pathologically long tax labels (e.g. a 30-plus-character rate name combined with a large currency value) can still ellipsis-truncate, because the rate line lives in a `width="*"` column (~34 chars on 48-CPL paper). This is a large improvement over the current 18-char hard cap and covers all realistic data; it is an accepted residual limit, not a regression.
 - `Test_Receipt_Template_Tax_Display.php` already passes against the new markup: it asserts the `{{#tax.display_excl}}` / `{{#tax.display_incl}}{{i18n.included_tax}}` heading branches (kept intact) and the excl line-item fields (untouched). No existing assertion targets the tax summary row layout.
 - `thermal-detailed-58mm-render.test.ts` continues to pass: it asserts `Taxable excl.` / `Taxable incl.` text (still present in the 58mm stacked layout) and does not assert on `code`.
@@ -142,7 +142,7 @@ Considerations:
   - the compact rate line renders (rate label, the inline net base, the tax amount)
   - the rendered output does not contain the tax-rate id from the fixture
   - the heading still branches between `Tax Summary` and `Tax included` by display mode
-- Extend `tests/includes/Templates/Test_Receipt_Template_Tax_Display.php` with content assertions that the tax summary no longer prints the rate-id: for `thermal-detailed-58mm.xml` and `thermal-detailed-80mm.xml`, that the `{{#rate}} ({{rate}}%){{/rate}}` rate line is no longer immediately followed by `{{#code}}`; for `detailed-receipt.html`, that the `{{#code}} · ` fragment is gone.
+- Extend `tests/includes/Templates/Test_Receipt_Template_Tax_Display.php` with content assertions that the tax summary no longer prints the rate-id: for `thermal-detailed-58mm.xml` and `thermal-detailed-80mm.xml`, that the `{{#rate}} ({{rate}}%){{/rate}}` rate line is no longer immediately followed by `{{#code}}`; for `detailed-receipt.html`, that the `{{#code}} ·` fragment is gone.
 - Run the existing template-gallery and PHP receipt-template suites to confirm no regression.
 
 Commands:

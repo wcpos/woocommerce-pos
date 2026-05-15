@@ -206,14 +206,14 @@ Leave the `{{#has_tax_summary}}` heading block immediately above it untouched.
 
 In the same file, in the top comment block's section list, replace these two lines (~lines 26-27):
 
-```
+```text
   - Tax summary — per-rate breakdown with net (taxable excl.) and
     gross (taxable incl.) under each rate.
 ```
 
 with:
 
-```
+```text
   - Tax summary — one line per tax rate: rate label and percent, the
     net amount it was applied to (after "@"), and the tax charged.
 ```
@@ -310,7 +310,7 @@ pnpm exec wp-env run --env-cwd='wp-content/plugins/woocommerce-pos' tests-cli --
   --filter test_tax_summary_does_not_print_internal_rate_id
 ```
 
-Expected: FAIL. `thermal-detailed-58mm.xml` still contains `{{/rate}}{{#code}}`, and `detailed-receipt.html` still contains `{{#code}} · `. (`thermal-detailed-80mm.xml` already passes its assertion — Task 1 removed the fragment there.)
+Expected: FAIL. `thermal-detailed-58mm.xml` still contains `{{/rate}}{{#code}}`, and `detailed-receipt.html` still contains `{{#code}} ·`. (`thermal-detailed-80mm.xml` already passes its assertion — Task 1 removed the fragment there.)
 
 - [ ] **Step 3: Remove the rate-id from the 58mm template and fix its header comment**
 
@@ -328,7 +328,7 @@ with:
 
 Then, in the same file's top comment block, replace these three lines (~lines 22-24):
 
-```
+```text
   - Tax summary — per-rate breakdown with net (taxable excl.) and
     gross (taxable incl.) stacked under each rate (the 80mm sibling
     shows them side-by-side; 32 columns is too narrow for that).
@@ -336,7 +336,7 @@ Then, in the same file's top comment block, replace these three lines (~lines 22
 
 with:
 
-```
+```text
   - Tax summary — per-rate breakdown with net (taxable excl.) and
     gross (taxable incl.) stacked under each rate (the 80mm sibling
     shows the net base inline on the rate line; 32 columns keeps
@@ -349,13 +349,13 @@ The 58mm stacked three-row layout is otherwise unchanged — it does not truncat
 
 In `templates/gallery/detailed-receipt.html`, in the tax summary table cell (~line 205), replace the fragment:
 
-```
+```html
 {{label}}{{#code}} · <span style="color: #6b7280;">{{code}}</span>{{/code}}
 ```
 
 with:
 
-```
+```html
 {{label}}
 ```
 
@@ -438,4 +438,4 @@ All work is committed in the worktree. Use the `/pr` skill to push the branch an
 
 **Placeholder scan:** No TBD/TODO/"handle edge cases" — every step has exact file paths, complete code, and exact commands with expected output.
 
-**Type / name consistency:** `RATE_ID_SENTINEL` is defined once and reused across all three `it` blocks. `test_tax_summary_does_not_print_internal_rate_id` and the `read_gallery_template()` helper match the existing test file. The `{{/rate}}{{#code}}` and `{{#code}} · ` assertion strings match the exact fragments removed in Task 1 Step 3, Task 2 Step 3, and Task 2 Step 4.
+**Type / name consistency:** `RATE_ID_SENTINEL` is defined once and reused across all three `it` blocks. `test_tax_summary_does_not_print_internal_rate_id` and the `read_gallery_template()` helper match the existing test file. The `{{/rate}}{{#code}}` and `{{#code}} ·` assertion strings match the exact fragments removed in Task 1 Step 3, Task 2 Step 3, and Task 2 Step 4.
