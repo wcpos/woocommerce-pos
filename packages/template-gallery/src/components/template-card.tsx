@@ -53,7 +53,7 @@ export function TemplateCard(props: TemplateCardProps) {
 						src={previewSrc}
 						alt=""
 						loading="lazy"
-						className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top wcpos:group-hover:object-bottom wcpos:transition-[object-position] wcpos:duration-[3000ms] wcpos:ease-linear"
+						className="wcpos:w-full wcpos:h-full wcpos:object-cover wcpos:object-top group-hover:wcpos:object-bottom wcpos:transition-[object-position] wcpos:duration-[3000ms] wcpos:ease-linear motion-reduce:wcpos:transition-none motion-reduce:wcpos:duration-0"
 					/>
 				) : (
 					<span className="wcpos:text-gray-400 wcpos:text-sm">{t('common.preview')}</span>

@@ -136,7 +136,9 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain('template-gallery/previews/standard-receipt.png');
 		expect(markup).toContain('wcpos:object-cover');
 		expect(markup).toContain('wcpos:object-top');
-		expect(markup).toContain('wcpos:group-hover:object-bottom');
+		expect(markup).toContain('group-hover:wcpos:object-bottom');
+		expect(markup).toContain('motion-reduce:wcpos:transition-none');
+		expect(markup).toContain('motion-reduce:wcpos:duration-0');
 		expect(markup).not.toContain('common.preview</span>');
 	});
 });
