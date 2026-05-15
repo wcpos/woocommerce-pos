@@ -16,6 +16,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WP_Query;
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
+use WCPOS\WooCommercePOS\Templates\Gallery_Registry;
 
 /**
  * Templates class.
@@ -870,19 +871,9 @@ class Templates {
 		}
 
 		$templates  = array();
-		$json_files = glob( $gallery_dir . '*.json' );
+		$extensions = array( 'html', 'php', 'xml' );
 
-		if ( ! $json_files ) {
-			return array();
-		}
-
-		foreach ( $json_files as $json_file ) {
-			$metadata = json_decode( file_get_contents( $json_file ), true );
-
-			if ( ! $metadata || empty( $metadata['key'] ) ) {
-				continue;
-			}
-
+		foreach ( Gallery_Registry::all() as $key => $metadata ) {
 			if ( $type && ( $metadata['type'] ?? '' ) !== $type ) {
 				continue;
 			}
@@ -890,10 +881,7 @@ class Templates {
 				continue;
 			}
 
-			$key          = $metadata['key'];
 			$content_file = null;
-			$extensions   = array( 'html', 'php', 'xml' );
-
 			foreach ( $extensions as $ext ) {
 				$candidate = $gallery_dir . $key . '.' . $ext;
 				if ( file_exists( $candidate ) ) {
@@ -906,6 +894,7 @@ class Templates {
 				continue;
 			}
 
+			$metadata['key']       = $key;
 			$metadata['direction'] = isset( $metadata['direction'] ) && 'rtl' === $metadata['direction']
 				? 'rtl'
 				: 'ltr';
