@@ -9,7 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
 const payloadPath = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), 'gallery-preview-payloads.json'));
 const outputDir = path.resolve(process.argv[3] ?? path.join(repoRoot, 'assets/img/template-gallery/previews'));
-const a4PreviewWidth = 312;
+const a4PreviewWidth = 794;
+const screenshotScale = 2;
 
 const viteUrl = pathToFileURL(path.join(repoRoot, 'packages/template-gallery/node_modules/vite/dist/node/index.js')).href;
 const { createServer } = await import(viteUrl);
@@ -82,6 +83,9 @@ const paper = document.getElementById('wcpos-preview-paper');
 const capture = document.getElementById('capture');
 const normalizedPaperWidth = payload.paper_width === '58mm' || payload.paper_width === '80mm' ? payload.paper_width : 'a4';
 const nativeWidth = normalizedPaperWidth === '58mm' ? 219 : normalizedPaperWidth === '80mm' ? 302 : 794;
+// Capture high-resolution source PNGs and let the gallery cards downscale them.
+// A4 templates use their real CSS paper width; Playwright's device scale factor
+// doubles the stored pixels so text and logos stay sharp in the browser.
 const initialCaptureWidth = payload.engine === 'thermal' ? nativeWidth : ${a4PreviewWidth};
 const scale = payload.engine === 'thermal' ? 1 : initialCaptureWidth / nativeWidth;
 capture.style.width = initialCaptureWidth + 'px';
@@ -122,7 +126,7 @@ const baseUrl = server.resolvedUrls?.local?.[0];
 if (!baseUrl) throw new Error('Unable to start Vite preview server');
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 900, height: 1400 }, deviceScaleFactor: 1 });
+const page = await browser.newPage({ viewport: { width: 1800, height: 2400 }, deviceScaleFactor: screenshotScale });
 
 try {
 	for (const payload of payloads) {

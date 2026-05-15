@@ -17,6 +17,9 @@ function getBundledGalleryKeys(): string[] {
 	return Array.from(keys).sort();
 }
 
+const PREVIEW_DEVICE_SCALE_FACTOR = 2;
+const A4_PREVIEW_CSS_WIDTH = 794;
+
 // Templates whose preview PNG dimensions must match the 58mm paper width.
 const THERMAL_58MM_KEYS = new Set([
 	'thermal-simple-58mm',
@@ -195,9 +198,19 @@ describe('gallery template assets', () => {
 	});
 
 
-	it('uses natural receipt paper widths for thermal preview images', () => {
+	it('ships high-resolution preview source images for clean browser downscaling', () => {
+		for (const key of getBundledGalleryKeys()) {
+			const expectedWidth = THERMAL_KEYS.has(key)
+				? (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR
+				: A4_PREVIEW_CSS_WIDTH * PREVIEW_DEVICE_SCALE_FACTOR;
+			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
+			expect(dimensions.width, key).toBe(expectedWidth);
+		}
+	});
+
+	it('preserves natural thermal paper widths at the preview source scale', () => {
 		for (const key of THERMAL_KEYS) {
-			const expectedWidth = THERMAL_58MM_KEYS.has(key) ? 274 : 398;
+			const expectedWidth = (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR;
 			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
