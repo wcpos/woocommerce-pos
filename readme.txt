@@ -93,14 +93,17 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Changelog ==
 
-= 1.8.15 - 2026/05/14 =
-- **Added the Receipt Data v1 contract for custom templates** — receipt data now exposes branchable tax-display fields, a tax-summary guard, robust totals, i18n labels, fiscal/refund context, and richer store/customer/line metadata for custom receipt templates.
-- **Redesigned the receipt template gallery and editor previews** — added refreshed A4, invoice, quote, packing slip, gift receipt, detailed thermal, simple thermal, and RTL templates, with shared preview rendering, scaled paper viewports, and safer PHP preview behavior.
-- **Fixed tax-inclusive receipt wording and tax summary calculations** — templates can now distinguish tax-inclusive vs tax-exclusive stores, and tax summaries use real post-discount taxable bases instead of reverse-calculating from rounded tax amounts.
-- **Fixed desktop app store sync validation** — removed the vestigial `order_barcode_type` field that could cause store documents to be rejected by app schemas.
-- **Improved receipt discounts and coupons** — each coupon discount is emitted as its own row, `discounts[].code` is the canonical coupon reference, and `discounts[].label` uses a distinct coupon description when available.
-- **Improved store details and tax ID settings** — consolidated Store Details and Tax IDs in settings, aligned tax ID schema handling, and preserved compatibility for older Pro overrides.
-- **Hardened template and CI safeguards** — added field-tree/payload contract coverage, schema checks, safer raw template-content guards, and stricter merge-gate handling.
+= 1.9.0 - 2026/05/15 =
+Almost three months of work — here are the highlights:
+
+- **New receipt template gallery** — pick from ready-made receipt, invoice, quote, packing slip, gift receipt, kitchen ticket, and right-to-left templates, and switch between them in settings.
+- **Multiple receipt templates** — install and enable several templates side by side instead of being stuck with one.
+- **Thermal printer support** — print receipts directly to thermal printers (58mm and 80mm) over network, Bluetooth, or USB, with a guided setup wizard in the WCPOS apps.
+- **Customer Tax IDs** — a new Tax ID field on the customer form, ready for VAT, ABN, GST, and other regional tax numbers.
+- **Pro: Coupons at the POS** — search for and apply coupons at checkout, with coupon pills in the cart and support for sequential discounts.
+- **Pro: Refunds at the POS** — refund POS orders directly from the till, with a full audit trail.
+- **Pro: Per-store receipt templates** — assign different templates to different stores, and drag-and-drop to reorder them.
+- Plus lots of smaller fixes — tax and coupon calculations, third-party plugin compatibility, faster syncs, and better translations.
 
 = 1.8.14 - 2026/02/19 =
 - **Hardened DB migration locking** — upgrade now uses the WordPress core upgrader lock (`WP_Upgrading`) with an atomic acquisition check and a shutdown fallback, preventing concurrent migrations on high-traffic sites ([#540](https://github.com/wcpos/woocommerce-pos/pull/540))
@@ -152,3 +155,8 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 - **Tightened permission checks** — capability checks now properly match what's configured on the Access settings page ([#467](https://github.com/wcpos/woocommerce-pos/pull/467))
 - **Improved performance during large syncs** — the UI stays responsive while syncing large product catalogs ([8657e1f](https://github.com/wcpos/monorepo/commit/8657e1f))
 - **Fixed web hydration in standalone mode** — the web app loads correctly when accessed directly without the desktop wrapper ([#19](https://github.com/wcpos/monorepo/pull/19))
+
+== Upgrade Notice ==
+
+= 1.9.0 =
+This is a big update with breaking changes. If you're busy, please wait — there's nothing urgent in 1.9.0, and it's safer to give any early bugs a few days to be worked out. Update during quiet time, and always make a backup first.
