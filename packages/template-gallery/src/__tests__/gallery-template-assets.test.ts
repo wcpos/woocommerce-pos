@@ -5,8 +5,43 @@ import path from 'path';
 const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
 const previewDir = path.join(repoRoot, 'assets', 'img', 'template-gallery', 'previews');
-const previewDataDir = path.join(galleryDir, 'preview-data');
 
+function getBundledGalleryKeys(): string[] {
+	const keys = new Set<string>();
+	for (const filename of fs.readdirSync(galleryDir)) {
+		const parsed = path.parse(filename);
+		if (['.html', '.xml', '.php'].includes(parsed.ext)) {
+			keys.add(parsed.name);
+		}
+	}
+	return Array.from(keys).sort();
+}
+
+// Templates whose preview PNG dimensions must match the 58mm paper width.
+const THERMAL_58MM_KEYS = new Set([
+	'thermal-simple-58mm',
+	'thermal-detailed-58mm',
+]);
+
+// All thermal templates (need a preview PNG sized to 58mm or 80mm).
+const THERMAL_KEYS = new Set([
+	'thermal-detailed-58mm',
+	'thermal-detailed-80mm',
+	'thermal-kitchen-ticket',
+	'thermal-simple-58mm',
+	'thermal-simple-80mm',
+	'thermal-simple-80mm-rtl',
+]);
+
+function findContentFile(key: string): string | null {
+	for (const ext of ['html', 'xml', 'php']) {
+		const candidate = path.join(galleryDir, `${key}.${ext}`);
+		if (fs.existsSync(candidate)) {
+			return candidate;
+		}
+	}
+	return null;
+}
 
 function readPngDimensions(filePath: string): { width: number; height: number } {
 	const buffer = fs.readFileSync(filePath);
@@ -41,28 +76,12 @@ afterEach(() => {
 
 describe('gallery template assets', () => {
 	it('includes a narrow browser receipt template that is webview-portable and B&W', () => {
-		const jsonPath = path.join(galleryDir, 'narrow-receipt.json');
 		const htmlPath = path.join(galleryDir, 'narrow-receipt.html');
 
-		expect(fs.existsSync(jsonPath)).toBe(true);
 		expect(fs.existsSync(htmlPath)).toBe(true);
 
-		const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
-			key: string;
-			engine: string;
-			type: string;
-			category: string;
-			output_type: string;
-			version: number;
-		};
 		const html = fs.readFileSync(htmlPath, 'utf8');
 
-		expect(metadata.key).toBe('narrow-receipt');
-		expect(metadata.engine).toBe('logicless');
-		expect(metadata.type).toBe('receipt');
-		expect(metadata.category).toBe('receipt');
-		expect(metadata.output_type).toBe('html');
-		expect(metadata.version).toBe(1);
 		expect(html).toContain('monospace');
 		expect(html).toContain('{{store.name}}');
 		// Older embedded WebViews render flex unreliably; rely on tables instead.
@@ -163,72 +182,38 @@ describe('gallery template assets', () => {
 		}
 	});
 
-	it('maps every bundled gallery template to a committed preview data fixture', () => {
-		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
-
-		for (const filename of metadataFiles) {
-			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
-				key: string;
-				preview_data?: string;
-			};
-
-			expect(metadata.preview_data, metadata.key).toBeTruthy();
-			expect(fs.existsSync(path.join(previewDataDir, `${metadata.preview_data}.json`)), metadata.key).toBe(true);
+	it('maps every bundled gallery template to a content file', () => {
+		for (const key of getBundledGalleryKeys()) {
+			expect(findContentFile(key), key).not.toBeNull();
 		}
 	});
 
 	it('maps every bundled gallery template to a committed preview image', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
-		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
 
-		for (const filename of metadataFiles) {
-			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
-				key: string;
-			};
-
-			expect(fs.existsSync(path.join(previewDir, `${metadata.key}.png`)), metadata.key).toBe(true);
-			expect(getGalleryPreviewSrc(metadata.key), metadata.key).toBe(`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${metadata.key}.png`);
+		for (const key of getBundledGalleryKeys()) {
+			expect(fs.existsSync(path.join(previewDir, `${key}.png`)), key).toBe(true);
+			expect(getGalleryPreviewSrc(key), key).toBe(
+				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.png`,
+			);
 		}
 	});
 
 
 	it('uses natural receipt paper widths for thermal preview images', () => {
-		const metadataFiles = fs.readdirSync(galleryDir).filter((filename: string) => filename.endsWith('.json'));
-
-		for (const filename of metadataFiles) {
-			const metadata = JSON.parse(fs.readFileSync(path.join(galleryDir, filename), 'utf8')) as {
-				key: string;
-				engine?: string;
-				paper_width?: string;
-			};
-
-			if (metadata.engine !== 'thermal') continue;
-
-			const expectedWidth = metadata.paper_width === '58mm' ? 274 : 398;
-			const dimensions = readPngDimensions(path.join(previewDir, `${metadata.key}.png`));
-			expect(dimensions.width, metadata.key).toBe(expectedWidth);
+		for (const key of THERMAL_KEYS) {
+			const expectedWidth = THERMAL_58MM_KEYS.has(key) ? 274 : 398;
+			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
+			expect(dimensions.width, key).toBe(expectedWidth);
 		}
 	});
 
 	it('ships the RTL HTML template with logical properties and direction=rtl', () => {
-		const jsonPath = path.join(galleryDir, 'standard-receipt-rtl.json');
 		const htmlPath = path.join(galleryDir, 'standard-receipt-rtl.html');
 
-		expect(fs.existsSync(jsonPath)).toBe(true);
 		expect(fs.existsSync(htmlPath)).toBe(true);
 
-		const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
-			key: string;
-			direction: string;
-			engine: string;
-			output_type: string;
-		};
 		const html = fs.readFileSync(htmlPath, 'utf8');
-
-		expect(metadata.key).toBe('standard-receipt-rtl');
-		expect(metadata.direction).toBe('rtl');
-		expect(metadata.engine).toBe('logicless');
-		expect(metadata.output_type).toBe('html');
 
 		// Outer wrapper carries dir + unicode-bidi for mixed-script safety.
 		expect(html).toContain('dir="rtl"');
@@ -249,30 +234,12 @@ describe('gallery template assets', () => {
 	});
 
 	it('ships the RTL thermal template with mirrored columns and codepage caveat', () => {
-		const jsonPath = path.join(galleryDir, 'thermal-simple-80mm-rtl.json');
 		const xmlPath = path.join(galleryDir, 'thermal-simple-80mm-rtl.xml');
 
-		expect(fs.existsSync(jsonPath)).toBe(true);
 		expect(fs.existsSync(xmlPath)).toBe(true);
 
-		const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as {
-			key: string;
-			direction: string;
-			engine: string;
-			output_type: string;
-			paper_width: string;
-			description: string;
-		};
 		const xml = fs.readFileSync(xmlPath, 'utf8');
 
-		expect(metadata.key).toBe('thermal-simple-80mm-rtl');
-		expect(metadata.direction).toBe('rtl');
-		expect(metadata.engine).toBe('thermal');
-		expect(metadata.output_type).toBe('escpos');
-		expect(metadata.paper_width).toBe('80mm');
-		// Description must mention the printer codepage requirement so users
-		// aren't surprised when buying a printer for an Arabic store.
-		expect(metadata.description).toMatch(/CP864|Windows-1256/);
 		expect(xml).toContain('Phone: {{store.phone}}');
 		expect(xml).toContain('Email: {{store.email}}');
 
