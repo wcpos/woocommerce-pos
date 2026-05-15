@@ -134,7 +134,9 @@ describe('TemplateCard gallery layout', () => {
 		expect(markup).toContain('aria-label="common.preview"');
 		expect(markup).toContain('alt=""');
 		expect(markup).toContain('template-gallery/previews/standard-receipt.png');
-		expect(markup).toContain('wcpos:object-contain');
+		expect(markup).toContain('wcpos:object-cover');
+		expect(markup).toContain('wcpos:object-top');
+		expect(markup).toContain('wcpos:group-hover:object-bottom');
 		expect(markup).not.toContain('common.preview</span>');
 	});
 });
