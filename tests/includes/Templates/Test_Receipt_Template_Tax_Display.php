@@ -317,6 +317,40 @@ class Test_Receipt_Template_Tax_Display extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test the tax summary never prints the internal WooCommerce tax-rate id.
+	 *
+	 * The tax_summary[].code field carries the WooCommerce tax-rate database id, which is
+	 * meaningless on a customer receipt. Templates must render the label and
+	 * rate, never the id.
+	 */
+	public function test_tax_summary_does_not_print_internal_rate_id(): void {
+		$templates = array_merge( self::DETAILED_THERMAL_TEMPLATES, array( 'detailed-receipt.html' ) );
+
+		foreach ( $templates as $filename ) {
+			$content = $this->read_gallery_template( $filename );
+
+			preg_match_all(
+				'/\{\{\s*#\s*tax_summary\s*\}\}[\s\S]*?\{\{\s*\/\s*tax_summary\s*\}\}/',
+				$content,
+				$tax_summary_blocks
+			);
+
+			$this->assertNotEmpty(
+				$tax_summary_blocks[0],
+				sprintf( '%s must include a tax_summary block for this assertion.', $filename )
+			);
+
+			foreach ( $tax_summary_blocks[0] as $tax_summary_block ) {
+				$this->assertDoesNotMatchRegularExpression(
+					'/\{\{\s*#\s*code\s*\}\}|\{\{\s*code\s*\}\}/',
+					$tax_summary_block,
+					sprintf( '%s tax summary must not render tax_summary[].code.', $filename )
+				);
+			}
+		}
+	}
+
+	/**
 	 * Test detailed-receipt.html omits the Total Tax row when the order has no tax.
 	 */
 	public function test_detailed_receipt_hides_tax_row_when_order_has_no_tax(): void {
