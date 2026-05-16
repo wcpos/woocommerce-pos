@@ -13,6 +13,7 @@ TRANSLATION_FILE="${MERGE_GATE_TRANSLATION_FILE:-}"
 POT_FILE="${MERGE_GATE_POT_FILE:-}"
 POT_AUTHOR="${MERGE_GATE_POT_AUTHOR:-wcpos-bot[bot]}"
 TRANSLATION_AUTHORS="|${MERGE_GATE_TRANSLATION_AUTHORS:-translations-ci[bot]|app/translations-ci}|"
+DEPENDENCY_AUTHORS="|${MERGE_GATE_DEPENDENCY_AUTHORS:-dependabot[bot]|app/dependabot}|"
 
 log() {
   printf '%s\n' "$*"
@@ -28,6 +29,35 @@ pr_diff_patch() {
 
 is_translation_author() {
   [[ "$TRANSLATION_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
+}
+
+is_dependency_author() {
+  [[ "$DEPENDENCY_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
+}
+
+is_dependency_manifest_file() {
+  case "$1" in
+    package.json|*/package.json|package-lock.json|*/package-lock.json|composer.json|*/composer.json)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+is_allowed_dependency_pr() {
+  is_dependency_author || return 1
+  [[ "$PR_TITLE" =~ ^(chore|build)\(deps\):[[:space:]]bump[[:space:]] ]] || return 1
+
+  local changed_files file saw_file=false
+  changed_files="$(pr_diff_names)"
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    saw_file=true
+    is_dependency_manifest_file "$file" || return 1
+  done <<< "$changed_files"
+
+  [[ "$saw_file" == "true" ]]
 }
 
 is_allowed_translation_version_pr() {
@@ -210,6 +240,9 @@ main() {
   elif is_allowed_pot_pr; then
     log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
     return 0
+  elif is_allowed_dependency_pr; then
+    coderabbit_required=false
+    log "Validated automated dependency PR; waiting for required checks without CodeRabbit."
   else
     log "CodeRabbit and smoke test are required for this PR."
   fi

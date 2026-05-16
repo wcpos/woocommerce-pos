@@ -186,6 +186,31 @@ run_case "human PR still requires CodeRabbit for non-PHP changes" fail \
   MOCK_CODERABBIT="missing" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
+run_case "Dependabot manifest-only PR bypasses CodeRabbit" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="chore(deps): bump react from 18.3.1 to 19.2.6" \
+  MOCK_CHANGED_FILES="packages/settings/package.json
+packages/ui/package.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "Dependabot non-manifest PR still requires CodeRabbit" fail \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="chore(deps): bump react from 18.3.1 to 19.2.6" \
+  MOCK_CHANGED_FILES="packages/settings/src/index.ts" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "human dependency PR still requires CodeRabbit" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="chore(deps): bump react from 18.3.1 to 19.2.6" \
+  MOCK_CHANGED_FILES="packages/settings/package.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
 run_case "POT-only bypass" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
   PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
