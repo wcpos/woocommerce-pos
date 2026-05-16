@@ -124,6 +124,20 @@ pot_patch="diff --git a/${TEST_POT_FILE} b/${TEST_POT_FILE}
  msgid \"Old string\"
 +msgid \"New string\""
 
+dependabot_actions_patch="diff --git a/.github/workflows/tests-js.yml b/.github/workflows/tests-js.yml
+--- a/.github/workflows/tests-js.yml
++++ b/.github/workflows/tests-js.yml
+@@ -46,7 +46,7 @@
+-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
++      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0"
+
+dependabot_non_action_patch="diff --git a/.github/workflows/tests-js.yml b/.github/workflows/tests-js.yml
+--- a/.github/workflows/tests-js.yml
++++ b/.github/workflows/tests-js.yml
+@@ -46,7 +46,7 @@
+-          node-version: '20'
++          node-version: '22'"
+
 run_case "translation-version bypass" pass \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
@@ -193,5 +207,27 @@ run_case "POT-only bypass" pass \
   MOCK_PATCH="$pot_patch" \
   MOCK_CODERABBIT="missing" \
   MOCK_NO_CHECKS_EXPECTED="true"
+
+run_case "Dependabot GitHub Actions bypasses CodeRabbit after required checks pass" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="chore(deps): bump the actions group across 1 directory with 1 update" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml" \
+  MOCK_PATCH="$dependabot_actions_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "Dependabot GitHub Actions rejects non-uses workflow changes" fail \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="chore(deps): bump the actions group across 1 directory with 1 update" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml" \
+  MOCK_PATCH="$dependabot_non_action_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "Dependabot GitHub Actions rejects non-workflow changes" fail \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="chore(deps): bump the actions group across 1 directory with 1 update" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml
+package.json" \
+  MOCK_PATCH="$dependabot_actions_patch" \
+  MOCK_CODERABBIT="missing"
 
 echo "merge-gate tests passed"

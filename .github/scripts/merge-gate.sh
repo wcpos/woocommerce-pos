@@ -49,15 +49,9 @@ is_allowed_translation_version_pr() {
   local version_pattern="[0-9]{4}\.[0-9]+\.[0-9]+"
   local version_line_pattern="^[[:space:]]*(const[[:space:]]+TRANSLATION_VERSION[[:space:]]*=[[:space:]]*'${version_pattern}'|\\\\?define\\([[:space:]]*__NAMESPACE__[[:space:]]*\\.[[:space:]]*'\\\\TRANSLATION_VERSION',[[:space:]]*'${version_pattern}'[[:space:]]*\\))[[:space:]]*;[[:space:]]*$"
   changed_lines="$({ pr_diff_patch || true; } | awk '
-    /^diff --git / { next }
-    /^index / { next }
-    /^@@ / { next }
-    /^--- / { next }
-    /^\+\+\+ / { next }
-    /^From / { next }
-    /^Date: / { next }
-    /^Subject: / { next }
-    /^[+-]/ { print }
+    /^diff --git / { in_hunk = 0; next }
+    /^@@ / { in_hunk = 1; next }
+    in_hunk && /^[+-]/ { print }
   ')"
 
   [[ -n "$changed_lines" ]] || return 1
@@ -89,6 +83,64 @@ is_allowed_pot_pr() {
   local changed_files
   changed_files="$(pr_diff_names)"
   [[ "$changed_files" == "$POT_FILE" ]]
+}
+
+is_allowed_dependabot_actions_pr() {
+  [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || return 1
+
+  local changed_files file
+  changed_files="$(pr_diff_names)"
+  [[ -n "$changed_files" ]] || return 1
+
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    case "$file" in
+      .github/workflows/*.yml|.github/workflows/*.yaml)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$changed_files"
+
+  local changed_lines line action added=0 removed=0
+  local action_pattern="^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*([^[:space:]@]+)@[^[:space:]]+([[:space:]]+#.*)?$"
+  declare -A removed_actions=()
+  declare -A added_actions=()
+
+  changed_lines="$({ pr_diff_patch || true; } | awk '
+    /^diff --git / { in_hunk = 0; next }
+    /^@@ / { in_hunk = 1; next }
+    in_hunk && /^[+-]/ { print }
+  ')"
+
+  [[ -n "$changed_lines" ]] || return 1
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ "${line:1}" =~ $action_pattern ]]; then
+      action="${BASH_REMATCH[2]}"
+    else
+      return 1
+    fi
+
+    if [[ "$line" == -* ]]; then
+      removed_actions["$action"]=$(( ${removed_actions["$action"]:-0} + 1 ))
+      removed=$((removed + 1))
+    elif [[ "$line" == +* ]]; then
+      added_actions["$action"]=$(( ${added_actions["$action"]:-0} + 1 ))
+      added=$((added + 1))
+    else
+      log "Unexpected non-actions diff line: $line"
+      return 1
+    fi
+  done <<< "$changed_lines"
+
+  [[ "$added" -gt 0 && "$added" -eq "$removed" ]] || return 1
+
+  for action in "${!removed_actions[@]}"; do
+    [[ "${added_actions["$action"]:-0}" -eq "${removed_actions["$action"]}" ]] || return 1
+  done
 }
 
 requires_php_tests() {
@@ -210,6 +262,9 @@ main() {
   elif is_allowed_pot_pr; then
     log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
     return 0
+  elif is_allowed_dependabot_actions_pr; then
+    log "Validated Dependabot GitHub Actions PR; smoke test is required and CodeRabbit is bypassed."
+    coderabbit_required=false
   else
     log "CodeRabbit and smoke test are required for this PR."
   fi
