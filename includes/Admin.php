@@ -23,7 +23,6 @@ use WCPOS\WooCommercePOS\Admin\Plugins;
 use WCPOS\WooCommercePOS\Admin\Products\List_Products;
 use WCPOS\WooCommercePOS\Admin\Products\Single_Product;
 use WCPOS\WooCommercePOS\Admin\Settings;
-use WCPOS\WooCommercePOS\Admin\Templates\List_Templates;
 use WCPOS\WooCommercePOS\Admin\Templates\Single_Template;
 use WP_Screen;
 
@@ -69,7 +68,6 @@ class Admin {
 			'edit-shop_order'            => List_Orders::class,
 			'plugins'                    => Plugins::class,
 			'wcpos_template'             => Single_Template::class,
-			'edit-wcpos_template'        => List_Templates::class,
 			'woocommerce_page_wc-orders' => array( $this, 'handle_wc_hpos_orders_screen' ),
 			'woocommerce_page_wc-admin'  => array( $this, 'handle_wc_analytics_screen' ),
 		);
@@ -80,60 +78,6 @@ class Admin {
 	 */
 	public function init(): void {
 		new Notices();
-
-		// Register admin-post.php handlers only when our specific actions are requested.
-		// This keeps the footprint minimal and avoids conflicts with other plugins.
-		$action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
-		if ( \in_array( $action, array( 'wcpos_activate_template', 'wcpos_copy_template', 'wcpos_install_starter', 'wcpos_toggle_template_status' ), true ) ) {
-			add_action( 'admin_post_wcpos_activate_template', array( $this, 'handle_activate_template' ) );
-			add_action( 'admin_post_wcpos_copy_template', array( $this, 'handle_copy_template' ) );
-			add_action( 'admin_post_wcpos_install_starter', array( $this, 'handle_install_starter' ) );
-			add_action( 'admin_post_wcpos_toggle_template_status', array( $this, 'handle_toggle_template_status' ) );
-		}
-	}
-
-	/**
-	 * Handle template activation via admin-post.php.
-	 * Delegates to List_Templates class.
-	 *
-	 * @return void
-	 */
-	public function handle_activate_template(): void {
-		$handler = new List_Templates();
-		$handler->activate_template();
-	}
-
-	/**
-	 * Handle template active/inactive status toggles via admin-post.php.
-	 * Delegates to Single_Template class.
-	 *
-	 * @return void
-	 */
-	public function handle_toggle_template_status(): void {
-		$handler = new Single_Template();
-		$handler->toggle_template_status();
-	}
-
-	/**
-	 * Handle template copy via admin-post.php.
-	 * Delegates to List_Templates class.
-	 *
-	 * @return void
-	 */
-	public function handle_copy_template(): void {
-		$handler = new List_Templates();
-		$handler->copy_template();
-	}
-
-	/**
-	 * Handle starter template installation via admin-post.php.
-	 * Delegates to List_Templates class.
-	 *
-	 * @return void
-	 */
-	public function handle_install_starter(): void {
-		$handler = new List_Templates();
-		$handler->install_starter_template();
 	}
 
 	/**
