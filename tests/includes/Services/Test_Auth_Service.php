@@ -161,6 +161,156 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test concurrent cashier sessions do not invalidate each other's tokens.
+	 */
+	public function test_two_cashiers_can_refresh_independent_token_pairs(): void {
+		$cashier_one = $this->factory->user->create_and_get(
+			array(
+				'role' => 'cashier',
+			)
+		);
+		$cashier_two = $this->factory->user->create_and_get(
+			array(
+				'role' => 'cashier',
+			)
+		);
+
+		try {
+			$this->assertTrue( user_can( $cashier_one, 'access_woocommerce_pos' ) );
+			$this->assertTrue( user_can( $cashier_two, 'access_woocommerce_pos' ) );
+
+			$cashier_one_tokens = $this->auth_service->generate_token_pair( $cashier_one );
+			$cashier_two_tokens = $this->auth_service->generate_token_pair( $cashier_two );
+
+			$this->assertIsArray( $cashier_one_tokens );
+			$this->assertIsArray( $cashier_two_tokens );
+			$this->assertNotEquals( $cashier_one_tokens['access_token'], $cashier_two_tokens['access_token'] );
+			$this->assertNotEquals( $cashier_one_tokens['refresh_token'], $cashier_two_tokens['refresh_token'] );
+
+			$cashier_one_access = $this->auth_service->validate_token( $cashier_one_tokens['access_token'], 'access' );
+			$cashier_one_refresh = $this->auth_service->validate_token( $cashier_one_tokens['refresh_token'], 'refresh' );
+			$cashier_two_access = $this->auth_service->validate_token( $cashier_two_tokens['access_token'], 'access' );
+			$cashier_two_refresh = $this->auth_service->validate_token( $cashier_two_tokens['refresh_token'], 'refresh' );
+
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_one_access );
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_one_refresh );
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_two_access );
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_two_refresh );
+
+			$this->assertEquals( $cashier_one->ID, $cashier_one_access->data->user->id );
+			$this->assertEquals( $cashier_one->ID, $cashier_one_refresh->data->user->id );
+			$this->assertEquals( $cashier_two->ID, $cashier_two_access->data->user->id );
+			$this->assertEquals( $cashier_two->ID, $cashier_two_refresh->data->user->id );
+			$this->assertNotEquals( $cashier_one_refresh->jti, $cashier_two_refresh->jti );
+			$this->assertEquals( $cashier_one_refresh->jti, $cashier_one_access->refresh_jti );
+			$this->assertEquals( $cashier_two_refresh->jti, $cashier_two_access->refresh_jti );
+
+			$cashier_one_sessions = $this->auth_service->get_user_sessions( $cashier_one->ID );
+			$cashier_two_sessions = $this->auth_service->get_user_sessions( $cashier_two->ID );
+
+			$this->assertCount( 1, $cashier_one_sessions );
+			$this->assertCount( 1, $cashier_two_sessions );
+			$this->assertEquals( $cashier_one_refresh->jti, $cashier_one_sessions[0]['jti'] );
+			$this->assertEquals( $cashier_two_refresh->jti, $cashier_two_sessions[0]['jti'] );
+
+			$cashier_one_refreshed = $this->auth_service->refresh_access_token( $cashier_one_tokens['refresh_token'] );
+			$this->assertIsArray( $cashier_one_refreshed );
+
+			$cashier_two_still_valid = $this->auth_service->refresh_access_token( $cashier_two_tokens['refresh_token'] );
+			$this->assertIsArray( $cashier_two_still_valid );
+
+			$cashier_one_new_access = $this->auth_service->validate_token( $cashier_one_refreshed['access_token'], 'access' );
+			$cashier_two_new_access = $this->auth_service->validate_token( $cashier_two_still_valid['access_token'], 'access' );
+
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_one_new_access );
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_two_new_access );
+			$this->assertEquals( $cashier_one->ID, $cashier_one_new_access->data->user->id );
+			$this->assertEquals( $cashier_two->ID, $cashier_two_new_access->data->user->id );
+			$this->assertEquals( $cashier_one_refresh->jti, $cashier_one_new_access->refresh_jti );
+			$this->assertEquals( $cashier_two_refresh->jti, $cashier_two_new_access->refresh_jti );
+
+			$this->assertCount( 1, $this->auth_service->get_user_sessions( $cashier_one->ID ) );
+			$this->assertCount( 1, $this->auth_service->get_user_sessions( $cashier_two->ID ) );
+
+			$this->assertTrue( $this->auth_service->revoke_session( $cashier_one->ID, $cashier_one_refresh->jti ) );
+
+			$cashier_one_revoked = $this->auth_service->refresh_access_token( $cashier_one_tokens['refresh_token'] );
+			$cashier_two_after_revoke = $this->auth_service->refresh_access_token( $cashier_two_tokens['refresh_token'] );
+
+			$this->assertInstanceOf( WP_Error::class, $cashier_one_revoked );
+			$this->assertIsArray( $cashier_two_after_revoke );
+		} finally {
+			wp_delete_user( $cashier_one->ID );
+			wp_delete_user( $cashier_two->ID );
+		}
+	}
+
+	/**
+	 * Test expired cashier tokens do not invalidate other cashier sessions.
+	 */
+	public function test_expired_cashier_tokens_do_not_invalidate_other_cashier_sessions(): void {
+		$cashier_one = $this->factory->user->create_and_get(
+			array(
+				'role' => 'cashier',
+			)
+		);
+		$cashier_two = $this->factory->user->create_and_get(
+			array(
+				'role' => 'cashier',
+			)
+		);
+		$expire_refresh_token = null;
+		$expire_access_token  = null;
+
+		try {
+			$cashier_two_tokens = $this->auth_service->generate_token_pair( $cashier_two );
+			$this->assertIsArray( $cashier_two_tokens );
+
+			$expire_refresh_token = function ( $expire, $issued_at ) {
+				return $issued_at - 1;
+			};
+
+			add_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
+			$cashier_one_expired_refresh_token = $this->auth_service->generate_refresh_token( $cashier_one );
+			remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+
+			$this->assertIsString( $cashier_one_expired_refresh_token );
+
+			$cashier_one_refresh_result = $this->auth_service->refresh_access_token( $cashier_one_expired_refresh_token );
+			$cashier_two_refresh_result = $this->auth_service->refresh_access_token( $cashier_two_tokens['refresh_token'] );
+
+			$this->assertInstanceOf( WP_Error::class, $cashier_one_refresh_result );
+			$this->assertIsArray( $cashier_two_refresh_result );
+
+			$expire_access_token = function ( $expire, $issued_at ) {
+				return $issued_at - 1;
+			};
+
+			add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+			$cashier_one_expired_access_token = $this->auth_service->generate_access_token( $cashier_one );
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+
+			$this->assertIsString( $cashier_one_expired_access_token );
+
+			$cashier_one_access_result = $this->auth_service->validate_token( $cashier_one_expired_access_token, 'access' );
+			$cashier_two_access_result = $this->auth_service->validate_token( $cashier_two_refresh_result['access_token'], 'access' );
+
+			$this->assertInstanceOf( WP_Error::class, $cashier_one_access_result );
+			$this->assertNotInstanceOf( WP_Error::class, $cashier_two_access_result );
+			$this->assertEquals( $cashier_two->ID, $cashier_two_access_result->data->user->id );
+		} finally {
+			if ( null !== $expire_refresh_token ) {
+				remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+			}
+			if ( null !== $expire_access_token ) {
+				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+			}
+			wp_delete_user( $cashier_one->ID );
+			wp_delete_user( $cashier_two->ID );
+		}
+	}
+
+	/**
 	 * Test session revocation.
 	 */
 	public function test_revoke_session(): void {
