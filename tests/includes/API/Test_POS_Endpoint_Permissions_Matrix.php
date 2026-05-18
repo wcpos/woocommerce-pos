@@ -108,18 +108,21 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	public function test_default_roles_can_access_expected_pos_endpoints_with_valid_access_tokens(): void {
 		foreach ( $this->get_pos_endpoint_matrix() as $endpoint ) {
 			foreach ( $this->role_users as $role => $user ) {
-				$expected_allowed = $endpoint['roles'][ $role ];
-				$response         = $this->dispatch_endpoint_as_user( $endpoint, $user );
-				$status           = $response->get_status();
-				$data             = $response->get_data();
-				$code             = \is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '';
+				$endpoint_for_dispatch         = $endpoint;
+				$endpoint_for_dispatch['path'] = $this->resolve_endpoint_path( $endpoint, $user );
+				$endpoint_for_dispatch['body'] = $this->resolve_endpoint_body( $endpoint, $user );
+				$expected_allowed              = $endpoint['roles'][ $role ];
+				$response                      = $this->dispatch_endpoint_as_user( $endpoint_for_dispatch, $user );
+				$status                        = $response->get_status();
+				$data                          = $response->get_data();
+				$code                          = \is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '';
 
 				if ( $expected_allowed ) {
 					$message = \sprintf(
 						'%s should access %s %s with a valid access token. Got %d %s.',
 						$role,
 						$endpoint['method'],
-						$this->resolve_endpoint_path( $endpoint, $user ),
+						$endpoint_for_dispatch['path'],
 						$status,
 						$code
 					);
@@ -138,7 +141,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 							'%s should be denied for %s %s. Got %d %s.',
 							$role,
 							$endpoint['method'],
-							$this->resolve_endpoint_path( $endpoint, $user ),
+							$endpoint_for_dispatch['path'],
 							$status,
 							$code
 						)
@@ -221,6 +224,10 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function ensure_cashier_role_caps(): void {
 		$role = get_role( 'cashier' );
+		$this->assertNotNull(
+			$role,
+			'The cashier role must be registered for POS endpoint permission tests.'
+		);
 		if ( ! $role ) {
 			return;
 		}
@@ -258,8 +265,7 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 	 */
 	private function get_pos_endpoint_matrix(): array {
 		ProductHelper::create_simple_product( array( 'regular_price' => 18, 'price' => 18 ) );
-		$order    = OrderHelper::create_order();
-		$customer = CustomerHelper::create_customer();
+		$order = OrderHelper::create_order();
 
 		$all_roles        = array( 'administrator' => true, 'shop_manager' => true, 'cashier' => true );
 		$management_roles = array( 'administrator' => true, 'shop_manager' => true, 'cashier' => false );
@@ -279,15 +285,39 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 
 			array( 'id' => 'orders index', 'method' => 'GET', 'path' => '/wcpos/v1/orders', 'roles' => $all_roles ),
 			array( 'id' => 'orders create', 'method' => 'POST', 'path' => '/wcpos/v1/orders', 'body' => array( 'status' => 'pending' ), 'roles' => $all_roles ),
-			array( 'id' => 'orders update', 'method' => 'PATCH', 'path' => '/wcpos/v1/orders/' . $order->get_id(), 'body' => array( 'status' => 'completed' ), 'roles' => $all_roles ),
+			array(
+				'id'     => 'orders update',
+				'method' => 'PATCH',
+				'path'   => function ( WP_User $_user ) {
+					return '/wcpos/v1/orders/' . OrderHelper::create_order()->get_id();
+				},
+				'body'   => array( 'status' => 'completed' ),
+				'roles'  => $all_roles,
+			),
 			array( 'id' => 'order checkout read', 'method' => 'GET', 'path' => '/wcpos/v1/orders/' . $order->get_id() . '/checkout', 'roles' => $all_roles ),
-			array( 'id' => 'order checkout create', 'method' => 'POST', 'path' => '/wcpos/v1/orders/' . $order->get_id() . '/checkout', 'body' => array( 'gateway_id' => 'pos_cash' ), 'roles' => $all_roles ),
+			array(
+				'id'     => 'order checkout create',
+				'method' => 'POST',
+				'path'   => function ( WP_User $_user ) {
+					return '/wcpos/v1/orders/' . OrderHelper::create_order()->get_id() . '/checkout';
+				},
+				'body'   => array( 'gateway_id' => 'pos_cash' ),
+				'roles'  => $all_roles,
+			),
 			array( 'id' => 'receipt live read', 'method' => 'GET', 'path' => '/wcpos/v1/receipts/' . $order->get_id(), 'query' => array( 'mode' => 'live' ), 'roles' => $all_roles ),
 			array( 'id' => 'order statuses', 'method' => 'GET', 'path' => '/wcpos/v1/data/order_statuses', 'roles' => $all_roles ),
 
 			array( 'id' => 'customers index', 'method' => 'GET', 'path' => '/wcpos/v1/customers', 'roles' => $all_roles ),
 			array( 'id' => 'customers create', 'method' => 'POST', 'path' => '/wcpos/v1/customers', 'body' => function ( WP_User $user ) { return array( 'email' => 'matrix-' . $user->ID . '-' . wp_generate_uuid4() . '@example.com', 'first_name' => 'Matrix', 'last_name' => 'Customer' ); }, 'roles' => $all_roles ),
-			array( 'id' => 'customers update', 'method' => 'PATCH', 'path' => '/wcpos/v1/customers/' . $customer->get_id(), 'body' => array( 'first_name' => 'Updated' ), 'roles' => $all_roles ),
+			array(
+				'id'     => 'customers update',
+				'method' => 'PATCH',
+				'path'   => function ( WP_User $_user ) {
+					return '/wcpos/v1/customers/' . CustomerHelper::create_customer()->get_id();
+				},
+				'body'   => array( 'first_name' => 'Updated' ),
+				'roles'  => $all_roles,
+			),
 
 			array( 'id' => 'taxes index', 'method' => 'GET', 'path' => '/wcpos/v1/taxes', 'roles' => $all_roles ),
 			array( 'id' => 'tax classes index', 'method' => 'GET', 'path' => '/wcpos/v1/taxes/classes', 'roles' => $all_roles ),
