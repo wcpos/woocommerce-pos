@@ -104,6 +104,7 @@ run_case() {
 }
 
 translation_patch="diff --git a/${TEST_TRANSLATION_FILE} b/${TEST_TRANSLATION_FILE}
+---
 --- a/${TEST_TRANSLATION_FILE}
 +++ b/${TEST_TRANSLATION_FILE}
 @@ -1,3 +1,3 @@
