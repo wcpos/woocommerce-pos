@@ -146,6 +146,11 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 							$code
 						)
 					);
+					$this->assertEquals(
+						$user->ID,
+						get_current_user_id(),
+						$role . ' denied endpoint should be an authenticated permission failure, not a token-auth failure.'
+					);
 				}
 			}
 		}
@@ -172,11 +177,11 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			$expired_response = $this->dispatch_path_as_access_token( '/wcpos/v1/products', $expired_access_token );
 			$expired_data     = $expired_response->get_data();
 
-			$this->assertEquals( 403, $expired_response->get_status(), $role . ' expired access token should be denied.' );
+			$this->assertEquals( 401, $expired_response->get_status(), $role . ' expired access token should require re-login or refresh.' );
 			$this->assertEquals(
-				'woocommerce_pos_rest_forbidden',
+				'woocommerce_pos_rest_unauthorized',
 				\is_array( $expired_data ) && isset( $expired_data['code'] ) ? $expired_data['code'] : '',
-				$role . ' expired access token should fail at the POS auth gate, not as an endpoint-specific permission issue.'
+				$role . ' expired access token should be an authentication failure, not a permission failure.'
 			);
 			$this->assertEquals( 0, get_current_user_id(), $role . ' expired access token must not authenticate a user.' );
 
@@ -217,6 +222,43 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			$this->assertInstanceOf( WP_Error::class, $refresh_result, $role . ' expired refresh token should not mint access tokens.' );
 			$this->assertEquals( 'woocommmerce_pos_auth_invalid_token', $refresh_result->get_error_code() );
 		}
+	}
+
+	/**
+	 * Test protected POS endpoints return auth failures when no access token is present.
+	 */
+	public function test_missing_access_token_returns_401_for_protected_pos_endpoint(): void {
+		unset( $_SERVER['HTTP_AUTHORIZATION'] );
+
+		global $current_user;
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/products' ) );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 401, $response->get_status(), 'Missing access token should be fixable by login.' );
+		$this->assertEquals(
+			'woocommerce_pos_rest_unauthorized',
+			\is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '',
+			'Missing access token should be reported as an authentication failure.'
+		);
+		$this->assertEquals( 0, get_current_user_id(), 'Missing access token must not authenticate a user.' );
+	}
+
+	/**
+	 * Test malformed POS access tokens return auth failures.
+	 */
+	public function test_invalid_access_token_returns_401_for_protected_pos_endpoint(): void {
+		$response = $this->dispatch_path_as_access_token( '/wcpos/v1/products', 'not-a-valid-access-token' );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 401, $response->get_status(), 'Invalid access token should be fixable by login.' );
+		$this->assertEquals(
+			'woocommerce_pos_rest_unauthorized',
+			\is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '',
+			'Invalid access token should be reported as an authentication failure.'
+		);
+		$this->assertEquals( 0, get_current_user_id(), 'Invalid access token must not authenticate a user.' );
 	}
 
 	/**

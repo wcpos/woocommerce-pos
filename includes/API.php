@@ -408,6 +408,14 @@ class API {
 		$has_route_specific_permission_error = is_user_logged_in() && 0 === strpos( $route, '/wcpos/v1/receipts/' );
 		if ( '/wcpos/v1/auth/test' !== $route && '/wcpos/v1/auth/refresh' !== $route && ! $has_route_specific_permission_error ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
+				if ( ! is_user_logged_in() ) {
+					return new \WP_Error(
+						'woocommerce_pos_rest_unauthorized',
+						__( 'Authentication required.', 'woocommerce-pos' ),
+						array( 'status' => 401 )
+					);
+				}
+
 				return new \WP_Error(
 					'woocommerce_pos_rest_forbidden',
 					__( 'You do not have permission to access the POS.', 'woocommerce-pos' ),
