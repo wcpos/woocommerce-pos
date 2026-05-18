@@ -115,18 +115,21 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 				$code             = \is_array( $data ) && isset( $data['code'] ) ? $data['code'] : '';
 
 				if ( $expected_allowed ) {
+					$message = \sprintf(
+						'%s should access %s %s with a valid access token. Got %d %s.',
+						$role,
+						$endpoint['method'],
+						$this->resolve_endpoint_path( $endpoint, $user ),
+						$status,
+						$code
+					);
+
 					$this->assertNotContains(
 						$status,
 						array( 401, 403 ),
-						\sprintf(
-							'%s should access %s %s with a valid access token. Got %d %s.',
-							$role,
-							$endpoint['method'],
-							$this->resolve_endpoint_path( $endpoint, $user ),
-							$status,
-							$code
-						)
+						$message
 					);
+					$this->assertLessThan( 500, $status, $message );
 				} else {
 					$this->assertEquals(
 						403,
@@ -178,9 +181,15 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			$this->assertIsArray( $refreshed, $role . ' valid refresh token should produce a new access token.' );
 
 			$refreshed_response = $this->dispatch_path_as_access_token( '/wcpos/v1/products', $refreshed['access_token'] );
+			$refreshed_status   = $refreshed_response->get_status();
 			$this->assertNotContains(
-				$refreshed_response->get_status(),
+				$refreshed_status,
 				array( 401, 403 ),
+				$role . ' refreshed access token should restore access to products.'
+			);
+			$this->assertLessThan(
+				500,
+				$refreshed_status,
 				$role . ' refreshed access token should restore access to products.'
 			);
 		}
@@ -231,7 +240,11 @@ class Test_POS_Endpoint_Permissions_Matrix extends WCPOS_REST_Unit_Test_Case {
 			return;
 		}
 
-		foreach ( $role->capabilities as $cap => $granted ) {
+		foreach ( $this->original_cashier_caps_snapshot as $cap => $granted ) {
+			$role->add_cap( $cap, (bool) $granted );
+		}
+
+		foreach ( $role->capabilities as $cap => $_ ) {
 			if ( ! array_key_exists( $cap, $this->original_cashier_caps_snapshot ) ) {
 				$role->remove_cap( $cap );
 			}
