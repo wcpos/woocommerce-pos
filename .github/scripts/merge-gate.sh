@@ -52,6 +52,7 @@ is_allowed_translation_version_pr() {
     /^diff --git / { next }
     /^index / { next }
     /^@@ / { next }
+    /^---$/ { next }
     /^--- / { next }
     /^\+\+\+ / { next }
     /^From / { next }
