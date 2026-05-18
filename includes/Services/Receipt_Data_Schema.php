@@ -739,7 +739,7 @@ class Receipt_Data_Schema {
 					),
 					'change_total'        => array(
 						'type'  => 'money',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Change', 'woocommerce-pos' ),
+						'label' => /* translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify. */ __( 'Change', 'woocommerce-pos' ),
 					),
 					'refund_total'        => array(
 						'type'  => 'money',
@@ -850,11 +850,11 @@ class Receipt_Data_Schema {
 					),
 					'tendered'     => array(
 						'type'  => 'money',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tendered', 'woocommerce-pos' ),
+						'label' => /* translators: Template-editor field label for the money received from the customer at checkout; use the target-language equivalent of "Received", not procurement tender/bid language. */ __( 'Tendered', 'woocommerce-pos' ),
 					),
 					'change'       => array(
 						'type'  => 'money',
-						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Change', 'woocommerce-pos' ),
+						'label' => /* translators: Template-editor field label for cash returned to the customer after payment; not "change" meaning modify. */ __( 'Change', 'woocommerce-pos' ),
 					),
 					'transaction_id' => array(
 						'type'  => 'string',

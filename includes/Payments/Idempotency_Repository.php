@@ -80,6 +80,7 @@ class Idempotency_Repository {
 			if ( $existing['request_hash'] !== $request_hash ) {
 				return new WP_Error(
 					'wcpos_idempotency_conflict',
+					/* translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key. */
 					__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
 					array( 'status' => 409 )
 				);
@@ -118,6 +119,7 @@ class Idempotency_Repository {
 			if ( $existing['request_hash'] !== $request_hash ) {
 				return new WP_Error(
 					'wcpos_idempotency_conflict',
+					/* translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key. */
 					__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
 					array( 'status' => 409 )
 				);
@@ -129,13 +131,15 @@ class Idempotency_Repository {
 		if ( is_array( $current_claim ) && ( $current_claim['request_hash'] ?? null ) !== $request_hash ) {
 			return new WP_Error(
 				'wcpos_idempotency_conflict',
-				__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
+				/* translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key. */
+					__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
 				array( 'status' => 409 )
 			);
 		}
 
 		return new WP_Error(
 			'wcpos_idempotency_in_progress',
+			/* translators: API conflict error shown while an identical POS payment request is still running. */
 			__( 'An identical request is already being processed.', 'woocommerce-pos' ),
 			array( 'status' => 409 )
 		);
@@ -156,7 +160,8 @@ class Idempotency_Repository {
 		if ( $existing && $existing['request_hash'] !== $request_hash ) {
 			return new WP_Error(
 				'wcpos_idempotency_conflict',
-				__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
+				/* translators: API conflict error; idempotency key is a request identifier header/token, not a keyboard key. */
+					__( 'Idempotency key was reused with a different request.', 'woocommerce-pos' ),
 				array( 'status' => 409 )
 			);
 		}

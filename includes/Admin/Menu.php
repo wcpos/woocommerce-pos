@@ -162,9 +162,9 @@ class Menu {
 
 		$this->settings_screen_id = add_submenu_page(
 			PLUGIN_NAME,
-			// translators: wordpress.
+			// translators: WordPress admin submenu label that opens WCPOS settings.
 			__( 'Settings', 'woocommerce-pos' ),
-			// translators: wordpress.
+			// translators: WordPress admin submenu label that opens WCPOS settings.
 			__( 'Settings', 'woocommerce-pos' ),
 			'manage_woocommerce_pos',
 			PLUGIN_NAME . '-settings',

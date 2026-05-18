@@ -34,7 +34,7 @@ class Plugins {
 	public function plugin_action_links( array $actions ): array {
 		$settings = array(
 			'settings' => '<a href="' . admin_url( 'admin.php?page=woocommerce-pos-settings' ) . '">' .
-			// translators: wordpress.
+			// translators: Plugin row action link that opens WCPOS settings.
 			__( 'Settings', 'woocommerce-pos' ) . '</a>',
 		);
 
@@ -78,7 +78,7 @@ class Plugins {
 		// Show any additional upgrade notice from readme.txt.
 		if ( isset( $r->upgrade_notice ) && \strlen( trim( $r->upgrade_notice ) ) > 0 ) {
 			echo '<p style="background-color: #d54e21; padding: 10px; color: #f9f9f9; margin-top: 10px"><strong>' .
-				 // translators: wordpress.
+				 // translators: Prefix for an important plugin update notice in the WordPress plugins screen.
 				 esc_html__( 'Important:', 'woocommerce-pos' ) . '</strong> ';
 			echo esc_html( $r->upgrade_notice ), '</p>';
 		}

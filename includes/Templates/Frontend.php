@@ -52,7 +52,7 @@ class Frontend {
 
 		// check privileges.
 		if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
-			// translators: wordpress.
+			// translators: Authorization error shown when a logged-in user lacks permission to open the POS page.
 			wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'woocommerce-pos' ) );
 		}
 
