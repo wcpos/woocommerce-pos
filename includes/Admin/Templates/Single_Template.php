@@ -12,6 +12,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin\Templates;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
@@ -73,7 +74,6 @@ class Single_Template {
 		add_action( 'add_meta_boxes_wcpos_template', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-		add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 		add_action( 'admin_head-post.php', array( $this, 'hide_publish_status_controls' ) );
 		add_action( 'admin_head-post-new.php', array( $this, 'hide_publish_status_controls' ) );
 		add_filter( 'enter_title_here', array( $this, 'change_title_placeholder' ), 10, 2 );
@@ -177,16 +177,6 @@ class Single_Template {
 			/* translators: Label or action in the receipt templates admin screen. */
 			__( 'Publish', 'woocommerce-pos' ),
 			'post_submit_meta_box',
-			'wcpos_template',
-			'side',
-			'high'
-		);
-
-		add_meta_box(
-			'wcpos_template_actions',
-			/* translators: Label or action in the receipt templates admin screen. */
-			__( 'Template Actions', 'woocommerce-pos' ),
-			array( $this, 'render_actions_metabox' ),
 			'wcpos_template',
 			'side',
 			'high'
@@ -306,40 +296,10 @@ class Single_Template {
 	}
 
 	/**
-	 * Render actions metabox.
-	 *
-	 * @param \WP_Post $post Post object.
-	 *
-	 * @return void
-	 */
-	public function render_actions_metabox( \WP_Post $post ): void {
-		$is_published = 'publish' === $post->post_status;
-		$action       = $is_published ? 'deactivate' : 'activate';
-		$button_label = $is_published ? /* translators: Label or action in the receipt templates admin screen. */ __( 'Deactivate Template', 'woocommerce-pos' ) : __( 'Activate Template', 'woocommerce-pos' );
-		$description  = $is_published
-			? __( 'This template is active and available for POS receipts.', 'woocommerce-pos' )
-			: __( 'This template is inactive and will not be used for POS receipts.', 'woocommerce-pos' );
-		$button_class = $is_published ? 'button button-large' : 'button button-primary button-large';
-
-		?>
-		<p style="margin-top: 0;">
-			<?php echo esc_html( $description ); ?>
-		</p>
-		<p>
-			<a href="<?php echo esc_url( $this->get_toggle_status_url( $post->ID, $action ) ); ?>"
-			   class="<?php echo esc_attr( $button_class ); ?>"
-			   style="width: 100%; text-align: center;">
-				<?php echo esc_html( $button_label ); ?>
-			</a>
-		</p>
-		<?php
-	}
-
-	/**
 	 * Hide confusing WordPress Status and Visibility controls in the Publish box.
 	 *
-	 * Templates use the explicit Active/Inactive controls in Template Actions and
-	 * the gallery list. WordPress visibility does not affect POS template usage.
+	 * Template availability is managed by the Template Gallery. WordPress visibility
+	 * does not affect POS template usage.
 	 *
 	 * @return void
 	 */
@@ -357,184 +317,6 @@ class Single_Template {
 			}
 		</style>
 		<?php
-	}
-
-	/**
-	 * Handle template active/inactive status toggles from the edit screen.
-	 *
-	 * @return void
-	 */
-	public function toggle_template_status(): void {
-		$template_id = isset( $_GET['template_id'] ) ? absint( $_GET['template_id'] ) : 0;
-		$state       = isset( $_GET['state'] ) ? sanitize_key( wp_unslash( $_GET['state'] ) ) : '';
-
-		if ( ! $template_id || ! \in_array( $state, array( 'activate', 'deactivate' ), true ) ) {
-			wp_die( esc_html__( 'Invalid template status request.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_toggle_template_status_' . $template_id . '_' . $state ) ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			wp_die( esc_html__( 'You do not have permission to update templates.', 'woocommerce-pos' ) );
-		}
-
-		$post = get_post( $template_id );
-		if ( ! $post || 'wcpos_template' !== $post->post_type ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
-		}
-
-		$result = wp_update_post(
-			array(
-				'ID'          => $template_id,
-				'post_status' => 'activate' === $state ? 'publish' : 'draft',
-			),
-			true
-		);
-
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'post'                 => $template_id,
-					'action'               => 'edit',
-					'wcpos_status_updated' => is_wp_error( $result ) ? '0' : '1',
-				),
-				admin_url( 'post.php' )
-			)
-		);
-		exit;
-	}
-
-	/**
-	 * Handle template activation.
-	 *
-	 * @return void
-	 */
-	public function activate_template(): void {
-		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
-
-		if ( empty( $template_id ) ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_activate_template_' . $template_id ) ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			wp_die( esc_html__( 'You do not have permission to activate templates.', 'woocommerce-pos' ) );
-		}
-
-		// Determine template type.
-		$type = 'receipt';
-		if ( is_numeric( $template_id ) ) {
-			$template = TemplatesManager::get_template( (int) $template_id );
-			if ( $template ) {
-				$type = $template['type'];
-			}
-		}
-
-		$success = TemplatesManager::set_active_template_id( $template_id, $type );
-
-		if ( is_numeric( $template_id ) ) {
-			// Redirect back to post edit screen.
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'post'            => $template_id,
-						'action'          => 'edit',
-						'wcpos_activated' => $success ? '1' : '0',
-					),
-					admin_url( 'post.php' )
-				)
-			);
-		} else {
-			// Redirect to template list.
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'post_type'       => 'wcpos_template',
-						'wcpos_activated' => $success ? '1' : '0',
-					),
-					admin_url( 'edit.php' )
-				)
-			);
-		}
-		exit;
-	}
-
-	/**
-	 * Handle copying a virtual template to create a custom one.
-	 *
-	 * @return void
-	 */
-	public function copy_template(): void {
-		$template_id = isset( $_GET['template_id'] ) ? sanitize_text_field( wp_unslash( $_GET['template_id'] ) ) : '';
-
-		if ( empty( $template_id ) ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Invalid template ID.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'wcpos_copy_template_' . $template_id ) ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Security check failed.', 'woocommerce-pos' ) );
-		}
-
-		if ( ! current_user_can( 'manage_woocommerce_pos' ) ) {
-			wp_die( esc_html__( 'You do not have permission to create templates.', 'woocommerce-pos' ) );
-		}
-
-		// Get the virtual template.
-		$virtual_template = TemplatesManager::get_virtual_template( $template_id, 'receipt' );
-
-		if ( ! $virtual_template ) {
-			wp_die( /* translators: Label or action in the receipt templates admin screen. */ esc_html__( 'Template not found.', 'woocommerce-pos' ) );
-		}
-
-		// Create a new custom template from the virtual one.
-		$post_id = wp_insert_post(
-			array(
-				'post_title'   => sprintf(
-					/* translators: %s: original template title */
-					__( 'Copy of %s', 'woocommerce-pos' ),
-					$virtual_template['title']
-				),
-				'post_content' => $virtual_template['content'],
-				'post_type'    => 'wcpos_template',
-				'post_status'  => 'draft',
-			)
-		);
-
-		// @phpstan-ignore-next-line
-		if ( is_wp_error( $post_id ) ) {
-			wp_die( esc_html__( 'Failed to create template copy.', 'woocommerce-pos' ) );
-		}
-
-		// Set taxonomy.
-		wp_set_object_terms( $post_id, $virtual_template['type'], 'wcpos_template_type' );
-
-		// Set meta.
-		$engine = $virtual_template['engine'] ?? 'legacy-php';
-		update_post_meta( $post_id, '_template_language', $virtual_template['language'] );
-		update_post_meta( $post_id, '_template_engine', $engine );
-		update_post_meta( $post_id, '_template_output_type', $virtual_template['output_type'] ?? 'html' );
-
-		// Bypass wp_kses for offline-capable engines — it strips unknown HTML/XML tags.
-		if ( \in_array( $engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
-			TemplatesManager::save_raw_post_content( $post_id, $virtual_template['content'] );
-		}
-
-		// Redirect to edit the new template.
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'post'   => $post_id,
-					'action' => 'edit',
-				),
-				admin_url( 'post.php' )
-			)
-		);
-		exit;
 	}
 
 	/**
@@ -650,7 +432,7 @@ class Single_Template {
 
 		if ( ! $result ) {
 			// Log failure for debugging; the user will see the filtered content on reload.
-			error_log( sprintf( 'WCPOS: Failed to save raw template content for post %d', $post_id ) );
+			Logger::log( sprintf( 'Failed to save raw template content for post %d', $post_id ) );
 		}
 	}
 
@@ -766,87 +548,6 @@ class Single_Template {
 			'var wcpos = wcpos || {}; wcpos.translationVersion = %s; var wcposTemplateEditor = %s;',
 			wp_json_encode( TRANSLATION_VERSION ),
 			$encoded_config
-		);
-	}
-
-	/**
-	 * Display admin notices.
-	 *
-	 * @return void
-	 */
-	public function admin_notices(): void {
-		$screen = get_current_screen();
-		if ( ! $screen || 'wcpos_template' !== $screen->post_type ) {
-			return;
-		}
-
-		// Activation success notice.
-		if ( isset( $_GET['wcpos_activated'] ) && '1' === $_GET['wcpos_activated'] ) {
-			?>
-			<div class="notice notice-success is-dismissible">
-				<p><?php /* translators: Label or action in the receipt templates admin screen. */ esc_html_e( 'Template activated successfully.', 'woocommerce-pos' ); ?></p>
-			</div>
-			<?php
-		}
-
-		// Status toggle notices.
-		if ( isset( $_GET['wcpos_status_updated'] ) ) {
-			$success = '1' === $_GET['wcpos_status_updated'];
-			?>
-			<div class="notice <?php echo $success ? 'notice-success' : 'notice-error'; ?> is-dismissible">
-				<p>
-					<?php
-					echo esc_html(
-						$success
-							? /* translators: Label or action in the receipt templates admin screen. */ __( 'Template status updated successfully.', 'woocommerce-pos' )
-							: __( 'Failed to update template status.', 'woocommerce-pos' )
-					);
-					?>
-				</p>
-			</div>
-			<?php
-		}
-
-		// Copy success notice.
-		if ( isset( $_GET['wcpos_copied'] ) && '1' === $_GET['wcpos_copied'] ) {
-			?>
-			<div class="notice notice-success is-dismissible">
-				<p><?php esc_html_e( 'Template copied successfully. You can now edit your custom template.', 'woocommerce-pos' ); ?></p>
-			</div>
-			<?php
-		}
-
-		// Starter installed success notice (shown on edit screen after redirect).
-		if ( isset( $_GET['wcpos_installed'] ) && '1' === $_GET['wcpos_installed'] ) {
-			?>
-			<div class="notice notice-success is-dismissible">
-				<p><?php esc_html_e( 'Starter template installed. You can now customise it and activate it when ready.', 'woocommerce-pos' ); ?></p>
-			</div>
-			<?php
-		}
-
-		// Error notice.
-		if ( isset( $_GET['wcpos_error'] ) ) {
-			?>
-			<div class="notice notice-error is-dismissible">
-				<p><?php esc_html_e( 'Failed to activate template.', 'woocommerce-pos' ); ?></p>
-			</div>
-			<?php
-		}
-	}
-
-	/**
-	 * Get template status toggle URL.
-	 *
-	 * @param int    $template_id Template ID.
-	 * @param string $state       Desired state (activate or deactivate).
-	 *
-	 * @return string Toggle URL.
-	 */
-	private function get_toggle_status_url( int $template_id, string $state ): string {
-		return wp_nonce_url(
-			admin_url( 'admin-post.php?action=wcpos_toggle_template_status&template_id=' . $template_id . '&state=' . $state ),
-			'wcpos_toggle_template_status_' . $template_id . '_' . $state
 		);
 	}
 }
