@@ -550,5 +550,4 @@ class Single_Template {
 			$encoded_config
 		);
 	}
-
 }
