@@ -164,9 +164,9 @@ class Test_JWT_Plugin_Compatibility extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals(
-			403,
+			401,
 			$response->get_status(),
-			'An invalid Bearer token should be rejected with 403 even when a JWT plugin is active'
+			'An invalid Bearer token should be rejected with 401 even when a JWT plugin is active'
 		);
 	}
 

@@ -97,7 +97,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/logs' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 401, $response->get_status() );
 	}
 
 	/**
@@ -109,7 +109,7 @@ class Test_Logs_Controller extends WCPOS_REST_Unit_Test_Case {
 		$request  = $this->wp_rest_post_request( '/wcpos/v1/logs/mark-read' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 401, $response->get_status() );
 	}
 
 	/**
