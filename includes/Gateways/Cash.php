@@ -89,15 +89,15 @@ class Cash extends WC_Payment_Gateway {
 		echo '
 		<div class="form-row" id="pos-cash-tendered_field" style="display: flex; justify-content: space-between;">
 			<div style="flex: 1;">
-				<label for="pos-cash-tendered" style="padding-left:0">' . /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
+				<label for="pos-cash-tendered" style="padding-left:0">' . /* translators: Cash checkout field label for the amount of money received from the customer. */ esc_html__( 'Amount Tendered', 'woocommerce-pos' ) . '</label>
 				<div class="input-group">
 					' . wp_kses_post( $left_addon ) . '
-					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . /* translators: POS payment gateway label shown during checkout. */ esc_attr__( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
+					<input type="text" class="form-control" name="pos-cash-tendered" id="pos-cash-tendered" maxlength="20" data-numpad="cash" data-label="' . /* translators: Cash numpad label for the amount of money received from the customer. */ esc_attr__( 'Amount Tendered', 'woocommerce-pos' ) . '" data-placement="bottom" data-value="{{total}}">
 					' . wp_kses_post( $right_addon ) . '
 				</div>
 			</div>
 			<div style="flex: 1;">
-				<label style="padding-left:0">' . /* translators: POS payment gateway label shown during checkout. */ esc_html__( 'Change', 'woocommerce-pos' ) . '</label>
+				<label style="padding-left:0">' . /* translators: Cash checkout label for money returned to the customer when the received amount exceeds the total. */ esc_html__( 'Change', 'woocommerce-pos' ) . '</label>
 				<div id="pos-cash-change-display"></div>
 			</div>';
 		wp_nonce_field( 'pos_cash_payment_nonce', 'pos_cash_payment_nonce_field' );
@@ -198,7 +198,7 @@ class Cash extends WC_Payment_Gateway {
 
 		// construct message.
 		if ( $tendered && $change ) {
-			$message = /* translators: POS payment gateway label shown during checkout. */ __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
+			$message = /* translators: Order note label for the cash amount received from the customer at checkout. */ __( 'Amount Tendered', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $tendered ) . '<br>';
 			$message .= /* translators: Money returned to the customer after a cash payment. */ _x( 'Change', 'Money returned from cash sale', 'woocommerce-pos' ) . ': ';
 			$message .= wc_price( $change );
@@ -333,6 +333,7 @@ class Cash extends WC_Payment_Gateway {
 		if ( (float) $tendered < 0 ) {
 			return new \WP_Error(
 				'wcpos_invalid_tendered_amount',
+				/* translators: Checkout validation error for the cash amount received from the customer. */
 				__( 'Tendered amount must be zero or greater.', 'woocommerce-pos' ),
 				array( 'status' => 400 )
 			);

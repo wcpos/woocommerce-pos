@@ -23,7 +23,7 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	<a href="#pos-visibility" id="pos-visibility-show" class="hide-if-no-js"
 	   style="display: inline;">
 	   <?php
-		// translators: wordpress.
+		// translators: Link text for editing product POS visibility in the WooCommerce product publish box.
 		esc_html_e( 'Edit', 'woocommerce-pos' );
 		?>
   </a>
@@ -42,14 +42,14 @@ if ( ! \defined( 'ABSPATH' ) ) {
 			<a href="#pos-visibility" id="pos-visibility-save"
 			   class="hide-if-no-js button">
 			   <?php
-				// translators: wordpress.
+				// translators: Button text confirming product POS visibility changes in the WooCommerce product publish box.
 				esc_html_e( 'OK', 'woocommerce-pos' );
 				?>
 				</a>
 			<a href="#pos-visibility" id="pos-visibility-cancel"
 			   class="hide-if-no-js">
 			   <?php
-				// translators: wordpress.
+				// translators: Link text cancelling product POS visibility changes in the WooCommerce product publish box.
 				esc_html_e( 'Cancel', 'woocommerce-pos' );
 				?>
 	  </a>
@@ -96,4 +96,3 @@ if ( ! \defined( 'ABSPATH' ) ) {
 		})();
 	</script>
 </div>
-

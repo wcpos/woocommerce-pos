@@ -349,7 +349,7 @@ $i18n = $receipt_data['i18n'] ?? array();
 	<!-- Payments -->
 	<?php if ( ! empty( $receipt_data['payments'] ) ) : ?>
 		<div class="payments">
-			<div class="payments-label"><?php echo esc_html( $i18n['paid'] ?? __( 'Paid', 'woocommerce-pos' ) ); ?></div>
+			<div class="payments-label"><?php echo esc_html( $i18n['paid'] ?? /* translators: Receipt payment-section heading for amounts already paid by the customer. */ __( 'Paid', 'woocommerce-pos' ) ); ?></div>
 			<?php foreach ( $receipt_data['payments'] as $payment ) : ?>
 				<div class="payment-row">
 					<span><strong><?php echo esc_html( $payment['method_title'] ?? '' ); ?></strong></span>
@@ -357,11 +357,11 @@ $i18n = $receipt_data['i18n'] ?? array();
 				</div>
 				<?php if ( ! empty( $payment['tendered'] ) && (float) $payment['tendered'] > 0 ) : ?>
 					<div class="payment-sub">
-						<span><?php echo esc_html( $i18n['tendered'] ?? __( 'Tendered', 'woocommerce-pos' ) ); ?></span>
+						<span><?php echo esc_html( $i18n['tendered'] ?? /* translators: Standalone receipt/payment label meaning money received from the customer at checkout. Use the target-language equivalent of "Received" as a concise label; do not use wording that means "Amount paid/deposited", and do not use procurement tender/bid language. */ __( 'Tendered', 'woocommerce-pos' ) ); ?></span>
 						<span class="amount"><?php echo wp_kses_post( wc_price( $payment['tendered'], $currency_args ) ); ?></span>
 					</div>
 					<div class="payment-sub">
-						<span><?php echo esc_html( $i18n['change'] ?? __( 'Change', 'woocommerce-pos' ) ); ?></span>
+						<span><?php echo esc_html( $i18n['change'] ?? /* translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify. */ __( 'Change', 'woocommerce-pos' ) ); ?></span>
 						<span class="amount"><?php echo wp_kses_post( wc_price( $payment['change'] ?? 0, $currency_args ) ); ?></span>
 					</div>
 				<?php endif; ?>
