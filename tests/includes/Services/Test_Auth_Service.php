@@ -311,6 +311,156 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test concurrent shop manager sessions do not invalidate each other's tokens.
+	 */
+	public function test_two_shop_managers_can_refresh_independent_token_pairs(): void {
+		$manager_one = $this->factory->user->create_and_get(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+		$manager_two = $this->factory->user->create_and_get(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+
+		try {
+			$this->assertTrue( user_can( $manager_one, 'access_woocommerce_pos' ) );
+			$this->assertTrue( user_can( $manager_two, 'access_woocommerce_pos' ) );
+
+			$manager_one_tokens = $this->auth_service->generate_token_pair( $manager_one );
+			$manager_two_tokens = $this->auth_service->generate_token_pair( $manager_two );
+
+			$this->assertIsArray( $manager_one_tokens );
+			$this->assertIsArray( $manager_two_tokens );
+			$this->assertNotEquals( $manager_one_tokens['access_token'], $manager_two_tokens['access_token'] );
+			$this->assertNotEquals( $manager_one_tokens['refresh_token'], $manager_two_tokens['refresh_token'] );
+
+			$manager_one_access  = $this->auth_service->validate_token( $manager_one_tokens['access_token'], 'access' );
+			$manager_one_refresh = $this->auth_service->validate_token( $manager_one_tokens['refresh_token'], 'refresh' );
+			$manager_two_access  = $this->auth_service->validate_token( $manager_two_tokens['access_token'], 'access' );
+			$manager_two_refresh = $this->auth_service->validate_token( $manager_two_tokens['refresh_token'], 'refresh' );
+
+			$this->assertNotInstanceOf( WP_Error::class, $manager_one_access );
+			$this->assertNotInstanceOf( WP_Error::class, $manager_one_refresh );
+			$this->assertNotInstanceOf( WP_Error::class, $manager_two_access );
+			$this->assertNotInstanceOf( WP_Error::class, $manager_two_refresh );
+
+			$this->assertEquals( $manager_one->ID, $manager_one_access->data->user->id );
+			$this->assertEquals( $manager_one->ID, $manager_one_refresh->data->user->id );
+			$this->assertEquals( $manager_two->ID, $manager_two_access->data->user->id );
+			$this->assertEquals( $manager_two->ID, $manager_two_refresh->data->user->id );
+			$this->assertNotEquals( $manager_one_refresh->jti, $manager_two_refresh->jti );
+			$this->assertEquals( $manager_one_refresh->jti, $manager_one_access->refresh_jti );
+			$this->assertEquals( $manager_two_refresh->jti, $manager_two_access->refresh_jti );
+
+			$manager_one_sessions = $this->auth_service->get_user_sessions( $manager_one->ID );
+			$manager_two_sessions = $this->auth_service->get_user_sessions( $manager_two->ID );
+
+			$this->assertCount( 1, $manager_one_sessions );
+			$this->assertCount( 1, $manager_two_sessions );
+			$this->assertEquals( $manager_one_refresh->jti, $manager_one_sessions[0]['jti'] );
+			$this->assertEquals( $manager_two_refresh->jti, $manager_two_sessions[0]['jti'] );
+
+			$manager_one_refreshed = $this->auth_service->refresh_access_token( $manager_one_tokens['refresh_token'] );
+			$this->assertIsArray( $manager_one_refreshed );
+
+			$manager_two_still_valid = $this->auth_service->refresh_access_token( $manager_two_tokens['refresh_token'] );
+			$this->assertIsArray( $manager_two_still_valid );
+
+			$manager_one_new_access = $this->auth_service->validate_token( $manager_one_refreshed['access_token'], 'access' );
+			$manager_two_new_access = $this->auth_service->validate_token( $manager_two_still_valid['access_token'], 'access' );
+
+			$this->assertNotInstanceOf( WP_Error::class, $manager_one_new_access );
+			$this->assertNotInstanceOf( WP_Error::class, $manager_two_new_access );
+			$this->assertEquals( $manager_one->ID, $manager_one_new_access->data->user->id );
+			$this->assertEquals( $manager_two->ID, $manager_two_new_access->data->user->id );
+			$this->assertEquals( $manager_one_refresh->jti, $manager_one_new_access->refresh_jti );
+			$this->assertEquals( $manager_two_refresh->jti, $manager_two_new_access->refresh_jti );
+
+			$this->assertCount( 1, $this->auth_service->get_user_sessions( $manager_one->ID ) );
+			$this->assertCount( 1, $this->auth_service->get_user_sessions( $manager_two->ID ) );
+
+			$this->assertTrue( $this->auth_service->revoke_session( $manager_one->ID, $manager_one_refresh->jti ) );
+
+			$manager_one_revoked      = $this->auth_service->refresh_access_token( $manager_one_tokens['refresh_token'] );
+			$manager_two_after_revoke = $this->auth_service->refresh_access_token( $manager_two_tokens['refresh_token'] );
+
+			$this->assertInstanceOf( WP_Error::class, $manager_one_revoked );
+			$this->assertIsArray( $manager_two_after_revoke );
+		} finally {
+			wp_delete_user( $manager_one->ID );
+			wp_delete_user( $manager_two->ID );
+		}
+	}
+
+	/**
+	 * Test expired shop manager tokens do not invalidate other shop manager sessions.
+	 */
+	public function test_expired_shop_manager_tokens_do_not_invalidate_other_shop_manager_sessions(): void {
+		$manager_one = $this->factory->user->create_and_get(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+		$manager_two = $this->factory->user->create_and_get(
+			array(
+				'role' => 'shop_manager',
+			)
+		);
+		$expire_refresh_token = null;
+		$expire_access_token  = null;
+
+		try {
+			$manager_two_tokens = $this->auth_service->generate_token_pair( $manager_two );
+			$this->assertIsArray( $manager_two_tokens );
+
+			$expire_refresh_token = function ( $expire, $issued_at ) {
+				return $issued_at - 1;
+			};
+
+			add_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10, 2 );
+			$manager_one_expired_refresh_token = $this->auth_service->generate_refresh_token( $manager_one );
+			remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+
+			$this->assertIsString( $manager_one_expired_refresh_token );
+
+			$manager_one_refresh_result = $this->auth_service->refresh_access_token( $manager_one_expired_refresh_token );
+			$manager_two_refresh_result = $this->auth_service->refresh_access_token( $manager_two_tokens['refresh_token'] );
+
+			$this->assertInstanceOf( WP_Error::class, $manager_one_refresh_result );
+			$this->assertIsArray( $manager_two_refresh_result );
+
+			$expire_access_token = function ( $expire, $issued_at ) {
+				return $issued_at - 1;
+			};
+
+			add_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10, 2 );
+			$manager_one_expired_access_token = $this->auth_service->generate_access_token( $manager_one );
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+
+			$this->assertIsString( $manager_one_expired_access_token );
+
+			$manager_one_access_result = $this->auth_service->validate_token( $manager_one_expired_access_token, 'access' );
+			$manager_two_access_result = $this->auth_service->validate_token( $manager_two_refresh_result['access_token'], 'access' );
+
+			$this->assertInstanceOf( WP_Error::class, $manager_one_access_result );
+			$this->assertNotInstanceOf( WP_Error::class, $manager_two_access_result );
+			$this->assertEquals( $manager_two->ID, $manager_two_access_result->data->user->id );
+		} finally {
+			if ( null !== $expire_refresh_token ) {
+				remove_filter( 'woocommerce_pos_jwt_refresh_token_expire', $expire_refresh_token, 10 );
+			}
+			if ( null !== $expire_access_token ) {
+				remove_filter( 'woocommerce_pos_jwt_access_token_expire', $expire_access_token, 10 );
+			}
+			wp_delete_user( $manager_one->ID );
+			wp_delete_user( $manager_two->ID );
+		}
+	}
+
+	/**
 	 * Test session revocation.
 	 */
 	public function test_revoke_session(): void {
