@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -96,6 +96,12 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.1 - 2026/05/19 =
+- **Improved session recovery** -- expired POS sessions now refresh or ask for login correctly, while real permission errors no longer look like login problems.
+- **Fixed theme display issues** -- web navigation backgrounds now update correctly after changing themes.
+- **Fixed printer setup navigation** -- printer vendor tabs now respond correctly after the 1.9.0 printer flow changes.
+- **Updated translations** -- includes the latest translation metadata for improved app language support.
 
 = 1.9.0 - 2026/05/15 =
 Almost three months of work — here are the highlights:
