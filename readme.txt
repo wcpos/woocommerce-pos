@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -96,6 +96,9 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.1 - 2026/05/19 =
+- **Fixed token refresh status codes** -- protected POS API routes now return `401` for missing, invalid, or expired access tokens so the POS app can refresh the session or ask the user to log in again. Authenticated users who lack a required capability still receive `403`, making permission problems easier to diagnose.
 
 = 1.9.0 - 2026/05/15 =
 Almost three months of work — here are the highlights:
