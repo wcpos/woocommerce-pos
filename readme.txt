@@ -98,7 +98,10 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 == Changelog ==
 
 = 1.9.1 - 2026/05/19 =
-- **Fixed token refresh status codes** -- protected POS API routes now return `401` for missing, invalid, or expired access tokens so the POS app can refresh the session or ask the user to log in again. Authenticated users who lack a required capability still receive `403`, making permission problems easier to diagnose.
+- **Improved session recovery** -- expired POS sessions now refresh or ask for login correctly, while real permission errors no longer look like login problems.
+- **Fixed theme display issues** -- web navigation backgrounds now update correctly after changing themes.
+- **Fixed printer setup navigation** -- printer vendor tabs now respond correctly after the 1.9.0 printer flow changes.
+- **Updated translations** -- includes the latest translation metadata for improved app language support.
 
 = 1.9.0 - 2026/05/15 =
 Almost three months of work — here are the highlights:
