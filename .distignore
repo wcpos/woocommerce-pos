@@ -17,3 +17,7 @@ generate_autoload.php
 turbo.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
+docs
+scripts
+CLAUDE.md
+AGENTS.md
