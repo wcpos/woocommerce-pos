@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.9.0\n"
+"Project-Id-Version: WCPOS 1.9.1\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-18T22:50:57+00:00\n"
+"POT-Creation-Date: 2026-05-20T17:17:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -119,8 +119,8 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #: includes/Admin/Menu.php:178
 #: includes/Admin/Menu.php:180
-#: includes/Templates.php:68
-#: includes/Templates.php:73
+#: includes/Templates.php:70
+#: includes/Templates.php:75
 msgid "Templates"
 msgstr ""
 
@@ -2433,7 +2433,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:179
-#: includes/Templates.php:1118
+#: includes/Templates.php:1181
 #: includes/Templates/Gallery_Registry.php:55
 msgid "Invoice"
 msgstr ""
@@ -2451,7 +2451,7 @@ msgstr ""
 #. translators: Document title printed at the top of a completed sale receipt.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:182
-#: includes/Templates.php:1117
+#: includes/Templates.php:1180
 #: templates/receipt.php:186
 msgid "Receipt"
 msgstr ""
@@ -2460,7 +2460,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:183
-#: includes/Templates.php:1119
+#: includes/Templates.php:1182
 #: includes/Templates/Gallery_Registry.php:42
 msgid "Gift Receipt"
 msgstr ""
@@ -2468,7 +2468,7 @@ msgstr ""
 #. translators: Document title for a credit note/refund document.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:184
-#: includes/Templates.php:1120
+#: includes/Templates.php:1183
 msgid "Credit Note"
 msgstr ""
 
@@ -2735,305 +2735,321 @@ msgid "Invalid visibility option provided"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:66
+#: includes/Templates.php:68
 msgctxt "Post Type General Name"
 msgid "Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:67
+#: includes/Templates.php:69
 msgctxt "Post Type Singular Name"
 msgid "Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:69
-#: includes/Templates.php:96
+#: includes/Templates.php:71
+#: includes/Templates.php:98
 msgid "Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:70
+#: includes/Templates.php:72
 msgid "Template Archives"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:71
+#: includes/Templates.php:73
 msgid "Template Attributes"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:72
+#: includes/Templates.php:74
 msgid "Parent Template:"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:74
+#: includes/Templates.php:76
 msgid "Add New Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:75
+#: includes/Templates.php:77
 msgid "Add New"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:76
+#: includes/Templates.php:78
 msgid "New Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:77
+#: includes/Templates.php:79
 msgid "Edit Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:78
+#: includes/Templates.php:80
 msgid "Update Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:79
+#: includes/Templates.php:81
 msgid "View Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:80
+#: includes/Templates.php:82
 msgid "View Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:81
+#: includes/Templates.php:83
 msgid "Search Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:82
+#: includes/Templates.php:84
 msgid "Not found"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:83
+#: includes/Templates.php:85
 msgid "Not found in Trash"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:84
+#: includes/Templates.php:86
 msgid "Featured Image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:85
+#: includes/Templates.php:87
 msgid "Set featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:86
+#: includes/Templates.php:88
 msgid "Remove featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:87
+#: includes/Templates.php:89
 msgid "Use as featured image"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:88
+#: includes/Templates.php:90
 msgid "Insert into template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:89
+#: includes/Templates.php:91
 msgid "Uploaded to this template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:90
+#: includes/Templates.php:92
 msgid "Templates list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:91
+#: includes/Templates.php:93
 msgid "Templates list navigation"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:92
+#: includes/Templates.php:94
 msgid "Filter templates list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:97
+#: includes/Templates.php:99
 msgid "POS Templates"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:137
-msgctxt "Taxonomy General Name"
-msgid "Template Types"
-msgstr ""
-
-#. translators: Receipt template post type or template option label.
-#: includes/Templates.php:138
-msgctxt "Taxonomy Singular Name"
-msgid "Template Type"
-msgstr ""
-
-#. translators: Receipt template post type or template option label.
 #: includes/Templates.php:139
+msgctxt "Taxonomy General Name"
 msgid "Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:140
-msgid "All Template Types"
+msgctxt "Taxonomy Singular Name"
+msgid "Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:141
-msgid "Parent Template Type"
+msgid "Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:142
-msgid "Parent Template Type:"
+msgid "All Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:143
-msgid "New Template Type Name"
+msgid "Parent Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:144
-msgid "Add New Template Type"
+msgid "Parent Template Type:"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:145
-msgid "Edit Template Type"
+msgid "New Template Type Name"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:146
-msgid "Update Template Type"
+msgid "Add New Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:147
-msgid "View Template Type"
+msgid "Edit Template Type"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #: includes/Templates.php:148
+msgid "Update Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:149
+msgid "View Template Type"
+msgstr ""
+
+#. translators: Receipt template post type or template option label.
+#: includes/Templates.php:150
 msgid "Separate template types with commas"
 msgstr ""
 
-#: includes/Templates.php:149
+#: includes/Templates.php:151
 msgid "Add or remove template types"
 msgstr ""
 
-#: includes/Templates.php:150
+#: includes/Templates.php:152
 msgid "Choose from the most used"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:151
+#: includes/Templates.php:153
 msgid "Popular Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:152
+#: includes/Templates.php:154
 msgid "Search Template Types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:153
+#: includes/Templates.php:155
 msgid "Not Found"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:154
+#: includes/Templates.php:156
 msgid "No template types"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:155
+#: includes/Templates.php:157
 msgid "Template types list"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:156
+#: includes/Templates.php:158
 msgid "Template types list navigation"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:188
+#: includes/Templates.php:190
 msgctxt "Taxonomy General Name"
 msgid "Template Categories"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:189
+#: includes/Templates.php:191
 msgctxt "Taxonomy Singular Name"
 msgid "Template Category"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:363
+#: includes/Templates.php:366
 msgid "Theme Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:364
+#: includes/Templates.php:371
 msgid "Pro Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:365
+#: includes/Templates.php:376
 msgid "Legacy PHP Template"
 msgstr ""
 
-#: includes/Templates.php:955
-msgid "Starter template not found."
+#: includes/Templates.php:381
+msgid "Invoice (WP Overnight)"
 msgstr ""
 
-#: includes/Templates.php:962
-msgid "Could not read starter template file."
+#: includes/Templates.php:382
+msgid "Renders the PDF Invoices & Packing Slips invoice HTML through the WP Overnight document API."
 msgstr ""
 
-#: includes/Templates.php:991
-#: includes/Templates.php:1072
-msgid "Template was created but raw content could not be saved."
+#: includes/Templates.php:386
+msgid "Packing Slip (WP Overnight)"
+msgstr ""
+
+#: includes/Templates.php:387
+msgid "Renders the PDF Invoices & Packing Slips packing slip HTML through the WP Overnight document API."
 msgstr ""
 
 #: includes/Templates.php:1018
+msgid "Starter template not found."
+msgstr ""
+
+#: includes/Templates.php:1025
+msgid "Could not read starter template file."
+msgstr ""
+
+#: includes/Templates.php:1054
+#: includes/Templates.php:1135
+msgid "Template was created but raw content could not be saved."
+msgstr ""
+
+#: includes/Templates.php:1081
 msgid "Gallery template not found."
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1093
+#: includes/Templates.php:1156
 msgid "Receipt templates for printing orders"
 msgstr ""
 
-#: includes/Templates.php:1104
+#: includes/Templates.php:1167
 msgid "Report templates for analytics"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1121
+#: includes/Templates.php:1184
 msgid "Purchase Order"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Templates.php:1122
+#: includes/Templates.php:1185
 #: includes/Templates/Gallery_Registry.php:172
 msgid "Kitchen Ticket"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1123
+#: includes/Templates.php:1186
 msgid "Bar Ticket"
 msgstr ""
 
@@ -3393,6 +3409,22 @@ msgstr ""
 #. translators: Document title shown for the POS page.
 #: templates/pos.php:14
 msgid "Point of Sale"
+msgstr ""
+
+#: templates/wp-overnight-invoice.php:17
+msgid "The WP Overnight invoice document is not available."
+msgstr ""
+
+#: templates/wp-overnight-invoice.php:28
+msgid "The WP Overnight invoice document could not be rendered for this order."
+msgstr ""
+
+#: templates/wp-overnight-packing-slip.php:17
+msgid "The WP Overnight packing slip document is not available."
+msgstr ""
+
+#: templates/wp-overnight-packing-slip.php:28
+msgid "The WP Overnight packing slip document could not be rendered for this order."
 msgstr ""
 
 #: woocommerce-pos.php:131
