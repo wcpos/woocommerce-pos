@@ -14,6 +14,7 @@ namespace WCPOS\WooCommercePOS\Tests;
 
 use WCPOS\WooCommercePOS\Services\Receipt_I18n_Labels;
 use WCPOS\WooCommercePOS\Templates;
+use WCPOS\WooCommercePOS\Templates\Renderers\Legacy_Php_Renderer;
 use WP_UnitTestCase;
 
 /**
@@ -62,6 +63,7 @@ class Test_Templates extends WP_UnitTestCase {
 		delete_option( 'wcpos_template_order_report' );
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
+		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
 	}
 
 	/**
@@ -224,6 +226,83 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertNotNull( $path );
 		$this->assertStringEndsWith( 'templates/receipt.php', $path );
 		$this->assertTrue( file_exists( $path ) );
+	}
+
+	/**
+	 * Test WP Overnight templates are not listed when the integration is unavailable.
+	 */
+	public function test_wp_overnight_templates_not_detected_when_integration_unavailable(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_false' );
+
+		$templates = Templates::detect_filesystem_templates( 'receipt' );
+		$ids       = array_column( $templates, 'id' );
+
+		$this->assertNotContains( 'wp-overnight-invoice', $ids );
+		$this->assertNotContains( 'wp-overnight-packing-slip', $ids );
+	}
+
+	/**
+	 * Test WP Overnight invoice and packing slip templates are listed when the integration is available.
+	 */
+	public function test_wp_overnight_templates_detected_when_integration_available(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$templates = Templates::detect_filesystem_templates( 'receipt' );
+		$by_id     = array_column( $templates, null, 'id' );
+
+		$this->assertArrayHasKey( 'wp-overnight-invoice', $by_id );
+		$this->assertEquals( 'Invoice (WP Overnight)', $by_id['wp-overnight-invoice']['title'] );
+		$this->assertEquals( 'invoice', $by_id['wp-overnight-invoice']['category'] );
+		$this->assertEquals( 'legacy-php', $by_id['wp-overnight-invoice']['engine'] );
+		$this->assertEquals( 'html', $by_id['wp-overnight-invoice']['output_type'] );
+		$this->assertStringEndsWith( 'templates/wp-overnight-invoice.php', $by_id['wp-overnight-invoice']['file_path'] );
+
+		$this->assertArrayHasKey( 'wp-overnight-packing-slip', $by_id );
+		$this->assertEquals( 'Packing Slip (WP Overnight)', $by_id['wp-overnight-packing-slip']['title'] );
+		$this->assertEquals( 'receipt', $by_id['wp-overnight-packing-slip']['category'] );
+		$this->assertEquals( 'legacy-php', $by_id['wp-overnight-packing-slip']['engine'] );
+		$this->assertEquals( 'html', $by_id['wp-overnight-packing-slip']['output_type'] );
+		$this->assertStringEndsWith( 'templates/wp-overnight-packing-slip.php', $by_id['wp-overnight-packing-slip']['file_path'] );
+	}
+
+	/**
+	 * Test the WP Overnight invoice template delegates rendering to the document API.
+	 */
+	public function test_wp_overnight_invoice_template_renders_document_html(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		if ( ! function_exists( 'wcpdf_get_document' ) ) {
+			eval(
+				'function wcpdf_get_document( string $document_type, $order, bool $init = false ) {
+					$GLOBALS["wcpos_wcpdf_get_document_calls"][] = array(
+						"document_type" => $document_type,
+						"order"         => $order,
+						"init"          => $init,
+					);
+
+					return new class() {
+						public function get_html() {
+							return "<main>WP Overnight invoice HTML</main>";
+						}
+					};
+				}'
+			);
+		}
+
+		$GLOBALS['wcpos_wcpdf_get_document_calls'] = array();
+		$template                                  = Templates::get_virtual_template( 'wp-overnight-invoice', 'receipt' );
+		$order                                     = wc_create_order();
+		$renderer                                  = new Legacy_Php_Renderer();
+
+		ob_start();
+		$renderer->render( $template, $order, array() );
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( 'WP Overnight invoice HTML', $html );
+		$this->assertCount( 1, $GLOBALS['wcpos_wcpdf_get_document_calls'] );
+		$this->assertEquals( 'invoice', $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['document_type'] );
+		$this->assertSame( $order, $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['order'] );
+		$this->assertTrue( $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['init'] );
 	}
 
 	/**

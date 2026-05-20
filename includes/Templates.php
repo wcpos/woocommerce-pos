@@ -28,6 +28,8 @@ class Templates {
 	const TEMPLATE_THEME       = 'theme';
 	const TEMPLATE_PLUGIN_PRO  = 'plugin-pro';
 	const TEMPLATE_PLUGIN_CORE = 'plugin-core';
+	const TEMPLATE_WP_OVERNIGHT_INVOICE      = 'wp-overnight-invoice';
+	const TEMPLATE_WP_OVERNIGHT_PACKING_SLIP = 'wp-overnight-packing-slip';
 
 	/**
 	 * Supported template types.
@@ -359,18 +361,41 @@ class Templates {
 			return null;
 		}
 
-		$titles = array(
-			self::TEMPLATE_THEME       => /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
-			self::TEMPLATE_PLUGIN_PRO  => /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
-			self::TEMPLATE_PLUGIN_CORE => /* translators: Receipt template post type or template option label. */ __( 'Legacy PHP Template', 'woocommerce-pos' ),
+		$metadata = array(
+			self::TEMPLATE_THEME                     => array(
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Theme Receipt Template', 'woocommerce-pos' ),
+				'description' => '',
+				'category'    => 'receipt',
+			),
+			self::TEMPLATE_PLUGIN_PRO                => array(
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Pro Receipt Template', 'woocommerce-pos' ),
+				'description' => '',
+				'category'    => 'receipt',
+			),
+			self::TEMPLATE_PLUGIN_CORE               => array(
+				'title'       => /* translators: Receipt template post type or template option label. */ __( 'Legacy PHP Template', 'woocommerce-pos' ),
+				'description' => '',
+				'category'    => 'receipt',
+			),
+			self::TEMPLATE_WP_OVERNIGHT_INVOICE      => array(
+				'title'       => __( 'Invoice (WP Overnight)', 'woocommerce-pos' ),
+				'description' => __( 'Renders the PDF Invoices & Packing Slips invoice HTML through the WP Overnight document API.', 'woocommerce-pos' ),
+				'category'    => 'invoice',
+			),
+			self::TEMPLATE_WP_OVERNIGHT_PACKING_SLIP => array(
+				'title'       => __( 'Packing Slip (WP Overnight)', 'woocommerce-pos' ),
+				'description' => __( 'Renders the PDF Invoices & Packing Slips packing slip HTML through the WP Overnight document API.', 'woocommerce-pos' ),
+				'category'    => 'receipt',
+			),
 		);
 
 		return array(
 			'id'                => $template_id,
-			'title'             => $titles[ $template_id ] ?? $template_id,
+			'title'             => $metadata[ $template_id ]['title'] ?? $template_id,
+			'description'       => $metadata[ $template_id ]['description'] ?? '',
 			'content'           => file_get_contents( $file_path ),
 			'type'              => $type,
-			'category'          => 'receipt' === $type ? 'receipt' : '',
+			'category'          => 'receipt' === $type ? ( $metadata[ $template_id ]['category'] ?? 'receipt' ) : '',
 			'language'          => 'php',
 			'file_path'         => $file_path,
 			'engine'            => 'legacy-php',
@@ -423,9 +448,45 @@ class Templates {
 				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/' . $file_name;
 				return file_exists( $path ) ? $path : null;
 
+			case self::TEMPLATE_WP_OVERNIGHT_INVOICE:
+				if ( 'receipt' !== $type || ! self::is_wp_overnight_pdf_templates_available() ) {
+					return null;
+				}
+				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/wp-overnight-invoice.php';
+				return file_exists( $path ) ? $path : null;
+
+			case self::TEMPLATE_WP_OVERNIGHT_PACKING_SLIP:
+				if ( 'receipt' !== $type || ! self::is_wp_overnight_pdf_templates_available() ) {
+					return null;
+				}
+				$path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/wp-overnight-packing-slip.php';
+				return file_exists( $path ) ? $path : null;
+
 			default:
 				return null;
 		}
+	}
+
+	/**
+	 * Check whether WP Overnight PDF Invoices & Packing Slips APIs are available.
+	 *
+	 * @return bool True when the integration templates can be exposed.
+	 */
+	private static function is_wp_overnight_pdf_templates_available(): bool {
+		$available = \function_exists( 'wcpdf_get_document' ) || \class_exists( 'WPO_WCPDF' );
+
+		/**
+		 * Filters WP Overnight PDF Invoices & Packing Slips template availability.
+		 *
+		 * @param bool $available Whether the third-party document API appears available.
+		 *
+		 * @returns bool Whether to expose the WP Overnight virtual receipt templates.
+		 *
+		 * @since 1.9.2
+		 *
+		 * @hook woocommerce_pos_wp_overnight_pdf_templates_enabled
+		 */
+		return (bool) apply_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', $available );
 	}
 
 	/**
@@ -444,6 +505,8 @@ class Templates {
 			self::TEMPLATE_THEME,
 			self::TEMPLATE_PLUGIN_PRO,
 			self::TEMPLATE_PLUGIN_CORE,
+			self::TEMPLATE_WP_OVERNIGHT_INVOICE,
+			self::TEMPLATE_WP_OVERNIGHT_PACKING_SLIP,
 		);
 
 		foreach ( $priority_order as $template_id ) {
