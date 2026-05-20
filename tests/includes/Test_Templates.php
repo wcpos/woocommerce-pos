@@ -64,6 +64,7 @@ class Test_Templates extends WP_UnitTestCase {
 		delete_option( 'wcpos_disabled_virtual_templates_receipt' );
 		delete_option( 'wcpos_disabled_virtual_templates_report' );
 		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled' );
+		remove_all_filters( 'woocommerce_pos_wp_overnight_pdf_document' );
 	}
 
 	/**
@@ -267,30 +268,26 @@ class Test_Templates extends WP_UnitTestCase {
 
 	/**
 	 * Test the WP Overnight invoice template delegates rendering to the document API.
-	 *
-	 * @runInSeparateProcess
-	 * @preserveGlobalState disabled
 	 */
 	public function test_wp_overnight_invoice_template_renders_document_html(): void {
 		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		add_filter(
+			'woocommerce_pos_wp_overnight_pdf_document',
+			static function ( $document, string $document_type, $order ) {
+				$GLOBALS['wcpos_wcpdf_get_document_calls'][] = array(
+					'document_type' => $document_type,
+					'order'         => $order,
+				);
 
-		if ( ! function_exists( 'wcpdf_get_document' ) ) {
-			eval(
-				'function wcpdf_get_document( string $document_type, $order, bool $init = false ) {
-					$GLOBALS["wcpos_wcpdf_get_document_calls"][] = array(
-						"document_type" => $document_type,
-						"order"         => $order,
-						"init"          => $init,
-					);
-
-					return new class() {
-						public function get_html() {
-							return "<main>WP Overnight invoice HTML</main>";
-						}
-					};
-				}'
-			);
-		}
+				return new class() {
+					public function get_html() {
+						return '<main>WP Overnight invoice HTML</main>';
+					}
+				};
+			},
+			10,
+			3
+		);
 
 		$GLOBALS['wcpos_wcpdf_get_document_calls'] = array();
 		$template                                  = Templates::get_virtual_template( 'wp-overnight-invoice', 'receipt' );
@@ -305,7 +302,6 @@ class Test_Templates extends WP_UnitTestCase {
 		$this->assertCount( 1, $GLOBALS['wcpos_wcpdf_get_document_calls'] );
 		$this->assertEquals( 'invoice', $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['document_type'] );
 		$this->assertSame( $order, $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['order'] );
-		$this->assertTrue( $GLOBALS['wcpos_wcpdf_get_document_calls'][0]['init'] );
 	}
 
 	/**

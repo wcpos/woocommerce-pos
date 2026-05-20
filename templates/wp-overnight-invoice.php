@@ -13,12 +13,16 @@ if ( ! \defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( empty( $order ) || ! \function_exists( 'wcpdf_get_document' ) ) {
+if ( empty( $order ) ) {
 	echo esc_html__( 'The WP Overnight invoice document is not available.', 'woocommerce-pos' );
 	return;
 }
 
-$document = wcpdf_get_document( 'invoice', $order, true );
+$document = apply_filters( 'woocommerce_pos_wp_overnight_pdf_document', null, 'invoice', $order );
+
+if ( null === $document && \function_exists( 'wcpdf_get_document' ) ) {
+	$document = wcpdf_get_document( 'invoice', $order, true );
+}
 
 if ( ! $document || ! \is_callable( array( $document, 'get_html' ) ) ) {
 	echo esc_html__( 'The WP Overnight invoice document could not be rendered for this order.', 'woocommerce-pos' );
