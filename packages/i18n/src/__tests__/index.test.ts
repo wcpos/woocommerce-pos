@@ -214,7 +214,7 @@ describe('createI18nInstance fallback to bundled English', () => {
 			i18nKey: 'common.hello',
 			i18n: i18n.createInstance(),
 			ns: 'other-ns',
-		};
+		} as unknown as Parameters<typeof result.Trans>[0];
 		const element = result.Trans(overrideProps);
 
 		expect(element.props.i18n).toBe(result.i18n);
