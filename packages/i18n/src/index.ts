@@ -36,7 +36,7 @@ declare global {
 
 const locales: Locales = localesData;
 
-type TransProps = ComponentProps<typeof ReactTrans>;
+type TransProps = Omit<ComponentProps<typeof ReactTrans>, 'i18n' | 'ns'>;
 
 /**
  * Detect the current locale from the HTML lang attribute.
@@ -109,9 +109,9 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 
 	const BoundTrans = (props: TransProps): ReactElement =>
 		createElement(ReactTrans, {
+			...props,
 			i18n: instance,
 			ns: namespace,
-			...props,
 		});
 
 	return {
