@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Action: woocommerce_pos_template_allow_dangerous_function - 10up Distributor Hook Docs</title>
+    <title>Filter: woocommerce_pos_wp_overnight_pdf_templates_enabled - 10up Distributor Hook Docs</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -21,7 +21,7 @@
 <div id="main">
 
 	
-    <h1 class="page-title">Action: woocommerce_pos_template_allow_dangerous_function</h1>
+    <h1 class="page-title">Filter: woocommerce_pos_wp_overnight_pdf_templates_enabled</h1>
 	
 
     
@@ -43,14 +43,14 @@
 
     
 
-    <h4 class="name" id="woocommerce_pos_template_allow_dangerous_function">do_action( 'woocommerce_pos_template_allow_dangerous_function', <span class="signature">bool, string, string )</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="woocommerce_pos_wp_overnight_pdf_templates_enabled">apply_filters( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', <span class="signature">bool )</span><span class="type-signature"></span></h4>
 
     
 
 
 
 <div class="description">
-    <p>Filters whether to allow dangerous functions in templates.</p>
+    <p>Filters WP Overnight PDF Invoices &amp; Packing Slips template availability.</p>
 </div>
 
 
@@ -95,43 +95,7 @@
 
             
 
-            <td class="description last"><p>$allow    Whether to allow the dangerous function.</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>string</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>$function Function name.</p></td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>string</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>$content  Template content.</p></td>
+            <td class="description last"><p>$available Whether the third-party document API appears available.</p></td>
         </tr>
 
     
@@ -149,7 +113,7 @@
 
     
     <dt class="tag-since">Since:</dt>
-    <dd class="tag-since"><ul class="dummy"><li>1.8.0</li></ul></dd>
+    <dd class="tag-since"><ul class="dummy"><li>1.9.2</li></ul></dd>
     
 
     
@@ -175,7 +139,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="Templates_Validator.php.html">Templates/Validator.php</a>, <a href="Templates_Validator.php.html#line300">line 300</a>
+        <a href="Templates.php.html">Templates.php</a>, <a href="Templates.php.html#line478">line 478</a>
     </li></ul></dd>
     
 
@@ -198,6 +162,16 @@
 
 
 
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>bool Whether to expose the WP Overnight virtual receipt templates.</p>
+</div>
+
+
+
+    
 
 
 
