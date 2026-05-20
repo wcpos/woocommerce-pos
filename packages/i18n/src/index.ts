@@ -1,8 +1,10 @@
+import { createElement, type ComponentProps, type ReactElement } from 'react';
+
 import i18n, { i18n as I18nInstance } from 'i18next';
 import ChainedBackend from 'i18next-chained-backend';
 import HttpBackend from 'i18next-http-backend';
 import LocalStorageBackend from 'i18next-localstorage-backend';
-import { initReactI18next, Trans } from 'react-i18next';
+import { initReactI18next, Trans as ReactTrans } from 'react-i18next';
 
 import localesData from './locales.json';
 
@@ -34,6 +36,8 @@ declare global {
 
 const locales: Locales = localesData;
 
+type TransProps = ComponentProps<typeof ReactTrans>;
+
 /**
  * Detect the current locale from the HTML lang attribute.
  */
@@ -58,6 +62,7 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 	i18n: I18nInstance;
 	i18nPromise: Promise<I18nInstance>;
 	t: I18nInstance['t'];
+	Trans: (props: TransProps) => ReactElement;
 } {
 	const instance = i18n.createInstance();
 	const locale = detectLocale();
@@ -99,13 +104,22 @@ export function createI18nInstance({ namespace, project, resources }: CreateI18n
 	const i18nPromise = instance
 		.use(ChainedBackend)
 		.use(initReactI18next)
-		.init(initOptions);
+		.init(initOptions)
+		.then(() => instance);
+
+	const BoundTrans = (props: TransProps): ReactElement =>
+		createElement(ReactTrans, {
+			i18n: instance,
+			ns: namespace,
+			...props,
+		});
 
 	return {
 		i18n: instance,
 		i18nPromise,
 		t: instance.t.bind(instance),
+		Trans: BoundTrans,
 	};
 }
 
-export { Trans, locales };
+export { ReactTrans as Trans, locales };
