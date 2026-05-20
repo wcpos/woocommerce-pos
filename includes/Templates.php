@@ -473,7 +473,7 @@ class Templates {
 	 * @return bool True when the integration templates can be exposed.
 	 */
 	private static function is_wp_overnight_pdf_templates_available(): bool {
-		$available = \function_exists( 'wcpdf_get_document' ) || \class_exists( 'WPO_WCPDF' );
+		$available = \function_exists( 'wcpdf_get_document' );
 
 		/**
 		 * Filters WP Overnight PDF Invoices & Packing Slips template availability.

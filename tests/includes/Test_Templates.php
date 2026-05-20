@@ -267,6 +267,9 @@ class Test_Templates extends WP_UnitTestCase {
 
 	/**
 	 * Test the WP Overnight invoice template delegates rendering to the document API.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_wp_overnight_invoice_template_renders_document_html(): void {
 		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
