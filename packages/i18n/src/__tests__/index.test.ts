@@ -180,6 +180,47 @@ describe('createI18nInstance fallback to bundled English', () => {
 		document.documentElement.removeAttribute('lang');
 	});
 
+	it('returns a Trans component bound to its own i18n instance and namespace', async () => {
+		const result = createI18nInstance({
+			namespace: NS,
+			project: 'woocommerce-pos',
+			resources: {
+				en: { [NS]: enTranslations },
+			},
+		});
+
+		await result.i18nPromise;
+
+		expect(typeof result.Trans).toBe('function');
+		const element = result.Trans({ i18nKey: 'common.hello' });
+
+		expect(element.props.i18n).toBe(result.i18n);
+		expect(element.props.ns).toBe(NS);
+		expect(element.props.i18nKey).toBe('common.hello');
+	});
+
+	it('does not allow Trans props to override the bound i18n instance or namespace', async () => {
+		const result = createI18nInstance({
+			namespace: NS,
+			project: 'woocommerce-pos',
+			resources: {
+				en: { [NS]: enTranslations },
+			},
+		});
+
+		await result.i18nPromise;
+
+		const overrideProps = {
+			i18nKey: 'common.hello',
+			i18n: i18n.createInstance(),
+			ns: 'other-ns',
+		} as unknown as Parameters<typeof result.Trans>[0];
+		const element = result.Trans(overrideProps);
+
+		expect(element.props.i18n).toBe(result.i18n);
+		expect(element.props.ns).toBe(NS);
+	});
+
 	it('returns bundled English when CDN is unavailable', async () => {
 		const { i18nPromise, t } = createI18nInstance({
 			namespace: NS,

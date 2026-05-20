@@ -1,8 +1,8 @@
-import { createI18nInstance, Trans } from '@wcpos/i18n';
+import { createI18nInstance } from '@wcpos/i18n';
 
 import en from './locales/en/wp-admin-template-gallery.json';
 
-const { i18n, i18nPromise, t } = createI18nInstance({
+const { i18n, i18nPromise, t, Trans } = createI18nInstance({
 	namespace: 'wp-admin-template-gallery',
 	project: 'woocommerce-pos',
 	resources: {
