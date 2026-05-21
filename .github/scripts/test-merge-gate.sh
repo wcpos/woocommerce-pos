@@ -125,6 +125,29 @@ pot_patch="diff --git a/${TEST_POT_FILE} b/${TEST_POT_FILE}
  msgid \"Old string\"
 +msgid \"New string\""
 
+run_case "test-matrix bot bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing"
+
+run_case "test-matrix bot rejects skipped smoke test" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "test-matrix bot with extra file still requires CodeRabbit" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json
+README.md" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing"
+
 run_case "translation-version bypass" pass \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
