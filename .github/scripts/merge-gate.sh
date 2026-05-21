@@ -101,7 +101,44 @@ is_allowed_test_matrix_pr() {
 
   local changed_files
   changed_files="$(pr_diff_names)"
-  [[ "$changed_files" == "$TEST_MATRIX_FILE" ]]
+  [[ "$changed_files" == "$TEST_MATRIX_FILE" ]] || return 1
+
+  local changed_lines line matrix_line added=0 removed=0
+  changed_lines="$({ pr_diff_patch || true; } | awk '
+    /^diff --git / { next }
+    /^index / { next }
+    /^@@ / { next }
+    /^---$/ { next }
+    /^--- / { next }
+    /^\+\+\+ / { next }
+    /^From / { next }
+    /^Date: / { next }
+    /^Subject: / { next }
+    /^[+-]/ { print }
+  ')"
+
+  [[ -n "$changed_lines" ]] || return 1
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    matrix_line="${line:1}"
+    if [[ "$matrix_line" =~ ^[[:space:]]*\"lastUpdated\":[[:space:]]\"[0-9]{4}-[0-9]{2}-[0-9]{2}\",[[:space:]]*$ ]] ||
+      [[ "$matrix_line" =~ ^[[:space:]]*\"(minimum|stable|experimental)\":[[:space:]]\"[0-9][0-9A-Za-z.-]*\",?[[:space:]]*$ ]]; then
+      if [[ "$line" == -* ]]; then
+        removed=$((removed + 1))
+      elif [[ "$line" == +* ]]; then
+        added=$((added + 1))
+      else
+        log "Unexpected non-test-matrix diff line: $line"
+        return 1
+      fi
+    else
+      log "Unexpected test-matrix diff line: $line"
+      return 1
+    fi
+  done <<< "$changed_lines"
+
+  [[ "$added" -ge 1 && "$removed" -ge 1 ]]
 }
 
 requires_php_tests() {
