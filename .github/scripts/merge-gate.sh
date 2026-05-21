@@ -12,6 +12,8 @@ SLEEP_SECONDS="${MERGE_GATE_SLEEP_SECONDS:-30}"
 TRANSLATION_FILE="${MERGE_GATE_TRANSLATION_FILE:-}"
 POT_FILE="${MERGE_GATE_POT_FILE:-}"
 POT_AUTHOR="${MERGE_GATE_POT_AUTHOR:-wcpos-bot[bot]}"
+TEST_MATRIX_FILE="${MERGE_GATE_TEST_MATRIX_FILE:-.github/test-matrix.json}"
+TEST_MATRIX_AUTHOR="${MERGE_GATE_TEST_MATRIX_AUTHOR:-wcpos-bot[bot]}"
 TRANSLATION_AUTHORS="|${MERGE_GATE_TRANSLATION_AUTHORS:-translations-ci[bot]|app/translations-ci}|"
 
 log() {
@@ -90,6 +92,53 @@ is_allowed_pot_pr() {
   local changed_files
   changed_files="$(pr_diff_names)"
   [[ "$changed_files" == "$POT_FILE" ]]
+}
+
+is_allowed_test_matrix_pr() {
+  [[ -n "$TEST_MATRIX_FILE" ]] || return 1
+  [[ "$PR_AUTHOR" == "$TEST_MATRIX_AUTHOR" ]] || return 1
+  [[ "$PR_TITLE" == "chore: update test matrix versions" ]] || return 1
+
+  local changed_files
+  changed_files="$(pr_diff_names)"
+  [[ "$changed_files" == "$TEST_MATRIX_FILE" ]] || return 1
+
+  local changed_lines line matrix_line added=0 removed=0
+  changed_lines="$({ pr_diff_patch || true; } | awk '
+    /^diff --git / { next }
+    /^index / { next }
+    /^@@ / { next }
+    /^---$/ { next }
+    /^--- / { next }
+    /^\+\+\+ / { next }
+    /^From / { next }
+    /^Date: / { next }
+    /^Subject: / { next }
+    /^[+-]/ { print }
+  ')"
+
+  [[ -n "$changed_lines" ]] || return 1
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    matrix_line="${line:1}"
+    if [[ "$matrix_line" =~ ^[[:space:]]*\"lastUpdated\":[[:space:]]\"[0-9]{4}-[0-9]{2}-[0-9]{2}\",[[:space:]]*$ ]] ||
+      [[ "$matrix_line" =~ ^[[:space:]]*\"(minimum|stable|experimental)\":[[:space:]]\"[0-9][0-9A-Za-z.-]*\",?[[:space:]]*$ ]]; then
+      if [[ "$line" == -* ]]; then
+        removed=$((removed + 1))
+      elif [[ "$line" == +* ]]; then
+        added=$((added + 1))
+      else
+        log "Unexpected non-test-matrix diff line: $line"
+        return 1
+      fi
+    else
+      log "Unexpected test-matrix diff line: $line"
+      return 1
+    fi
+  done <<< "$changed_lines"
+
+  [[ "$added" -ge 1 && "$removed" -ge 1 ]]
 }
 
 requires_php_tests() {
@@ -211,6 +260,9 @@ main() {
   elif is_allowed_pot_pr; then
     log "Validated automated POT-only PR; merge gate passes without waiting for CodeRabbit or full CI."
     return 0
+  elif is_allowed_test_matrix_pr; then
+    log "Validated automated test-matrix PR; waiting for required checks without CodeRabbit."
+    coderabbit_required=false
   else
     log "CodeRabbit and smoke test are required for this PR."
   fi

@@ -125,6 +125,54 @@ pot_patch="diff --git a/${TEST_POT_FILE} b/${TEST_POT_FILE}
  msgid \"Old string\"
 +msgid \"New string\""
 
+test_matrix_patch="diff --git a/.github/test-matrix.json b/.github/test-matrix.json
+--- a/.github/test-matrix.json
++++ b/.github/test-matrix.json
+@@ -1,11 +1,11 @@
+-  \"lastUpdated\": \"2026-04-29\",
++  \"lastUpdated\": \"2026-05-21\",
+-    \"minimum\": \"6.8\",
+-    \"stable\": \"6.9.4\"
++    \"minimum\": \"6.9.4\",
++    \"stable\": \"7.0\""
+
+test_matrix_extra_code_patch="diff --git a/.github/test-matrix.json b/.github/test-matrix.json
+--- a/.github/test-matrix.json
++++ b/.github/test-matrix.json
+@@ -20,3 +20,4 @@
+     \"matrix\": [
++      { \"php\": \"8.5\", \"wp\": \"stable\", \"wc\": \"stable\" },"
+
+run_case "test-matrix bot bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json" \
+  MOCK_PATCH="$test_matrix_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "test-matrix bot rejects skipped smoke test" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json" \
+  MOCK_PATCH="$test_matrix_patch" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
+run_case "test-matrix bot with extra file still requires CodeRabbit" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json
+README.md" \
+  MOCK_PATCH="$test_matrix_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "test-matrix bot with matrix structure change still requires CodeRabbit" fail \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore: update test matrix versions" \
+  MOCK_CHANGED_FILES=".github/test-matrix.json" \
+  MOCK_PATCH="$test_matrix_extra_code_patch" \
+  MOCK_CODERABBIT="missing"
+
 run_case "translation-version bypass" pass \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
