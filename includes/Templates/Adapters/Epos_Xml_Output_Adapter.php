@@ -34,10 +34,10 @@ class Epos_Xml_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		);
 
 		foreach ( $this->line_items( $receipt_data ) as $item ) {
-			$name     = isset( $item['name'] ) ? (string) $item['name'] : '';
-			$quantity = isset( $item['quantity'] ) ? (float) $item['quantity'] : 1;
-			$item_total = isset( $item['total'] ) ? (float) $item['total'] : 0;
-			$lines[]  = '<text>' . $this->escape( $name ) . ' x' . $this->format_quantity( $quantity ) . ' ' . $this->format_money( $item_total ) . "\n" . '</text>';
+			$name       = isset( $item['name'] ) ? (string) $item['name'] : '';
+			$quantity   = isset( $item['quantity'] ) ? (float) $item['quantity'] : (float) ( $item['qty'] ?? 1 );
+			$item_total = isset( $item['total'] ) ? (float) $item['total'] : (float) ( $item['line_total_incl'] ?? 0 );
+			$lines[]    = '<text>' . $this->escape( $name ) . ' x' . $this->format_quantity( $quantity ) . ' ' . $this->format_money( $item_total ) . "\n" . '</text>';
 		}
 
 		$lines[] = '<text>Total ' . $this->escape( $this->format_money( $total ) ) . "\n" . '</text>';
@@ -55,6 +55,9 @@ class Epos_Xml_Output_Adapter implements Receipt_Output_Adapter_Interface {
 	 * @return array
 	 */
 	private function line_items( array $receipt_data ): array {
+		if ( isset( $receipt_data['lines'] ) && is_array( $receipt_data['lines'] ) ) {
+			return $receipt_data['lines'];
+		}
 		if ( isset( $receipt_data['line_items'] ) && is_array( $receipt_data['line_items'] ) ) {
 			return $receipt_data['line_items'];
 		}

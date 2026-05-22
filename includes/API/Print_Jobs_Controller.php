@@ -247,12 +247,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		$this->jobs->claim( (int) $job['id'] );
-		$payload = base64_decode( (string) $job['payload'], true );
-		if ( false === $payload ) {
-			$payload = '';
-		}
 
-		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+		return $this->serve_raw( $this->jobs->render_payload( $job ), $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
 	}
 
 	/**

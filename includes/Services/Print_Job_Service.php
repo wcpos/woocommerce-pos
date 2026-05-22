@@ -108,6 +108,31 @@ class Print_Job_Service {
 	}
 
 	/**
+	 * Render the bytes a printer should fetch for a job.
+	 *
+	 * @param array $job Job array returned by get().
+	 *
+	 * @return string
+	 */
+	public function render_payload( array $job ): string {
+		if ( ! empty( $job['order_id'] ) && ! empty( $job['format'] ) ) {
+			$order = wc_get_order( (int) $job['order_id'] );
+			if ( ! $order ) {
+				return '';
+			}
+
+			$data    = ( new Receipt_Data_Builder() )->build( $order, 'live' );
+			$adapter = ( new Receipt_Output_Adapter_Factory() )->create( (string) $job['format'] );
+
+			return $adapter->transform( $data );
+		}
+
+		$payload = base64_decode( (string) $job['payload'], true );
+
+		return false === $payload ? '' : $payload;
+	}
+
+	/**
 	 * Query jobs by printer and/or status (newest first).
 	 *
 	 * @param array $filters printer_id, status, limit.
