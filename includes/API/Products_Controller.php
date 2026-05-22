@@ -138,6 +138,24 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$params['per_page']['minimum'] = -1;
 		}
 
+		if ( ! isset( $params['brand'] ) ) {
+			$params['brand'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Limit result set to products assigned to brand IDs or slugs, separated by commas.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! isset( $params['brand_operator'] ) ) {
+			$params['brand_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product brand terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
 		// Ensure 'orderby' is set and is an array before attempting to modify it.
 		if ( isset( $params['orderby']['enum'] ) && \is_array( $params['orderby']['enum'] ) ) {
 			// Define new sorting options.
@@ -395,7 +413,89 @@ class Products_Controller extends WC_REST_Products_Controller {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
 		}
 
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
+			$brand_terms = $this->wcpos_get_product_brand_terms_from_request( $request );
+			if ( ! empty( $brand_terms ) && taxonomy_exists( 'product_brand' ) ) {
+				if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
+					$args['tax_query'] = array();
+				}
+
+				$args['tax_query'][] = array(
+					'taxonomy' => 'product_brand',
+					'field'    => $brand_terms['field'],
+					'terms'    => $brand_terms['terms'],
+					'operator' => $this->wcpos_get_store_api_tax_operator( $request->get_param( 'brand_operator' ) ),
+				);
+			}
+		}
+
 		return $args;
+	}
+
+	/**
+	 * Check whether the parent WooCommerce REST controller already supports a collection param.
+	 *
+	 * If WooCommerce adds native REST support for Store API-style product filters, WCPOS
+	 * should defer to the parent implementation instead of adding duplicate tax queries.
+	 *
+	 * @param string $param Collection parameter name.
+	 *
+	 * @return bool
+	 */
+	protected function wcpos_parent_collection_supports_param( string $param ): bool {
+		$params = parent::get_collection_params();
+
+		return isset( $params[ $param ] );
+	}
+
+	/**
+	 * Parse one or more product brand terms from the Store API-style brand request parameter.
+	 *
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array{field:string,terms:array<int|string>}
+	 */
+	protected function wcpos_get_product_brand_terms_from_request( WP_REST_Request $request ): array {
+		$brand = $request->get_param( 'brand' );
+
+		if ( empty( $brand ) ) {
+			return array();
+		}
+
+		$terms = array_filter( array_map( 'trim', explode( ',', (string) $brand ) ) );
+		if ( empty( $terms ) ) {
+			return array();
+		}
+
+		$ids = wp_parse_id_list( $terms );
+		if ( \count( $ids ) === \count( $terms ) ) {
+			return array(
+				'field' => 'term_id',
+				'terms' => $ids,
+			);
+		}
+
+		return array(
+			'field' => 'slug',
+			'terms' => $terms,
+		);
+	}
+
+	/**
+	 * Convert Store API-style taxonomy operators to WP_Query tax query operators.
+	 *
+	 * @param string|null $operator Store API taxonomy operator.
+	 *
+	 * @return string
+	 */
+	protected function wcpos_get_store_api_tax_operator( ?string $operator ): string {
+		$operators = array(
+			'and'    => 'AND',
+			'in'     => 'IN',
+			'not_in' => 'NOT IN',
+		);
+
+		return $operators[ $operator ?? 'in' ] ?? 'IN';
 	}
 
 	/**

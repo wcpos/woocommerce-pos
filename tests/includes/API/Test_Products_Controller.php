@@ -523,6 +523,102 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Filter products by a single Store API-style brand parameter.
+	 */
+	public function test_product_filter_by_brand(): void {
+		$brand_a = wp_insert_term( 'Brand A', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand B', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $brand_a['term_id'], (int) $brand_b['term_id'] ), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand' => (string) $brand_a['term_id'],
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product3->get_id() ), $ids );
+	}
+
+	/**
+	 * Filter products by multiple custom WCPOS brand IDs.
+	 */
+	public function test_product_filter_by_multiple_brands(): void {
+		$brand_a = wp_insert_term( 'Brand C', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand D', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product3->get_id(), array(), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand' => $brand_a['term_id'] . ',' . $brand_b['term_id'],
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
+	}
+
+	/**
+	 * Filter products by excluding brand IDs with Store API-style operators.
+	 */
+	public function test_product_filter_by_brand_not_in_operator(): void {
+		$brand_a = wp_insert_term( 'Brand E', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand F', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand'          => (string) $brand_a['term_id'],
+				'brand_operator' => 'not_in',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product2->get_id(), $ids );
+		$this->assertNotContains( $product1->get_id(), $ids );
+	}
+
+	/**
 	 * Decimal quantities.
 	 */
 	public function test_product_decimal_stock_quantity_schema(): void {
