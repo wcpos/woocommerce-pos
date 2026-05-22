@@ -109,6 +109,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/epson-sdp',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'epson_sdp' ),
+					'permission_callback' => array( $this, 'printer_token_permissions_check' ),
+				),
+			)
+		);
 	}
 
 
@@ -325,6 +337,52 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		);
 
 		return $response;
+	}
+
+
+	/**
+	 * Epson Server Direct Print poll/result endpoint.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function epson_sdp( $request ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$raw_body   = (string) $request->get_body();
+		$soap       = 'text/xml; charset=utf-8';
+		$ack        = '<response success="true" code="" status=""/>';
+
+		$this->jobs->release_stale_claims( $printer_id );
+
+		if ( false !== strpos( $raw_body, 'success=' ) ) {
+			$claim = $this->jobs->find_active_claim( $printer_id );
+			if ( null !== $claim ) {
+				$ok = false !== strpos( $raw_body, 'success="true"' );
+				$this->jobs->set_status( (int) $claim['id'], $ok ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED );
+			}
+
+			return $this->serve_raw( $ack, $soap );
+		}
+
+		if ( null !== $this->jobs->find_active_claim( $printer_id ) ) {
+			return $this->serve_raw( $ack, $soap );
+		}
+
+		$job = $this->jobs->next_pending( $printer_id );
+		if ( null === $job ) {
+			return $this->serve_raw( $ack, $soap );
+		}
+
+		$this->jobs->claim( (int) $job['id'] );
+		$epos = $this->jobs->render_payload( $job );
+
+		$envelope  = '<?xml version="1.0" encoding="utf-8"?>';
+		$envelope .= '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>';
+		$envelope .= $epos;
+		$envelope .= '</s:Body></s:Envelope>';
+
+		return $this->serve_raw( $envelope, $soap );
 	}
 
 	/**
