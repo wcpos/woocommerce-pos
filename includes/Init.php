@@ -258,6 +258,7 @@ class Init {
 		new Orders();
 		new Emails();
 		new Templates();
+		new Services\Print_Job_Service();
 	}
 
 	/**
