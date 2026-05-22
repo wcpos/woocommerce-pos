@@ -80,4 +80,47 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 400, rest_do_request( $request )->get_status() );
 	}
+	/**
+	 * It lists jobs filtered by printer id.
+	 */
+	public function test_list_returns_jobs_filtered_by_printer(): void {
+		$this->jobs_seed( 'printer-A' );
+		$this->jobs_seed( 'printer-B' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/print-jobs' );
+		$request->set_query_params( array( 'printer_id' => 'printer-A' ) );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $response->get_data() ) );
+	}
+
+	/**
+	 * It cancels a print job.
+	 */
+	public function test_cancel_sets_status_cancelled(): void {
+		$id = $this->jobs_seed( 'printer-A' );
+
+		$request = new \WP_REST_Request( 'DELETE', '/wcpos/v1/print-jobs/' . $id );
+		$request->set_header( 'X-WCPOS', '1' );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'cancelled', ( new Print_Job_Service() )->get( $id )['status'] );
+	}
+
+	/**
+	 * Seed a print job.
+	 *
+	 * @param string $printer_id Printer ID.
+	 */
+	private function jobs_seed( string $printer_id ): int {
+		return ( new Print_Job_Service() )->create(
+			array(
+				'printer_id'   => $printer_id,
+				'content_type' => 'application/octet-stream',
+				'payload'      => base64_encode( 'x' ),
+			)
+		);
+	}
 }

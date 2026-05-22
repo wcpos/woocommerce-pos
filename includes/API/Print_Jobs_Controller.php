@@ -57,12 +57,137 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			'/' . $this->rest_base,
 			array(
 				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_items' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+				array(
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'create_item' ),
 					'permission_callback' => array( $this, 'manage_permissions_check' ),
 				),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_item' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'delete_item' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)/reprint',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'reprint_item' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+	}
+
+
+	/**
+	 * List print jobs.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function get_items( $request ) {
+		return rest_ensure_response(
+			$this->jobs->query(
+				array(
+					'printer_id' => $request->get_param( 'printer_id' ),
+					'status'     => $request->get_param( 'status' ),
+				)
+			)
+		);
+	}
+
+	/**
+	 * Get a print job.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function get_item( $request ) {
+		$job = $this->jobs->get( (int) $request->get_param( 'id' ) );
+		if ( null === $job ) {
+			return new WP_Error(
+				'wcpos_print_job_not_found',
+				__( 'Print job not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return rest_ensure_response( $job );
+	}
+
+	/**
+	 * Cancel a print job.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function delete_item( $request ) {
+		$id = (int) $request->get_param( 'id' );
+		if ( null === $this->jobs->get( $id ) ) {
+			return new WP_Error(
+				'wcpos_print_job_not_found',
+				__( 'Print job not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+		$this->jobs->set_status( $id, Print_Job_Service::STATUS_CANCELLED );
+
+		return rest_ensure_response( $this->jobs->get( $id ) );
+	}
+
+	/**
+	 * Reprint a print job by copying it to a new pending job.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function reprint_item( $request ) {
+		$source = $this->jobs->get( (int) $request->get_param( 'id' ) );
+		if ( null === $source ) {
+			return new WP_Error(
+				'wcpos_print_job_not_found',
+				__( 'Print job not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+		$new_id = $this->jobs->create(
+			array(
+				'printer_id'   => $source['printer_id'],
+				'content_type' => $source['content_type'],
+				'payload'      => $source['payload'],
+				'order_id'     => $source['order_id'] ? $source['order_id'] : null,
+				'format'       => $source['format'] ? $source['format'] : null,
+			)
+		);
+		$response = rest_ensure_response( $this->jobs->get( $new_id ) );
+		$response->set_status( 201 );
+
+		return $response;
 	}
 
 	/**
