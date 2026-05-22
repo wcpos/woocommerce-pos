@@ -115,6 +115,7 @@ class API {
 				'cashier'               => API\Cashier::class,
 				'templates'             => API\Templates_Controller::class,
 				'receipts'              => API\Receipts_Controller::class,
+				'print_jobs'            => API\Print_Jobs_Controller::class,
 
 				// TODO: remove this?
 				'stores'                => API\Stores::class,
