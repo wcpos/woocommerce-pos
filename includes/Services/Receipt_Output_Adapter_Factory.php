@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use InvalidArgumentException;
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Output_Adapter_Interface;
 use WCPOS\WooCommercePOS\Templates\Adapters\Cpcl_Output_Adapter;
+use WCPOS\WooCommercePOS\Templates\Adapters\Epos_Xml_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Html_Output_Adapter;
 use WCPOS\WooCommercePOS\Templates\Adapters\Starprnt_Output_Adapter;
@@ -35,6 +36,8 @@ class Receipt_Output_Adapter_Factory {
 				return new Html_Output_Adapter();
 			case 'escpos':
 				return new Escpos_Output_Adapter();
+			case 'epos-xml':
+				return new Epos_Xml_Output_Adapter();
 			case 'starprnt':
 				return new Starprnt_Output_Adapter();
 			case 'zpl':
