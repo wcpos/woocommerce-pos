@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
@@ -225,6 +226,23 @@ class Settings extends WP_REST_Controller {
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_license_settings' ),
 				'permission_callback' => array( $this, 'read_permission_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/cloud-print',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_cloud_print_settings' ),
+					'permission_callback' => array( $this, 'read_permission_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'update_cloud_print_settings' ),
+					'permission_callback' => array( $this, 'update_permission_check' ),
+				),
 			)
 		);
 	}
@@ -592,6 +610,137 @@ class Settings extends WP_REST_Controller {
 		$response->set_status( 200 );
 
 		return $response;
+	}
+
+	/**
+	 * Get cloud-print settings.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_cloud_print_settings() {
+		$settings = get_option( 'woocommerce_pos_settings_cloud_print', array() );
+		$settings = wp_parse_args(
+			\is_array( $settings ) ? $settings : array(),
+			array(
+				'printers'    => array(),
+				'assignments' => array(),
+			)
+		);
+		$settings['printers'] = array_map(
+			static function ( $printer ) {
+				unset( $printer['poll_token_hash'] );
+
+				return $printer;
+			},
+			$settings['printers']
+		);
+
+		return new WP_REST_Response( $settings, 200 );
+	}
+
+	/**
+	 * Replace cloud-print settings.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function update_cloud_print_settings( WP_REST_Request $request ) {
+		$payload = $request->get_json_params();
+		if ( empty( $payload ) ) {
+			$payload = $request->get_body_params();
+		}
+		$printers = isset( $payload['printers'] ) && \is_array( $payload['printers'] ) ? array_values( $payload['printers'] ) : array();
+		$assigns  = isset( $payload['assignments'] ) && \is_array( $payload['assignments'] ) ? array_values( $payload['assignments'] ) : array();
+
+		$existing        = get_option( 'woocommerce_pos_settings_cloud_print', array() );
+		$existing_hashes = array();
+		if ( isset( $existing['printers'] ) && \is_array( $existing['printers'] ) ) {
+			foreach ( $existing['printers'] as $printer ) {
+				if ( ! empty( $printer['id'] ) && ! empty( $printer['poll_token_hash'] ) ) {
+					$existing_hashes[ $printer['id'] ] = $printer['poll_token_hash'];
+				}
+			}
+		}
+
+		$generated      = array();
+		$clean_printers = array();
+		foreach ( $printers as $printer ) {
+			$printer    = $this->sanitize_cloud_printer( $printer );
+			$id         = $printer['id'];
+			$regenerate = ! empty( $printer['regenerate_token'] );
+			unset( $printer['regenerate_token'] );
+
+			if ( '' !== $id && ( $regenerate || empty( $existing_hashes[ $id ] ) ) ) {
+				$token                      = Cloud_Print_Registry::generate_token();
+				$printer['poll_token_hash'] = Cloud_Print_Registry::hash_token( $token );
+				$generated[ $id ]           = $token;
+			} elseif ( '' !== $id ) {
+				$printer['poll_token_hash'] = $existing_hashes[ $id ];
+			}
+
+			$clean_printers[] = $printer;
+		}
+
+		$clean = array(
+			'printers'    => $clean_printers,
+			'assignments' => array_map( array( $this, 'sanitize_cloud_assignment' ), $assigns ),
+		);
+		update_option( 'woocommerce_pos_settings_cloud_print', $clean );
+
+		$response_printers = array_map(
+			static function ( $printer ) {
+				unset( $printer['poll_token_hash'] );
+
+				return $printer;
+			},
+			$clean_printers
+		);
+
+		return new WP_REST_Response(
+			array(
+				'printers'    => $response_printers,
+				'assignments' => $clean['assignments'],
+				'generated'   => $generated,
+			),
+			200
+		);
+	}
+
+	/**
+	 * Sanitize a cloud printer entry.
+	 *
+	 * @param mixed $printer Printer.
+	 *
+	 * @return array
+	 */
+	private function sanitize_cloud_printer( $printer ): array {
+		$printer = \is_array( $printer ) ? $printer : array();
+
+		return array(
+			'id'               => sanitize_text_field( $printer['id'] ?? '' ),
+			'name'             => sanitize_text_field( $printer['name'] ?? '' ),
+			'protocol'         => \in_array( $printer['protocol'] ?? '', array( 'star-cloudprnt', 'epson-sdp' ), true ) ? $printer['protocol'] : 'star-cloudprnt',
+			'store_id'         => isset( $printer['store_id'] ) ? (int) $printer['store_id'] : 0,
+			'regenerate_token' => ! empty( $printer['regenerate_token'] ),
+		);
+	}
+
+	/**
+	 * Sanitize a cloud assignment entry.
+	 *
+	 * @param mixed $assignment Assignment.
+	 *
+	 * @return array
+	 */
+	private function sanitize_cloud_assignment( $assignment ): array {
+		$assignment = \is_array( $assignment ) ? $assignment : array();
+
+		return array(
+			'printer_id' => sanitize_text_field( $assignment['printer_id'] ?? '' ),
+			'scope'      => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
+			'format'     => sanitize_text_field( $assignment['format'] ?? '' ),
+		);
 	}
 
 
