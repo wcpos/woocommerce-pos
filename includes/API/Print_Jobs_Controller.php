@@ -97,6 +97,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/cloudprnt',
+			array(
+				array(
+					'methods'             => array( 'POST', 'GET', 'DELETE' ),
+					'callback'            => array( $this, 'cloudprnt' ),
+					'permission_callback' => array( $this, 'printer_token_permissions_check' ),
+				),
+			)
+		);
 	}
 
 
@@ -186,6 +198,135 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		);
 		$response = rest_ensure_response( $this->jobs->get( $new_id ) );
 		$response->set_status( 201 );
+
+		return $response;
+	}
+
+
+	/**
+	 * Star CloudPRNT poll/fetch/confirm endpoint.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function cloudprnt( $request ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$this->jobs->release_stale_claims( $printer_id );
+
+		if ( 'POST' === $request->get_method() ) {
+			if ( $this->jobs->find_active_claim( $printer_id ) ) {
+				return rest_ensure_response( array( 'jobReady' => false ) );
+			}
+
+			$job = $this->jobs->next_pending( $printer_id );
+			if ( null === $job ) {
+				return rest_ensure_response( array( 'jobReady' => false ) );
+			}
+
+			return rest_ensure_response(
+				array(
+					'jobReady'  => true,
+					'jobToken'  => (string) $job['id'],
+					'mediaType' => $job['content_type'] ? $job['content_type'] : 'application/octet-stream',
+				)
+			);
+		}
+
+		$job = $this->get_cloud_job_for_request( $request, $printer_id );
+		if ( is_wp_error( $job ) ) {
+			return $job;
+		}
+
+		if ( 'DELETE' === $request->get_method() ) {
+			$code   = (string) $request->get_param( 'code' );
+			$status = '' === $code || '000' === $code ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
+			$this->jobs->set_status( (int) $job['id'], $status );
+
+			return rest_ensure_response( array( 'ok' => true ) );
+		}
+
+		$this->jobs->claim( (int) $job['id'] );
+		$payload = base64_decode( (string) $job['payload'], true );
+		if ( false === $payload ) {
+			$payload = '';
+		}
+
+		return $this->serve_raw( $payload, $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
+	}
+
+	/**
+	 * Permission check for printer-token routes.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return bool|WP_Error
+	 */
+	public function printer_token_permissions_check( $request ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$token      = (string) $request->get_param( 'pt' );
+		$registry   = new Cloud_Print_Registry();
+
+		if ( ! $registry->verify_token( $printer_id, $token ) ) {
+			return new WP_Error(
+				'wcpos_print_job_invalid_token',
+				__( 'Invalid printer token.', 'woocommerce-pos' ),
+				array( 'status' => 401 )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Resolve and authorize a CloudPRNT job token.
+	 *
+	 * @param WP_REST_Request $request    Request.
+	 * @param string          $printer_id Printer ID.
+	 *
+	 * @return array|WP_Error
+	 */
+	private function get_cloud_job_for_request( WP_REST_Request $request, string $printer_id ) {
+		$job = $this->jobs->get( (int) $request->get_param( 'token' ) );
+		if ( null === $job || $printer_id !== $job['printer_id'] ) {
+			return new WP_Error(
+				'wcpos_print_job_not_found',
+				__( 'Print job not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		return $job;
+	}
+
+	/**
+	 * Serve raw bytes from a REST callback.
+	 *
+	 * @param string $body         Response body.
+	 * @param string $content_type Content type.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function serve_raw( string $body, string $content_type ) {
+		$response = rest_ensure_response( null );
+		$response->set_status( 200 );
+		$response->header( 'Content-Type', $content_type );
+
+		$served = false;
+		add_filter(
+			'rest_pre_serve_request',
+			static function ( $served_result, $result ) use ( $response, $body, &$served ) {
+				if ( $served || $result !== $response ) {
+					return $served_result;
+				}
+				$served = true;
+				echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Raw printer bytes.
+
+				return true;
+			},
+			10,
+			2
+		);
 
 		return $response;
 	}
