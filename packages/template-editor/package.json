@@ -24,13 +24,13 @@
     "@wordpress/api-fetch": "^7.45.0",
     "codemirror": "^6.0.1",
     "mustache": "^4.2.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
     "@types/mustache": "^4.2.6",
-    "@types/react": "^18.3.28",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
     "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
