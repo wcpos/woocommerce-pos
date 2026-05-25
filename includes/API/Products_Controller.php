@@ -62,7 +62,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 *
 	 * @var array|null
 	 */
-	protected $wcpos_parent_collection_params;
+	protected $wcpos_parent_collection_params = null;
 
 	/**
 	 * Dispatch request to parent controller, or override if needed.
@@ -478,7 +478,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @param WP_REST_Request $request The request used.
 	 * @param string          $param   Request parameter name.
 	 *
-	 * @return array{field:string,terms:array<int|string>}
+	 * @return array{field?:string,terms?:array<int,int|string>}
 	 */
 	protected function wcpos_get_store_api_tax_terms_from_request( WP_REST_Request $request, string $param ): array {
 		$value = $request->get_param( $param );
@@ -534,7 +534,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 	protected function wcpos_apply_store_api_tax_operator_fallbacks( array $args, WP_REST_Request $request ): array {
 		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
 			$brand_terms = $this->wcpos_get_store_api_tax_terms_from_request( $request, 'brand' );
-			if ( ! empty( $brand_terms ) && taxonomy_exists( 'product_brand' ) ) {
+			if ( isset( $brand_terms['field'], $brand_terms['terms'] ) && taxonomy_exists( 'product_brand' ) ) {
 				if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
 					$args['tax_query'] = array();
 				}
@@ -765,10 +765,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	protected function prepare_objects_query( $request ) {
 		$args          = parent::prepare_objects_query( $request );
-		if ( is_wp_error( $args ) ) {
-			return $args;
-		}
-
 		$args          = $this->wcpos_apply_store_api_tax_operator_fallbacks( $args, $request );
 		$barcode_field = $this->wcpos_get_barcode_field();
 

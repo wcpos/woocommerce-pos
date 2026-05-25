@@ -21,6 +21,18 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Skip brand fallback assertions when the Woo REST parent owns brand handling.
+	 */
+	private function skip_if_native_brand_filter_supported(): void {
+		$method = new \ReflectionMethod( Products_Controller::class, 'wcpos_parent_collection_supports_param' );
+		$method->setAccessible( true );
+
+		if ( $method->invoke( $this->endpoint, 'brand' ) ) {
+			$this->markTestSkipped( 'WooCommerce REST supports brand natively; WCPOS brand fallback is not active.' );
+		}
+	}
+
 	public function test_namespace_property(): void {
 		$namespace = $this->get_reflected_property_value( 'namespace' );
 
@@ -590,6 +602,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Filter products that match all requested brand IDs with Store API-style operators.
 	 */
 	public function test_product_filter_by_brand_and_operator(): void {
+		$this->skip_if_native_brand_filter_supported();
+
 		$brand_a = wp_insert_term( 'Brand G', 'product_brand' );
 		$brand_b = wp_insert_term( 'Brand H', 'product_brand' );
 		$this->assertIsArray( $brand_a );
@@ -623,6 +637,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Filter products by excluding brand IDs with Store API-style operators.
 	 */
 	public function test_product_filter_by_brand_not_in_operator(): void {
+		$this->skip_if_native_brand_filter_supported();
+
 		$brand_a = wp_insert_term( 'Brand E', 'product_brand' );
 		$brand_b = wp_insert_term( 'Brand F', 'product_brand' );
 		$this->assertIsArray( $brand_a );
