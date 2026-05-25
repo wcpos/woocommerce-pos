@@ -21,6 +21,7 @@ import { t } from '../translations';
 const pageTitles: Record<string, string> = {
 	'/general': 'common.general',
 	'/checkout': 'common.checkout',
+	'/cloud-print': 'common.cloud_print',
 	'/access': 'common.access',
 	'/sessions': 'sessions.sessions',
 	'/extensions': 'common.extensions',
@@ -31,6 +32,7 @@ const pageTitles: Record<string, string> = {
 const pageSkeletons: Record<string, React.ReactNode> = {
 	'/general': <FormSkeleton rows={5} />,
 	'/checkout': <FormSkeleton rows={4} />,
+	'/cloud-print': <FormSkeleton rows={4} />,
 	'/access': <AccessSkeleton />,
 	'/sessions': <SessionsSkeleton />,
 	'/extensions': <CardGridSkeleton cards={4} />,

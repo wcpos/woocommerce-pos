@@ -38,6 +38,11 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 				<NavGroup heading={t('common.settings')}>
 					<NavItem to="/general" label={t('common.general')} onClick={onNavItemClick} />
 					<NavItem to="/checkout" label={t('common.checkout')} onClick={onNavItemClick} />
+					<NavItem
+						to="/cloud-print"
+						label={t('common.cloud_print', 'Cloud Print')}
+						onClick={onNavItemClick}
+					/>
 					<NavItem to="/access" label={t('common.access')} onClick={onNavItemClick} />
 					<NavItem to="/sessions" label={t('sessions.sessions')} onClick={onNavItemClick} />
 					<NavItem
