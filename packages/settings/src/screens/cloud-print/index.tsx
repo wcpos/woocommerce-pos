@@ -12,33 +12,52 @@ import { t } from '../../translations';
 function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
 	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
+	const [saveError, setSaveError] = React.useState<string | null>(null);
 	// One-time poll token returned by the server after registering a printer.
 	const [newToken, setNewToken] = React.useState<{ id: string; token: string } | null>(null);
 
-	const saveDraft = (next: CloudPrintSettings) => {
+	const saveDraft = async (next: CloudPrintSettings) => {
+		const previous = draft;
 		setDraft(next);
-		return save(next);
+		setSaveError(null);
+		try {
+			return await save(next);
+		} catch (error) {
+			setDraft(previous);
+			setSaveError(error instanceof Error ? error.message : t('cloud_print.save_failed', 'Save failed.'));
+			throw error;
+		}
 	};
 
 	const addPrinter = async (printer: CloudPrinter) => {
-		const res = await saveDraft({ ...draft, printers: [...draft.printers, printer] });
-		const token = res?.generated?.[printer.id];
-		if (token) {
-			setNewToken({ id: printer.id, token });
+		try {
+			const res = await saveDraft({ ...draft, printers: [...draft.printers, printer] });
+			const token = res?.generated?.[printer.id];
+			if (token) {
+				setNewToken({ id: printer.id, token });
+			}
+		} catch {
+			// useCloudPrintSettings surfaces save failures; draft state has been rolled back.
 		}
 	};
 
 	const removePrinter = (id: string) => {
-		saveDraft({
+		void saveDraft({
 			printers: draft.printers.filter((p) => p.id !== id),
 			assignments: draft.assignments.filter((a) => a.printer_id !== id),
-		});
+		}).catch(() => undefined);
 	};
 
 	return (
 		<div className="wcpos:px-4 wcpos:pb-5">
 			<h2 className="wcpos:text-base">{t('cloud_print.printers', 'Cloud printers')}</h2>
 			<p>{t('cloud_print.printers_description', 'Printers that pull jobs from this site.')}</p>
+
+			{saveError && (
+				<p data-testid="cloud-print-save-error" className="wcpos:text-sm wcpos:text-red-600">
+					{saveError}
+				</p>
+			)}
 
 			{newToken && (
 				<p data-testid="cloud-print-new-token" className="wcpos:text-sm">
@@ -78,7 +97,9 @@ function CloudPrint() {
 			<AssignmentEditor
 				printers={draft.printers}
 				assignments={draft.assignments}
-				onChange={(assignments) => saveDraft({ ...draft, assignments })}
+				onChange={(assignments) => {
+					void saveDraft({ ...draft, assignments }).catch(() => undefined);
+				}}
 			/>
 		</div>
 	);

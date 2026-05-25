@@ -50,6 +50,27 @@ describe('CloudPrint editing', () => {
 		);
 	});
 
+
+	it('rolls back a printer add when the save fails', async () => {
+		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+		apiFetchMock.mockRejectedValueOnce(new Error('Duplicate printer id.'));
+
+		renderScreen();
+		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
+		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+
+		await waitFor(() => {
+			expect(apiFetchMock.mock.calls.some((c) => (c[0] as { method?: string }).method === 'POST')).toBe(
+				true
+			);
+		});
+		expect(screen.queryByTestId('cloud-printer-kitchen')).toBeNull();
+		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
+		expect(await screen.findByTestId('cloud-print-save-error')).toHaveTextContent('Duplicate printer id.');
+	});
+
 	it('keeps rapid assignment edits in the next full-settings POST', async () => {
 		apiFetchMock.mockResolvedValueOnce({
 			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
