@@ -115,6 +115,7 @@ class API {
 				'cashier'               => API\Cashier::class,
 				'templates'             => API\Templates_Controller::class,
 				'receipts'              => API\Receipts_Controller::class,
+				'print_jobs'            => API\Print_Jobs_Controller::class,
 
 				// TODO: remove this?
 				'stores'                => API\Stores::class,
@@ -403,10 +404,14 @@ class API {
 		}
 
 		// Baseline permission gate: all POS endpoints require access_woocommerce_pos.
-		// Exempt public auth routes and authenticated receipt denials that need the receipt-specific error code.
+		// Exempt public auth, printer-token polling, and authenticated receipt denials that need
+		// the receipt-specific error code.
 		$route                               = $request->get_route();
 		$has_route_specific_permission_error = is_user_logged_in() && 0 === strpos( $route, '/wcpos/v1/receipts/' );
-		if ( '/wcpos/v1/auth/test' !== $route && '/wcpos/v1/auth/refresh' !== $route && ! $has_route_specific_permission_error ) {
+		$is_public_auth_route                = \in_array( $route, array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ), true );
+		$is_printer_token_route             = \in_array( $route, array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ), true );
+
+		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 				if ( ! is_user_logged_in() ) {
 					return new \WP_Error(
