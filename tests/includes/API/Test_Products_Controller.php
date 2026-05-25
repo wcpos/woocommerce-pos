@@ -21,6 +21,18 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		parent::tearDown();
 	}
 
+	/**
+	 * Skip brand fallback assertions when the Woo REST parent owns brand handling.
+	 */
+	private function skip_if_native_brand_filter_supported(): void {
+		$method = new \ReflectionMethod( Products_Controller::class, 'wcpos_parent_collection_supports_param' );
+		$method->setAccessible( true );
+
+		if ( $method->invoke( $this->endpoint, 'brand' ) ) {
+			$this->markTestSkipped( 'WooCommerce REST supports brand natively; WCPOS brand fallback is not active.' );
+		}
+	}
+
 	public function test_namespace_property(): void {
 		$namespace = $this->get_reflected_property_value( 'namespace' );
 
@@ -520,6 +532,421 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Products without stock management (null) should come last when sorting DESC
 		$this->assertEquals( array( 2, 1, 0, -1, null, null ), $stock_qtys );
+	}
+
+	/**
+	 * Filter products by a single Store API-style brand parameter.
+	 */
+	public function test_product_filter_by_brand(): void {
+		$brand_a = wp_insert_term( 'Brand A', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand B', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $brand_a['term_id'], (int) $brand_b['term_id'] ), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand' => (string) $brand_a['term_id'],
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product3->get_id() ), $ids );
+	}
+
+	/**
+	 * Filter products by multiple custom WCPOS brand IDs.
+	 */
+	public function test_product_filter_by_multiple_brands(): void {
+		$brand_a = wp_insert_term( 'Brand C', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand D', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product3->get_id(), array(), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand' => $brand_a['term_id'] . ',' . $brand_b['term_id'],
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
+	}
+
+	/**
+	 * Filter products that match all requested brand IDs with Store API-style operators.
+	 */
+	public function test_product_filter_by_brand_and_operator(): void {
+		$this->skip_if_native_brand_filter_supported();
+
+		$brand_a = wp_insert_term( 'Brand G', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand H', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $brand_a['term_id'], (int) $brand_b['term_id'] ), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand'          => $brand_a['term_id'] . ',' . $brand_b['term_id'],
+				'brand_operator' => 'and',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( $product3->get_id() ), $ids );
+	}
+
+	/**
+	 * Filter products by excluding brand IDs with Store API-style operators.
+	 */
+	public function test_product_filter_by_brand_not_in_operator(): void {
+		$this->skip_if_native_brand_filter_supported();
+
+		$brand_a = wp_insert_term( 'Brand E', 'product_brand' );
+		$brand_b = wp_insert_term( 'Brand F', 'product_brand' );
+		$this->assertIsArray( $brand_a );
+		$this->assertIsArray( $brand_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $brand_a['term_id'] ), 'product_brand' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $brand_b['term_id'] ), 'product_brand' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'brand'          => (string) $brand_a['term_id'],
+				'brand_operator' => 'not_in',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$ids      = wp_list_pluck( $data, 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product2->get_id(), $ids );
+		$this->assertNotContains( $product1->get_id(), $ids );
+	}
+
+	/**
+	 * Plain category filters without operator params keep Woo REST IN semantics.
+	 */
+	public function test_product_filter_by_category_plain_and_explicit_in_return_same_products(): void {
+		$category_a = wp_insert_term( 'Category A', 'product_cat' );
+		$category_b = wp_insert_term( 'Category B', 'product_cat' );
+		$this->assertIsArray( $category_a );
+		$this->assertIsArray( $category_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $category_a['term_id'] ), 'product_cat' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $category_b['term_id'] ), 'product_cat' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $category_a['term_id'], (int) $category_b['term_id'] ), 'product_cat' );
+
+		$category_ids = $category_a['term_id'] . ',' . $category_b['term_id'];
+		$expected_ids = array( $product1->get_id(), $product2->get_id(), $product3->get_id() );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'category' => $category_ids ) );
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( $expected_ids, $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'category'          => $category_ids,
+				'category_operator' => 'in',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( $expected_ids, $ids );
+	}
+
+	/**
+	 * Store API-style AND category operator requires all requested categories.
+	 */
+	public function test_product_filter_by_category_and_operator_returns_products_in_all_categories(): void {
+		$category_a = wp_insert_term( 'Category C', 'product_cat' );
+		$category_b = wp_insert_term( 'Category D', 'product_cat' );
+		$this->assertIsArray( $category_a );
+		$this->assertIsArray( $category_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $category_a['term_id'] ), 'product_cat' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $category_b['term_id'] ), 'product_cat' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $category_a['term_id'], (int) $category_b['term_id'] ), 'product_cat' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'category'          => $category_a['term_id'] . ',' . $category_b['term_id'],
+				'category_operator' => 'and',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( $product3->get_id() ), $ids );
+	}
+
+	/**
+	 * Store API-style NOT IN category operator excludes products assigned to the requested category.
+	 */
+	public function test_product_filter_by_category_not_in_operator_excludes_matching_products(): void {
+		$category_a = wp_insert_term( 'Category E', 'product_cat' );
+		$category_b = wp_insert_term( 'Category F', 'product_cat' );
+		$this->assertIsArray( $category_a );
+		$this->assertIsArray( $category_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $category_a['term_id'] ), 'product_cat' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $category_b['term_id'] ), 'product_cat' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'category'          => (string) $category_a['term_id'],
+				'category_operator' => 'not_in',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product2->get_id(), $ids );
+		$this->assertNotContains( $product1->get_id(), $ids );
+	}
+
+	/**
+	 * Plain tag filters without operator params keep Woo REST IN semantics.
+	 */
+	public function test_product_filter_by_tag_plain_and_explicit_in_return_same_products(): void {
+		$tag_a = wp_insert_term( 'Tag A', 'product_tag' );
+		$tag_b = wp_insert_term( 'Tag B', 'product_tag' );
+		$this->assertIsArray( $tag_a );
+		$this->assertIsArray( $tag_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $tag_a['term_id'] ), 'product_tag' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $tag_b['term_id'] ), 'product_tag' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $tag_a['term_id'], (int) $tag_b['term_id'] ), 'product_tag' );
+
+		$tag_ids      = $tag_a['term_id'] . ',' . $tag_b['term_id'];
+		$expected_ids = array( $product1->get_id(), $product2->get_id(), $product3->get_id() );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'tag' => $tag_ids ) );
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( $expected_ids, $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'tag'          => $tag_ids,
+				'tag_operator' => 'in',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEqualsCanonicalizing( $expected_ids, $ids );
+	}
+
+	/**
+	 * Store API-style AND tag operator requires all requested tags.
+	 */
+	public function test_product_filter_by_tag_and_operator_returns_products_with_all_tags(): void {
+		$tag_a = wp_insert_term( 'Tag C', 'product_tag' );
+		$tag_b = wp_insert_term( 'Tag D', 'product_tag' );
+		$this->assertIsArray( $tag_a );
+		$this->assertIsArray( $tag_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$product3 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $tag_a['term_id'] ), 'product_tag' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $tag_b['term_id'] ), 'product_tag' );
+		wp_set_object_terms( $product3->get_id(), array( (int) $tag_a['term_id'], (int) $tag_b['term_id'] ), 'product_tag' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'tag'          => $tag_a['term_id'] . ',' . $tag_b['term_id'],
+				'tag_operator' => 'and',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( array( $product3->get_id() ), $ids );
+	}
+
+	/**
+	 * Store API-style NOT IN tag operator excludes products assigned to the requested tag.
+	 */
+	public function test_product_filter_by_tag_not_in_operator_excludes_matching_products(): void {
+		$tag_a = wp_insert_term( 'Tag E', 'product_tag' );
+		$tag_b = wp_insert_term( 'Tag F', 'product_tag' );
+		$this->assertIsArray( $tag_a );
+		$this->assertIsArray( $tag_b );
+
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+
+		wp_set_object_terms( $product1->get_id(), array( (int) $tag_a['term_id'] ), 'product_tag' );
+		wp_set_object_terms( $product2->get_id(), array( (int) $tag_b['term_id'] ), 'product_tag' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'tag'          => (string) $tag_a['term_id'],
+				'tag_operator' => 'not_in',
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product2->get_id(), $ids );
+		$this->assertNotContains( $product1->get_id(), $ids );
+	}
+
+	/**
+	 * Operator params without matching terms are no-ops.
+	 */
+	public function test_product_filter_by_tax_operator_without_terms_does_not_add_tax_query(): void {
+		$product = ProductHelper::create_simple_product();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'category_operator' => 'and' ) );
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product->get_id(), $ids );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params( array( 'tag_operator' => 'not_in' ) );
+		$response = $this->server->dispatch( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertContains( $product->get_id(), $ids );
+	}
+
+	/**
+	 * Store API taxonomy operator helper maps supported and unknown values.
+	 */
+	public function test_product_store_api_tax_operator_mapping(): void {
+		$method = new \ReflectionMethod( Products_Controller::class, 'wcpos_get_store_api_tax_operator' );
+		$method->setAccessible( true );
+
+		$this->assertEquals( 'IN', $method->invoke( $this->endpoint, 'in' ) );
+		$this->assertEquals( 'AND', $method->invoke( $this->endpoint, 'and' ) );
+		$this->assertEquals( 'NOT IN', $method->invoke( $this->endpoint, 'not_in' ) );
+		$this->assertEquals( 'IN', $method->invoke( $this->endpoint, 'unknown' ) );
+		$this->assertEquals( 'IN', $method->invoke( $this->endpoint, null ) );
+	}
+
+	/**
+	 * Native parent support disables WCPOS taxonomy operator fallback mutations per param.
+	 */
+	public function test_product_tax_operator_fallback_skips_when_parent_supports_param(): void {
+		$endpoint = new class() extends Products_Controller {
+			protected function wcpos_parent_collection_supports_param( string $param ): bool {
+				return 'category_operator' === $param;
+			}
+		};
+		$method = new \ReflectionMethod( $endpoint, 'wcpos_apply_store_api_tax_operator_fallbacks' );
+		$method->setAccessible( true );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_query_params(
+			array(
+				'category'          => '1',
+				'category_operator' => 'not_in',
+			)
+		);
+		$args = array(
+			'tax_query' => array(
+				array(
+					'taxonomy' => 'product_cat',
+					'field'    => 'term_id',
+					'terms'    => array( 1 ),
+					'operator' => 'IN',
+				),
+			),
+		);
+
+		$result = $method->invoke( $endpoint, $args, $request );
+
+		$this->assertEquals( 'IN', $result['tax_query'][0]['operator'] );
 	}
 
 	/**
