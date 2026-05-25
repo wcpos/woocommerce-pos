@@ -160,15 +160,17 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	 */
 	public function test_assignments_filter_can_substitute_assignments(): void {
 		update_option( 'woocommerce_pos_settings_cloud_print', array( 'assignments' => array() ) );
+		$callback = static function () {
+			return array( array( 'printer_id' => 'outlet-1', 'scope' => 'every', 'format' => 'starprnt' ) );
+		};
 		add_filter(
 			'woocommerce_pos_cloud_print_assignments',
-			function () {
-				return array( array( 'printer_id' => 'outlet-1', 'scope' => 'every', 'format' => 'starprnt' ) );
-			}
+			$callback
 		);
 		$order = OrderHelper::create_order();
 
 		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+		remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
 
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
 	}

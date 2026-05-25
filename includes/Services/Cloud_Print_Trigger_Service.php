@@ -51,6 +51,9 @@ class Cloud_Print_Trigger_Service {
 		 * @param \WC_Order $order       The order being processed.
 		 */
 		$assignments = apply_filters( 'woocommerce_pos_cloud_print_assignments', $assignments, $order );
+		if ( ! \is_array( $assignments ) ) {
+			$assignments = array();
+		}
 
 		if ( empty( $assignments ) ) {
 			return;
