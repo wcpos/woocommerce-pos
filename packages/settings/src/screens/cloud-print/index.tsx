@@ -63,6 +63,10 @@ function CloudPrint() {
 			try {
 				const saved = await queuedSave;
 				if (version === saveVersionRef.current) {
+					applyDraft({
+						printers: saved.printers,
+						assignments: saved.assignments,
+					});
 					setSaveError(null);
 				}
 				return saved;

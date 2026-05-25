@@ -8,6 +8,7 @@ export function PrinterForm({ onAdd }: { onAdd: (printer: CloudPrinter) => void 
 	const [id, setId] = React.useState('');
 	const [name, setName] = React.useState('');
 	const [protocol, setProtocol] = React.useState<CloudPrinter['protocol']>('star-cloudprnt');
+	const trimmedId = id.trim();
 
 	return (
 		<div className="wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:mt-3">
@@ -34,11 +35,14 @@ export function PrinterForm({ onAdd }: { onAdd: (printer: CloudPrinter) => void 
 			<button
 				type="button"
 				data-testid="cloud-printer-add"
-				disabled={'' === id}
+				disabled={'' === trimmedId}
 				onClick={() => {
+					if ('' === trimmedId) {
+						return;
+					}
 					onAdd({
-						id,
-						name: '' === name ? id : name,
+						id: trimmedId,
+						name: '' === name ? trimmedId : name,
 						protocol,
 						store_id: 0,
 					});
