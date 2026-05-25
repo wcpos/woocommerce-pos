@@ -192,46 +192,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 		 * @TODO - only need to update if there is a change
 		 */
 		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
-			// Build sale_price range from only variations that are genuinely on sale.
-			// WC's get_variation_prices()['sale_price'] stores the regular price for
-			// non-sale variations, so we compare against regular_price to identify true sales.
-			$all_variation_prices = $product->get_variation_prices();
-			$sale_prices          = array();
-			foreach ( $all_variation_prices['sale_price'] as $variation_id => $sale_price ) {
-				if ( isset( $all_variation_prices['regular_price'][ $variation_id ] )
-					&& $sale_price !== $all_variation_prices['regular_price'][ $variation_id ] ) {
-					$sale_prices[ $variation_id ] = $sale_price;
-				}
-			}
-
-			$min_sale = ! empty( $sale_prices ) ? min( $sale_prices ) : '';
-			$max_sale = ! empty( $sale_prices ) ? max( $sale_prices ) : '';
-
-			// Apply WooCommerce filter so pricing/currency extensions can adjust the values.
-			if ( '' !== $min_sale ) {
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
-				$min_sale = apply_filters( 'woocommerce_get_variation_sale_price', $min_sale, $product, 'min', false );
-			}
-			if ( '' !== $max_sale ) {
-				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
-				$max_sale = apply_filters( 'woocommerce_get_variation_sale_price', $max_sale, $product, 'max', false );
-			}
-
-			// Initialize price variables.
-			$price_array = array(
-				'price'         => array(
-					'min' => $product->get_variation_price(),
-					'max' => $product->get_variation_price( 'max' ),
-				),
-				'regular_price' => array(
-					'min' => $product->get_variation_regular_price(),
-					'max' => $product->get_variation_regular_price( 'max' ),
-				),
-				'sale_price'    => array(
-					'min' => $min_sale,
-					'max' => $max_sale,
-				),
-			);
+			$price_array = $this->wcpos_get_variable_product_price_ranges( $product );
 
 			// Try encoding the array into JSON.
 			$encoded_price = wp_json_encode( $price_array );
@@ -256,6 +217,110 @@ class Products_Controller extends WC_REST_Products_Controller {
 		$response->set_data( $data );
 
 		return $response;
+	}
+
+	/**
+	 * Build variable product price ranges from current variation data.
+	 *
+	 * WooCommerce caches variable product price ranges in a parent-product transient.
+	 * If a variation price changes without that parent cache being refreshed, the POS
+	 * listing response can keep serving stale parent prices. Read the visible child
+	 * variations directly for WCPOS response metadata so the listing reflects the
+	 * current variation prices used by variation selection and cart flows.
+	 *
+	 * @param WC_Product_Variable $product Variable product.
+	 *
+	 * @return array{price: array{min: string, max: string}, regular_price: array{min: string, max: string},
+	 *               sale_price: array{min: string, max: string}}
+	 */
+	private function wcpos_get_variable_product_price_ranges( WC_Product_Variable $product ): array {
+		$prices = array(
+			'price'         => array(),
+			'regular_price' => array(),
+			'sale_price'    => array(),
+		);
+
+		$price_decimals = wc_get_price_decimals();
+
+		foreach ( $product->get_visible_children() as $variation_id ) {
+			$variation = wc_get_product( $variation_id );
+
+			if ( ! $variation ) {
+				continue;
+			}
+
+			$price = apply_filters(
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
+				'woocommerce_variation_prices_price',
+				$variation->get_price( 'edit' ),
+				$variation,
+				$product
+			);
+
+			if ( '' === $price ) {
+				continue;
+			}
+
+			$regular_price = apply_filters(
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
+				'woocommerce_variation_prices_regular_price',
+				$variation->get_regular_price( 'edit' ),
+				$variation,
+				$product
+			);
+			$sale_price = apply_filters(
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- intentionally invoking WC core filter.
+				'woocommerce_variation_prices_sale_price',
+				$variation->get_sale_price( 'edit' ),
+				$variation,
+				$product
+			);
+
+			$formatted_price         = wc_format_decimal( $price, $price_decimals );
+			$formatted_regular_price = wc_format_decimal( $regular_price, $price_decimals );
+			$formatted_sale_price    = wc_format_decimal( $sale_price, $price_decimals );
+
+			$prices['price'][ $variation_id ]         = $formatted_price;
+			$prices['regular_price'][ $variation_id ] = $formatted_regular_price;
+
+			if ( '' !== $sale_price
+				&& $formatted_sale_price !== $formatted_regular_price
+				&& $formatted_sale_price === $formatted_price ) {
+				$prices['sale_price'][ $variation_id ] = $formatted_sale_price;
+			}
+		}
+
+		foreach ( $prices as $key => $values ) {
+			asort( $values, SORT_NUMERIC );
+			$prices[ $key ] = $values;
+		}
+
+		return array(
+			'price'         => $this->wcpos_get_min_max_price_range( $prices['price'] ),
+			'regular_price' => $this->wcpos_get_min_max_price_range( $prices['regular_price'] ),
+			'sale_price'    => $this->wcpos_get_min_max_price_range( $prices['sale_price'] ),
+		);
+	}
+
+	/**
+	 * Convert a variation price list to a min/max range.
+	 *
+	 * @param array<int,string> $prices Prices keyed by variation ID.
+	 *
+	 * @return array{min: string, max: string}
+	 */
+	private function wcpos_get_min_max_price_range( array $prices ): array {
+		if ( empty( $prices ) ) {
+			return array(
+				'min' => '',
+				'max' => '',
+			);
+		}
+
+		return array(
+			'min' => (string) reset( $prices ),
+			'max' => (string) end( $prices ),
+		);
 	}
 
 	/**

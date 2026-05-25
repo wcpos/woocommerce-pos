@@ -963,6 +963,55 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Variable product price metadata should be recalculated from current variation meta.
+	 *
+	 * Regression test for wcpos/monorepo#515. If WooCommerce's variable-product price
+	 * transient is stale after a variation price update, the POS response must not keep
+	 * returning the old parent/listing price.
+	 */
+	public function test_variable_product_price_metadata_ignores_stale_parent_price_cache(): void {
+		$product = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation_id = reset( $variation_ids );
+
+		update_post_meta( $variation_id, '_regular_price', '79' );
+		update_post_meta( $variation_id, '_sale_price', '' );
+		update_post_meta( $variation_id, '_price', '79' );
+		wc_delete_product_transients( $product->get_id() );
+
+		// Prime WooCommerce's variable price cache with the old parent/listing price.
+		$product->get_variation_prices();
+
+		// Simulate a variation price edit that updates the child price meta, while the
+		// parent variable-product price cache remains stale.
+		update_post_meta( $variation_id, '_regular_price', '69.95' );
+		update_post_meta( $variation_id, '_sale_price', '65' );
+		update_post_meta( $variation_id, '_price', '65' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$variable_prices = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$variable_prices = json_decode( $meta['value'], true );
+				break;
+			}
+		}
+
+		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
+		$this->assertEquals( '65.00', $variable_prices['price']['min'] );
+		$this->assertEquals( '65.00', $variable_prices['price']['max'] );
+		$this->assertEquals( '69.95', $variable_prices['regular_price']['min'] );
+		$this->assertEquals( '69.95', $variable_prices['regular_price']['max'] );
+		$this->assertEquals( '65.00', $variable_prices['sale_price']['min'] );
+		$this->assertEquals( '65.00', $variable_prices['sale_price']['max'] );
+	}
+
+	/**
 	 * When no variations have sale prices, the sale_price min/max should be empty strings, not 0.
 	 */
 	public function test_variable_product_no_sale_prices(): void {
