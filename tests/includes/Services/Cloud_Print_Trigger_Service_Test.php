@@ -171,11 +171,10 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 
 		try {
 			( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
 		} finally {
 			remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
 		}
-
-		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
 	}
 
 }
