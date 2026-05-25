@@ -972,21 +972,24 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_variable_product_price_metadata_ignores_stale_parent_price_cache(): void {
 		$product = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
-		$variation_id = reset( $variation_ids );
 
-		update_post_meta( $variation_id, '_regular_price', '79' );
-		update_post_meta( $variation_id, '_sale_price', '' );
-		update_post_meta( $variation_id, '_price', '79' );
+		foreach ( $variation_ids as $variation_id ) {
+			update_post_meta( $variation_id, '_regular_price', '79' );
+			update_post_meta( $variation_id, '_sale_price', '' );
+			update_post_meta( $variation_id, '_price', '79' );
+		}
 		wc_delete_product_transients( $product->get_id() );
 
 		// Prime WooCommerce's variable price cache with the old parent/listing price.
 		$product->get_variation_prices();
 
-		// Simulate a variation price edit that updates the child price meta, while the
+		// Simulate variation price edits that update child price meta, while the
 		// parent variable-product price cache remains stale.
-		update_post_meta( $variation_id, '_regular_price', '69.95' );
-		update_post_meta( $variation_id, '_sale_price', '65' );
-		update_post_meta( $variation_id, '_price', '65' );
+		foreach ( $variation_ids as $variation_id ) {
+			update_post_meta( $variation_id, '_regular_price', '69.95' );
+			update_post_meta( $variation_id, '_sale_price', '65' );
+			update_post_meta( $variation_id, '_price', '65' );
+		}
 
 		$request = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
 		$response = $this->server->dispatch( $request );

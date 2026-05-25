@@ -295,11 +295,60 @@ class Products_Controller extends WC_REST_Products_Controller {
 			$prices[ $key ] = $values;
 		}
 
+		$price_range         = $this->wcpos_get_min_max_price_range( $prices['price'] );
+		$regular_price_range = $this->wcpos_get_min_max_price_range( $prices['regular_price'] );
+		$sale_price_range    = $this->wcpos_get_min_max_price_range( $prices['sale_price'] );
+
 		return array(
-			'price'         => $this->wcpos_get_min_max_price_range( $prices['price'] ),
-			'regular_price' => $this->wcpos_get_min_max_price_range( $prices['regular_price'] ),
-			'sale_price'    => $this->wcpos_get_min_max_price_range( $prices['sale_price'] ),
+			'price'         => $this->wcpos_apply_variable_product_price_range_filter(
+				'woocommerce_get_variation_price',
+				$price_range,
+				$product
+			),
+			'regular_price' => $this->wcpos_apply_variable_product_price_range_filter(
+				'woocommerce_get_variation_regular_price',
+				$regular_price_range,
+				$product
+			),
+			'sale_price'    => $this->wcpos_apply_variable_product_price_range_filter(
+				'woocommerce_get_variation_sale_price',
+				$sale_price_range,
+				$product
+			),
 		);
+	}
+
+	/**
+	 * Apply WooCommerce variable product min/max price filters to a calculated range.
+	 *
+	 * @param string                          $hook_name WooCommerce price range filter name.
+	 * @param array{min: string, max: string} $price_range Price range.
+	 * @param WC_Product_Variable             $product Variable product.
+	 *
+	 * @return array{min: string, max: string}
+	 */
+	private function wcpos_apply_variable_product_price_range_filter( string $hook_name, array $price_range, WC_Product_Variable $product ): array {
+		if ( '' !== $price_range['min'] ) {
+			$price_range['min'] = (string) apply_filters(
+				$hook_name,
+				$price_range['min'],
+				$product,
+				'min',
+				false
+			);
+		}
+
+		if ( '' !== $price_range['max'] ) {
+			$price_range['max'] = (string) apply_filters(
+				$hook_name,
+				$price_range['max'],
+				$product,
+				'max',
+				false
+			);
+		}
+
+		return $price_range;
 	}
 
 	/**
