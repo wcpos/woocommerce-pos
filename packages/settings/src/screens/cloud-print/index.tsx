@@ -10,6 +10,21 @@ import {
 } from '../../hooks/use-cloud-print-settings';
 import { t } from '../../translations';
 
+function getSaveErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	if (
+		'object' === typeof error &&
+		null !== error &&
+		'message' in error &&
+		'string' === typeof error.message
+	) {
+		return error.message;
+	}
+	return t('cloud_print.save_failed', 'Save failed.');
+}
+
 function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
 	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
@@ -52,8 +67,7 @@ function CloudPrint() {
 				}
 				return saved;
 			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : t('cloud_print.save_failed', 'Save failed.');
+				const message = getSaveErrorMessage(error);
 				if (version === saveVersionRef.current) {
 					applyDraft(previous);
 					setSaveError(message);

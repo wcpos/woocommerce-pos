@@ -63,7 +63,7 @@ describe('CloudPrint editing', () => {
 
 	it('rolls back a printer add when the save fails', async () => {
 		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockRejectedValueOnce(new Error('Duplicate printer id.'));
+		apiFetchMock.mockRejectedValueOnce({ message: 'Duplicate printer id.' });
 
 		renderScreen();
 		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
