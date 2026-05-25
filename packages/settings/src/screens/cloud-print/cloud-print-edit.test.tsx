@@ -11,10 +11,12 @@ import CloudPrint from './index';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;
-	const promise = new Promise<T>((res) => {
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((res, rej) => {
 		resolve = res;
+		reject = rej;
 	});
-	return { promise, resolve };
+	return { promise, resolve, reject };
 }
 
 function renderScreen() {
@@ -162,6 +164,45 @@ describe('CloudPrint editing', () => {
 		secondSave.resolve({
 			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
 			assignments: [{ printer_id: 'kitchen', scope: 'pos', format: 'starprnt' }],
+		});
+	});
+
+	it('does not keep an older queued save error after the latest edit saves', async () => {
+		const firstSave = deferred<{ printers: Array<{ id: string }>; assignments: never[] }>();
+		const secondSave = deferred<{
+			printers: Array<{ id: string; name: string; protocol: string; store_id: number }>;
+			assignments: Array<{ printer_id: string; scope: string; format: string }>;
+		}>();
+		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+		apiFetchMock.mockReturnValueOnce(firstSave.promise);
+		apiFetchMock.mockReturnValueOnce(secondSave.promise);
+
+		renderScreen();
+		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
+		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
+		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
+		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
+
+		firstSave.reject(new Error('Temporary queue error.'));
+		await waitFor(() => {
+			const postCalls = apiFetchMock.mock.calls.filter(
+				(c) => (c[0] as { method?: string }).method === 'POST'
+			);
+			expect(postCalls.length).toBe(2);
+		});
+
+		secondSave.resolve({
+			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
+			assignments: [{ printer_id: 'kitchen', scope: 'pos', format: 'starprnt' }],
+		});
+
+		await waitFor(() => {
+			expect(screen.queryByTestId('cloud-print-save-error')).toBeNull();
 		});
 	});
 

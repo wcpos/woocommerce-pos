@@ -46,14 +46,18 @@ function CloudPrint() {
 			);
 
 			try {
-				return await queuedSave;
+				const saved = await queuedSave;
+				if (version === saveVersionRef.current) {
+					setSaveError(null);
+				}
+				return saved;
 			} catch (error) {
 				const message =
 					error instanceof Error ? error.message : t('cloud_print.save_failed', 'Save failed.');
 				if (version === saveVersionRef.current) {
 					applyDraft(previous);
+					setSaveError(message);
 				}
-				setSaveError(message);
 				throw error;
 			}
 		},
