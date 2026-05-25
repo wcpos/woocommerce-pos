@@ -72,7 +72,7 @@ class Print_Job_Service {
 			true
 		);
 
-		if ( is_wp_error( $id ) || (int) $id <= 0 ) {
+		if ( is_wp_error( $id ) ) {
 			return 0;
 		}
 
@@ -290,7 +290,7 @@ class Print_Job_Service {
 		$option = $this->claim_lock_option( $printer_id );
 		$now    = time();
 
-		if ( add_option( $option, (string) $now, '', 'no' ) ) {
+		if ( add_option( $option, (string) $now, '', false ) ) {
 			return true;
 		}
 
@@ -298,7 +298,7 @@ class Print_Job_Service {
 		if ( $locked_at > 0 && ( $now - $locked_at ) > self::CLAIM_TTL ) {
 			delete_option( $option );
 
-			return add_option( $option, (string) $now, '', 'no' );
+			return add_option( $option, (string) $now, '', false );
 		}
 
 		return false;
