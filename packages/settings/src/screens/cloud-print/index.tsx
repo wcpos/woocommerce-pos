@@ -2,16 +2,26 @@ import * as React from 'react';
 
 import { AssignmentEditor } from './assignment-editor';
 import { PrinterForm } from './printer-form';
-import { useCloudPrintSettings, type CloudPrinter } from '../../hooks/use-cloud-print-settings';
+import {
+	type CloudPrintSettings,
+	useCloudPrintSettings,
+	type CloudPrinter,
+} from '../../hooks/use-cloud-print-settings';
 import { t } from '../../translations';
 
 function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
+	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
 	// One-time poll token returned by the server after registering a printer.
 	const [newToken, setNewToken] = React.useState<{ id: string; token: string } | null>(null);
 
+	const saveDraft = (next: CloudPrintSettings) => {
+		setDraft(next);
+		return save(next);
+	};
+
 	const addPrinter = async (printer: CloudPrinter) => {
-		const res = await save({ ...settings, printers: [...settings.printers, printer] });
+		const res = await saveDraft({ ...draft, printers: [...draft.printers, printer] });
 		const token = res?.generated?.[printer.id];
 		if (token) {
 			setNewToken({ id: printer.id, token });
@@ -19,9 +29,9 @@ function CloudPrint() {
 	};
 
 	const removePrinter = (id: string) => {
-		save({
-			printers: settings.printers.filter((p) => p.id !== id),
-			assignments: settings.assignments.filter((a) => a.printer_id !== id),
+		saveDraft({
+			printers: draft.printers.filter((p) => p.id !== id),
+			assignments: draft.assignments.filter((a) => a.printer_id !== id),
 		});
 	};
 
@@ -40,11 +50,11 @@ function CloudPrint() {
 				</p>
 			)}
 
-			{settings.printers.length === 0 ? (
+			{draft.printers.length === 0 ? (
 				<p data-testid="cloud-print-empty">{t('cloud_print.no_printers', 'No cloud printers yet.')}</p>
 			) : (
 				<ul data-testid="cloud-print-list" className="wcpos:flex wcpos:flex-col wcpos:gap-2">
-					{settings.printers.map((printer) => (
+					{draft.printers.map((printer) => (
 						<li
 							key={printer.id}
 							data-testid={`cloud-printer-${printer.id}`}
@@ -66,9 +76,9 @@ function CloudPrint() {
 
 			<PrinterForm onAdd={addPrinter} />
 			<AssignmentEditor
-				printers={settings.printers}
-				assignments={settings.assignments}
-				onChange={(assignments) => save({ ...settings, assignments })}
+				printers={draft.printers}
+				assignments={draft.assignments}
+				onChange={(assignments) => saveDraft({ ...draft, assignments })}
 			/>
 		</div>
 	);
