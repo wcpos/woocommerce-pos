@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiFetchMock = vi.fn();
@@ -21,13 +21,16 @@ function deferred<T>() {
 
 function renderScreen() {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-	return render(
-		<QueryClientProvider client={client}>
-			<React.Suspense fallback="loading">
-				<CloudPrint />
-			</React.Suspense>
-		</QueryClientProvider>
-	);
+	return {
+		client,
+		...render(
+			<QueryClientProvider client={client}>
+				<React.Suspense fallback="loading">
+					<CloudPrint />
+				</React.Suspense>
+			</QueryClientProvider>
+		),
+	};
 }
 
 describe('CloudPrint editing', () => {
@@ -95,6 +98,40 @@ describe('CloudPrint editing', () => {
 		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
 	});
 
+	it('syncs fresh settings into the draft when there are no pending edits', async () => {
+		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+
+		const { client } = renderScreen();
+		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+
+		act(() => {
+			client.setQueryData(['cloud-print'], {
+				printers: [{ id: 'front', name: 'Front', protocol: 'star-cloudprnt', store_id: 0 }],
+				assignments: [],
+			});
+		});
+
+		expect(await screen.findByTestId('cloud-printer-front')).toBeTruthy();
+		expect(screen.queryByTestId('cloud-print-empty')).toBeNull();
+	});
+
+	it('does not save duplicate printer ids', async () => {
+		apiFetchMock.mockResolvedValueOnce({
+			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
+			assignments: [],
+		});
+
+		renderScreen();
+		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
+		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+
+		expect(apiFetchMock.mock.calls.some((c) => (c[0] as { method?: string }).method === 'POST')).toBe(
+			false
+		);
+		expect(screen.getByTestId('cloud-print-save-error')).toHaveTextContent('Printer ID already exists.');
+	});
 
 	it('rolls back a printer add when the save fails', async () => {
 		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
@@ -239,6 +276,41 @@ describe('CloudPrint editing', () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId('cloud-print-save-error')).toBeNull();
 		});
+	});
+
+	it('rolls back to the last confirmed server snapshot after queued saves fail', async () => {
+		const firstSave = deferred<{ printers: Array<{ id: string }>; assignments: never[] }>();
+		const secondSave = deferred<{ printers: Array<{ id: string }>; assignments: Array<{ printer_id: string }> }>();
+		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+		apiFetchMock.mockReturnValueOnce(firstSave.promise);
+		apiFetchMock.mockReturnValueOnce(secondSave.promise);
+
+		renderScreen();
+		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
+		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
+		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
+
+		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
+		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
+
+		firstSave.reject(new Error('First failed.'));
+		await waitFor(() => {
+			const postCalls = apiFetchMock.mock.calls.filter(
+				(c) => (c[0] as { method?: string }).method === 'POST'
+			);
+			expect(postCalls.length).toBe(2);
+		});
+
+		secondSave.reject(new Error('Second failed.'));
+
+		await waitFor(() => {
+			expect(screen.queryByTestId('cloud-printer-kitchen')).toBeNull();
+		});
+		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
+		expect(screen.getByTestId('cloud-print-save-error')).toHaveTextContent('Second failed.');
 	});
 
 	it('defaults Epson Server Direct Print assignments to epos-xml', async () => {

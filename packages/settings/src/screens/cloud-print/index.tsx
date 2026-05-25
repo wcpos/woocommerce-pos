@@ -30,6 +30,8 @@ function CloudPrint() {
 	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
 	const [saveError, setSaveError] = React.useState<string | null>(null);
 	const draftRef = React.useRef(draft);
+	const committedRef = React.useRef(settings);
+	const pendingSaveCountRef = React.useRef(0);
 	const saveQueueRef = React.useRef<Promise<void>>(Promise.resolve());
 	const saveVersionRef = React.useRef(0);
 	// One-time poll token returned by the server after registering a printer.
@@ -40,11 +42,18 @@ function CloudPrint() {
 		setDraft(next);
 	}, []);
 
+	React.useEffect(() => {
+		if (0 === pendingSaveCountRef.current) {
+			committedRef.current = settings;
+			applyDraft(settings);
+		}
+	}, [applyDraft, settings]);
+
 	const saveDraft = React.useCallback(
 		async (next: CloudPrintSettings): Promise<CloudPrintSettingsResponse> => {
-			const previous = draftRef.current;
 			const version = saveVersionRef.current + 1;
 			saveVersionRef.current = version;
+			pendingSaveCountRef.current += 1;
 			applyDraft(next);
 			setSaveError(null);
 
@@ -62,21 +71,25 @@ function CloudPrint() {
 
 			try {
 				const saved = await queuedSave;
+				const committed = {
+					printers: saved.printers,
+					assignments: saved.assignments,
+				};
+				committedRef.current = committed;
 				if (version === saveVersionRef.current) {
-					applyDraft({
-						printers: saved.printers,
-						assignments: saved.assignments,
-					});
+					applyDraft(committed);
 					setSaveError(null);
 				}
 				return saved;
 			} catch (error) {
 				const message = getSaveErrorMessage(error);
 				if (version === saveVersionRef.current) {
-					applyDraft(previous);
+					applyDraft(committedRef.current);
 					setSaveError(message);
 				}
 				throw error;
+			} finally {
+				pendingSaveCountRef.current -= 1;
 			}
 		},
 		[applyDraft, save]
@@ -85,6 +98,10 @@ function CloudPrint() {
 	const addPrinter = async (printer: CloudPrinter) => {
 		try {
 			const current = draftRef.current;
+			if (current.printers.some((existing) => existing.id === printer.id)) {
+				setSaveError(t('cloud_print.printer_id_exists', 'Printer ID already exists.'));
+				return;
+			}
 			const res = await saveDraft({ ...current, printers: [...current.printers, printer] });
 			const generatedEntries = Object.entries(res?.generated ?? {});
 			const generated =
