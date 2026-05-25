@@ -58,6 +58,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 	protected $wcpos_request;
 
 	/**
+	 * Memoized parent collection params.
+	 *
+	 * @var array|null
+	 */
+	protected $wcpos_parent_collection_params;
+
+	/**
 	 * Dispatch request to parent controller, or override if needed.
 	 *
 	 * @param mixed           $dispatch_result Dispatch result, will be used if not empty.
@@ -131,14 +138,14 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return array $params The collection parameters.
 	 */
 	public function get_collection_params() {
-		$params = parent::get_collection_params();
+		$params = $this->wcpos_get_parent_collection_params();
 
 		// Check if 'per_page' parameter exists and has a 'minimum' key before modifying.
 		if ( isset( $params['per_page'] ) && \is_array( $params['per_page'] ) ) {
 			$params['per_page']['minimum'] = -1;
 		}
 
-		if ( ! isset( $params['brand'] ) ) {
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
 			$params['brand'] = array(
 				'description'       => /* translators: REST API collection parameter description. */ __( 'Limit result set to products assigned to brand IDs or slugs, separated by commas.', 'woocommerce-pos' ),
 				'type'              => 'string',
@@ -146,9 +153,29 @@ class Products_Controller extends WC_REST_Products_Controller {
 			);
 		}
 
-		if ( ! isset( $params['brand_operator'] ) ) {
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand_operator' ) ) {
 			$params['brand_operator'] = array(
 				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product brand terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'category_operator' ) ) {
+			$params['category_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product category terms.', 'woocommerce-pos' ),
+				'type'              => 'string',
+				'enum'              => array( 'in', 'not_in', 'and' ),
+				'default'           => 'in',
+				'validate_callback' => 'rest_validate_request_arg',
+			);
+		}
+
+		if ( ! $this->wcpos_parent_collection_supports_param( 'tag_operator' ) ) {
+			$params['tag_operator'] = array(
+				'description'       => /* translators: REST API collection parameter description. */ __( 'Operator to compare product tag terms.', 'woocommerce-pos' ),
 				'type'              => 'string',
 				'enum'              => array( 'in', 'not_in', 'and' ),
 				'default'           => 'in',
@@ -413,22 +440,6 @@ class Products_Controller extends WC_REST_Products_Controller {
 			add_filter( 'posts_where', array( $this, 'wcpos_posts_where_product_include_exclude' ), 20, 2 );
 		}
 
-		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
-			$brand_terms = $this->wcpos_get_product_brand_terms_from_request( $request );
-			if ( ! empty( $brand_terms ) && taxonomy_exists( 'product_brand' ) ) {
-				if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
-					$args['tax_query'] = array();
-				}
-
-				$args['tax_query'][] = array(
-					'taxonomy' => 'product_brand',
-					'field'    => $brand_terms['field'],
-					'terms'    => $brand_terms['terms'],
-					'operator' => $this->wcpos_get_store_api_tax_operator( $request->get_param( 'brand_operator' ) ),
-				);
-			}
-		}
-
 		return $args;
 	}
 
@@ -443,26 +454,40 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 * @return bool
 	 */
 	protected function wcpos_parent_collection_supports_param( string $param ): bool {
-		$params = parent::get_collection_params();
+		$params = $this->wcpos_get_parent_collection_params();
 
 		return isset( $params[ $param ] );
 	}
 
 	/**
-	 * Parse one or more product brand terms from the Store API-style brand request parameter.
+	 * Get parent collection params once per controller instance.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_get_parent_collection_params(): array {
+		if ( null === $this->wcpos_parent_collection_params ) {
+			$this->wcpos_parent_collection_params = parent::get_collection_params();
+		}
+
+		return $this->wcpos_parent_collection_params;
+	}
+
+	/**
+	 * Parse one or more taxonomy terms from a Store API-style request parameter.
 	 *
 	 * @param WP_REST_Request $request The request used.
+	 * @param string          $param   Request parameter name.
 	 *
 	 * @return array{field:string,terms:array<int|string>}
 	 */
-	protected function wcpos_get_product_brand_terms_from_request( WP_REST_Request $request ): array {
-		$brand = $request->get_param( 'brand' );
+	protected function wcpos_get_store_api_tax_terms_from_request( WP_REST_Request $request, string $param ): array {
+		$value = $request->get_param( $param );
 
-		if ( empty( $brand ) ) {
+		if ( empty( $value ) ) {
 			return array();
 		}
 
-		$terms = array_filter( array_map( 'trim', explode( ',', (string) $brand ) ) );
+		$terms = array_filter( array_map( 'trim', explode( ',', (string) $value ) ) );
 		if ( empty( $terms ) ) {
 			return array();
 		}
@@ -496,6 +521,77 @@ class Products_Controller extends WC_REST_Products_Controller {
 		);
 
 		return $operators[ $operator ?? 'in' ] ?? 'IN';
+	}
+
+	/**
+	 * Apply Store API taxonomy fallback query behavior for params missing in Woo REST.
+	 *
+	 * @param array           $args    Prepared query args.
+	 * @param WP_REST_Request $request The request used.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_apply_store_api_tax_operator_fallbacks( array $args, WP_REST_Request $request ): array {
+		if ( ! $this->wcpos_parent_collection_supports_param( 'brand' ) ) {
+			$brand_terms = $this->wcpos_get_store_api_tax_terms_from_request( $request, 'brand' );
+			if ( ! empty( $brand_terms ) && taxonomy_exists( 'product_brand' ) ) {
+				if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
+					$args['tax_query'] = array();
+				}
+
+				$args['tax_query'][] = array(
+					'taxonomy' => 'product_brand',
+					'field'    => $brand_terms['field'],
+					'terms'    => $brand_terms['terms'],
+					'operator' => $this->wcpos_get_store_api_tax_operator( $request->get_param( 'brand_operator' ) ),
+				);
+			}
+		}
+
+		$operator_fallbacks = array(
+			'category_operator' => 'product_cat',
+			'tag_operator'      => 'product_tag',
+		);
+		$query_params       = $request->get_query_params();
+
+		foreach ( $operator_fallbacks as $param => $taxonomy ) {
+			if ( $this->wcpos_parent_collection_supports_param( $param ) || ! array_key_exists( $param, $query_params ) ) {
+				continue;
+			}
+
+			if ( ! isset( $args['tax_query'] ) || ! \is_array( $args['tax_query'] ) ) {
+				continue;
+			}
+
+			$args['tax_query'] = $this->wcpos_replace_tax_query_operator_for_taxonomy(
+				$args['tax_query'],
+				$taxonomy,
+				$this->wcpos_get_store_api_tax_operator( $request->get_param( $param ) )
+			);
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Replace a tax query clause operator for one taxonomy.
+	 *
+	 * @param array  $tax_query Tax query clauses.
+	 * @param string $taxonomy  Taxonomy to match.
+	 * @param string $operator  WP_Tax_Query operator.
+	 *
+	 * @return array
+	 */
+	protected function wcpos_replace_tax_query_operator_for_taxonomy( array $tax_query, string $taxonomy, string $operator ): array {
+		foreach ( $tax_query as $key => $clause ) {
+			if ( ! \is_array( $clause ) || ! isset( $clause['taxonomy'] ) || $taxonomy !== $clause['taxonomy'] ) {
+				continue;
+			}
+
+			$tax_query[ $key ]['operator'] = $operator;
+		}
+
+		return $tax_query;
 	}
 
 	/**
@@ -669,6 +765,11 @@ class Products_Controller extends WC_REST_Products_Controller {
 	 */
 	protected function prepare_objects_query( $request ) {
 		$args          = parent::prepare_objects_query( $request );
+		if ( is_wp_error( $args ) ) {
+			return $args;
+		}
+
+		$args          = $this->wcpos_apply_store_api_tax_operator_fallbacks( $args, $request );
 		$barcode_field = $this->wcpos_get_barcode_field();
 
 		// Add custom 'orderby' options.
