@@ -60,6 +60,24 @@ describe('CloudPrint editing', () => {
 		);
 	});
 
+	it('shows a one-time poll token keyed by the server-sanitized printer id', async () => {
+		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+		apiFetchMock.mockResolvedValueOnce({
+			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
+			assignments: [],
+			generated: { kitchen: 'poll-token-123' },
+		});
+
+		renderScreen();
+		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen ' } });
+		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
+		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+
+		expect(await screen.findByTestId('cloud-print-new-token')).toHaveTextContent('poll-token-123');
+	});
+
 
 	it('rolls back a printer add when the save fails', async () => {
 		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });

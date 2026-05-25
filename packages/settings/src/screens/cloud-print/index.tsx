@@ -82,9 +82,12 @@ function CloudPrint() {
 		try {
 			const current = draftRef.current;
 			const res = await saveDraft({ ...current, printers: [...current.printers, printer] });
-			const token = res?.generated?.[printer.id];
-			if (token) {
-				setNewToken({ id: printer.id, token });
+			const generatedEntries = Object.entries(res?.generated ?? {});
+			const generated =
+				generatedEntries.find(([id]) => id === printer.id) ?? generatedEntries[0];
+			if (generated) {
+				const [id, token] = generated;
+				setNewToken({ id, token });
 			}
 		} catch {
 			// The failed optimistic save has been rolled back and the screen shows the save error.
