@@ -11,6 +11,7 @@ import { RootLayout } from './layouts/root-layout';
 import { queryClient } from './query-client';
 import AccessPage from './screens/access';
 import CheckoutPage from './screens/checkout';
+import CloudPrintPage from './screens/cloud-print';
 import ExtensionsPage from './screens/extensions';
 import GeneralPage from './screens/general';
 import LicensePage from './screens/license';
@@ -58,6 +59,13 @@ const checkoutRoute = createRoute({
 	component: CheckoutPage,
 });
 
+const cloudPrintRoute = createRoute({
+	getParentRoute: () => rootRoute,
+	path: '/cloud-print',
+	loader: settingsLoader('cloud-print'),
+	component: CloudPrintPage,
+});
+
 const accessRoute = createRoute({
 	getParentRoute: () => rootRoute,
 	path: '/access',
@@ -102,6 +110,7 @@ const routeTree = rootRoute.addChildren([
 	indexRoute,
 	generalRoute,
 	checkoutRoute,
+	cloudPrintRoute,
 	accessRoute,
 	sessionsRoute,
 	extensionsRoute,
