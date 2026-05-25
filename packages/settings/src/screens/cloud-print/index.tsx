@@ -4,6 +4,7 @@ import { AssignmentEditor } from './assignment-editor';
 import { PrinterForm } from './printer-form';
 import {
 	type CloudPrintSettings,
+	type CloudPrintSettingsResponse,
 	useCloudPrintSettings,
 	type CloudPrinter,
 } from '../../hooks/use-cloud-print-settings';
@@ -13,38 +14,70 @@ function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
 	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
 	const [saveError, setSaveError] = React.useState<string | null>(null);
+	const draftRef = React.useRef(draft);
+	const saveQueueRef = React.useRef<Promise<void>>(Promise.resolve());
+	const saveVersionRef = React.useRef(0);
 	// One-time poll token returned by the server after registering a printer.
 	const [newToken, setNewToken] = React.useState<{ id: string; token: string } | null>(null);
 
-	const saveDraft = async (next: CloudPrintSettings) => {
-		const previous = draft;
+	const applyDraft = React.useCallback((next: CloudPrintSettings) => {
+		draftRef.current = next;
 		setDraft(next);
-		setSaveError(null);
-		try {
-			return await save(next);
-		} catch (error) {
-			setDraft(previous);
-			setSaveError(error instanceof Error ? error.message : t('cloud_print.save_failed', 'Save failed.'));
-			throw error;
-		}
-	};
+	}, []);
+
+	const saveDraft = React.useCallback(
+		async (next: CloudPrintSettings): Promise<CloudPrintSettingsResponse> => {
+			const previous = draftRef.current;
+			const version = saveVersionRef.current + 1;
+			saveVersionRef.current = version;
+			applyDraft(next);
+			setSaveError(null);
+
+			const queuedSave = saveQueueRef.current
+				.catch(() => undefined)
+				.then(async () => {
+					const saved = await save(next);
+					return saved;
+				});
+
+			saveQueueRef.current = queuedSave.then(
+				() => undefined,
+				() => undefined
+			);
+
+			try {
+				return await queuedSave;
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : t('cloud_print.save_failed', 'Save failed.');
+				if (version === saveVersionRef.current) {
+					applyDraft(previous);
+				}
+				setSaveError(message);
+				throw error;
+			}
+		},
+		[applyDraft, save]
+	);
 
 	const addPrinter = async (printer: CloudPrinter) => {
 		try {
-			const res = await saveDraft({ ...draft, printers: [...draft.printers, printer] });
+			const current = draftRef.current;
+			const res = await saveDraft({ ...current, printers: [...current.printers, printer] });
 			const token = res?.generated?.[printer.id];
 			if (token) {
 				setNewToken({ id: printer.id, token });
 			}
 		} catch {
-			// useCloudPrintSettings surfaces save failures; draft state has been rolled back.
+			// The failed optimistic save has been rolled back and the screen shows the save error.
 		}
 	};
 
 	const removePrinter = (id: string) => {
+		const current = draftRef.current;
 		void saveDraft({
-			printers: draft.printers.filter((p) => p.id !== id),
-			assignments: draft.assignments.filter((a) => a.printer_id !== id),
+			printers: current.printers.filter((p) => p.id !== id),
+			assignments: current.assignments.filter((a) => a.printer_id !== id),
 		}).catch(() => undefined);
 	};
 
@@ -98,7 +131,8 @@ function CloudPrint() {
 				printers={draft.printers}
 				assignments={draft.assignments}
 				onChange={(assignments) => {
-					void saveDraft({ ...draft, assignments }).catch(() => undefined);
+					const current = draftRef.current;
+					void saveDraft({ ...current, assignments }).catch(() => undefined);
 				}}
 			/>
 		</div>
