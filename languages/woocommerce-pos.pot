@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-20T17:17:28+00:00\n"
+"POT-Creation-Date: 2026-05-25T14:52:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -354,12 +354,12 @@ msgid "58mm (Narrow)"
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API.php:414
+#: includes/API.php:419
 #: includes/API/Cashier.php:124
 msgid "Authentication required."
 msgstr ""
 
-#: includes/API.php:421
+#: includes/API.php:426
 #: includes/Templates/Auth.php:314
 msgid "You do not have permission to access the POS."
 msgstr ""
@@ -554,7 +554,7 @@ msgstr ""
 
 #. translators: REST API schema field label or error message.
 #: includes/API/Orders_Controller.php:302
-#: includes/API/Products_Controller.php:105
+#: includes/API/Products_Controller.php:112
 #: includes/API/Product_Variations_Controller.php:109
 msgid "Barcode"
 msgstr ""
@@ -603,6 +603,62 @@ msgstr ""
 msgid "Display name of the order status."
 msgstr ""
 
+#: includes/API/Print_Jobs_Controller.php:157
+#: includes/API/Print_Jobs_Controller.php:177
+#: includes/API/Print_Jobs_Controller.php:198
+#: includes/API/Print_Jobs_Controller.php:312
+msgid "Print job not found."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:214
+#: includes/API/Print_Jobs_Controller.php:438
+msgid "Print job could not be created."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:291
+msgid "Invalid printer token."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:412
+msgid "A printer_id is required."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:468
+msgid "Epson Server Direct Print accepts order-based ePOS-Print jobs only, not raw payloads."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:475
+msgid "Epson Server Direct Print requires the epos-xml format."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:486
+msgid "Star CloudPRNT does not accept the epos-xml format."
+msgstr ""
+
+#: includes/API/Print_Jobs_Controller.php:505
+msgid "Sorry, you cannot manage print jobs."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/Products_Controller.php:150
+msgid "Limit result set to products assigned to brand IDs or slugs, separated by commas."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/Products_Controller.php:158
+msgid "Operator to compare product brand terms."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/Products_Controller.php:168
+msgid "Operator to compare product category terms."
+msgstr ""
+
+#. translators: REST API collection parameter description.
+#: includes/API/Products_Controller.php:178
+msgid "Operator to compare product tag terms."
+msgstr ""
+
 #. translators: REST API schema field label or error message.
 #: includes/API/Receipts_Controller.php:81
 msgid "Invalid order."
@@ -619,6 +675,10 @@ msgstr ""
 
 #: includes/API/Receipts_Controller.php:133
 msgid "Sorry, you cannot view receipts."
+msgstr ""
+
+#: includes/API/Settings.php:684
+msgid "Duplicate printer id."
 msgstr ""
 
 #: includes/API/Stores.php:93
