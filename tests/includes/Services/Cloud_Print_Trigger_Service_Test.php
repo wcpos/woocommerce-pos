@@ -114,6 +114,7 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	 * It checks beyond the first query page when avoiding duplicates.
 	 */
 	public function test_duplicate_guard_scans_beyond_first_fifty_jobs(): void {
+		$order = OrderHelper::create_order();
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
@@ -135,7 +136,6 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				)
 			);
 		}
-		$order = OrderHelper::create_order();
 		$this->jobs->create(
 			array(
 				'printer_id' => 'kitchen',
@@ -153,6 +153,28 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 			}
 		);
 		$this->assertEquals( 1, \count( $matches ) );
+	}
+
+	/**
+	 * It lets Pro substitute per-outlet assignments through a filter.
+	 */
+	public function test_assignments_filter_can_substitute_assignments(): void {
+		update_option( 'woocommerce_pos_settings_cloud_print', array( 'assignments' => array() ) );
+		$callback = static function () {
+			return array( array( 'printer_id' => 'outlet-1', 'scope' => 'every', 'format' => 'starprnt' ) );
+		};
+		add_filter(
+			'woocommerce_pos_cloud_print_assignments',
+			$callback
+		);
+		$order = OrderHelper::create_order();
+
+		try {
+			( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+			$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'outlet-1' ) ) ) );
+		} finally {
+			remove_filter( 'woocommerce_pos_cloud_print_assignments', $callback );
+		}
 	}
 
 }

@@ -42,6 +42,19 @@ class Cloud_Print_Trigger_Service {
 
 		$settings    = get_option( self::OPTION, array() );
 		$assignments = isset( $settings['assignments'] ) && \is_array( $settings['assignments'] ) ? $settings['assignments'] : array();
+
+		/**
+		 * Filter the cloud-print assignments for an order. Pro uses this to
+		 * substitute per-outlet assignments based on the order's store.
+		 *
+		 * @param array     $assignments Global assignments.
+		 * @param \WC_Order $order       The order being processed.
+		 */
+		$assignments = apply_filters( 'woocommerce_pos_cloud_print_assignments', $assignments, $order );
+		if ( ! \is_array( $assignments ) ) {
+			$assignments = array();
+		}
+
 		if ( empty( $assignments ) ) {
 			return;
 		}
