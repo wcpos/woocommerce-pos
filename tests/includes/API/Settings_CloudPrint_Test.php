@@ -67,4 +67,42 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( false, isset( $saved['printers'][0]['poll_token'] ) );
 		$this->assertEquals( 'pos', $saved['assignments'][0]['scope'] );
 	}
+
+	/**
+	 * It preserves malformed stored printer rows without exposing token hashes.
+	 */
+	public function test_get_cloud_print_preserves_malformed_printer_rows(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array( 'legacy-row' ),
+				'assignments' => array(),
+			)
+		);
+
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		$this->assertEquals( 'legacy-row', $data['printers'][0] );
+	}
+
+	/**
+	 * It rejects duplicate cloud printer ids.
+	 */
+	public function test_update_rejects_duplicate_printer_ids(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers' => array(
+					array( 'id' => 'kitchen' ),
+					array( 'id' => 'kitchen' ),
+				),
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'wcpos_cloud_print_duplicate_printer_id', $response->get_data()['code'] );
+	}
+
 }

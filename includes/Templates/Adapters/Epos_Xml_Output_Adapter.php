@@ -26,7 +26,6 @@ class Epos_Xml_Output_Adapter implements Receipt_Output_Adapter_Interface {
 		$order_number = isset( $receipt_data['order']['number'] ) ? (string) $receipt_data['order']['number'] : '';
 		$total        = isset( $receipt_data['totals']['total_incl'] ) ? (float) $receipt_data['totals']['total_incl'] : 0;
 		$lines        = array(
-			'<?xml version="1.0" encoding="UTF-8"?>',
 			'<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">',
 			'<text align="center" em="true">' . $this->escape( $store_name ) . "\n" . '</text>',
 			'<text align="center">RECEIPT' . "\n" . '</text>',

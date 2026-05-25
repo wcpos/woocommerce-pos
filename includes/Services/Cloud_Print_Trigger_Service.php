@@ -98,7 +98,14 @@ class Cloud_Print_Trigger_Service {
 	 * @param string $printer_id Printer ID.
 	 */
 	private function already_queued( int $order_id, string $printer_id ): bool {
-		foreach ( $this->jobs->query( array( 'printer_id' => $printer_id ) ) as $job ) {
+		foreach (
+			$this->jobs->query(
+				array(
+					'printer_id' => $printer_id,
+					'limit'      => -1,
+				)
+			) as $job
+		) {
 			if ( (int) $job['order_id'] === $order_id ) {
 				return true;
 			}

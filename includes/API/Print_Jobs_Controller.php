@@ -208,6 +208,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'format'       => $source['format'] ? $source['format'] : null,
 			)
 		);
+		if ( $new_id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
 		$response = rest_ensure_response( $this->jobs->get( $new_id ) );
 		$response->set_status( 201 );
 
@@ -258,7 +266,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
 
-		$this->jobs->claim( (int) $job['id'] );
+		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
+			return rest_ensure_response( array( 'jobReady' => false ) );
+		}
 
 		return $this->serve_raw( $this->jobs->render_payload( $job ), $job['content_type'] ? $job['content_type'] : 'application/octet-stream' );
 	}
@@ -374,7 +384,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			return $this->serve_raw( $ack, $soap );
 		}
 
-		$this->jobs->claim( (int) $job['id'] );
+		if ( ! $this->jobs->try_claim( (int) $job['id'] ) ) {
+			return $this->serve_raw( $ack, $soap );
+		}
 		$epos = $this->jobs->render_payload( $job );
 
 		$envelope  = '<?xml version="1.0" encoding="utf-8"?>';
@@ -420,6 +432,13 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'format'       => $format,
 			)
 		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		$response = rest_ensure_response( $this->jobs->get( $id ) );
 		$response->set_status( 201 );

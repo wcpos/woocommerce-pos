@@ -21,6 +21,7 @@ class Epos_Xml_Output_Adapter_Test extends \WP_UnitTestCase {
 		$xml = ( new Epos_Xml_Output_Adapter() )->transform( $this->receipt_data() );
 
 		$this->assertStringContainsString( '<epos-print', $xml );
+		$this->assertStringNotContainsString( '<?xml', $xml );
 		$this->assertStringContainsString( 'Acme Store', $xml );
 		$this->assertStringContainsString( 'Widget', $xml );
 		$this->assertStringContainsString( '<cut', $xml );

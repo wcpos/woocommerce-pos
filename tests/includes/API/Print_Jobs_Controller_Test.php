@@ -52,6 +52,7 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		$response = rest_do_request( $request );
 
 		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_missing_printer', $response->as_error()->get_error_code() );
 	}
 
 	/**
@@ -78,8 +79,12 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
-		$this->assertEquals( 400, rest_do_request( $request )->get_status() );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_incompatible', $response->as_error()->get_error_code() );
 	}
+
 	/**
 	 * It lists jobs filtered by printer id.
 	 */

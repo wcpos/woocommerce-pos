@@ -109,4 +109,50 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'kitchen' ) ) ) );
 		$this->assertEquals( 1, \count( $this->jobs->query( array( 'printer_id' => 'counter' ) ) ) );
 	}
+
+	/**
+	 * It checks beyond the first query page when avoiding duplicates.
+	 */
+	public function test_duplicate_guard_scans_beyond_first_fifty_jobs(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'assignments' => array(
+					array(
+						'printer_id' => 'kitchen',
+						'scope'      => 'every',
+						'format'     => 'epos-xml',
+					),
+				),
+			)
+		);
+		for ( $i = 0; $i < 50; $i++ ) {
+			$this->jobs->create(
+				array(
+					'printer_id' => 'kitchen',
+					'order_id'   => 1000 + $i,
+					'format'     => 'epos-xml',
+				)
+			);
+		}
+		$order = OrderHelper::create_order();
+		$this->jobs->create(
+			array(
+				'printer_id' => 'kitchen',
+				'order_id'   => $order->get_id(),
+				'format'     => 'epos-xml',
+			)
+		);
+
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		$matches = array_filter(
+			$this->jobs->query( array( 'printer_id' => 'kitchen', 'limit' => -1 ) ),
+			static function ( $job ) use ( $order ) {
+				return (int) $job['order_id'] === $order->get_id();
+			}
+		);
+		$this->assertEquals( 1, \count( $matches ) );
+	}
+
 }

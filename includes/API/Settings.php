@@ -628,6 +628,10 @@ class Settings extends WP_REST_Controller {
 		);
 		$settings['printers'] = array_map(
 			static function ( $printer ) {
+				if ( ! \is_array( $printer ) ) {
+					return $printer;
+				}
+
 				unset( $printer['poll_token_hash'] );
 
 				return $printer;
@@ -665,11 +669,25 @@ class Settings extends WP_REST_Controller {
 
 		$generated      = array();
 		$clean_printers = array();
+		$seen_ids       = array();
 		foreach ( $printers as $printer ) {
 			$printer    = $this->sanitize_cloud_printer( $printer );
 			$id         = $printer['id'];
 			$regenerate = ! empty( $printer['regenerate_token'] );
 			unset( $printer['regenerate_token'] );
+
+			if ( '' !== $id ) {
+				if ( isset( $seen_ids[ $id ] ) ) {
+					return new WP_REST_Response(
+						array(
+							'code'    => 'wcpos_cloud_print_duplicate_printer_id',
+							'message' => __( 'Duplicate printer id.', 'woocommerce-pos' ),
+						),
+						400
+					);
+				}
+				$seen_ids[ $id ] = true;
+			}
 
 			if ( '' !== $id && ( $regenerate || empty( $existing_hashes[ $id ] ) ) ) {
 				$token                      = Cloud_Print_Registry::generate_token();

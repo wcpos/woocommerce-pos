@@ -18,7 +18,8 @@ class Print_Job_Service {
 	const META_ORDER_ID   = '_wcpos_pj_order_id';
 	const META_FORMAT     = '_wcpos_pj_format';
 	const META_ERROR      = '_wcpos_pj_error';
-	const META_CLAIMED_AT = '_wcpos_pj_claimed_at';
+	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
+	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
 	const CLAIM_TTL = 120;
@@ -67,8 +68,13 @@ class Print_Job_Service {
 				'post_status'  => 'publish',
 				'post_title'   => 'print-job',
 				'post_content' => isset( $args['payload'] ) ? (string) $args['payload'] : '',
-			)
+			),
+			true
 		);
+
+		if ( is_wp_error( $id ) || (int) $id <= 0 ) {
+			return 0;
+		}
 
 		update_post_meta( $id, self::META_PRINTER, sanitize_text_field( $args['printer_id'] ) );
 		update_post_meta( $id, self::META_STATUS, self::STATUS_PENDING );
@@ -189,8 +195,39 @@ class Print_Job_Service {
 	 * @param int $id Job ID.
 	 */
 	public function claim( int $id ): void {
-		update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED );
-		update_post_meta( $id, self::META_CLAIMED_AT, time() );
+		$this->try_claim( $id );
+	}
+
+	/**
+	 * Attempt to claim a job while preserving one active claim per printer.
+	 *
+	 * @param int $id Job ID.
+	 *
+	 * @return bool True when the job was claimed.
+	 */
+	public function try_claim( int $id ): bool {
+		$job = $this->get( $id );
+		if ( null === $job || self::STATUS_PENDING !== $job['status'] || '' === $job['printer_id'] ) {
+			return false;
+		}
+
+		$printer_id = sanitize_text_field( $job['printer_id'] );
+		if ( ! $this->acquire_claim_lock( $printer_id ) ) {
+			return false;
+		}
+
+		try {
+			if ( null !== $this->find_active_claim( $printer_id ) ) {
+				return false;
+			}
+
+			update_post_meta( $id, self::META_STATUS, self::STATUS_CLAIMED );
+			update_post_meta( $id, self::META_CLAIMED_AT, time() );
+
+			return true;
+		} finally {
+			$this->release_claim_lock( $printer_id );
+		}
 	}
 
 	/**
@@ -240,6 +277,51 @@ class Print_Job_Service {
 				delete_post_meta( $job['id'], self::META_CLAIMED_AT );
 			}
 		}
+	}
+
+	/**
+	 * Acquire a short per-printer claim lock.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return bool True when the lock was acquired.
+	 */
+	private function acquire_claim_lock( string $printer_id ): bool {
+		$option = $this->claim_lock_option( $printer_id );
+		$now    = time();
+
+		if ( add_option( $option, (string) $now, '', 'no' ) ) {
+			return true;
+		}
+
+		$locked_at = (int) get_option( $option, 0 );
+		if ( $locked_at > 0 && ( $now - $locked_at ) > self::CLAIM_TTL ) {
+			delete_option( $option );
+
+			return add_option( $option, (string) $now, '', 'no' );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Release the per-printer claim lock.
+	 *
+	 * @param string $printer_id Printer ID.
+	 */
+	private function release_claim_lock( string $printer_id ): void {
+		delete_option( $this->claim_lock_option( $printer_id ) );
+	}
+
+	/**
+	 * Build the per-printer claim lock option name.
+	 *
+	 * @param string $printer_id Printer ID.
+	 *
+	 * @return string
+	 */
+	private function claim_lock_option( string $printer_id ): string {
+		return self::CLAIM_LOCK_PREFIX . md5( $printer_id );
 	}
 
 	/**

@@ -45,12 +45,15 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Poll the CloudPRNT route.
 	 *
-	 * @param string $method HTTP method.
-	 * @param array  $params Query params.
+	 * @param string $method           HTTP method.
+	 * @param array  $params           Query params.
+	 * @param bool   $set_wcpos_header Whether to set the WCPOS header.
 	 */
-	private function poll( string $method, array $params ) {
+	private function poll( string $method, array $params, bool $set_wcpos_header = true ) {
 		$request = new \WP_REST_Request( $method, '/wcpos/v1/print-jobs/cloudprnt' );
-		$request->set_header( 'X-WCPOS', '1' );
+		if ( $set_wcpos_header ) {
+			$request->set_header( 'X-WCPOS', '1' );
+		}
 		$request->set_query_params(
 			array_merge(
 				array(
@@ -75,7 +78,9 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 				'payload'      => base64_encode( 'X' ),
 			)
 		);
-		$data = $this->poll( 'POST', array() )->get_data();
+		$response = $this->poll( 'POST', array() );
+		$this->assertEquals( 200, $response->get_status() );
+		$data = $response->get_data();
 
 		$this->assertEquals( true, $data['jobReady'] );
 		$this->assertEquals( (string) $id, $data['jobToken'] );
@@ -119,10 +124,26 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
-		$first = $this->poll( 'POST', array() )->get_data();
+		$first_response = $this->poll( 'POST', array() );
+		$this->assertEquals( 200, $first_response->get_status() );
+		$first = $first_response->get_data();
 		$this->poll( 'GET', array( 'token' => $first['jobToken'] ) );
 
-		$this->assertEquals( false, $this->poll( 'POST', array() )->get_data()['jobReady'] );
+		$second_response = $this->poll( 'POST', array() );
+		$this->assertEquals( 200, $second_response->get_status() );
+		$this->assertEquals( false, $second_response->get_data()['jobReady'] );
+	}
+
+	/**
+	 * It allows anonymous hardware polling to reach token validation.
+	 */
+	public function test_poll_allows_anonymous_printer_token_request(): void {
+		wp_set_current_user( 0 );
+
+		$response = $this->poll( 'POST', array(), false );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( false, $response->get_data()['jobReady'] );
 	}
 
 	/**
