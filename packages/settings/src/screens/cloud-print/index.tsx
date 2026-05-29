@@ -171,6 +171,7 @@ function CloudPrint() {
 		(printer: CloudPrinter) => {
 			const current = draftRef.current;
 			void saveDraft({
+				...current,
 				printers: current.printers.filter((p) => p.id !== printer.id),
 				assignments: current.assignments.filter((a) => a.printer_id !== printer.id),
 			}).catch(() => undefined);
