@@ -15,8 +15,8 @@ function makePrinters(): CloudPrinter[] {
 }
 
 const templateOptions = [
-	{ value: '11', label: 'Standard receipt' },
-	{ value: '22', label: 'Kitchen ticket' },
+	{ value: '11', label: 'Standard receipt', engine: 'thermal' as const },
+	{ value: '22', label: 'Kitchen ticket', engine: 'thermal' as const },
 ];
 
 function makeAssignments(): CloudAssignment[] {
@@ -147,5 +147,54 @@ describe('AutoPrintRules', () => {
 		});
 		expect(screen.getByTestId('rule-template-0')).toBeInTheDocument();
 		expect(onChange).not.toHaveBeenCalled();
+	});
+
+	it('filters template options per row by the row printer provider', () => {
+		const mixedOptions = [
+			{ value: '11', label: 'Thermal receipt', engine: 'thermal' as const },
+			{ value: '22', label: 'PDF receipt', engine: 'logicless' as const },
+			{ value: '33', label: 'Legacy receipt', engine: 'legacy-php' as const },
+		];
+		const printers: CloudPrinter[] = [
+			{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
+			{ id: 'cloud', name: 'Cloud', provider: 'printnode', store_id: 0 },
+		];
+		renderRules({
+			printers,
+			assignments: [
+				{ printer_id: 'kitchen', scope: 'pos', template_id: '11' },
+				{ printer_id: 'cloud', scope: 'online', template_id: '22' },
+			],
+			templateOptions: mixedOptions,
+		});
+
+		// Star (direct polling) row → only the thermal template.
+		const starSelect = screen.getByTestId('rule-template-0');
+		const starOptions = within(starSelect)
+			.getAllByRole('option')
+			.map((o) => o.textContent);
+		expect(starOptions).toEqual(['Thermal receipt']);
+
+		// PrintNode (push) row → all templates.
+		const pnSelect = screen.getByTestId('rule-template-1');
+		const pnOptions = within(pnSelect)
+			.getAllByRole('option')
+			.map((o) => o.textContent);
+		expect(pnOptions).toEqual(['Thermal receipt', 'PDF receipt', 'Legacy receipt']);
+	});
+
+	it('defaults a new rule template_id to the first option valid for the first printer', () => {
+		const mixedOptions = [
+			{ value: '22', label: 'PDF receipt', engine: 'logicless' as const },
+			{ value: '11', label: 'Thermal receipt', engine: 'thermal' as const },
+		];
+		// First printer is a star (direct) printer, so the only valid option is the thermal one.
+		const { onChange } = renderRules({
+			assignments: [],
+			templateOptions: mixedOptions,
+		});
+		fireEvent.click(screen.getByTestId('rules-add'));
+		const next = onChange.mock.calls[0][0] as CloudAssignment[];
+		expect(next[0].template_id).toBe('11');
 	});
 });

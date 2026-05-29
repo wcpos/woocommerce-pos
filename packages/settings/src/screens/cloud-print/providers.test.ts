@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { PROVIDERS, getProvider } from './providers';
+import { PROVIDERS, getProvider, templateOptionsForProvider } from './providers';
 
 import type { CloudProvider } from '../../hooks/use-cloud-print-settings';
+import type { TemplateEngine } from '../../hooks/use-receipt-templates';
 
 describe('cloud-print providers metadata', () => {
 	it('exposes metadata for exactly the three providers', () => {
@@ -49,5 +50,29 @@ describe('cloud-print providers metadata', () => {
 	it('getProvider returns the same entry as PROVIDERS lookup', () => {
 		expect(getProvider('star-cloudprnt')).toBe(PROVIDERS['star-cloudprnt']);
 		expect(getProvider('printnode')).toBe(PROVIDERS['printnode']);
+	});
+});
+
+describe('templateOptionsForProvider', () => {
+	const opts: { value: string; label: string; engine: TemplateEngine }[] = [
+		{ value: '1', label: 'A', engine: 'thermal' },
+		{ value: '2', label: 'B', engine: 'logicless' },
+		{ value: '3', label: 'C', engine: 'legacy-php' },
+	];
+
+	it('keeps only thermal templates for Star CloudPRNT (direct polling)', () => {
+		expect(templateOptionsForProvider(opts, 'star-cloudprnt')).toEqual([
+			{ value: '1', label: 'A', engine: 'thermal' },
+		]);
+	});
+
+	it('keeps only thermal templates for Epson SDP (direct polling)', () => {
+		expect(templateOptionsForProvider(opts, 'epson-sdp')).toEqual([
+			{ value: '1', label: 'A', engine: 'thermal' },
+		]);
+	});
+
+	it('keeps all templates for PrintNode (push provider)', () => {
+		expect(templateOptionsForProvider(opts, 'printnode')).toEqual(opts);
 	});
 });

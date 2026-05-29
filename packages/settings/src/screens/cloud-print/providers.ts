@@ -1,4 +1,5 @@
 import type { CloudProvider } from '../../hooks/use-cloud-print-settings';
+import type { TemplateEngine } from '../../hooks/use-receipt-templates';
 
 /**
  * A small square badge rendered next to a provider name.
@@ -51,4 +52,21 @@ export const PROVIDERS: Record<CloudProvider, ProviderMeta> = {
  */
 export function getProvider(id: CloudProvider): ProviderMeta {
 	return PROVIDERS[id];
+}
+
+/**
+ * Filter receipt-template options to those a given provider can render.
+ *
+ * Direct polling printers (Star CloudPRNT / Epson SDP) accept only `thermal`
+ * templates; push providers (PrintNode) accept every active template. The input
+ * objects are returned untouched, so any extra fields are preserved.
+ */
+export function templateOptionsForProvider<T extends { engine: TemplateEngine }>(
+	options: T[],
+	provider: CloudProvider
+): T[] {
+	if (!PROVIDERS[provider].isPolling) {
+		return options;
+	}
+	return options.filter((option) => option.engine === 'thermal');
 }

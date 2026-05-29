@@ -1,8 +1,14 @@
 import { Button, Callout, Select } from '@wcpos/ui';
 
+import { templateOptionsForProvider } from './providers';
 import { t } from '../../translations';
 
-import type { CloudAssignment, CloudPrinter } from '../../hooks/use-cloud-print-settings';
+import type {
+	CloudAssignment,
+	CloudPrinter,
+	CloudProvider,
+} from '../../hooks/use-cloud-print-settings';
+import type { TemplateEngine } from '../../hooks/use-receipt-templates';
 
 export interface AutoPrintRulesProps {
 	printers: CloudPrinter[];
@@ -10,7 +16,7 @@ export interface AutoPrintRulesProps {
 	// Receipt-template options supplied by the screen (it calls
 	// `useReceiptTemplateOptions`). Passed in as a prop so this component stays
 	// suspense-free and easily testable.
-	templateOptions: { value: string; label: string }[];
+	templateOptions: { value: string; label: string; engine: TemplateEngine }[];
 	onChange: (next: CloudAssignment[]) => void;
 }
 
@@ -36,6 +42,15 @@ export function AutoPrintRules({
 }: AutoPrintRulesProps) {
 	const printerOptions = printers.map((p) => ({ value: p.id, label: p.name }));
 
+	// The provider for a printer id (falls back to PrintNode-style "all
+	// templates" when the printer can't be found, e.g. a stale assignment).
+	const providerFor = (printerId: string): CloudProvider =>
+		printers.find((p) => p.id === printerId)?.provider ?? 'printnode';
+
+	// Template options valid for the printer driving a given assignment row.
+	const optionsForPrinter = (printerId: string) =>
+		templateOptionsForProvider(templateOptions, providerFor(printerId));
+
 	const update = (index: number, patch: Partial<CloudAssignment>) => {
 		onChange(assignments.map((a, i) => (i === index ? { ...a, ...patch } : a)));
 	};
@@ -43,12 +58,13 @@ export function AutoPrintRules({
 	const add = () => {
 		const first = printers[0];
 		if (!first) return;
+		const firstOptions = optionsForPrinter(first.id);
 		onChange([
 			...assignments,
 			{
 				printer_id: first.id,
 				scope: 'every',
-				template_id: templateOptions[0]?.value ?? '',
+				template_id: firstOptions[0]?.value ?? '',
 			},
 		]);
 	};
@@ -118,7 +134,7 @@ export function AutoPrintRules({
 								aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
 								className="wcpos:w-auto"
 								value={a.template_id}
-								options={templateOptions}
+								options={optionsForPrinter(a.printer_id)}
 								onChange={({ value }) =>
 									update(i, { template_id: String(value) })
 								}

@@ -23,7 +23,7 @@ describe('useReceiptTemplateOptions', () => {
 		apiFetchMock.mockReset();
 	});
 
-	it('returns published/active receipt templates as { value, label } options and excludes inactive drafts', async () => {
+	it('returns published/active receipt templates as { value, label, engine } options and excludes inactive drafts', async () => {
 		// Arrange
 		apiFetchMock.mockResolvedValue([
 			{ id: 12, title: 'Standard Receipt', status: 'publish', is_active: false, engine: 'logicless' },
@@ -41,8 +41,8 @@ describe('useReceiptTemplateOptions', () => {
 			method: 'GET',
 		});
 		expect(result.current).toEqual([
-			{ value: '12', label: 'Standard Receipt' },
-			{ value: 'plugin-core', label: 'Core Receipt' },
+			{ value: '12', label: 'Standard Receipt', engine: 'logicless' },
+			{ value: 'plugin-core', label: 'Core Receipt', engine: 'legacy-php' },
 		]);
 	});
 
@@ -57,6 +57,6 @@ describe('useReceiptTemplateOptions', () => {
 
 		// Assert
 		await waitFor(() => expect(result.current).toBeTruthy());
-		expect(result.current).toEqual([{ value: '7', label: 'Active Draft' }]);
+		expect(result.current).toEqual([{ value: '7', label: 'Active Draft', engine: 'logicless' }]);
 	});
 });
