@@ -34,7 +34,7 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 				'printers' => array(
 					array(
 						'id'              => 'p1',
-						'protocol'        => 'star-cloudprnt',
+						'provider'        => 'star-cloudprnt',
 						'poll_token_hash' => Cloud_Print_Registry::hash_token( 'tok' ),
 					),
 				),

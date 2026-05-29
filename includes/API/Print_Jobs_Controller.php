@@ -447,7 +447,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Validate a job against the target printer's protocol.
+	 * Validate a job against the target printer's provider.
 	 *
 	 * @param array|null $printer Registered printer, or null when unknown.
 	 * @param string     $payload Base64 payload (raw jobs).
@@ -459,9 +459,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( null === $printer ) {
 			return true;
 		}
-		$protocol = $printer['protocol'] ?? 'star-cloudprnt';
+		$provider = $printer['provider'] ?? 'star-cloudprnt';
 
-		if ( 'epson-sdp' === $protocol ) {
+		if ( 'epson-sdp' === $provider ) {
 			if ( '' !== $payload ) {
 				return new WP_Error(
 					'wcpos_print_job_incompatible',

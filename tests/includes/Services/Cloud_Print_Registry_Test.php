@@ -24,7 +24,7 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 				'printers' => array(
 					array(
 						'id'              => 'p1',
-						'protocol'        => 'star-cloudprnt',
+						'provider'        => 'star-cloudprnt',
 						'poll_token_hash' => Cloud_Print_Registry::hash_token( 'secret-1' ),
 					),
 				),
@@ -33,7 +33,7 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 
 		$registry = new Cloud_Print_Registry();
 
-		$this->assertEquals( 'star-cloudprnt', $registry->get_printer( 'p1' )['protocol'] );
+		$this->assertEquals( 'star-cloudprnt', $registry->get_printer( 'p1' )['provider'] );
 		$this->assertEquals( true, $registry->verify_token( 'p1', 'secret-1' ) );
 		$this->assertEquals( false, $registry->verify_token( 'p1', 'wrong' ) );
 		$this->assertEquals( null, $registry->get_printer( 'missing' ) );

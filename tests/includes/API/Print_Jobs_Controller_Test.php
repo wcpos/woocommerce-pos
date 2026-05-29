@@ -65,7 +65,7 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 				'printers' => array(
 					array(
 						'id'       => 'epson-1',
-						'protocol' => 'epson-sdp',
+						'provider' => 'epson-sdp',
 					),
 				),
 			)
