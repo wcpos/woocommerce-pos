@@ -65,6 +65,24 @@
 		<exclude name="WordPress.Variables.GlobalVariables.OverrideProhibited"/> -->
 	</rule>
 
+	<!-- Allow native DOM/SimpleXML object properties that cannot be renamed. -->
+	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<properties>
+			<property name="allowed_custom_properties" type="array">
+				<element value="documentElement"/>
+				<element value="tagName"/>
+				<element value="childNodes"/>
+				<element value="nodeType"/>
+				<element value="textContent"/>
+				<element value="nodeValue"/>
+				<element value="nodeName"/>
+				<element value="parentNode"/>
+				<element value="firstChild"/>
+				<element value="nextSibling"/>
+			</property>
+		</properties>
+	</rule>
+
 	<!-- Let's also check that everything is properly documented. -->
 	<rule ref="WordPress-Docs"/>
 
