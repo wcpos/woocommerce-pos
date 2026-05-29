@@ -63,4 +63,27 @@ class Cloud_Print_Registry {
 	public static function hash_token( string $token ): string {
 		return hash( 'sha256', $token );
 	}
+
+	/**
+	 * Derive a stable, URL-safe printer id from a display name, unique against existing ids.
+	 *
+	 * @param string        $name         Display name.
+	 * @param array<string> $existing_ids Already-used ids.
+	 *
+	 * @return string
+	 */
+	public static function derive_id( string $name, array $existing_ids ): string {
+		$base = sanitize_title( $name );
+		if ( '' === $base ) {
+			$base = 'printer';
+		}
+		$candidate = $base;
+		$suffix    = 2;
+		while ( \in_array( $candidate, $existing_ids, true ) ) {
+			$candidate = $base . '-' . $suffix;
+			++$suffix;
+		}
+
+		return $candidate;
+	}
 }

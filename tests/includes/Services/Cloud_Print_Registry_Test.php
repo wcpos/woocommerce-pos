@@ -38,4 +38,14 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 		$this->assertEquals( false, $registry->verify_token( 'p1', 'wrong' ) );
 		$this->assertEquals( null, $registry->get_printer( 'missing' ) );
 	}
+
+	/**
+	 * It slugifies a printer name into a stable id and dedupes against existing ids.
+	 */
+	public function test_derive_id_slugifies_name_and_dedupes(): void {
+		$this->assertEquals( 'kitchen-printer', Cloud_Print_Registry::derive_id( 'Kitchen Printer', array() ) );
+		$this->assertEquals( 'kitchen-printer-2', Cloud_Print_Registry::derive_id( 'Kitchen Printer!', array( 'kitchen-printer' ) ) );
+		$this->assertEquals( 'kitchen-printer-3', Cloud_Print_Registry::derive_id( 'Kitchen Printer', array( 'kitchen-printer', 'kitchen-printer-2' ) ) );
+		$this->assertEquals( 'printer', Cloud_Print_Registry::derive_id( '', array() ) );
+	}
 }
