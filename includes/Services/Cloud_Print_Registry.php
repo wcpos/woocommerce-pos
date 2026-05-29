@@ -13,6 +13,9 @@ namespace WCPOS\WooCommercePOS\Services;
 class Cloud_Print_Registry {
 	const OPTION = 'woocommerce_pos_settings_cloud_print';
 
+	const RUNTIME_OPTION = 'woocommerce_pos_cloud_print_runtime';
+	const SEEN_TTL       = 150; // seconds; connected if seen within this window
+
 	/**
 	 * Get a registered cloud printer by id.
 	 *
@@ -85,5 +88,30 @@ class Cloud_Print_Registry {
 		}
 
 		return $candidate;
+	}
+
+	/**
+	 * Record that a printer polled just now.
+	 *
+	 * @param string $printer_id Printer id.
+	 */
+	public function record_seen( string $printer_id ): void {
+		$runtime                = get_option( self::RUNTIME_OPTION, array() );
+		$runtime                = \is_array( $runtime ) ? $runtime : array();
+		$runtime[ $printer_id ] = time();
+		update_option( self::RUNTIME_OPTION, $runtime, false ); // autoload no
+	}
+
+	/**
+	 * Get a printer's last-seen unix timestamp (0 if never).
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return int
+	 */
+	public function get_seen( string $printer_id ): int {
+		$runtime = get_option( self::RUNTIME_OPTION, array() );
+
+		return ( \is_array( $runtime ) && isset( $runtime[ $printer_id ] ) ) ? (int) $runtime[ $printer_id ] : 0;
 	}
 }

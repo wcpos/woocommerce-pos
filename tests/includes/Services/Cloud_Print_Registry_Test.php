@@ -48,4 +48,14 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'kitchen-printer-3', Cloud_Print_Registry::derive_id( 'Kitchen Printer', array( 'kitchen-printer', 'kitchen-printer-2' ) ) );
 		$this->assertEquals( 'printer', Cloud_Print_Registry::derive_id( '', array() ) );
 	}
+
+	/**
+	 * It records and reads back a printer's last-seen timestamp.
+	 */
+	public function test_record_and_get_seen_roundtrip(): void {
+		$registry = new Cloud_Print_Registry();
+		$this->assertEquals( 0, $registry->get_seen( 'kitchen' ) );
+		$registry->record_seen( 'kitchen' );
+		$this->assertGreaterThan( 0, $registry->get_seen( 'kitchen' ) );
+	}
 }

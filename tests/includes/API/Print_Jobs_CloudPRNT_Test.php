@@ -152,4 +152,16 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	public function test_poll_rejects_bad_token_with_401(): void {
 		$this->assertEquals( 401, $this->poll( 'POST', array( 'pt' => 'wrong' ) )->get_status() );
 	}
+
+	/**
+	 * It records the printer's last-seen timestamp on a valid poll.
+	 */
+	public function test_valid_poll_records_last_seen(): void {
+		$registry = new \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry();
+		$this->assertEquals( 0, $registry->get_seen( 'p1' ) );
+
+		$this->poll( 'POST', array() );
+
+		$this->assertGreaterThan( 0, $registry->get_seen( 'p1' ) );
+	}
 }

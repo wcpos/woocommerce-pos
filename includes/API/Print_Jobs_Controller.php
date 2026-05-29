@@ -42,10 +42,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	protected $jobs;
 
 	/**
+	 * Cloud printer registry.
+	 *
+	 * @var Cloud_Print_Registry
+	 */
+	protected $registry;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->jobs = new Print_Job_Service();
+		$this->jobs     = new Print_Job_Service();
+		$this->registry = new Cloud_Print_Registry();
 	}
 
 	/**
@@ -232,6 +240,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function cloudprnt( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$this->registry->record_seen( $printer_id );
 		$this->jobs->release_stale_claims( $printer_id );
 
 		if ( 'POST' === $request->get_method() ) {
@@ -283,9 +292,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	public function printer_token_permissions_check( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
 		$token      = (string) $request->get_param( 'pt' );
-		$registry   = new Cloud_Print_Registry();
 
-		if ( ! $registry->verify_token( $printer_id, $token ) ) {
+		if ( ! $this->registry->verify_token( $printer_id, $token ) ) {
 			return new WP_Error(
 				'wcpos_print_job_invalid_token',
 				__( 'Invalid printer token.', 'woocommerce-pos' ),
@@ -359,6 +367,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function epson_sdp( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$this->registry->record_seen( $printer_id );
 		$raw_body   = (string) $request->get_body();
 		$soap       = 'text/xml; charset=utf-8';
 		$ack        = '<response success="true" code="" status=""/>';
@@ -417,8 +426,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$payload = (string) $request->get_param( 'payload' );
 		$format  = (string) $request->get_param( 'format' );
 
-		$registry   = new Cloud_Print_Registry();
-		$validation = $this->validate_job_for_printer( $registry->get_printer( $printer_id ), $payload, $format );
+		$validation = $this->validate_job_for_printer( $this->registry->get_printer( $printer_id ), $payload, $format );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
