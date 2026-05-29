@@ -105,6 +105,18 @@ describe('PrinterCard', () => {
 		expect(onRename).toHaveBeenCalledWith(printer.id, 'Bar');
 	});
 
+	it('commits a rename only once when Enter blurs a focused input', () => {
+		// Enter calls blur() (→ onBlur → commitName) and then commitName() again;
+		// the idempotency guard must collapse that into a single onRename/save.
+		const { onRename, printer } = renderCard();
+		const input = screen.getByTestId(`printer-card-name-${printer.id}`) as HTMLInputElement;
+		input.focus();
+		fireEvent.change(input, { target: { value: 'Once Only' } });
+		fireEvent.keyDown(input, { key: 'Enter' });
+		expect(onRename).toHaveBeenCalledTimes(1);
+		expect(onRename).toHaveBeenCalledWith(printer.id, 'Once Only');
+	});
+
 	it('does not call onRename when committed value is empty and reverts the field', () => {
 		const { onRename, printer } = renderCard();
 		const input = screen.getByTestId(`printer-card-name-${printer.id}`) as HTMLInputElement;

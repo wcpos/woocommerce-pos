@@ -107,9 +107,14 @@ export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: Printe
 	const [testing, setTesting] = React.useState(false);
 	const [confirmOpen, setConfirmOpen] = React.useState(false);
 
+	// Tracks the last name we committed via onRename so a single Enter press
+	// (which blurs *and* calls commitName) can't fire two renames/saves.
+	const lastCommittedName = React.useRef(printer.name);
+
 	// Keep local name state in sync when the printer prop changes.
 	React.useEffect(() => {
 		setName(printer.name);
+		lastCommittedName.current = printer.name;
 	}, [printer.name]);
 
 	const commitName = React.useCallback(() => {
@@ -119,7 +124,8 @@ export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: Printe
 			setName(printer.name);
 			return;
 		}
-		if (trimmed !== printer.name) {
+		if (trimmed !== printer.name && trimmed !== lastCommittedName.current) {
+			lastCommittedName.current = trimmed;
 			onRename(printer.id, trimmed);
 		}
 	}, [name, onRename, printer.id, printer.name]);
