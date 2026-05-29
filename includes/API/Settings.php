@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\API;
 
 use Closure;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\Provider;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Detector;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Settings;
@@ -700,7 +701,7 @@ class Settings extends WP_REST_Controller {
 			$regenerate = ! empty( $printer['regenerate_token'] );
 			unset( $printer['regenerate_token'] );
 
-			if ( \in_array( $printer['provider'], array( 'star-cloudprnt', 'epson-sdp' ), true ) ) {
+			if ( Provider::is_polling( $printer['provider'] ) ) {
 				if ( $regenerate || empty( $existing_hashes[ $id ] ) ) {
 					$token                      = Cloud_Print_Registry::generate_token();
 					$printer['poll_token_hash'] = Cloud_Print_Registry::hash_token( $token );
@@ -750,7 +751,7 @@ class Settings extends WP_REST_Controller {
 	 */
 	private function sanitize_cloud_printer( $printer ): array {
 		$printer  = \is_array( $printer ) ? $printer : array();
-		$provider = \in_array( $printer['provider'] ?? '', array( 'star-cloudprnt', 'epson-sdp', 'printnode' ), true )
+		$provider = \in_array( $printer['provider'] ?? '', Provider::valid(), true )
 			? $printer['provider'] : 'star-cloudprnt';
 
 		$clean = array(

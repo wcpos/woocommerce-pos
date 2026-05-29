@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
+use WCPOS\WooCommercePOS\Services\Provider;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -529,7 +530,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 		$provider = $printer['provider'] ?? 'star-cloudprnt';
 
-		if ( 'epson-sdp' === $provider ) {
+		if ( 'epos-xml' === Provider::wire_format( $provider, 'thermal' ) ) {
 			if ( '' !== $payload ) {
 				return new WP_Error(
 					'wcpos_print_job_incompatible',
