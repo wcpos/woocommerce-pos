@@ -14,7 +14,7 @@ class Cloud_Print_Registry {
 	const OPTION = 'woocommerce_pos_settings_cloud_print';
 
 	const RUNTIME_OPTION = 'woocommerce_pos_cloud_print_runtime';
-	const SEEN_TTL       = 150; // seconds; connected if seen within this window
+	const SEEN_TTL       = 150; // Seconds; connected if seen within this window.
 
 	/**
 	 * Get a registered cloud printer by id.
@@ -99,7 +99,7 @@ class Cloud_Print_Registry {
 		$runtime                = get_option( self::RUNTIME_OPTION, array() );
 		$runtime                = \is_array( $runtime ) ? $runtime : array();
 		$runtime[ $printer_id ] = time();
-		update_option( self::RUNTIME_OPTION, $runtime, false ); // autoload no
+		update_option( self::RUNTIME_OPTION, $runtime, false ); // Autoload no.
 	}
 
 	/**

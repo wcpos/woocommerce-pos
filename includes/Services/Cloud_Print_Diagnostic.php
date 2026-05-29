@@ -36,7 +36,7 @@ class Cloud_Print_Diagnostic {
 			);
 		}
 
-		throw new \RuntimeException( 'No server-side diagnostic for provider: ' . $provider );
+		throw new \RuntimeException( esc_html( 'No server-side diagnostic for provider: ' . $provider ) );
 	}
 
 	/**
