@@ -13,6 +13,9 @@ namespace WCPOS\WooCommercePOS\Services;
 class Cloud_Print_Registry {
 	const OPTION = 'woocommerce_pos_settings_cloud_print';
 
+	const RUNTIME_OPTION = 'woocommerce_pos_cloud_print_runtime';
+	const SEEN_TTL       = 150; // Seconds; connected if seen within this window.
+
 	/**
 	 * Get a registered cloud printer by id.
 	 *
@@ -62,5 +65,90 @@ class Cloud_Print_Registry {
 	 */
 	public static function hash_token( string $token ): string {
 		return hash( 'sha256', $token );
+	}
+
+	/**
+	 * Derive a stable, URL-safe printer id from a display name, unique against existing ids.
+	 *
+	 * @param string        $name         Display name.
+	 * @param array<string> $existing_ids Already-used ids.
+	 *
+	 * @return string
+	 */
+	public static function derive_id( string $name, array $existing_ids ): string {
+		$base = sanitize_title( $name );
+		if ( '' === $base ) {
+			$base = 'printer';
+		}
+		$candidate = $base;
+		$suffix    = 2;
+		while ( \in_array( $candidate, $existing_ids, true ) ) {
+			$candidate = $base . '-' . $suffix;
+			++$suffix;
+		}
+
+		return $candidate;
+	}
+
+	/**
+	 * Record that a printer polled just now.
+	 *
+	 * @param string $printer_id Printer id.
+	 */
+	public function record_seen( string $printer_id ): void {
+		$runtime                = get_option( self::RUNTIME_OPTION, array() );
+		$runtime                = \is_array( $runtime ) ? $runtime : array();
+		$runtime[ $printer_id ] = time();
+		update_option( self::RUNTIME_OPTION, $runtime, false ); // Autoload no.
+	}
+
+	/**
+	 * Get a printer's last-seen unix timestamp (0 if never).
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return int
+	 */
+	public function get_seen( string $printer_id ): int {
+		$runtime = get_option( self::RUNTIME_OPTION, array() );
+
+		return ( \is_array( $runtime ) && isset( $runtime[ $printer_id ] ) ) ? (int) $runtime[ $printer_id ] : 0;
+	}
+
+	/**
+	 * Drop runtime last-seen entries for printer ids that no longer exist.
+	 *
+	 * Prevents the runtime option from growing unbounded as printers are
+	 * removed, and stops a recreated id (slug reuse) from inheriting a deleted
+	 * printer's stale status.
+	 *
+	 * @param array<string> $keep_ids Printer ids to retain.
+	 */
+	public function prune_seen( array $keep_ids ): void {
+		$runtime = get_option( self::RUNTIME_OPTION, array() );
+		if ( ! \is_array( $runtime ) ) {
+			return;
+		}
+		$pruned = array_intersect_key( $runtime, array_flip( $keep_ids ) );
+		if ( $pruned !== $runtime ) {
+			update_option( self::RUNTIME_OPTION, $pruned, false );
+		}
+	}
+
+	/**
+	 * Connection status for a printer: 'waiting' (never polled), 'connected'
+	 * (polled within SEEN_TTL), or 'offline' (polled, but stale).
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return string
+	 */
+	public function status_for( string $printer_id ): string {
+		$seen = $this->get_seen( $printer_id );
+		if ( 0 === $seen ) {
+			return 'waiting';
+		}
+
+		return ( time() - $seen ) <= self::SEEN_TTL ? 'connected' : 'offline';
 	}
 }

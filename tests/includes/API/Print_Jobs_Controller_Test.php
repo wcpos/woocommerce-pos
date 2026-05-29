@@ -65,7 +65,7 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 				'printers' => array(
 					array(
 						'id'       => 'epson-1',
-						'protocol' => 'epson-sdp',
+						'provider' => 'epson-sdp',
 					),
 				),
 			)
@@ -112,6 +112,96 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'cancelled', ( new Print_Job_Service() )->get( $id )['status'] );
+	}
+
+	/**
+	 * It enqueues a pending diagnostic job for a Star printer.
+	 */
+	public function test_test_print_enqueues_pending_job_for_star_printer(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'              => 'kitchen',
+						'name'            => 'Kitchen',
+						'provider'        => 'star-cloudprnt',
+						'poll_token_hash' => \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'kitchen' ) );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 201, $res->get_status() );
+		$this->assertEquals( 'pending', $res->get_data()['status'] );
+		$this->assertEquals( 'kitchen', $res->get_data()['printer_id'] );
+	}
+
+	/**
+	 * It returns 404 for an unknown printer.
+	 */
+	public function test_test_print_unknown_printer_returns_404(): void {
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'nope' ) );
+		$this->assertEquals( 404, rest_do_request( $req )->get_status() );
+	}
+
+	/**
+	 * It returns 500 when the diagnostic job cannot be created.
+	 */
+	public function test_test_print_returns_500_when_job_creation_fails(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'              => 'kitchen',
+						'name'            => 'Kitchen',
+						'provider'        => 'star-cloudprnt',
+						'poll_token_hash' => \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'kitchen' ) );
+		$res = rest_do_request( $req );
+
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$this->assertEquals( 500, $res->get_status() );
+		$this->assertEquals( 'wcpos_print_job_create_failed', $res->as_error()->get_error_code() );
+	}
+
+	/**
+	 * It returns 400 for PrintNode printers until Phase 4.
+	 */
+	public function test_test_print_printnode_returns_400_until_phase_4(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                  => 'bar',
+						'name'                => 'Bar',
+						'provider'            => 'printnode',
+						'printnode_api_key'   => 'k',
+						'printnode_printer_id' => 1,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'bar' ) );
+		$this->assertEquals( 400, rest_do_request( $req )->get_status() );
 	}
 
 	/**

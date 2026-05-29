@@ -626,13 +626,17 @@ class Settings extends WP_REST_Controller {
 				'assignments' => array(),
 			)
 		);
+		$registry             = new Cloud_Print_Registry();
 		$settings['printers'] = array_map(
-			static function ( $printer ) {
+			static function ( $printer ) use ( $registry ) {
 				if ( ! \is_array( $printer ) ) {
 					return $printer;
 				}
-
-				unset( $printer['poll_token_hash'] );
+				$id                   = (string) ( $printer['id'] ?? '' );
+				$seen                 = $registry->get_seen( $id );
+				$printer['status']    = $registry->status_for( $id );
+				$printer['last_seen'] = $seen > 0 ? $seen : null;
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );
 
 				return $printer;
 			},
@@ -659,8 +663,12 @@ class Settings extends WP_REST_Controller {
 
 		$existing        = get_option( 'woocommerce_pos_settings_cloud_print', array() );
 		$existing_hashes = array();
+		$existing_ids    = array();
 		if ( isset( $existing['printers'] ) && \is_array( $existing['printers'] ) ) {
 			foreach ( $existing['printers'] as $printer ) {
+				if ( ! empty( $printer['id'] ) ) {
+					$existing_ids[] = $printer['id'];
+				}
 				if ( ! empty( $printer['id'] ) && ! empty( $printer['poll_token_hash'] ) ) {
 					$existing_hashes[ $printer['id'] ] = $printer['poll_token_hash'];
 				}
@@ -671,30 +679,35 @@ class Settings extends WP_REST_Controller {
 		$clean_printers = array();
 		$seen_ids       = array();
 		foreach ( $printers as $printer ) {
-			$printer    = $this->sanitize_cloud_printer( $printer );
-			$id         = $printer['id'];
+			$printer = $this->sanitize_cloud_printer( $printer );
+
+			if ( '' === $printer['id'] ) {
+				$printer['id'] = Cloud_Print_Registry::derive_id( $printer['name'], array_merge( $existing_ids, array_keys( $seen_ids ) ) );
+			}
+			$id = $printer['id'];
+
+			if ( isset( $seen_ids[ $id ] ) ) {
+				return new WP_REST_Response(
+					array(
+						'code'    => 'wcpos_cloud_print_duplicate_printer_id',
+						'message' => __( 'Duplicate printer id.', 'woocommerce-pos' ),
+					),
+					400
+				);
+			}
+			$seen_ids[ $id ] = true;
+
 			$regenerate = ! empty( $printer['regenerate_token'] );
 			unset( $printer['regenerate_token'] );
 
-			if ( '' !== $id ) {
-				if ( isset( $seen_ids[ $id ] ) ) {
-					return new WP_REST_Response(
-						array(
-							'code'    => 'wcpos_cloud_print_duplicate_printer_id',
-							'message' => __( 'Duplicate printer id.', 'woocommerce-pos' ),
-						),
-						400
-					);
+			if ( \in_array( $printer['provider'], array( 'star-cloudprnt', 'epson-sdp' ), true ) ) {
+				if ( $regenerate || empty( $existing_hashes[ $id ] ) ) {
+					$token                      = Cloud_Print_Registry::generate_token();
+					$printer['poll_token_hash'] = Cloud_Print_Registry::hash_token( $token );
+					$generated[ $id ]           = $token;
+				} else {
+					$printer['poll_token_hash'] = $existing_hashes[ $id ];
 				}
-				$seen_ids[ $id ] = true;
-			}
-
-			if ( '' !== $id && ( $regenerate || empty( $existing_hashes[ $id ] ) ) ) {
-				$token                      = Cloud_Print_Registry::generate_token();
-				$printer['poll_token_hash'] = Cloud_Print_Registry::hash_token( $token );
-				$generated[ $id ]           = $token;
-			} elseif ( '' !== $id ) {
-				$printer['poll_token_hash'] = $existing_hashes[ $id ];
 			}
 
 			$clean_printers[] = $printer;
@@ -706,9 +719,12 @@ class Settings extends WP_REST_Controller {
 		);
 		update_option( 'woocommerce_pos_settings_cloud_print', $clean );
 
+		// Drop runtime last-seen entries for printers that were removed.
+		( new Cloud_Print_Registry() )->prune_seen( array_keys( $seen_ids ) );
+
 		$response_printers = array_map(
 			static function ( $printer ) {
-				unset( $printer['poll_token_hash'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );
 
 				return $printer;
 			},
@@ -733,15 +749,23 @@ class Settings extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function sanitize_cloud_printer( $printer ): array {
-		$printer = \is_array( $printer ) ? $printer : array();
+		$printer  = \is_array( $printer ) ? $printer : array();
+		$provider = \in_array( $printer['provider'] ?? '', array( 'star-cloudprnt', 'epson-sdp', 'printnode' ), true )
+			? $printer['provider'] : 'star-cloudprnt';
 
-		return array(
+		$clean = array(
 			'id'               => sanitize_text_field( $printer['id'] ?? '' ),
 			'name'             => sanitize_text_field( $printer['name'] ?? '' ),
-			'protocol'         => \in_array( $printer['protocol'] ?? '', array( 'star-cloudprnt', 'epson-sdp' ), true ) ? $printer['protocol'] : 'star-cloudprnt',
+			'provider'         => $provider,
 			'store_id'         => isset( $printer['store_id'] ) ? (int) $printer['store_id'] : 0,
 			'regenerate_token' => ! empty( $printer['regenerate_token'] ),
 		);
+		if ( 'printnode' === $provider ) {
+			$clean['printnode_api_key']    = sanitize_text_field( $printer['printnode_api_key'] ?? '' );
+			$clean['printnode_printer_id'] = isset( $printer['printnode_printer_id'] ) ? (int) $printer['printnode_printer_id'] : 0;
+		}
+
+		return $clean;
 	}
 
 	/**
@@ -755,9 +779,9 @@ class Settings extends WP_REST_Controller {
 		$assignment = \is_array( $assignment ) ? $assignment : array();
 
 		return array(
-			'printer_id' => sanitize_text_field( $assignment['printer_id'] ?? '' ),
-			'scope'      => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
-			'format'     => sanitize_text_field( $assignment['format'] ?? '' ),
+			'printer_id'  => sanitize_text_field( $assignment['printer_id'] ?? '' ),
+			'scope'       => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
+			'template_id' => sanitize_text_field( (string) ( $assignment['template_id'] ?? '' ) ),
 		);
 	}
 

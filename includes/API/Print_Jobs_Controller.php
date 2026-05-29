@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WP_Error;
@@ -42,10 +43,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	protected $jobs;
 
 	/**
+	 * Cloud printer registry.
+	 *
+	 * @var Cloud_Print_Registry
+	 */
+	protected $registry;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->jobs = new Print_Job_Service();
+		$this->jobs     = new Print_Job_Service();
+		$this->registry = new Cloud_Print_Registry();
 	}
 
 	/**
@@ -95,6 +104,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 					'callback'            => array( $this, 'reprint_item' ),
 					'permission_callback' => array( $this, 'manage_permissions_check' ),
 				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/test',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'test_print' ),
+				'permission_callback' => array( $this, 'manage_permissions_check' ),
 			)
 		);
 
@@ -232,6 +251,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function cloudprnt( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$this->registry->record_seen( $printer_id );
 		$this->jobs->release_stale_claims( $printer_id );
 
 		if ( 'POST' === $request->get_method() ) {
@@ -283,9 +303,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	public function printer_token_permissions_check( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
 		$token      = (string) $request->get_param( 'pt' );
-		$registry   = new Cloud_Print_Registry();
 
-		if ( ! $registry->verify_token( $printer_id, $token ) ) {
+		if ( ! $this->registry->verify_token( $printer_id, $token ) ) {
 			return new WP_Error(
 				'wcpos_print_job_invalid_token',
 				__( 'Invalid printer token.', 'woocommerce-pos' ),
@@ -359,6 +378,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 */
 	public function epson_sdp( $request ) {
 		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$this->registry->record_seen( $printer_id );
 		$raw_body   = (string) $request->get_body();
 		$soap       = 'text/xml; charset=utf-8';
 		$ack        = '<response success="true" code="" status=""/>';
@@ -417,8 +437,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$payload = (string) $request->get_param( 'payload' );
 		$format  = (string) $request->get_param( 'format' );
 
-		$registry   = new Cloud_Print_Registry();
-		$validation = $this->validate_job_for_printer( $registry->get_printer( $printer_id ), $payload, $format );
+		$validation = $this->validate_job_for_printer( $this->registry->get_printer( $printer_id ), $payload, $format );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
@@ -447,7 +466,56 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Validate a job against the target printer's protocol.
+	 * Enqueue a diagnostic test print for a registered printer.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function test_print( $request ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$printer    = $this->registry->get_printer( $printer_id );
+		if ( null === $printer ) {
+			return new WP_Error(
+				'wcpos_print_job_unknown_printer',
+				__( 'Unknown printer.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		try {
+			$diag = ( new Cloud_Print_Diagnostic() )->build( (string) $printer['provider'], (string) $printer['name'] );
+		} catch ( \RuntimeException $e ) {
+			return new WP_Error(
+				'wcpos_print_job_no_diagnostic',
+				__( 'Test print is not available for this printer yet.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => $printer_id,
+				'content_type' => $diag['content_type'],
+				'payload'      => $diag['payload'],
+			)
+		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		$response = rest_ensure_response( $this->jobs->get( $id ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Validate a job against the target printer's provider.
 	 *
 	 * @param array|null $printer Registered printer, or null when unknown.
 	 * @param string     $payload Base64 payload (raw jobs).
@@ -459,9 +527,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		if ( null === $printer ) {
 			return true;
 		}
-		$protocol = $printer['protocol'] ?? 'star-cloudprnt';
+		$provider = $printer['provider'] ?? 'star-cloudprnt';
 
-		if ( 'epson-sdp' === $protocol ) {
+		if ( 'epson-sdp' === $provider ) {
 			if ( '' !== $payload ) {
 				return new WP_Error(
 					'wcpos_print_job_incompatible',

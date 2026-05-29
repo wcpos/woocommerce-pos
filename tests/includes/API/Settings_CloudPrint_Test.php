@@ -21,7 +21,7 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 				'printers'    => array(
 					array(
 						'id'              => 'p1',
-						'protocol'        => 'star-cloudprnt',
+						'provider'        => 'star-cloudprnt',
 						'poll_token_hash' => 'abc',
 					),
 				),
@@ -46,14 +46,14 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 					array(
 						'id'       => 'kitchen',
 						'name'     => 'Kitchen',
-						'protocol' => 'star-cloudprnt',
+						'provider' => 'star-cloudprnt',
 					),
 				),
 				'assignments' => array(
 					array(
-						'printer_id' => 'kitchen',
-						'scope'      => 'pos',
-						'format'     => 'starprnt',
+						'printer_id'  => 'kitchen',
+						'scope'       => 'pos',
+						'template_id' => 'starprnt',
 					),
 				),
 			)
@@ -103,6 +103,109 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 400, $response->get_status() );
 		$this->assertEquals( 'wcpos_cloud_print_duplicate_printer_id', $response->get_data()['code'] );
+	}
+
+	/**
+	 * It prunes runtime last-seen entries for printers removed on save.
+	 */
+	public function test_save_prunes_runtime_for_removed_printers(): void {
+		$registry = new \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array( 'id' => 'kitchen', 'name' => 'Kitchen', 'provider' => 'star-cloudprnt' ),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params( array( 'printers' => array(), 'assignments' => array() ) );
+		rest_do_request( $req );
+
+		$this->assertEquals( 0, $registry->get_seen( 'kitchen' ) );
+	}
+
+	/**
+	 * It derives an immutable id and persists the provider for new printers.
+	 */
+	public function test_new_printer_gets_derived_id_and_provider(): void {
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params(
+			array(
+				'printers'    => array( array( 'name' => 'Kitchen Printer', 'provider' => 'star-cloudprnt' ) ),
+				'assignments' => array(),
+			)
+		);
+		$res  = rest_do_request( $req );
+		$data = $res->get_data();
+
+		$this->assertEquals( 200, $res->get_status() );
+		$this->assertEquals( 'kitchen-printer', $data['printers'][0]['id'] );
+		$this->assertEquals( 'star-cloudprnt', $data['printers'][0]['provider'] );
+		$this->assertArrayNotHasKey( 'poll_token_hash', $data['printers'][0] );
+		$this->assertArrayHasKey( 'kitchen-printer', $data['generated'] );
+	}
+
+	/**
+	 * It preserves an existing printer id when only the name changes.
+	 */
+	public function test_existing_printer_id_is_preserved_on_rename(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'              => 'kitchen-printer',
+						'name'            => 'Kitchen Printer',
+						'provider'        => 'star-cloudprnt',
+						'store_id'        => 0,
+						'poll_token_hash' => \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params(
+			array(
+				'printers'    => array( array( 'id' => 'kitchen-printer', 'name' => 'Back Kitchen', 'provider' => 'star-cloudprnt' ) ),
+				'assignments' => array(),
+			)
+		);
+		$data = rest_do_request( $req )->get_data();
+
+		$this->assertEquals( 'kitchen-printer', $data['printers'][0]['id'] );
+		$this->assertEquals( 'Back Kitchen', $data['printers'][0]['name'] );
+		$this->assertArrayNotHasKey( 'kitchen-printer', $data['generated'] ?? array() );
+	}
+
+	/**
+	 * It surfaces connection status and last_seen while stripping secrets.
+	 */
+	public function test_get_settings_includes_status_and_strips_secrets(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'              => 'kitchen',
+						'name'            => 'Kitchen',
+						'provider'        => 'star-cloudprnt',
+						'store_id'        => 0,
+						'poll_token_hash' => \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		$this->assertEquals( 'waiting', $data['printers'][0]['status'] );
+		$this->assertArrayHasKey( 'last_seen', $data['printers'][0] );
+		$this->assertArrayNotHasKey( 'poll_token_hash', $data['printers'][0] );
 	}
 
 }

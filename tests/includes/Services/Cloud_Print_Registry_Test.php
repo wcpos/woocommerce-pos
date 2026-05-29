@@ -24,7 +24,7 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 				'printers' => array(
 					array(
 						'id'              => 'p1',
-						'protocol'        => 'star-cloudprnt',
+						'provider'        => 'star-cloudprnt',
 						'poll_token_hash' => Cloud_Print_Registry::hash_token( 'secret-1' ),
 					),
 				),
@@ -33,9 +33,60 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 
 		$registry = new Cloud_Print_Registry();
 
-		$this->assertEquals( 'star-cloudprnt', $registry->get_printer( 'p1' )['protocol'] );
+		$this->assertEquals( 'star-cloudprnt', $registry->get_printer( 'p1' )['provider'] );
 		$this->assertEquals( true, $registry->verify_token( 'p1', 'secret-1' ) );
 		$this->assertEquals( false, $registry->verify_token( 'p1', 'wrong' ) );
 		$this->assertEquals( null, $registry->get_printer( 'missing' ) );
+	}
+
+	/**
+	 * It slugifies a printer name into a stable id and dedupes against existing ids.
+	 */
+	public function test_derive_id_slugifies_name_and_dedupes(): void {
+		$this->assertEquals( 'kitchen-printer', Cloud_Print_Registry::derive_id( 'Kitchen Printer', array() ) );
+		$this->assertEquals( 'kitchen-printer-2', Cloud_Print_Registry::derive_id( 'Kitchen Printer!', array( 'kitchen-printer' ) ) );
+		$this->assertEquals( 'kitchen-printer-3', Cloud_Print_Registry::derive_id( 'Kitchen Printer', array( 'kitchen-printer', 'kitchen-printer-2' ) ) );
+		$this->assertEquals( 'printer', Cloud_Print_Registry::derive_id( '', array() ) );
+	}
+
+	/**
+	 * It records and reads back a printer's last-seen timestamp.
+	 */
+	public function test_record_and_get_seen_roundtrip(): void {
+		$registry = new Cloud_Print_Registry();
+		$this->assertEquals( 0, $registry->get_seen( 'kitchen' ) );
+		$registry->record_seen( 'kitchen' );
+		$this->assertGreaterThan( 0, $registry->get_seen( 'kitchen' ) );
+	}
+
+	/**
+	 * It reports a printer that has never polled as waiting.
+	 */
+	public function test_status_waiting_when_never_seen(): void {
+		$registry = new Cloud_Print_Registry();
+		$this->assertEquals( 'waiting', $registry->status_for( 'kitchen' ) );
+	}
+
+	/**
+	 * It reports a printer polled within the TTL as connected.
+	 */
+	public function test_status_connected_when_recently_seen(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		$this->assertEquals( 'connected', $registry->status_for( 'kitchen' ) );
+	}
+
+	/**
+	 * It drops runtime last-seen entries for ids no longer present.
+	 */
+	public function test_prune_seen_drops_unlisted_ids(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		$registry->record_seen( 'bar' );
+
+		$registry->prune_seen( array( 'kitchen' ) );
+
+		$this->assertGreaterThan( 0, $registry->get_seen( 'kitchen' ) );
+		$this->assertEquals( 0, $registry->get_seen( 'bar' ) );
 	}
 }
