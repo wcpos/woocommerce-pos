@@ -75,4 +75,18 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 		$registry->record_seen( 'kitchen' );
 		$this->assertEquals( 'connected', $registry->status_for( 'kitchen' ) );
 	}
+
+	/**
+	 * It drops runtime last-seen entries for ids no longer present.
+	 */
+	public function test_prune_seen_drops_unlisted_ids(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		$registry->record_seen( 'bar' );
+
+		$registry->prune_seen( array( 'kitchen' ) );
+
+		$this->assertGreaterThan( 0, $registry->get_seen( 'kitchen' ) );
+		$this->assertEquals( 0, $registry->get_seen( 'bar' ) );
+	}
 }

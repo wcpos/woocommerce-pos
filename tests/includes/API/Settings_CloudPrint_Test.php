@@ -106,6 +106,29 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It prunes runtime last-seen entries for printers removed on save.
+	 */
+	public function test_save_prunes_runtime_for_removed_printers(): void {
+		$registry = new \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array( 'id' => 'kitchen', 'name' => 'Kitchen', 'provider' => 'star-cloudprnt' ),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params( array( 'printers' => array(), 'assignments' => array() ) );
+		rest_do_request( $req );
+
+		$this->assertEquals( 0, $registry->get_seen( 'kitchen' ) );
+	}
+
+	/**
 	 * It derives an immutable id and persists the provider for new printers.
 	 */
 	public function test_new_printer_gets_derived_id_and_provider(): void {

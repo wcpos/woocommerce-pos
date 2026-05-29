@@ -500,6 +500,13 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'payload'      => $diag['payload'],
 			)
 		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		$response = rest_ensure_response( $this->jobs->get( $id ) );
 		$response->set_status( 201 );

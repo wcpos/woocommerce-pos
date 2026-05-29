@@ -719,6 +719,9 @@ class Settings extends WP_REST_Controller {
 		);
 		update_option( 'woocommerce_pos_settings_cloud_print', $clean );
 
+		// Drop runtime last-seen entries for printers that were removed.
+		( new Cloud_Print_Registry() )->prune_seen( array_keys( $seen_ids ) );
+
 		$response_printers = array_map(
 			static function ( $printer ) {
 				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );

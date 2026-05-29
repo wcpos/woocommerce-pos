@@ -116,6 +116,26 @@ class Cloud_Print_Registry {
 	}
 
 	/**
+	 * Drop runtime last-seen entries for printer ids that no longer exist.
+	 *
+	 * Prevents the runtime option from growing unbounded as printers are
+	 * removed, and stops a recreated id (slug reuse) from inheriting a deleted
+	 * printer's stale status.
+	 *
+	 * @param array<string> $keep_ids Printer ids to retain.
+	 */
+	public function prune_seen( array $keep_ids ): void {
+		$runtime = get_option( self::RUNTIME_OPTION, array() );
+		if ( ! \is_array( $runtime ) ) {
+			return;
+		}
+		$pruned = array_intersect_key( $runtime, array_flip( $keep_ids ) );
+		if ( $pruned !== $runtime ) {
+			update_option( self::RUNTIME_OPTION, $pruned, false );
+		}
+	}
+
+	/**
 	 * Connection status for a printer: 'waiting' (never polled), 'connected'
 	 * (polled within SEEN_TTL), or 'offline' (polled, but stale).
 	 *
