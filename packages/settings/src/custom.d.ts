@@ -17,6 +17,7 @@ declare global {
 			settings?: WcposSettings;
 			[key: string]: unknown;
 		};
+		wpApiSettings?: { root?: string };
 	}
 }
 
