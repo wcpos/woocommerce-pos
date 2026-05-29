@@ -130,6 +130,25 @@ describe('AddPrinterWizard', () => {
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
 	});
 
+	it('add mode: shows a guard notice (no broken URL) when a polling provider returns no token', async () => {
+		const onCreate = vi.fn().mockResolvedValue({
+			printer: makePrinter({ provider: 'star-cloudprnt' }),
+			// token omitted — should never happen per the Phase 1 contract, but guard it.
+		});
+		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={onCreate} />);
+
+		fireEvent.click(screen.getByTestId('wizard-continue')); // star default -> step 1
+		fireEvent.change(screen.getByTestId('wizard-name-input'), {
+			target: { value: 'Kitchen printer' },
+		});
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+
+		await waitFor(() => expect(screen.getByText(/no setup token was returned/i)).toBeInTheDocument());
+		// No broken poll URL or empty token row.
+		expect(screen.queryByTestId('wizard-poll-url')).not.toBeInTheDocument();
+		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
+	});
+
 	it('setup mode: opens at step 2 with masked token and does not call onCreate', () => {
 		const onCreate = vi.fn();
 		render(

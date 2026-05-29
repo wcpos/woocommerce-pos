@@ -385,6 +385,19 @@ export function AddPrinterWizard({
 										);
 									}
 									const token = created?.token ?? '';
+									if (!token) {
+										// Polling providers always return a one-time token (Phase 1
+										// contract). Guard the theoretical empty case so we never show
+										// a broken `…&pt=` URL or an empty, copyable token row.
+										return (
+											<Notice status="warning" isDismissible={false}>
+												{t(
+													'cloud_print.token_missing',
+													'This printer was created, but no setup token was returned. Remove and re-add it to get one.'
+												)}
+											</Notice>
+										);
+									}
 									const url = buildPollUrl(finalProvider, printerForUrl.id, token);
 									return (
 										<>

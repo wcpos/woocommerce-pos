@@ -231,6 +231,7 @@
 	"cloud_print.status_waiting": "Waiting for printer",
 	"cloud_print.status_offline": "Offline",
 	"cloud_print.status_linked": "Linked",
+	"cloud_print.token_missing": "This printer was created, but no setup token was returned. Remove and re-add it to get one.",
 	"cloud_print.test_sent": "Sent a test print to {name}.",
 	"cloud_print.test_unavailable": "Test print isn't available for this printer yet.",
 	"cloud_print.test_failed": "Test print failed.",
