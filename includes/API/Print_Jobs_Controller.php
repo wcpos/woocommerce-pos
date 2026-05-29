@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WP_Error;
@@ -103,6 +104,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 					'callback'            => array( $this, 'reprint_item' ),
 					'permission_callback' => array( $this, 'manage_permissions_check' ),
 				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/test',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'test_print' ),
+				'permission_callback' => array( $this, 'manage_permissions_check' ),
 			)
 		);
 
@@ -447,6 +458,48 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				array( 'status' => 500 )
 			);
 		}
+
+		$response = rest_ensure_response( $this->jobs->get( $id ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Enqueue a diagnostic test print for a registered printer.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function test_print( $request ) {
+		$printer_id = sanitize_text_field( (string) $request->get_param( 'printer_id' ) );
+		$printer    = $this->registry->get_printer( $printer_id );
+		if ( null === $printer ) {
+			return new WP_Error(
+				'wcpos_print_job_unknown_printer',
+				__( 'Unknown printer.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		try {
+			$diag = ( new Cloud_Print_Diagnostic() )->build( (string) $printer['provider'], (string) $printer['name'] );
+		} catch ( \RuntimeException $e ) {
+			return new WP_Error(
+				'wcpos_print_job_no_diagnostic',
+				__( 'Test print is not available for this printer yet.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => $printer_id,
+				'content_type' => $diag['content_type'],
+				'payload'      => $diag['payload'],
+			)
+		);
 
 		$response = rest_ensure_response( $this->jobs->get( $id ) );
 		$response->set_status( 201 );
