@@ -159,4 +159,30 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'kitchen-printer', $data['generated'] ?? array() );
 	}
 
+	/**
+	 * It surfaces connection status and last_seen while stripping secrets.
+	 */
+	public function test_get_settings_includes_status_and_strips_secrets(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'              => 'kitchen',
+						'name'            => 'Kitchen',
+						'provider'        => 'star-cloudprnt',
+						'store_id'        => 0,
+						'poll_token_hash' => \WCPOS\WooCommercePOS\Services\Cloud_Print_Registry::hash_token( 'tok' ),
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$data = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
+
+		$this->assertEquals( 'waiting', $data['printers'][0]['status'] );
+		$this->assertArrayHasKey( 'last_seen', $data['printers'][0] );
+		$this->assertArrayNotHasKey( 'poll_token_hash', $data['printers'][0] );
+	}
+
 }

@@ -626,12 +626,16 @@ class Settings extends WP_REST_Controller {
 				'assignments' => array(),
 			)
 		);
+		$registry             = new Cloud_Print_Registry();
 		$settings['printers'] = array_map(
-			static function ( $printer ) {
+			static function ( $printer ) use ( $registry ) {
 				if ( ! \is_array( $printer ) ) {
 					return $printer;
 				}
-
+				$id                   = (string) ( $printer['id'] ?? '' );
+				$seen                 = $registry->get_seen( $id );
+				$printer['status']    = $registry->status_for( $id );
+				$printer['last_seen'] = $seen > 0 ? $seen : null;
 				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );
 
 				return $printer;

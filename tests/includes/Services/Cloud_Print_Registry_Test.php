@@ -58,4 +58,21 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 		$registry->record_seen( 'kitchen' );
 		$this->assertGreaterThan( 0, $registry->get_seen( 'kitchen' ) );
 	}
+
+	/**
+	 * It reports a printer that has never polled as waiting.
+	 */
+	public function test_status_waiting_when_never_seen(): void {
+		$registry = new Cloud_Print_Registry();
+		$this->assertEquals( 'waiting', $registry->status_for( 'kitchen' ) );
+	}
+
+	/**
+	 * It reports a printer polled within the TTL as connected.
+	 */
+	public function test_status_connected_when_recently_seen(): void {
+		$registry = new Cloud_Print_Registry();
+		$registry->record_seen( 'kitchen' );
+		$this->assertEquals( 'connected', $registry->status_for( 'kitchen' ) );
+	}
 }

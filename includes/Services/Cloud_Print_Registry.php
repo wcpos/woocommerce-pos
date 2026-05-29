@@ -114,4 +114,21 @@ class Cloud_Print_Registry {
 
 		return ( \is_array( $runtime ) && isset( $runtime[ $printer_id ] ) ) ? (int) $runtime[ $printer_id ] : 0;
 	}
+
+	/**
+	 * Connection status for a printer: 'waiting' (never polled), 'connected'
+	 * (polled within SEEN_TTL), or 'offline' (polled, but stale).
+	 *
+	 * @param string $printer_id Printer id.
+	 *
+	 * @return string
+	 */
+	public function status_for( string $printer_id ): string {
+		$seen = $this->get_seen( $printer_id );
+		if ( 0 === $seen ) {
+			return 'waiting';
+		}
+
+		return ( time() - $seen ) <= self::SEEN_TTL ? 'connected' : 'offline';
+	}
 }
