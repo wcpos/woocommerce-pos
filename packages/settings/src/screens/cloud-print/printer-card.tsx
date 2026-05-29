@@ -34,7 +34,13 @@ interface StatusMeta {
 /**
  * Map a printer's connection status to a Chip variant + localized label.
  */
-function getStatusMeta(status: CloudStatus | undefined): StatusMeta {
+function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): StatusMeta {
+	// Non-polling providers (PrintNode) push jobs and never check in, so the
+	// poll-derived status is meaningless — show a neutral "Linked" chip instead
+	// of a misleading "Waiting for printer". A real PrintNode status lands in P4.
+	if (!isPolling) {
+		return { variant: 'info', label: t('cloud_print.status_linked', 'Linked') };
+	}
 	switch (status) {
 		case 'connected':
 			return { variant: 'success', label: t('cloud_print.status_connected', 'Connected') };
@@ -95,7 +101,7 @@ export function formatRelative(unixSeconds: number, locale?: string): string {
 export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: PrinterCardProps) {
 	const { addSnackbar } = useSnackbar();
 	const provider = PROVIDERS[printer.provider];
-	const status = getStatusMeta(printer.status);
+	const status = getStatusMeta(printer.status, provider.isPolling);
 
 	const [name, setName] = React.useState(printer.name);
 	const [testing, setTesting] = React.useState(false);

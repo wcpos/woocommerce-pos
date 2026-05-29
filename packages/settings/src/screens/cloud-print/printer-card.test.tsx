@@ -79,6 +79,16 @@ describe('PrinterCard', () => {
 		expect(chip).toHaveTextContent('Offline');
 	});
 
+	it('renders a neutral "Linked" Chip for a non-polling (PrintNode) printer regardless of status', () => {
+		// PrintNode pushes jobs and never checks in, so the poll-derived status
+		// ("waiting") must not surface as a misleading "Waiting for printer".
+		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'waiting' });
+		renderCard({ printer });
+		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
+		expect(chip).toHaveTextContent('Linked');
+		expect(chip).not.toHaveTextContent('Waiting');
+	});
+
 	it('commits a renamed value on blur', () => {
 		const { onRename, printer } = renderCard();
 		const input = screen.getByTestId(`printer-card-name-${printer.id}`) as HTMLInputElement;

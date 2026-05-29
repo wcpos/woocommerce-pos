@@ -230,6 +230,7 @@
 	"cloud_print.status_connected": "Connected",
 	"cloud_print.status_waiting": "Waiting for printer",
 	"cloud_print.status_offline": "Offline",
+	"cloud_print.status_linked": "Linked",
 	"cloud_print.test_sent": "Sent a test print to {name}.",
 	"cloud_print.test_unavailable": "Test print isn't available for this printer yet.",
 	"cloud_print.test_failed": "Test print failed.",
