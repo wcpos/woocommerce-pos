@@ -1,0 +1,318 @@
+<!doctype html>
+<!--
+  THROWAWAY PROTOTYPE — WCPOS "Cloud Print" settings redesign (converged design).
+  Decisions baked in:
+    - Printer cards (Sessions-style: icon + name + status Chip + key/value + action links)
+    - Auto-print rules as plain-language SENTENCES (not a column table)
+    - Intro = blue left-border info Callout, plain explanation only (no 1-2-3 steps)
+    - "Leave empty to print manually" tip sits at the TOP of the auto-print section
+    - The 3rd dropdown picks an ACTIVE RECEIPT TEMPLATE (from POS > Templates), not a raw wire format
+    - Add printer = outline button -> Modal wizard. PrintNode is a first-class provider.
+  NOTE: rule-picks-a-template is the intended model but needs backend work — see chat. Mock shows the target UX.
+  Plain HTML/CSS/JS, no build step. Open directly in a browser.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WCPOS Cloud Print — redesign prototype</title>
+<style>
+  :root{
+    --bg:#f0f0f1; --card:#fff; --line:#dcdcde; --line-strong:#c3c4c7;
+    --ink:#1d2327; --muted:#646970; --faint:#8c8f94;
+    --blue:#2271b1; --blue-d:#135e96; --blue-bg:#eef3fb; --blue-line:#cdd9ee; --indigo:#3858e9;
+    --green:#00824a; --green-bg:#e6f5ec; --amber:#8a6116; --amber-bg:#fcf4e3;
+    --red:#d63638; --red-bg:#fcf0f1;
+    --pos:#e8413b; --r:8px; --r-sm:5px;
+    --shadow:0 1px 2px rgba(0,0,0,.05),0 1px 3px rgba(0,0,0,.04);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,h4,p{margin:0}
+  button{font-family:inherit;cursor:pointer}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+
+  .app{display:flex;min-height:100vh}
+  .side{width:222px;flex:0 0 222px;background:#fff;border-right:1px solid var(--line);padding:0 0 40px}
+  .brand{display:flex;align-items:center;gap:10px;padding:18px 20px;border-bottom:1px solid var(--line)}
+  .brand .logo{width:34px;height:34px;border-radius:7px;background:linear-gradient(135deg,#2c2f33,#1d2327);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px;position:relative;overflow:hidden}
+  .brand .logo::before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:repeating-linear-gradient(90deg,var(--pos) 0 6px,#fff 6px 12px)}
+  .brand b{font-size:17px;letter-spacing:.3px}
+  .navgroup{padding:18px 12px 4px;font-size:11px;font-weight:600;letter-spacing:.6px;color:var(--faint);text-transform:uppercase}
+  .nav a{display:block;padding:9px 20px;color:var(--ink);text-decoration:none;font-size:14px;border-left:3px solid transparent}
+  .nav a:hover{background:#f6f7f7}
+  .nav a.active{font-weight:600;border-left-color:var(--indigo);background:#f6f7f7;color:var(--blue-d)}
+  .main{flex:1;min-width:0}
+  .topbar{background:#fff;border-bottom:1px solid var(--line);padding:18px 32px}
+  .topbar h1{font-size:21px;font-weight:600}
+  .content{padding:26px 32px 80px;max-width:1000px}
+
+  .btn{display:inline-flex;align-items:center;gap:7px;border-radius:var(--r-sm);border:1px solid var(--blue);background:var(--blue);color:#fff;padding:8px 14px;font-size:13.5px;font-weight:500;line-height:1.1;transition:.12s}
+  .btn:hover{background:var(--blue-d);border-color:var(--blue-d)}
+  .btn.outline{background:#fff;color:var(--blue);border-color:var(--blue)}
+  .btn.outline:hover{background:var(--blue-bg)}
+  .btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+  .btn.sm{padding:6px 11px;font-size:12.5px}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .link{color:var(--blue);background:none;border:none;padding:0;font-size:13.5px;cursor:pointer}
+  .link:hover{text-decoration:underline}
+  .link.danger{color:var(--red)}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;line-height:1.6}
+  .chip .dot{width:7px;height:7px;border-radius:50%}
+  .chip.ok{background:var(--green-bg);color:var(--green)} .chip.ok .dot{background:var(--green)}
+  .chip.wait{background:var(--amber-bg);color:var(--amber)} .chip.wait .dot{background:var(--amber);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  .field{width:100%;padding:9px 11px;border:1px solid var(--line-strong);border-radius:var(--r-sm);font-size:14px;background:#fff;color:var(--ink)}
+  .field:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(34,113,177,.15)}
+  select.field{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23646970' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+  label.lbl{display:block;font-weight:600;font-size:13px;margin-bottom:6px}
+
+  .callout{display:flex;gap:12px;background:var(--blue-bg);border:1px solid var(--blue-line);border-left:4px solid var(--indigo);border-radius:var(--r);padding:15px 18px;color:#1c3d5a}
+  .callout .ci{flex:0 0 22px;font-size:18px;line-height:1.3}
+  .callout h2{font-size:14.5px;font-weight:700;color:#11335a}
+  .callout p{font-size:13px;margin-top:4px;max-width:740px}
+  .callout ul{margin:7px 0 0;padding-left:18px;font-size:13px;max-width:740px}
+  .callout li{margin:2px 0}
+
+  .sec-h{font-size:15.5px;font-weight:700;margin:30px 0 3px}
+  .sec-sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .note{background:var(--blue-bg);border:1px solid var(--blue-line);border-radius:var(--r-sm);padding:11px 14px;color:#1c3d5a;font-size:12.5px;margin-bottom:14px}
+  .copyrow{display:flex;align-items:stretch;border:1px solid var(--line-strong);border-radius:var(--r-sm);overflow:hidden;background:#fbfbfc}
+  .copyrow code{flex:1;padding:9px 11px;overflow:auto;white-space:nowrap;display:flex;align-items:center;color:#2b2f33}
+  .copyrow button{border:none;border-left:1px solid var(--line-strong);background:#f6f7f7;padding:0 14px;font-size:12.5px;font-weight:600;color:var(--blue);white-space:nowrap}
+  .copyrow button:hover{background:var(--blue-bg)}
+
+  .proto-ic{width:30px;height:30px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex:0 0 30px}
+  .ic-star{background:#0a7cff} .ic-epson{background:#003a70} .ic-pn{background:#119a78}
+
+  /* printer cards */
+  .pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+  .pcard .hd{padding:15px 16px;display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid #f0f0f1}
+  .pcard .hd .nm{font-size:15px;font-weight:700}
+  .name-edit{font-size:15px;font-weight:700;font-family:inherit;color:var(--ink);width:100%;border:1px solid transparent;border-radius:5px;padding:2px 7px;margin:-2px -7px 0;background:transparent}
+  .name-edit:hover{border-color:var(--line-strong);background:#fff}
+  .name-edit:focus{outline:none;border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(34,113,177,.15)}
+  .pcard .hd .pr{font-size:12px;color:var(--muted);margin-top:1px}
+  .pcard .meta{padding:12px 16px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}
+  .pcard .meta .ln{display:flex;justify-content:space-between}
+  .pcard .meta .ln span{color:var(--muted)} .pcard .meta .ln b{font-weight:600}
+  .pcard .ft{display:flex;gap:18px;align-items:center;padding:11px 16px;border-top:1px solid #f0f0f1;background:#fcfcfd}
+  .menu-wrap{position:relative;display:flex}
+  .kebab{border:none;background:none;color:var(--muted);font-size:18px;line-height:1;padding:2px 5px;border-radius:4px}
+  .kebab:hover{background:#f0f0f1;color:var(--ink)}
+  .menu{position:absolute;top:28px;right:0;background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 6px 22px rgba(0,0,0,.15);min-width:155px;z-index:20;padding:4px}
+  .menu button{display:block;width:100%;text-align:left;border:none;background:none;padding:8px 10px;font-size:13px;border-radius:4px;color:var(--ink)}
+  .menu button:hover{background:#f3f5f7}
+  .menu button.danger{color:var(--red)} .menu button.danger:hover{background:var(--red-bg)}
+
+  /* sentence-style auto-print rules */
+  .rules{display:flex;flex-direction:column}
+  .ruleline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:15px;line-height:2.4;padding:10px 0;border-bottom:1px dashed var(--line)}
+  .ruleline:first-child{border-top:1px dashed var(--line)}
+  .ruleline .rl-select{font-size:14px;font-weight:600;color:var(--blue-d);background:var(--blue-bg);border:1px solid var(--blue-line);border-radius:6px;padding:5px 26px 5px 9px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%23135e96' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer}
+  .ruleline .rm{margin-left:auto}
+  .addrow{margin-top:14px}
+
+  /* wizard modal */
+  .overlay{position:fixed;inset:0;background:rgba(20,24,28,.45);display:none;align-items:flex-start;justify-content:center;padding:56px 20px;z-index:50;overflow:auto}
+  .overlay.show{display:flex}
+  .modal{width:580px;max-width:100%;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
+  .modal .mh{padding:17px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .modal .mh h3{font-size:16px}
+  .modal .mb{padding:22px} .modal .mf{padding:14px 22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;background:#fbfbfc}
+  .xbtn{border:none;background:none;font-size:20px;color:var(--faint)}
+  .steps-ind{display:flex;gap:6px;margin-bottom:18px}
+  .steps-ind .s{flex:1;height:4px;border-radius:2px;background:var(--line)} .steps-ind .s.on{background:var(--blue)}
+  .choice{display:flex;gap:13px;align-items:center;border:1.5px solid var(--line);border-radius:var(--r);padding:13px 15px;cursor:pointer;margin-bottom:10px}
+  .choice:hover{border-color:var(--blue);background:var(--blue-bg)}
+  .choice.sel{border-color:var(--blue);background:var(--blue-bg);box-shadow:0 0 0 3px rgba(34,113,177,.12)}
+  .choice .t b{display:block;font-size:14.5px} .choice .t span{font-size:12.5px;color:var(--muted)}
+  .testbox{margin-top:14px;border:1px solid var(--line);border-radius:var(--r-sm);padding:13px 15px;display:flex;align-items:center;gap:10px;font-size:13px}
+  .spinner{width:15px;height:15px;border:2px solid var(--blue-line);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#11161b;color:#fff;padding:9px 16px;border-radius:8px;font-size:13px;z-index:120;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo">pos</div><b>WCPOS</b></div>
+    <div class="navgroup">Settings</div>
+    <nav class="nav"><a href="#">General</a><a href="#">Checkout</a><a href="#" class="active">Cloud Print</a><a href="#">Access</a><a href="#">Sessions</a><a href="#">Extensions</a></nav>
+    <div class="navgroup">Tools</div><nav class="nav"><a href="#">Logs</a></nav>
+    <div class="navgroup">Account</div><nav class="nav"><a href="#">License</a></nav>
+  </aside>
+  <div class="main">
+    <div class="topbar"><h1>Cloud Print</h1></div>
+    <div class="content"><div id="mount"></div></div>
+  </div>
+</div>
+
+<!-- Add-printer wizard -->
+<div class="overlay" id="wiz">
+  <div class="modal">
+    <div class="mh"><h3 id="wizTitle">Add a cloud printer</h3><button class="xbtn" onclick="closeWiz()">✕</button></div>
+    <div class="mb">
+      <div class="steps-ind"><div class="s on" data-i="0"></div><div class="s" data-i="1"></div><div class="s" data-i="2"></div></div>
+      <div class="wstep" data-step="0">
+        <p class="muted small" style="margin-bottom:14px">What kind of printer are you connecting?</p>
+        <div class="choice sel" data-proto="star" onclick="pickProto(this,'star')"><div class="proto-ic ic-star">★</div><div class="t"><b>Star CloudPRNT printer</b><span>Star printer with CloudPRNT built in (mC-Print, TSP143IV…)</span></div></div>
+        <div class="choice" data-proto="epson" onclick="pickProto(this,'epson')"><div class="proto-ic ic-epson">E</div><div class="t"><b>Epson Server Direct Print</b><span>Epson TM printer with Server Direct Print support</span></div></div>
+        <div class="choice" data-proto="pn" onclick="pickProto(this,'pn')"><div class="proto-ic ic-pn">PN</div><div class="t"><b>Any printer via PrintNode</b><span>Use a regular USB / network thermal printer through a PrintNode account</span></div></div>
+      </div>
+      <div class="wstep hidden" data-step="1">
+        <label class="lbl">Printer name</label>
+        <input class="field" id="wizName" placeholder="e.g. Kitchen printer" value="Kitchen printer" />
+        <p class="small muted" style="margin-top:6px">A friendly name so you can recognise it later. The technical ID is created for you.</p>
+        <div id="pnFields" class="hidden" style="margin-top:18px">
+          <label class="lbl">PrintNode API key</label>
+          <input class="field" placeholder="Paste your PrintNode account API key" />
+          <div class="note" style="margin-top:10px">Install the small <b>PrintNode client</b> on a computer next to the printer, then paste your account's API key. We'll list that account's printers next.</div>
+        </div>
+      </div>
+      <div class="wstep hidden" data-step="2"></div>
+    </div>
+    <div class="mf"><button class="link" id="wizBack" onclick="wizNav(-1)" style="visibility:hidden">← Back</button><button class="btn" id="wizNext" onclick="wizNav(1)">Continue</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PRINTERS = [
+  {id:'kitchen', name:'Kitchen printer', proto:'star',  status:'ok',   seen:'12 seconds ago', jobs:0, model:'Star mC-Print3'},
+  {id:'counter', name:'Front counter',   proto:'epson', status:'wait', seen:'never',          jobs:2, model:'Epson TM-m30'},
+  {id:'bar',     name:'Bar (PrintNode)', proto:'pn',    status:'ok',   seen:'just now',       jobs:0, model:'Generic 80mm via PrintNode'},
+];
+const PROTO = {
+  star:{label:'Star CloudPRNT', ic:'ic-star', mark:'★'},
+  epson:{label:'Epson Server Direct Print', ic:'ic-epson', mark:'E'},
+  pn:{label:'PrintNode', ic:'ic-pn', mark:'PN'},
+};
+const SCOPES = {every:'every order', pos:'every in-store (POS) order', online:'every online order'};
+// Active receipt templates (these come from WP Admin > POS > Templates — the ones toggled "Active")
+const TEMPLATES = ['Standard Receipt','Detailed Receipt','Kitchen Ticket','Packing Slip','Gift Receipt'];
+// example rules reflect the brief: every order -> kitchen; online sales -> packing slip
+let RULES = [
+  {scope:'every',  printer:'kitchen', template:'Kitchen Ticket'},
+  {scope:'online', printer:'counter', template:'Packing Slip'},
+];
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function chip(st){const m={ok:['ok','Connected'],wait:['wait','Waiting for printer']}[st];return `<span class="chip ${m[0]}"><span class="dot"></span>${m[1]}</span>`}
+function protoIcon(p){const d=PROTO[p];return `<span class="proto-ic ${d.ic}">${d.mark}</span>`}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1600)}
+function copy(text,btn){navigator.clipboard&&navigator.clipboard.writeText(text);const o=btn.textContent;btn.textContent='Copied!';toast('Copied to clipboard');setTimeout(()=>btn.textContent=o,1200)}
+
+function render(){
+  const cards = PRINTERS.map(p=>`
+    <div class="pcard">
+      <div class="hd">${protoIcon(p.proto)}
+        <div style="flex:1;min-width:0">
+          <input class="name-edit" value="${p.name}" title="Click to rename" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')this.blur()" onchange="renamePrinter('${p.id}',this.value)" />
+          <div class="pr">${PROTO[p.proto].label}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">${chip(p.status)}
+          <div class="menu-wrap">
+            <button class="kebab" onclick="toggleMenu(event,'${p.id}')" aria-label="More actions">⋮</button>
+            <div class="menu hidden" id="menu-${p.id}">
+              <button onclick="closeMenus();openWiz(true,'${p.proto}')">Setup &amp; token</button>
+              <button class="danger" onclick="closeMenus();toast('Removed ${p.name}')">Remove printer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="ln"><span>Last check-in</span><b>${p.seen}</b></div>
+        <div class="ln"><span>Waiting jobs</span><b>${p.jobs}</b></div>
+        <div class="ln" title="The printer's address in its setup URL. Created automatically and can't be changed — to rename, edit the name above; to change the ID, remove and re-add the printer."><span>Printer ID&nbsp;<span class="muted" style="cursor:help">ⓘ</span></span><b><code>${p.id}</code></b></div>
+      </div>
+      <div class="ft">
+        <button class="btn outline sm" onclick="toast('Sent a test print to ${p.name}')">Test print</button>
+      </div>
+    </div>`).join('');
+
+  const sel=(opts,val,on)=>`<select class="rl-select" onchange="${on}">${opts.map(([v,l])=>`<option value="${v}" ${v===val?'selected':''}>${l}</option>`).join('')}</select>`;
+  const ruleHtml = RULES.map((r,i)=>{
+    const scopeSel=sel(Object.entries(SCOPES),r.scope,`updateRule(${i},'scope',this.value)`);
+    const printerSel=sel(PRINTERS.map(p=>[p.id,p.name]),r.printer,`updateRule(${i},'printer',this.value)`);
+    const tplSel=sel(TEMPLATES.map(t=>[t,t]),r.template,`updateRule(${i},'template',this.value)`);
+    return `<div class="ruleline">Automatically print ${scopeSel} to ${printerSel} using the ${tplSel} template.
+      <button class="link danger rm" onclick="removeRule(${i})">Remove</button></div>`;
+  }).join('');
+
+  $('#mount').innerHTML = `
+    <div class="callout"><div class="ci">🖨️</div><div>
+      <h2>What is cloud printing?</h2>
+      <p>Cloud printing lets your store send a receipt to a printer over the internet — the printer fetches each job itself, so it doesn't need to be connected to the POS device.</p>
+      <p>Use it when a receipt printer is on a different network from the till, or when you want orders to print automatically. For example:</p>
+      <ul>
+        <li>send <b>every order</b> straight to the <b>kitchen printer</b>, or</li>
+        <li>print a <b>packing slip</b> for <b>every online sale</b>.</li>
+      </ul>
+      <p>Cashiers can also print to a cloud printer manually from the POS. <a class="link" href="#">Learn more</a></p>
+    </div></div>
+
+    <div class="sec-h">Your cloud printers</div>
+    <div class="sec-sub">Printers that fetch jobs from this store.</div>
+    <div class="pcards">${cards}</div>
+    <div class="addrow"><button class="btn outline" onclick="openWiz()">+ Add a printer</button></div>
+
+    <div class="sec-h">Auto-print rules</div>
+    <div class="note">💡 This is optional — leave it empty to print receipts only manually from the POS.</div>
+    <div class="sec-sub">Each rule prints the chosen template automatically when an order matches. Templates come from <a class="link" href="#">POS&nbsp;&rsaquo;&nbsp;Templates</a>. More than one rule can run for the same order.</div>
+    <div class="rules">${ruleHtml || '<p class="muted small" style="padding:8px 0">No rules yet.</p>'}</div>
+    <div class="addrow"><button class="btn outline" onclick="addRule()">+ Add rule</button></div>`;
+}
+function closeMenus(){$$('.menu').forEach(m=>m.classList.add('hidden'))}
+function toggleMenu(e,id){e.stopPropagation();const m=$('#menu-'+id);const wasOpen=!m.classList.contains('hidden');closeMenus();if(!wasOpen)m.classList.remove('hidden')}
+document.addEventListener('click',closeMenus);
+function renamePrinter(id,val){const p=PRINTERS.find(x=>x.id===id);if(!p)return;p.name=(val||'').trim()||p.name;render();toast('Printer name updated')}
+function updateRule(i,k,v){RULES[i][k]=v}
+function removeRule(i){RULES.splice(i,1);render();toast('Rule removed')}
+function addRule(){RULES.push({scope:'every',printer:PRINTERS[0].id,template:TEMPLATES[0]});render()}
+
+/* wizard */
+let wizStep=0, wizProto='star';
+function openWiz(skipToSetup,proto){wizProto=proto||'star';wizStep=skipToSetup?2:0;$$('.choice').forEach(c=>c.classList.toggle('sel',c.dataset.proto===wizProto));$('#wiz').classList.add('show');paintWiz()}
+function closeWiz(){$('#wiz').classList.remove('show')}
+function pickProto(el,p){wizProto=p;$$('.choice').forEach(c=>c.classList.remove('sel'));el.classList.add('sel')}
+function wizNav(d){wizStep=Math.max(0,Math.min(2,wizStep+d));if(wizStep===2&&d>0)toast(wizProto==='pn'?'Printer linked from PrintNode':'Printer created — copy the token now');paintWiz()}
+function setupStepHtml(){
+  if(wizProto==='pn'){
+    return `<div class="chip ok" style="margin-bottom:12px"><span class="dot"></span> Linked to PrintNode</div>
+      <p class="small" style="margin-bottom:14px">Choose which printer on your PrintNode account WCPOS should send jobs to. No URLs or tokens to copy — PrintNode handles delivery.</p>
+      <label class="lbl">PrintNode printer</label>
+      <select class="field" style="margin-bottom:14px"><option>Generic 80mm (USB) · Office PC</option><option>Star TSP143 (LAN) · Office PC</option></select>
+      <div class="testbox" id="wizTest"><button class="btn outline sm" onclick="runTest(this)">Send test print</button><span class="muted">We'll send a test receipt through PrintNode.</span></div>`;
+  }
+  const ep=wizProto==='epson'?'epson-sdp':'cloudprnt';
+  const url=`https://mystore.com/wp-json/wcpos/v1/print-jobs/${ep}?printer_id=kitchen&pt=9f3a8c21d7b64e0fa1c2`;
+  return `<div class="chip ok" style="margin-bottom:12px"><span class="dot"></span> Printer created</div>
+    <p class="small" style="margin-bottom:14px">Copy these two values into your printer's setup screen. <b>The token is shown only once.</b></p>
+    <label class="lbl">1. Poll URL <span class="muted" style="font-weight:400">— paste into the printer's "server URL"</span></label>
+    <div class="copyrow" style="margin-bottom:14px"><code>${url.replace(/pt=.*/,'pt=••••')}</code><button onclick="copy('${url}',this)">Copy</button></div>
+    <label class="lbl">2. Poll token <span class="muted" style="font-weight:400">— store it like a password</span></label>
+    <div class="copyrow" style="margin-bottom:14px"><code>9f3a8c21d7b64e0fa1c2e5d8b09a7f6c</code><button onclick="copy('9f3a8c21d7b64e0fa1c2e5d8b09a7f6c',this)">Copy</button></div>
+    <div class="testbox" id="wizTest"><button class="btn outline sm" onclick="runTest(this)">Test connection</button><span class="muted">Waiting for the printer to check in…</span></div>`;
+}
+function paintWiz(){
+  $$('.wstep').forEach(s=>s.classList.toggle('hidden',+s.dataset.step!==wizStep));
+  $$('.steps-ind .s').forEach(s=>s.classList.toggle('on',+s.dataset.i<=wizStep));
+  $('#pnFields').classList.toggle('hidden',wizProto!=='pn');
+  if(wizStep===2)$('.wstep[data-step="2"]').innerHTML=setupStepHtml();
+  $('#wizBack').style.visibility=wizStep>0?'visible':'hidden';
+  $('#wizNext').textContent=wizStep===2?'Done':'Continue';
+  $('#wizNext').onclick=wizStep===2?closeWiz:()=>wizNav(1);
+  $('#wizTitle').textContent=wizStep===2?'Connect your printer':'Add a cloud printer';
+}
+function runTest(btn){const box=$('#wizTest');box.innerHTML='<span class="spinner"></span><span class="muted">Listening for the printer…</span>';setTimeout(()=>{box.innerHTML='<span class="chip ok"><span class="dot"></span>Connected</span><span class="muted">Printer responded successfully.</span>';},1700)}
+
+render();
+</script>
+</body>
+</html>
