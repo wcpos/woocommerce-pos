@@ -70,6 +70,16 @@ class Thermal_Renderer {
 
 		$xml = $mustache->render( $content, $data );
 
+		// Strip control characters that XML 1.0 forbids (everything below 0x20
+		// except tab, LF and CR). Order data can carry these — e.g. a customer
+		// note pasted with a form-feed — and Mustache's HTML escaping leaves them
+		// intact, so they would make DOMDocument::loadXML() fail downstream. They
+		// can never print meaningfully, so removing them is safe.
+		$stripped = preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', '', $xml );
+		if ( null !== $stripped ) {
+			$xml = $stripped;
+		}
+
 		$ast = ( new Thermal_Markup_Parser() )->parse( $xml );
 
 		switch ( $wire_format ) {

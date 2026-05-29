@@ -7,6 +7,10 @@
  * JS receipt-renderer `render-escpos.ts`. Parity is defined as matching command
  * sequences and visual text layout, NOT byte-identity with the npm encoder.
  *
+ * This is the template-driven counterpart to
+ * `WCPOS\WooCommercePOS\Templates\Adapters\Escpos_Output_Adapter`, which emits a
+ * fixed, non-template layout from canonical receipt data.
+ *
  * Deliberate deviations from the JS renderer / this class's reference:
  *  - Double rules (`<line style="double"/>`) are emitted as ASCII `=` repeated
  *    across the paper width instead of the CP437 box-drawing byte 0xCD. This

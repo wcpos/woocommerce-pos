@@ -71,9 +71,11 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	 * the unfiltered_html cap, which strips the custom thermal tags. Writing the
 	 * content directly with $wpdb mirrors how real templates are stored.
 	 *
+	 * @param string $content Raw template markup to store.
+	 *
 	 * @return int Template post ID.
 	 */
-	private function create_thermal_template(): int {
+	private function create_thermal_template( string $content = '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' ): int {
 		$tid = wp_insert_post(
 			array(
 				'post_type'    => 'wcpos_template',
@@ -86,7 +88,7 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		global $wpdb;
 		$wpdb->update(
 			$wpdb->posts,
-			array( 'post_content' => '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' ),
+			array( 'post_content' => $content ),
 			array( 'ID' => $tid ),
 			array( '%s' ),
 			array( '%d' )
@@ -169,6 +171,45 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertStringContainsString( '<epos-print', $out );
 		$this->assertStringContainsString( (string) $order->get_order_number(), $out );
+	}
+
+	/**
+	 * It returns an empty string (no throw) when the thermal renderer fails.
+	 *
+	 * A template whose root is not <receipt> makes the markup parser throw even
+	 * after Mustache rendering and control-char stripping. render_payload() must
+	 * catch this so the poll controller does not 500 and the job is not stuck.
+	 */
+	public function test_render_payload_returns_empty_when_thermal_render_fails(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'star1',
+						'name'     => 'Star',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$tid   = $this->create_thermal_template( '<notreceipt>{{order.number}}</notreceipt>' );
+		$order = OrderHelper::create_order();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'  => 'star1',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+			)
+		);
+
+		// Act.
+		$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		// Assert.
+		$this->assertSame( '', $out );
 	}
 
 	/**

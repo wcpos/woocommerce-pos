@@ -6,6 +6,10 @@
  * XML for use with Server Direct Print. The emitted document uses the same
  * namespace and escaping conventions as Epos_Xml_Output_Adapter.
  *
+ * This is the template-driven counterpart to
+ * `WCPOS\WooCommercePOS\Templates\Adapters\Epos_Xml_Output_Adapter`, which emits a
+ * fixed, non-template layout from canonical receipt data.
+ *
  * Deliberate deviations / limitations:
  *  - Double rules (`<line style="double"/>`) are emitted as ASCII `=` repeated
  *    across the paper width (consistent with the ESC/POS emitter) rather than a

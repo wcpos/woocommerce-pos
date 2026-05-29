@@ -105,6 +105,40 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It strips XML-1.0-illegal control characters from order data before parsing.
+	 *
+	 * A form-feed (0x0C) in the customer note would otherwise make DOMDocument::loadXML
+	 * fail and the parser throw. The renderer must strip such characters and still
+	 * produce a non-empty, parseable payload.
+	 */
+	public function test_render_strips_xml_illegal_control_characters_from_data(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$order->set_customer_note( "Line1\x0CLine2" );
+		$order->save();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48"><text>{{order.customer_note}}</text><cut /></receipt>',
+		);
+		$renderer = new Thermal_Renderer();
+
+		// Act.
+		$escpos = $renderer->render( $template, $order, 'escpos' );
+
+		// Assert.
+		$this->assertNotEmpty( $escpos );
+		$this->assertStringContainsString( 'Line1', $escpos );
+		$this->assertStringContainsString( 'Line2', $escpos );
+		$this->assertStringNotContainsString( "\x0C", $escpos );
+
+		// Act (epos-xml) — must produce XML that simplexml can parse.
+		$xml = $renderer->render( $template, $order, 'epos-xml' );
+
+		// Assert.
+		$this->assertNotFalse( simplexml_load_string( $xml ) );
+	}
+
+	/**
 	 * It throws for an unknown wire format.
 	 */
 	public function test_render_throws_for_unknown_wire_format(): void {

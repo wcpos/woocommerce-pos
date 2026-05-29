@@ -146,7 +146,18 @@ class Print_Job_Service {
 				return '';
 			}
 
-			return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, $wire );
+			try {
+				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, $wire );
+			} catch ( \Throwable $e ) {
+				// Defense in depth: never let a malformed template/payload bubble up
+				// as a 500 and leave the poll's claimed job stuck. Returning empty
+				// lets the caller treat the job as having nothing to print.
+				\WCPOS\WooCommercePOS\Logger::log(
+					sprintf( 'Cloud print: thermal render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+				);
+
+				return '';
+			}
 		}
 
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['format'] ) ) {
