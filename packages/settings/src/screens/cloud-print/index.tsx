@@ -155,7 +155,7 @@ function CloudPrint() {
 							className="wcpos:flex wcpos:gap-2"
 						>
 							<span className="wcpos:font-semibold">{printer.name}</span>
-							<span className="wcpos:text-gray-500">({printer.protocol})</span>
+							<span className="wcpos:text-gray-500">({printer.provider})</span>
 							<button
 								type="button"
 								data-testid={`cloud-printer-remove-${printer.id}`}

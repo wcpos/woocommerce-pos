@@ -7,7 +7,7 @@ import type { CloudPrinter } from '../../hooks/use-cloud-print-settings';
 export function PrinterForm({ onAdd }: { onAdd: (printer: CloudPrinter) => void }) {
 	const [id, setId] = React.useState('');
 	const [name, setName] = React.useState('');
-	const [protocol, setProtocol] = React.useState<CloudPrinter['protocol']>('star-cloudprnt');
+	const [provider, setProvider] = React.useState<CloudPrinter['provider']>('star-cloudprnt');
 	const trimmedId = id.trim();
 
 	return (
@@ -26,8 +26,8 @@ export function PrinterForm({ onAdd }: { onAdd: (printer: CloudPrinter) => void 
 			/>
 			<select
 				data-testid="cloud-printer-protocol-select"
-				value={protocol}
-				onChange={(e) => setProtocol(e.target.value as CloudPrinter['protocol'])}
+				value={provider}
+				onChange={(e) => setProvider(e.target.value as CloudPrinter['provider'])}
 			>
 				<option value="star-cloudprnt">Star CloudPRNT</option>
 				<option value="epson-sdp">Epson Server Direct Print</option>
@@ -43,7 +43,7 @@ export function PrinterForm({ onAdd }: { onAdd: (printer: CloudPrinter) => void 
 					onAdd({
 						id: trimmedId,
 						name: '' === name ? trimmedId : name,
-						protocol,
+						provider,
 						store_id: 0,
 					});
 					setId('');

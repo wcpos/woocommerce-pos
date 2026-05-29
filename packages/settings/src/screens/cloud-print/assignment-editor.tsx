@@ -13,7 +13,7 @@ const STAR_FORMATS: FormatOption[] = [
 const EPSON_FORMATS: FormatOption[] = [{ value: 'epos-xml', label: 'Epson ePOS-Print' }];
 
 function formatsForPrinter(printer: CloudPrinter | undefined): FormatOption[] {
-	return printer?.protocol === 'epson-sdp' ? EPSON_FORMATS : STAR_FORMATS;
+	return printer?.provider === 'epson-sdp' ? EPSON_FORMATS : STAR_FORMATS;
 }
 
 function defaultFormatForPrinter(printer: CloudPrinter | undefined): string {
@@ -34,7 +34,7 @@ export function AssignmentEditor({
 		if (!first) return;
 		onChange([
 			...assignments,
-			{ printer_id: first.id, scope: 'pos', format: defaultFormatForPrinter(first) },
+			{ printer_id: first.id, scope: 'pos', template_id: defaultFormatForPrinter(first) },
 		]);
 	};
 
@@ -44,7 +44,7 @@ export function AssignmentEditor({
 
 	const changePrinter = (index: number, printerId: string) => {
 		const printer = printers.find((p) => p.id === printerId);
-		update(index, { printer_id: printerId, format: defaultFormatForPrinter(printer) });
+		update(index, { printer_id: printerId, template_id: defaultFormatForPrinter(printer) });
 	};
 
 	const remove = (index: number) => onChange(assignments.filter((_, i) => i !== index));
@@ -57,8 +57,8 @@ export function AssignmentEditor({
 			{assignments.map((a, i) => {
 				const printer = printers.find((p) => p.id === a.printer_id);
 				const formats = formatsForPrinter(printer);
-				const format = formats.some((option) => option.value === a.format)
-					? a.format
+				const format = formats.some((option) => option.value === a.template_id)
+					? a.template_id
 					: defaultFormatForPrinter(printer);
 
 				return (
@@ -86,7 +86,7 @@ export function AssignmentEditor({
 						<select
 							data-testid={`cloud-assignment-format-${i}`}
 							value={format}
-							onChange={(e) => update(i, { format: e.target.value })}
+							onChange={(e) => update(i, { template_id: e.target.value })}
 						>
 							{formats.map((option) => (
 								<option key={option.value} value={option.value}>

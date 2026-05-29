@@ -1,19 +1,29 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
+export type CloudProvider = 'star-cloudprnt' | 'epson-sdp' | 'printnode';
+export type CloudStatus = 'waiting' | 'connected' | 'offline';
+
 export interface CloudPrinter {
 	id: string;
 	name: string;
-	protocol: 'star-cloudprnt' | 'epson-sdp';
+	provider: CloudProvider;
 	store_id: number;
+	// read-only (GET only):
+	status?: CloudStatus;
+	last_seen?: number | null;
+	// write-only (POST only; never returned):
 	// Poll token is server-generated, stored hashed, and returned once on save —
-	// never read back via GET, so it is not part of the printer shape.
+	// never read back via GET, so it is not part of the read shape.
+	regenerate_token?: boolean;
+	printnode_api_key?: string; // printnode only
+	printnode_printer_id?: number; // printnode only
 }
 
 export interface CloudAssignment {
 	printer_id: string;
 	scope: 'every' | 'pos' | 'online';
-	format: string;
+	template_id: string;
 }
 
 export interface CloudPrintSettings {
