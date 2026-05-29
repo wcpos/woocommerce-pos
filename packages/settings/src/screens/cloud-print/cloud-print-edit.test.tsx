@@ -1,8 +1,10 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SnackbarProvider } from '@wcpos/ui';
 
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({ default: (...args: unknown[]) => apiFetchMock(...args) }));
@@ -19,323 +21,241 @@ function deferred<T>() {
 	return { promise, resolve, reject };
 }
 
+interface ApiOpts {
+	path: string;
+	method?: string;
+	data?: { printers: unknown[]; assignments: unknown[] };
+}
+
+/**
+ * Path-aware api-fetch mock: the screen performs two suspense fetches (the
+ * cloud-print settings GET and the receipt-templates GET) plus the settings
+ * POSTs. `postSettings` receives the POSTed data and returns the server
+ * response promise so tests can control resolution ordering.
+ */
+function routeApiFetch({
+	getSettings,
+	postSettings,
+	templates = [],
+}: {
+	getSettings: () => unknown;
+	postSettings: (data: ApiOpts['data']) => Promise<unknown>;
+	templates?: unknown[];
+}) {
+	apiFetchMock.mockImplementation((opts: ApiOpts) => {
+		if (opts.path.includes('/templates')) {
+			return Promise.resolve(templates);
+		}
+		if (opts.path.includes('/settings/cloud-print')) {
+			if (opts.method === 'POST') {
+				return postSettings(opts.data);
+			}
+			return Promise.resolve(getSettings());
+		}
+		return Promise.resolve({});
+	});
+}
+
+function postCalls() {
+	return apiFetchMock.mock.calls.filter((c) => (c[0] as ApiOpts).method === 'POST');
+}
+
+function lastPostData() {
+	const calls = postCalls();
+	return (calls[calls.length - 1][0] as ApiOpts).data!;
+}
+
 function renderScreen() {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return {
 		client,
 		...render(
 			<QueryClientProvider client={client}>
-				<React.Suspense fallback="loading">
-					<CloudPrint />
-				</React.Suspense>
+				<SnackbarProvider>
+					<React.Suspense fallback="loading">
+						<CloudPrint />
+					</React.Suspense>
+				</SnackbarProvider>
 			</QueryClientProvider>
 		),
 	};
 }
 
+/** Drive the add-printer wizard through step 0 (Star) and step 1 (name). */
+function fillWizard(name: string) {
+	fireEvent.click(screen.getByTestId('cloud-print-add'));
+	fireEvent.click(screen.getByTestId('provider-choice-star-cloudprnt'));
+	fireEvent.click(screen.getByTestId('wizard-continue'));
+	fireEvent.change(screen.getByTestId('wizard-name-input'), { target: { value: name } });
+	fireEvent.click(screen.getByTestId('wizard-continue'));
+}
+
+beforeEach(() => {
+	apiFetchMock.mockReset();
+	(window as unknown as { wpApiSettings?: { root?: string } }).wpApiSettings = {
+		root: 'https://mystore.com/wp-json/',
+	};
+	Object.defineProperty(navigator, 'clipboard', {
+		value: { writeText: vi.fn() },
+		configurable: true,
+		writable: true,
+	});
+});
+
+afterEach(() => {
+	delete (window as unknown as { wpApiSettings?: unknown }).wpApiSettings;
+});
+
 describe('CloudPrint editing', () => {
-	beforeEach(() => {
-		apiFetchMock.mockReset();
-	});
-	it('adds a printer and POSTs the full settings object', async () => {
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockResolvedValueOnce({ printers: [{ id: 'kitchen' }], assignments: [] });
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-
-		await waitFor(() => {
-			const postCall = apiFetchMock.mock.calls.find(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCall).toBeTruthy();
-		});
-
-		const postCall = apiFetchMock.mock.calls.find(
-			(c) => (c[0] as { method?: string }).method === 'POST'
-		);
-		expect((postCall![0] as { data: { printers: Array<{ id: string }> } }).data.printers[0].id).toBe(
-			'kitchen'
-		);
-	});
-
-	it('shows a one-time poll token keyed by the server-sanitized printer id', async () => {
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockResolvedValueOnce({
-			printers: [{ id: 'server-kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [],
-			generated: { 'server-kitchen': 'poll-token-123' },
+	it('adds a printer via the wizard, POSTs the full settings with no real id, and surfaces the one-time token', async () => {
+		routeApiFetch({
+			getSettings: () => ({ printers: [], assignments: [] }),
+			postSettings: () =>
+				Promise.resolve({
+					printers: [
+						{ id: 'server-kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
+					],
+					assignments: [],
+					generated: { 'server-kitchen': 'poll-token-123' },
+				}),
 		});
 
 		renderScreen();
 		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
 
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen ' } });
-		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+		fillWizard('Kitchen');
 
-		expect(await screen.findByTestId('cloud-print-new-token')).toHaveTextContent('poll-token-123');
-		expect(await screen.findByTestId('cloud-printer-server-kitchen')).toBeTruthy();
-		expect(screen.queryByTestId('cloud-printer-kitchen ')).toBeNull();
+		// A POST happened whose new printer carries an empty (server-derived) id.
+		await waitFor(() => expect(postCalls().length).toBe(1));
+		const posted = lastPostData() as { printers: Array<{ id: string }> };
+		expect(posted.printers[posted.printers.length - 1].id).toBe('');
+
+		// The wizard step 2 surfaces the one-time token.
+		expect(await screen.findByTestId('wizard-poll-token')).toHaveTextContent('poll-token-123');
+
+		// The server-derived printer card appears once the save commits.
+		expect(await screen.findByTestId('printer-card-server-kitchen')).toBeTruthy();
 	});
 
-	it('does not add whitespace-only printer ids', async () => {
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
+	it('serializes full-settings saves so an earlier printer registration is folded into a later rule edit', async () => {
+		const firstSave = deferred<unknown>();
+		routeApiFetch({
+			getSettings: () => ({ printers: [], assignments: [] }),
+			postSettings: (data) => {
+				if ((data!.assignments as unknown[]).length === 0) {
+					return firstSave.promise;
+				}
+				return Promise.resolve({
+					printers: [
+						{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
+					],
+					assignments: [{ printer_id: 'kitchen', scope: 'every', template_id: '1' }],
+				});
+			},
+			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+		});
 
 		renderScreen();
 		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
 
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: '   ' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
+		// 1) Add a printer (first save left pending/deferred).
+		fillWizard('Kitchen');
+		await waitFor(() => expect(postCalls().length).toBe(1));
 
-		expect(apiFetchMock.mock.calls.some((c) => (c[0] as { method?: string }).method === 'POST')).toBe(
-			false
-		);
-		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
-	});
+		// 2) The wizard reached step 2 once the printer optimistically exists; close it.
+		fireEvent.click(screen.getByTestId('wizard-back'));
 
-	it('syncs fresh settings into the draft when there are no pending edits', async () => {
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-
-		const { client } = renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
-
-		act(() => {
-			client.setQueryData(['cloud-print'], {
-				printers: [{ id: 'front', name: 'Front', protocol: 'star-cloudprnt', store_id: 0 }],
-				assignments: [],
-			});
-		});
-
-		expect(await screen.findByTestId('cloud-printer-front')).toBeTruthy();
-		expect(screen.queryByTestId('cloud-print-empty')).toBeNull();
-	});
-
-	it('does not save duplicate printer ids', async () => {
-		apiFetchMock.mockResolvedValueOnce({
-			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [],
-		});
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-
-		expect(apiFetchMock.mock.calls.some((c) => (c[0] as { method?: string }).method === 'POST')).toBe(
-			false
-		);
-		expect(screen.getByTestId('cloud-print-save-error')).toHaveTextContent('Printer ID already exists.');
-	});
-
-	it('rolls back a printer add when the save fails', async () => {
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockRejectedValueOnce({ message: 'Duplicate printer id.' });
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-
-		await waitFor(() => {
-			expect(apiFetchMock.mock.calls.some((c) => (c[0] as { method?: string }).method === 'POST')).toBe(
-				true
-			);
-		});
-		expect(screen.queryByTestId('cloud-printer-kitchen')).toBeNull();
-		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
-		expect(await screen.findByTestId('cloud-print-save-error')).toHaveTextContent('Duplicate printer id.');
-	});
-
-	it('keeps rapid assignment edits in the next full-settings POST', async () => {
-		apiFetchMock.mockResolvedValueOnce({
-			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [{ printer_id: 'kitchen', scope: 'pos', format: 'starprnt' }],
-		});
-		apiFetchMock.mockResolvedValue({
-			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [{ printer_id: 'kitchen', scope: 'online', format: 'escpos' }],
-		});
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-assignment-scope-0'), { target: { value: 'online' } });
-		fireEvent.change(screen.getByTestId('cloud-assignment-format-0'), { target: { value: 'escpos' } });
-
-		await waitFor(() => {
-			const postCalls = apiFetchMock.mock.calls.filter(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCalls.length).toBe(2);
-		});
-
-		const postCalls = apiFetchMock.mock.calls.filter((c) => (c[0] as { method?: string }).method === 'POST');
-		expect(
-			(postCalls[1][0] as { data: { assignments: Array<{ scope: string; format: string }> } }).data
-				.assignments[0]
-		).toMatchObject({ scope: 'online', format: 'escpos' });
-	});
-
-	it('serializes full-settings saves so older printer registrations cannot overwrite later rule edits', async () => {
-		const firstSave = deferred<{ printers: Array<{ id: string }>; assignments: never[] }>();
-		const secondSave = deferred<{
-			printers: Array<{ id: string; name: string; protocol: string; store_id: number }>;
-			assignments: Array<{ printer_id: string; scope: string; format: string }>;
-		}>();
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockReturnValueOnce(firstSave.promise);
-		apiFetchMock.mockReturnValueOnce(secondSave.promise);
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
-
-		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
-		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
-
-		await waitFor(() => {
-			const postCalls = apiFetchMock.mock.calls.filter(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCalls.length).toBe(1);
-		});
-
+		// Resolve the first save with the server-assigned id.
 		firstSave.resolve({
-			printers: [{ id: 'kitchen' }],
+			printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
 			assignments: [],
 		});
+		expect(await screen.findByTestId('printer-card-kitchen')).toBeTruthy();
 
-		await waitFor(() => {
-			const postCalls = apiFetchMock.mock.calls.filter(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCalls.length).toBe(2);
-		});
+		// 3) Add an auto-print rule — this triggers the second (serialized) save.
+		fireEvent.click(screen.getByTestId('rules-add'));
 
-		const postCalls = apiFetchMock.mock.calls.filter((c) => (c[0] as { method?: string }).method === 'POST');
-		expect(
-			(postCalls[1][0] as {
-				data: { printers: Array<{ id: string }>; assignments: Array<{ printer_id: string }> };
-			}).data
-		).toMatchObject({
+		await waitFor(() => expect(postCalls().length).toBe(2));
+
+		// The second POST body includes the committed printer from the first save.
+		expect(lastPostData()).toMatchObject({
 			printers: [{ id: 'kitchen' }],
 			assignments: [{ printer_id: 'kitchen' }],
 		});
-
-		secondSave.resolve({
-			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [{ printer_id: 'kitchen', scope: 'pos', format: 'starprnt' }],
-		});
 	});
 
-	it('does not keep an older queued save error after the latest edit saves', async () => {
-		const firstSave = deferred<{ printers: Array<{ id: string }>; assignments: never[] }>();
-		const secondSave = deferred<{
-			printers: Array<{ id: string; name: string; protocol: string; store_id: number }>;
-			assignments: Array<{ printer_id: string; scope: string; format: string }>;
-		}>();
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockReturnValueOnce(firstSave.promise);
-		apiFetchMock.mockReturnValueOnce(secondSave.promise);
+	it('rolls back an optimistic rule edit and shows an error snackbar when the save fails', async () => {
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [
+					{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
+				],
+				assignments: [],
+			}),
+			postSettings: () => Promise.reject({ message: 'Could not save rule.' }),
+			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+		});
 
 		renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+		expect(await screen.findByTestId('printer-card-kitchen')).toBeTruthy();
+		expect(screen.getByTestId('rules-empty')).toBeTruthy();
 
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
+		// Optimistically add a rule; the POST rejects.
+		fireEvent.click(screen.getByTestId('rules-add'));
 
-		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
-		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
+		await waitFor(() => expect(postCalls().length).toBe(1));
 
-		firstSave.reject(new Error('Temporary queue error.'));
-		await waitFor(() => {
-			const postCalls = apiFetchMock.mock.calls.filter(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCalls.length).toBe(2);
-		});
+		// The optimistic rule is rolled back.
+		await waitFor(() => expect(screen.getByTestId('rules-empty')).toBeTruthy());
+		expect(screen.queryByTestId('rule-0')).toBeNull();
 
-		secondSave.resolve({
-			printers: [{ id: 'kitchen', name: 'Kitchen', protocol: 'star-cloudprnt', store_id: 0 }],
-			assignments: [{ printer_id: 'kitchen', scope: 'pos', format: 'starprnt' }],
-		});
-
-		await waitFor(() => {
-			expect(screen.queryByTestId('cloud-print-save-error')).toBeNull();
-		});
+		// An error snackbar (in the live region) surfaces the failure message.
+		const liveRegion = document.querySelector('[role="status"]') as HTMLElement;
+		await waitFor(() =>
+			expect(within(liveRegion).getByText('Could not save rule.')).toBeTruthy()
+		);
 	});
 
 	it('rolls back to the last confirmed server snapshot after queued saves fail', async () => {
-		const firstSave = deferred<{ printers: Array<{ id: string }>; assignments: never[] }>();
-		const secondSave = deferred<{ printers: Array<{ id: string }>; assignments: Array<{ printer_id: string }> }>();
-		apiFetchMock.mockResolvedValueOnce({ printers: [], assignments: [] });
-		apiFetchMock.mockReturnValueOnce(firstSave.promise);
-		apiFetchMock.mockReturnValueOnce(secondSave.promise);
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
-
-		fireEvent.change(screen.getByTestId('cloud-printer-id-input'), { target: { value: 'kitchen' } });
-		fireEvent.change(screen.getByTestId('cloud-printer-name-input'), { target: { value: 'Kitchen' } });
-		fireEvent.click(screen.getByTestId('cloud-printer-add'));
-		expect(await screen.findByTestId('cloud-printer-kitchen')).toBeTruthy();
-
-		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
-		expect(await screen.findByTestId('cloud-assignment-0')).toBeTruthy();
-
-		firstSave.reject(new Error('First failed.'));
-		await waitFor(() => {
-			const postCalls = apiFetchMock.mock.calls.filter(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(postCalls.length).toBe(2);
+		const firstSave = deferred<unknown>();
+		const secondSave = deferred<unknown>();
+		let postIndex = 0;
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [
+					{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
+				],
+				assignments: [],
+			}),
+			postSettings: () => {
+				postIndex += 1;
+				return postIndex === 1 ? firstSave.promise : secondSave.promise;
+			},
+			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
 		});
 
+		renderScreen();
+		expect(await screen.findByTestId('printer-card-kitchen')).toBeTruthy();
+		expect(screen.getByTestId('rules-empty')).toBeTruthy();
+
+		// Two rapid rule edits queue two serialized saves. Saves run one at a
+		// time, so the first POST goes out immediately while the second is held
+		// behind it in the queue.
+		fireEvent.click(screen.getByTestId('rules-add'));
+		await waitFor(() => expect(postCalls().length).toBe(1));
+		expect(await screen.findByTestId('rule-0')).toBeTruthy();
+
+		fireEvent.change(screen.getByTestId('rule-scope-0'), { target: { value: 'pos' } });
+
+		// Fail the first save → the queue drains and the second POST is sent.
+		firstSave.reject(new Error('First failed.'));
+		await waitFor(() => expect(postCalls().length).toBe(2));
+
+		// Fail the second (latest) save too.
 		secondSave.reject(new Error('Second failed.'));
 
-		await waitFor(() => {
-			expect(screen.queryByTestId('cloud-printer-kitchen')).toBeNull();
-		});
-		expect(screen.getByTestId('cloud-print-empty')).toBeTruthy();
-		expect(screen.getByTestId('cloud-print-save-error')).toHaveTextContent('Second failed.');
+		// Everything rolls back to the last confirmed (no-rules) snapshot.
+		await waitFor(() => expect(screen.getByTestId('rules-empty')).toBeTruthy());
+		expect(screen.queryByTestId('rule-0')).toBeNull();
 	});
-
-	it('defaults Epson Server Direct Print assignments to epos-xml', async () => {
-		apiFetchMock.mockResolvedValueOnce({
-			printers: [{ id: 'epson', name: 'Epson', protocol: 'epson-sdp', store_id: 0 }],
-			assignments: [],
-		});
-		apiFetchMock.mockResolvedValueOnce({
-			printers: [{ id: 'epson', name: 'Epson', protocol: 'epson-sdp', store_id: 0 }],
-			assignments: [{ printer_id: 'epson', scope: 'pos', format: 'epos-xml' }],
-		});
-
-		renderScreen();
-		expect(await screen.findByTestId('cloud-printer-epson')).toBeTruthy();
-		fireEvent.click(screen.getByTestId('cloud-assignment-add'));
-
-		await waitFor(() => {
-			const postCall = apiFetchMock.mock.calls.find(
-				(c) => (c[0] as { method?: string }).method === 'POST'
-			);
-			expect(
-				(postCall?.[0] as { data?: { assignments: Array<{ format: string }> } } | undefined)?.data
-					?.assignments[0]?.format
-			).toBe('epos-xml');
-		});
-	});
-
 });
