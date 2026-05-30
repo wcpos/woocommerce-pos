@@ -764,6 +764,8 @@ class Settings extends WP_REST_Controller {
 		if ( 'printnode' === $provider ) {
 			$clean['printnode_api_key']    = sanitize_text_field( $printer['printnode_api_key'] ?? '' );
 			$clean['printnode_printer_id'] = isset( $printer['printnode_printer_id'] ) ? (int) $printer['printnode_printer_id'] : 0;
+			$clean['printnode_format']     = \in_array( $printer['printnode_format'] ?? '', array( 'pdf', 'raw' ), true )
+				? $printer['printnode_format'] : 'pdf';
 		}
 
 		return $clean;
