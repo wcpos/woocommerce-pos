@@ -139,6 +139,26 @@ class Thermal_Renderer_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It builds an AST whose root is a receipt node with children.
+	 */
+	public function test_build_ast_returns_receipt_root_with_children(): void {
+		// Arrange.
+		$order    = OrderHelper::create_order();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>',
+		);
+		$renderer = new Thermal_Renderer();
+
+		// Act.
+		$ast = $renderer->build_ast( $template, $order );
+
+		// Assert.
+		$this->assertEquals( 'receipt', $ast['type'] );
+		$this->assertNotEmpty( $ast['children'] );
+	}
+
+	/**
 	 * It throws for an unknown wire format.
 	 */
 	public function test_render_throws_for_unknown_wire_format(): void {

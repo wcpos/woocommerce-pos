@@ -29,6 +29,7 @@ function renderCard(props: Partial<React.ComponentProps<typeof PrinterCard>> = {
 	const onRename = props.onRename ?? vi.fn();
 	const onRemove = props.onRemove ?? vi.fn();
 	const onOpenSetup = props.onOpenSetup ?? vi.fn();
+	const onUpdate = props.onUpdate ?? vi.fn();
 	const printer = props.printer ?? makePrinter();
 	const utils = render(
 		<SnackbarProvider>
@@ -37,10 +38,11 @@ function renderCard(props: Partial<React.ComponentProps<typeof PrinterCard>> = {
 				onRename={onRename}
 				onRemove={onRemove}
 				onOpenSetup={onOpenSetup}
+				onUpdate={onUpdate}
 			/>
 		</SnackbarProvider>
 	);
-	return { ...utils, onRename, onRemove, onOpenSetup, printer };
+	return { ...utils, onRename, onRemove, onOpenSetup, onUpdate, printer };
 }
 
 beforeEach(() => {
@@ -79,14 +81,60 @@ describe('PrinterCard', () => {
 		expect(chip).toHaveTextContent('Offline');
 	});
 
-	it('renders a neutral "Linked" Chip for a non-polling (PrintNode) printer regardless of status', () => {
-		// PrintNode pushes jobs and never checks in, so the poll-derived status
-		// ("waiting") must not surface as a misleading "Waiting for printer".
-		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'waiting' });
+	it('renders a success "Online" Chip for a PrintNode printer reported online', () => {
+		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'online' });
 		renderCard({ printer });
 		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
-		expect(chip).toHaveTextContent('Linked');
+		// The Chip prepends an icon glyph, so match a substring.
+		expect(chip).toHaveTextContent(/Online/);
+	});
+
+	it('renders an error "Offline" Chip for a PrintNode printer reported offline', () => {
+		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'offline' });
+		renderCard({ printer });
+		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
+		expect(chip).toHaveTextContent(/Offline/);
+	});
+
+	it('renders a neutral "Unknown" Chip for a PrintNode printer with unknown/undefined status', () => {
+		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'unknown' });
+		renderCard({ printer });
+		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
+		expect(chip).toHaveTextContent(/Unknown/);
 		expect(chip).not.toHaveTextContent('Waiting');
+	});
+
+	it('treats an undefined status on a PrintNode printer as Unknown', () => {
+		const printer = makePrinter({ id: 'p-pn2', provider: 'printnode', status: undefined });
+		renderCard({ printer });
+		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
+		expect(chip).toHaveTextContent(/Unknown/);
+	});
+
+	it('renders a PDF/RAW format control only for PrintNode printers', () => {
+		const pn = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'online' });
+		const { unmount } = renderCard({ printer: pn });
+		expect(screen.getByTestId(`printer-card-format-${pn.id}`)).toBeInTheDocument();
+		unmount();
+
+		const star = makePrinter({ id: 'p-star', provider: 'star-cloudprnt' });
+		renderCard({ printer: star });
+		expect(screen.queryByTestId(`printer-card-format-${star.id}`)).not.toBeInTheDocument();
+	});
+
+	it('defaults the format control to PDF when printnode_format is absent', () => {
+		const pn = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'online' });
+		renderCard({ printer: pn });
+		const select = screen.getByTestId(`printer-card-format-${pn.id}`) as HTMLSelectElement;
+		expect(select.value).toBe('pdf');
+	});
+
+	it('persists printnode_format via onUpdate when changed to RAW', () => {
+		const pn = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'online' });
+		const { onUpdate } = renderCard({ printer: pn });
+		const select = screen.getByTestId(`printer-card-format-${pn.id}`);
+		fireEvent.change(select, { target: { value: 'raw' } });
+		expect(onUpdate).toHaveBeenCalledWith(pn.id, { printnode_format: 'raw' });
 	});
 
 	it('commits a renamed value on blur', () => {
@@ -179,20 +227,42 @@ describe('PrinterCard', () => {
 		expect(await screen.findByText('Sent a test print to Kitchen.')).toBeInTheDocument();
 	});
 
-	it('shows a graceful info snackbar (not an error) on a 400 response', async () => {
+	it('shows the server error message on a 400 (printnode now supported)', async () => {
 		apiFetchMock.mockRejectedValue({
-			code: 'wcpos_print_job_no_diagnostic',
-			message: 'No diagnostic available',
+			code: 'wcpos_print_job_printnode_unconfigured',
+			message: 'This PrintNode printer is not fully configured.',
 			data: { status: 400 },
 		});
 		const printer = makePrinter({ provider: 'printnode' });
 		renderCard({ printer });
 		fireEvent.click(screen.getByTestId(`printer-card-test-${printer.id}`));
 		expect(
-			await screen.findByText("Test print isn't available for this printer yet.")
+			await screen.findByText('This PrintNode printer is not fully configured.')
 		).toBeInTheDocument();
-		// The graceful copy is shown rather than the raw error message.
-		expect(screen.queryByText('No diagnostic available')).not.toBeInTheDocument();
+		// The old "not available yet" info copy must NOT appear.
+		expect(
+			screen.queryByText("Test print isn't available for this printer yet.")
+		).not.toBeInTheDocument();
+	});
+
+	it('submits a test print for a printnode printer and shows the success snackbar', async () => {
+		apiFetchMock.mockResolvedValue({ submitted: true, pn_job_id: 42 });
+		const printer = makePrinter({ id: 'p-pn', name: 'Counter', provider: 'printnode' });
+		renderCard({ printer });
+		fireEvent.click(screen.getByTestId(`printer-card-test-${printer.id}`));
+		expect(await screen.findByText('Sent a test print to Counter.')).toBeInTheDocument();
+	});
+
+	it('shows the server error message on a 502 test-print failure', async () => {
+		apiFetchMock.mockRejectedValue({
+			code: 'wcpos_print_job_submit_failed',
+			message: 'PrintNode rejected the job.',
+			data: { status: 502 },
+		});
+		const printer = makePrinter({ provider: 'printnode' });
+		renderCard({ printer });
+		fireEvent.click(screen.getByTestId(`printer-card-test-${printer.id}`));
+		expect(await screen.findByText('PrintNode rejected the job.')).toBeInTheDocument();
 	});
 
 	it('shows an error snackbar with the message on other failures', async () => {

@@ -32,6 +32,15 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Tear down — clear scheduled submit events and the settings option.
+	 */
+	public function tearDown(): void {
+		wp_clear_scheduled_hook( Cloud_Print_Trigger_Service::CRON_SUBMIT );
+		delete_option( 'woocommerce_pos_settings_cloud_print' );
+		parent::tearDown();
+	}
+
+	/**
 	 * Create a thermal template post with raw markup, bypassing wp_kses.
 	 *
 	 * The wp_insert_post() call runs content through wp_kses for users without
@@ -300,9 +309,9 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * It enqueues no job for a PrintNode printer (no thermal wire format).
+	 * It enqueues one PDF job and schedules a submit event for a PrintNode printer (default format).
 	 */
-	public function test_printnode_printer_enqueues_no_job(): void {
+	public function test_printnode_printer_default_format_enqueues_pdf_job_and_schedules_submit(): void {
 		// Arrange.
 		$tid = $this->create_thermal_template();
 		$this->set_cloud_print(
@@ -327,7 +336,87 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
 
 		// Assert.
-		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'pn' ) ) ) );
+		$jobs = $this->jobs->query( array( 'printer_id' => 'pn' ) );
+		$this->assertEquals( 1, \count( $jobs ) );
+		$job = $this->jobs->get( $jobs[0]['id'] );
+		$this->assertEquals( 'pdf', $job['pn_kind'] );
+		$this->assertEquals( 'application/pdf', $job['content_type'] );
+		$this->assertNotFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $jobs[0]['id'] ) )
+		);
+	}
+
+	/**
+	 * It enqueues an ESC/POS job for a PrintNode printer configured for raw format.
+	 */
+	public function test_printnode_printer_raw_format_enqueues_escpos_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'pn',
+					'name' => 'PrintNode',
+					'provider' => 'printnode',
+					'printnode_format' => 'raw',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'pn',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$jobs = $this->jobs->query( array( 'printer_id' => 'pn' ) );
+		$this->assertEquals( 1, \count( $jobs ) );
+		$job = $this->jobs->get( $jobs[0]['id'] );
+		$this->assertEquals( 'escpos', $job['pn_kind'] );
+		$this->assertEquals( 'application/octet-stream', $job['content_type'] );
+	}
+
+	/**
+	 * It schedules no submit event for a star/epson assignment.
+	 */
+	public function test_star_assignment_schedules_no_submit_event(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id' => 'counter',
+					'name' => 'Counter',
+					'provider' => 'star-cloudprnt',
+				),
+			),
+			array(
+				array(
+					'printer_id' => 'counter',
+					'scope' => 'every',
+					'template_id' => (string) $tid,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$jobs = $this->jobs->query( array( 'printer_id' => 'counter' ) );
+		$this->assertEquals( 1, \count( $jobs ) );
+		$job = $this->jobs->get( $jobs[0]['id'] );
+		$this->assertEquals( 'application/octet-stream', $job['content_type'] );
+		$this->assertFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $jobs[0]['id'] ) )
+		);
 	}
 
 	/**

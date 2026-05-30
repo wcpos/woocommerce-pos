@@ -664,6 +664,7 @@ class Settings extends WP_REST_Controller {
 
 		$existing        = get_option( 'woocommerce_pos_settings_cloud_print', array() );
 		$existing_hashes = array();
+		$existing_keys   = array();
 		$existing_ids    = array();
 		if ( isset( $existing['printers'] ) && \is_array( $existing['printers'] ) ) {
 			foreach ( $existing['printers'] as $printer ) {
@@ -672,6 +673,9 @@ class Settings extends WP_REST_Controller {
 				}
 				if ( ! empty( $printer['id'] ) && ! empty( $printer['poll_token_hash'] ) ) {
 					$existing_hashes[ $printer['id'] ] = $printer['poll_token_hash'];
+				}
+				if ( ! empty( $printer['id'] ) && ! empty( $printer['printnode_api_key'] ) ) {
+					$existing_keys[ $printer['id'] ] = $printer['printnode_api_key'];
 				}
 			}
 		}
@@ -686,6 +690,14 @@ class Settings extends WP_REST_Controller {
 				$printer['id'] = Cloud_Print_Registry::derive_id( $printer['name'], array_merge( $existing_ids, array_keys( $seen_ids ) ) );
 			}
 			$id = $printer['id'];
+
+			// Preserve a previously stored PrintNode API key when the incoming
+			// payload omits it (GET strips the key, so the React app re-POSTs
+			// printers without it when toggling other fields). A non-empty
+			// incoming key still overwrites, letting users rotate it.
+			if ( 'printnode' === $printer['provider'] && '' === $printer['printnode_api_key'] && ! empty( $existing_keys[ $id ] ) ) {
+				$printer['printnode_api_key'] = $existing_keys[ $id ];
+			}
 
 			if ( isset( $seen_ids[ $id ] ) ) {
 				return new WP_REST_Response(
@@ -764,6 +776,8 @@ class Settings extends WP_REST_Controller {
 		if ( 'printnode' === $provider ) {
 			$clean['printnode_api_key']    = sanitize_text_field( $printer['printnode_api_key'] ?? '' );
 			$clean['printnode_printer_id'] = isset( $printer['printnode_printer_id'] ) ? (int) $printer['printnode_printer_id'] : 0;
+			$clean['printnode_format']     = \in_array( $printer['printnode_format'] ?? '', array( 'pdf', 'raw' ), true )
+				? $printer['printnode_format'] : 'pdf';
 		}
 
 		return $clean;

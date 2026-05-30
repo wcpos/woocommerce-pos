@@ -20,6 +20,10 @@ class Print_Job_Service {
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
+	const META_PN_KIND      = '_wcpos_pj_pn_kind';
+	const META_PN_JOB_ID    = '_wcpos_pj_pn_job_id';
+	const META_PN_STATE     = '_wcpos_pj_pn_state';
+	const META_PN_ATTEMPTS  = '_wcpos_pj_pn_attempts';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
@@ -58,7 +62,7 @@ class Print_Job_Service {
 	/**
 	 * Create a print job.
 	 *
-	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format, template_id.
+	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format, template_id, pn_kind.
 	 *
 	 * @return int Job post ID.
 	 */
@@ -89,6 +93,9 @@ class Print_Job_Service {
 		if ( ! empty( $args['template_id'] ) ) {
 			update_post_meta( $id, self::META_TEMPLATE, sanitize_text_field( (string) $args['template_id'] ) );
 		}
+		if ( ! empty( $args['pn_kind'] ) ) {
+			update_post_meta( $id, self::META_PN_KIND, sanitize_text_field( (string) $args['pn_kind'] ) );
+		}
 
 		return (int) $id;
 	}
@@ -114,8 +121,23 @@ class Print_Job_Service {
 			'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
 			'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
 			'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
+			'pn_kind'      => (string) get_post_meta( $id, self::META_PN_KIND, true ),
+			'pn_job_id'    => (int) get_post_meta( $id, self::META_PN_JOB_ID, true ),
+			'pn_state'     => (string) get_post_meta( $id, self::META_PN_STATE, true ),
 			'payload'      => (string) $post->post_content,
 		);
+	}
+
+	/**
+	 * Record a successful PrintNode submission against a job.
+	 *
+	 * @param int    $id        Job ID.
+	 * @param int    $pn_job_id PrintNode print job id.
+	 * @param string $state     PrintNode submission state (e.g. 'submitted').
+	 */
+	public function record_printnode_submission( int $id, int $pn_job_id, string $state ): void {
+		update_post_meta( $id, self::META_PN_JOB_ID, $pn_job_id );
+		update_post_meta( $id, self::META_PN_STATE, sanitize_text_field( $state ) );
 	}
 
 	/**
@@ -126,6 +148,46 @@ class Print_Job_Service {
 	 * @return string
 	 */
 	public function render_payload( array $job ): string {
+		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) && ! empty( $job['pn_kind'] ) ) {
+			$template = is_numeric( $job['template_id'] )
+				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $job['template_id'] )
+				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( (string) $job['template_id'], 'receipt' );
+			if ( null === $template ) {
+				return '';
+			}
+
+			$order = wc_get_order( (int) $job['order_id'] );
+			if ( ! $order ) {
+				return '';
+			}
+
+			if ( 'pdf' === $job['pn_kind'] ) {
+				try {
+					return ( new Template_Pdf_Service() )->render( $template, $order );
+				} catch ( \Throwable $e ) {
+					\WCPOS\WooCommercePOS\Logger::log(
+						sprintf( 'Cloud print: PrintNode PDF render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+					);
+
+					return '';
+				}
+			}
+
+			if ( 'escpos' === $job['pn_kind'] ) {
+				try {
+					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, 'escpos' );
+				} catch ( \Throwable $e ) {
+					\WCPOS\WooCommercePOS\Logger::log(
+						sprintf( 'Cloud print: PrintNode ESC/POS render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+					);
+
+					return '';
+				}
+			}
+
+			return '';
+		}
+
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) ) {
 			$template = is_numeric( $job['template_id'] )
 				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $job['template_id'] )

@@ -2,7 +2,12 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 export type CloudProvider = 'star-cloudprnt' | 'epson-sdp' | 'printnode';
-export type CloudStatus = 'waiting' | 'connected' | 'offline';
+// Star/Epson polling providers report `waiting | connected | offline`; PrintNode
+// reports its real upstream state `online | offline | unknown`.
+export type CloudStatus = 'waiting' | 'connected' | 'offline' | 'online' | 'unknown';
+
+// PrintNode print format. RAW (ESC/POS) is only meaningful for thermal templates.
+export type PrintnodeFormat = 'pdf' | 'raw';
 
 export interface CloudPrinter {
 	id: string;
@@ -18,6 +23,8 @@ export interface CloudPrinter {
 	regenerate_token?: boolean;
 	printnode_api_key?: string; // printnode only
 	printnode_printer_id?: number; // printnode only
+	// read+write (printnode only): job format, defaults to 'pdf' server-side.
+	printnode_format?: PrintnodeFormat;
 }
 
 export interface CloudAssignment {

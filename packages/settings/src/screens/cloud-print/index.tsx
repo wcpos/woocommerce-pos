@@ -140,6 +140,7 @@ function CloudPrint() {
 					? {
 							printnode_api_key: input.printnode_api_key,
 							printnode_printer_id: input.printnode_printer_id,
+							printnode_format: 'pdf' as const,
 					  }
 					: {}),
 			};
@@ -162,6 +163,17 @@ function CloudPrint() {
 			void saveDraft({
 				...current,
 				printers: current.printers.map((p) => (p.id === id ? { ...p, name: newName } : p)),
+			}).catch(() => undefined);
+		},
+		[saveDraft]
+	);
+
+	const handleUpdatePrinter = React.useCallback(
+		(id: string, changes: Partial<CloudPrinter>) => {
+			const current = draftRef.current;
+			void saveDraft({
+				...current,
+				printers: current.printers.map((p) => (p.id === id ? { ...p, ...changes } : p)),
 			}).catch(() => undefined);
 		},
 		[saveDraft]
@@ -233,6 +245,7 @@ function CloudPrint() {
 								printer={printer}
 								onRename={handleRename}
 								onRemove={handleRemove}
+								onUpdate={handleUpdatePrinter}
 								onOpenSetup={(p) => setWizard({ open: true, mode: 'setup', printer: p })}
 							/>
 						))}

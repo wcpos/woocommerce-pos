@@ -8,6 +8,7 @@ import {
 	Chip,
 	DropdownMenu,
 	DropdownMenuItem,
+	Select,
 	Tooltip,
 	useSnackbar,
 	type ChipVariant,
@@ -17,13 +18,19 @@ import { PROVIDERS } from './providers';
 import ConfirmDialog from '../sessions/confirm-dialog';
 import { i18n, t } from '../../translations';
 
-import type { CloudPrinter, CloudStatus } from '../../hooks/use-cloud-print-settings';
+import type {
+	CloudPrinter,
+	CloudStatus,
+	PrintnodeFormat,
+} from '../../hooks/use-cloud-print-settings';
 
 export interface PrinterCardProps {
 	printer: CloudPrinter;
 	onRename: (id: string, newName: string) => void;
 	onRemove: (printer: CloudPrinter) => void;
 	onOpenSetup: (printer: CloudPrinter) => void;
+	/** Persist arbitrary field changes (e.g. the PrintNode print format). */
+	onUpdate: (id: string, changes: Partial<CloudPrinter>) => void;
 }
 
 interface StatusMeta {
@@ -33,13 +40,22 @@ interface StatusMeta {
 
 /**
  * Map a printer's connection status to a Chip variant + localized label.
+ *
+ * Polling providers (Star/Epson) report `connected | waiting | offline`.
+ * PrintNode reports its real upstream state `online | offline | unknown`
+ * (or `undefined` before the first status read).
  */
 function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): StatusMeta {
-	// Non-polling providers (PrintNode) push jobs and never check in, so the
-	// poll-derived status is meaningless — show a neutral "Linked" chip instead
-	// of a misleading "Waiting for printer". A real PrintNode status lands in P4.
 	if (!isPolling) {
-		return { variant: 'info', label: t('cloud_print.status_linked', 'Linked') };
+		switch (status) {
+			case 'online':
+				return { variant: 'success', label: t('cloud_print.status_online', 'Online') };
+			case 'offline':
+				return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };
+			case 'unknown':
+			default:
+				return { variant: 'info', label: t('cloud_print.status_unknown', 'Unknown') };
+		}
 	}
 	switch (status) {
 		case 'connected':
@@ -53,6 +69,17 @@ function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): Sta
 		default:
 			return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };
 	}
+}
+
+/** PDF/RAW options for the PrintNode format control. */
+function formatOptions(): { value: PrintnodeFormat; label: string }[] {
+	return [
+		{ value: 'pdf', label: t('cloud_print.format_pdf', 'PDF (recommended)') },
+		{
+			value: 'raw',
+			label: t('cloud_print.format_raw', 'ESC/POS RAW — thermal templates only'),
+		},
+	];
 }
 
 const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
@@ -98,10 +125,19 @@ export function formatRelative(unixSeconds: number, locale?: string): string {
  * "Waiting jobs" count is intentionally omitted in P2 to avoid an extra API
  * call; it can be added in a later phase.
  */
-export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: PrinterCardProps) {
+export function PrinterCard({
+	printer,
+	onRename,
+	onRemove,
+	onOpenSetup,
+	onUpdate,
+}: PrinterCardProps) {
 	const { addSnackbar } = useSnackbar();
 	const provider = PROVIDERS[printer.provider];
 	const status = getStatusMeta(printer.status, provider.isPolling);
+	const isPrintNode = printer.provider === 'printnode';
+	// Render the absent field as the server default ('pdf').
+	const format: PrintnodeFormat = printer.printnode_format ?? 'pdf';
 
 	const [name, setName] = React.useState(printer.name);
 	const [testing, setTesting] = React.useState(false);
@@ -143,30 +179,17 @@ export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: Printe
 				status: 'success',
 			});
 		} catch (err) {
-			const status400 =
+			// PrintNode is now a supported test-print target; surface the server's
+			// error message (e.g. unconfigured 400, submit-failure 502) rather than
+			// the old "not available yet" copy.
+			const message =
 				typeof err === 'object' &&
 				err !== null &&
-				'data' in err &&
-				typeof (err as { data?: { status?: number } }).data === 'object' &&
-				(err as { data?: { status?: number } }).data?.status === 400;
-			if (status400) {
-				addSnackbar({
-					message: t(
-						'cloud_print.test_unavailable',
-						"Test print isn't available for this printer yet."
-					),
-					status: 'info',
-				});
-			} else {
-				const message =
-					typeof err === 'object' &&
-					err !== null &&
-					'message' in err &&
-					typeof (err as { message?: string }).message === 'string'
-						? (err as { message: string }).message
-						: t('cloud_print.test_failed', 'Test print failed.');
-				addSnackbar({ message, status: 'error' });
-			}
+				'message' in err &&
+				typeof (err as { message?: string }).message === 'string'
+					? (err as { message: string }).message
+					: t('cloud_print.test_failed', 'Test print failed.');
+			addSnackbar({ message, status: 'error' });
 		} finally {
 			setTesting(false);
 		}
@@ -274,6 +297,26 @@ export function PrinterCard({ printer, onRename, onRemove, onOpenSetup }: Printe
 							</span>
 						</Tooltip>
 					</dd>
+
+					{isPrintNode && (
+						<>
+							<dt className="wcpos:text-gray-500">
+								{t('cloud_print.format', 'Print format')}
+							</dt>
+							<dd className="wcpos:text-gray-900">
+								<Select
+									data-testid={`printer-card-format-${printer.id}`}
+									aria-label={t('cloud_print.format', 'Print format')}
+									className="wcpos:w-auto"
+									value={format}
+									options={formatOptions()}
+									onChange={({ value }) =>
+										onUpdate(printer.id, { printnode_format: value as PrintnodeFormat })
+									}
+								/>
+							</dd>
+						</>
+					)}
 				</dl>
 			</Card.Body>
 

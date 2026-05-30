@@ -16,6 +16,11 @@ class Cloud_Print_Trigger_Service {
 	const OPTION = 'woocommerce_pos_settings_cloud_print';
 
 	/**
+	 * Cron hook used to submit a PrintNode job out-of-band (never on checkout).
+	 */
+	const CRON_SUBMIT = 'wcpos_cloud_print_submit';
+
+	/**
 	 * Job store.
 	 *
 	 * @var Print_Job_Service
@@ -94,6 +99,35 @@ class Cloud_Print_Trigger_Service {
 				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
 				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
 			if ( null === $template ) {
+				continue;
+			}
+
+			if ( 'printnode' === $provider ) {
+				$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
+				if ( '' === $fmt['kind'] ) {
+					Logger::log(
+						sprintf(
+							'Cloud print: skipping PrintNode assignment for printer "%s" — no printable format for template.',
+							(string) $assignment['printer_id']
+						)
+					);
+
+					continue;
+				}
+
+				$job_id = $this->jobs->create(
+					array(
+						'printer_id'   => (string) $assignment['printer_id'],
+						'order_id'     => $order->get_id(),
+						'template_id'  => $template_id,
+						'content_type' => $fmt['content_type'],
+						'pn_kind'      => $fmt['kind'],
+					)
+				);
+				if ( $job_id > 0 ) {
+					wp_schedule_single_event( time(), self::CRON_SUBMIT, array( $job_id ) );
+				}
+
 				continue;
 			}
 

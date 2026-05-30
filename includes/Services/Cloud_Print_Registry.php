@@ -15,6 +15,7 @@ class Cloud_Print_Registry {
 
 	const RUNTIME_OPTION = 'woocommerce_pos_cloud_print_runtime';
 	const SEEN_TTL       = 150; // Seconds; connected if seen within this window.
+	const PN_STATUS_TTL  = 60;  // Seconds; PrintNode live-status cache window.
 
 	/**
 	 * Get a registered cloud printer by id.
@@ -136,19 +137,58 @@ class Cloud_Print_Registry {
 	}
 
 	/**
-	 * Connection status for a printer: 'waiting' (never polled), 'connected'
-	 * (polled within SEEN_TTL), or 'offline' (polled, but stale).
+	 * Connection status for a printer.
+	 *
+	 * For PrintNode printers this returns PrintNode's live vocabulary
+	 * ('online'|'offline'|'unknown'), cached briefly. For polling printers
+	 * (Star/Epson) it returns 'waiting' (never polled), 'connected' (polled
+	 * within SEEN_TTL), or 'offline' (polled, but stale).
 	 *
 	 * @param string $printer_id Printer id.
 	 *
 	 * @return string
 	 */
 	public function status_for( string $printer_id ): string {
+		$printer = $this->get_printer( $printer_id );
+		if ( null !== $printer && 'printnode' === ( $printer['provider'] ?? '' ) ) {
+			return $this->printnode_status( $printer );
+		}
+
 		$seen = $this->get_seen( $printer_id );
 		if ( 0 === $seen ) {
 			return 'waiting';
 		}
 
 		return ( time() - $seen ) <= self::SEEN_TTL ? 'connected' : 'offline';
+	}
+
+	/**
+	 * Resolve a PrintNode printer's live status, cached for PN_STATUS_TTL seconds.
+	 *
+	 * All outcomes are cached, including 'unknown'/'offline', to avoid hammering
+	 * the PrintNode API on every settings read.
+	 *
+	 * @param array $printer Registered PrintNode printer.
+	 *
+	 * @return string 'online', 'offline', or 'unknown'.
+	 */
+	private function printnode_status( array $printer ): string {
+		$key    = 'wcpos_cloud_print_pn_status_' . md5( (string) $printer['id'] );
+		$cached = get_transient( $key );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
+		$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
+		if ( '' === $api_key || 0 === $pn_printer_id ) {
+			$status = 'unknown';
+		} else {
+			$status = ( new PrintNode_Client( $api_key ) )->printer_state( $pn_printer_id );
+		}
+
+		set_transient( $key, $status, self::PN_STATUS_TTL );
+
+		return $status;
 	}
 }

@@ -1,0 +1,64 @@
+<?php
+
+declare (strict_types=1);
+namespace WCPOS\Vendor\Sabberworm\CSS\Value;
+
+use WCPOS\Vendor\Sabberworm\CSS\OutputFormat;
+use WCPOS\Vendor\Sabberworm\CSS\Parsing\ParserState;
+use WCPOS\Vendor\Sabberworm\CSS\Parsing\UnexpectedEOFException;
+use WCPOS\Vendor\Sabberworm\CSS\Parsing\UnexpectedTokenException;
+class LineName extends ValueList
+{
+    /**
+     * @param array<Value|string> $components
+     * @param int<1, max>|null $lineNumber
+     */
+    public function __construct(array $components = [], ?int $lineNumber = null)
+    {
+        parent::__construct($components, ' ', $lineNumber);
+    }
+    /**
+     * @throws UnexpectedTokenException
+     * @throws UnexpectedEOFException
+     *
+     * @internal since V8.8.0
+     */
+    public static function parse(ParserState $parserState) : LineName
+    {
+        $parserState->consume('[');
+        $parserState->consumeWhiteSpace();
+        $names = [];
+        do {
+            if ($parserState->getSettings()->usesLenientParsing()) {
+                try {
+                    $names[] = $parserState->parseIdentifier();
+                } catch (UnexpectedTokenException $e) {
+                    if (!$parserState->comes(']')) {
+                        throw $e;
+                    }
+                }
+            } else {
+                $names[] = $parserState->parseIdentifier();
+            }
+            $parserState->consumeWhiteSpace();
+        } while (!$parserState->comes(']'));
+        $parserState->consume(']');
+        return new LineName($names, $parserState->currentLine());
+    }
+    /**
+     * @return non-empty-string
+     */
+    public function render(OutputFormat $outputFormat) : string
+    {
+        return '[' . parent::render(OutputFormat::createCompact()) . ']';
+    }
+    /**
+     * @return array<string, bool|int|float|string|array<mixed>|null>
+     *
+     * @internal
+     */
+    public function getArrayRepresentation() : array
+    {
+        throw new \BadMethodCallException('`getArrayRepresentation` is not yet implemented for `' . self::class . '`');
+    }
+}
