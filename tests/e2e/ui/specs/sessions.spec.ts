@@ -15,11 +15,11 @@ test.describe('Sessions Settings', () => {
 	});
 
 	test('renders the manage-sessions description', async ({ adminPage }) => {
-		// Either the user list with sessions OR the empty-state notice must
-		// render, but the descriptive notice is shown in both cases.
-		await expect(
-			adminPage.getByText('Manage active user sessions', { exact: false })
-		).toBeVisible({ timeout: 10000 });
+		// The descriptive notice renders whether or not any users have active
+		// sessions. Match by testid, not the translated notice copy.
+		await expect(adminPage.getByTestId('sessions-manage-description')).toBeVisible({
+			timeout: 10000,
+		});
 	});
 
 	test('current admin user has at least one session in the list', async ({ adminPage }) => {

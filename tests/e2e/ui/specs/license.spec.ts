@@ -15,8 +15,8 @@ test.describe('License Settings', () => {
 		// Free plugin in CI has no Pro license registered, so the page renders
 		// the upgrade CTA. This proves the screen mounted past the loading
 		// state — without it the screen would be blank when the license API
-		// returns no instance.
-		await expect(adminPage.getByText('Upgrade to Pro')).toBeVisible({ timeout: 10000 });
+		// returns no instance. Match by testid, not the translated CTA copy.
+		await expect(adminPage.getByTestId('license-upgrade-cta')).toBeVisible({ timeout: 10000 });
 	});
 
 	test('upgrade CTA links point at the WCPOS Pro page', async ({ adminPage }) => {

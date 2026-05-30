@@ -23,12 +23,13 @@ test.describe('Settings Page', () => {
 		const nav = adminPage.locator('aside');
 		await expect(nav).toBeVisible({ timeout: 15000 });
 
-		// All five nav links should be present
-		await expect(nav.getByText('General')).toBeVisible();
-		await expect(nav.getByText('Checkout')).toBeVisible();
-		await expect(nav.getByText('Access')).toBeVisible();
-		await expect(nav.getByText('Sessions')).toBeVisible();
-		await expect(nav.getByText('License')).toBeVisible();
+		// All five core nav links should be present. Match by stable route
+		// testids rather than translated labels, which change per locale.
+		await expect(adminPage.getByTestId('settings-nav-general')).toBeVisible();
+		await expect(adminPage.getByTestId('settings-nav-checkout')).toBeVisible();
+		await expect(adminPage.getByTestId('settings-nav-access')).toBeVisible();
+		await expect(adminPage.getByTestId('settings-nav-sessions')).toBeVisible();
+		await expect(adminPage.getByTestId('settings-nav-license')).toBeVisible();
 	});
 
 	test('Defaults to General page', async ({ adminPage }) => {

@@ -24,10 +24,11 @@ test.describe('Checkout Settings', () => {
 		const table = adminPage.locator('table');
 		await expect(table).toBeVisible({ timeout: 10000 });
 
-		// Verify the expected column headers
-		await expect(table.locator('th').getByText('Default')).toBeVisible();
-		await expect(table.locator('th').getByText('Gateway', { exact: true })).toBeVisible();
-		await expect(table.locator('th').getByText('Enabled')).toBeVisible();
+		// Verify the expected column headers. Match by stable testids on the
+		// header cells rather than translated header text.
+		await expect(adminPage.getByTestId('gateways-th-default')).toBeVisible();
+		await expect(adminPage.getByTestId('gateways-th-gateway')).toBeVisible();
+		await expect(adminPage.getByTestId('gateways-th-enabled')).toBeVisible();
 	});
 
 	test('Gateways table has at least one row', async ({ adminPage }) => {
