@@ -42,6 +42,33 @@ class Thermal_Renderer {
 	 * @return string The rendered wire-format payload.
 	 */
 	public function render( array $template, WC_Abstract_Order $order, string $wire_format ): string {
+		$ast = $this->build_ast( $template, $order );
+
+		switch ( $wire_format ) {
+			case 'escpos':
+				return ( new Escpos_Thermal_Emitter() )->emit( $ast );
+			case 'epos-xml':
+				return ( new Epos_Xml_Thermal_Emitter() )->emit( $ast );
+			default:
+				throw new InvalidArgumentException(
+					esc_html( "Unsupported thermal wire format: {$wire_format}" )
+				);
+		}
+	}
+
+	/**
+	 * Build the thermal AST for an order from a template.
+	 *
+	 * Shared pipeline used by both render() and the PDF path: Mustache-render the
+	 * template against canonical receipt data, strip XML-illegal control characters,
+	 * then parse the markup into an AST.
+	 *
+	 * @param array             $template Template metadata/content.
+	 * @param WC_Abstract_Order $order    The order to render.
+	 *
+	 * @return array The thermal AST root (a receipt node).
+	 */
+	public function build_ast( array $template, WC_Abstract_Order $order ): array {
 		$content = (string) ( $template['content'] ?? '' );
 
 		$data = ( new Receipt_Data_Builder() )->build( $order, 'live' );
@@ -80,17 +107,6 @@ class Thermal_Renderer {
 			$xml = $stripped;
 		}
 
-		$ast = ( new Thermal_Markup_Parser() )->parse( $xml );
-
-		switch ( $wire_format ) {
-			case 'escpos':
-				return ( new Escpos_Thermal_Emitter() )->emit( $ast );
-			case 'epos-xml':
-				return ( new Epos_Xml_Thermal_Emitter() )->emit( $ast );
-			default:
-				throw new InvalidArgumentException(
-					esc_html( "Unsupported thermal wire format: {$wire_format}" )
-				);
-		}
+		return ( new Thermal_Markup_Parser() )->parse( $xml );
 	}
 }
