@@ -22,21 +22,19 @@ class Cloud_Print_Diagnostic {
 	 * @throws \RuntimeException When the provider has no server-side diagnostic (PrintNode: see Phase 4).
 	 */
 	public function build( string $provider, string $printer_name ): array {
-		$date = gmdate( 'Y-m-d H:i' );
-		if ( 'star-cloudprnt' === $provider ) {
-			return array(
-				'content_type' => 'application/octet-stream',
-				'payload'      => base64_encode( $this->escpos( $printer_name, $date ) ),
-			);
-		}
-		if ( 'epson-sdp' === $provider ) {
-			return array(
-				'content_type' => 'application/xml',
-				'payload'      => base64_encode( $this->epos( $printer_name, $date ) ),
-			);
+		if ( ! Provider::supports_server_diagnostic( $provider ) ) {
+			throw new \RuntimeException( esc_html( 'No server-side diagnostic for provider: ' . $provider ) );
 		}
 
-		throw new \RuntimeException( esc_html( 'No server-side diagnostic for provider: ' . $provider ) );
+		$date    = gmdate( 'Y-m-d H:i' );
+		$payload = 'epson-sdp' === $provider
+			? $this->epos( $printer_name, $date )
+			: $this->escpos( $printer_name, $date );
+
+		return array(
+			'content_type' => Provider::content_type( $provider ),
+			'payload'      => base64_encode( $payload ),
+		);
 	}
 
 	/**

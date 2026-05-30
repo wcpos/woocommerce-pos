@@ -17,6 +17,7 @@ class Print_Job_Service {
 	const META_CTYPE      = '_wcpos_pj_content_type';
 	const META_ORDER_ID   = '_wcpos_pj_order_id';
 	const META_FORMAT     = '_wcpos_pj_format';
+	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
@@ -57,7 +58,7 @@ class Print_Job_Service {
 	/**
 	 * Create a print job.
 	 *
-	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format.
+	 * @param array $args printer_id (required), content_type, payload (base64), order_id, format, template_id.
 	 *
 	 * @return int Job post ID.
 	 */
@@ -85,6 +86,9 @@ class Print_Job_Service {
 		if ( ! empty( $args['format'] ) ) {
 			update_post_meta( $id, self::META_FORMAT, sanitize_text_field( $args['format'] ) );
 		}
+		if ( ! empty( $args['template_id'] ) ) {
+			update_post_meta( $id, self::META_TEMPLATE, sanitize_text_field( (string) $args['template_id'] ) );
+		}
 
 		return (int) $id;
 	}
@@ -109,6 +113,7 @@ class Print_Job_Service {
 			'content_type' => (string) get_post_meta( $id, self::META_CTYPE, true ),
 			'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
 			'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
+			'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
 			'payload'      => (string) $post->post_content,
 		);
 	}
@@ -121,6 +126,40 @@ class Print_Job_Service {
 	 * @return string
 	 */
 	public function render_payload( array $job ): string {
+		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) ) {
+			$template = is_numeric( $job['template_id'] )
+				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $job['template_id'] )
+				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( (string) $job['template_id'], 'receipt' );
+			if ( null === $template ) {
+				return '';
+			}
+
+			$printer  = ( new Cloud_Print_Registry() )->get_printer( (string) $job['printer_id'] );
+			$provider = $printer['provider'] ?? 'star-cloudprnt';
+			$wire     = Provider::wire_format( $provider, (string) ( $template['engine'] ?? '' ) );
+			if ( null === $wire ) {
+				return '';
+			}
+
+			$order = wc_get_order( (int) $job['order_id'] );
+			if ( ! $order ) {
+				return '';
+			}
+
+			try {
+				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, $wire );
+			} catch ( \Throwable $e ) {
+				// Defense in depth: never let a malformed template/payload bubble up
+				// as a 500 and leave the poll's claimed job stuck. Returning empty
+				// lets the caller treat the job as having nothing to print.
+				\WCPOS\WooCommercePOS\Logger::log(
+					sprintf( 'Cloud print: thermal render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
+				);
+
+				return '';
+			}
+		}
+
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['format'] ) ) {
 			$order = wc_get_order( (int) $job['order_id'] );
 			if ( ! $order ) {

@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Logger;
+
 /**
  * Cloud_Print_Trigger_Service class.
  */
@@ -21,10 +23,18 @@ class Cloud_Print_Trigger_Service {
 	private $jobs;
 
 	/**
+	 * Printer registry.
+	 *
+	 * @var Cloud_Print_Registry
+	 */
+	private $registry;
+
+	/**
 	 * Constructor — hook order events.
 	 */
 	public function __construct() {
-		$this->jobs = new Print_Job_Service();
+		$this->jobs     = new Print_Job_Service();
+		$this->registry = new Cloud_Print_Registry();
 		add_action( 'woocommerce_new_order', array( $this, 'handle_order' ), 20, 1 );
 		add_action( 'woocommerce_order_status_changed', array( $this, 'handle_order' ), 20, 1 );
 	}
@@ -62,7 +72,7 @@ class Cloud_Print_Trigger_Service {
 		$is_pos = 'woocommerce-pos' === $order->get_created_via();
 
 		foreach ( $assignments as $assignment ) {
-			if ( empty( $assignment['printer_id'] ) || empty( $assignment['format'] ) ) {
+			if ( empty( $assignment['printer_id'] ) || empty( $assignment['template_id'] ) ) {
 				continue;
 			}
 			$scope = isset( $assignment['scope'] ) ? (string) $assignment['scope'] : 'every';
@@ -73,12 +83,41 @@ class Cloud_Print_Trigger_Service {
 				continue;
 			}
 
+			$printer = $this->registry->get_printer( (string) $assignment['printer_id'] );
+			if ( empty( $printer ) ) {
+				continue;
+			}
+			$provider = (string) ( $printer['provider'] ?? '' );
+
+			$template_id = (string) $assignment['template_id'];
+			$template    = is_numeric( $template_id )
+				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
+				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+			if ( null === $template ) {
+				continue;
+			}
+
+			$engine = (string) ( $template['engine'] ?? '' );
+			$wire   = Provider::wire_format( $provider, $engine );
+			if ( null === $wire ) {
+				Logger::log(
+					sprintf(
+						'Cloud print: skipping assignment for printer "%s" — template engine "%s" is not printable on provider "%s".',
+						(string) $assignment['printer_id'],
+						$engine,
+						$provider
+					)
+				);
+
+				continue;
+			}
+
 			$this->jobs->create(
 				array(
 					'printer_id'   => (string) $assignment['printer_id'],
-					'content_type' => 'epos-xml' === $assignment['format'] ? 'application/xml' : 'application/octet-stream',
+					'content_type' => Provider::content_type( $provider ),
 					'order_id'     => $order->get_id(),
-					'format'       => (string) $assignment['format'],
+					'template_id'  => $template_id,
 				)
 			);
 		}

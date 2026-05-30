@@ -14,6 +14,7 @@ export interface ReceiptTemplate {
 export interface TemplateOption {
 	value: string;
 	label: string;
+	engine: TemplateEngine;
 }
 
 const ENDPOINT = 'wcpos/v1/templates?wcpos=1&type=receipt';
@@ -22,8 +23,9 @@ const ENDPOINT = 'wcpos/v1/templates?wcpos=1&type=receipt';
  * Receipt-template options for the cloud-print rule picker.
  *
  * Derived from the templates endpoint, filtered to templates that are published
- * or active. Drafts that are not active are dropped. P2 does not filter by
- * engine (that is handled in P3).
+ * or active. Drafts that are not active are dropped. The `engine` is threaded
+ * through so the rule picker can filter per-printer (thermal-only for direct
+ * polling printers); see `templateOptionsForProvider`.
  */
 export function useReceiptTemplateOptions(): TemplateOption[] {
 	const { data } = useSuspenseQuery<ReceiptTemplate[]>({
@@ -33,5 +35,9 @@ export function useReceiptTemplateOptions(): TemplateOption[] {
 
 	return data
 		.filter((template) => template.status === 'publish' || template.is_active === true)
-		.map((template) => ({ value: String(template.id), label: template.title }));
+		.map((template) => ({
+			value: String(template.id),
+			label: template.title,
+			engine: template.engine,
+		}));
 }

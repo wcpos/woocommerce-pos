@@ -49,18 +49,20 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 	 * It returns zero when WordPress rejects the job insert.
 	 */
 	public function test_create_returns_zero_when_insert_fails(): void {
-		if ( post_type_exists( Print_Job_Service::POST_TYPE ) ) {
-			unregister_post_type( Print_Job_Service::POST_TYPE );
-		}
+		// Force wp_insert_post() to reject the insert with a WP_Error.
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
 
 		$service = new Print_Job_Service();
-		$id      = $service->create(
+		$service->register_post_type();
+		$id = $service->create(
 			array(
 				'printer_id'   => 'printer-1',
 				'content_type' => 'application/octet-stream',
 				'payload'      => base64_encode( 'x' ),
 			)
 		);
+
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
 
 		$this->assertEquals( 0, $id );
 	}
@@ -91,5 +93,4 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'claimed', $service->get( $first_id )['status'] );
 		$this->assertEquals( 'pending', $service->get( $second_id )['status'] );
 	}
-
 }
