@@ -1,15 +1,13 @@
 import * as React from 'react';
 
-import apiFetch from '@wordpress/api-fetch';
-
 import { Button, Callout, FormSection, useSnackbar } from '@wcpos/ui';
 
 import {
 	AddPrinterWizard,
 	type NewPrinterInput,
-	type PrintNodePrinterOption,
 } from './add-printer-wizard';
 import { AutoPrintRules } from './auto-print-rules';
+import { fetchPrintNodePrinters } from './fetch-printnode-printers';
 import { PrinterCard } from './printer-card';
 import {
 	type CloudPrintSettings,
@@ -204,15 +202,6 @@ function CloudPrint() {
 		},
 		[saveDraft]
 	);
-
-	const fetchPrintNodePrinters = React.useCallback(async (apiKey: string) => {
-		const res = (await apiFetch({
-			path: 'wcpos/v1/printnode/printers',
-			method: 'POST',
-			data: { api_key: apiKey },
-		})) as { printers?: PrintNodePrinterOption[] };
-		return res.printers ?? [];
-	}, []);
 
 	return (
 		<div className="wcpos:flex wcpos:flex-col wcpos:gap-6 wcpos:px-4 wcpos:pb-5">
