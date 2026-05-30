@@ -178,6 +178,79 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It renders PDF bytes for a PrintNode pdf job.
+	 */
+	public function test_render_payload_renders_pdf_for_printnode_pdf_job(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'pn',
+						'name'     => 'PrintNode',
+						'provider' => 'printnode',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'  => 'pn',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+				'pn_kind'     => 'pdf',
+			)
+		);
+
+		// Act.
+		$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		// Assert.
+		$this->assertSame( '%PDF-', substr( $out, 0, 5 ) );
+	}
+
+	/**
+	 * It renders ESC/POS bytes for a PrintNode escpos job.
+	 */
+	public function test_render_payload_renders_escpos_for_printnode_escpos_job(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'pn',
+						'name'     => 'PrintNode',
+						'provider' => 'printnode',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'  => 'pn',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+				'pn_kind'     => 'escpos',
+			)
+		);
+
+		// Act.
+		$out = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		// Assert.
+		$this->assertNotSame( '', $out );
+		$this->assertSame( "\x1b\x40", substr( $out, 0, 2 ) );
+	}
+
+	/**
 	 * It returns an empty string (no throw) when the thermal renderer fails.
 	 *
 	 * A template whose root is not <receipt> makes the markup parser throw even

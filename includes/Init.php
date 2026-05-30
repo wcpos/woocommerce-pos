@@ -260,6 +260,7 @@ class Init {
 		new Templates();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
+		new Services\Cloud_Print_Submit_Service();
 	}
 
 	/**
