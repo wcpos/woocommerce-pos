@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
@@ -144,6 +145,69 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/printnode/printers',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'printnode_printers' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Proxy the PrintNode account's printer list for the add-printer wizard.
+	 *
+	 * The API key is supplied in the POST body (never the URL/query, so it does
+	 * not leak through logs or history) and is used only for this request; it is
+	 * never returned. Only id/name/state are surfaced to the client.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function printnode_printers( $request ) {
+		$api_key = (string) $request->get_param( 'api_key' );
+		if ( '' === $api_key ) {
+			return new WP_Error(
+				'wcpos_printnode_missing_api_key',
+				__( 'A PrintNode API key is required.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = ( new PrintNode_Client( $api_key ) )->printers();
+		if ( is_wp_error( $result ) ) {
+			$data   = $result->get_error_data();
+			$status = is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 502;
+			if ( $status < 400 || $status > 599 ) {
+				$status = 502;
+			}
+
+			return new WP_Error(
+				'wcpos_printnode_printers_failed',
+				$result->get_error_message(),
+				array( 'status' => $status )
+			);
+		}
+
+		$printers = array();
+		foreach ( (array) $result as $printer ) {
+			if ( ! is_array( $printer ) || ! isset( $printer['id'] ) ) {
+				continue;
+			}
+			$printers[] = array(
+				'id'    => (int) $printer['id'],
+				'name'  => (string) ( $printer['name'] ?? '' ),
+				'state' => (string) ( $printer['state'] ?? '' ),
+			);
+		}
+
+		return new WP_REST_Response( array( 'printers' => $printers ), 200 );
 	}
 
 
@@ -438,12 +502,34 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$payload = (string) $request->get_param( 'payload' );
-		$format  = (string) $request->get_param( 'format' );
+		$payload     = (string) $request->get_param( 'payload' );
+		$format      = (string) $request->get_param( 'format' );
+		$template_id = sanitize_text_field( (string) $request->get_param( 'template_id' ) );
+		$order_id    = (int) $request->get_param( 'order_id' );
 
-		$validation = $this->validate_job_for_printer( $this->registry->get_printer( $printer_id ), $payload, $format );
+		$printer    = $this->registry->get_printer( $printer_id );
+		$validation = $this->validate_job_for_printer( $printer, $payload, $format );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
+		}
+
+		$provider = null !== $printer ? (string) ( $printer['provider'] ?? '' ) : '';
+
+		// PrintNode never polls, so a raw payload could never be delivered — a
+		// PrintNode job must be order-based (rendered + submitted out-of-band).
+		if ( 'printnode' === $provider && ( 0 === $order_id || '' === $template_id ) ) {
+			return new WP_Error(
+				'wcpos_print_job_printnode_requires_template',
+				__( 'PrintNode print jobs require an order and a template.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// Order-based job: render server-side from the order + template, deriving
+		// the wire format from the printer's provider (shared with the auto-print
+		// trigger). Star/Epson are fetched on poll; PrintNode is submitted.
+		if ( null !== $printer && 0 !== $order_id && '' !== $template_id ) {
+			return $this->create_order_job( $printer_id, $printer, $order_id, $template_id );
 		}
 
 		$id = $this->jobs->create(
@@ -451,7 +537,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'printer_id'   => $printer_id,
 				'content_type' => (string) $request->get_param( 'content_type' ),
 				'payload'      => $payload,
-				'order_id'     => $request->get_param( 'order_id' ),
+				'order_id'     => $order_id,
 				'format'       => $format,
 			)
 		);
@@ -460,6 +546,49 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'wcpos_print_job_create_failed',
 				__( 'Print job could not be created.', 'woocommerce-pos' ),
 				array( 'status' => 500 )
+			);
+		}
+
+		$response = rest_ensure_response( $this->jobs->get( $id ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Enqueue an order-based job, deriving the wire format from the printer's
+	 * provider via the shared trigger-service helper.
+	 *
+	 * @param string $printer_id  Registered printer id.
+	 * @param array  $printer     Registered printer config.
+	 * @param int    $order_id    Order id to render.
+	 * @param string $template_id Template id (numeric) or virtual slug.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function create_order_job( string $printer_id, array $printer, int $order_id, string $template_id ) {
+		$template = Cloud_Print_Trigger_Service::load_template( $template_id );
+		if ( null === $template ) {
+			return new WP_Error(
+				'wcpos_print_job_unknown_template',
+				__( 'Unknown template.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$id = Cloud_Print_Trigger_Service::enqueue_order_job(
+			$this->jobs,
+			$printer_id,
+			$printer,
+			$order_id,
+			$template_id,
+			$template
+		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_template_not_printable',
+				__( 'The selected template cannot be printed on this printer.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
 			);
 		}
 

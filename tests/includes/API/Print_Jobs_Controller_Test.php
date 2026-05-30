@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
 /**
@@ -43,7 +45,42 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 			remove_filter( 'pre_http_request', $this->http_filter, 10 );
 			$this->http_filter = null;
 		}
+		wp_clear_scheduled_hook( Cloud_Print_Trigger_Service::CRON_SUBMIT );
+		delete_option( 'woocommerce_pos_settings_cloud_print' );
 		parent::tearDown();
+	}
+
+	/**
+	 * Create a thermal template post with raw markup, bypassing wp_kses.
+	 *
+	 * Mirrors the trigger-service test helper: wp_insert_post() runs content
+	 * through wp_kses for users without unfiltered_html, stripping the custom
+	 * thermal tags, so the content is written directly via $wpdb.
+	 *
+	 * @return int Template post ID.
+	 */
+	private function create_thermal_template(): int {
+		$tid = wp_insert_post(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => 'T',
+			)
+		);
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' ),
+			array( 'ID' => $tid ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $tid );
+		update_post_meta( $tid, '_template_engine', 'thermal' );
+		wp_set_object_terms( $tid, 'receipt', 'wcpos_template_type' );
+
+		return (int) $tid;
 	}
 
 	/**
@@ -126,6 +163,109 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 400, $response->get_status() );
 		$this->assertEquals( 'wcpos_print_job_incompatible', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * It enqueues an order-based PrintNode job and schedules its submit event.
+	 */
+	public function test_enqueue_order_based_printnode_job_schedules_submit(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                   => 'bar',
+						'name'                 => 'Bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+					),
+				),
+			)
+		);
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'  => 'bar',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+			)
+		);
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'pending', $data['status'] );
+		$this->assertEquals( 'pdf', $data['pn_kind'] );
+		$this->assertEquals( 'application/pdf', $data['content_type'] );
+		$this->assertNotFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $data['id'] ) )
+		);
+	}
+
+	/**
+	 * It rejects a PrintNode job that has no order + template (nothing to render/submit).
+	 */
+	public function test_enqueue_printnode_without_template_returns_400(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                   => 'bar',
+						'name'                 => 'Bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+					),
+				),
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params( array( 'printer_id' => 'bar' ) );
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_printnode_requires_template', $response->as_error()->get_error_code() );
+	}
+
+	/**
+	 * It enqueues a pending order-based job for an Epson printer (rendered on poll).
+	 */
+	public function test_enqueue_order_based_epson_job_returns_201_pending(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'epson-1',
+						'name'     => 'Epson',
+						'provider' => 'epson-sdp',
+					),
+				),
+			)
+		);
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'  => 'epson-1',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+			)
+		);
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( 'pending', $data['status'] );
+		$this->assertEquals( (string) $tid, $data['template_id'] );
 	}
 
 	/**
@@ -326,6 +466,82 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertEquals( 502, $res->get_status() );
 		$this->assertEquals( 'wcpos_print_job_printnode_failed', $res->as_error()->get_error_code() );
+	}
+
+	/**
+	 * It proxies the PrintNode printer list, mapped to id/name/state only.
+	 */
+	public function test_printnode_printers_returns_mapped_list(): void {
+		$this->mock_http(
+			$this->fake_response(
+				array(
+					array(
+						'id'          => 73,
+						'name'        => 'Front Desk',
+						'state'       => 'online',
+						'description' => 'should be dropped',
+					),
+					array(
+						'id'    => 88,
+						'name'  => 'Kitchen',
+						'state' => 'offline',
+					),
+				)
+			)
+		);
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/printnode/printers' );
+		$req->set_body_params( array( 'api_key' => 'KEY' ) );
+		$res  = rest_do_request( $req );
+		$data = $res->get_data();
+
+		$this->assertEquals( 200, $res->get_status() );
+		$this->assertEquals(
+			array(
+				array(
+					'id'    => 73,
+					'name'  => 'Front Desk',
+					'state' => 'online',
+				),
+				array(
+					'id'    => 88,
+					'name'  => 'Kitchen',
+					'state' => 'offline',
+				),
+			),
+			$data['printers']
+		);
+		// The API key must be sent via Basic auth, never echoed back.
+		$this->assertArrayNotHasKey( 'api_key', (array) $data );
+	}
+
+	/**
+	 * It rejects a printer-list request with no API key, without any HTTP call.
+	 */
+	public function test_printnode_printers_missing_api_key_returns_400(): void {
+		$this->mock_http( new \WP_Error( 'should_not_be_called', 'no http' ) );
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/printnode/printers' );
+		$req->set_body_params( array() );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 400, $res->get_status() );
+		$this->assertEquals( 'wcpos_printnode_missing_api_key', $res->as_error()->get_error_code() );
+		$this->assertEquals( array(), $this->captured );
+	}
+
+	/**
+	 * It returns 502 when the PrintNode printer-list request fails.
+	 */
+	public function test_printnode_printers_request_failure_returns_502(): void {
+		$this->mock_http( new \WP_Error( 'http_request_failed', 'Connection timed out.' ) );
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/printnode/printers' );
+		$req->set_body_params( array( 'api_key' => 'KEY' ) );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 502, $res->get_status() );
+		$this->assertEquals( 'wcpos_printnode_printers_failed', $res->as_error()->get_error_code() );
 	}
 
 	/**

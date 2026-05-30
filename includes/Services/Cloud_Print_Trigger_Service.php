@@ -95,66 +95,102 @@ class Cloud_Print_Trigger_Service {
 			$provider = (string) ( $printer['provider'] ?? '' );
 
 			$template_id = (string) $assignment['template_id'];
-			$template    = is_numeric( $template_id )
-				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
-				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+			$template    = self::load_template( $template_id );
 			if ( null === $template ) {
 				continue;
 			}
 
-			if ( 'printnode' === $provider ) {
-				$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
-				if ( '' === $fmt['kind'] ) {
-					Logger::log(
-						sprintf(
-							'Cloud print: skipping PrintNode assignment for printer "%s" — no printable format for template.',
-							(string) $assignment['printer_id']
-						)
-					);
-
-					continue;
-				}
-
-				$job_id = $this->jobs->create(
-					array(
-						'printer_id'   => (string) $assignment['printer_id'],
-						'order_id'     => $order->get_id(),
-						'template_id'  => $template_id,
-						'content_type' => $fmt['content_type'],
-						'pn_kind'      => $fmt['kind'],
-					)
-				);
-				if ( $job_id > 0 ) {
-					wp_schedule_single_event( time(), self::CRON_SUBMIT, array( $job_id ) );
-				}
-
-				continue;
-			}
-
-			$engine = (string) ( $template['engine'] ?? '' );
-			$wire   = Provider::wire_format( $provider, $engine );
-			if ( null === $wire ) {
+			$job_id = self::enqueue_order_job(
+				$this->jobs,
+				(string) $assignment['printer_id'],
+				$printer,
+				$order->get_id(),
+				$template_id,
+				$template
+			);
+			if ( 0 === $job_id ) {
 				Logger::log(
 					sprintf(
-						'Cloud print: skipping assignment for printer "%s" — template engine "%s" is not printable on provider "%s".',
+						'Cloud print: skipping assignment for printer "%s" — template "%s" is not printable on provider "%s".',
 						(string) $assignment['printer_id'],
-						$engine,
+						$template_id,
 						$provider
 					)
 				);
+			}
+		}
+	}
 
-				continue;
+	/**
+	 * Load a receipt template by id (numeric stored template or virtual slug).
+	 *
+	 * @param string $template_id Template id (numeric) or virtual slug.
+	 *
+	 * @return array|null Template array, or null when not found.
+	 */
+	public static function load_template( string $template_id ): ?array {
+		return is_numeric( $template_id )
+			? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
+			: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+	}
+
+	/**
+	 * Enqueue a print job for an order + template, deriving the wire format from
+	 * the printer's provider. Shared by the order-event trigger and the manual
+	 * print-jobs endpoint so the two cannot drift.
+	 *
+	 * For PrintNode the job's submit event is scheduled out-of-band (PrintNode
+	 * does not poll). For polling providers (Star/Epson) the printer fetches the
+	 * job on its next poll, so no submit is scheduled.
+	 *
+	 * @param Print_Job_Service $jobs        Job store.
+	 * @param string            $printer_id  Registered printer id.
+	 * @param array             $printer     Registered printer config.
+	 * @param int               $order_id    Order id to render.
+	 * @param string            $template_id Template id (numeric) or virtual slug.
+	 * @param array             $template    Loaded template array.
+	 *
+	 * @return int Created job id, or 0 when the template is not printable on the provider.
+	 */
+	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template ): int {
+		$provider = (string) ( $printer['provider'] ?? '' );
+
+		if ( 'printnode' === $provider ) {
+			$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
+			if ( '' === $fmt['kind'] ) {
+				return 0;
 			}
 
-			$this->jobs->create(
+			$job_id = $jobs->create(
 				array(
-					'printer_id'   => (string) $assignment['printer_id'],
-					'content_type' => Provider::content_type( $provider ),
-					'order_id'     => $order->get_id(),
+					'printer_id'   => $printer_id,
+					'order_id'     => $order_id,
 					'template_id'  => $template_id,
+					'content_type' => $fmt['content_type'],
+					'pn_kind'      => $fmt['kind'],
 				)
 			);
+			if ( $job_id > 0 ) {
+				wp_schedule_single_event( time(), self::CRON_SUBMIT, array( $job_id ) );
+			}
+
+			return $job_id;
 		}
+
+		$engine = (string) ( $template['engine'] ?? '' );
+		$wire   = Provider::wire_format( $provider, $engine );
+		if ( null === $wire ) {
+			return 0;
+		}
+
+		return $jobs->create(
+			array(
+				'printer_id'   => $printer_id,
+				'content_type' => Provider::content_type( $provider ),
+				'order_id'     => $order_id,
+				'template_id'  => $template_id,
+			)
+		);
 	}
 
 	/**
@@ -184,19 +220,14 @@ class Cloud_Print_Trigger_Service {
 	 * @param string $printer_id Printer ID.
 	 */
 	private function already_queued( int $order_id, string $printer_id ): bool {
-		foreach (
-			$this->jobs->query(
-				array(
-					'printer_id' => $printer_id,
-					'limit'      => -1,
-				)
-			) as $job
-		) {
-			if ( (int) $job['order_id'] === $order_id ) {
-				return true;
-			}
-		}
+		$existing = $this->jobs->query(
+			array(
+				'printer_id' => $printer_id,
+				'order_id'   => $order_id,
+				'limit'      => 1,
+			)
+		);
 
-		return false;
+		return ! empty( $existing );
 	}
 }

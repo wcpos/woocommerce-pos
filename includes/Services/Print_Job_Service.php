@@ -240,9 +240,9 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Query jobs by printer and/or status (newest first).
+	 * Query jobs by printer, status and/or order (newest first).
 	 *
-	 * @param array $filters printer_id, status, limit.
+	 * @param array $filters printer_id, status, order_id, limit.
 	 *
 	 * @return array<int, array>
 	 */
@@ -258,6 +258,13 @@ class Print_Job_Service {
 			$meta_query[] = array(
 				'key'   => self::META_STATUS,
 				'value' => sanitize_text_field( $filters['status'] ),
+			);
+		}
+		if ( ! empty( $filters['order_id'] ) ) {
+			$meta_query[] = array(
+				'key'   => self::META_ORDER_ID,
+				'value' => (int) $filters['order_id'],
+				'type'  => 'NUMERIC',
 			);
 		}
 
