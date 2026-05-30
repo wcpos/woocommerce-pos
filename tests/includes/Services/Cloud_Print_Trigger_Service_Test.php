@@ -51,15 +51,19 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 				'post_content' => '',
 			)
 		);
+		$this->assertNotInstanceOf( \WP_Error::class, $tid, 'wp_insert_post() returned a WP_Error creating the thermal template.' );
+		$this->assertIsInt( $tid );
+		$this->assertGreaterThan( 0, $tid, 'wp_insert_post() failed to create the thermal template post.' );
 
 		global $wpdb;
-		$wpdb->update(
+		$updated = $wpdb->update(
 			$wpdb->posts,
 			array( 'post_content' => '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' ),
 			array( 'ID' => $tid ),
 			array( '%s' ),
 			array( '%d' )
 		);
+		$this->assertNotFalse( $updated, 'Failed to write raw template content via $wpdb->update().' );
 		clean_post_cache( $tid );
 
 		update_post_meta( $tid, '_template_engine', $engine );
