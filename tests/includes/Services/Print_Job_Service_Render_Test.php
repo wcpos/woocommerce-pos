@@ -84,15 +84,19 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 				'post_content' => '',
 			)
 		);
+		$this->assertNotInstanceOf( \WP_Error::class, $tid, 'wp_insert_post() returned a WP_Error creating the thermal template.' );
+		$this->assertIsInt( $tid );
+		$this->assertGreaterThan( 0, $tid, 'wp_insert_post() failed to create the thermal template post.' );
 
 		global $wpdb;
-		$wpdb->update(
+		$updated = $wpdb->update(
 			$wpdb->posts,
 			array( 'post_content' => $content ),
 			array( 'ID' => $tid ),
 			array( '%s' ),
 			array( '%d' )
 		);
+		$this->assertNotFalse( $updated, 'Failed to write raw template content via $wpdb->update().' );
 		clean_post_cache( $tid );
 
 		update_post_meta( $tid, '_template_engine', 'thermal' );
