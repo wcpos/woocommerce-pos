@@ -23,7 +23,7 @@ describe('fetchPrintNodePrinters', () => {
 
 		// Assert — WCPOS only registers its /wcpos/v1/ routes when the request
 		// carries the wcpos flag; without it the route 404s with rest_no_route.
-		// Regression guard for the "Fetch my printers" 404 (PR #1094).
+		// Regression guard for the "Fetch my printers" 404 (PR #1098).
 		expect(apiFetchMock).toHaveBeenCalledTimes(1);
 		const args = apiFetchMock.mock.calls[0][0] as {
 			path: string;
