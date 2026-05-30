@@ -63,6 +63,9 @@ class Pdf_Renderer {
 		$dir = rtrim( get_temp_dir(), '/\\' ) . '/wcpos-dompdf';
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
+			// Restrict the freshly created cache dir to the owner; it holds
+			// rendered font caches and temp PDFs that need not be world-readable.
+			@chmod( $dir, 0700 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
 		return $dir;

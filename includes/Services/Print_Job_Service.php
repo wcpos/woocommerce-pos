@@ -23,6 +23,7 @@ class Print_Job_Service {
 	const META_PN_KIND      = '_wcpos_pj_pn_kind';
 	const META_PN_JOB_ID    = '_wcpos_pj_pn_job_id';
 	const META_PN_STATE     = '_wcpos_pj_pn_state';
+	const META_PN_ATTEMPTS  = '_wcpos_pj_pn_attempts';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */

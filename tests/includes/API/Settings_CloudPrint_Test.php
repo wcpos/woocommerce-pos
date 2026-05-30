@@ -326,4 +326,96 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'printnode_api_key', $get_data['printers'][0] );
 		$this->assertEquals( 'raw', $get_data['printers'][0]['printnode_format'] );
 	}
+
+	/**
+	 * It preserves a stored printnode_api_key when a later save omits the key.
+	 *
+	 * The React app never receives the key on GET, so toggling another field
+	 * (e.g. printnode_format) re-POSTs the printer without it. The stored key
+	 * must survive so submissions keep working.
+	 */
+	public function test_printnode_api_key_preserved_when_omitted_on_resave(): void {
+		// Arrange — first save establishes the key.
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params(
+			array(
+				'printers'    => array(
+					array(
+						'id'                => 'office',
+						'name'              => 'Office',
+						'provider'          => 'printnode',
+						'printnode_api_key' => 'SECRET',
+						'printnode_format'  => 'pdf',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req );
+
+		// Act — re-save the same printer without the key, toggling the format.
+		$req2 = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req2->set_body_params(
+			array(
+				'printers'    => array(
+					array(
+						'id'               => 'office',
+						'name'             => 'Office',
+						'provider'         => 'printnode',
+						'printnode_format' => 'raw',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req2 );
+
+		// Assert — read the option directly because GET strips the key.
+		$saved = get_option( 'woocommerce_pos_settings_cloud_print' );
+		$this->assertEquals( 'SECRET', $saved['printers'][0]['printnode_api_key'] );
+		$this->assertEquals( 'raw', $saved['printers'][0]['printnode_format'] );
+	}
+
+	/**
+	 * It lets a non-empty incoming key overwrite the stored key (rotation).
+	 */
+	public function test_printnode_api_key_rotation_overwrites_stored_key(): void {
+		// Arrange.
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params(
+			array(
+				'printers'    => array(
+					array(
+						'id'                => 'office',
+						'name'              => 'Office',
+						'provider'          => 'printnode',
+						'printnode_api_key' => 'OLD',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req );
+
+		// Act.
+		$req2 = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req2->set_body_params(
+			array(
+				'printers'    => array(
+					array(
+						'id'                => 'office',
+						'name'              => 'Office',
+						'provider'          => 'printnode',
+						'printnode_api_key' => 'NEW',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req2 );
+
+		// Assert.
+		$saved = get_option( 'woocommerce_pos_settings_cloud_print' );
+		$this->assertEquals( 'NEW', $saved['printers'][0]['printnode_api_key'] );
+	}
 }
