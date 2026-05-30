@@ -19,6 +19,9 @@ export type NewPrinterInput = {
 	printnode_printer_id?: number;
 };
 
+/** A PrintNode printer as surfaced by the fetch-my-printers proxy. */
+export type PrintNodePrinterOption = { id: number; name: string; state: string };
+
 export interface AddPrinterWizardProps {
 	open: boolean;
 	mode: 'add' | 'setup';
@@ -31,6 +34,12 @@ export interface AddPrinterWizardProps {
 	 * save failure.
 	 */
 	onCreate: (input: NewPrinterInput) => Promise<{ printer: CloudPrinter; token?: string }>;
+	/**
+	 * Optional: list the PrintNode account's printers for the given API key so
+	 * the user can pick one instead of typing its id. When omitted, only the
+	 * manual printer-id input is shown.
+	 */
+	fetchPrintNodePrinters?: (apiKey: string) => Promise<PrintNodePrinterOption[]>;
 }
 
 /** The ordered provider choices shown on step 0. */
@@ -154,6 +163,7 @@ export function AddPrinterWizard({
 	setupPrinter,
 	onClose,
 	onCreate,
+	fetchPrintNodePrinters,
 }: AddPrinterWizardProps): JSX.Element | null {
 	const [step, setStep] = React.useState(0);
 	const [provider, setProvider] = React.useState<CloudProvider>('star-cloudprnt');
@@ -163,6 +173,40 @@ export function AddPrinterWizard({
 	const [pending, setPending] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
 	const [created, setCreated] = React.useState<CreatedState | null>(null);
+	const [pnPrinters, setPnPrinters] = React.useState<PrintNodePrinterOption[] | null>(null);
+	const [pnFetching, setPnFetching] = React.useState(false);
+	const [pnFetchError, setPnFetchError] = React.useState<string | null>(null);
+
+	const handleFetchPrintNodePrinters = async () => {
+		if (!fetchPrintNodePrinters) {
+			return;
+		}
+		setPnFetching(true);
+		setPnFetchError(null);
+		try {
+			const list = await fetchPrintNodePrinters(apiKey.trim());
+			setPnPrinters(list);
+			// Drop a previously-selected id that isn't in the new list (e.g. after
+			// changing the API key) so Continue can't stay enabled with a stale id.
+			// Manual entry still works — the field is independently editable.
+			setPrinterId((current) => (list.some((p) => String(p.id) === current) ? current : ''));
+			if (list.length === 0) {
+				setPnFetchError(
+					t('cloud_print.printnode_no_printers', 'No printers found on this PrintNode account.')
+				);
+			}
+		} catch {
+			setPnPrinters(null);
+			setPnFetchError(
+				t(
+					'cloud_print.printnode_fetch_failed',
+					"Couldn't list your PrintNode printers. Check the API key and that the desktop client is running."
+				)
+			);
+		} finally {
+			setPnFetching(false);
+		}
+	};
 
 	// Reset internal state when the modal transitions closed → open so each
 	// open starts fresh / on the correct step for the mode.
@@ -182,6 +226,9 @@ export function AddPrinterWizard({
 			setPending(false);
 			setError(null);
 			setCreated(null);
+			setPnPrinters(null);
+			setPnFetching(false);
+			setPnFetchError(null);
 		}
 		prevOpen.current = open;
 	}, [open, mode, setupPrinter]);
@@ -316,7 +363,52 @@ export function AddPrinterWizard({
 										)}
 										onChange={(event) => setApiKey(event.target.value)}
 									/>
+									{fetchPrintNodePrinters && (
+										<div className="wcpos:flex wcpos:flex-col wcpos:gap-1 wcpos:pt-1">
+											<Button
+												variant="outline"
+												data-testid="wizard-printnode-fetch"
+												disabled={apiKey.trim() === '' || pnFetching}
+												loading={pnFetching}
+												onClick={handleFetchPrintNodePrinters}
+											>
+												{t('cloud_print.printnode_fetch', 'Fetch my printers')}
+											</Button>
+											{pnFetchError && (
+												<span
+													data-testid="wizard-printnode-fetch-error"
+													className="wcpos:text-xs wcpos:text-red-600"
+												>
+													{pnFetchError}
+												</span>
+											)}
+										</div>
+									)}
 								</label>
+
+								{pnPrinters && pnPrinters.length > 0 && (
+									<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
+										<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
+											{t('cloud_print.printnode_pick_printer', 'Choose a printer')}
+										</span>
+										<select
+											data-testid="wizard-printnode-printer-select"
+											value={printerId}
+											onChange={(event) => setPrinterId(event.target.value)}
+											className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:px-2 wcpos:py-1 wcpos:text-sm"
+										>
+											<option value="">
+												{t('cloud_print.printnode_pick_placeholder', 'Select a printer…')}
+											</option>
+											{pnPrinters.map((p) => (
+												<option key={p.id} value={String(p.id)}>
+													{p.name} ({p.state})
+												</option>
+											))}
+										</select>
+									</label>
+								)}
+
 								<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
 									<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">
 										{t('cloud_print.printnode_printer_id', 'PrintNode printer ID')}

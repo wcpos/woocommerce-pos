@@ -141,6 +141,22 @@ class Print_Job_Service {
 	}
 
 	/**
+	 * Load a receipt template by id (numeric stored template or virtual slug).
+	 *
+	 * Single source of truth for template resolution shared by render_payload(),
+	 * the auto-print trigger, and the manual print-jobs endpoint.
+	 *
+	 * @param string $template_id Template id (numeric) or virtual slug.
+	 *
+	 * @return array|null Template array, or null when not found.
+	 */
+	public static function load_template( string $template_id ): ?array {
+		return is_numeric( $template_id )
+			? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
+			: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
+	}
+
+	/**
 	 * Render the bytes a printer should fetch for a job.
 	 *
 	 * @param array $job Job array returned by get().
@@ -149,9 +165,7 @@ class Print_Job_Service {
 	 */
 	public function render_payload( array $job ): string {
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) && ! empty( $job['pn_kind'] ) ) {
-			$template = is_numeric( $job['template_id'] )
-				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $job['template_id'] )
-				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( (string) $job['template_id'], 'receipt' );
+			$template = self::load_template( (string) $job['template_id'] );
 			if ( null === $template ) {
 				return '';
 			}
@@ -189,9 +203,7 @@ class Print_Job_Service {
 		}
 
 		if ( ! empty( $job['order_id'] ) && ! empty( $job['template_id'] ) ) {
-			$template = is_numeric( $job['template_id'] )
-				? \WCPOS\WooCommercePOS\Templates::get_template( (int) $job['template_id'] )
-				: \WCPOS\WooCommercePOS\Templates::get_virtual_template( (string) $job['template_id'], 'receipt' );
+			$template = self::load_template( (string) $job['template_id'] );
 			if ( null === $template ) {
 				return '';
 			}
@@ -240,9 +252,9 @@ class Print_Job_Service {
 	}
 
 	/**
-	 * Query jobs by printer and/or status (newest first).
+	 * Query jobs by printer, status and/or order (newest first).
 	 *
-	 * @param array $filters printer_id, status, limit.
+	 * @param array $filters printer_id, status, order_id, limit.
 	 *
 	 * @return array<int, array>
 	 */
@@ -258,6 +270,13 @@ class Print_Job_Service {
 			$meta_query[] = array(
 				'key'   => self::META_STATUS,
 				'value' => sanitize_text_field( $filters['status'] ),
+			);
+		}
+		if ( ! empty( $filters['order_id'] ) ) {
+			$meta_query[] = array(
+				'key'   => self::META_ORDER_ID,
+				'value' => (int) $filters['order_id'],
+				'type'  => 'NUMERIC',
 			);
 		}
 

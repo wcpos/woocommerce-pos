@@ -149,6 +149,97 @@ describe('AddPrinterWizard', () => {
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
 	});
 
+	it('printnode flow: fetch my printers populates a select and picking one fills the printer id', async () => {
+		const fetchPrintNodePrinters = vi.fn().mockResolvedValue([
+			{ id: 73, name: 'Front Desk', state: 'online' },
+			{ id: 88, name: 'Kitchen', state: 'offline' },
+		]);
+		const onCreate = vi.fn().mockResolvedValue({
+			printer: makePrinter({ id: 'pn-1', provider: 'printnode' }),
+		});
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="add"
+				onClose={vi.fn()}
+				onCreate={onCreate}
+				fetchPrintNodePrinters={fetchPrintNodePrinters}
+			/>
+		);
+
+		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		fireEvent.change(screen.getByTestId('wizard-name-input'), {
+			target: { value: 'Receipt printer' },
+		});
+		fireEvent.change(screen.getByTestId('wizard-printnode-api-key'), {
+			target: { value: 'secret-key' },
+		});
+
+		fireEvent.click(screen.getByTestId('wizard-printnode-fetch'));
+		await waitFor(() => expect(fetchPrintNodePrinters).toHaveBeenCalledWith('secret-key'));
+
+		const select = await screen.findByTestId('wizard-printnode-printer-select');
+		fireEvent.change(select, { target: { value: '88' } });
+
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+		expect(onCreate.mock.calls[0][0].printnode_printer_id).toBe(88);
+	});
+
+	it('printnode flow: shows a "no printers" message when the account has none', async () => {
+		const fetchPrintNodePrinters = vi.fn().mockResolvedValue([]);
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="add"
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+				fetchPrintNodePrinters={fetchPrintNodePrinters}
+			/>
+		);
+
+		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		fireEvent.change(screen.getByTestId('wizard-printnode-api-key'), {
+			target: { value: 'valid-key' },
+		});
+		fireEvent.click(screen.getByTestId('wizard-printnode-fetch'));
+
+		await waitFor(() =>
+			expect(screen.getByTestId('wizard-printnode-fetch-error')).toBeInTheDocument()
+		);
+		expect(screen.getByTestId('wizard-printnode-fetch-error')).toHaveTextContent(/No printers found/i);
+		expect(screen.queryByTestId('wizard-printnode-printer-select')).not.toBeInTheDocument();
+	});
+
+	it('printnode flow: surfaces an error when fetching the printer list fails', async () => {
+		const fetchPrintNodePrinters = vi.fn().mockRejectedValue(new Error('bad key'));
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="add"
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+				fetchPrintNodePrinters={fetchPrintNodePrinters}
+			/>
+		);
+
+		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		fireEvent.change(screen.getByTestId('wizard-printnode-api-key'), {
+			target: { value: 'bad' },
+		});
+		fireEvent.click(screen.getByTestId('wizard-printnode-fetch'));
+
+		await waitFor(() =>
+			expect(screen.getByTestId('wizard-printnode-fetch-error')).toBeInTheDocument()
+		);
+	});
+
 	it('setup mode: opens at step 2 with masked token and does not call onCreate', () => {
 		const onCreate = vi.fn();
 		render(

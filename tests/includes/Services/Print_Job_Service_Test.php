@@ -68,6 +68,38 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It filters jobs by order_id, scoped to the requested printer.
+	 */
+	public function test_query_filters_jobs_by_order_id(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$service->create(
+			array(
+				'printer_id' => 'printer-1',
+				'order_id'   => 101,
+				'payload'    => base64_encode( 'a' ),
+			)
+		);
+		$service->create(
+			array(
+				'printer_id' => 'printer-1',
+				'order_id'   => 202,
+				'payload'    => base64_encode( 'b' ),
+			)
+		);
+
+		$jobs = $service->query(
+			array(
+				'printer_id' => 'printer-1',
+				'order_id'   => 202,
+			)
+		);
+
+		$this->assertEquals( 1, \count( $jobs ) );
+		$this->assertEquals( 202, $jobs[0]['order_id'] );
+	}
+
+	/**
 	 * It leaves the second job pending while another claim is active.
 	 */
 	public function test_try_claim_rejects_second_active_claim_for_printer(): void {
