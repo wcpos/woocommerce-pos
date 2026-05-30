@@ -670,9 +670,9 @@ class Escpos_Thermal_Emitter {
 	 */
 	private function code_point( string $char ): int {
 		if ( function_exists( 'mb_ord' ) ) {
-			$code = mb_ord( $char, 'UTF-8' );
-
-			return false === $code ? -1 : $code;
+			// mb_ord() is typed int by stubs; cast guards a theoretical false (invalid
+			// char) to 0, which is_full_width() treats as not full-width.
+			return (int) mb_ord( $char, 'UTF-8' );
 		}
 		$values = unpack( 'N', mb_convert_encoding( $char, 'UCS-4BE', 'UTF-8' ) );
 
