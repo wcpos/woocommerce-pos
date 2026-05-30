@@ -1,0 +1,49 @@
+---
+description: E2E Playwright selectors must not depend on translatable UI text
+globs: tests/e2e/**
+alwaysApply: false
+---
+
+# E2E Selector Rule: No Translatable Text
+
+Playwright E2E selectors (`tests/e2e/ui/specs/*.spec.ts`) **MUST NOT** target
+elements by translatable UI text.
+
+## Why
+
+WCPOS ships in many languages. The settings UI renders almost all visible
+strings through the `t()` / `Trans` i18n system, and WordPress role display
+names ("Administrator", "Shop Manager") are themselves translatable. A selector
+like `getByText('Administrator')` is fragile in two ways:
+
+1. **Per-locale breakage** — the text changes under any non-English locale, so
+   the test fails on translated sites.
+2. **Strict-mode duplicate matches** — the same string often appears in more
+   than one node (e.g. a list item and an ancestor wrapper, or a list label and
+   a detail heading), which trips Playwright's strict-mode "resolved to N
+   elements" error. This is a deterministic failure, not a flake.
+
+## Required practice
+
+- **Prefer `getByTestId`.** Add a stable, descriptive `data-testid` to the
+  rendering component in `packages/settings/src/...` and assert against it.
+  Naming is kebab/scoped and derived from non-translatable identifiers, e.g.:
+  - `access-role-<roleId>` (role list rows, keyed by WP role id)
+  - `access-capability-group-<groupKey>` (`wcpos` / `wc` / `wp`)
+  - `settings-nav-<route>` (sidebar nav items, keyed by route path)
+  - `license-upgrade-cta`, `gateways-th-<column>`, `sessions-manage-description`
+- **`getByRole` only for structural, non-translatable roles** (e.g.
+  `button[role="switch"]`, `role="switch"` with a stable `aria-label`). Do not
+  pass a translated string as the role `name`.
+- **Never assert on translated content strings** — WP role display names,
+  `t()`-driven nav labels and notices, table headers, CTA copy, etc.
+- **Non-translatable runtime values are fine** — usernames, route hashes
+  (`#/checkout`), URLs, CSS classes, element ids.
+
+## Locale pin (belt-and-suspenders, not a substitute)
+
+The E2E UI workflow (`.github/workflows/e2e-ui.yml`) pins the site language to
+`en_US` (`wp site switch-language en_US`). This makes any unavoidable text
+deterministic, but it is a safety net — it does NOT license new text-based
+selectors. Selectors must still be locale-independent so the suite stays valid
+if the pin is ever removed or the app is tested under another locale.
