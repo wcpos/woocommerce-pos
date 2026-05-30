@@ -23,7 +23,7 @@ class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 		$bytes = base64_decode( $diag['payload'], true );
 		$this->assertStringContainsString( 'WCPOS', $bytes );
 		$this->assertStringContainsString( 'Kitchen', $bytes );
-		$this->assertStringContainsString( "\x1B@", $bytes ); // ESC @ init
+		$this->assertStringContainsString( "\x1B@", $bytes ); // ESC @ init.
 	}
 
 	/**
@@ -43,5 +43,13 @@ class Cloud_Print_Diagnostic_Test extends WP_UnitTestCase {
 	public function test_build_printnode_throws(): void {
 		$this->expectException( \RuntimeException::class );
 		( new Cloud_Print_Diagnostic() )->build( 'printnode', 'Bar' );
+	}
+
+	/**
+	 * It builds a PrintNode diagnostic as PDF bytes.
+	 */
+	public function test_build_pdf_returns_pdf_bytes(): void {
+		$pdf = ( new Cloud_Print_Diagnostic() )->build_pdf( 'Bar' );
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
 	}
 }

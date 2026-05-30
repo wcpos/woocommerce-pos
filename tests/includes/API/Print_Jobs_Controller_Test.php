@@ -14,11 +14,54 @@ use WCPOS\WooCommercePOS\Services\Print_Job_Service;
  */
 class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * Captured request args from the last intercepted HTTP request.
+	 *
+	 * @var array
+	 */
+	private $captured = array();
+
+	/**
+	 * Active pre_http_request callback, stored so it can be removed in tearDown.
+	 *
+	 * @var callable|null
+	 */
+	private $http_filter = null;
+
+	/**
 	 * Set up the print job CPT.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		( new Print_Job_Service() )->register_post_type();
+	}
+
+	/**
+	 * Remove any active HTTP filter.
+	 */
+	public function tearDown(): void {
+		if ( null !== $this->http_filter ) {
+			remove_filter( 'pre_http_request', $this->http_filter, 10 );
+			$this->http_filter = null;
+		}
+		parent::tearDown();
+	}
+
+	/**
+	 * Register a pre_http_request filter that captures args and returns a faux response.
+	 *
+	 * @param mixed $response Faux response array or WP_Error to return.
+	 */
+	private function mock_http( $response ): void {
+		$this->http_filter = function ( $pre, $args, $url ) use ( $response ) {
+			$this->captured = array(
+				'args' => $args,
+				'url'  => $url,
+			);
+
+			return $response;
+		};
+
+		add_filter( 'pre_http_request', $this->http_filter, 10, 3 );
 	}
 
 	/**
@@ -181,27 +224,124 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It returns 400 for PrintNode printers until Phase 4.
+	 * It submits a diagnostic PDF to PrintNode and returns the job id.
+	 *
+	 * Replaces the former Phase-3 test that asserted a 400 wcpos_print_job_no_diagnostic
+	 * for PrintNode printers; PrintNode now submits a diagnostic directly.
 	 */
-	public function test_test_print_printnode_returns_400_until_phase_4(): void {
+	public function test_test_print_printnode_submits_diagnostic_returns_201(): void {
+		// Arrange.
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
 				'printers'    => array(
 					array(
-						'id'                  => 'bar',
-						'name'                => 'Bar',
-						'provider'            => 'printnode',
-						'printnode_api_key'   => 'k',
-						'printnode_printer_id' => 1,
+						'id'                   => 'bar',
+						'name'                 => 'Bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
 					),
 				),
 				'assignments' => array(),
 			)
 		);
+		$this->mock_http( $this->fake_response( 555 ) );
+
+		// Act.
 		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
 		$req->set_body_params( array( 'printer_id' => 'bar' ) );
-		$this->assertEquals( 400, rest_do_request( $req )->get_status() );
+		$res = rest_do_request( $req );
+
+		// Assert.
+		$this->assertEquals( 201, $res->get_status() );
+		$this->assertEquals( true, $res->get_data()['submitted'] );
+		$this->assertEquals( 555, $res->get_data()['pn_job_id'] );
+
+		$body = json_decode( $this->captured['args']['body'], true );
+		$this->assertEquals( 'pdf_base64', $body['contentType'] );
+		$this->assertEquals( 9, $body['printerId'] );
+	}
+
+	/**
+	 * It returns 400 for a PrintNode printer missing its API key, without any HTTP call.
+	 */
+	public function test_test_print_printnode_unconfigured_returns_400_no_http(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'bar',
+						'name'                 => 'Bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => '',
+						'printnode_printer_id' => 9,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$this->mock_http( new \WP_Error( 'should_not_be_called', 'no http' ) );
+
+		// Act.
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'bar' ) );
+		$res = rest_do_request( $req );
+
+		// Assert.
+		$this->assertEquals( 400, $res->get_status() );
+		$this->assertEquals( 'wcpos_print_job_printnode_unconfigured', $res->as_error()->get_error_code() );
+		$this->assertEquals( array(), $this->captured );
+	}
+
+	/**
+	 * It returns 502 when the PrintNode submission fails.
+	 */
+	public function test_test_print_printnode_submit_failure_returns_502(): void {
+		// Arrange.
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                   => 'bar',
+						'name'                 => 'Bar',
+						'provider'             => 'printnode',
+						'printnode_api_key'    => 'KEY',
+						'printnode_printer_id' => 9,
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$this->mock_http( new \WP_Error( 'http_request_failed', 'Connection timed out.' ) );
+
+		// Act.
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'bar' ) );
+		$res = rest_do_request( $req );
+
+		// Assert.
+		$this->assertEquals( 502, $res->get_status() );
+		$this->assertEquals( 'wcpos_print_job_printnode_failed', $res->as_error()->get_error_code() );
+	}
+
+	/**
+	 * Build a faux 2xx response array.
+	 *
+	 * @param mixed $payload Payload to JSON-encode as the body.
+	 * @param int   $code    HTTP status code.
+	 *
+	 * @return array
+	 */
+	private function fake_response( $payload, int $code = 200 ): array {
+		return array(
+			'response' => array( 'code' => $code ),
+			'body'     => wp_json_encode( $payload ),
+			'headers'  => array(),
+		);
 	}
 
 	/**

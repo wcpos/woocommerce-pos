@@ -38,6 +38,38 @@ class Cloud_Print_Diagnostic {
 	}
 
 	/**
+	 * Build a PrintNode diagnostic receipt as PDF bytes.
+	 *
+	 * A simple, black-and-white, printer-friendly page used to confirm a PrintNode
+	 * printer is wired up correctly. Rendered via the shared PDF renderer.
+	 *
+	 * @param string $printer_name Display name.
+	 *
+	 * @return string PDF document bytes (begins with '%PDF-').
+	 */
+	public function build_pdf( string $printer_name ): string {
+		$date = gmdate( 'Y-m-d H:i' );
+
+		$html  = '<!DOCTYPE html><html><head><meta charset="utf-8">';
+		$html .= '<style>'
+			. 'body{font-family:"dejavu sans",sans-serif;color:#000;background:#fff;margin:24px;}'
+			. 'h1{font-size:18px;margin:0 0 12px;}'
+			. '.row{font-size:13px;margin:4px 0;}'
+			. '.label{font-weight:bold;}'
+			. 'hr{border:none;border-top:1px solid #000;margin:16px 0;}'
+			. '.ok{font-size:14px;font-weight:bold;margin-top:16px;}'
+			. '</style></head><body>';
+		$html .= '<h1>WCPOS &mdash; Cloud Print Test</h1>';
+		$html .= '<div class="row"><span class="label">Printer:</span> ' . esc_html( $printer_name ) . '</div>';
+		$html .= '<div class="row"><span class="label">Date (UTC):</span> ' . esc_html( $date ) . '</div>';
+		$html .= '<hr>';
+		$html .= '<div class="ok">If you can read this, printing works!</div>';
+		$html .= '</body></html>';
+
+		return ( new Pdf_Renderer() )->render_html( $html );
+	}
+
+	/**
 	 * Minimal ESC/POS capability check.
 	 *
 	 * @param string $name Printer display name.

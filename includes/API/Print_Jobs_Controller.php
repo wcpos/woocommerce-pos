@@ -9,11 +9,13 @@ namespace WCPOS\WooCommercePOS\API;
 
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
+use WCPOS\WooCommercePOS\Services\PrintNode_Client;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
+use WP_REST_Response;
 use WP_REST_Server;
 
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -484,6 +486,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
+		if ( 'printnode' === ( $printer['provider'] ?? '' ) ) {
+			return $this->test_print_printnode( $printer );
+		}
+
 		try {
 			$diag = ( new Cloud_Print_Diagnostic() )->build( (string) $printer['provider'], (string) $printer['name'] );
 		} catch ( \RuntimeException $e ) {
@@ -513,6 +519,49 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$response->set_status( 201 );
 
 		return $response;
+	}
+
+	/**
+	 * Submit a diagnostic PDF to a PrintNode printer.
+	 *
+	 * @param array $printer Registered PrintNode printer.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function test_print_printnode( array $printer ) {
+		$api_key       = (string) ( $printer['printnode_api_key'] ?? '' );
+		$pn_printer_id = (int) ( $printer['printnode_printer_id'] ?? 0 );
+		if ( '' === $api_key || 0 === $pn_printer_id ) {
+			return new WP_Error(
+				'wcpos_print_job_printnode_unconfigured',
+				__( 'This PrintNode printer is missing its API key or printer id.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$pdf    = ( new Cloud_Print_Diagnostic() )->build_pdf( (string) $printer['name'] );
+		$result = ( new PrintNode_Client( $api_key ) )->submit_job(
+			$pn_printer_id,
+			'WCPOS Test Print',
+			'pdf_base64',
+			base64_encode( $pdf )
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return new WP_Error(
+				'wcpos_print_job_printnode_failed',
+				$result->get_error_message(),
+				array( 'status' => 502 )
+			);
+		}
+
+		return new WP_REST_Response(
+			array(
+				'submitted' => true,
+				'pn_job_id' => (int) $result['id'],
+			),
+			201
+		);
 	}
 
 	/**
