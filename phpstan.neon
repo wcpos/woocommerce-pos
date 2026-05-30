@@ -34,8 +34,14 @@ parameters:
         - '#Access to property .+ on an unknown class#'
         - '#PHPDoc tag @throws with type .+ is not subtype of Throwable#'
 
-        # Vendor-prefixed classes
+        # Vendor-prefixed classes (php-scoper output in vendor_prefixed/, opaque to
+        # PHPStan but present at runtime: Dompdf, picqer barcode, chillerlan QR, JWT).
         - '#on an unknown class WCPOS\\Vendor\\#'
+        - '#Instantiated class WCPOS\\Vendor\\.+ not found#'
+        - '#Class WCPOS\\Vendor\\.+ not found#'
+        - '#Access to constant .+ on an unknown class WCPOS\\Vendor\\#'
+        - '#Call to static method .+ on an unknown class WCPOS\\Vendor\\#'
+        - '#Catch with unknown class WCPOS\\Vendor\\.+#'
 
         # WordPress/WooCommerce function parameter mismatches in stubs
         - '#Function rest_ensure_response invoked with#'

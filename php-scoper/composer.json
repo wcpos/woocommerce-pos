@@ -5,8 +5,11 @@
   "require": {
     "php": ">=7.4",
     "ext-json": "*",
+    "chillerlan/php-qrcode": "^5.0",
+    "dompdf/dompdf": "^3.1",
     "firebase/php-jwt": "^6.10.0",
-    "phpfastcache/phpfastcache": "^8.1.4"
+    "phpfastcache/phpfastcache": "^8.1.4",
+    "picqer/php-barcode-generator": "^2.4"
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
