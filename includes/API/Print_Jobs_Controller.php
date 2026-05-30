@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Diagnostic;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
@@ -539,7 +540,20 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		$pdf    = ( new Cloud_Print_Diagnostic() )->build_pdf( (string) $printer['name'] );
+		try {
+			$pdf = ( new Cloud_Print_Diagnostic() )->build_pdf( (string) $printer['name'] );
+		} catch ( \Throwable $e ) {
+			// Defense in depth: a Dompdf/font-cache/temp-dir failure must not
+			// surface as an uncaught 500. Mirror the render_payload() guard.
+			Logger::log( 'Cloud print: PrintNode diagnostic PDF render failed: ' . $e->getMessage() );
+
+			return new WP_Error(
+				'wcpos_print_job_diagnostic_failed',
+				__( 'Could not generate the test print.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
 		$result = ( new PrintNode_Client( $api_key ) )->submit_job(
 			$pn_printer_id,
 			'WCPOS Test Print',

@@ -40,6 +40,11 @@ class Pdf_Renderer {
 		// direct its writable caches at a WCPOS-owned temp dir.
 		$options->set( 'fontCache', $temp_dir );
 		$options->set( 'tempDir', $temp_dir );
+		// chroot only gates Dompdf's file:// local-URI access (e.g. <img src> /
+		// @import to local paths); Dompdf still loads its bundled fonts from its
+		// own rootDir/fontDir, so confining chroot to $temp_dir does not break
+		// font rendering. With isRemoteEnabled false and images embedded as data
+		// URIs, no local file access is needed anyway.
 		$options->set( 'chroot', array( $temp_dir ) );
 
 		$dompdf = new Dompdf( $options );

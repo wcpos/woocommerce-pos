@@ -263,6 +263,6 @@ class PrintNode_Client_Test extends \WP_UnitTestCase {
 
 		// Assert.
 		$this->assertTrue( is_wp_error( $result ) );
-		$this->assertFalse( strpos( $result->get_error_message(), 'SECRETKEY' ) );
+		$this->assertStringNotContainsString( 'SECRETKEY', $result->get_error_message() );
 	}
 }

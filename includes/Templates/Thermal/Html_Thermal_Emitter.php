@@ -238,6 +238,11 @@ class Html_Thermal_Emitter {
 		}
 
 		try {
+			// $size is intentionally NOT mapped to QROptions::scale: scale only
+			// affects raster (PNG/GIF) output — the MARKUP_SVG renderer emits a
+			// vector with a module-unit viewBox and no width/height, so scale is a
+			// no-op there. Sizing is handled responsively by constrain_svg (capped
+			// to the receipt width), which is the intended look on narrow paper.
 			$options = new QROptions(
 				array(
 					'outputType'  => QROutputInterface::MARKUP_SVG,
