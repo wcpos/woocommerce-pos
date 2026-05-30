@@ -95,7 +95,7 @@ class Cloud_Print_Trigger_Service {
 			$provider = (string) ( $printer['provider'] ?? '' );
 
 			$template_id = (string) $assignment['template_id'];
-			$template    = self::load_template( $template_id );
+			$template    = Print_Job_Service::load_template( $template_id );
 			if ( null === $template ) {
 				continue;
 			}
@@ -119,19 +119,6 @@ class Cloud_Print_Trigger_Service {
 				);
 			}
 		}
-	}
-
-	/**
-	 * Load a receipt template by id (numeric stored template or virtual slug).
-	 *
-	 * @param string $template_id Template id (numeric) or virtual slug.
-	 *
-	 * @return array|null Template array, or null when not found.
-	 */
-	public static function load_template( string $template_id ): ?array {
-		return is_numeric( $template_id )
-			? \WCPOS\WooCommercePOS\Templates::get_template( (int) $template_id )
-			: \WCPOS\WooCommercePOS\Templates::get_virtual_template( $template_id, 'receipt' );
 	}
 
 	/**

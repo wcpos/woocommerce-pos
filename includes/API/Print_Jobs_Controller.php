@@ -182,11 +182,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		$result = ( new PrintNode_Client( $api_key ) )->printers();
 		if ( is_wp_error( $result ) ) {
-			$data   = $result->get_error_data();
-			$status = is_array( $data ) && isset( $data['status'] ) ? (int) $data['status'] : 502;
-			if ( $status < 400 || $status > 599 ) {
-				$status = 502;
-			}
+			// A rejected key is a client input error (the value just typed into
+			// the wizard) → 400 so the UI can prompt for a correct key. Any other
+			// PrintNode failure is an upstream/transport error → 502 (matching
+			// test_print_printnode()).
+			$status = 'wcpos_printnode_unauthorized' === $result->get_error_code() ? 400 : 502;
 
 			return new WP_Error(
 				'wcpos_printnode_printers_failed',
@@ -528,7 +528,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		// Order-based job: render server-side from the order + template, deriving
 		// the wire format from the printer's provider (shared with the auto-print
 		// trigger). Star/Epson are fetched on poll; PrintNode is submitted.
-		if ( null !== $printer && 0 !== $order_id && '' !== $template_id ) {
+		if ( 0 !== $order_id && '' !== $template_id ) {
+			if ( null === $printer ) {
+				// Without a known printer there is no provider to render for, and
+				// the job could never be polled/submitted — fail loudly rather
+				// than enqueue a job that silently never prints.
+				return new WP_Error(
+					'wcpos_print_job_unknown_printer',
+					__( 'Unknown printer.', 'woocommerce-pos' ),
+					array( 'status' => 404 )
+				);
+			}
+
 			return $this->create_order_job( $printer_id, $printer, $order_id, $template_id );
 		}
 
@@ -567,7 +578,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	private function create_order_job( string $printer_id, array $printer, int $order_id, string $template_id ) {
-		$template = Cloud_Print_Trigger_Service::load_template( $template_id );
+		$template = Print_Job_Service::load_template( $template_id );
 		if ( null === $template ) {
 			return new WP_Error(
 				'wcpos_print_job_unknown_template',

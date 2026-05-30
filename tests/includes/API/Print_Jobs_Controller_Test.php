@@ -207,6 +207,28 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It returns 404 for an order-based job targeting an unknown printer
+	 * (rather than silently enqueuing a job that can never be delivered).
+	 */
+	public function test_enqueue_order_based_unknown_printer_returns_404(): void {
+		$tid   = $this->create_thermal_template();
+		$order = OrderHelper::create_order();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'  => 'ghost',
+				'order_id'    => $order->get_id(),
+				'template_id' => (string) $tid,
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 404, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_unknown_printer', $response->as_error()->get_error_code() );
+	}
+
+	/**
 	 * It rejects a PrintNode job that has no order + template (nothing to render/submit).
 	 */
 	public function test_enqueue_printnode_without_template_returns_400(): void {
@@ -528,6 +550,26 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 400, $res->get_status() );
 		$this->assertEquals( 'wcpos_printnode_missing_api_key', $res->as_error()->get_error_code() );
 		$this->assertEquals( array(), $this->captured );
+	}
+
+	/**
+	 * It maps a rejected PrintNode API key (401) to a 400 client error.
+	 */
+	public function test_printnode_printers_invalid_key_returns_400(): void {
+		$this->mock_http(
+			array(
+				'response' => array( 'code' => 401 ),
+				'body'     => '',
+				'headers'  => array(),
+			)
+		);
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/printnode/printers' );
+		$req->set_body_params( array( 'api_key' => 'wrong-key' ) );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 400, $res->get_status() );
+		$this->assertEquals( 'wcpos_printnode_printers_failed', $res->as_error()->get_error_code() );
 	}
 
 	/**
