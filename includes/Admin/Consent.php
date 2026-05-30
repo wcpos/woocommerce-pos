@@ -273,6 +273,12 @@ class Consent {
 	 * Register the consent REST endpoint.
 	 */
 	public function register_routes(): void {
+		// Only expose the consent REST routes on WCPOS-flagged requests, matching the
+		// rest of /wcpos/v1/ (see Init::init_rest_api). Limits the always-on surface.
+		if ( ! woocommerce_pos_request() ) {
+			return;
+		}
+
 		register_rest_route(
 			SHORT_NAME . '/v1',
 			'/consent',
@@ -414,9 +420,11 @@ class Consent {
 			delete_transient( self::MODAL_TRANSIENT );
 		}
 
+		// Append the WCPOS request flag so the bundle's REST calls register the
+		// now-gated consent routes (see register_routes / Init::init_rest_api).
 		$config = array(
-			'restUrl'     => esc_url_raw( rest_url( SHORT_NAME . '/v1/consent' ) ),
-			'dismissUrl'  => esc_url_raw( rest_url( SHORT_NAME . '/v1/consent/dismiss' ) ),
+			'restUrl'     => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent' ) ) ),
+			'dismissUrl'  => esc_url_raw( add_query_arg( 'wcpos', '1', rest_url( SHORT_NAME . '/v1/consent/dismiss' ) ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'showModal'   => $show_modal,
 			'showCallout' => true,
