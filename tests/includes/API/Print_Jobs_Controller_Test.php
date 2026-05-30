@@ -229,6 +229,38 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It returns 404 for an order-based job referencing a non-existent order.
+	 */
+	public function test_enqueue_order_based_unknown_order_returns_404(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'epson-1',
+						'name'     => 'Epson',
+						'provider' => 'epson-sdp',
+					),
+				),
+			)
+		);
+		$tid = $this->create_thermal_template();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'  => 'epson-1',
+				'order_id'    => 99999999,
+				'template_id' => (string) $tid,
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 404, $response->get_status() );
+		$this->assertEquals( 'wcpos_print_job_unknown_order', $response->as_error()->get_error_code() );
+	}
+
+	/**
 	 * It rejects a PrintNode job that has no order + template (nothing to render/submit).
 	 */
 	public function test_enqueue_printnode_without_template_returns_400(): void {
@@ -549,6 +581,21 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 400, $res->get_status() );
 		$this->assertEquals( 'wcpos_printnode_missing_api_key', $res->as_error()->get_error_code() );
+		$this->assertEquals( array(), $this->captured );
+	}
+
+	/**
+	 * It rejects an API key sent via the query string (must be body-only), without any HTTP call.
+	 */
+	public function test_printnode_printers_api_key_in_query_returns_400_no_http(): void {
+		$this->mock_http( new \WP_Error( 'should_not_be_called', 'no http' ) );
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/printnode/printers' );
+		$req->set_query_params( array( 'api_key' => 'leaky' ) );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 400, $res->get_status() );
+		$this->assertEquals( 'wcpos_printnode_api_key_in_query', $res->as_error()->get_error_code() );
 		$this->assertEquals( array(), $this->captured );
 	}
 

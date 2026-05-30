@@ -171,7 +171,23 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function printnode_printers( $request ) {
-		$api_key = (string) $request->get_param( 'api_key' );
+		// The API key is a secret: read it from the request body only, never the
+		// query string, so it can't leak through server logs or browser history.
+		// get_param() merges query + body, so it is deliberately avoided here.
+		$query = $request->get_query_params();
+		if ( isset( $query['api_key'] ) ) {
+			return new WP_Error(
+				'wcpos_printnode_api_key_in_query',
+				__( 'The PrintNode API key must be sent in the request body, not the query string.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// JSON bodies land in the JSON param set, form-encoded bodies in POST;
+		// read both (cast handles the null-on-absent case) and never the query set.
+		$json    = (array) $request->get_json_params();
+		$body    = (array) $request->get_body_params();
+		$api_key = (string) ( $json['api_key'] ?? $body['api_key'] ?? '' );
 		if ( '' === $api_key ) {
 			return new WP_Error(
 				'wcpos_printnode_missing_api_key',
@@ -578,6 +594,16 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	private function create_order_job( string $printer_id, array $printer, int $order_id, string $template_id ) {
+		if ( ! wc_get_order( $order_id ) ) {
+			// Surface the bad order up front rather than enqueue a job that
+			// render_payload() can only ever resolve to an empty (never-printing) payload.
+			return new WP_Error(
+				'wcpos_print_job_unknown_order',
+				__( 'Unknown order.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
 		$template = Print_Job_Service::load_template( $template_id );
 		if ( null === $template ) {
 			return new WP_Error(

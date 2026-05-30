@@ -186,6 +186,10 @@ export function AddPrinterWizard({
 		try {
 			const list = await fetchPrintNodePrinters(apiKey.trim());
 			setPnPrinters(list);
+			// Drop a previously-selected id that isn't in the new list (e.g. after
+			// changing the API key) so Continue can't stay enabled with a stale id.
+			// Manual entry still works — the field is independently editable.
+			setPrinterId((current) => (list.some((p) => String(p.id) === current) ? current : ''));
 			if (list.length === 0) {
 				setPnFetchError(
 					t('cloud_print.printnode_no_printers', 'No printers found on this PrintNode account.')

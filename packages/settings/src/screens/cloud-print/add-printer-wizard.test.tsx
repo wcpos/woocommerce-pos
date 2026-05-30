@@ -188,6 +188,33 @@ describe('AddPrinterWizard', () => {
 		expect(onCreate.mock.calls[0][0].printnode_printer_id).toBe(88);
 	});
 
+	it('printnode flow: shows a "no printers" message when the account has none', async () => {
+		const fetchPrintNodePrinters = vi.fn().mockResolvedValue([]);
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="add"
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+				fetchPrintNodePrinters={fetchPrintNodePrinters}
+			/>
+		);
+
+		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		fireEvent.change(screen.getByTestId('wizard-printnode-api-key'), {
+			target: { value: 'valid-key' },
+		});
+		fireEvent.click(screen.getByTestId('wizard-printnode-fetch'));
+
+		await waitFor(() =>
+			expect(screen.getByTestId('wizard-printnode-fetch-error')).toBeInTheDocument()
+		);
+		expect(screen.getByTestId('wizard-printnode-fetch-error')).toHaveTextContent(/No printers found/i);
+		expect(screen.queryByTestId('wizard-printnode-printer-select')).not.toBeInTheDocument();
+	});
+
 	it('printnode flow: surfaces an error when fetching the printer list fails', async () => {
 		const fetchPrintNodePrinters = vi.fn().mockRejectedValue(new Error('bad key'));
 
