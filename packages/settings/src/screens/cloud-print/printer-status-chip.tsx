@@ -16,6 +16,8 @@ import type {
 const ENDPOINT = 'wcpos/v1/settings/cloud-print?wcpos=1';
 const STATUS_REFRESH_MS = 30000;
 
+type StatusSubscriber = (settings: CloudPrintSettings) => void;
+
 interface StatusMeta {
 	variant: ChipVariant;
 	label: string;
@@ -54,13 +56,50 @@ function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): Sta
 	}
 }
 
-async function fetchPrinterStatus(printerId: string): Promise<CloudStatus | undefined> {
-	const settings = (await apiFetch({
+async function fetchCloudPrintSettings(): Promise<CloudPrintSettings> {
+	return (await apiFetch({
 		path: ENDPOINT,
 		method: 'GET',
 	})) as CloudPrintSettings;
+}
 
-	return settings.printers.find((printer) => printer.id === printerId)?.status;
+const statusSubscribers = new Set<StatusSubscriber>();
+let statusRefreshIntervalId: number | undefined;
+let statusRefreshInFlight = false;
+
+async function refreshPrinterStatuses() {
+	if (statusRefreshInFlight) {
+		return;
+	}
+
+	statusRefreshInFlight = true;
+	try {
+		const settings = await fetchCloudPrintSettings();
+		statusSubscribers.forEach((subscriber) => subscriber(settings));
+	} catch {
+		// Keep displaying the last known status if a background refresh fails.
+	} finally {
+		statusRefreshInFlight = false;
+	}
+}
+
+function subscribeToPrinterStatusUpdates(subscriber: StatusSubscriber) {
+	statusSubscribers.add(subscriber);
+
+	if (statusRefreshIntervalId === undefined) {
+		statusRefreshIntervalId = window.setInterval(() => {
+			void refreshPrinterStatuses();
+		}, STATUS_REFRESH_MS);
+	}
+
+	return () => {
+		statusSubscribers.delete(subscriber);
+
+		if (statusSubscribers.size === 0 && statusRefreshIntervalId !== undefined) {
+			window.clearInterval(statusRefreshIntervalId);
+			statusRefreshIntervalId = undefined;
+		}
+	};
 }
 
 export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
@@ -68,28 +107,13 @@ export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
 	const [status, setStatus] = React.useState<CloudStatus | undefined>(printer.status);
 
 	React.useEffect(() => {
-		let cancelled = false;
 		setStatus(printer.status);
 
-		const refresh = async () => {
-			try {
-				const next = await fetchPrinterStatus(printer.id);
-				if (!cancelled) {
-					setStatus(next);
-				}
-			} catch {
-				// Keep displaying the last known status if a background refresh fails.
-			}
-		};
-
-		const intervalId = window.setInterval(() => {
-			void refresh();
-		}, STATUS_REFRESH_MS);
-
-		return () => {
-			cancelled = true;
-			window.clearInterval(intervalId);
-		};
+		return subscribeToPrinterStatusUpdates((settings) => {
+			setStatus(
+				settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status
+			);
+		});
 	}, [printer.id, printer.status]);
 
 	const meta = getStatusMeta(status, provider.isPolling);

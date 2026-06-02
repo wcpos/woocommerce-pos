@@ -30,10 +30,7 @@ describe('useCloudPrintSettings', () => {
 	it('does not refresh the whole cloud-print settings tree on an interval', () => {
 		useCloudPrintSettings();
 
-		expect(useSuspenseQueryMock).toHaveBeenCalledWith(
-			expect.not.objectContaining({
-				refetchInterval: expect.any(Number),
-			})
-		);
+		const [options] = useSuspenseQueryMock.mock.calls[0];
+		expect(options).not.toHaveProperty('refetchInterval');
 	});
 });

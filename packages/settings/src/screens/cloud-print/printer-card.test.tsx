@@ -141,6 +141,33 @@ describe('PrinterCard', () => {
 		expect(name.value).toBe('Typing a new name');
 	});
 
+	it('shares one status refresh request across multiple printer cards', async () => {
+		vi.useFakeTimers();
+		const kitchen = makePrinter({ id: 'p-kitchen', provider: 'printnode', status: 'unknown' });
+		const bar = makePrinter({ id: 'p-bar', provider: 'printnode', status: 'unknown' });
+		apiFetchMock.mockResolvedValue({
+			printers: [
+				{ ...kitchen, status: 'online' },
+				{ ...bar, status: 'offline' },
+			],
+			assignments: [],
+		});
+
+		renderCard({ printer: kitchen });
+		renderCard({ printer: bar });
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30001);
+			await Promise.resolve();
+		});
+
+		expect(apiFetchMock).toHaveBeenCalledTimes(1);
+		expect(screen.getByTestId(`printer-card-status-${kitchen.id}`)).toHaveTextContent(
+			'Online'
+		);
+		expect(screen.getByTestId(`printer-card-status-${bar.id}`)).toHaveTextContent('Offline');
+	});
+
 	it('renders a PDF/RAW format control only for PrintNode printers', () => {
 		const pn = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'online' });
 		const { unmount } = renderCard({ printer: pn });
