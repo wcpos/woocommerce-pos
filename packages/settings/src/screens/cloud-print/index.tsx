@@ -224,6 +224,14 @@ function CloudPrint() {
 				</ul>
 				<p className="wcpos:mt-2">
 					{t('cloud_print.intro_p3', 'Cashiers can also print to a cloud printer manually from the POS.')}
+					{' '}
+					<a
+						href="https://docs.wcpos.com/receipts/cloud-printing"
+						target="_blank"
+						rel="noopener noreferrer"
+					>
+						{t('cloud_print.learn_more', 'Learn more')}
+					</a>
 				</p>
 			</Callout>
 
@@ -241,7 +249,7 @@ function CloudPrint() {
 				) : (
 					<div
 						data-testid="cloud-print-list"
-						className="wcpos:grid wcpos:gap-4 wcpos:grid-cols-1 wcpos:sm:grid-cols-2 wcpos:lg:grid-cols-3"
+						className="wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4"
 					>
 						{draft.printers.map((printer) => (
 							<PrinterCard

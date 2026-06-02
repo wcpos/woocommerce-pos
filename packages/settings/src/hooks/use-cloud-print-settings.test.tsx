@@ -1,0 +1,41 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const setQueryDataMock = vi.fn();
+const mutateAsyncMock = vi.fn();
+const useSuspenseQueryMock = vi.fn();
+const useMutationMock = vi.fn();
+
+vi.mock('@tanstack/react-query', () => ({
+	useQueryClient: () => ({ setQueryData: setQueryDataMock }),
+	useSuspenseQuery: (opts: unknown) => useSuspenseQueryMock(opts),
+	useMutation: (opts: unknown) => useMutationMock(opts),
+}));
+
+vi.mock('@wordpress/api-fetch', () => ({ default: vi.fn() }));
+
+import { useCloudPrintSettings } from './use-cloud-print-settings';
+
+describe('useCloudPrintSettings', () => {
+	beforeEach(() => {
+		setQueryDataMock.mockReset();
+		mutateAsyncMock.mockReset();
+		useSuspenseQueryMock.mockReset();
+		useMutationMock.mockReset();
+		useSuspenseQueryMock.mockReturnValue({
+			data: { printers: [], assignments: [] },
+		});
+		useMutationMock.mockReturnValue({ mutateAsync: mutateAsyncMock });
+	});
+
+	it('refreshes cloud-print settings regularly so printer status labels stay current', () => {
+		useCloudPrintSettings();
+
+		expect(useSuspenseQueryMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				queryKey: ['cloud-print'],
+				refetchInterval: 30000,
+				refetchIntervalInBackground: true,
+			})
+		);
+	});
+});

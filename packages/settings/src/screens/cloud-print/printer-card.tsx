@@ -15,6 +15,7 @@ import {
 } from '@wcpos/ui';
 
 import { PROVIDERS } from './providers';
+import MoreVerticalIcon from '../../../assets/more-vertical-icon.svg';
 import ConfirmDialog from '../sessions/confirm-dialog';
 import { i18n, t } from '../../translations';
 
@@ -202,7 +203,7 @@ export function PrinterCard({
 
 	return (
 		<Card data-testid={`printer-card-${printer.id}`}>
-			<Card.Body>
+			<Card.Body className="wcpos:relative">
 				<div className="wcpos:flex wcpos:items-start wcpos:gap-3">
 					<span
 						className={
@@ -229,12 +230,12 @@ export function PrinterCard({
 								}
 							}}
 							aria-label={t('cloud_print.printer_name', 'Printer name')}
-							className="wcpos:w-full wcpos:rounded wcpos:border wcpos:border-transparent wcpos:bg-transparent wcpos:px-1 wcpos:py-0.5 wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900 wcpos:hover:border-gray-300 wcpos:focus:border-wp-admin-theme-color wcpos:focus:bg-white wcpos:focus:outline-none"
+							className="wcpos:w-full wcpos:rounded wcpos:border wcpos:border-transparent wcpos:bg-transparent wcpos:px-1 wcpos:py-0.5 wcpos:pr-8 wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900 wcpos:hover:border-gray-300 wcpos:focus:border-wp-admin-theme-color wcpos:focus:bg-white wcpos:focus:outline-none"
 						/>
 						<div className="wcpos:px-1 wcpos:text-xs wcpos:text-gray-500">{provider.label}</div>
 					</div>
 
-					<div className="wcpos:flex wcpos:items-center wcpos:gap-1">
+					<div className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:pr-8">
 						<Chip
 							variant={status.variant}
 							shape="pill"
@@ -246,14 +247,15 @@ export function PrinterCard({
 						<DropdownMenu
 							align="end"
 							label={t('cloud_print.printer_menu', 'Printer actions')}
+							className="wcpos:absolute wcpos:top-2 wcpos:right-2"
 							trigger={
-								<Button
-									variant="ghost"
+								<span
+									className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:w-7 wcpos:h-7 wcpos:rounded-md wcpos:text-gray-500 wcpos:hover:bg-gray-100 wcpos:hover:text-gray-700 wcpos:cursor-pointer"
 									data-testid={`printer-card-menu-${printer.id}`}
 									aria-label={t('cloud_print.printer_menu', 'Printer actions')}
 								>
-									⋮
-								</Button>
+									<MoreVerticalIcon className="wcpos:w-4 wcpos:h-4 wcpos:fill-current" />
+								</span>
 							}
 						>
 							<DropdownMenuItem onSelect={() => onOpenSetup(printer)}>

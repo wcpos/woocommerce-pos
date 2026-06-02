@@ -61,6 +61,22 @@ describe('AutoPrintRules', () => {
 		expect(within(row0).getByTestId('rule-template-0')).toBeInTheDocument();
 	});
 
+	it('sizes each rule select from its currently selected label', () => {
+		renderRules({
+			assignments: [{ printer_id: 'kitchen', scope: 'every', template_id: '11' }],
+		});
+
+		expect(screen.getByTestId('rule-scope-0')).toHaveStyle({
+			width: 'calc(11ch + 3.5rem)',
+		});
+		expect(screen.getByTestId('rule-printer-0')).toHaveStyle({
+			width: 'calc(7ch + 3.5rem)',
+		});
+		expect(screen.getByTestId('rule-template-0')).toHaveStyle({
+			width: 'calc(16ch + 3.5rem)',
+		});
+	});
+
 	it('changing scope select calls onChange with scope updated and other fields preserved', () => {
 		const { onChange } = renderRules();
 		const scope = screen.getByTestId('rule-scope-0');

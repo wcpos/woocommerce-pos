@@ -43,6 +43,7 @@ export interface CloudPrintSettingsResponse extends CloudPrintSettings {
 }
 
 const ENDPOINT = 'wcpos/v1/settings/cloud-print?wcpos=1';
+const STATUS_REFRESH_MS = 30000;
 
 /**
  * Read/write the cloud-print settings. The REST endpoint replaces the whole
@@ -54,6 +55,8 @@ export function useCloudPrintSettings() {
 	const { data } = useSuspenseQuery<CloudPrintSettings>({
 		queryKey: ['cloud-print'],
 		queryFn: () => apiFetch({ path: ENDPOINT, method: 'GET' }) as Promise<CloudPrintSettings>,
+		refetchInterval: STATUS_REFRESH_MS,
+		refetchIntervalInBackground: true,
 	});
 
 	const mutation = useMutation({
