@@ -21,6 +21,7 @@ export interface AutoPrintRulesProps {
 }
 
 type ScopeValue = CloudAssignment['scope'];
+type SentenceSelectOption = { value: string | number; label: string };
 
 function scopeOptions(): { value: ScopeValue; label: string }[] {
 	return [
@@ -33,6 +34,24 @@ function scopeOptions(): { value: ScopeValue; label: string }[] {
 // Templates live in WP-admin as the `wcpos_template` custom post type, so link
 // to its list screen rather than a route inside this React app.
 const TEMPLATES_URL = 'edit.php?post_type=wcpos_template';
+
+function selectedLabelLength(
+	options: SentenceSelectOption[],
+	value: string | number
+): number {
+	return (
+		options.find((option) => String(option.value) === String(value))?.label.length ?? 0
+	);
+}
+
+function sentenceSelectWidth(
+	options: SentenceSelectOption[],
+	value: string | number
+): React.CSSProperties {
+	return {
+		width: `calc(${Math.max(selectedLabelLength(options, value), 1)}ch + 3.5rem)`,
+	};
+}
 
 export function AutoPrintRules({
 	printers,
@@ -110,7 +129,8 @@ export function AutoPrintRules({
 							<Select
 								data-testid={`rule-scope-${i}`}
 								aria-label={t('cloud_print.rule_scope_label', 'Which orders to print')}
-								className="wcpos:w-auto"
+								className="wcpos:w-auto wcpos:max-w-full"
+								style={sentenceSelectWidth(scopeOptions(), a.scope)}
 								value={a.scope}
 								options={scopeOptions()}
 								onChange={({ value }) =>
@@ -121,7 +141,8 @@ export function AutoPrintRules({
 							<Select
 								data-testid={`rule-printer-${i}`}
 								aria-label={t('cloud_print.rule_printer_label', 'Printer')}
-								className="wcpos:w-auto"
+								className="wcpos:w-auto wcpos:max-w-full"
+								style={sentenceSelectWidth(printerOptions, a.printer_id)}
 								value={a.printer_id}
 								options={printerOptions}
 								onChange={({ value }) =>
@@ -132,7 +153,8 @@ export function AutoPrintRules({
 							<Select
 								data-testid={`rule-template-${i}`}
 								aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
-								className="wcpos:w-auto"
+								className="wcpos:w-auto wcpos:max-w-full"
+								style={sentenceSelectWidth(optionsForPrinter(a.printer_id), a.template_id)}
 								value={a.template_id}
 								options={optionsForPrinter(a.printer_id)}
 								onChange={({ value }) =>
