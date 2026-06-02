@@ -34,6 +34,12 @@ class Test_Consent extends WP_UnitTestCase {
 	 * Set up each test.
 	 */
 	public function setUp(): void {
+		// The consent REST routes are now gated behind woocommerce_pos_request()
+		// (see Consent::register_routes). The real call path carries the WCPOS
+		// flag, so set it before any rest_api_init for the routes to register.
+		// wcpos_request() reads the request headers via getallheaders().
+		$_SERVER['HTTP_X_WCPOS'] = '1';
+
 		parent::setUp();
 
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -67,6 +73,7 @@ class Test_Consent extends WP_UnitTestCase {
 			remove_action( 'rest_api_init', array( $this->consent, 'register_routes' ), 10 );
 		}
 		delete_transient( Consent::MODAL_TRANSIENT );
+		unset( $_SERVER['HTTP_X_WCPOS'] );
 		parent::tearDown();
 	}
 
@@ -514,5 +521,62 @@ class Test_Consent extends WP_UnitTestCase {
 			'',
 			get_user_meta( $user_id, Consent::CALLOUT_HIDE_META, true )
 		);
+	}
+
+	/**
+	 * Positive control for the WCPOS gate: with the flag present (set in
+	 * setUp), register_routes runs and the consent routes are registered.
+	 */
+	public function test_routes_registered_with_wcpos_flag(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'rest_api_init' );
+
+		$routes = rest_get_server()->get_routes();
+
+		$this->assertArrayHasKey( '/wcpos/v1/consent', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/consent/dismiss', $routes );
+	}
+
+	/**
+	 * Without the WCPOS flag the consent routes must NOT be registered,
+	 * matching the rest of /wcpos/v1/. register_routes returns early.
+	 */
+	public function test_routes_not_registered_without_wcpos_flag(): void {
+		// Arrange: clear the flag so woocommerce_pos_request() is false when
+		// rest_api_init fires, on a fresh REST server.
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- resetting the REST server for an isolated registration run.
+		$GLOBALS['wp_rest_server'] = null;
+
+		// Act.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'rest_api_init' );
+		$routes = rest_get_server()->get_routes();
+
+		// Assert.
+		$this->assertArrayNotHasKey( '/wcpos/v1/consent', $routes );
+		$this->assertArrayNotHasKey( '/wcpos/v1/consent/dismiss', $routes );
+	}
+
+	/**
+	 * Without the flag, dispatching the consent route returns rest_no_route
+	 * (the route is never registered, so it 404s).
+	 */
+	public function test_dispatch_without_wcpos_flag_returns_no_route(): void {
+		// Arrange: no WCPOS flag, fresh REST server.
+		unset( $_SERVER['HTTP_X_WCPOS'] );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- resetting the REST server for an isolated registration run.
+		$GLOBALS['wp_rest_server'] = null;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WP hook.
+		do_action( 'rest_api_init' );
+
+		// Act.
+		$request = new WP_REST_Request( 'POST', '/wcpos/v1/consent' );
+		$request->set_param( 'consent', 'allowed' );
+		$response = rest_do_request( $request );
+
+		// Assert.
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'rest_no_route', $response->get_data()['code'] );
 	}
 }
