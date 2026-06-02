@@ -5,6 +5,7 @@ import { FilterTabs } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
+import { CardGrid } from '../../components/card-grid';
 import { setUpdateExtensionsCount } from './use-update-extensions-count';
 import Notice from '../../components/notice';
 import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
@@ -123,11 +124,11 @@ function Extensions() {
 					{t('extensions.no_results', 'No extensions found.')}
 				</p>
 			) : (
-				<div className="wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4">
+				<CardGrid>
 					{filtered.map((ext) => (
 						<ExtensionCard key={ext.slug} extension={ext} />
 					))}
-				</div>
+				</CardGrid>
 			)}
 		</div>
 	);

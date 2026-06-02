@@ -9,6 +9,7 @@ import {
 import { AutoPrintRules } from './auto-print-rules';
 import { fetchPrintNodePrinters } from './fetch-printnode-printers';
 import { PrinterCard } from './printer-card';
+import { CardGrid } from '../../components/card-grid';
 import {
 	type CloudPrintSettings,
 	type CloudPrintSettingsResponse,
@@ -247,9 +248,8 @@ function CloudPrint() {
 						{t('cloud_print.no_printers', 'No cloud printers yet.')}
 					</p>
 				) : (
-					<div
+					<CardGrid
 						data-testid="cloud-print-list"
-						className="wcpos:grid wcpos:grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] wcpos:gap-4"
 					>
 						{draft.printers.map((printer) => (
 							<PrinterCard
@@ -261,7 +261,7 @@ function CloudPrint() {
 								onOpenSetup={(p) => setWizard({ open: true, mode: 'setup', printer: p })}
 							/>
 						))}
-					</div>
+					</CardGrid>
 				)}
 
 				<div className="wcpos:mt-4">

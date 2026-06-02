@@ -27,14 +27,12 @@ describe('useCloudPrintSettings', () => {
 		useMutationMock.mockReturnValue({ mutateAsync: mutateAsyncMock });
 	});
 
-	it('refreshes cloud-print settings regularly so printer status labels stay current', () => {
+	it('does not refresh the whole cloud-print settings tree on an interval', () => {
 		useCloudPrintSettings();
 
 		expect(useSuspenseQueryMock).toHaveBeenCalledWith(
-			expect.objectContaining({
-				queryKey: ['cloud-print'],
-				refetchInterval: 30000,
-				refetchIntervalInBackground: true,
+			expect.not.objectContaining({
+				refetchInterval: expect.any(Number),
 			})
 		);
 	});

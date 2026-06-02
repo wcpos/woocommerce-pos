@@ -4,7 +4,7 @@ import classNames from 'classnames';
 
 import { Card, Chip, DropdownMenu, DropdownMenuItem, Tooltip } from '@wcpos/ui';
 
-import MoreVerticalIcon from '../../../assets/more-vertical-icon.svg';
+import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { t } from '../../translations';
 
 import type { Extension } from './index';
@@ -225,12 +225,9 @@ function ExtensionCard({ extension }: ExtensionCardProps) {
 						label={extension.name}
 						className="wcpos:absolute wcpos:top-2 wcpos:right-2"
 						trigger={
-							<span
-								className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:w-7 wcpos:h-7 wcpos:rounded-md wcpos:text-gray-500 wcpos:hover:bg-gray-100 wcpos:hover:text-gray-700 wcpos:cursor-pointer"
-								aria-label={t('extensions.more_actions', 'More actions')}
-							>
-								<MoreVerticalIcon className="wcpos:w-4 wcpos:h-4 wcpos:fill-current" />
-							</span>
+							<KebabMenuTrigger
+								label={t('extensions.more_actions', 'More actions')}
+							/>
 						}
 					>
 						{showSettingsItem && (

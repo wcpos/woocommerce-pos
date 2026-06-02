@@ -1,7 +1,8 @@
 import * as React from 'react';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SnackbarProvider } from '@wcpos/ui';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiFetchMock = vi.fn();
@@ -31,16 +32,19 @@ function renderCard(props: Partial<React.ComponentProps<typeof PrinterCard>> = {
 	const onOpenSetup = props.onOpenSetup ?? vi.fn();
 	const onUpdate = props.onUpdate ?? vi.fn();
 	const printer = props.printer ?? makePrinter();
+	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	const utils = render(
-		<SnackbarProvider>
-			<PrinterCard
-				printer={printer}
-				onRename={onRename}
-				onRemove={onRemove}
-				onOpenSetup={onOpenSetup}
-				onUpdate={onUpdate}
-			/>
-		</SnackbarProvider>
+		<QueryClientProvider client={client}>
+			<SnackbarProvider>
+				<PrinterCard
+					printer={printer}
+					onRename={onRename}
+					onRemove={onRemove}
+					onOpenSetup={onOpenSetup}
+					onUpdate={onUpdate}
+				/>
+			</SnackbarProvider>
+		</QueryClientProvider>
 	);
 	return { ...utils, onRename, onRemove, onOpenSetup, onUpdate, printer };
 }
@@ -109,6 +113,32 @@ describe('PrinterCard', () => {
 		renderCard({ printer });
 		const chip = screen.getByTestId(`printer-card-status-${printer.id}`);
 		expect(chip).toHaveTextContent(/Unknown/);
+	});
+
+	it('refreshes only the status chip and does not overwrite an in-progress name edit', async () => {
+		vi.useFakeTimers();
+		const printer = makePrinter({ id: 'p-pn', provider: 'printnode', status: 'unknown' });
+		apiFetchMock.mockResolvedValue({
+			printers: [{ ...printer, status: 'online', name: 'Server Name' }],
+			assignments: [],
+		});
+		renderCard({ printer });
+		const name = screen.getByTestId(`printer-card-name-${printer.id}`) as HTMLInputElement;
+
+		fireEvent.change(name, { target: { value: 'Typing a new name' } });
+		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent(
+			'Unknown'
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30001);
+			await Promise.resolve();
+		});
+
+		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent(
+			'Online'
+		);
+		expect(name.value).toBe('Typing a new name');
 	});
 
 	it('renders a PDF/RAW format control only for PrintNode printers', () => {

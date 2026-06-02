@@ -5,23 +5,21 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
 	Card,
-	Chip,
 	DropdownMenu,
 	DropdownMenuItem,
 	Select,
 	Tooltip,
 	useSnackbar,
-	type ChipVariant,
 } from '@wcpos/ui';
 
 import { PROVIDERS } from './providers';
-import MoreVerticalIcon from '../../../assets/more-vertical-icon.svg';
+import { PrinterStatusChip } from './printer-status-chip';
 import ConfirmDialog from '../sessions/confirm-dialog';
+import { KebabMenuTrigger } from '../../components/kebab-menu-trigger';
 import { i18n, t } from '../../translations';
 
 import type {
 	CloudPrinter,
-	CloudStatus,
 	PrintnodeFormat,
 } from '../../hooks/use-cloud-print-settings';
 
@@ -32,44 +30,6 @@ export interface PrinterCardProps {
 	onOpenSetup: (printer: CloudPrinter) => void;
 	/** Persist arbitrary field changes (e.g. the PrintNode print format). */
 	onUpdate: (id: string, changes: Partial<CloudPrinter>) => void;
-}
-
-interface StatusMeta {
-	variant: ChipVariant;
-	label: string;
-}
-
-/**
- * Map a printer's connection status to a Chip variant + localized label.
- *
- * Polling providers (Star/Epson) report `connected | waiting | offline`.
- * PrintNode reports its real upstream state `online | offline | unknown`
- * (or `undefined` before the first status read).
- */
-function getStatusMeta(status: CloudStatus | undefined, isPolling: boolean): StatusMeta {
-	if (!isPolling) {
-		switch (status) {
-			case 'online':
-				return { variant: 'success', label: t('cloud_print.status_online', 'Online') };
-			case 'offline':
-				return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };
-			case 'unknown':
-			default:
-				return { variant: 'info', label: t('cloud_print.status_unknown', 'Unknown') };
-		}
-	}
-	switch (status) {
-		case 'connected':
-			return { variant: 'success', label: t('cloud_print.status_connected', 'Connected') };
-		case 'waiting':
-			return {
-				variant: 'warning',
-				label: t('cloud_print.status_waiting', 'Waiting for printer'),
-			};
-		case 'offline':
-		default:
-			return { variant: 'error', label: t('cloud_print.status_offline', 'Offline') };
-	}
 }
 
 /** PDF/RAW options for the PrintNode format control. */
@@ -135,7 +95,6 @@ export function PrinterCard({
 }: PrinterCardProps) {
 	const { addSnackbar } = useSnackbar();
 	const provider = PROVIDERS[printer.provider];
-	const status = getStatusMeta(printer.status, provider.isPolling);
 	const isPrintNode = printer.provider === 'printnode';
 	// Render the absent field as the server default ('pdf').
 	const format: PrintnodeFormat = printer.printnode_format ?? 'pdf';
@@ -236,26 +195,16 @@ export function PrinterCard({
 					</div>
 
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-1 wcpos:pr-8">
-						<Chip
-							variant={status.variant}
-							shape="pill"
-							size="sm"
-							data-testid={`printer-card-status-${printer.id}`}
-						>
-							{status.label}
-						</Chip>
+						<PrinterStatusChip printer={printer} />
 						<DropdownMenu
 							align="end"
 							label={t('cloud_print.printer_menu', 'Printer actions')}
 							className="wcpos:absolute wcpos:top-2 wcpos:right-2"
 							trigger={
-								<span
-									className="wcpos:inline-flex wcpos:items-center wcpos:justify-center wcpos:w-7 wcpos:h-7 wcpos:rounded-md wcpos:text-gray-500 wcpos:hover:bg-gray-100 wcpos:hover:text-gray-700 wcpos:cursor-pointer"
-									data-testid={`printer-card-menu-${printer.id}`}
-									aria-label={t('cloud_print.printer_menu', 'Printer actions')}
-								>
-									<MoreVerticalIcon className="wcpos:w-4 wcpos:h-4 wcpos:fill-current" />
-								</span>
+								<KebabMenuTrigger
+									label={t('cloud_print.printer_menu', 'Printer actions')}
+									testId={`printer-card-menu-${printer.id}`}
+								/>
 							}
 						>
 							<DropdownMenuItem onSelect={() => onOpenSetup(printer)}>
