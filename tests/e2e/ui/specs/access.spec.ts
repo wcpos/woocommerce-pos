@@ -12,19 +12,24 @@ test.describe('Access Settings', () => {
 	});
 
 	test('renders the role list', async ({ adminPage }) => {
-		// At least Administrator and Shop Manager must appear in the role list,
-		// or the access settings response wasn't translated into a role list.
-		await expect(adminPage.getByText('Administrator')).toBeVisible({ timeout: 10000 });
-		await expect(adminPage.getByText('Shop Manager')).toBeVisible();
+		// At least the administrator and shop_manager rows must appear in the
+		// role list, or the access settings response wasn't rendered into a
+		// role list. Match by stable role-id testid rather than the translated
+		// display name, which changes per locale.
+		await expect(adminPage.getByTestId('access-role-administrator')).toBeVisible({
+			timeout: 10000,
+		});
+		await expect(adminPage.getByTestId('access-role-shop_manager')).toBeVisible();
 	});
 
 	test('selecting a role renders its capability groups', async ({ adminPage }) => {
 		// Administrator is selected by default. Capabilities are grouped under
-		// WCPOS / WooCommerce / WordPress headings — at least the WCPOS heading
-		// must render or the capability tree is broken.
-		await expect(adminPage.getByRole('heading', { name: 'WCPOS' })).toBeVisible({
+		// WCPOS / WooCommerce / WordPress headings — at least the WCPOS and
+		// WordPress groups must render or the capability tree is broken. The
+		// group testids are keyed off the non-translatable group ids.
+		await expect(adminPage.getByTestId('access-capability-group-wcpos')).toBeVisible({
 			timeout: 10000,
 		});
-		await expect(adminPage.getByRole('heading', { name: 'WordPress' })).toBeVisible();
+		await expect(adminPage.getByTestId('access-capability-group-wp')).toBeVisible();
 	});
 });

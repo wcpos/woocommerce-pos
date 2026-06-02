@@ -53,6 +53,7 @@ export function NavItem({ to, label, badge, onClick }: NavItemProps) {
 		<Link
 			to={to}
 			onClick={onClick}
+			data-testid={`settings-nav-${to.replace(/^\//, '')}`}
 			className={classNames(
 				'wcpos:flex wcpos:items-center wcpos:justify-between wcpos:px-4 wcpos:py-2 wcpos:text-sm wcpos:no-underline wcpos:border-l-3 wcpos:transition-colors wcpos:hover:bg-gray-100 wcpos:focus-visible:outline-none wcpos:focus-visible:bg-gray-100',
 				isActive

@@ -10,27 +10,27 @@ test.describe('Settings Navigation', () => {
 
 	test('clicking nav items changes the route', async ({ adminPage }) => {
 		// Click Checkout
-		await adminPage.locator('aside').getByText('Checkout').click();
+		await adminPage.getByTestId('settings-nav-checkout').click();
 		await adminPage.waitForTimeout(500);
 		expect(adminPage.url()).toContain('#/checkout');
 
 		// Click Access
-		await adminPage.locator('aside').getByText('Access').click();
+		await adminPage.getByTestId('settings-nav-access').click();
 		await adminPage.waitForTimeout(500);
 		expect(adminPage.url()).toContain('#/access');
 
 		// Click Sessions
-		await adminPage.locator('aside').getByText('Sessions').click();
+		await adminPage.getByTestId('settings-nav-sessions').click();
 		await adminPage.waitForTimeout(500);
 		expect(adminPage.url()).toContain('#/sessions');
 
 		// Click License
-		await adminPage.locator('aside').getByText('License').click();
+		await adminPage.getByTestId('settings-nav-license').click();
 		await adminPage.waitForTimeout(500);
 		expect(adminPage.url()).toContain('#/license');
 
 		// Click General to go back
-		await adminPage.locator('aside').getByText('General').click();
+		await adminPage.getByTestId('settings-nav-general').click();
 		await adminPage.waitForTimeout(500);
 		expect(adminPage.url()).toContain('#/general');
 	});

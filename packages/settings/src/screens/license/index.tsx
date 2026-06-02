@@ -128,6 +128,7 @@ function License() {
 					<p className="wcpos:text-gray-600 wcpos:mb-3">{t('license.support_development')}</p>
 					<a
 						href="https://wcpos.com/pro"
+						data-testid="license-upgrade-cta"
 						className="wcpos:inline-block wcpos:font-medium wcpos:text-[color:var(--wp-admin-theme-color)] hover:wcpos:underline"
 						onClick={() => captureUpgradeCtaClicked('license_screen_link', 'https://wcpos.com/pro')}
 					>

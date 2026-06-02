@@ -185,7 +185,7 @@ function Sessions() {
 
 	return (
 		<div className="wcpos:p-4">
-			<div className="wcpos:mb-3">
+			<div className="wcpos:mb-3" data-testid="sessions-manage-description">
 				<Notice status="info" isDismissible={false}>
 					{t('sessions.manage_description')}
 				</Notice>

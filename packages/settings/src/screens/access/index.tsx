@@ -33,6 +33,7 @@ function Access() {
 						{map(data, (role: { name: string }, id) => (
 							<li
 								key={id}
+								data-testid={`access-role-${id}`}
 								className={classNames(
 									'wcpos:p-4 wcpos:mb-1 wcpos:rounded wcpos:font-medium wcpos:text-sm wcpos:hover:bg-gray-100 wcpos:cursor-pointer',
 									id === selected &&
@@ -52,7 +53,7 @@ function Access() {
 						map(capabilities, (caps, group) => {
 							return (
 								<div key={group}>
-									<h2 className="wcpos:text-base">
+									<h2 className="wcpos:text-base" data-testid={`access-capability-group-${group}`}>
 										{
 											{
 												wcpos: 'WCPOS',

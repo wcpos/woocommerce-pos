@@ -30,7 +30,8 @@ test.describe('Extension Registry', () => {
 			});
 		});
 
-		// The sidebar should now contain the "Test Page" link
-		await expect(adminPage.locator('aside').getByText('Test Page')).toBeVisible({ timeout: 5000 });
+		// The sidebar should now contain the registered test page link. Match
+		// by the route testid (derived from the page id) rather than the label.
+		await expect(adminPage.getByTestId('settings-nav-test-page')).toBeVisible({ timeout: 5000 });
 	});
 });

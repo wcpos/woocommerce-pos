@@ -283,12 +283,14 @@ function Gateways() {
 				<TableHeader>
 					<TableHeaderRow>
 						<TableHead scope="col" />
-						<TableHead scope="col" className="wcpos:text-center">
+						<TableHead scope="col" className="wcpos:text-center" data-testid="gateways-th-default">
 							{t('common.default')}
 						</TableHead>
-						<TableHead scope="col">{t('common.gateway')}</TableHead>
+						<TableHead scope="col" data-testid="gateways-th-gateway">
+							{t('common.gateway')}
+						</TableHead>
 						<TableHead scope="col">{t('checkout.gateway_id')}</TableHead>
-						<TableHead scope="col" className="wcpos:text-center">
+						<TableHead scope="col" className="wcpos:text-center" data-testid="gateways-th-enabled">
 							{t('common.enabled')}
 						</TableHead>
 						<TableHead scope="col">{t('checkout.order_status')}</TableHead>
