@@ -429,27 +429,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response
 	 */
 	private function serve_raw( string $body, string $content_type ) {
-		$response = rest_ensure_response( null );
-		$response->set_status( 200 );
-		$response->header( 'Content-Type', $content_type );
-
-		$served = false;
-		add_filter(
-			'rest_pre_serve_request',
-			static function ( $served_result, $result ) use ( $response, $body, &$served ) {
-				if ( $served || $result !== $response ) {
-					return $served_result;
-				}
-				$served = true;
-				echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Raw printer bytes.
-
-				return true;
-			},
-			10,
-			2
-		);
-
-		return $response;
+		return Raw_Response::serve( $body, $content_type );
 	}
 
 

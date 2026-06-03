@@ -58,6 +58,52 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It fits a short thermal receipt PDF page to the rendered content height.
+	 */
+	public function test_render_thermal_fits_page_to_content(): void {
+		// Arrange.
+		$order    = OrderHelper::create_order();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48"><text>Order {{order.number}}</text></receipt>',
+		);
+		$service  = new Template_Pdf_Service();
+
+		// Act.
+		$pdf = $service->render( $template, $order );
+		$box = $this->get_media_box( $pdf );
+
+		// Assert.
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
+		$this->assertEquals( 1, $this->get_pdf_page_count( $pdf ) );
+		$this->assertEquals( 226.77, $box['width'], '', 0.01 );
+		$this->assertLessThan( 1000.0, $box['height'] );
+	}
+
+	/**
+	 * It keeps a long thermal receipt on one fitted continuous-roll PDF page.
+	 */
+	public function test_render_thermal_long_receipt_stays_single_page(): void {
+		// Arrange.
+		$order = OrderHelper::create_order();
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48">' . str_repeat( '<text>Line item {{order.number}}</text>', 80 ) . '<barcode type="code128">12345</barcode></receipt>',
+		);
+		$service  = new Template_Pdf_Service();
+
+		// Act.
+		$pdf = $service->render( $template, $order );
+		$box = $this->get_media_box( $pdf );
+
+		// Assert.
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
+		$this->assertEquals( 1, $this->get_pdf_page_count( $pdf ) );
+		$this->assertEquals( 226.77, $box['width'], '', 0.01 );
+		$this->assertGreaterThan( 1000.0, $box['height'] );
+	}
+
+	/**
 	 * It renders a logicless template into PDF bytes.
 	 */
 	public function test_render_logicless_template_returns_pdf_bytes(): void {
@@ -118,5 +164,43 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 
 		// Assert.
 		$this->assertStringContainsString( (string) $order->get_order_number(), $html );
+	}
+
+	/**
+	 * Read the first page MediaBox dimensions from PDF bytes.
+	 *
+	 * @param string $pdf PDF bytes.
+	 *
+	 * @return array{width: float, height: float}
+	 */
+	private function get_media_box( string $pdf ): array {
+		$this->assertMatchesRegularExpression(
+			'/\\/MediaBox\\s*\\[\\s*([\\d.\\-]+)\\s+([\\d.\\-]+)\\s+([\\d.\\-]+)\\s+([\\d.\\-]+)\\s*\\]/',
+			$pdf,
+			'PDF should contain a MediaBox.'
+		);
+		preg_match(
+			'/\\/MediaBox\\s*\\[\\s*([\\d.\\-]+)\\s+([\\d.\\-]+)\\s+([\\d.\\-]+)\\s+([\\d.\\-]+)\\s*\\]/',
+			$pdf,
+			$matches
+		);
+
+		return array(
+			'width'  => (float) $matches[3] - (float) $matches[1],
+			'height' => (float) $matches[4] - (float) $matches[2],
+		);
+	}
+
+	/**
+	 * Count PDF pages by counting page objects.
+	 *
+	 * @param string $pdf PDF bytes.
+	 *
+	 * @return int
+	 */
+	private function get_pdf_page_count( string $pdf ): int {
+		preg_match_all( '/\\/Type\\s*\\/Page\\b/', $pdf, $matches );
+
+		return \count( $matches[0] );
 	}
 }

@@ -40,15 +40,15 @@ class Template_Pdf_Service {
 			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
 			$html = ( new Html_Thermal_Emitter() )->emit( $ast );
 
-			// Narrow continuous-roll receipt page: ~80mm wide (226.77pt). The height
-			// is a deliberate fixed large value — PrintNode/the printer trims the
-			// continuous roll — and is a candidate for future tuning. The monospace
-			// default font matches the receipt wrapper's font-family.
+			// Narrow continuous-roll receipt page: ~80mm wide (226.77pt). Render on
+			// a tall probe page, then let Pdf_Renderer fit the height to the content
+			// so downloaded PDFs and PrintNode PDFs avoid blank tails/overflow pages.
 			return ( new Pdf_Renderer() )->render_html(
 				$html,
 				array(
-					'paper'        => array( 0, 0, 226.77, 1000.0 ),
+					'paper'        => array( 0, 0, 226.77, 100000.0 ),
 					'default_font' => 'dejavu sans mono',
+					'fit_height'   => true,
 				)
 			);
 		}

@@ -41,6 +41,7 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$routes = $this->server->get_routes();
 
 		$this->assertArrayHasKey( '/wcpos/v1/receipts/(?P<order_id>[\d]+)', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/receipts/(?P<order_id>[\d]+)/pdf', $routes );
 	}
 
 	/**
@@ -133,5 +134,135 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
+	}
+
+	/**
+	 * Test PDF endpoint returns downloadable PDF bytes.
+	 */
+	public function test_get_receipt_pdf_returns_pdf_bytes(): void {
+		$order       = OrderHelper::create_order();
+		$template_id = $this->create_receipt_template();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+		$request->set_param( 'template_id', (string) $template_id );
+		$response = $this->server->dispatch( $request );
+		$headers  = $response->get_headers();
+		$body     = $this->serve_raw_response_body( $response, $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'application/pdf', $headers['Content-Type'] );
+		$this->assertEquals( 'attachment; filename="receipt-' . $order->get_id() . '.pdf"', $headers['Content-Disposition'] );
+		$this->assertStringStartsWith( '%PDF-', $body );
+		$this->assertEquals( (string) \strlen( $body ), $headers['Content-Length'] );
+	}
+
+	/**
+	 * Test PDF endpoint sets no-store cache header.
+	 */
+	public function test_get_receipt_pdf_sets_no_store_cache_header(): void {
+		$order       = OrderHelper::create_order();
+		$template_id = $this->create_receipt_template();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+		$request->set_param( 'template_id', (string) $template_id );
+		$response = $this->server->dispatch( $request );
+		$headers  = $response->get_headers();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'no-store', $headers['Cache-Control'] );
+	}
+
+	/**
+	 * Test PDF endpoint returns 404 for unknown order.
+	 */
+	public function test_get_receipt_pdf_unknown_order_returns_404(): void {
+		$template_id = $this->create_receipt_template();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/999999/pdf' );
+		$request->set_param( 'template_id', (string) $template_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 404, $response->get_status() );
+	}
+
+	/**
+	 * Test PDF endpoint returns 404 for unknown template.
+	 */
+	public function test_get_receipt_pdf_unknown_template_returns_404(): void {
+		$order = OrderHelper::create_order();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+		$request->set_param( 'template_id', '999999' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 404, $response->get_status() );
+	}
+
+	/**
+	 * Test PDF endpoint rejects an empty template id.
+	 */
+	public function test_get_receipt_pdf_empty_template_id_returns_400(): void {
+		$order = OrderHelper::create_order();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+		$request->set_param( 'template_id', '   ' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+	}
+
+	/**
+	 * Test PDF endpoint requires POS access.
+	 */
+	public function test_get_receipt_pdf_requires_capability(): void {
+		$order         = OrderHelper::create_order();
+		$template_id   = $this->create_receipt_template();
+		$subscriber_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $subscriber_id );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+		$request->set_param( 'template_id', (string) $template_id );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+	}
+
+	/**
+	 * Create a minimal receipt template for PDF endpoint tests.
+	 *
+	 * @return int Template post ID.
+	 */
+	private function create_receipt_template(): int {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'publish',
+				'post_title'   => 'PDF Receipt',
+				'post_content' => '<receipt paper-width="48"><text>Order {{order.number}}</text></receipt>',
+			)
+		);
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+		update_post_meta( $post_id, '_template_engine', 'thermal' );
+		update_post_meta( $post_id, '_template_output_type', 'html' );
+		update_post_meta( $post_id, '_template_language', 'xml' );
+		update_post_meta( $post_id, '_template_tax_display', 'default' );
+
+		return $post_id;
+	}
+
+	/**
+	 * Capture raw REST bytes emitted through rest_pre_serve_request.
+	 *
+	 * @param \WP_REST_Response $response Response object.
+	 * @param \WP_REST_Request  $request  Request object.
+	 *
+	 * @return string
+	 */
+	private function serve_raw_response_body( \WP_REST_Response $response, \WP_REST_Request $request ): string {
+		ob_start();
+		apply_filters( 'rest_pre_serve_request', false, $response, $request, $this->server );
+		$body = ob_get_clean();
+
+		return false === $body ? '' : $body;
 	}
 }
