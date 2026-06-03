@@ -650,6 +650,82 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It proxies Star Online devices for the add-printer wizard.
+	 */
+	public function test_star_online_devices_proxy_returns_list(): void {
+		$this->mock_http(
+			$this->fake_response(
+				array(
+					array(
+						'AccessIdentifier' => 'abc',
+						'ClientType'       => 'Star mC-Print2',
+						'Status'           => array( 'Online' => true ),
+					),
+				)
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/star-online/devices' );
+		$request->set_body_params(
+			array(
+				'cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+				'api_key'       => 'KEY',
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$devices = $response->get_data()['devices'];
+		$this->assertSame( 'abc', $devices[0]['id'] );
+		$this->assertSame( 'Star mC-Print2', $devices[0]['name'] );
+	}
+
+	/**
+	 * It rejects Star Online API keys in query strings.
+	 */
+	public function test_star_online_devices_rejects_api_key_in_query(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/star-online/devices' );
+		$request->set_query_params( array( 'api_key' => 'KEY' ) );
+		$request->set_body_params( array( 'cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot' ) );
+
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+	}
+
+	/**
+	 * It queues and immediately submits a Star Online test print.
+	 */
+	public function test_test_print_star_online_queues_and_submits(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                 => 'star',
+						'name'               => 'Star',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$this->mock_http( $this->fake_response( array( 'JobId' => '999' ), 201 ) );
+
+		$req = $this->wp_rest_post_request( '/wcpos/v1/print-jobs/test' );
+		$req->set_body_params( array( 'printer_id' => 'star' ) );
+		$res = rest_do_request( $req );
+
+		$this->assertEquals( 201, $res->get_status() );
+		$this->assertNotEquals( 'wcpos_print_job_no_diagnostic', $res->as_error() ? $res->as_error()->get_error_code() : '' );
+		$this->assertSame( '999', $res->get_data()['external_job_id'] );
+		$this->assertNotFalse( wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $res->get_data()['id'] ) ) );
+	}
+
+	/**
 	 * Seed a print job.
 	 *
 	 * @param string $printer_id Printer ID.
