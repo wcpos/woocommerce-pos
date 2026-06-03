@@ -450,7 +450,9 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 		// Assert.
 		$this->assertEquals( 201, $res->get_status() );
 		$this->assertEquals( true, $res->get_data()['submitted'] );
-		$this->assertEquals( 555, $res->get_data()['pn_job_id'] );
+		$this->assertSame( 'printnode', $res->get_data()['external_provider'] );
+		$this->assertSame( '555', $res->get_data()['external_job_id'] );
+		$this->assertSame( 'submitted', $res->get_data()['external_state'] );
 
 		$body = json_decode( $this->captured['args']['body'], true );
 		$this->assertEquals( 'pdf_base64', $body['contentType'] );

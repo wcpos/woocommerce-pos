@@ -860,8 +860,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		return new WP_REST_Response(
 			array(
-				'submitted' => true,
-				'pn_job_id' => (int) $result['id'],
+				'submitted'         => true,
+				'external_provider' => 'printnode',
+				'external_job_id'   => (string) $result['id'],
+				'external_state'    => 'submitted',
 			),
 			201
 		);
