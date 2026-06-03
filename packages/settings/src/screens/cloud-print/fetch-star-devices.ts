@@ -1,6 +1,6 @@
 import apiFetch from '@wordpress/api-fetch';
 
-import type { StarDeviceOption } from './add-printer-wizard';
+export type StarDeviceOption = { id: string; name: string; state: string };
 
 /**
  * Fetch the stario.online devices for a CloudPRNT URL + API key via the WCPOS

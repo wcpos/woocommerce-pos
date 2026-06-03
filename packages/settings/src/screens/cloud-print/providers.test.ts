@@ -82,4 +82,10 @@ describe('templateOptionsForProvider', () => {
 	it('keeps all templates for PrintNode (push provider)', () => {
 		expect(templateOptionsForProvider(opts, 'printnode')).toEqual(opts);
 	});
+
+	it('keeps only thermal templates for Star Online (push provider)', () => {
+		expect(templateOptionsForProvider(opts, 'star-online')).toEqual([
+			{ value: '1', label: 'A', engine: 'thermal' },
+		]);
+	});
 });

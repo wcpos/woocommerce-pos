@@ -74,4 +74,25 @@ class Star_Markup_Thermal_Emitter_Test extends WP_UnitTestCase {
 		) );
 		$this->assertStringContainsString( '[image: url ' . home_url( '/wp-content/logo.png' ) . ';', $out );
 	}
+
+	public function test_row_preserves_inline_formatting_inside_columns(): void {
+		$out = $this->emit( array(
+			array( 'type' => 'row', 'children' => array(
+				array( 'type' => 'column', 'width' => 24, 'children' => array(
+					array( 'type' => 'bold', 'children' => array(
+						array( 'type' => 'text', 'children' => array(
+							array( 'type' => 'raw-text', 'value' => 'Total' ),
+						) ),
+					) ),
+				) ),
+				array( 'type' => 'column', 'width' => 24, 'align' => 'right', 'children' => array(
+					array( 'type' => 'raw-text', 'value' => '$10.00' ),
+				) ),
+			) ),
+		) );
+
+		$this->assertStringContainsString( '[fixedWidth: on][bold: on]Total[bold: off]', $out );
+		$this->assertStringContainsString( '$10.00[fixedWidth: off]', $out );
+	}
+
 }

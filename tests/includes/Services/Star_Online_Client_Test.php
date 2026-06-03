@@ -70,20 +70,20 @@ class Star_Online_Client_Test extends WP_UnitTestCase {
 
 	public function test_device_state_reads_status_online(): void {
 		remove_filter( 'pre_http_request', array( $this, 'intercept' ), 10 );
-		add_filter(
-			'pre_http_request',
-			static function () {
-				return array(
-					'headers'  => array(),
-					'body'     => wp_json_encode( array( 'Status' => array( 'Online' => true ) ) ),
-					'response' => array( 'code' => 200, 'message' => 'OK' ),
-				);
-			},
-			10,
-			3
-		);
+		$filter = static function () {
+			return array(
+				'headers'  => array(),
+				'body'     => wp_json_encode( array( 'Status' => array( 'Online' => true ) ) ),
+				'response' => array( 'code' => 200, 'message' => 'OK' ),
+			);
+		};
+		add_filter( 'pre_http_request', $filter, 10, 3 );
 
-		$client = new Star_Online_Client( 'https://eu-api.stario.online/v1', 'KEY' );
-		$this->assertSame( 'online', $client->device_state( 'kilbot', 'abc' ) );
+		try {
+			$client = new Star_Online_Client( 'https://eu-api.stario.online/v1', 'KEY' );
+			$this->assertSame( 'online', $client->device_state( 'kilbot', 'abc' ) );
+		} finally {
+			remove_filter( 'pre_http_request', $filter, 10 );
+		}
 	}
 }

@@ -240,6 +240,45 @@ describe('AddPrinterWizard', () => {
 		);
 	});
 
+	it('clears provider-scoped state when switching providers', async () => {
+		const fetchStarDevices = vi.fn().mockResolvedValue([
+			{ id: 'star-1', name: 'Star One', state: 'online' },
+		]);
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="add"
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+				fetchStarDevices={fetchStarDevices}
+			/>
+		);
+
+		fireEvent.click(screen.getByTestId('provider-choice-star-online'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+		fireEvent.change(screen.getByTestId('wizard-name-input'), {
+			target: { value: 'Star printer' },
+		});
+		fireEvent.change(screen.getByTestId('wizard-star-cloudprnt-url'), {
+			target: { value: 'https://eu-device.stario.online/cloudprnt/kilbot' },
+		});
+		fireEvent.change(screen.getByTestId('wizard-star-api-key'), {
+			target: { value: 'STAR-KEY' },
+		});
+		fireEvent.click(screen.getByTestId('wizard-star-fetch'));
+		await screen.findByTestId('wizard-star-device-select');
+
+		fireEvent.click(screen.getByTestId('wizard-back'));
+		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
+		fireEvent.click(screen.getByTestId('wizard-continue'));
+
+		expect(screen.getByTestId('wizard-name-input')).toHaveValue('Star printer');
+		expect(screen.getByTestId('wizard-printnode-api-key')).toHaveValue('');
+		expect(screen.getByTestId('wizard-printnode-printer-id')).not.toHaveValue('star-1');
+		expect(screen.queryByTestId('wizard-star-device-select')).not.toBeInTheDocument();
+	});
+
 	it('setup mode: opens at step 2 with masked token and does not call onCreate', () => {
 		const onCreate = vi.fn();
 		render(

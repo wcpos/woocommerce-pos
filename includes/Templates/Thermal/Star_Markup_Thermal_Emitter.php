@@ -199,17 +199,18 @@ class Star_Markup_Thermal_Emitter {
 
 		$line = '';
 		foreach ( $cols as $index => $col ) {
-			$width = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
-			$text  = $this->extract_text( isset( $col['children'] ) && \is_array( $col['children'] ) ? $col['children'] : array() );
-			$text  = $this->truncate( $text, $width );
-			$pad   = max( 0, $width - $this->display_width( $text ) );
-			$align = isset( $col['align'] ) ? $col['align'] : 'left';
+			$width    = isset( $widths[ $index ] ) ? $widths[ $index ] : 1;
+			$children = isset( $col['children'] ) && \is_array( $col['children'] ) ? $col['children'] : array();
+			$text     = $this->truncate( $this->extract_text( $children ), $width );
+			$markup   = $this->render_inline( $children, $width );
+			$pad      = max( 0, $width - $this->display_width( $text ) );
+			$align    = isset( $col['align'] ) ? $col['align'] : 'left';
 			$line .= ( 'right' === $align )
-				? str_repeat( ' ', $pad ) . $text
-				: $text . str_repeat( ' ', $pad );
+				? str_repeat( ' ', $pad ) . $markup
+				: $markup . str_repeat( ' ', $pad );
 		}
 
-		$this->buffer .= '[fixedWidth: on]' . $this->escape( $line ) . '[fixedWidth: off]' . "\n";
+		$this->buffer .= '[fixedWidth: on]' . $line . '[fixedWidth: off]' . "\n";
 	}
 
 	/**
@@ -360,6 +361,90 @@ class Star_Markup_Thermal_Emitter {
 		}
 
 		return $text;
+	}
+
+	/**
+	 * Render inline text nodes for fixed-width rows while preserving formatting.
+	 *
+	 * Star markup tags are not printed characters, so padding/truncation is based
+	 * on extracted text while the emitted inline content keeps style wrappers.
+	 *
+	 * @param array $nodes AST nodes.
+	 * @param int   $width Maximum display width.
+	 *
+	 * @return string Star markup inline content.
+	 */
+	private function render_inline( array $nodes, int $width ): string {
+		$remaining = max( 0, $width );
+
+		return $this->render_inline_nodes( $nodes, $remaining );
+	}
+
+	/**
+	 * Render a list of inline nodes, consuming display width as raw text is emitted.
+	 *
+	 * @param array $nodes     AST nodes.
+	 * @param int   $remaining Remaining display width.
+	 *
+	 * @return string Star markup inline content.
+	 */
+	private function render_inline_nodes( array $nodes, int &$remaining ): string {
+		$out = '';
+		foreach ( $nodes as $node ) {
+			if ( $remaining <= 0 || ! \is_array( $node ) ) {
+				continue;
+			}
+			$out .= $this->render_inline_node( $node, $remaining );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Render a single inline node for use inside a fixed-width row.
+	 *
+	 * @param array $node      AST node.
+	 * @param int   $remaining Remaining display width.
+	 *
+	 * @return string Star markup inline content.
+	 */
+	private function render_inline_node( array $node, int &$remaining ): string {
+		$type = isset( $node['type'] ) ? (string) $node['type'] : '';
+
+		if ( 'raw-text' === $type ) {
+			$text       = $this->truncate( isset( $node['value'] ) ? (string) $node['value'] : '', $remaining );
+			$remaining -= $this->display_width( $text );
+
+			return $this->escape( $text );
+		}
+
+		$children = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
+		if ( 'text' === $type || 'column' === $type ) {
+			return $this->render_inline_nodes( $children, $remaining );
+		}
+
+		$wrapped = $this->render_inline_nodes( $children, $remaining );
+		if ( '' === $wrapped ) {
+			return '';
+		}
+
+		if ( 'bold' === $type ) {
+			return '[bold: on]' . $wrapped . '[bold: off]';
+		}
+		if ( 'underline' === $type ) {
+			return '[underline: on]' . $wrapped . '[underline: off]';
+		}
+		if ( 'invert' === $type ) {
+			return '[negative: on]' . $wrapped . '[negative: off]';
+		}
+		if ( 'size' === $type ) {
+			$width  = isset( $node['width'] ) ? max( 1, (int) $node['width'] ) : 1;
+			$height = isset( $node['height'] ) ? max( 1, (int) $node['height'] ) : 1;
+
+			return sprintf( '[magnify: width %d; height %d]', $width, $height ) . $wrapped . '[magnify]';
+		}
+
+		return $wrapped;
 	}
 
 	/**

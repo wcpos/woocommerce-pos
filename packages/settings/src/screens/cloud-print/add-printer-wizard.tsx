@@ -3,6 +3,7 @@ import * as React from 'react';
 import { Button, Chip, Modal, Notice, TextInput } from '@wcpos/ui';
 
 import { PROVIDERS } from './providers';
+import type { StarDeviceOption } from './fetch-star-devices';
 import { t } from '../../translations';
 
 import type { CloudPrinter, CloudProvider } from '../../hooks/use-cloud-print-settings';
@@ -12,8 +13,6 @@ import type { CloudPrinter, CloudProvider } from '../../hooks/use-cloud-print-se
  * `id` — the server derives it. PrintNode-only fields are included solely when
  * the chosen provider is `printnode`.
  */
-export type StarDeviceOption = { id: string; name: string; state: string };
-
 export type NewPrinterInput = {
 	name: string;
 	provider: CloudProvider;
@@ -208,6 +207,35 @@ export function AddPrinterWizard({
 	const [starFetching, setStarFetching] = React.useState(false);
 	const [starFetchError, setStarFetchError] = React.useState<string | null>(null);
 
+
+	const resetProviderScopedState = React.useCallback(() => {
+		setApiKey('');
+		setPrinterId('');
+		setCloudprntUrl('');
+		setPending(false);
+		setError(null);
+		setCreated(null);
+		setPnPrinters(null);
+		setPnFetching(false);
+		setPnFetchError(null);
+		setStarDevices(null);
+		setStarFetching(false);
+		setStarFetchError(null);
+	}, []);
+
+	const prevProvider = React.useRef(provider);
+	React.useEffect(() => {
+		if (!open) {
+			prevProvider.current = provider;
+			return;
+		}
+		if (prevProvider.current === provider) {
+			return;
+		}
+		resetProviderScopedState();
+		prevProvider.current = provider;
+	}, [open, provider, resetProviderScopedState]);
+
 	const handleFetchPrintNodePrinters = async () => {
 		if (!fetchPrintNodePrinters) {
 			return;
@@ -274,21 +302,10 @@ export function AddPrinterWizard({
 				setStep(0);
 			}
 			setName('');
-			setApiKey('');
-			setPrinterId('');
-			setCloudprntUrl('');
-			setPending(false);
-			setError(null);
-			setCreated(null);
-			setPnPrinters(null);
-			setPnFetching(false);
-			setPnFetchError(null);
-			setStarDevices(null);
-			setStarFetching(false);
-			setStarFetchError(null);
+			resetProviderScopedState();
 		}
 		prevOpen.current = open;
-	}, [open, mode, setupPrinter]);
+	}, [open, mode, resetProviderScopedState, setupPrinter]);
 
 	if (!open) {
 		return null;
@@ -623,7 +640,8 @@ export function AddPrinterWizard({
 								<p className="wcpos:text-sm wcpos:text-gray-700">
 									{t(
 										'cloud_print.printnode_delivery',
-										'No URLs or tokens to copy — {provider} handles delivery.'
+										'No URLs or tokens to copy — {provider} handles delivery.',
+										{ provider: PROVIDERS[finalProvider].label }
 									)}
 								</p>
 							</>

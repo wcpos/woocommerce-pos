@@ -24,6 +24,8 @@ export interface ProviderMeta {
 	isPolling: boolean;
 	/** REST poll endpoint slug, or `null` for push providers. */
 	pollEndpoint: 'cloudprnt' | 'epson-sdp' | null;
+	/** Receipt-template engines this provider can render for automatic jobs. */
+	templateEngines: 'all' | 'thermal';
 }
 
 export const PROVIDERS: Record<CloudProvider, ProviderMeta> = {
@@ -32,24 +34,28 @@ export const PROVIDERS: Record<CloudProvider, ProviderMeta> = {
 		badge: { mark: 'PN', className: 'wcpos:bg-teal-600 wcpos:text-white' },
 		isPolling: false,
 		pollEndpoint: null,
+		templateEngines: 'all',
 	},
 	'star-online': {
 		label: 'Star Online',
 		badge: { mark: '☆', className: 'wcpos:bg-indigo-600 wcpos:text-white' },
 		isPolling: false,
 		pollEndpoint: null,
+		templateEngines: 'thermal',
 	},
 	'star-cloudprnt': {
 		label: 'Star CloudPRNT',
 		badge: { mark: '★', className: 'wcpos:bg-blue-500 wcpos:text-white' },
 		isPolling: true,
 		pollEndpoint: 'cloudprnt',
+		templateEngines: 'thermal',
 	},
 	'epson-sdp': {
 		label: 'Epson Server Direct Print',
 		badge: { mark: 'E', className: 'wcpos:bg-blue-900 wcpos:text-white' },
 		isPolling: true,
 		pollEndpoint: 'epson-sdp',
+		templateEngines: 'thermal',
 	},
 };
 
@@ -63,16 +69,17 @@ export function getProvider(id: CloudProvider): ProviderMeta {
 /**
  * Filter receipt-template options to those a given provider can render.
  *
- * Direct polling printers (Star CloudPRNT / Epson SDP) accept only `thermal`
- * templates; push providers (PrintNode) accept every active template. The input
- * objects are returned untouched, so any extra fields are preserved.
+ * Providers declare their renderable template engines independently from
+ * polling/push delivery. PrintNode accepts every active template; Star Online,
+ * Star CloudPRNT, and Epson SDP accept only thermal templates. The input objects
+ * are returned untouched, so any extra fields are preserved.
  */
 export function templateOptionsForProvider<T extends { engine: TemplateEngine }>(
 	options: T[],
 	provider: CloudProvider
 ): T[] {
-	if (!PROVIDERS[provider].isPolling) {
+	if (PROVIDERS[provider].templateEngines === 'all') {
 		return options;
 	}
-	return options.filter((option) => option.engine === 'thermal');
+	return options.filter((option) => option.engine === PROVIDERS[provider].templateEngines);
 }

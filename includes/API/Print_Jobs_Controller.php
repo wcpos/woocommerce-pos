@@ -281,10 +281,15 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			if ( ! \is_array( $device ) || empty( $device['AccessIdentifier'] ) ) {
 				continue;
 			}
+			$state  = 'unknown';
+			$status = isset( $device['Status'] ) && \is_array( $device['Status'] ) ? $device['Status'] : array();
+			if ( array_key_exists( 'Online', $status ) ) {
+				$state = $status['Online'] ? 'online' : 'offline';
+			}
 			$devices[] = array(
 				'id'    => (string) $device['AccessIdentifier'],
 				'name'  => (string) ( $device['ClientType'] ?? $device['AccessIdentifier'] ),
-				'state' => isset( $device['Status']['Online'] ) && $device['Status']['Online'] ? 'online' : 'offline',
+				'state' => $state,
 			);
 		}
 

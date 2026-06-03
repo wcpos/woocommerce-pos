@@ -683,6 +683,34 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It preserves unknown state when Star omits Status.Online.
+	 */
+	public function test_star_online_devices_proxy_returns_unknown_for_missing_online_status(): void {
+		$this->mock_http(
+			$this->fake_response(
+				array(
+					array(
+						'AccessIdentifier' => 'abc',
+						'ClientType'       => 'Star mC-Print2',
+					),
+				)
+			)
+		);
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/star-online/devices' );
+		$request->set_body_params(
+			array(
+				'cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+				'api_key'       => 'KEY',
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( 'unknown', $response->get_data()['devices'][0]['state'] );
+	}
+
+	/**
 	 * It rejects Star Online API keys in query strings.
 	 */
 	public function test_star_online_devices_rejects_api_key_in_query(): void {
