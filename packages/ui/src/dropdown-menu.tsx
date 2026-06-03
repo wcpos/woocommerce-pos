@@ -25,6 +25,8 @@ export interface DropdownMenuItemProps {
 	disabled?: boolean;
 	target?: string;
 	rel?: string;
+	/** Style the item as a destructive action (red text + red hover). */
+	destructive?: boolean;
 }
 
 interface MenuContextValue {
@@ -147,13 +149,17 @@ export function DropdownMenuItem({
 	disabled,
 	target,
 	rel,
+	destructive,
 }: DropdownMenuItemProps) {
 	const menu = React.useContext(MenuContext);
 
 	const baseClasses =
-		'wcpos:flex wcpos:w-full wcpos:items-center wcpos:px-3 wcpos:py-1.5 wcpos:text-sm wcpos:text-left wcpos:text-gray-700 wcpos:no-underline wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:hover:bg-gray-100 wcpos:focus:bg-gray-100 wcpos:focus:outline-none';
+		'wcpos:flex wcpos:w-full wcpos:items-center wcpos:px-3 wcpos:py-1.5 wcpos:text-sm wcpos:text-left wcpos:no-underline wcpos:bg-transparent wcpos:border-0 wcpos:cursor-pointer wcpos:focus:outline-none';
+	const toneClasses = destructive
+		? 'wcpos:text-red-600 wcpos:hover:bg-red-50 wcpos:focus:bg-red-50'
+		: 'wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:focus:bg-gray-100';
 	const disabledClasses = 'wcpos:opacity-50 wcpos:cursor-not-allowed wcpos:hover:bg-transparent';
-	const className = classNames(baseClasses, disabled && disabledClasses);
+	const className = classNames(baseClasses, toneClasses, disabled && disabledClasses);
 
 	const handleSelect = (event: React.SyntheticEvent) => {
 		if (disabled) {

@@ -166,7 +166,7 @@ export function AutoPrintRules({
 							/>
 							<span>{t('cloud_print.rule_template_suffix', 'template.')}</span>
 							<Button
-								variant="text"
+								variant="ghost-destructive"
 								data-testid={`rule-remove-${i}`}
 								className="wcpos:ml-1"
 								onClick={() => remove(i)}
