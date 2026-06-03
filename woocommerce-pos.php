@@ -113,6 +113,7 @@ function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConven
 	}
 	if ( file_exists( $vendor_prefixed_autoload ) ) {
 		require_once $vendor_prefixed_autoload;
+		require_once __DIR__ . '/includes/Vendor_Prefixed_Polyfills.php';
 	}
 }
 
