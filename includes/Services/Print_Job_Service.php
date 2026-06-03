@@ -20,10 +20,11 @@ class Print_Job_Service {
 	const META_TEMPLATE   = '_wcpos_pj_template_id';
 	const META_ERROR      = '_wcpos_pj_error';
 	const META_CLAIMED_AT   = '_wcpos_pj_claimed_at';
-	const META_PN_KIND      = '_wcpos_pj_pn_kind';
-	const META_PN_JOB_ID    = '_wcpos_pj_pn_job_id';
-	const META_PN_STATE     = '_wcpos_pj_pn_state';
-	const META_PN_ATTEMPTS  = '_wcpos_pj_pn_attempts';
+	const META_PN_KIND           = '_wcpos_pj_pn_kind';
+	const META_EXTERNAL_PROVIDER = '_wcpos_pj_external_provider';
+	const META_EXTERNAL_JOB_ID   = '_wcpos_pj_external_job_id';
+	const META_EXTERNAL_STATE    = '_wcpos_pj_external_state';
+	const META_SUBMIT_ATTEMPTS   = '_wcpos_pj_submit_attempts';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
@@ -121,23 +122,26 @@ class Print_Job_Service {
 			'order_id'     => (int) get_post_meta( $id, self::META_ORDER_ID, true ),
 			'format'       => (string) get_post_meta( $id, self::META_FORMAT, true ),
 			'template_id'  => (string) get_post_meta( $id, self::META_TEMPLATE, true ),
-			'pn_kind'      => (string) get_post_meta( $id, self::META_PN_KIND, true ),
-			'pn_job_id'    => (int) get_post_meta( $id, self::META_PN_JOB_ID, true ),
-			'pn_state'     => (string) get_post_meta( $id, self::META_PN_STATE, true ),
-			'payload'      => (string) $post->post_content,
+			'pn_kind'           => (string) get_post_meta( $id, self::META_PN_KIND, true ),
+			'external_provider' => (string) get_post_meta( $id, self::META_EXTERNAL_PROVIDER, true ),
+			'external_job_id'   => (string) get_post_meta( $id, self::META_EXTERNAL_JOB_ID, true ),
+			'external_state'    => (string) get_post_meta( $id, self::META_EXTERNAL_STATE, true ),
+			'payload'           => (string) $post->post_content,
 		);
 	}
 
 	/**
-	 * Record a successful PrintNode submission against a job.
+	 * Record a successful external (push-provider) submission against a job.
 	 *
-	 * @param int    $id        Job ID.
-	 * @param int    $pn_job_id PrintNode print job id.
-	 * @param string $state     PrintNode submission state (e.g. 'submitted').
+	 * @param int    $id       Job ID.
+	 * @param string $provider Provider key (e.g. 'printnode', 'star-online').
+	 * @param string $job_id   External job id (opaque string).
+	 * @param string $state    Submission state (e.g. 'submitted').
 	 */
-	public function record_printnode_submission( int $id, int $pn_job_id, string $state ): void {
-		update_post_meta( $id, self::META_PN_JOB_ID, $pn_job_id );
-		update_post_meta( $id, self::META_PN_STATE, sanitize_text_field( $state ) );
+	public function record_external_submission( int $id, string $provider, string $job_id, string $state ): void {
+		update_post_meta( $id, self::META_EXTERNAL_PROVIDER, sanitize_text_field( $provider ) );
+		update_post_meta( $id, self::META_EXTERNAL_JOB_ID, sanitize_text_field( $job_id ) );
+		update_post_meta( $id, self::META_EXTERNAL_STATE, sanitize_text_field( $state ) );
 	}
 
 	/**

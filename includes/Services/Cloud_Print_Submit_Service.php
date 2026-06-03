@@ -69,7 +69,7 @@ class Cloud_Print_Submit_Service {
 		if ( null === $job ) {
 			return;
 		}
-		if ( $job['pn_job_id'] > 0 ) {
+		if ( '' !== $job['external_job_id'] ) {
 			return;
 		}
 
@@ -81,7 +81,7 @@ class Cloud_Print_Submit_Service {
 		try {
 			// Double-check under the lock in case another worker just finished.
 			$job = $this->jobs->get( $job_id );
-			if ( null === $job || $job['pn_job_id'] > 0 ) {
+			if ( null === $job || '' !== $job['external_job_id'] ) {
 				return;
 			}
 
@@ -123,7 +123,7 @@ class Cloud_Print_Submit_Service {
 				return;
 			}
 
-			$this->jobs->record_printnode_submission( $job_id, (int) $result['id'], 'submitted' );
+			$this->jobs->record_external_submission( $job_id, 'printnode', (string) $result['id'], 'submitted' );
 			$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 		} finally {
 			$this->release_lock( $job_id );
@@ -179,8 +179,8 @@ class Cloud_Print_Submit_Service {
 	 * @param string $error  Failure reason from PrintNode_Client.
 	 */
 	private function handle_submit_error( int $job_id, string $error ): void {
-		$attempts = (int) get_post_meta( $job_id, Print_Job_Service::META_PN_ATTEMPTS, true ) + 1;
-		update_post_meta( $job_id, Print_Job_Service::META_PN_ATTEMPTS, $attempts );
+		$attempts = (int) get_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, true ) + 1;
+		update_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, $attempts );
 		update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $error ) );
 
 		if ( $attempts < self::MAX_ATTEMPTS ) {
@@ -190,13 +190,13 @@ class Cloud_Print_Submit_Service {
 				Cloud_Print_Trigger_Service::CRON_SUBMIT,
 				array( $job_id )
 			);
-			Logger::log( sprintf( 'Cloud print: PrintNode submission failed for job %d, retry %d scheduled.', $job_id, $attempts ) );
+			Logger::log( sprintf( 'Cloud print: external submission failed for job %d, retry %d scheduled.', $job_id, $attempts ) );
 
 			return;
 		}
 
 		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_FAILED );
-		Logger::log( sprintf( 'Cloud print: PrintNode submission failed for job %d after %d attempts.', $job_id, $attempts ) );
+		Logger::log( sprintf( 'Cloud print: external submission failed for job %d after %d attempts.', $job_id, $attempts ) );
 	}
 
 	/**
@@ -229,6 +229,6 @@ class Cloud_Print_Submit_Service {
 	private function fail( int $job_id, string $error ): void {
 		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_FAILED );
 		update_post_meta( $job_id, Print_Job_Service::META_ERROR, sanitize_text_field( $error ) );
-		Logger::log( sprintf( 'Cloud print: PrintNode submission failed for job %d.', $job_id ) );
+		Logger::log( sprintf( 'Cloud print: external submission failed for job %d.', $job_id ) );
 	}
 }
