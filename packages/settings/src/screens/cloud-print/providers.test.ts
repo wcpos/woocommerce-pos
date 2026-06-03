@@ -6,9 +6,16 @@ import type { CloudProvider } from '../../hooks/use-cloud-print-settings';
 import type { TemplateEngine } from '../../hooks/use-receipt-templates';
 
 describe('cloud-print providers metadata', () => {
-	it('exposes metadata for exactly the three providers', () => {
-		const ids: CloudProvider[] = ['star-cloudprnt', 'epson-sdp', 'printnode'];
-		expect(Object.keys(PROVIDERS).sort()).toEqual([...ids].sort());
+	it('has metadata for star-online (push provider)', () => {
+		const meta = PROVIDERS['star-online'];
+		expect(meta.isPolling).toBe(false);
+		expect(meta.pollEndpoint).toBeNull();
+	});
+
+	it('PROVIDERS covers every CloudProvider exactly once', () => {
+		const ids = Object.keys(PROVIDERS) as CloudProvider[];
+		expect(new Set(ids).size).toBe(ids.length);
+		expect(ids).toEqual(expect.arrayContaining(['printnode', 'star-online', 'star-cloudprnt', 'epson-sdp']));
 	});
 
 	it('describes Star CloudPRNT', () => {

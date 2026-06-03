@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import apiFetch from '@wordpress/api-fetch';
 
-export type CloudProvider = 'star-cloudprnt' | 'epson-sdp' | 'printnode';
+export type CloudProvider = 'star-cloudprnt' | 'epson-sdp' | 'printnode' | 'star-online';
 // Star/Epson polling providers report `waiting | connected | offline`; PrintNode
 // reports its real upstream state `online | offline | unknown`.
 export type CloudStatus = 'waiting' | 'connected' | 'offline' | 'online' | 'unknown';
@@ -25,6 +25,10 @@ export interface CloudPrinter {
 	printnode_printer_id?: number; // printnode only
 	// read+write (printnode only): job format, defaults to 'pdf' server-side.
 	printnode_format?: PrintnodeFormat;
+	star_api_key?: string; // star-online only
+	star_cloudprnt_url?: string; // star-online only
+	star_device_id?: string; // star-online only
+	star_client_type?: string; // star-online only
 }
 
 export interface CloudAssignment {

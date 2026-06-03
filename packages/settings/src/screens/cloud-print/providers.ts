@@ -20,13 +20,25 @@ export interface ProviderMeta {
 	/** Brand/product name (a proper noun, intentionally not translated). */
 	label: string;
 	badge: ProviderBadge;
-	/** Star/Epson printers poll this site for jobs; PrintNode is pushed to. */
+	/** Polling printers fetch jobs from this site; push providers are submitted to. */
 	isPolling: boolean;
 	/** REST poll endpoint slug, or `null` for push providers. */
 	pollEndpoint: 'cloudprnt' | 'epson-sdp' | null;
 }
 
 export const PROVIDERS: Record<CloudProvider, ProviderMeta> = {
+	printnode: {
+		label: 'PrintNode',
+		badge: { mark: 'PN', className: 'wcpos:bg-teal-600 wcpos:text-white' },
+		isPolling: false,
+		pollEndpoint: null,
+	},
+	'star-online': {
+		label: 'Star Online',
+		badge: { mark: '☆', className: 'wcpos:bg-indigo-600 wcpos:text-white' },
+		isPolling: false,
+		pollEndpoint: null,
+	},
 	'star-cloudprnt': {
 		label: 'Star CloudPRNT',
 		badge: { mark: '★', className: 'wcpos:bg-blue-500 wcpos:text-white' },
@@ -38,12 +50,6 @@ export const PROVIDERS: Record<CloudProvider, ProviderMeta> = {
 		badge: { mark: 'E', className: 'wcpos:bg-blue-900 wcpos:text-white' },
 		isPolling: true,
 		pollEndpoint: 'epson-sdp',
-	},
-	printnode: {
-		label: 'PrintNode',
-		badge: { mark: 'PN', className: 'wcpos:bg-teal-600 wcpos:text-white' },
-		isPolling: false,
-		pollEndpoint: null,
 	},
 };
 
