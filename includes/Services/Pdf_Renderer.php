@@ -22,7 +22,7 @@ class Pdf_Renderer {
 	/**
 	 * Tall probe page height used when fitting continuous-roll receipt PDFs.
 	 */
-	private const FIT_HEIGHT_PROBE_PT = 14400.0;
+	private const FIT_HEIGHT_PROBE_PT = 14000.0;
 
 	/**
 	 * Bottom breathing room added to the fitted receipt PDF page.
