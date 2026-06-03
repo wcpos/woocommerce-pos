@@ -41,6 +41,13 @@ class Provider {
 			'supports_server_diagnostic' => false,
 			'thermal_wire_format'        => null,
 		),
+		'star-online'    => array(
+			'polling'                    => false,
+			'content_type'               => 'text/vnd.star.markup',
+			'poll_endpoint'              => null,
+			'supports_server_diagnostic' => false,
+			'thermal_wire_format'        => 'star-markup',
+		),
 	);
 
 	/**
@@ -61,6 +68,18 @@ class Provider {
 	 */
 	public static function is_polling( string $provider ): bool {
 		return (bool) ( self::CAPABILITIES[ $provider ]['polling'] ?? false );
+	}
+
+	/**
+	 * Whether the provider needs an out-of-band submit (we push jobs to it),
+	 * as opposed to a polling provider that fetches jobs itself.
+	 *
+	 * @param string $provider Provider key.
+	 *
+	 * @return bool
+	 */
+	public static function requires_submit( string $provider ): bool {
+		return \in_array( $provider, self::valid(), true ) && ! self::is_polling( $provider );
 	}
 
 	/**

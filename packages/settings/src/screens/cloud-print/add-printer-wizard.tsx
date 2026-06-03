@@ -3,6 +3,7 @@ import * as React from 'react';
 import { Button, Chip, Modal, Notice, TextInput } from '@wcpos/ui';
 
 import { PROVIDERS } from './providers';
+import type { StarDeviceOption } from './fetch-star-devices';
 import { t } from '../../translations';
 
 import type { CloudPrinter, CloudProvider } from '../../hooks/use-cloud-print-settings';
@@ -17,6 +18,9 @@ export type NewPrinterInput = {
 	provider: CloudProvider;
 	printnode_api_key?: string;
 	printnode_printer_id?: number;
+	star_api_key?: string;
+	star_cloudprnt_url?: string;
+	star_device_id?: string;
 };
 
 /** A PrintNode printer as surfaced by the fetch-my-printers proxy. */
@@ -40,14 +44,20 @@ export interface AddPrinterWizardProps {
 	 * manual printer-id input is shown.
 	 */
 	fetchPrintNodePrinters?: (apiKey: string) => Promise<PrintNodePrinterOption[]>;
+	fetchStarDevices?: (cloudprntUrl: string, apiKey: string) => Promise<StarDeviceOption[]>;
 }
 
 /** The ordered provider choices shown on step 0. */
-const PROVIDER_ORDER: CloudProvider[] = ['star-cloudprnt', 'epson-sdp', 'printnode'];
+const PROVIDER_ORDER: CloudProvider[] = ['printnode', 'star-online', 'star-cloudprnt', 'epson-sdp'];
 
 /** Per-provider one-liner shown under each choice on step 0. */
 function providerDescription(provider: CloudProvider): string {
 	switch (provider) {
+		case 'star-online':
+			return t(
+				'cloud_print.choice_star_online_desc',
+				'A Star printer linked to your stario.online account. Examples: mC-Print3, TSP143IV, mC-Label3.'
+			);
 		case 'star-cloudprnt':
 			return t(
 				'cloud_print.choice_star_desc',
@@ -64,6 +74,21 @@ function providerDescription(provider: CloudProvider): string {
 				'cloud_print.choice_printnode_desc',
 				'Use a regular USB / network thermal printer through a PrintNode account'
 			);
+	}
+}
+
+
+function providerBestIf(provider: CloudProvider): string {
+	switch (provider) {
+		case 'printnode':
+			return t('cloud_print.best_printnode', 'Best if you have an ordinary USB or network receipt printer (not a cloud printer) and can run the small PrintNode app on a computer at the store.');
+		case 'star-online':
+			return t('cloud_print.best_star_online', "Best if you have a Star printer and a stario.online account — Star's cloud handles delivery for you.");
+		case 'star-cloudprnt':
+			return t('cloud_print.best_star_direct', 'Best if you have a Star printer and want a free connection with no third-party account — the printer talks to your store directly.');
+		case 'epson-sdp':
+		default:
+			return t('cloud_print.best_epson', 'Best if you have an Epson "intelligent" TM printer (TM-T88VI/VII, TM-m30III, TM-i series).');
 	}
 }
 
@@ -164,18 +189,52 @@ export function AddPrinterWizard({
 	onClose,
 	onCreate,
 	fetchPrintNodePrinters,
+	fetchStarDevices,
 }: AddPrinterWizardProps): JSX.Element | null {
 	const [step, setStep] = React.useState(0);
 	const [provider, setProvider] = React.useState<CloudProvider>('star-cloudprnt');
 	const [name, setName] = React.useState('');
 	const [apiKey, setApiKey] = React.useState('');
 	const [printerId, setPrinterId] = React.useState('');
+	const [cloudprntUrl, setCloudprntUrl] = React.useState('');
 	const [pending, setPending] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
 	const [created, setCreated] = React.useState<CreatedState | null>(null);
 	const [pnPrinters, setPnPrinters] = React.useState<PrintNodePrinterOption[] | null>(null);
 	const [pnFetching, setPnFetching] = React.useState(false);
 	const [pnFetchError, setPnFetchError] = React.useState<string | null>(null);
+	const [starDevices, setStarDevices] = React.useState<StarDeviceOption[] | null>(null);
+	const [starFetching, setStarFetching] = React.useState(false);
+	const [starFetchError, setStarFetchError] = React.useState<string | null>(null);
+
+
+	const resetProviderScopedState = React.useCallback(() => {
+		setApiKey('');
+		setPrinterId('');
+		setCloudprntUrl('');
+		setPending(false);
+		setError(null);
+		setCreated(null);
+		setPnPrinters(null);
+		setPnFetching(false);
+		setPnFetchError(null);
+		setStarDevices(null);
+		setStarFetching(false);
+		setStarFetchError(null);
+	}, []);
+
+	const prevProvider = React.useRef(provider);
+	React.useEffect(() => {
+		if (!open) {
+			prevProvider.current = provider;
+			return;
+		}
+		if (prevProvider.current === provider) {
+			return;
+		}
+		resetProviderScopedState();
+		prevProvider.current = provider;
+	}, [open, provider, resetProviderScopedState]);
 
 	const handleFetchPrintNodePrinters = async () => {
 		if (!fetchPrintNodePrinters) {
@@ -208,6 +267,28 @@ export function AddPrinterWizard({
 		}
 	};
 
+
+	const handleFetchStarDevices = async () => {
+		if (!fetchStarDevices) {
+			return;
+		}
+		setStarFetching(true);
+		setStarFetchError(null);
+		try {
+			const list = await fetchStarDevices(cloudprntUrl.trim(), apiKey.trim());
+			setStarDevices(list);
+			setPrinterId((current) => (list.some((d) => d.id === current) ? current : ''));
+			if (list.length === 0) {
+				setStarFetchError(t('cloud_print.star_online_no_devices', 'No devices found in this Star Online group.'));
+			}
+		} catch {
+			setStarDevices(null);
+			setStarFetchError(t('cloud_print.star_online_fetch_failed', "Couldn't list your Star Online devices. Check the CloudPRNT URL and API key."));
+		} finally {
+			setStarFetching(false);
+		}
+	};
+
 	// Reset internal state when the modal transitions closed → open so each
 	// open starts fresh / on the correct step for the mode.
 	const prevOpen = React.useRef(false);
@@ -221,33 +302,33 @@ export function AddPrinterWizard({
 				setStep(0);
 			}
 			setName('');
-			setApiKey('');
-			setPrinterId('');
-			setPending(false);
-			setError(null);
-			setCreated(null);
-			setPnPrinters(null);
-			setPnFetching(false);
-			setPnFetchError(null);
+			resetProviderScopedState();
 		}
 		prevOpen.current = open;
-	}, [open, mode, setupPrinter]);
+	}, [open, mode, resetProviderScopedState, setupPrinter]);
 
 	if (!open) {
 		return null;
 	}
 
 	const isPrintNode = provider === 'printnode';
+	const isStarOnline = provider === 'star-online';
 	const trimmedName = name.trim();
 	const step1Ready =
 		trimmedName !== '' &&
-		(!isPrintNode || (apiKey.trim() !== '' && printerId.trim() !== ''));
+		(!isPrintNode || (apiKey.trim() !== '' && printerId.trim() !== '')) &&
+		(!isStarOnline || (apiKey.trim() !== '' && cloudprntUrl.trim() !== '' && printerId.trim() !== ''));
 
 	const handleCreate = async () => {
 		const input: NewPrinterInput = { name: trimmedName, provider };
 		if (isPrintNode) {
 			input.printnode_api_key = apiKey.trim();
 			input.printnode_printer_id = Number(printerId.trim());
+		}
+		if (isStarOnline) {
+			input.star_api_key = apiKey.trim();
+			input.star_cloudprnt_url = cloudprntUrl.trim();
+			input.star_device_id = printerId.trim();
 		}
 		setPending(true);
 		setError(null);
@@ -319,6 +400,9 @@ export function AddPrinterWizard({
 										</span>
 										<span className="wcpos:block wcpos:text-xs wcpos:text-gray-500">
 											{providerDescription(id)}
+										</span>
+										<span className="wcpos:mt-1 wcpos:block wcpos:text-xs wcpos:text-gray-600">
+											{providerBestIf(id)}
 										</span>
 									</span>
 								</button>
@@ -428,6 +512,39 @@ export function AddPrinterWizard({
 								</Notice>
 							</>
 						)}
+
+						{isStarOnline && (
+							<>
+								<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
+									<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{t('cloud_print.star_cloudprnt_url', 'CloudPRNT URL')}</span>
+									<TextInput data-testid="wizard-star-cloudprnt-url" value={cloudprntUrl} placeholder="https://eu-device.stario.online/cloudprnt/your-group" onChange={(event) => setCloudprntUrl(event.target.value)} />
+								</label>
+								<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
+									<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{t('cloud_print.star_api_key', 'Star Online API key')}</span>
+									<TextInput data-testid="wizard-star-api-key" value={apiKey} placeholder={t('cloud_print.star_api_key_ph', 'Paste your Star-Api-Key')} onChange={(event) => setApiKey(event.target.value)} />
+									{fetchStarDevices && (
+										<div className="wcpos:flex wcpos:flex-col wcpos:gap-1 wcpos:pt-1">
+											<Button variant="outline" data-testid="wizard-star-fetch" disabled={apiKey.trim() === '' || cloudprntUrl.trim() === '' || starFetching} loading={starFetching} onClick={handleFetchStarDevices}>{t('cloud_print.star_fetch', 'Fetch my devices')}</Button>
+											{starFetchError && <span data-testid="wizard-star-fetch-error" className="wcpos:text-xs wcpos:text-red-600">{starFetchError}</span>}
+										</div>
+									)}
+								</label>
+								{starDevices && starDevices.length > 0 && (
+									<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
+										<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{t('cloud_print.star_pick_device', 'Choose a device')}</span>
+										<select data-testid="wizard-star-device-select" value={printerId} onChange={(event) => setPrinterId(event.target.value)} className="wcpos:rounded wcpos:border wcpos:border-gray-300 wcpos:px-2 wcpos:py-1 wcpos:text-sm">
+											<option value="">{t('cloud_print.star_pick_placeholder', 'Select a device…')}</option>
+											{starDevices.map((d) => <option key={d.id} value={d.id}>{d.name} ({d.state})</option>)}
+										</select>
+									</label>
+								)}
+								<label className="wcpos:flex wcpos:flex-col wcpos:gap-1">
+									<span className="wcpos:text-sm wcpos:font-medium wcpos:text-gray-900">{t('cloud_print.star_device_id', 'AccessIdentifier')}</span>
+									<TextInput data-testid="wizard-star-device-id" value={printerId} onChange={(event) => setPrinterId(event.target.value)} />
+								</label>
+							</>
+						)}
+
 					</div>
 				)}
 
@@ -517,13 +634,14 @@ export function AddPrinterWizard({
 							<>
 								<div>
 									<Chip variant="success" icon="✓">
-										{t('cloud_print.linked', 'Linked to PrintNode')}
+										{t('cloud_print.linked_provider', 'Linked to {provider}', { provider: PROVIDERS[finalProvider].label })}
 									</Chip>
 								</div>
 								<p className="wcpos:text-sm wcpos:text-gray-700">
 									{t(
 										'cloud_print.printnode_delivery',
-										'No URLs or tokens to copy — PrintNode handles delivery.'
+										'No URLs or tokens to copy — {provider} handles delivery.',
+										{ provider: PROVIDERS[finalProvider].label }
 									)}
 								</p>
 							</>

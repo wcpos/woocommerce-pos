@@ -22,7 +22,7 @@ class Provider_Test extends WP_UnitTestCase {
 		$actual = Provider::valid();
 
 		// Assert.
-		$this->assertEquals( array( 'star-cloudprnt', 'epson-sdp', 'printnode' ), $actual );
+		$this->assertEquals( array( 'star-cloudprnt', 'epson-sdp', 'printnode', 'star-online' ), $actual );
 	}
 
 	/**
@@ -135,5 +135,37 @@ class Provider_Test extends WP_UnitTestCase {
 	public function test_wire_format_printnode_thermal_returns_null(): void {
 		// Act / Assert.
 		$this->assertNull( Provider::wire_format( 'printnode', 'thermal' ) );
+	}
+	/**
+	 * It includes star-online as a valid provider.
+	 */
+	public function test_valid_includes_star_online(): void {
+		$this->assertContains( 'star-online', Provider::valid() );
+	}
+
+	/**
+	 * It reports push providers as requiring submit.
+	 */
+	public function test_requires_submit_true_for_push_providers(): void {
+		$this->assertTrue( Provider::requires_submit( 'printnode' ) );
+		$this->assertTrue( Provider::requires_submit( 'star-online' ) );
+	}
+
+	/**
+	 * It reports polling providers as not requiring submit.
+	 */
+	public function test_requires_submit_false_for_polling_providers(): void {
+		$this->assertFalse( Provider::requires_submit( 'star-cloudprnt' ) );
+		$this->assertFalse( Provider::requires_submit( 'epson-sdp' ) );
+	}
+
+	/**
+	 * It reports star-online as a push provider with Star markup.
+	 */
+	public function test_star_online_is_push_with_star_markup(): void {
+		$this->assertFalse( Provider::is_polling( 'star-online' ) );
+		$this->assertSame( 'text/vnd.star.markup', Provider::content_type( 'star-online' ) );
+		$this->assertSame( 'star-markup', Provider::wire_format( 'star-online', 'thermal' ) );
+		$this->assertNull( Provider::poll_endpoint( 'star-online' ) );
 	}
 }

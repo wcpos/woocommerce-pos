@@ -125,4 +125,24 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'claimed', $service->get( $first_id )['status'] );
 		$this->assertEquals( 'pending', $service->get( $second_id )['status'] );
 	}
+	/**
+	 * It records provider-neutral external submission metadata.
+	 */
+	public function test_record_external_submission_roundtrips(): void {
+		$service = new Print_Job_Service();
+		$service->register_post_type();
+		$id = $service->create(
+			array(
+				'printer_id'   => 'star',
+				'content_type' => 'text/vnd.star.markup',
+			)
+		);
+
+		$service->record_external_submission( $id, 'star-online', '689', 'submitted' );
+
+		$job = $service->get( $id );
+		$this->assertSame( 'star-online', $job['external_provider'] );
+		$this->assertSame( '689', $job['external_job_id'] );
+		$this->assertSame( 'submitted', $job['external_state'] );
+	}
 }

@@ -418,4 +418,137 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		$saved = get_option( 'woocommerce_pos_settings_cloud_print' );
 		$this->assertEquals( 'NEW', $saved['printers'][0]['printnode_api_key'] );
 	}
+	/**
+	 * It saves a Star Online printer while stripping the secret key from responses.
+	 */
+	public function test_star_online_printer_saves_and_strips_key(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY-1',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		$response = rest_do_request( $request );
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertArrayNotHasKey( 'star_api_key', $response->get_data()['printers'][0] );
+
+		$get  = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) );
+		$data = $get->get_data();
+		$this->assertArrayNotHasKey( 'star_api_key', $data['printers'][0] );
+	}
+
+	/**
+	 * It rejects Star Online printers missing a device id.
+	 */
+	public function test_star_online_missing_device_id_is_rejected(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY-1',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => '',
+					),
+				),
+			)
+		);
+		$this->assertEquals( 400, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * It rejects Star Online CloudPRNT URLs with non-allowlisted hosts.
+	 */
+	public function test_star_online_bad_host_is_rejected(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY-1',
+						'star_cloudprnt_url' => 'https://evil.example.com/cloudprnt/x',
+						'star_device_id'     => 'abc',
+					),
+				),
+			)
+		);
+		$this->assertEquals( 400, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * It rejects Star Online CloudPRNT URLs without a non-empty group path.
+	 */
+	public function test_star_online_missing_group_path_is_rejected(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY-1',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/',
+						'star_device_id'     => 'abc',
+					),
+				),
+			)
+		);
+		$this->assertEquals( 400, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * It preserves a stored Star Online API key when a later save omits the key.
+	 */
+	public function test_star_online_api_key_preserved_when_omitted_on_resave(): void {
+		$req = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'id'                 => 'star',
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'SECRET',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req );
+
+		$req2 = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$req2->set_body_params(
+			array(
+				'printers' => array(
+					array(
+						'id'                 => 'star',
+						'name'               => 'Star Cloud',
+						'provider'           => 'star-online',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+		rest_do_request( $req2 );
+
+		$saved = get_option( 'woocommerce_pos_settings_cloud_print' );
+		$this->assertEquals( 'SECRET', $saved['printers'][0]['star_api_key'] );
+	}
 }

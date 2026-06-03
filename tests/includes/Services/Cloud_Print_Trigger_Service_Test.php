@@ -509,4 +509,35 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 		// Assert.
 		$this->assertEquals( 0, \count( $this->jobs->query( array( 'printer_id' => 'kitchen' ) ) ) );
 	}
+	/**
+	 * It schedules submit for a Star Online push printer.
+	 */
+	public function test_enqueue_schedules_submit_for_star_online(): void {
+		$printer = array(
+			'id'                 => 'star',
+			'provider'           => 'star-online',
+			'star_api_key'       => 'k',
+			'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+			'star_device_id'     => 'abc',
+		);
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt><text>Hi</text></receipt>',
+		);
+		$order = OrderHelper::create_order();
+
+		$job_id = Cloud_Print_Trigger_Service::enqueue_order_job(
+			$this->jobs,
+			'star',
+			$printer,
+			$order->get_id(),
+			'virtual-receipt',
+			$template
+		);
+
+		$this->assertGreaterThan( 0, $job_id );
+		$this->assertNotFalse(
+			wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $job_id ) )
+		);
+	}
 }

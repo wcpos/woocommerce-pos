@@ -193,7 +193,7 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		$this->assertTrue( $this->http_called );
 		$this->assertEquals( 'pdf_base64', $this->captured_body['contentType'] );
 		$job = $this->jobs->get( $job_id );
-		$this->assertEquals( 987, $job['pn_job_id'] );
+		$this->assertEquals( '987', $job['external_job_id'] );
 		$this->assertEquals( Print_Job_Service::STATUS_PRINTED, $job['status'] );
 	}
 
@@ -250,8 +250,8 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		// Assert.
 		$job = $this->jobs->get( $job_id );
 		$this->assertEquals( Print_Job_Service::STATUS_PENDING, $job['status'] );
-		$this->assertEquals( 0, $job['pn_job_id'] );
-		$this->assertEquals( 1, (int) get_post_meta( $job_id, Print_Job_Service::META_PN_ATTEMPTS, true ) );
+		$this->assertEquals( '', $job['external_job_id'] );
+		$this->assertEquals( 1, (int) get_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, true ) );
 		$this->assertNotEquals( '', (string) get_post_meta( $job_id, Print_Job_Service::META_ERROR, true ) );
 		$this->assertNotFalse( wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $job_id ) ) );
 	}
@@ -275,7 +275,7 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 			)
 		);
 		// Simulate having already exhausted all but the final attempt.
-		update_post_meta( $job_id, Print_Job_Service::META_PN_ATTEMPTS, Cloud_Print_Submit_Service::MAX_ATTEMPTS - 1 );
+		update_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, Cloud_Print_Submit_Service::MAX_ATTEMPTS - 1 );
 
 		// Act.
 		( new Cloud_Print_Submit_Service() )->submit( $job_id );
@@ -283,7 +283,7 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		// Assert.
 		$job = $this->jobs->get( $job_id );
 		$this->assertEquals( Print_Job_Service::STATUS_FAILED, $job['status'] );
-		$this->assertEquals( Cloud_Print_Submit_Service::MAX_ATTEMPTS, (int) get_post_meta( $job_id, Print_Job_Service::META_PN_ATTEMPTS, true ) );
+		$this->assertEquals( Cloud_Print_Submit_Service::MAX_ATTEMPTS, (int) get_post_meta( $job_id, Print_Job_Service::META_SUBMIT_ATTEMPTS, true ) );
 		$this->assertFalse( wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $job_id ) ) );
 	}
 
@@ -344,7 +344,7 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * It is idempotent — a job already carrying a pn_job_id is not resubmitted.
+	 * It is idempotent — a job already carrying an external_job_id is not resubmitted.
 	 */
 	public function test_submit_is_idempotent_for_already_submitted_job(): void {
 		// Arrange.
@@ -361,13 +361,63 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 				'pn_kind'      => 'pdf',
 			)
 		);
-		$this->jobs->record_printnode_submission( $job_id, 555, 'submitted' );
+		$this->jobs->record_external_submission( $job_id, 'printnode', '555', 'submitted' );
 
 		// Act.
 		( new Cloud_Print_Submit_Service() )->submit( $job_id );
 
 		// Assert.
 		$this->assertFalse( $this->http_called );
-		$this->assertEquals( 555, $this->jobs->get( $job_id )['pn_job_id'] );
+		$this->assertEquals( '555', $this->jobs->get( $job_id )['external_job_id'] );
+	}
+	/**
+	 * It submits a Star Online job and records the external id.
+	 */
+	public function test_submit_star_online_job_records_external_id(): void {
+		add_filter(
+			'pre_http_request',
+			static function () {
+				return array(
+					'headers'  => array(),
+					'body'     => wp_json_encode( array( 'JobId' => '777' ) ),
+					'response' => array( 'code' => 201, 'message' => 'Created' ),
+				);
+			},
+			10,
+			3
+		);
+
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                 => 'star',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$tid   = $this->create_thermal_template();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'   => 'star',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+				'content_type' => 'text/vnd.star.markup',
+			)
+		);
+
+		( new Cloud_Print_Submit_Service() )->submit( $id );
+
+		$job = $this->jobs->get( $id );
+		$this->assertSame( '777', $job['external_job_id'] );
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $job['status'] );
 	}
 }

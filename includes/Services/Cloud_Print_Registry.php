@@ -154,6 +154,10 @@ class Cloud_Print_Registry {
 			return $this->printnode_status( $printer );
 		}
 
+		if ( null !== $printer && 'star-online' === ( $printer['provider'] ?? '' ) ) {
+			return $this->star_online_status( $printer );
+		}
+
 		$seen = $this->get_seen( $printer_id );
 		if ( 0 === $seen ) {
 			return 'waiting';
@@ -185,6 +189,36 @@ class Cloud_Print_Registry {
 			$status = 'unknown';
 		} else {
 			$status = ( new PrintNode_Client( $api_key ) )->printer_state( $pn_printer_id );
+		}
+
+		set_transient( $key, $status, self::PN_STATUS_TTL );
+
+		return $status;
+	}
+	/**
+	 * Resolve a Star Online device's live status, cached for PN_STATUS_TTL seconds.
+	 *
+	 * @param array $printer Registered star-online printer.
+	 *
+	 * @return string 'online', 'offline', or 'unknown'.
+	 */
+	private function star_online_status( array $printer ): string {
+		$key    = 'wcpos_cloud_print_star_status_' . md5( (string) $printer['id'] );
+		$cached = get_transient( $key );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$api_key   = (string) ( $printer['star_api_key'] ?? '' );
+		$url       = (string) ( $printer['star_cloudprnt_url'] ?? '' );
+		$device_id = (string) ( $printer['star_device_id'] ?? '' );
+		$api_base  = Star_Online_Client::api_base_from_cloudprnt_url( $url );
+		$group     = Star_Online_Client::group_from_cloudprnt_url( $url );
+
+		if ( '' === $api_key || null === $api_base || '' === $group || '' === $device_id ) {
+			$status = 'unknown';
+		} else {
+			$status = ( new Star_Online_Client( $api_base, $api_key ) )->device_state( $group, $device_id );
 		}
 
 		set_transient( $key, $status, self::PN_STATUS_TTL );

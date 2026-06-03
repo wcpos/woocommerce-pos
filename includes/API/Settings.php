@@ -637,7 +637,7 @@ class Settings extends WP_REST_Controller {
 				$seen                 = $registry->get_seen( $id );
 				$printer['status']    = $registry->status_for( $id );
 				$printer['last_seen'] = $seen > 0 ? $seen : null;
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
 			},
@@ -664,8 +664,9 @@ class Settings extends WP_REST_Controller {
 
 		$existing        = get_option( 'woocommerce_pos_settings_cloud_print', array() );
 		$existing_hashes = array();
-		$existing_keys   = array();
-		$existing_ids    = array();
+		$existing_keys      = array();
+		$existing_star_keys = array();
+		$existing_ids       = array();
 		if ( isset( $existing['printers'] ) && \is_array( $existing['printers'] ) ) {
 			foreach ( $existing['printers'] as $printer ) {
 				if ( ! empty( $printer['id'] ) ) {
@@ -676,6 +677,9 @@ class Settings extends WP_REST_Controller {
 				}
 				if ( ! empty( $printer['id'] ) && ! empty( $printer['printnode_api_key'] ) ) {
 					$existing_keys[ $printer['id'] ] = $printer['printnode_api_key'];
+				}
+				if ( ! empty( $printer['id'] ) && ! empty( $printer['star_api_key'] ) ) {
+					$existing_star_keys[ $printer['id'] ] = $printer['star_api_key'];
 				}
 			}
 		}
@@ -697,6 +701,24 @@ class Settings extends WP_REST_Controller {
 			// incoming key still overwrites, letting users rotate it.
 			if ( 'printnode' === $printer['provider'] && '' === $printer['printnode_api_key'] && ! empty( $existing_keys[ $id ] ) ) {
 				$printer['printnode_api_key'] = $existing_keys[ $id ];
+			}
+
+			if ( 'star-online' === $printer['provider'] && '' === $printer['star_api_key'] && ! empty( $existing_star_keys[ $id ] ) ) {
+				$printer['star_api_key'] = $existing_star_keys[ $id ];
+			}
+
+			if ( 'star-online' === $printer['provider'] ) {
+				$api_base = \WCPOS\WooCommercePOS\Services\Star_Online_Client::api_base_from_cloudprnt_url( (string) $printer['star_cloudprnt_url'] );
+				$group    = \WCPOS\WooCommercePOS\Services\Star_Online_Client::group_from_cloudprnt_url( (string) $printer['star_cloudprnt_url'] );
+				if ( '' === $printer['star_api_key'] || null === $api_base || '' === $group || '' === $printer['star_device_id'] ) {
+					return new WP_REST_Response(
+						array(
+							'code'    => 'wcpos_cloud_print_star_online_invalid',
+							'message' => __( 'Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device.', 'woocommerce-pos' ),
+						),
+						400
+					);
+				}
 			}
 
 			if ( isset( $seen_ids[ $id ] ) ) {
@@ -737,7 +759,7 @@ class Settings extends WP_REST_Controller {
 
 		$response_printers = array_map(
 			static function ( $printer ) {
-				unset( $printer['poll_token_hash'], $printer['printnode_api_key'] );
+				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
 			},
@@ -778,6 +800,12 @@ class Settings extends WP_REST_Controller {
 			$clean['printnode_printer_id'] = isset( $printer['printnode_printer_id'] ) ? (int) $printer['printnode_printer_id'] : 0;
 			$clean['printnode_format']     = \in_array( $printer['printnode_format'] ?? '', array( 'pdf', 'raw' ), true )
 				? $printer['printnode_format'] : 'pdf';
+		}
+		if ( 'star-online' === $provider ) {
+			$clean['star_api_key']       = sanitize_text_field( $printer['star_api_key'] ?? '' );
+			$clean['star_cloudprnt_url'] = esc_url_raw( $printer['star_cloudprnt_url'] ?? '' );
+			$clean['star_device_id']     = sanitize_text_field( $printer['star_device_id'] ?? '' );
+			$clean['star_client_type']   = sanitize_text_field( $printer['star_client_type'] ?? '' );
 		}
 
 		return $clean;

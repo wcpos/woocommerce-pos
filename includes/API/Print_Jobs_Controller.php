@@ -14,6 +14,7 @@ use WCPOS\WooCommercePOS\Services\Cloud_Print_Trigger_Service;
 use WCPOS\WooCommercePOS\Services\PrintNode_Client;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Provider;
+use WCPOS\WooCommercePOS\Services\Star_Online_Client;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -157,6 +158,18 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/star-online/devices',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'star_online_devices' ),
+					'permission_callback' => array( $this, 'manage_permissions_check' ),
+				),
+			)
+		);
 	}
 
 	/**
@@ -224,6 +237,63 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		}
 
 		return new WP_REST_Response( array( 'printers' => $printers ), 200 );
+	}
+
+	/**
+	 * Proxy the stario.online device list for the add-printer wizard.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function star_online_devices( $request ) {
+		$query = $request->get_query_params();
+		if ( isset( $query['api_key'] ) ) {
+			return new WP_Error(
+				'wcpos_star_online_api_key_in_query',
+				__( 'The Star Online API key must be sent in the request body, not the query string.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$json    = (array) $request->get_json_params();
+		$body    = (array) $request->get_body_params();
+		$api_key = (string) ( $json['api_key'] ?? $body['api_key'] ?? '' );
+		$url     = (string) ( $json['cloudprnt_url'] ?? $body['cloudprnt_url'] ?? '' );
+
+		$api_base = Star_Online_Client::api_base_from_cloudprnt_url( $url );
+		$group    = Star_Online_Client::group_from_cloudprnt_url( $url );
+		if ( '' === $api_key || null === $api_base || '' === $group ) {
+			return new WP_Error(
+				'wcpos_star_online_invalid_request',
+				__( 'A Star Online API key and a valid stario.online CloudPRNT URL are required.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$result = ( new Star_Online_Client( $api_base, $api_key ) )->devices( $group );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$devices = array();
+		foreach ( $result as $device ) {
+			if ( ! \is_array( $device ) || empty( $device['AccessIdentifier'] ) ) {
+				continue;
+			}
+			$state  = 'unknown';
+			$status = isset( $device['Status'] ) && \is_array( $device['Status'] ) ? $device['Status'] : array();
+			if ( array_key_exists( 'Online', $status ) ) {
+				$state = $status['Online'] ? 'online' : 'offline';
+			}
+			$devices[] = array(
+				'id'    => (string) $device['AccessIdentifier'],
+				'name'  => (string) ( $device['ClientType'] ?? $device['AccessIdentifier'] ),
+				'state' => $state,
+			);
+		}
+
+		return new WP_REST_Response( array( 'devices' => $devices ), 200 );
 	}
 
 
@@ -633,8 +703,14 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			);
 		}
 
-		if ( 'printnode' === ( $printer['provider'] ?? '' ) ) {
+		$provider = (string) ( $printer['provider'] ?? '' );
+
+		if ( 'printnode' === $provider ) {
 			return $this->test_print_printnode( $printer );
+		}
+
+		if ( 'star-online' === $provider ) {
+			return $this->test_print_star_online( $printer_id, $printer );
 		}
 
 		try {
@@ -666,6 +742,58 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 		$response->set_status( 201 );
 
 		return $response;
+	}
+
+	/**
+	 * Queue a Star Markup test receipt and submit it through the push pipeline.
+	 *
+	 * @param string $printer_id Registered printer id.
+	 * @param array  $printer    Registered star-online printer.
+	 *
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	private function test_print_star_online( string $printer_id, array $printer ) {
+		$date    = gmdate( 'Y-m-d H:i' );
+		$markup  = '[align: middle][bold: on]WCPOS[bold: off]' . "\n";
+		$markup .= 'Cloud Print Test' . "\n" . '[align: left]';
+		$markup .= 'Printer: ' . $this->star_escape( (string) $printer['name'] ) . "\n";
+		$markup .= 'Date: ' . $date . "\n";
+		$markup .= 'If you can read this, printing works!' . "\n";
+		$markup .= '[feed][cut]';
+
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => $printer_id,
+				'content_type' => 'text/vnd.star.markup',
+				'payload'      => base64_encode( $markup ),
+			)
+		);
+		if ( $id <= 0 ) {
+			return new WP_Error(
+				'wcpos_print_job_create_failed',
+				__( 'Print job could not be created.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		wp_schedule_single_event( time(), Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $id ) );
+		( new \WCPOS\WooCommercePOS\Services\Cloud_Print_Submit_Service() )->submit( $id );
+
+		$response = rest_ensure_response( $this->jobs->get( $id ) );
+		$response->set_status( 201 );
+
+		return $response;
+	}
+
+	/**
+	 * Escape brackets for Star Document Markup text.
+	 *
+	 * @param string $value Text.
+	 *
+	 * @return string
+	 */
+	private function star_escape( string $value ): string {
+		return str_replace( array( '[', ']' ), array( '[[', ']]' ), $value );
 	}
 
 	/**
@@ -717,8 +845,10 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		return new WP_REST_Response(
 			array(
-				'submitted' => true,
-				'pn_job_id' => (int) $result['id'],
+				'submitted'         => true,
+				'external_provider' => 'printnode',
+				'external_job_id'   => (string) $result['id'],
+				'external_state'    => 'submitted',
 			),
 			201
 		);

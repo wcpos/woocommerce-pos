@@ -170,7 +170,7 @@ class Cloud_Print_Trigger_Service {
 			return 0;
 		}
 
-		return $jobs->create(
+		$job_id = $jobs->create(
 			array(
 				'printer_id'   => $printer_id,
 				'content_type' => Provider::content_type( $provider ),
@@ -178,6 +178,13 @@ class Cloud_Print_Trigger_Service {
 				'template_id'  => $template_id,
 			)
 		);
+
+		// Push providers (e.g. Star Online) don't poll us; submit out-of-band.
+		if ( $job_id > 0 && Provider::requires_submit( $provider ) ) {
+			wp_schedule_single_event( time(), self::CRON_SUBMIT, array( $job_id ) );
+		}
+
+		return $job_id;
 	}
 
 	/**
