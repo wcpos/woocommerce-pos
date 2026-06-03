@@ -22,7 +22,7 @@ class Pdf_Renderer {
 	/**
 	 * Tall probe page height used when fitting continuous-roll receipt PDFs.
 	 */
-	private const FIT_HEIGHT_PROBE_PT = 100000.0;
+	private const FIT_HEIGHT_PROBE_PT = 14400.0;
 
 	/**
 	 * Bottom breathing room added to the fitted receipt PDF page.
@@ -86,9 +86,40 @@ class Pdf_Renderer {
 		$orientation = isset( $opts['orientation'] ) ? (string) $opts['orientation'] : 'portrait';
 		$dompdf->setPaper( $paper, $orientation );
 
-		$dompdf->render();
+		$this->render_dompdf( $dompdf );
 
 		return $dompdf;
+	}
+
+	/**
+	 * Render a Dompdf instance while ignoring PHP 8.5 vendor deprecations.
+	 *
+	 * @param mixed $dompdf Dompdf instance.
+	 */
+	private function render_dompdf( $dompdf ): void {
+		$previous_handler = null;
+		$previous_handler = set_error_handler(
+			static function ( int $errno, string $errstr, string $errfile = '', int $errline = 0 ) use ( &$previous_handler ): bool {
+				if (
+					0 !== ( $errno & ( E_DEPRECATED | E_USER_DEPRECATED ) )
+					&& false !== strpos( str_replace( '\\', '/', $errfile ), '/vendor_prefixed/dompdf/' )
+				) {
+					return true;
+				}
+
+				if ( \is_callable( $previous_handler ) ) {
+					return (bool) \call_user_func( $previous_handler, $errno, $errstr, $errfile, $errline );
+				}
+
+				return false;
+			}
+		);
+
+		try {
+			$dompdf->render();
+		} finally {
+			restore_error_handler();
+		}
 	}
 
 	/**

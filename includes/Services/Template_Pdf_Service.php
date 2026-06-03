@@ -46,7 +46,7 @@ class Template_Pdf_Service {
 			return ( new Pdf_Renderer() )->render_html(
 				$html,
 				array(
-					'paper'        => array( 0, 0, 226.77, 100000.0 ),
+					'paper'        => array( 0, 0, 226.77, 14400.0 ),
 					'default_font' => 'dejavu sans mono',
 					'fit_height'   => true,
 				)
