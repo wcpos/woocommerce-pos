@@ -7,9 +7,12 @@
 
 namespace WCPOS\WooCommercePOS\API;
 
+use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Fiscal_Receipt_Service;
+use WCPOS\WooCommercePOS\Services\Template_Pdf_Service;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -56,6 +59,28 @@ class Receipts_Controller extends WP_REST_Controller {
 						'type'              => 'string',
 						'required'          => false,
 						'enum'              => array( 'fiscal', 'live' ),
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<order_id>[\\d]+)/pdf',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_pdf' ),
+				'permission_callback' => array( $this, 'get_item_permissions_check' ),
+				'args'                => array(
+					'order_id'    => array(
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+					'template_id' => array(
+						'type'              => 'string',
+						'required'          => true,
 						'sanitize_callback' => 'sanitize_text_field',
 					),
 				),
@@ -116,6 +141,72 @@ class Receipts_Controller extends WP_REST_Controller {
 			'has_snapshot' => $snapshot_store->has_snapshot( $order_id ),
 			'submission_status' => ( new Fiscal_Receipt_Service() )->get_submission_status( $order_id ),
 			'data'         => $payload,
+		);
+	}
+
+	/**
+	 * Get receipt PDF bytes for an order.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return Raw_Response|WP_Error
+	 */
+	public function get_pdf( $request ) {
+		$order = wc_get_order( (int) $request['order_id'] );
+		if ( ! $order ) {
+			return new WP_Error(
+				'wcpos_receipt_order_not_found',
+				__( 'Order not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		$template_id = trim( (string) $request->get_param( 'template_id' ) );
+		if ( '' === $template_id ) {
+			return new WP_Error(
+				'wcpos_receipt_missing_template',
+				__( 'A template_id is required.', 'woocommerce-pos' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$template = Print_Job_Service::load_template( $template_id );
+		if ( null === $template ) {
+			return new WP_Error(
+				'wcpos_receipt_template_not_found',
+				__( 'Template not found.', 'woocommerce-pos' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		try {
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+		} catch ( \Throwable $e ) {
+			Logger::log( sprintf( 'Receipt PDF render failed for order %d: %s', $order->get_id(), $e->getMessage() ) );
+
+			return new WP_Error(
+				'wcpos_receipt_pdf_failed',
+				__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		if ( '' === $pdf ) {
+			return new WP_Error(
+				'wcpos_receipt_pdf_empty',
+				__( 'Could not generate the receipt PDF.', 'woocommerce-pos' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		return Raw_Response::serve(
+			$pdf,
+			'application/pdf',
+			array(
+				'Content-Disposition' => sprintf( 'attachment; filename="receipt-%d.pdf"', $order->get_id() ),
+				'Content-Length'      => (string) \strlen( $pdf ),
+				'Cache-Control'       => 'no-store',
+			)
 		);
 	}
 
