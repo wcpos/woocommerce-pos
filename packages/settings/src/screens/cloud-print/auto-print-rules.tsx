@@ -127,9 +127,10 @@ export function AutoPrintRules({
 						>
 							<span>{t('cloud_print.rule_print', 'Automatically print')}</span>
 							<Select
+								inline
 								data-testid={`rule-scope-${i}`}
 								aria-label={t('cloud_print.rule_scope_label', 'Which orders to print')}
-								className="wcpos:w-auto wcpos:max-w-full"
+								className="wcpos:max-w-full"
 								style={sentenceSelectWidth(scopeOptions(), a.scope)}
 								value={a.scope}
 								options={scopeOptions()}
@@ -139,9 +140,10 @@ export function AutoPrintRules({
 							/>
 							<span>{t('cloud_print.rule_to', 'to')}</span>
 							<Select
+								inline
 								data-testid={`rule-printer-${i}`}
 								aria-label={t('cloud_print.rule_printer_label', 'Printer')}
-								className="wcpos:w-auto wcpos:max-w-full"
+								className="wcpos:max-w-full"
 								style={sentenceSelectWidth(printerOptions, a.printer_id)}
 								value={a.printer_id}
 								options={printerOptions}
@@ -151,9 +153,10 @@ export function AutoPrintRules({
 							/>
 							<span>{t('cloud_print.rule_using', 'using the')}</span>
 							<Select
+								inline
 								data-testid={`rule-template-${i}`}
 								aria-label={t('cloud_print.rule_template_label', 'Receipt template')}
-								className="wcpos:w-auto wcpos:max-w-full"
+								className="wcpos:max-w-full"
 								style={sentenceSelectWidth(optionsForPrinter(a.printer_id), a.template_id)}
 								value={a.template_id}
 								options={optionsForPrinter(a.printer_id)}
@@ -163,7 +166,7 @@ export function AutoPrintRules({
 							/>
 							<span>{t('cloud_print.rule_template_suffix', 'template.')}</span>
 							<Button
-								variant="text"
+								variant="ghost-destructive"
 								data-testid={`rule-remove-${i}`}
 								className="wcpos:ml-1"
 								onClick={() => remove(i)}

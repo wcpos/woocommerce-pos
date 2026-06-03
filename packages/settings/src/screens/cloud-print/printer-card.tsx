@@ -225,7 +225,7 @@ export function PrinterCard({
 							<DropdownMenuItem onSelect={() => onOpenSetup(printer)}>
 								{t('cloud_print.menu_setup', 'Setup & token')}
 							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={() => setConfirmOpen(true)}>
+							<DropdownMenuItem destructive onSelect={() => setConfirmOpen(true)}>
 								{t('cloud_print.menu_remove', 'Remove printer')}
 							</DropdownMenuItem>
 						</DropdownMenu>
