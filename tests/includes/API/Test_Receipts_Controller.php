@@ -238,9 +238,19 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 				'post_type'    => 'wcpos_template',
 				'post_status'  => 'publish',
 				'post_title'   => 'PDF Receipt',
-				'post_content' => '<receipt paper-width="48"><text>Order {{order.number}}</text></receipt>',
 			)
 		);
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			array( 'post_content' => '<receipt paper-width="48"><text>Order {{order.number}}</text></receipt>' ),
+			array( 'ID' => $post_id ),
+			array( '%s' ),
+			array( '%d' )
+		);
+		clean_post_cache( $post_id );
+
 		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
 		update_post_meta( $post_id, '_template_engine', 'thermal' );
 		update_post_meta( $post_id, '_template_output_type', 'html' );
