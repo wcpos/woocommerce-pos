@@ -86,8 +86,21 @@ class Cloud_Print_Submit_Service {
 			}
 
 			$printer = $this->registry->get_printer( (string) $job['printer_id'] );
-			if ( null === $printer || 'printnode' !== ( $printer['provider'] ?? '' ) ) {
-				$this->fail( $job_id, 'Cloud print: PrintNode printer not found for job.' );
+			if ( null === $printer ) {
+				$this->fail( $job_id, 'Cloud print: printer not found for job.' );
+
+				return;
+			}
+
+			$provider = (string) ( $printer['provider'] ?? '' );
+			if ( 'star-online' === $provider ) {
+				$this->submit_star_online( $job_id, $job, $printer );
+
+				return;
+			}
+
+			if ( 'printnode' !== $provider ) {
+				$this->fail( $job_id, 'Cloud print: unsupported push provider for job.' );
 
 				return;
 			}
@@ -128,6 +141,51 @@ class Cloud_Print_Submit_Service {
 		} finally {
 			$this->release_lock( $job_id );
 		}
+	}
+
+	/**
+	 * Submit a queued Star Online job: render Star markup and POST it to stario.online.
+	 *
+	 * @param int   $job_id  Job id.
+	 * @param array $job     Job array.
+	 * @param array $printer Registered star-online printer.
+	 */
+	private function submit_star_online( int $job_id, array $job, array $printer ): void {
+		$api_key   = (string) ( $printer['star_api_key'] ?? '' );
+		$url       = (string) ( $printer['star_cloudprnt_url'] ?? '' );
+		$device_id = (string) ( $printer['star_device_id'] ?? '' );
+		$api_base  = Star_Online_Client::api_base_from_cloudprnt_url( $url );
+		$group     = Star_Online_Client::group_from_cloudprnt_url( $url );
+
+		if ( '' === $api_key || null === $api_base || '' === $group || '' === $device_id ) {
+			$this->fail( $job_id, 'Cloud print: Star Online printer is misconfigured.' );
+
+			return;
+		}
+
+		$payload = $this->jobs->render_payload( $job );
+		if ( '' === $payload ) {
+			$this->fail( $job_id, 'Cloud print: Star Online job produced no printable content.' );
+
+			return;
+		}
+
+		$result = ( new Star_Online_Client( $api_base, $api_key ) )->submit_job(
+			$group,
+			$device_id,
+			$this->title_for( $job ),
+			'text/vnd.star.markup',
+			$payload
+		);
+
+		if ( is_wp_error( $result ) ) {
+			$this->handle_submit_error( $job_id, $result->get_error_message() );
+
+			return;
+		}
+
+		$this->jobs->record_external_submission( $job_id, 'star-online', (string) $result['id'], 'submitted' );
+		$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 	}
 
 	/**

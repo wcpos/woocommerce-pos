@@ -370,4 +370,54 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		$this->assertFalse( $this->http_called );
 		$this->assertEquals( '555', $this->jobs->get( $job_id )['external_job_id'] );
 	}
+	/**
+	 * It submits a Star Online job and records the external id.
+	 */
+	public function test_submit_star_online_job_records_external_id(): void {
+		add_filter(
+			'pre_http_request',
+			static function () {
+				return array(
+					'headers'  => array(),
+					'body'     => wp_json_encode( array( 'JobId' => '777' ) ),
+					'response' => array( 'code' => 201, 'message' => 'Created' ),
+				);
+			},
+			10,
+			3
+		);
+
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'                 => 'star',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$tid   = $this->create_thermal_template();
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'   => 'star',
+				'order_id'     => $order->get_id(),
+				'template_id'  => (string) $tid,
+				'content_type' => 'text/vnd.star.markup',
+			)
+		);
+
+		( new Cloud_Print_Submit_Service() )->submit( $id );
+
+		$job = $this->jobs->get( $id );
+		$this->assertSame( '777', $job['external_job_id'] );
+		$this->assertSame( Print_Job_Service::STATUS_PRINTED, $job['status'] );
+	}
 }
