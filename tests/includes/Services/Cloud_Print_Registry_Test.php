@@ -30,6 +30,7 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 			$this->http_filter = null;
 		}
 		delete_transient( 'wcpos_cloud_print_pn_status_' . md5( 'bar' ) );
+		delete_transient( 'wcpos_cloud_print_star_status_' . md5( 'star' ) );
 		parent::tearDown();
 	}
 
@@ -261,5 +262,50 @@ class Cloud_Print_Registry_Test extends WP_UnitTestCase {
 
 		// Act + Assert.
 		$this->assertEquals( 'waiting', ( new Cloud_Print_Registry() )->status_for( 'kitchen' ) );
+	}
+	/**
+	 * It reports Star Online live device status.
+	 */
+	public function test_status_for_star_online_online_returns_online(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                 => 'star',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+			)
+		);
+		$this->mock_http( $this->fake_response( array( 'Status' => array( 'Online' => true ) ) ) );
+
+		$this->assertEquals( 'online', ( new Cloud_Print_Registry() )->status_for( 'star' ) );
+	}
+
+	/**
+	 * It reports malformed Star Online status as unknown.
+	 */
+	public function test_status_for_star_online_malformed_returns_unknown(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'                 => 'star',
+						'provider'           => 'star-online',
+						'star_api_key'       => 'KEY',
+						'star_cloudprnt_url' => 'https://eu-device.stario.online/cloudprnt/kilbot',
+						'star_device_id'     => 'abc',
+					),
+				),
+			)
+		);
+		$this->mock_http( $this->fake_response( array( 'Nope' => true ) ) );
+
+		$this->assertEquals( 'unknown', ( new Cloud_Print_Registry() )->status_for( 'star' ) );
 	}
 }
