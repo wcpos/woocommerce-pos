@@ -49,6 +49,8 @@ class Thermal_Renderer {
 				return ( new Escpos_Thermal_Emitter() )->emit( $ast );
 			case 'epos-xml':
 				return ( new Epos_Xml_Thermal_Emitter() )->emit( $ast );
+			case 'star-markup':
+				return ( new Star_Markup_Thermal_Emitter() )->emit( $ast );
 			default:
 				throw new InvalidArgumentException(
 					esc_html( "Unsupported thermal wire format: {$wire_format}" )
