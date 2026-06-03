@@ -8,6 +8,7 @@ import {
 } from './add-printer-wizard';
 import { AutoPrintRules } from './auto-print-rules';
 import { fetchPrintNodePrinters } from './fetch-printnode-printers';
+import { fetchStarDevices } from './fetch-star-devices';
 import { PrinterCard } from './printer-card';
 import { CardGrid } from '../../components/card-grid';
 import {
@@ -148,6 +149,13 @@ function CloudPrint() {
 							printnode_format: 'pdf' as const,
 					  }
 					: {}),
+				...(input.provider === 'star-online'
+					? {
+							star_api_key: input.star_api_key,
+							star_cloudprnt_url: input.star_cloudprnt_url,
+							star_device_id: input.star_device_id,
+					  }
+					: {}),
 			};
 			const saved = await saveDraft({
 				...current,
@@ -238,7 +246,7 @@ function CloudPrint() {
 
 			<FormSection
 				title={t('cloud_print.printers', 'Your cloud printers')}
-				description={t('cloud_print.printers_description', 'Printers that fetch jobs from this store.')}
+				description={t('cloud_print.printers_description', 'Printers that print jobs from this store.')}
 			>
 				{draft.printers.length === 0 ? (
 					<p
@@ -291,6 +299,7 @@ function CloudPrint() {
 				onClose={() => setWizard((w) => ({ ...w, open: false }))}
 				onCreate={handleCreate}
 				fetchPrintNodePrinters={fetchPrintNodePrinters}
+				fetchStarDevices={fetchStarDevices}
 			/>
 		</div>
 	);

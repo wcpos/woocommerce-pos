@@ -78,6 +78,20 @@ export function formatRelative(unixSeconds: number, locale?: string): string {
 	return rtf.format(0, 'second');
 }
 
+
+function starGroupFromUrl(url?: string): string {
+	if (!url) {
+		return '';
+	}
+	try {
+		const parsed = new URL(url);
+		const match = parsed.pathname.match(/\/cloudprnt\/([^/]+)/);
+		return match ? decodeURIComponent(match[1]) : '';
+	} catch {
+		return '';
+	}
+}
+
 /**
  * A single cloud printer rendered as a card: provider badge, name (inline
  * editable), connection status, last check-in, immutable printer id, a
@@ -96,6 +110,7 @@ export function PrinterCard({
 	const { addSnackbar } = useSnackbar();
 	const provider = PROVIDERS[printer.provider];
 	const isPrintNode = printer.provider === 'printnode';
+	const isStarOnline = printer.provider === 'star-online';
 	// Render the absent field as the server default ('pdf').
 	const format: PrintnodeFormat = printer.printnode_format ?? 'pdf';
 
@@ -248,6 +263,24 @@ export function PrinterCard({
 							</span>
 						</Tooltip>
 					</dd>
+
+
+					{isStarOnline && (
+						<>
+							<dt className="wcpos:text-gray-500">{t('cloud_print.star_device', 'Device')}</dt>
+							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-device-${printer.id}`}>
+								{printer.star_client_type || PROVIDERS['star-online'].label}
+							</dd>
+							<dt className="wcpos:text-gray-500">{t('cloud_print.star_group', 'Group')}</dt>
+							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-group-${printer.id}`}>
+								{starGroupFromUrl(printer.star_cloudprnt_url) || '—'}
+							</dd>
+							<dt className="wcpos:text-gray-500">{t('cloud_print.star_device_id', 'AccessIdentifier')}</dt>
+							<dd className="wcpos:text-gray-900" data-testid={`printer-card-star-device-id-${printer.id}`}>
+								<code className="wcpos:rounded wcpos:bg-gray-100 wcpos:px-1 wcpos:py-0.5">{printer.star_device_id}</code>
+							</dd>
+						</>
+					)}
 
 					{isPrintNode && (
 						<>
