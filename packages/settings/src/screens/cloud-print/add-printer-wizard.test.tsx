@@ -267,7 +267,9 @@ describe('AddPrinterWizard', () => {
 			target: { value: 'STAR-KEY' },
 		});
 		fireEvent.click(screen.getByTestId('wizard-star-fetch'));
-		await screen.findByTestId('wizard-star-device-select');
+		const starSelect = await screen.findByTestId('wizard-star-device-select');
+		fireEvent.change(starSelect, { target: { value: 'star-1' } });
+		expect(screen.getByTestId('wizard-star-device-id')).toHaveValue('star-1');
 
 		fireEvent.click(screen.getByTestId('wizard-back'));
 		fireEvent.click(screen.getByTestId('provider-choice-printnode'));
@@ -275,7 +277,7 @@ describe('AddPrinterWizard', () => {
 
 		expect(screen.getByTestId('wizard-name-input')).toHaveValue('Star printer');
 		expect(screen.getByTestId('wizard-printnode-api-key')).toHaveValue('');
-		expect(screen.getByTestId('wizard-printnode-printer-id')).not.toHaveValue('star-1');
+		expect(screen.getByTestId('wizard-printnode-printer-id')).toHaveValue(null);
 		expect(screen.queryByTestId('wizard-star-device-select')).not.toBeInTheDocument();
 	});
 
