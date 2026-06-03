@@ -102,7 +102,7 @@ class Pdf_Renderer {
 			static function ( int $errno, string $errstr, string $errfile = '', int $errline = 0 ) use ( &$previous_handler ): bool {
 				if (
 					0 !== ( $errno & ( E_DEPRECATED | E_USER_DEPRECATED ) )
-					&& false !== strpos( str_replace( '\\', '/', $errfile ), '/vendor_prefixed/dompdf/' )
+					&& false !== strpos( str_replace( '\\', '/', $errfile ), '/vendor_prefixed/' )
 				) {
 					return true;
 				}
