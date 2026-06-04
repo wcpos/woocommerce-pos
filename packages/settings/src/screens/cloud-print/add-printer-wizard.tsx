@@ -638,11 +638,15 @@ export function AddPrinterWizard({
 									</Chip>
 								</div>
 								<p className="wcpos:text-sm wcpos:text-gray-700">
-									{t(
-										'cloud_print.printnode_delivery',
-										'No URLs or tokens to copy — {provider} handles delivery.',
-										{ provider: PROVIDERS[finalProvider].label }
-									)}
+									{finalProvider === 'star-online'
+										? t(
+												'cloud_print.star_online_delivery',
+												'No URLs or tokens to copy — Star Online handles delivery.'
+											)
+										: t(
+												'cloud_print.printnode_delivery',
+												'No URLs or tokens to copy — PrintNode handles delivery.'
+											)}
 								</p>
 							</>
 						)}

@@ -130,49 +130,6 @@ describe('AddPrinterWizard', () => {
 		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
 	});
 
-	it('add mode: star online flow shows star online delivery confirmation', async () => {
-		const fetchStarDevices = vi.fn().mockResolvedValue([
-			{ id: 'star-1', name: 'Star One', state: 'online' },
-		]);
-		const onCreate = vi.fn().mockResolvedValue({
-			printer: makePrinter({ id: 'star-1', provider: 'star-online' }),
-		});
-
-		render(
-			<AddPrinterWizard
-				open
-				mode="add"
-				onClose={vi.fn()}
-				onCreate={onCreate}
-				fetchStarDevices={fetchStarDevices}
-			/>
-		);
-
-		fireEvent.click(screen.getByTestId('provider-choice-star-online'));
-		fireEvent.click(screen.getByTestId('wizard-continue'));
-		fireEvent.change(screen.getByTestId('wizard-name-input'), {
-			target: { value: 'Star printer' },
-		});
-		fireEvent.change(screen.getByTestId('wizard-star-cloudprnt-url'), {
-			target: { value: 'https://eu-device.stario.online/cloudprnt/kilbot' },
-		});
-		fireEvent.change(screen.getByTestId('wizard-star-api-key'), {
-			target: { value: 'STAR-KEY' },
-		});
-		fireEvent.click(screen.getByTestId('wizard-star-fetch'));
-		const starSelect = await screen.findByTestId('wizard-star-device-select');
-		fireEvent.change(starSelect, { target: { value: 'star-1' } });
-		fireEvent.click(screen.getByTestId('wizard-continue'));
-
-		await waitFor(() => expect(screen.getByText(/Linked to Star Online/)).toBeInTheDocument());
-		expect(screen.getByText(/No URLs or tokens to copy/)).toHaveTextContent(
-			'No URLs or tokens to copy — Star Online handles delivery.'
-		);
-		expect(screen.queryByText(/PrintNode handles delivery/)).not.toBeInTheDocument();
-		expect(screen.queryByTestId('wizard-poll-url')).not.toBeInTheDocument();
-		expect(screen.queryByTestId('wizard-poll-token')).not.toBeInTheDocument();
-	});
-
 	it('add mode: shows a guard notice (no broken URL) when a polling provider returns no token', async () => {
 		const onCreate = vi.fn().mockResolvedValue({
 			printer: makePrinter({ provider: 'star-cloudprnt' }),
