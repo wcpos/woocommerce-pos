@@ -283,6 +283,12 @@ class Print_Job_Service {
 				'type'  => 'NUMERIC',
 			);
 		}
+		if ( ! empty( $filters['template_id'] ) ) {
+			$meta_query[] = array(
+				'key'   => self::META_TEMPLATE,
+				'value' => sanitize_text_field( (string) $filters['template_id'] ),
+			);
+		}
 
 		$posts = get_posts(
 			array(
