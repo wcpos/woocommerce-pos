@@ -203,10 +203,18 @@ class Star_Online_Client {
 			return \is_array( $decoded ) ? $decoded : array();
 		}
 
-		if ( 401 === $code || 403 === $code ) {
+		if ( 401 === $code ) {
 			return new WP_Error(
 				'wcpos_star_online_unauthorized',
 				__( 'Star Online authentication failed.', 'woocommerce-pos' ),
+				array( 'status' => $code )
+			);
+		}
+
+		if ( 403 === $code ) {
+			return new WP_Error(
+				'wcpos_star_online_forbidden',
+				__( 'Star Online rejected the request. Check that the API key has the required permissions.', 'woocommerce-pos' ),
 				array( 'status' => $code )
 			);
 		}
