@@ -5,6 +5,7 @@ import classNames from 'classnames';
 export interface OptionProps extends Record<string, unknown> {
 	value: string | number;
 	label: string;
+	disabled?: boolean;
 }
 
 export interface SelectProps extends Omit<
@@ -62,7 +63,11 @@ export function Select({
 				</option>
 			)}
 			{options.map((option) => (
-				<option key={String(option.value)} value={String(option.value)}>
+				<option
+					key={String(option.value)}
+					value={String(option.value)}
+					disabled={Boolean(option.disabled)}
+				>
 					{option.label}
 				</option>
 			))}
