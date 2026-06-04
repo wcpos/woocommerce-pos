@@ -166,6 +166,124 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 		$this->assertStringContainsString( (string) $order->get_order_number(), $html );
 	}
 
+
+	/**
+	 * It returns WP Overnight's native invoice PDF bytes without re-rendering HTML.
+	 */
+	public function test_render_wp_overnight_invoice_uses_native_pdf_bytes(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$native_pdf = "%PDF-1.4\n% native wp overnight invoice\n";
+		$calls      = array();
+		$callback   = static function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
+			$calls[] = array(
+				'document_type' => $document_type,
+				'order_id'       => $order->get_id(),
+			);
+
+			return new class( $native_pdf ) {
+				private $pdf;
+
+				public function __construct( string $pdf ) {
+					$this->pdf = $pdf;
+				}
+
+				public function get_pdf(): string {
+					return $this->pdf;
+				}
+			};
+		};
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+
+		try {
+			$order    = OrderHelper::create_order();
+			$template = \WCPOS\WooCommercePOS\Templates::get_virtual_template( 'wp-overnight-invoice', 'receipt' );
+
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+
+			$this->assertSame( $native_pdf, $pdf );
+			$this->assertCount( 1, $calls );
+			$this->assertSame( 'invoice', $calls[0]['document_type'] );
+			$this->assertSame( $order->get_id(), $calls[0]['order_id'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+	}
+
+	/**
+	 * It returns WP Overnight's native packing slip PDF bytes without re-rendering HTML.
+	 */
+	public function test_render_wp_overnight_packing_slip_uses_native_pdf_bytes(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$native_pdf = "%PDF-1.4\n% native wp overnight packing slip\n";
+		$calls      = array();
+		$callback   = static function ( $document, string $document_type, $order ) use ( &$calls, $native_pdf ) {
+			$calls[] = array(
+				'document_type' => $document_type,
+				'order_id'       => $order->get_id(),
+			);
+
+			return new class( $native_pdf ) {
+				private $pdf;
+
+				public function __construct( string $pdf ) {
+					$this->pdf = $pdf;
+				}
+
+				public function get_pdf(): string {
+					return $this->pdf;
+				}
+			};
+		};
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+
+		try {
+			$order    = OrderHelper::create_order();
+			$template = \WCPOS\WooCommercePOS\Templates::get_virtual_template( 'wp-overnight-packing-slip', 'receipt' );
+
+			$pdf = ( new Template_Pdf_Service() )->render( $template, $order );
+
+			$this->assertSame( $native_pdf, $pdf );
+			$this->assertCount( 1, $calls );
+			$this->assertSame( 'packing-slip', $calls[0]['document_type'] );
+			$this->assertSame( $order->get_id(), $calls[0]['order_id'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+	}
+
+	/**
+	 * It rejects empty or non-PDF bytes from the WP Overnight native renderer.
+	 */
+	public function test_render_wp_overnight_native_pdf_rejects_invalid_bytes(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$callback = static function () {
+			return new class() {
+				public function get_pdf(): string {
+					return '<html>not a pdf</html>';
+				}
+			};
+		};
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+
+		try {
+			$order    = OrderHelper::create_order();
+			$template = \WCPOS\WooCommercePOS\Templates::get_virtual_template( 'wp-overnight-invoice', 'receipt' );
+
+			$this->expectException( \RuntimeException::class );
+			$this->expectExceptionMessage( 'WP Overnight invoice PDF could not be generated.' );
+
+			( new Template_Pdf_Service() )->render( $template, $order );
+		} finally {
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+	}
+
 	/**
 	 * Read the first page MediaBox dimensions from PDF bytes.
 	 *
