@@ -72,14 +72,17 @@ export async function runLoop(config, deps = {}) {
   logger.log(`Star CloudPRNT simulator polling ${config.cloudprntUrl}`);
 
   do {
+    let shouldSleep = true;
+
     try {
       const result = await simulator.pollOnce();
       logResult(logger, result);
+      shouldSleep = result.type !== 'clientAction';
     } catch (error) {
       logger.error(`poll failed: ${error.message}`);
     }
 
-    if (!config.once) {
+    if (!config.once && shouldSleep) {
       await sleep(config.pollSeconds * 1000);
     }
   } while (!config.once);

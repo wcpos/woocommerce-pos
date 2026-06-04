@@ -64,7 +64,7 @@ test('handleClientActions returns plausible Star responses and persists SetID', 
   assert.deepEqual(results, [
     { request: 'SetID', result: 'Bar' },
     { request: 'ClientType', result: 'Star mC-Print3' },
-    { request: 'ClientVersion', result: '5.1' },
+    { request: 'ClientVersion', result: '3.0' },
     { request: 'GetPollInterval', result: '7' },
     {
       request: 'Encodings',

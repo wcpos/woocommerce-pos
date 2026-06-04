@@ -93,7 +93,7 @@ export function handleClientActions(profile, actions, options = {}) {
       case 'ClientType':
         return { request, result: profile.clientType };
       case 'ClientVersion':
-        return { request, result: profile.clientVersion };
+        return { request, result: profile.cloudprntVersion };
       case 'GetPollInterval':
         return { request, result: String(pollSeconds) };
       case 'Encodings':
