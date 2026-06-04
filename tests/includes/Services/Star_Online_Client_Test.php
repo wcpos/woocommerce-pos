@@ -86,4 +86,28 @@ class Star_Online_Client_Test extends WP_UnitTestCase {
 			remove_filter( 'pre_http_request', $filter, 10 );
 		}
 	}
+
+	public function test_forbidden_response_reports_permissions_error(): void {
+		remove_filter( 'pre_http_request', array( $this, 'intercept' ), 10 );
+		$filter = static function () {
+			return array(
+				'headers'  => array(),
+				'body'     => 'Forbidden',
+				'response' => array( 'code' => 403, 'message' => 'Forbidden' ),
+			);
+		};
+		add_filter( 'pre_http_request', $filter, 10, 3 );
+
+		try {
+			$client = new Star_Online_Client( 'https://eu-api.stario.online/v1', 'KEY' );
+			$result = $client->devices( 'kilbot' );
+
+			$this->assertWPError( $result );
+			$this->assertSame( 'wcpos_star_online_forbidden', $result->get_error_code() );
+			$this->assertSame( 403, $result->get_error_data()['status'] );
+			$this->assertStringContainsString( 'permissions', $result->get_error_message() );
+		} finally {
+			remove_filter( 'pre_http_request', $filter, 10 );
+		}
+	}
 }
