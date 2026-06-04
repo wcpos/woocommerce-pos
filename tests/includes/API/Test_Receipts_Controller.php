@@ -156,6 +156,49 @@ class Test_Receipts_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( (string) \strlen( $body ), $headers['Content-Length'] );
 	}
 
+
+	/**
+	 * Test PDF endpoint returns WP Overnight's native PDF bytes for integration templates.
+	 */
+	public function test_get_receipt_pdf_wp_overnight_invoice_uses_native_pdf_bytes(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from POS download\n";
+		$callback   = static function () use ( $native_pdf ) {
+			return new class( $native_pdf ) {
+				private $pdf;
+
+				public function __construct( string $pdf ) {
+					$this->pdf = $pdf;
+				}
+
+				public function get_pdf(): string {
+					return $this->pdf;
+				}
+			};
+		};
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+
+		try {
+			$order = OrderHelper::create_order();
+
+			$request = $this->wp_rest_get_request( '/wcpos/v1/receipts/' . $order->get_id() . '/pdf' );
+			$request->set_param( 'template_id', 'wp-overnight-invoice' );
+			$response = $this->server->dispatch( $request );
+			$headers  = $response->get_headers();
+			$body     = $this->serve_raw_response_body( $response, $request );
+
+			$this->assertEquals( 200, $response->get_status() );
+			$this->assertEquals( 'application/pdf', $headers['Content-Type'] );
+			$this->assertEquals( 'attachment; filename="receipt-' . $order->get_id() . '.pdf"', $headers['Content-Disposition'] );
+			$this->assertSame( $native_pdf, $body );
+			$this->assertEquals( (string) \strlen( $native_pdf ), $headers['Content-Length'] );
+		} finally {
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+	}
+
 	/**
 	 * Test PDF endpoint sets no-store cache header.
 	 */
