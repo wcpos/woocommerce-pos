@@ -57,6 +57,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	delete (window as unknown as { wpApiSettings?: unknown }).wpApiSettings;
+	delete window.wcpos;
 });
 
 describe('CloudPrint screen', () => {
@@ -93,5 +94,31 @@ describe('CloudPrint screen', () => {
 		renderScreen();
 
 		expect(await screen.findByTestId('cloud-print-empty')).toBeTruthy();
+	});
+
+	it('ignores non-array cloud print store options from global settings', async () => {
+		(window as unknown as { wcpos?: { settings?: { cloudPrintStoreOptions?: unknown } } }).wcpos = {
+			settings: { cloudPrintStoreOptions: { id: 7, name: 'Store A' } },
+		};
+		routeApiFetch({
+			getSettings: () => ({
+				printers: [{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 }],
+				assignments: [
+					{
+						id: 'rule-1',
+						printer_id: 'kitchen',
+						template_id: 1,
+						enabled: true,
+						scope: 'all',
+						store_id: 0,
+					},
+				],
+			}),
+			templates: [{ id: 1, title: 'Receipt', status: 'publish', is_active: true, engine: 'thermal' }],
+		});
+
+		renderScreen();
+
+		expect(await screen.findByText('Auto-print rules')).toBeTruthy();
 	});
 });
