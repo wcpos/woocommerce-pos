@@ -214,6 +214,85 @@ class Cloud_Print_Trigger_Service_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Two rules for the same printer with different templates create two jobs.
+	 */
+	public function test_same_printer_different_templates_creates_two_jobs(): void {
+		// Arrange.
+		$t1 = $this->create_thermal_template();
+		$t2 = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $t1,
+				),
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $t2,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$jobs = $this->jobs->query( array( 'printer_id' => 'kitchen' ) );
+		$this->assertEquals( 2, \count( $jobs ) );
+	}
+
+	/**
+	 * Two identical rules (same printer + template) still dedupe to one job.
+	 */
+	public function test_identical_rules_dedupe_to_one_job(): void {
+		// Arrange.
+		$tid = $this->create_thermal_template();
+		$this->set_cloud_print(
+			array(
+				array(
+					'id'       => 'kitchen',
+					'name'     => 'Kitchen',
+					'provider' => 'epson-sdp',
+				),
+			),
+			array(
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+				),
+				array(
+					'printer_id'  => 'kitchen',
+					'scope'       => 'every',
+					'template_id' => (string) $tid,
+				),
+			)
+		);
+		$order = OrderHelper::create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->save();
+
+		// Act.
+		( new Cloud_Print_Trigger_Service() )->handle_order( $order->get_id() );
+
+		// Assert.
+		$jobs = $this->jobs->query( array( 'printer_id' => 'kitchen' ) );
+		$this->assertEquals( 1, \count( $jobs ) );
+	}
+
+	/**
 	 * It checks beyond the first query page when avoiding duplicates.
 	 */
 	public function test_duplicate_guard_scans_beyond_first_fifty_jobs(): void {

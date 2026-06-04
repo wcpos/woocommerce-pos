@@ -84,7 +84,7 @@ class Cloud_Print_Trigger_Service {
 			if ( ! $this->scope_matches( $scope, $is_pos ) ) {
 				continue;
 			}
-			if ( $this->already_queued( $order->get_id(), (string) $assignment['printer_id'] ) ) {
+			if ( $this->already_queued( $order->get_id(), (string) $assignment['printer_id'], (string) $assignment['template_id'] ) ) {
 				continue;
 			}
 
@@ -208,17 +208,19 @@ class Cloud_Print_Trigger_Service {
 	}
 
 	/**
-	 * Guard against duplicate jobs for the same order+printer.
+	 * Guard against duplicate jobs for the same order+printer+template.
 	 *
-	 * @param int    $order_id   Order ID.
-	 * @param string $printer_id Printer ID.
+	 * @param int    $order_id    Order ID.
+	 * @param string $printer_id  Printer ID.
+	 * @param string $template_id Template ID.
 	 */
-	private function already_queued( int $order_id, string $printer_id ): bool {
+	private function already_queued( int $order_id, string $printer_id, string $template_id ): bool {
 		$existing = $this->jobs->query(
 			array(
-				'printer_id' => $printer_id,
-				'order_id'   => $order_id,
-				'limit'      => 1,
+				'printer_id'  => $printer_id,
+				'order_id'    => $order_id,
+				'template_id' => $template_id,
+				'limit'       => 1,
 			)
 		);
 
