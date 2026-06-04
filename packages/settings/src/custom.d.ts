@@ -10,6 +10,7 @@ declare global {
 		updateExtensionsCount?: number | null;
 		unreadLogCounts?: Record<string, number>;
 		currentUserId?: number;
+		cloudPrintStoreOptions?: { id: number; name: string }[];
 	}
 
 	interface Window {

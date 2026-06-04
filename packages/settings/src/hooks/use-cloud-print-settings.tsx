@@ -33,6 +33,7 @@ export interface CloudPrinter {
 
 export interface CloudAssignment {
 	printer_id: string;
+	store_id?: number;
 	scope: 'every' | 'pos' | 'online';
 	template_id: string;
 }

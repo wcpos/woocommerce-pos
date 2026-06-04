@@ -7,6 +7,10 @@ import { AutoPrintRules } from './auto-print-rules';
 
 import type { CloudAssignment, CloudPrinter } from '../../hooks/use-cloud-print-settings';
 
+type AutoPrintRulesTestProps = React.ComponentProps<typeof AutoPrintRules> & {
+	storeOptions?: { id: number; name: string }[];
+};
+
 function makePrinters(): CloudPrinter[] {
 	return [
 		{ id: 'kitchen', name: 'Kitchen', provider: 'star-cloudprnt', store_id: 0 },
@@ -21,12 +25,12 @@ const templateOptions = [
 
 function makeAssignments(): CloudAssignment[] {
 	return [
-		{ printer_id: 'kitchen', scope: 'pos', template_id: '11' },
-		{ printer_id: 'front', scope: 'online', template_id: '22' },
+		{ printer_id: 'kitchen', store_id: 0, scope: 'pos', template_id: '11' },
+		{ printer_id: 'front', store_id: 0, scope: 'online', template_id: '22' },
 	];
 }
 
-function renderRules(overrides: Partial<React.ComponentProps<typeof AutoPrintRules>> = {}) {
+function renderRules(overrides: Partial<AutoPrintRulesTestProps> = {}) {
 	const onChange = vi.fn(overrides.onChange);
 	const printers = overrides.printers ?? makePrinters();
 	const assignments = overrides.assignments ?? makeAssignments();
@@ -35,6 +39,7 @@ function renderRules(overrides: Partial<React.ComponentProps<typeof AutoPrintRul
 			printers={printers}
 			assignments={assignments}
 			templateOptions={overrides.templateOptions ?? templateOptions}
+			storeOptions={overrides.storeOptions ?? []}
 			onChange={onChange}
 		/>
 	);
@@ -63,7 +68,7 @@ describe('AutoPrintRules', () => {
 
 	it('sizes each rule select from its currently selected label', () => {
 		renderRules({
-			assignments: [{ printer_id: 'kitchen', scope: 'every', template_id: '11' }],
+			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '11' }],
 		});
 
 		expect(screen.getByTestId('rule-scope-0')).toHaveStyle({
@@ -83,9 +88,9 @@ describe('AutoPrintRules', () => {
 		fireEvent.change(scope, { target: { value: 'online' } });
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const next = onChange.mock.calls[0][0] as CloudAssignment[];
-		expect(next[0]).toEqual({ printer_id: 'kitchen', scope: 'online', template_id: '11' });
+		expect(next[0]).toEqual({ printer_id: 'kitchen', store_id: 0, scope: 'online', template_id: '11' });
 		// Other rows untouched.
-		expect(next[1]).toEqual({ printer_id: 'front', scope: 'online', template_id: '22' });
+		expect(next[1]).toEqual({ printer_id: 'front', store_id: 0, scope: 'online', template_id: '22' });
 	});
 
 	it('changing template select calls onChange with template_id set to String(value)', () => {
@@ -97,6 +102,7 @@ describe('AutoPrintRules', () => {
 		expect(next[0].template_id).toBe('22');
 		expect(next[0].scope).toBe('pos');
 		expect(next[0].printer_id).toBe('kitchen');
+		expect(next[0].store_id).toBe(0);
 	});
 
 	it('changing printer select calls onChange with printer_id updated', () => {
@@ -108,6 +114,7 @@ describe('AutoPrintRules', () => {
 		expect(next[0].printer_id).toBe('front');
 		expect(next[0].scope).toBe('pos');
 		expect(next[0].template_id).toBe('11');
+		expect(next[0].store_id).toBe(0);
 	});
 
 	it('+ Add rule appends a default rule', () => {
@@ -118,6 +125,7 @@ describe('AutoPrintRules', () => {
 		expect(next).toHaveLength(3);
 		expect(next[2]).toEqual({
 			printer_id: printers[0].id,
+			store_id: 0,
 			scope: 'every',
 			template_id: templateOptions[0].value,
 		});
@@ -129,7 +137,7 @@ describe('AutoPrintRules', () => {
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const next = onChange.mock.calls[0][0] as CloudAssignment[];
 		expect(next).toHaveLength(1);
-		expect(next[0]).toEqual({ printer_id: 'front', scope: 'online', template_id: '22' });
+		expect(next[0]).toEqual({ printer_id: 'front', store_id: 0, scope: 'online', template_id: '22' });
 	});
 
 	it('renders the empty state and a working add button when there are no rules', () => {
@@ -159,7 +167,7 @@ describe('AutoPrintRules', () => {
 
 	it('does not crash when an assignment template_id is not in templateOptions', () => {
 		const { onChange } = renderRules({
-			assignments: [{ printer_id: 'kitchen', scope: 'pos', template_id: '999' }],
+			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'pos', template_id: '999' }],
 		});
 		expect(screen.getByTestId('rule-template-0')).toBeInTheDocument();
 		expect(onChange).not.toHaveBeenCalled();
@@ -178,8 +186,8 @@ describe('AutoPrintRules', () => {
 		renderRules({
 			printers,
 			assignments: [
-				{ printer_id: 'kitchen', scope: 'pos', template_id: '11' },
-				{ printer_id: 'cloud', scope: 'online', template_id: '22' },
+				{ printer_id: 'kitchen', store_id: 0, scope: 'pos', template_id: '11' },
+				{ printer_id: 'cloud', store_id: 0, scope: 'online', template_id: '22' },
 			],
 			templateOptions: mixedOptions,
 		});
@@ -212,5 +220,84 @@ describe('AutoPrintRules', () => {
 		fireEvent.click(screen.getByTestId('rules-add'));
 		const next = onChange.mock.calls[0][0] as CloudAssignment[];
 		expect(next[0].template_id).toBe('11');
+		expect(next[0].store_id).toBe(0);
+	});
+
+	it('lists store rows after channel rows when store options are available', () => {
+		renderRules({
+			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'every', template_id: '11' }],
+			storeOptions: [
+				{ id: 7, name: 'Store A' },
+				{ id: 8, name: 'Store B' },
+			],
+		});
+
+		const options = within(screen.getByTestId('rule-scope-0'))
+			.getAllByRole('option')
+			.map((option) => option.textContent);
+		expect(options).toEqual([
+			'every order',
+			'every in-store (POS) order',
+			'every online order',
+			'orders for Store A',
+			'orders for Store B',
+		]);
+	});
+
+	it('selecting a store row writes store_id with the every scope', () => {
+		const { onChange } = renderRules({
+			assignments: [{ printer_id: 'kitchen', store_id: 0, scope: 'pos', template_id: '11' }],
+			storeOptions: [{ id: 7, name: 'Store A' }],
+		});
+
+		fireEvent.change(screen.getByTestId('rule-scope-0'), {
+			target: { value: 'store:7' },
+		});
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect((onChange.mock.calls[0][0] as CloudAssignment[])[0]).toEqual({
+			printer_id: 'kitchen',
+			store_id: 7,
+			scope: 'every',
+			template_id: '11',
+		});
+	});
+
+	it('selecting a channel row resets store_id to 0 and writes the selected scope', () => {
+		const { onChange } = renderRules({
+			assignments: [{ printer_id: 'kitchen', store_id: 7, scope: 'every', template_id: '11' }],
+			storeOptions: [{ id: 7, name: 'Store A' }],
+		});
+
+		fireEvent.change(screen.getByTestId('rule-scope-0'), {
+			target: { value: 'online' },
+		});
+
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect((onChange.mock.calls[0][0] as CloudAssignment[])[0]).toEqual({
+			printer_id: 'kitchen',
+			store_id: 0,
+			scope: 'online',
+			template_id: '11',
+		});
+	});
+
+	it('shows the store row selected by store_id', () => {
+		renderRules({
+			assignments: [{ printer_id: 'kitchen', store_id: 7, scope: 'every', template_id: '11' }],
+			storeOptions: [{ id: 7, name: 'Store A' }],
+		});
+
+		expect(screen.getByTestId('rule-scope-0')).toHaveValue('store:7');
+	});
+
+	it('renders a disabled unknown store option for absent store_id and keeps it selected', () => {
+		renderRules({
+			assignments: [{ printer_id: 'kitchen', store_id: 42, scope: 'every', template_id: '11' }],
+			storeOptions: [{ id: 7, name: 'Store A' }],
+		});
+
+		expect(screen.getByTestId('rule-scope-0')).toHaveValue('store:42');
+		expect(screen.getByRole('option', { name: 'Unknown store (#42)' })).toBeDisabled();
 	});
 });

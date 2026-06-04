@@ -283,6 +283,8 @@
 	"cloud_print.scope_every": "every order",
 	"cloud_print.scope_pos": "every in-store (POS) order",
 	"cloud_print.scope_online": "every online order",
+	"cloud_print.scope_store": "orders for {name}",
+	"cloud_print.scope_store_unknown": "Unknown store (#{id})",
 	"cloud_print.rules_tip": "This is optional — leave it empty to print receipts only manually from the POS.",
 	"cloud_print.rules_subline_pre": "Each rule prints the chosen template automatically when an order matches. Templates come from ",
 	"cloud_print.templates_link": "POS › Templates",
