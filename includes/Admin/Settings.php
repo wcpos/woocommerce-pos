@@ -140,6 +140,7 @@ class Settings {
 		$store_country    = function_exists( 'WC' )
 			? WC()->countries->get_base_country()
 			: '';
+		$store_options   = apply_filters( 'woocommerce_pos_cloud_print_store_options', array() );
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
@@ -147,6 +148,7 @@ class Settings {
             order_statuses: %s,
             countries: %s,
             storeCountry: %s,
+            cloudPrintStoreOptions: %s,
             updateExtensionsCount: %s,
             unreadLogCounts: %s,
             currentUserId: %s
@@ -155,6 +157,7 @@ class Settings {
 			json_encode( $order_statuses ),
 			json_encode( $countries ),
 			json_encode( $store_country ),
+			json_encode( array_values( (array) $store_options ) ),
 			json_encode( $update_ext_count ),
 			json_encode( $unread_logs ),
 			json_encode( $current_user_id ),
