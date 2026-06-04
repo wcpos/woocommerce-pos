@@ -46,6 +46,8 @@ type WizardState = {
 function CloudPrint() {
 	const { settings, save } = useCloudPrintSettings();
 	const templateOptions = useReceiptTemplateOptions();
+	const rawStoreOptions = window.wcpos?.settings?.cloudPrintStoreOptions;
+	const storeOptions = Array.isArray(rawStoreOptions) ? rawStoreOptions : [];
 	const { addSnackbar } = useSnackbar();
 
 	const [draft, setDraft] = React.useState<CloudPrintSettings>(settings);
@@ -288,6 +290,7 @@ function CloudPrint() {
 					printers={draft.printers}
 					assignments={draft.assignments}
 					templateOptions={templateOptions}
+					storeOptions={storeOptions}
 					onChange={handleRulesChange}
 				/>
 			</FormSection>

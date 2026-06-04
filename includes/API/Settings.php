@@ -823,6 +823,7 @@ class Settings extends WP_REST_Controller {
 
 		return array(
 			'printer_id'  => sanitize_text_field( $assignment['printer_id'] ?? '' ),
+			'store_id'    => isset( $assignment['store_id'] ) ? (int) $assignment['store_id'] : 0,
 			'scope'       => \in_array( $assignment['scope'] ?? '', array( 'every', 'pos', 'online' ), true ) ? $assignment['scope'] : 'every',
 			'template_id' => sanitize_text_field( (string) ( $assignment['template_id'] ?? '' ) ),
 		);

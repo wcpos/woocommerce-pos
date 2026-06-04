@@ -100,6 +100,43 @@ class Print_Job_Service_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Query() filters by template_id when supplied.
+	 */
+	public function test_query_filters_by_template_id(): void {
+		$jobs = new Print_Job_Service();
+		$jobs->register_post_type();
+
+		$jobs->create(
+			array(
+				'printer_id'   => 'kitchen',
+				'order_id'     => 5,
+				'template_id'  => '11',
+				'content_type' => 'text/plain',
+				'payload'      => base64_encode( 'a' ),
+			)
+		);
+		$jobs->create(
+			array(
+				'printer_id'   => 'kitchen',
+				'order_id'     => 5,
+				'template_id'  => '22',
+				'content_type' => 'text/plain',
+				'payload'      => base64_encode( 'b' ),
+			)
+		);
+
+		$only_11 = $jobs->query(
+			array(
+				'printer_id'  => 'kitchen',
+				'order_id'    => 5,
+				'template_id' => '11',
+			)
+		);
+		$this->assertCount( 1, $only_11 );
+		$this->assertEquals( '11', $only_11[0]['template_id'] );
+	}
+
+	/**
 	 * It leaves the second job pending while another claim is active.
 	 */
 	public function test_try_claim_rejects_second_active_claim_for_printer(): void {

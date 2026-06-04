@@ -551,4 +551,20 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		$saved = get_option( 'woocommerce_pos_settings_cloud_print' );
 		$this->assertEquals( 'SECRET', $saved['printers'][0]['star_api_key'] );
 	}
+
+	/**
+	 * sanitize_cloud_assignment defaults store_id to 0 and casts a provided id to int.
+	 */
+	public function test_cloud_assignment_persists_store_id(): void {
+		$method = new \ReflectionMethod( \WCPOS\WooCommercePOS\API\Settings::class, 'sanitize_cloud_assignment' );
+		$method->setAccessible( true );
+		$settings = new \WCPOS\WooCommercePOS\API\Settings();
+
+		$default = $method->invoke( $settings, array( 'printer_id' => 'kitchen', 'template_id' => '11' ) );
+		$this->assertEquals( 0, $default['store_id'] );
+
+		$with_store = $method->invoke( $settings, array( 'printer_id' => 'kitchen', 'template_id' => '11', 'store_id' => '12' ) );
+		$this->assertSame( 12, $with_store['store_id'] );
+	}
+
 }
