@@ -1,0 +1,14 @@
+{
+	"name": "@wcpos/star-cloudprnt-simulator",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"star-cloudprnt-simulator": "src/cli.mjs"
+	},
+	"scripts": {
+		"start": "node src/cli.mjs",
+		"test": "node --test test/*.test.mjs",
+		"lint": "find src test -name '*.mjs' -print0 | xargs -0 -n1 node --check"
+	}
+}
