@@ -36,6 +36,11 @@ class Template_Pdf_Service {
 	public function render( array $template, WC_Abstract_Order $order ): string {
 		$engine = isset( $template['engine'] ) ? (string) $template['engine'] : '';
 
+		$wp_overnight_pdf = $this->maybe_render_wp_overnight_pdf( $template, $order );
+		if ( null !== $wp_overnight_pdf ) {
+			return $wp_overnight_pdf;
+		}
+
 		if ( 'thermal' === $engine ) {
 			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
 			$html = ( new Html_Thermal_Emitter() )->emit( $ast );
@@ -57,6 +62,75 @@ class Template_Pdf_Service {
 
 		// Non-thermal templates render to a standard A4 portrait page (Pdf_Renderer default).
 		return ( new Pdf_Renderer() )->render_html( $html );
+	}
+
+	/**
+	 * Render WP Overnight integration templates using the plugin's native PDF bytes.
+	 *
+	 * @param array             $template Template metadata/content.
+	 * @param WC_Abstract_Order $order    The order to render.
+	 *
+	 * @return string|null Native PDF bytes for WP Overnight templates, null for all other templates.
+	 * @throws \RuntimeException When the WP Overnight PDF document cannot be generated.
+	 */
+	private function maybe_render_wp_overnight_pdf( array $template, WC_Abstract_Order $order ): ?string {
+		$document_type = $this->wp_overnight_document_type( $template );
+		if ( null === $document_type ) {
+			return null;
+		}
+
+		$document = apply_filters( 'woocommerce_pos_wp_overnight_pdf_document', null, $document_type, $order );
+		if ( null === $document && \function_exists( 'wcpdf_get_document' ) ) {
+			$document = wcpdf_get_document( $document_type, $order, true );
+		}
+
+		if ( ! $document || ! \is_callable( array( $document, 'get_pdf' ) ) ) {
+			throw new \RuntimeException(
+				esc_html(
+					sprintf(
+						/* translators: %s: WP Overnight document type. */
+						__( 'WP Overnight %s PDF could not be generated.', 'woocommerce-pos' ),
+						$document_type
+					)
+				)
+			);
+		}
+
+		$pdf = $document->get_pdf();
+		if ( ! \is_string( $pdf ) || '' === $pdf || 0 !== strpos( $pdf, '%PDF-' ) ) {
+			throw new \RuntimeException(
+				esc_html(
+					sprintf(
+						/* translators: %s: WP Overnight document type. */
+						__( 'WP Overnight %s PDF could not be generated.', 'woocommerce-pos' ),
+						$document_type
+					)
+				)
+			);
+		}
+
+		return $pdf;
+	}
+
+	/**
+	 * Map WCPOS virtual template IDs to WP Overnight document types.
+	 *
+	 * @param array $template Template metadata/content.
+	 *
+	 * @return string|null invoice|packing-slip for WP Overnight templates, null otherwise.
+	 */
+	private function wp_overnight_document_type( array $template ): ?string {
+		$id = isset( $template['id'] ) ? (string) $template['id'] : '';
+
+		if ( 'wp-overnight-invoice' === $id ) {
+			return 'invoice';
+		}
+
+		if ( 'wp-overnight-packing-slip' === $id ) {
+			return 'packing-slip';
+		}
+
+		return null;
 	}
 
 	/**

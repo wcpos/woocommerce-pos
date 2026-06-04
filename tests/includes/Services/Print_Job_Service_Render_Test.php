@@ -213,6 +213,50 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		$this->assertSame( '%PDF-', substr( $out, 0, 5 ) );
 	}
 
+
+	/**
+	 * It renders WP Overnight native PDF bytes for PrintNode PDF jobs.
+	 */
+	public function test_render_payload_printnode_wp_overnight_invoice_uses_native_pdf_bytes(): void {
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+
+		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from cloud print\n";
+		$callback   = static function () use ( $native_pdf ) {
+			return new class( $native_pdf ) {
+				private $pdf;
+
+				public function __construct( string $pdf ) {
+					$this->pdf = $pdf;
+				}
+
+				public function get_pdf(): string {
+					return $this->pdf;
+				}
+			};
+		};
+		add_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10, 3 );
+
+		try {
+			$order  = OrderHelper::create_order();
+			$job_id = $this->jobs->create(
+				array(
+					'printer_id'   => 'pn',
+					'order_id'     => $order->get_id(),
+					'template_id'  => 'wp-overnight-invoice',
+					'content_type' => 'application/pdf',
+					'pn_kind'      => 'pdf',
+				)
+			);
+
+			$out = $this->jobs->render_payload( $this->jobs->get( $job_id ) );
+
+			$this->assertSame( $native_pdf, $out );
+		} finally {
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_document', $callback, 10 );
+			remove_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
+		}
+	}
+
 	/**
 	 * It renders ESC/POS bytes for a PrintNode escpos job.
 	 */
