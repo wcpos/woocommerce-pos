@@ -279,7 +279,7 @@
 	"cloud_print.poll_token": "Poll token",
 	"cloud_print.poll_token_help": "store it like a password",
 	"cloud_print.linked": "Linked to PrintNode",
-	"cloud_print.printnode_delivery": "No URLs or tokens to copy — PrintNode handles delivery.",
+	"cloud_print.printnode_delivery": "No URLs or tokens to copy — {provider} handles delivery.",
 	"cloud_print.scope_every": "every order",
 	"cloud_print.scope_pos": "every in-store (POS) order",
 	"cloud_print.scope_online": "every online order",
