@@ -192,7 +192,7 @@ export function AddPrinterWizard({
 	fetchStarDevices,
 }: AddPrinterWizardProps): JSX.Element | null {
 	const [step, setStep] = React.useState(0);
-	const [provider, setProvider] = React.useState<CloudProvider>('star-cloudprnt');
+	const [provider, setProvider] = React.useState<CloudProvider | null>(null);
 	const [name, setName] = React.useState('');
 	const [apiKey, setApiKey] = React.useState('');
 	const [printerId, setPrinterId] = React.useState('');
@@ -298,7 +298,7 @@ export function AddPrinterWizard({
 				setProvider(setupPrinter.provider);
 				setStep(2);
 			} else {
-				setProvider('star-cloudprnt');
+				setProvider(null);
 				setStep(0);
 			}
 			setName('');
@@ -320,6 +320,9 @@ export function AddPrinterWizard({
 		(!isStarOnline || (apiKey.trim() !== '' && cloudprntUrl.trim() !== '' && printerId.trim() !== ''));
 
 	const handleCreate = async () => {
+		if (!provider) {
+			return;
+		}
 		const input: NewPrinterInput = { name: trimmedName, provider };
 		if (isPrintNode) {
 			input.printnode_api_key = apiKey.trim();
@@ -351,7 +354,7 @@ export function AddPrinterWizard({
 	// Resolve the printer/provider used to render the final step.
 	const finalPrinter = mode === 'setup' ? setupPrinter ?? null : created?.printer ?? null;
 	const finalProvider = mode === 'setup' && setupPrinter ? setupPrinter.provider : provider;
-	const finalIsPolling = PROVIDERS[finalProvider].isPolling;
+	const finalIsPolling = finalProvider ? PROVIDERS[finalProvider].isPolling : false;
 
 	return (
 		<Modal open={open} onClose={() => onClose()} title={title} className="wcpos:max-w-xl">
@@ -549,7 +552,7 @@ export function AddPrinterWizard({
 				)}
 
 				{/* Step 2: final / setup. */}
-				{step === 2 && (
+				{step === 2 && finalProvider && (
 					<div className="wcpos:flex wcpos:flex-col wcpos:gap-3">
 						{finalIsPolling ? (
 							<>
@@ -668,6 +671,7 @@ export function AddPrinterWizard({
 						<Button
 							variant="primary"
 							data-testid="wizard-continue"
+							disabled={!provider}
 							onClick={() => setStep(1)}
 						>
 							{t('common.continue', 'Continue')}
