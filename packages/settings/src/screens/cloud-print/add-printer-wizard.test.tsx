@@ -36,6 +36,24 @@ function makePrinter(overrides: Partial<CloudPrinter> = {}): CloudPrinter {
 }
 
 describe('AddPrinterWizard', () => {
+	it('add mode: pre-selects no provider and keeps Continue disabled until one is chosen', () => {
+		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={vi.fn()} />);
+
+		// No provider should be pre-selected on open.
+		expect(screen.getByTestId('provider-choice-printnode')).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByTestId('provider-choice-star-online')).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByTestId('provider-choice-epson-sdp')).toHaveAttribute('aria-pressed', 'false');
+
+		// Continue is disabled until a provider is selected.
+		expect(screen.getByTestId('wizard-continue')).toBeDisabled();
+
+		fireEvent.click(screen.getByTestId('provider-choice-star-cloudprnt'));
+
+		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute('aria-pressed', 'true');
+		expect(screen.getByTestId('wizard-continue')).toBeEnabled();
+	});
+
 	it('add mode: walks star/epson polling flow and shows poll URL + token', async () => {
 		const onCreate = vi.fn().mockResolvedValue({
 			printer: makePrinter({ provider: 'epson-sdp' }),
@@ -137,7 +155,8 @@ describe('AddPrinterWizard', () => {
 		});
 		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={onCreate} />);
 
-		fireEvent.click(screen.getByTestId('wizard-continue')); // star default -> step 1
+		fireEvent.click(screen.getByTestId('provider-choice-star-cloudprnt'));
+		fireEvent.click(screen.getByTestId('wizard-continue')); // -> step 1
 		fireEvent.change(screen.getByTestId('wizard-name-input'), {
 			target: { value: 'Kitchen printer' },
 		});
@@ -311,7 +330,8 @@ describe('AddPrinterWizard', () => {
 		const onCreate = vi.fn().mockRejectedValue(new Error('boom'));
 		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={onCreate} />);
 
-		fireEvent.click(screen.getByTestId('wizard-continue')); // star default -> step 1
+		fireEvent.click(screen.getByTestId('provider-choice-star-cloudprnt'));
+		fireEvent.click(screen.getByTestId('wizard-continue')); // -> step 1
 		fireEvent.change(screen.getByTestId('wizard-name-input'), {
 			target: { value: 'Bar printer' },
 		});
