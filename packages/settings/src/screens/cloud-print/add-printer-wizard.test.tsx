@@ -40,9 +40,10 @@ describe('AddPrinterWizard', () => {
 		render(<AddPrinterWizard open mode="add" onClose={vi.fn()} onCreate={vi.fn()} />);
 
 		// No provider should be pre-selected on open.
+		expect(screen.getByTestId('provider-choice-printnode')).toHaveAttribute('aria-pressed', 'false');
+		expect(screen.getByTestId('provider-choice-star-online')).toHaveAttribute('aria-pressed', 'false');
 		expect(screen.getByTestId('provider-choice-star-cloudprnt')).toHaveAttribute('aria-pressed', 'false');
 		expect(screen.getByTestId('provider-choice-epson-sdp')).toHaveAttribute('aria-pressed', 'false');
-		expect(screen.getByTestId('provider-choice-printnode')).toHaveAttribute('aria-pressed', 'false');
 
 		// Continue is disabled until a provider is selected.
 		expect(screen.getByTestId('wizard-continue')).toBeDisabled();
