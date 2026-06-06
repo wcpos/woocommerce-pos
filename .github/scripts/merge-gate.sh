@@ -32,6 +32,10 @@ is_translation_author() {
   [[ "$TRANSLATION_AUTHORS" == *"|${PR_AUTHOR}|"* ]]
 }
 
+is_dependabot_pr() {
+  [[ "$PR_AUTHOR" == "dependabot[bot]" ]]
+}
+
 is_allowed_translation_version_pr() {
   [[ -n "$TRANSLATION_FILE" ]] || return 1
   is_translation_author || return 1
@@ -232,7 +236,7 @@ wait_for_checks() {
         all_pass=false
       fi
     else
-      log "↷ CodeRabbit bypassed for validated automated PR"
+      log "↷ CodeRabbit bypassed for this PR"
     fi
 
     if [[ "$any_failed" == "true" ]]; then
@@ -262,6 +266,9 @@ main() {
     return 0
   elif is_allowed_test_matrix_pr; then
     log "Validated automated test-matrix PR; waiting for required checks without CodeRabbit."
+    coderabbit_required=false
+  elif is_dependabot_pr; then
+    log "Dependabot PR; waiting for required checks without CodeRabbit."
     coderabbit_required=false
   else
     log "CodeRabbit and smoke test are required for this PR."

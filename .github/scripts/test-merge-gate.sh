@@ -235,6 +235,14 @@ run_case "human PR still requires CodeRabbit for non-PHP changes" fail \
   MOCK_CODERABBIT="missing" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
+run_case "dependabot PR bypasses CodeRabbit for non-PHP dependency bump" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps-dev): bump sass-loader from 16.0.8 to 17.0.0 in packages/analytics" \
+  MOCK_CHANGED_FILES="packages/analytics/package.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
 run_case "POT-only bypass" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
   PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
