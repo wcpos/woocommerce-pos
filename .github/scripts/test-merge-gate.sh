@@ -143,6 +143,13 @@ test_matrix_extra_code_patch="diff --git a/.github/test-matrix.json b/.github/te
      \"matrix\": [
 +      { \"php\": \"8.5\", \"wp\": \"stable\", \"wc\": \"stable\" },"
 
+composer_dev_dependency_patch="diff --git a/composer.json b/composer.json
+--- a/composer.json
++++ b/composer.json
+@@ -11,7 +11,7 @@
+-    \"friendsofphp/php-cs-fixer\": \"v3.95.1\",
++    \"friendsofphp/php-cs-fixer\": \"v3.95.4\","
+
 run_case "test-matrix bot bypasses CodeRabbit but waits for smoke test" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
   PR_TITLE="chore: update test matrix versions" \
@@ -171,6 +178,21 @@ run_case "test-matrix bot with matrix structure change still requires CodeRabbit
   PR_TITLE="chore: update test matrix versions" \
   MOCK_CHANGED_FILES=".github/test-matrix.json" \
   MOCK_PATCH="$test_matrix_extra_code_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "dependabot dev-dependency bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
+  MOCK_CHANGED_FILES="composer.json" \
+  MOCK_PATCH="$composer_dev_dependency_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "dependabot dev-dependency with extra file still requires CodeRabbit" fail \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
+  MOCK_CHANGED_FILES="composer.json
+README.md" \
+  MOCK_PATCH="$composer_dev_dependency_patch" \
   MOCK_CODERABBIT="missing"
 
 run_case "translation-version bypass" pass \
