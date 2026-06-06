@@ -492,6 +492,48 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		$this->assertSame( 'Hello !', $output );
 	}
 
+	// ─── Barcode markup rasterization ───
+
+	/**
+	 * A <barcode> element is rasterized to a PNG <img> that survives sanitization.
+	 *
+	 * Sanitization would otherwise strip the unknown <barcode> element (leaving
+	 * only the bare value as text), and the data: image URI it produces is not an
+	 * allowed protocol by default — the renderer handles both so the barcode
+	 * appears in the PDF, matching the on-screen preview.
+	 */
+	public function test_barcode_marker_rasterized_to_png_image(): void {
+		$data = array(
+			'order' => array(
+				'currency' => 'USD',
+				'number'   => '23957',
+			),
+		);
+
+		$output = $this->render(
+			'<barcode type="code128" height="40">{{order.number}}</barcode>',
+			$data
+		);
+
+		$this->assertStringContainsString( '<img src="data:image/png;base64,', $output );
+		$this->assertStringNotContainsString( '<barcode', $output );
+	}
+
+	/**
+	 * A <qrcode> element is rasterized to a PNG <img> that survives sanitization.
+	 */
+	public function test_qrcode_marker_rasterized_to_png_image(): void {
+		$data = array( 'order' => array( 'currency' => 'USD' ) );
+
+		$output = $this->render(
+			'<qrcode size="4">https://wcpos.com</qrcode>',
+			$data
+		);
+
+		$this->assertStringContainsString( '<img src="data:image/png;base64,', $output );
+		$this->assertStringNotContainsString( '<qrcode', $output );
+	}
+
 	/**
 	 * Test existing placeholder substitution still works.
 	 */
