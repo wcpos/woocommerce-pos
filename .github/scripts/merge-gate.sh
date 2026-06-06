@@ -141,6 +141,25 @@ is_allowed_test_matrix_pr() {
   [[ "$added" -ge 1 && "$removed" -ge 1 ]]
 }
 
+is_allowed_dependabot_composer_dev_dependency_pr() {
+  [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || return 1
+  [[ "$PR_TITLE" == build\(deps-dev\):\ bump\ * ]] || return 1
+
+  local changed_files file
+  changed_files="$(pr_diff_names)"
+  [[ -n "$changed_files" ]] || return 1
+
+  while IFS= read -r file; do
+    case "$file" in
+      composer.json|composer.lock)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$changed_files"
+}
+
 requires_php_tests() {
   local file
   while IFS= read -r file; do
@@ -262,6 +281,9 @@ main() {
     return 0
   elif is_allowed_test_matrix_pr; then
     log "Validated automated test-matrix PR; waiting for required checks without CodeRabbit."
+    coderabbit_required=false
+  elif is_allowed_dependabot_composer_dev_dependency_pr; then
+    log "Validated automated Dependabot Composer dev-dependency PR; waiting for required checks without CodeRabbit."
     coderabbit_required=false
   else
     log "CodeRabbit and smoke test are required for this PR."
