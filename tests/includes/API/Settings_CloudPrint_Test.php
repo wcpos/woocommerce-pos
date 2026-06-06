@@ -242,12 +242,19 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 						'provider'          => 'star-cloudprnt',
 						'columns'           => 48,
 						'language'          => 'esc-pos',
-						'autoCut'           => false,
-						'fullReceiptRaster' => true,
+						'autoCut'           => 'false',
+						'fullReceiptRaster' => 'true',
 					),
 					array(
-						'id'       => 'bar',
-						'name'     => 'Bar',
+						'id'                => 'bar',
+						'name'              => 'Bar',
+						'provider'          => 'star-cloudprnt',
+						'autoCut'           => 'true',
+						'fullReceiptRaster' => 'false',
+					),
+					array(
+						'id'       => 'counter',
+						'name'     => 'Counter',
 						'provider' => 'star-cloudprnt',
 					),
 				),
@@ -256,24 +263,33 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		$post_data = rest_do_request( $req )->get_data();
+		$saved     = get_option( 'woocommerce_pos_settings_cloud_print' );
 		$get_data  = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) )->get_data();
 
 		$this->assertEquals( 48, $post_data['printers'][0]['columns'] );
 		$this->assertEquals( 'esc-pos', $post_data['printers'][0]['language'] );
 		$this->assertEquals( false, $post_data['printers'][0]['autoCut'] );
 		$this->assertEquals( true, $post_data['printers'][0]['fullReceiptRaster'] );
-		$this->assertEquals( 42, $post_data['printers'][1]['columns'] );
-		$this->assertEquals( 'esc-pos', $post_data['printers'][1]['language'] );
 		$this->assertEquals( true, $post_data['printers'][1]['autoCut'] );
 		$this->assertEquals( false, $post_data['printers'][1]['fullReceiptRaster'] );
+		$this->assertEquals( 42, $post_data['printers'][2]['columns'] );
+		$this->assertEquals( 'esc-pos', $post_data['printers'][2]['language'] );
+		$this->assertEquals( true, $post_data['printers'][2]['autoCut'] );
+		$this->assertEquals( false, $post_data['printers'][2]['fullReceiptRaster'] );
+		$this->assertEquals( false, $saved['printers'][0]['autoCut'] );
+		$this->assertEquals( true, $saved['printers'][0]['fullReceiptRaster'] );
+		$this->assertEquals( true, $saved['printers'][1]['autoCut'] );
+		$this->assertEquals( false, $saved['printers'][1]['fullReceiptRaster'] );
 		$this->assertEquals( 48, $get_data['printers'][0]['columns'] );
 		$this->assertEquals( 'esc-pos', $get_data['printers'][0]['language'] );
 		$this->assertEquals( false, $get_data['printers'][0]['autoCut'] );
 		$this->assertEquals( true, $get_data['printers'][0]['fullReceiptRaster'] );
-		$this->assertEquals( 42, $get_data['printers'][1]['columns'] );
-		$this->assertEquals( 'esc-pos', $get_data['printers'][1]['language'] );
 		$this->assertEquals( true, $get_data['printers'][1]['autoCut'] );
 		$this->assertEquals( false, $get_data['printers'][1]['fullReceiptRaster'] );
+		$this->assertEquals( 42, $get_data['printers'][2]['columns'] );
+		$this->assertEquals( 'esc-pos', $get_data['printers'][2]['language'] );
+		$this->assertEquals( true, $get_data['printers'][2]['autoCut'] );
+		$this->assertEquals( false, $get_data['printers'][2]['fullReceiptRaster'] );
 	}
 
 	/**

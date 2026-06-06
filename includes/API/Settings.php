@@ -846,8 +846,8 @@ class Settings extends WP_REST_Controller {
 
 		$printer['columns']           = $columns;
 		$printer['language']          = $language;
-		$printer['autoCut']           = array_key_exists( 'autoCut', $printer ) ? (bool) $printer['autoCut'] : true;
-		$printer['fullReceiptRaster'] = array_key_exists( 'fullReceiptRaster', $printer ) ? (bool) $printer['fullReceiptRaster'] : false;
+		$printer['autoCut']           = array_key_exists( 'autoCut', $printer ) ? rest_sanitize_boolean( $printer['autoCut'] ) : true;
+		$printer['fullReceiptRaster'] = array_key_exists( 'fullReceiptRaster', $printer ) ? rest_sanitize_boolean( $printer['fullReceiptRaster'] ) : false;
 
 		return $printer;
 	}
