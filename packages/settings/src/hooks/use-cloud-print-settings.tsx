@@ -29,6 +29,11 @@ export interface CloudPrinter {
 	star_cloudprnt_url?: string; // star-online only
 	star_device_id?: string; // star-online only
 	star_client_type?: string; // star-online only
+	// read-only POS client encoding contract (star-cloudprnt only).
+	columns?: 32 | 42 | 48;
+	language?: 'esc-pos' | 'star-prnt' | 'star-line';
+	autoCut?: boolean;
+	fullReceiptRaster?: boolean;
 }
 
 export interface CloudAssignment {

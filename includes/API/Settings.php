@@ -629,12 +629,13 @@ class Settings extends WP_REST_Controller {
 		);
 		$registry             = new Cloud_Print_Registry();
 		$settings['printers'] = array_map(
-			static function ( $printer ) use ( $registry ) {
+			function ( $printer ) use ( $registry ) {
 				if ( ! \is_array( $printer ) ) {
 					return $printer;
 				}
 				$id                   = (string) ( $printer['id'] ?? '' );
 				$seen                 = $registry->get_seen( $id );
+				$printer              = $this->with_cloud_printer_encoding_fields( $printer );
 				$printer['status']    = $registry->status_for( $id );
 				$printer['last_seen'] = $seen > 0 ? $seen : null;
 				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
@@ -758,7 +759,8 @@ class Settings extends WP_REST_Controller {
 		( new Cloud_Print_Registry() )->prune_seen( array_keys( $seen_ids ) );
 
 		$response_printers = array_map(
-			static function ( $printer ) {
+			function ( $printer ) {
+				$printer = $this->with_cloud_printer_encoding_fields( $printer );
 				unset( $printer['poll_token_hash'], $printer['printnode_api_key'], $printer['star_api_key'] );
 
 				return $printer;
@@ -801,6 +803,15 @@ class Settings extends WP_REST_Controller {
 			$clean['printnode_format']     = \in_array( $printer['printnode_format'] ?? '', array( 'pdf', 'raw' ), true )
 				? $printer['printnode_format'] : 'pdf';
 		}
+		if ( 'star-cloudprnt' === $provider ) {
+			$encoding_fields = array_intersect_key(
+				$printer,
+				array_flip( array( 'columns', 'language', 'autoCut', 'fullReceiptRaster' ) )
+			);
+			$clean           = $this->with_cloud_printer_encoding_fields(
+				array_merge( $clean, $encoding_fields )
+			);
+		}
 		if ( 'star-online' === $provider ) {
 			$clean['star_api_key']       = sanitize_text_field( $printer['star_api_key'] ?? '' );
 			$clean['star_cloudprnt_url'] = esc_url_raw( $printer['star_cloudprnt_url'] ?? '' );
@@ -809,6 +820,36 @@ class Settings extends WP_REST_Controller {
 		}
 
 		return $clean;
+	}
+
+	/**
+	 * Add server-owned client encoding fields for Star CloudPRNT printers.
+	 *
+	 * These fields let POS clients synthesize read-only cloud printer targets
+	 * without guessing how to render raw payloads before CloudPRNT delivery.
+	 *
+	 * @param array $printer Printer row.
+	 *
+	 * @return array
+	 */
+	private function with_cloud_printer_encoding_fields( array $printer ): array {
+		if ( 'star-cloudprnt' !== ( $printer['provider'] ?? '' ) ) {
+			return $printer;
+		}
+
+		$language = \in_array( $printer['language'] ?? '', array( 'esc-pos', 'star-prnt', 'star-line' ), true )
+			? $printer['language'] : 'esc-pos';
+		$columns  = isset( $printer['columns'] ) ? (int) $printer['columns'] : 42;
+		if ( ! \in_array( $columns, array( 32, 42, 48 ), true ) ) {
+			$columns = 42;
+		}
+
+		$printer['columns']           = $columns;
+		$printer['language']          = $language;
+		$printer['autoCut']           = array_key_exists( 'autoCut', $printer ) ? (bool) $printer['autoCut'] : true;
+		$printer['fullReceiptRaster'] = array_key_exists( 'fullReceiptRaster', $printer ) ? (bool) $printer['fullReceiptRaster'] : false;
+
+		return $printer;
 	}
 
 	/**
