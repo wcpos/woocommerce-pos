@@ -23,11 +23,7 @@
 
 namespace WCPOS\WooCommercePOS\Templates\Thermal;
 
-use Throwable;
-use WCPOS\Vendor\chillerlan\QRCode\Output\QROutputInterface;
-use WCPOS\Vendor\chillerlan\QRCode\QRCode;
-use WCPOS\Vendor\chillerlan\QRCode\QROptions;
-use WCPOS\Vendor\Picqer\Barcode\BarcodeGeneratorSVG;
+use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 
 /**
  * Html_Thermal_Emitter class.
@@ -112,7 +108,7 @@ class Html_Thermal_Emitter {
 				if ( $this->is_qr_barcode_type( $barcode_type ) ) {
 					return $this->render_qrcode( $value, $this->height_to_qr_size( isset( $node['height'] ) ? (int) $node['height'] : 40 ) );
 				}
-				return $this->render_barcode( $barcode_type, $value );
+				return $this->render_barcode( $barcode_type, $value, isset( $node['height'] ) ? (int) $node['height'] : 40 );
 			case 'qrcode':
 				$value = isset( $node['value'] ) ? (string) $node['value'] : '';
 				$size  = isset( $node['size'] ) ? (int) $node['size'] : 4;
@@ -200,34 +196,32 @@ class Html_Thermal_Emitter {
 	}
 
 	/**
-	 * Render a 1D barcode as a centered SVG, falling back to text on failure.
+	 * Render a 1D barcode as a centered PNG image, falling back to text on failure.
 	 *
 	 * @param string $barcode_type The barcode symbology string.
 	 * @param string $value        The barcode value.
+	 * @param int    $height       The barcode height in pixels.
 	 *
 	 * @return string The HTML fragment.
 	 */
-	private function render_barcode( string $barcode_type, string $value ): string {
+	private function render_barcode( string $barcode_type, string $value, int $height = 40 ): string {
 		$text = trim( $value );
 		if ( '' === $text ) {
 			return '';
 		}
 
-		try {
-			$generator = new BarcodeGeneratorSVG();
-			$svg       = $generator->getBarcode( $text, $this->barcode_constant( $barcode_type ) );
+		$img = Barcode_Image::barcode_img( $barcode_type, $text, $height );
 
-			return '<div style="text-align: center; padding: 8px 0">' . $this->constrain_svg( $svg ) . '</div>';
-		} catch ( Throwable $error ) {
-			return $this->render_barcode_fallback( $text );
-		}
+		return '' !== $img
+			? '<div style="text-align: center; padding: 8px 0">' . $img . '</div>'
+			: $this->render_barcode_fallback( $text );
 	}
 
 	/**
-	 * Render a QR code as a centered SVG, falling back to text on failure.
+	 * Render a QR code as a centered PNG image, falling back to text on failure.
 	 *
 	 * @param string $value The QR code value.
-	 * @param int    $size  The QR code module size hint (unused by chillerlan SVG).
+	 * @param int    $size  The QR code module scale (pixels per module).
 	 *
 	 * @return string The HTML fragment.
 	 */
@@ -237,24 +231,11 @@ class Html_Thermal_Emitter {
 			return '';
 		}
 
-		try {
-			// $size is intentionally NOT mapped to QROptions::scale: scale only
-			// affects raster (PNG/GIF) output — the MARKUP_SVG renderer emits a
-			// vector with a module-unit viewBox and no width/height, so scale is a
-			// no-op there. Sizing is handled responsively by constrain_svg (capped
-			// to the receipt width), which is the intended look on narrow paper.
-			$options = new QROptions(
-				array(
-					'outputType'  => QROutputInterface::MARKUP_SVG,
-					'imageBase64' => false,
-				)
-			);
-			$svg = ( new QRCode( $options ) )->render( $text );
+		$img = Barcode_Image::qrcode_img( $text, $size );
 
-			return '<div style="text-align: center; padding: 8px 0">' . $this->constrain_svg( $svg ) . '</div>';
-		} catch ( Throwable $error ) {
-			return $this->render_barcode_fallback( $text );
-		}
+		return '' !== $img
+			? '<div style="text-align: center; padding: 8px 0">' . $img . '</div>'
+			: $this->render_barcode_fallback( $text );
 	}
 
 	/**
@@ -266,53 +247,6 @@ class Html_Thermal_Emitter {
 	 */
 	private function render_barcode_fallback( string $text ): string {
 		return '<div style="text-align: center; padding: 8px 0"><code>' . $this->escape_html( $text ) . '</code></div>';
-	}
-
-	/**
-	 * Constrain a standalone SVG so it embeds and fits inside the receipt HTML.
-	 *
-	 * Strips a leading XML declaration that the generators may emit and injects a
-	 * max-width/height style so Dompdf renders it within the receipt width.
-	 *
-	 * @param string $svg The SVG markup.
-	 *
-	 * @return string The constrained SVG markup.
-	 */
-	private function constrain_svg( string $svg ): string {
-		$svg = preg_replace( '/^\s*<\?xml[^>]*\?>\s*/', '', $svg );
-		$svg = null === $svg ? '' : $svg;
-
-		$pos = strpos( $svg, '<svg ' );
-		if ( false === $pos ) {
-			return $svg;
-		}
-
-		return substr_replace( $svg, '<svg style="max-width: 100%; height: auto" ', $pos, \strlen( '<svg ' ) );
-	}
-
-	/**
-	 * Map an AST barcode type string to a picqer generator constant.
-	 *
-	 * @param string $barcode_type The barcode type string.
-	 *
-	 * @return string The picqer TYPE_* constant value.
-	 */
-	private function barcode_constant( string $barcode_type ): string {
-		$normalized = strtolower( trim( $barcode_type ) );
-
-		$map = array(
-			'code128' => BarcodeGeneratorSVG::TYPE_CODE_128,
-			'code39'  => BarcodeGeneratorSVG::TYPE_CODE_39,
-			'code93'  => BarcodeGeneratorSVG::TYPE_CODE_93,
-			'ean13'   => BarcodeGeneratorSVG::TYPE_EAN_13,
-			'ean8'    => BarcodeGeneratorSVG::TYPE_EAN_8,
-			'upca'    => BarcodeGeneratorSVG::TYPE_UPC_A,
-			'upce'    => BarcodeGeneratorSVG::TYPE_UPC_E,
-			'codabar' => BarcodeGeneratorSVG::TYPE_CODABAR,
-			'itf'     => BarcodeGeneratorSVG::TYPE_INTERLEAVED_2_5,
-		);
-
-		return isset( $map[ $normalized ] ) ? $map[ $normalized ] : BarcodeGeneratorSVG::TYPE_CODE_128;
 	}
 
 	/**

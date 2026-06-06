@@ -18,6 +18,7 @@ namespace WCPOS\WooCommercePOS\Templates\Renderers;
 use Mustache\Engine as Mustache_Engine;
 use WCPOS\WooCommercePOS\Interfaces\Receipt_Renderer_Interface;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Schema;
+use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 use WC_Abstract_Order;
 
 /**
@@ -66,6 +67,14 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 
 		$output = $mustache->render( $content, $formatted_data );
 
+		// Swap <barcode>/<qrcode> markup for placeholder tokens before sanitizing
+		// (wp_kses_post would otherwise strip the unknown elements, leaving only the
+		// bare value as text). The rasterized PNG <img> tags are spliced back in
+		// after sanitization, so their data: image URI never has to be whitelisted
+		// in kses. Mirrors the client-side preview renderer.
+		$barcode_images = array();
+		$output         = Barcode_Image::replace_markup( $output, $barcode_images );
+
 		// Allow print-color-adjust in inline styles so background fills survive print.
 		// wp_kses_post drops CSS properties not on the safe_style_css allowlist by default.
 		$allow_print_color_adjust = function ( array $styles ): array {
@@ -78,7 +87,8 @@ class Logicless_Renderer implements Receipt_Renderer_Interface {
 		add_filter( 'safe_style_css', $allow_print_color_adjust );
 
 		try {
-			echo wp_kses_post( $output );
+			$sanitized = wp_kses_post( $output );
+			echo $barcode_images ? strtr( $sanitized, $barcode_images ) : $sanitized; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $sanitized is kses'd; spliced values are self-generated PNG <img> tags.
 		} finally {
 			remove_filter( 'safe_style_css', $allow_print_color_adjust );
 		}

@@ -121,6 +121,36 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Render_html survives nested flex-inside-grid layout.
+	 *
+	 * Dompdf has no flex/grid engine, so the compatibility shim rewrites those
+	 * containers as tables/floats. An earlier all-tables approach nested anonymous
+	 * tables and triggered a "Frame not found in cellmap" fatal on this exact
+	 * structure (a grid cell containing space-between rows plus a flex-end
+	 * wrapper, as in the detailed receipt). This guards that regression.
+	 */
+	public function test_render_html_handles_nested_flex_and_grid(): void {
+		// Arrange.
+		$html = '<div style="display: grid; grid-template-columns: 1fr 320px;">'
+			. '<div></div>'
+			. '<div>'
+			. '<div style="display: flex; justify-content: space-between;"><span>Subtotal</span><span>55,00</span></div>'
+			. '<div style="display: flex; justify-content: space-between;"><span>Total</span><span>55,00</span></div>'
+			. '</div></div>'
+			. '<div style="display: grid; grid-template-columns: 1fr 320px;">'
+			. '<div><div style="display: flex; justify-content: space-between;"><span>Cash</span><span>55,00</span></div></div>'
+			. '<div style="display: flex; justify-content: flex-end;"><div style="width: 220px;">X</div></div>'
+			. '</div>';
+
+		// Act.
+		$pdf = $this->renderer->render_html( $html, array( 'flex_grid_shim' => true ) );
+
+		// Assert.
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
+		$this->assertGreaterThan( 1000, \strlen( $pdf ) );
+	}
+
+	/**
 	 * Read the first page MediaBox dimensions from PDF bytes.
 	 *
 	 * @param string $pdf PDF bytes.

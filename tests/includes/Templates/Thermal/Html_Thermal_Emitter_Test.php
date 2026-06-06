@@ -447,11 +447,14 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A valid CODE128 barcode embeds an SVG.
+	 * A valid CODE128 barcode embeds a PNG image.
+	 *
+	 * Dompdf cannot render inline SVG, so barcodes are rasterized to a PNG data
+	 * URI that Dompdf renders reliably.
 	 *
 	 * @return void
 	 */
-	public function test_valid_code128_barcode_embeds_svg(): void {
+	public function test_valid_code128_barcode_embeds_png_image(): void {
 		// Arrange.
 		$ast = $this->receipt(
 			array(
@@ -468,15 +471,16 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( '<svg', $html );
+		$this->assertStringContainsString( '<img src="data:image/png;base64,', $html );
+		$this->assertStringNotContainsString( '<svg', $html );
 	}
 
 	/**
-	 * A QR code node embeds an SVG.
+	 * A QR code node embeds a PNG image.
 	 *
 	 * @return void
 	 */
-	public function test_qrcode_embeds_svg(): void {
+	public function test_qrcode_embeds_png_image(): void {
 		// Arrange.
 		$ast = $this->receipt(
 			array(
@@ -492,7 +496,8 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( '<svg', $html );
+		$this->assertStringContainsString( '<img src="data:image/png;base64,', $html );
+		$this->assertStringNotContainsString( '<svg', $html );
 	}
 
 	/**

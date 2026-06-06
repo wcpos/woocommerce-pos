@@ -51,9 +51,10 @@ class Template_Pdf_Service {
 			return ( new Pdf_Renderer() )->render_html(
 				$html,
 				array(
-					'paper'        => array( 0, 0, 226.77, 14000.0 ),
-					'default_font' => 'dejavu sans mono',
-					'fit_height'   => true,
+					'paper'          => array( 0, 0, 226.77, 14000.0 ),
+					'default_font'   => 'dejavu sans mono',
+					'fit_height'     => true,
+					'flex_grid_shim' => true,
 				)
 			);
 		}
@@ -61,7 +62,7 @@ class Template_Pdf_Service {
 		$html = $this->render_html_engine( $engine, $template, $order );
 
 		// Non-thermal templates render to a standard A4 portrait page (Pdf_Renderer default).
-		return ( new Pdf_Renderer() )->render_html( $html );
+		return ( new Pdf_Renderer() )->render_html( $html, array( 'flex_grid_shim' => true ) );
 	}
 
 	/**
