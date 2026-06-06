@@ -160,6 +160,7 @@ class Barcode_Image {
 	private static function element_to_img( string $tag, string $attrs, string $inner ): string {
 		$value = self::attr( $attrs, 'data-value' );
 		$value = '' !== $value ? $value : trim( wp_strip_all_tags( $inner ) );
+		$value = html_entity_decode( $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		if ( '' === trim( $value ) ) {
 			return '';
 		}

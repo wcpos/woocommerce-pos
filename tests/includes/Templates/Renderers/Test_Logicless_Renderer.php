@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Templates\Renderers;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Templates\Renderers\Logicless_Renderer;
+use WCPOS\Vendor\chillerlan\QRCode\QRCode;
 use WC_REST_Unit_Test_Case;
 
 /**
@@ -55,6 +56,23 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 		ob_start();
 		$this->renderer->render( array( 'content' => $content ), $this->order, $receipt_data );
 		return ob_get_clean();
+	}
+
+	/**
+	 * Decode the first QR PNG embedded in rendered output.
+	 *
+	 * @param string $output Rendered HTML output.
+	 *
+	 * @return string The decoded QR payload.
+	 */
+	private function decoded_qr_payload_from_output( string $output ): string {
+		$this->assertMatchesRegularExpression( '#<img src="data:image/png;base64,([^"]+)"#', $output );
+		preg_match( '#<img src="data:image/png;base64,([^"]+)"#', $output, $match );
+
+		$png = base64_decode( $match[1], true );
+		$this->assertIsString( $png );
+
+		return ( new QRCode() )->readFromBlob( $png )->data;
 	}
 
 	// ─── Task 2: Basic section iteration ───
@@ -532,6 +550,46 @@ class Test_Logicless_Renderer extends WC_REST_Unit_Test_Case {
 
 		$this->assertStringContainsString( '<img src="data:image/png;base64,', $output );
 		$this->assertStringNotContainsString( '<qrcode', $output );
+	}
+
+	/**
+	 * QR marker inner text is entity-decoded before PNG generation.
+	 */
+	public function test_qrcode_marker_decodes_inner_text_entities_before_png_generation(): void {
+		$payment_url = 'https://example.test/checkout/order-pay/123?pay_for_order=true&key=wc_order_abc';
+		$data        = array(
+			'order' => array(
+				'currency'    => 'USD',
+				'payment_url' => $payment_url,
+			),
+		);
+
+		$output = $this->render(
+			'<qrcode size="4">{{order.payment_url}}</qrcode>',
+			$data
+		);
+
+		$this->assertSame( $payment_url, $this->decoded_qr_payload_from_output( $output ) );
+	}
+
+	/**
+	 * QR marker attribute values are entity-decoded before PNG generation.
+	 */
+	public function test_qrcode_marker_decodes_attribute_entities_before_png_generation(): void {
+		$payment_url = 'https://example.test/checkout/order-pay/123?pay_for_order=true&key=wc_order_abc';
+		$data        = array(
+			'order' => array(
+				'currency'    => 'USD',
+				'payment_url' => $payment_url,
+			),
+		);
+
+		$output = $this->render(
+			'<qrcode size="4" data-value="{{order.payment_url}}"></qrcode>',
+			$data
+		);
+
+		$this->assertSame( $payment_url, $this->decoded_qr_payload_from_output( $output ) );
 	}
 
 	/**
