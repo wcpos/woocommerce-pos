@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-08T10:40:17+00:00\n"
+"POT-Creation-Date: 2026-06-08T18:47:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -2579,7 +2579,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:179
-#: includes/Templates.php:1181
+#: includes/Templates.php:1230
 #: includes/Templates/Gallery_Registry.php:55
 msgid "Invoice"
 msgstr ""
@@ -2597,7 +2597,7 @@ msgstr ""
 #. translators: Document title printed at the top of a completed sale receipt.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:182
-#: includes/Templates.php:1180
+#: includes/Templates.php:1229
 #: templates/receipt.php:186
 msgid "Receipt"
 msgstr ""
@@ -2606,7 +2606,7 @@ msgstr ""
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
 #: includes/Services/Receipt_I18n_Labels.php:183
-#: includes/Templates.php:1182
+#: includes/Templates.php:1231
 #: includes/Templates/Gallery_Registry.php:42
 msgid "Gift Receipt"
 msgstr ""
@@ -2614,7 +2614,7 @@ msgstr ""
 #. translators: Document title for a credit note/refund document.
 #. translators: Receipt template post type or template option label.
 #: includes/Services/Receipt_I18n_Labels.php:184
-#: includes/Templates.php:1183
+#: includes/Templates.php:1232
 msgid "Credit Note"
 msgstr ""
 
@@ -3150,77 +3150,113 @@ msgctxt "Taxonomy Singular Name"
 msgid "Template Category"
 msgstr ""
 
+#. translators: %d: template post ID.
+#: includes/Templates.php:285
+#, php-format
+msgid "Report Template #%d"
+msgstr ""
+
+#. translators: 1: thermal paper width, 2: template post ID.
+#: includes/Templates.php:291
+#, php-format
+msgid "Thermal Receipt Template (%1$s) #%2$d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:295
+#, php-format
+msgid "Thermal Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:300
+#, php-format
+msgid "HTML Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:305
+#, php-format
+msgid "PHP Receipt Template #%d"
+msgstr ""
+
+#. translators: %d: template post ID.
+#: includes/Templates.php:309
+#, php-format
+msgid "Receipt Template #%d"
+msgstr ""
+
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:366
+#: includes/Templates.php:415
 msgid "Theme Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:371
+#: includes/Templates.php:420
 msgid "Pro Receipt Template"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:376
+#: includes/Templates.php:425
 msgid "Legacy PHP Template"
 msgstr ""
 
-#: includes/Templates.php:381
+#: includes/Templates.php:430
 msgid "Invoice (WP Overnight)"
 msgstr ""
 
-#: includes/Templates.php:382
+#: includes/Templates.php:431
 msgid "Renders the PDF Invoices & Packing Slips invoice HTML through the WP Overnight document API."
 msgstr ""
 
-#: includes/Templates.php:386
+#: includes/Templates.php:435
 msgid "Packing Slip (WP Overnight)"
 msgstr ""
 
-#: includes/Templates.php:387
+#: includes/Templates.php:436
 msgid "Renders the PDF Invoices & Packing Slips packing slip HTML through the WP Overnight document API."
 msgstr ""
 
-#: includes/Templates.php:1018
+#: includes/Templates.php:1067
 msgid "Starter template not found."
 msgstr ""
 
-#: includes/Templates.php:1025
+#: includes/Templates.php:1074
 msgid "Could not read starter template file."
 msgstr ""
 
-#: includes/Templates.php:1054
-#: includes/Templates.php:1135
+#: includes/Templates.php:1103
+#: includes/Templates.php:1184
 msgid "Template was created but raw content could not be saved."
 msgstr ""
 
-#: includes/Templates.php:1081
+#: includes/Templates.php:1130
 msgid "Gallery template not found."
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1156
+#: includes/Templates.php:1205
 msgid "Receipt templates for printing orders"
 msgstr ""
 
-#: includes/Templates.php:1167
+#: includes/Templates.php:1216
 msgid "Report templates for analytics"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1184
+#: includes/Templates.php:1233
 msgid "Purchase Order"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
 #. translators: Gallery template name shown in the admin Template Gallery.
-#: includes/Templates.php:1185
+#: includes/Templates.php:1234
 #: includes/Templates/Gallery_Registry.php:172
 msgid "Kitchen Ticket"
 msgstr ""
 
 #. translators: Receipt template post type or template option label.
-#: includes/Templates.php:1186
+#: includes/Templates.php:1235
 msgid "Bar Ticket"
 msgstr ""
 
