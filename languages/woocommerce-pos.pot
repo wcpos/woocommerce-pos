@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-06T16:27:32+00:00\n"
+"POT-Creation-Date: 2026-06-08T10:40:17+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -745,11 +745,11 @@ msgstr ""
 msgid "Sorry, you cannot view receipts."
 msgstr ""
 
-#: includes/API/Settings.php:717
+#: includes/API/Settings.php:718
 msgid "Star Online printers need an API key, a valid stario.online CloudPRNT URL, and a device."
 msgstr ""
 
-#: includes/API/Settings.php:728
+#: includes/API/Settings.php:729
 msgid "Duplicate printer id."
 msgstr ""
 
