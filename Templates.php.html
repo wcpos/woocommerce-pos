@@ -303,6 +303,46 @@ class Templates {
 	}
 
 	/**
+	 * Generate a readable fallback title for templates saved without a name.
+	 *
+	 * @param int    $template_id Template post ID.
+	 * @param string $type        Template type slug.
+	 * @param string $engine      Template engine slug.
+	 * @param string $paper_width Thermal paper width, when available.
+	 *
+	 * @return string Fallback template title.
+	 */
+	public static function get_fallback_template_title( int $template_id, string $type = 'receipt', string $engine = '', string $paper_width = '' ): string {
+		if ( 'report' === $type ) {
+			/* translators: %d: template post ID. */
+			return sprintf( __( 'Report Template #%d', 'woocommerce-pos' ), $template_id );
+		}
+
+		if ( 'thermal' === $engine ) {
+			if ( '' !== $paper_width ) {
+				/* translators: 1: thermal paper width, 2: template post ID. */
+				return sprintf( __( 'Thermal Receipt Template (%1$s) #%2$d', 'woocommerce-pos' ), $paper_width, $template_id );
+			}
+
+			/* translators: %d: template post ID. */
+			return sprintf( __( 'Thermal Receipt Template #%d', 'woocommerce-pos' ), $template_id );
+		}
+
+		if ( 'logicless' === $engine ) {
+			/* translators: %d: template post ID. */
+			return sprintf( __( 'HTML Receipt Template #%d', 'woocommerce-pos' ), $template_id );
+		}
+
+		if ( 'legacy-php' === $engine ) {
+			/* translators: %d: template post ID. */
+			return sprintf( __( 'PHP Receipt Template #%d', 'woocommerce-pos' ), $template_id );
+		}
+
+		/* translators: %d: template post ID. */
+		return sprintf( __( 'Receipt Template #%d', 'woocommerce-pos' ), $template_id );
+	}
+
+	/**
 	 * Get a database template by ID.
 	 *
 	 * @param int $template_id Template post ID.
@@ -336,10 +376,19 @@ class Templates {
 		}
 		$paper_width     = get_post_meta( $template_id, '_template_paper_width', true );
 		$category        = self::get_template_category( $template_id );
+		$title           = trim( $post->post_title );
+		if ( '' === $title ) {
+			$title = self::get_fallback_template_title(
+				$template_id,
+				$type,
+				$engine ? $engine : 'legacy-php',
+				$paper_width ? $paper_width : ''
+			);
+		}
 
 		return array(
 			'id'              => $post->ID,
-			'title'           => $post->post_title,
+			'title'           => $title,
 			'description'     => $description ? $description : '',
 			'content'         => $post->post_content,
 			'type'            => $type,
