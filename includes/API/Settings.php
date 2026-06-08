@@ -237,7 +237,7 @@ class Settings extends WP_REST_Controller {
 				array(
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => array( $this, 'get_cloud_print_settings' ),
-					'permission_callback' => array( $this, 'read_permission_check' ),
+					'permission_callback' => array( $this, 'cloud_print_read_permission_check' ),
 				),
 				array(
 					'methods'             => WP_REST_Server::EDITABLE,
@@ -1006,6 +1006,19 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function read_permission_check(): bool {
 		return current_user_can( 'manage_woocommerce_pos' );
+	}
+
+	/**
+	 * Check Cloud Print read permissions.
+	 *
+	 * POS clients need to read server-owned Cloud Printer targets so they can route
+	 * receipts to printers configured by a manager. Updating the server-owned
+	 * settings still requires manage_woocommerce_pos via update_permission_check().
+	 *
+	 * @return bool
+	 */
+	public function cloud_print_read_permission_check(): bool {
+		return current_user_can( 'access_woocommerce_pos' );
 	}
 
 	/**
