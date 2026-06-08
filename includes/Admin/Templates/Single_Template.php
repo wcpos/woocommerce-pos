@@ -394,12 +394,47 @@ class Single_Template {
 			}
 		}
 
+		$this->ensure_template_title( $post_id, $post );
+
 		// Save raw content for offline-capable engines only. Legacy-php templates
 		// are executed via include, so their content must go through wp_kses.
 		$saved_engine = get_post_meta( $post_id, '_template_engine', true );
 		if ( \in_array( $saved_engine, TemplatesManager::OFFLINE_CAPABLE_ENGINES, true ) ) {
 			$this->save_raw_content( $post_id );
 		}
+	}
+
+	/**
+	 * Ensure templates saved without a title still have a readable POS label.
+	 *
+	 * @param int      $post_id Post ID.
+	 * @param \WP_Post $post    Post object from the current save.
+	 *
+	 * @return void
+	 */
+	private function ensure_template_title( int $post_id, \WP_Post $post ): void {
+		if ( '' !== trim( $post->post_title ) ) {
+			return;
+		}
+
+		$terms = wp_get_post_terms( $post_id, 'wcpos_template_type' );
+		$type  = ! empty( $terms ) && ! is_wp_error( $terms ) ? $terms[0]->slug : 'receipt';
+
+		$title = TemplatesManager::get_fallback_template_title(
+			$post_id,
+			$type,
+			(string) get_post_meta( $post_id, '_template_engine', true ),
+			(string) get_post_meta( $post_id, '_template_paper_width', true )
+		);
+
+		remove_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10 );
+		wp_update_post(
+			array(
+				'ID'         => $post_id,
+				'post_title' => $title,
+			)
+		);
+		add_action( 'save_post_wcpos_template', array( $this, 'save_post' ), 10, 2 );
 	}
 
 	/**

@@ -643,6 +643,26 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that get_template returns a readable fallback title for existing blank templates.
+	 */
+	public function test_get_template_generates_title_for_blank_template(): void {
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'   => 'wcpos_template',
+				'post_status' => 'publish',
+				'post_title'  => '',
+			)
+		);
+		update_post_meta( $post_id, '_template_engine', 'logicless' );
+		update_post_meta( $post_id, '_template_output_type', 'html' );
+		wp_set_object_terms( $post_id, 'receipt', 'wcpos_template_type' );
+
+		$template = \WCPOS\WooCommercePOS\Templates::get_template( $post_id );
+
+		$this->assertEquals( sprintf( 'HTML Receipt Template #%d', $post_id ), $template['title'] );
+	}
+
+	/**
 	 * Test that get_template includes description field.
 	 */
 	public function test_get_template_includes_description(): void {

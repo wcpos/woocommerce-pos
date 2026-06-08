@@ -193,8 +193,51 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		unset(
 			$_POST['wcpos_template_settings_nonce'],
 			$_POST['content'],
-			$_POST['wcpos_template_engine']
+			$_POST['wcpos_template_engine'],
+			$_POST['wcpos_template_paper_width']
 		);
+	}
+
+	/**
+	 * Test admin save assigns a readable default title when a new template is saved blank.
+	 */
+	public function test_admin_save_generates_title_for_blank_thermal_template(): void {
+		// Arrange: a new template post like post-new.php creates before first save.
+		$post_id = $this->factory->post->create(
+			array(
+				'post_type'    => 'wcpos_template',
+				'post_status'  => 'auto-draft',
+				'post_title'   => '',
+				'post_content' => '',
+			)
+		);
+
+		$nonce = wp_create_nonce( 'wcpos_template_settings' );
+
+		// phpcs:disable WordPress.Security
+		$_POST['wcpos_template_settings_nonce'] = $nonce;
+		$_POST['content']                       = addslashes( $this->sample_xml );
+		$_POST['wcpos_template_engine']         = 'thermal';
+		$_POST['wcpos_template_paper_width']    = '80mm';
+		// phpcs:enable WordPress.Security
+
+		new Single_Template();
+
+		// Act: save the post without entering a title.
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_status'  => 'publish',
+				'post_title'   => '',
+				'post_content' => $this->sample_xml,
+			)
+		);
+
+		$this->cleanup_post_globals();
+
+		// Assert.
+		$saved_post = get_post( $post_id );
+		$this->assertSame( sprintf( 'Thermal Receipt Template (80mm) #%d', $post_id ), $saved_post->post_title );
 	}
 
 	/**
