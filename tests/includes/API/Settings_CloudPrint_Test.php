@@ -12,6 +12,58 @@ namespace WCPOS\WooCommercePOS\Tests\API;
  */
 class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	/**
+	 * It lets POS users read server-owned Cloud Printer targets.
+	 */
+	public function test_get_cloud_print_allows_pos_access_users_without_settings_management(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'printnode-test',
+						'name'     => 'PrintNode Test',
+						'provider' => 'printnode',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user_id );
+
+		$response = rest_do_request( $this->wp_rest_get_request( '/wcpos/v1/settings/cloud-print' ) );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'printnode-test', $response->get_data()['printers'][0]['id'] );
+		wp_delete_user( $user_id );
+	}
+
+	/**
+	 * It keeps Cloud Print settings writes manager-only.
+	 */
+	public function test_update_cloud_print_rejects_pos_access_users_without_settings_management(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$user->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user_id );
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/settings/cloud-print' );
+		$request->set_body_params(
+			array(
+				'printers'    => array(),
+				'assignments' => array(),
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$this->assertEquals( 403, $response->get_status() );
+		wp_delete_user( $user_id );
+	}
+
+	/**
 	 * It never exposes stored token hashes on GET.
 	 */
 	public function test_get_cloud_print_returns_printers_without_token_hash(): void {
@@ -617,18 +669,30 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * sanitize_cloud_assignment defaults store_id to 0 and casts a provided id to int.
+	 * Sanitize_cloud_assignment defaults store_id to 0 and casts a provided id to int.
 	 */
 	public function test_cloud_assignment_persists_store_id(): void {
 		$method = new \ReflectionMethod( \WCPOS\WooCommercePOS\API\Settings::class, 'sanitize_cloud_assignment' );
 		$method->setAccessible( true );
 		$settings = new \WCPOS\WooCommercePOS\API\Settings();
 
-		$default = $method->invoke( $settings, array( 'printer_id' => 'kitchen', 'template_id' => '11' ) );
+		$default = $method->invoke(
+			$settings,
+			array(
+				'printer_id'  => 'kitchen',
+				'template_id' => '11',
+			)
+		);
 		$this->assertEquals( 0, $default['store_id'] );
 
-		$with_store = $method->invoke( $settings, array( 'printer_id' => 'kitchen', 'template_id' => '11', 'store_id' => '12' ) );
+		$with_store = $method->invoke(
+			$settings,
+			array(
+				'printer_id'  => 'kitchen',
+				'template_id' => '11',
+				'store_id'    => '12',
+			)
+		);
 		$this->assertSame( 12, $with_store['store_id'] );
 	}
-
 }
