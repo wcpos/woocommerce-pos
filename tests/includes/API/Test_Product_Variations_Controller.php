@@ -104,7 +104,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		);
 
 		// 'gallery_image_ids' was added to the product variation REST API schema in WC 10.9.0.
-		if ( version_compare( WC_VERSION, '10.9.0', '>=' ) ) {
+		if ( version_compare( WC_VERSION, '10.9.0-beta.1', '>=' ) ) {
 			$fields[] = 'gallery_image_ids';
 		}
 
