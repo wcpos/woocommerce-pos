@@ -3,9 +3,10 @@
  * Renders HTML to PDF bytes via the prefixed Dompdf library.
  *
  * Thin wrapper around WCPOS\Vendor\Dompdf\Dompdf. Remote/PHP/JS are disabled for
- * safety (images must be embedded as data URIs); Dompdf's writable font cache and
- * temp dir are pointed at a WCPOS-owned subdirectory of the system temp so nothing
- * is written into the read-only, committed vendor_prefixed/ tree.
+ * safety; local WordPress/plugin images are embedded as data URIs before Dompdf
+ * sees the HTML. Dompdf's writable font cache and temp dir are pointed at a
+ * WCPOS-owned subdirectory of the system temp so nothing is written into the
+ * read-only, committed vendor_prefixed/ tree.
  *
  * @package WCPOS\WooCommercePOS\Services
  */
@@ -57,9 +58,36 @@ class Pdf_Renderer {
 		. '[style*="display: flex"],[style*="display:flex"],'
 		. '[style*="display: grid"],[style*="display:grid"]'
 		. '{display:table !important;width:100% !important;border-spacing:0 !important}'
+		. '[style*="gap: 22px"],[style*="gap:22px"]'
+		. '{border-collapse:separate !important;border-spacing:22px 0 !important}'
+		. '[style*="gap: 24px"],[style*="gap:24px"]'
+		. '{border-collapse:separate !important;border-spacing:24px 0 !important}'
+		. '[style*="gap: 28px"],[style*="gap:28px"]'
+		. '{border-collapse:separate !important;border-spacing:28px 0 !important}'
 		. '[style*="display: flex"]>*,[style*="display:flex"]>*,'
 		. '[style*="display: grid"]>*,[style*="display:grid"]>*'
 		. '{display:table-cell !important;vertical-align:top !important}'
+		. '[style*="flex: 0 0 auto"],[style*="flex:0 0 auto"]'
+		. '{width:1% !important;white-space:nowrap !important}'
+		. '[style*="flex: 0 0 92px"],[style*="flex:0 0 92px"]'
+		. '{width:92px !important}'
+		. '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]'
+		. '{width:280px !important}'
+		. '[style*="grid-template-columns: 1fr 220px"]>*:last-child,'
+		. '[style*="grid-template-columns:1fr 220px"]>*:last-child'
+		. '{width:220px !important}'
+		. '[style*="grid-template-columns: 1fr 320px"]>*:last-child,'
+		. '[style*="grid-template-columns:1fr 320px"]>*:last-child'
+		. '{width:320px !important}'
+		. '[style*="grid-template-columns: 2fr 1fr"]>*:first-child,'
+		. '[style*="grid-template-columns:2fr 1fr"]>*:first-child'
+		. '{width:66.666% !important}'
+		. '[style*="grid-template-columns: 2fr 1fr"]>*:last-child,'
+		. '[style*="grid-template-columns:2fr 1fr"]>*:last-child'
+		. '{width:33.333% !important}'
+		. '[style*="grid-template-columns: 1fr 1fr 1fr"]>*,'
+		. '[style*="grid-template-columns:1fr 1fr 1fr"]>*'
+		. '{width:33.333% !important}'
 		// 2. Label/value rows (justify-content:space-between) stay block-level and
 		// float the value to the right edge — no nested table. These rules are
 		// declared after rule 1, so they win the cascade at equal specificity (and
@@ -100,12 +128,7 @@ class Pdf_Renderer {
 	 * @return string The PDF document bytes (begins with '%PDF-').
 	 */
 	public function render_html( string $html, array $opts = array() ): string {
-		// Opt-in: the shim encodes receipt-layout knowledge (including legacy
-		// template class names), so it is only applied when the caller asks for it
-		// (receipt rendering) rather than for every generic HTML document.
-		if ( ! empty( $opts['flex_grid_shim'] ) ) {
-			$html = $this->inject_flex_grid_shim( $html );
-		}
+		$html = $this->prepare_html_for_render( $html, $opts );
 
 		$paper = isset( $opts['paper'] ) ? $opts['paper'] : 'A4';
 		if ( ! empty( $opts['fit_height'] ) && \is_array( $paper ) ) {
@@ -113,6 +136,25 @@ class Pdf_Renderer {
 		}
 
 		return (string) $this->build( $html, $opts )->output();
+	}
+
+	/**
+	 * Prepare receipt HTML for Dompdf's locked-down render environment.
+	 *
+	 * @param string $html HTML document to render.
+	 * @param array  $opts Render options.
+	 *
+	 * @return string Prepared HTML.
+	 */
+	private function prepare_html_for_render( string $html, array $opts ): string {
+		// Opt-in: the shim encodes receipt-layout knowledge (including legacy
+		// template class names), so it is only applied when the caller asks for it
+		// (receipt rendering) rather than for every generic HTML document.
+		if ( ! empty( $opts['flex_grid_shim'] ) ) {
+			$html = $this->inject_flex_grid_shim( $html );
+		}
+
+		return $this->embed_local_images( $html );
 	}
 
 	/**
@@ -134,6 +176,206 @@ class Pdf_Renderer {
 		}
 
 		return self::FLEX_GRID_SHIM . $html;
+	}
+
+	/**
+	 * Embed local WordPress image URLs as data URIs.
+	 *
+	 * Dompdf remote loading and local file access are intentionally disabled, so
+	 * receipt logos and bundled assets must be inlined. Only URLs that resolve to
+	 * known local WordPress/plugin paths are embedded; external URLs are left
+	 * untouched.
+	 *
+	 * @param string $html HTML document.
+	 *
+	 * @return string HTML with local image sources embedded.
+	 */
+	private function embed_local_images( string $html ): string {
+		return (string) preg_replace_callback(
+			'/(<img\b[^>]*\bsrc\s*=\s*["\'])([^"\']+)(["\'][^>]*>)/i',
+			function ( array $matches ): string {
+				$data_uri = $this->image_src_to_data_uri( html_entity_decode( $matches[2], ENT_QUOTES, 'UTF-8' ) );
+				if ( null === $data_uri ) {
+					return $matches[0];
+				}
+
+				return $matches[1] . esc_attr( $data_uri ) . $matches[3];
+			},
+			$html
+		);
+	}
+
+	/**
+	 * Convert a local image source to a data URI.
+	 *
+	 * @param string $src Image source.
+	 *
+	 * @return string|null Data URI, or null when the source is not embeddable.
+	 */
+	private function image_src_to_data_uri( string $src ): ?string {
+		if ( '' === $src || 0 === strpos( $src, 'data:' ) ) {
+			return null;
+		}
+
+		$path = $this->local_image_path_from_src( $src );
+		if ( null === $path || ! is_readable( $path ) || ! is_file( $path ) ) {
+			return null;
+		}
+
+		$bytes = file_get_contents( $path );
+		if ( false === $bytes || '' === $bytes ) {
+			return null;
+		}
+
+		$mime = $this->image_mime_type( $path );
+		if ( null === $mime ) {
+			return null;
+		}
+
+		return 'data:' . $mime . ';base64,' . base64_encode( $bytes );
+	}
+
+	/**
+	 * Resolve an image src to a safe local filesystem path.
+	 *
+	 * @param string $src Image source.
+	 *
+	 * @return string|null Local path, or null when the src is external/unknown.
+	 */
+	private function local_image_path_from_src( string $src ): ?string {
+		$src = trim( $src );
+
+		if ( 0 === strpos( $src, '/' ) && 0 !== strpos( $src, '//' ) && \defined( 'ABSPATH' ) ) {
+			$path = wp_normalize_path( ABSPATH . ltrim( $src, '/' ) );
+			return $this->is_allowed_local_image_path( $path ) ? $path : null;
+		}
+
+		$mappings = $this->local_url_path_mappings();
+		foreach ( $mappings as $url_base => $path_base ) {
+			if ( 0 !== strpos( $src, $url_base ) ) {
+				continue;
+			}
+
+			$relative = ltrim( substr( $src, \strlen( $url_base ) ), '/\\' );
+			$path     = wp_normalize_path( trailingslashit( $path_base ) . $relative );
+
+			return $this->is_allowed_local_image_path( $path ) ? $path : null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Build URL-to-path mappings for local WordPress assets.
+	 *
+	 * @return array<string,string>
+	 */
+	private function local_url_path_mappings(): array {
+		$uploads = wp_upload_dir();
+		$plugin  = dirname( __DIR__, 2 );
+
+		$mappings = array(
+			isset( $uploads['baseurl'] ) ? $uploads['baseurl'] : '' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : '',
+			content_url()                                          => \defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
+			plugins_url( '', $plugin . '/woocommerce-pos.php' )    => $plugin,
+		);
+
+		$normalized = array();
+		foreach ( $mappings as $url => $path ) {
+			if ( '' === $url || '' === $path ) {
+				continue;
+			}
+
+			$normalized[ trailingslashit( $url ) ] = wp_normalize_path( $path );
+		}
+
+		uksort(
+			$normalized,
+			static function ( string $a, string $b ): int {
+				return \strlen( $b ) <=> \strlen( $a );
+			}
+		);
+
+		return $normalized;
+	}
+
+	/**
+	 * Check that a resolved path stays within known local asset roots.
+	 *
+	 * @param string $path Resolved path.
+	 *
+	 * @return bool
+	 */
+	private function is_allowed_local_image_path( string $path ): bool {
+		$real_path = realpath( $path );
+		if ( false === $real_path ) {
+			return false;
+		}
+
+		$real_path = wp_normalize_path( $real_path );
+		foreach ( $this->allowed_local_image_roots() as $root ) {
+			if ( 0 === strpos( $real_path, trailingslashit( $root ) ) || $real_path === $root ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Allowed local image roots.
+	 *
+	 * @return string[]
+	 */
+	private function allowed_local_image_roots(): array {
+		$uploads = wp_upload_dir();
+		$roots   = array(
+			isset( $uploads['basedir'] ) ? $uploads['basedir'] : '',
+			\defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
+			dirname( __DIR__, 2 ),
+		);
+
+		return array_values(
+			array_filter(
+				array_map(
+					static function ( string $root ): string {
+						$real = realpath( $root );
+						return false === $real ? '' : wp_normalize_path( $real );
+					},
+					$roots
+				)
+			)
+		);
+	}
+
+	/**
+	 * Determine a supported image MIME type from path.
+	 *
+	 * @param string $path Local image path.
+	 *
+	 * @return string|null MIME type.
+	 */
+	private function image_mime_type( string $path ): ?string {
+		$type = wp_check_filetype( $path );
+		$mime = isset( $type['type'] ) ? (string) $type['type'] : '';
+
+		if ( '' === $mime ) {
+			$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+			$mime      = array(
+				'gif'  => 'image/gif',
+				'jpg'  => 'image/jpeg',
+				'jpeg' => 'image/jpeg',
+				'png'  => 'image/png',
+				'svg'  => 'image/svg+xml',
+				'webp' => 'image/webp',
+			)[ $extension ] ?? '';
+		}
+
+		if ( 0 !== strpos( $mime, 'image/' ) ) {
+			return null;
+		}
+
+		return $mime;
 	}
 
 	/**

@@ -151,6 +151,62 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Render_html embeds local image URLs before Dompdf sees the document.
+	 *
+	 * Dompdf runs with remote access and local file access locked down, so receipt
+	 * logos that are stored in WordPress uploads must be converted to data URIs.
+	 */
+	public function test_render_html_embeds_local_image_urls_as_data_uris(): void {
+		// Arrange.
+		$uploads = wp_upload_dir();
+		$path    = trailingslashit( $uploads['basedir'] ) . 'wcpos-pdf-logo.png';
+		$url     = trailingslashit( $uploads['baseurl'] ) . 'wcpos-pdf-logo.png';
+		$png     = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=' );
+
+		file_put_contents( $path, $png );
+
+		try {
+			// Act.
+			$html = $this->invoke_private_method(
+				'prepare_html_for_render',
+				array(
+					'<html><body><img src="' . esc_url( $url ) . '" alt="US Store"></body></html>',
+					array(),
+				)
+			);
+
+			// Assert.
+			$this->assertStringContainsString( 'src="data:image/png;base64,', $html );
+			$this->assertStringNotContainsString( $url, $html );
+		} finally {
+			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+
+	/**
+	 * The PDF flex/grid shim preserves fixed receipt columns.
+	 *
+	 * Invoice/packing-slip templates use grid/flex wrappers with fixed trailing
+	 * columns for totals, order details, and barcodes. The Dompdf table fallback
+	 * must carry those widths across so the right-hand blocks do not stretch or
+	 * overlap the left-hand content.
+	 */
+	public function test_flex_grid_shim_preserves_fixed_receipt_columns(): void {
+		// Act.
+		$html = $this->invoke_private_method(
+			'inject_flex_grid_shim',
+			array( '<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px;"></div>' )
+		);
+
+		// Assert.
+		$this->assertStringContainsString( '[style*="grid-template-columns: 1fr 320px"]>*:last-child', $html );
+		$this->assertStringContainsString( 'width:320px !important', $html );
+		$this->assertStringContainsString( '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]', $html );
+		$this->assertStringContainsString( '[style*="gap: 28px"],[style*="gap:28px"]', $html );
+		$this->assertStringContainsString( 'border-spacing:28px 0 !important', $html );
+	}
+
+	/**
 	 * Read the first page MediaBox dimensions from PDF bytes.
 	 *
 	 * @param string $pdf PDF bytes.
@@ -173,5 +229,20 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 			'width'  => (float) $matches[3] - (float) $matches[1],
 			'height' => (float) $matches[4] - (float) $matches[2],
 		);
+	}
+
+	/**
+	 * Invoke a private renderer helper for focused HTML-preparation assertions.
+	 *
+	 * @param string $method Method name.
+	 * @param array  $args   Method arguments.
+	 *
+	 * @return mixed
+	 */
+	private function invoke_private_method( string $method, array $args = array() ) {
+		$reflection = new \ReflectionMethod( $this->renderer, $method );
+		$reflection->setAccessible( true );
+
+		return $reflection->invokeArgs( $this->renderer, $args );
 	}
 }
