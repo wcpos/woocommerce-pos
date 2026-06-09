@@ -51,7 +51,7 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	 * Get all expected fields.
 	 */
 	public function get_expected_response_fields() {
-		return array(
+		$fields = array(
 			'id',
 			'date_created',
 			'date_created_gmt',
@@ -102,6 +102,13 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 			// Added in WooCommerce 9.4.0
 			'global_unique_id',
 		);
+
+		// 'gallery_image_ids' was added to the product variation REST API schema in WC 10.9.0.
+		if ( version_compare( WC_VERSION, '10.9.0', '>=' ) ) {
+			$fields[] = 'gallery_image_ids';
+		}
+
+		return $fields;
 	}
 
 	public function test_variation_api_get_all_fields(): void {
