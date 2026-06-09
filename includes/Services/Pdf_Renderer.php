@@ -244,6 +244,8 @@ class Pdf_Renderer {
 	 */
 	private function local_image_path_from_src( string $src ): ?string {
 		$src = trim( $src );
+		$src = explode( '#', $src, 2 )[0];
+		$src = explode( '?', $src, 2 )[0];
 
 		if ( 0 === strpos( $src, '/' ) && 0 !== strpos( $src, '//' ) && \defined( 'ABSPATH' ) ) {
 			$path = wp_normalize_path( ABSPATH . ltrim( $src, '/' ) );
@@ -275,9 +277,9 @@ class Pdf_Renderer {
 		$plugin  = dirname( __DIR__, 2 );
 
 		$mappings = array(
-			isset( $uploads['baseurl'] ) ? $uploads['baseurl'] : '' => isset( $uploads['basedir'] ) ? $uploads['basedir'] : '',
-			content_url()                                          => \defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
-			plugins_url( '', $plugin . '/woocommerce-pos.php' )    => $plugin,
+			$uploads['baseurl']                                => $uploads['basedir'],
+			content_url()                                      => \defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
+			plugins_url( '', $plugin . '/woocommerce-pos.php' ) => $plugin,
 		);
 
 		$normalized = array();
@@ -330,7 +332,7 @@ class Pdf_Renderer {
 	private function allowed_local_image_roots(): array {
 		$uploads = wp_upload_dir();
 		$roots   = array(
-			isset( $uploads['basedir'] ) ? $uploads['basedir'] : '',
+			$uploads['basedir'],
 			\defined( 'WP_CONTENT_DIR' ) ? WP_CONTENT_DIR : '',
 			dirname( __DIR__, 2 ),
 		);
@@ -357,7 +359,7 @@ class Pdf_Renderer {
 	 */
 	private function image_mime_type( string $path ): ?string {
 		$type = wp_check_filetype( $path );
-		$mime = isset( $type['type'] ) ? (string) $type['type'] : '';
+		$mime = false !== $type['type'] ? (string) $type['type'] : '';
 
 		if ( '' === $mime ) {
 			$extension = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );

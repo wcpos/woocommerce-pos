@@ -184,6 +184,36 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Render_html embeds local image URLs even when they include cache busters.
+	 */
+	public function test_render_html_embeds_local_image_urls_with_query_and_fragment_as_data_uris(): void {
+		// Arrange.
+		$uploads = wp_upload_dir();
+		$path    = trailingslashit( $uploads['basedir'] ) . 'wcpos-pdf-logo-versioned.png';
+		$url     = trailingslashit( $uploads['baseurl'] ) . 'wcpos-pdf-logo-versioned.png?ver=123#logo';
+		$png     = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=' );
+
+		file_put_contents( $path, $png );
+
+		try {
+			// Act.
+			$html = $this->invoke_private_method(
+				'prepare_html_for_render',
+				array(
+					'<html><body><img src="' . esc_url( $url ) . '" alt="US Store"></body></html>',
+					array(),
+				)
+			);
+
+			// Assert.
+			$this->assertStringContainsString( 'src="data:image/png;base64,', $html );
+			$this->assertStringNotContainsString( $url, $html );
+		} finally {
+			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+
+	/**
 	 * The PDF flex/grid shim preserves fixed receipt columns.
 	 *
 	 * Invoice/packing-slip templates use grid/flex wrappers with fixed trailing
