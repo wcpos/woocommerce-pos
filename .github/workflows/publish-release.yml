@@ -1,0 +1,52 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        required: true
+        type: string
+      lane:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+      source_issue:
+        required: false
+        type: string
+      dry_run:
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Report inputs
+        run: |
+          echo "release_id=${{ inputs.release_id }}"
+          echo "lane=${{ inputs.lane }}"
+          echo "release_version=${{ inputs.release_version }}"
+          echo "source_issue=${{ inputs.source_issue }}"
+          echo "dry_run=${{ inputs.dry_run }}"
+
+      - name: Dry run
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry run only; repo-specific publish not executed."
+
+      - name: Block real publish until implemented
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "::error::Real release publishing for this repository is not implemented yet."
+          exit 1
