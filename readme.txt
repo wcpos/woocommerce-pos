@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.1
+Stable tag: 1.9.2
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -96,6 +96,14 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.2 - 2026/06/09 =
+- **Added Star Online cloud printing support** -- connect Star Online printers, fetch registered devices, validate printer settings, and submit cloud print jobs from WCPOS.
+- **Improved cloud print setup** -- the Add Printer wizard no longer pre-selects a provider, shows clearer Star Online permission messages, and supports explicit encoding settings.
+- **Added server-side PDF receipt downloads** -- receipt PDFs now use native WP Overnight PDF bytes where available and render flex/grid layouts and barcodes more reliably.
+- **Fixed cloud printer access** -- POS clients can read configured cloud printers without requiring broader admin permissions.
+- **Fixed blank template titles** -- POS templates now get fallback names when the saved title is empty.
+- **Updated translations** -- includes the latest POT and translation metadata through 2026.6.0.
 
 = 1.9.1 - 2026/05/19 =
 - **Improved session recovery** -- expired POS sessions now refresh or ask for login correctly, while real permission errors no longer look like login problems.
