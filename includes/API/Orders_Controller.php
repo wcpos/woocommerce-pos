@@ -471,7 +471,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return $order;
 		}
 
-		if ( 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/i', $client_date_gmt ) ) {
+		if ( 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/i', $client_date_gmt ) ) {
 			return new WP_Error(
 				'woocommerce_pos_rest_invalid_date_created_gmt',
 				__( 'date_created_gmt must be a valid ISO 8601 UTC date.', 'woocommerce-pos' ),
@@ -479,7 +479,14 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			);
 		}
 
-		$timestamp = rest_parse_date( $client_date_gmt, true );
+		// WooCommerce serializes *_gmt fields without a timezone suffix; treat bare values as UTC.
+		$parse_date_gmt = 'Z' === strtoupper( substr( $client_date_gmt, -1 ) )
+			? $client_date_gmt
+			: $client_date_gmt . 'Z';
+		$timestamp = rest_parse_date(
+			$parse_date_gmt,
+			true
+		);
 
 		if ( false === $timestamp ) {
 			return new WP_Error(
