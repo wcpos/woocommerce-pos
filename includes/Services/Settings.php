@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Settings\Tax_Ids_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -167,6 +168,7 @@ class Settings {
 			$this->registry->register( new Checkout_Section() );
 			$this->registry->register( new Tools_Section() );
 			$this->registry->register( new Tax_Ids_Section() );
+			$this->registry->register( new Visibility_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -635,27 +637,13 @@ class Settings {
 
 	/**
 	 * POS Visibility settings.
+	 *
+	 * @return array
 	 */
-	public function get_visibility_settings() {
-		$default_settings = self::$default_settings['visibility'];
-		$settings         = get_option( self::$db_prefix . 'visibility', array() );
+	public function get_visibility_settings(): array {
+		$section = $this->sections()->get( 'visibility' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the visibility settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_visibility_settings
-		 */
-		return apply_filters( 'woocommerce_pos_visibility_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
