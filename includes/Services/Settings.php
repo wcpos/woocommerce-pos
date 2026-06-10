@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WC_Payment_Gateways;
 use WP_Error;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -136,6 +138,57 @@ class Settings {
 	private static $instance = null;
 
 	/**
+	 * The Section Registry. Built lazily on first access so registrants can
+	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
+	 *
+	 * @var null|Section_Registry
+	 */
+	private $registry = null;
+
+	/**
+	 * Get the Section Registry, building and populating it on first access.
+	 *
+	 * @return Section_Registry
+	 */
+	public function sections(): Section_Registry {
+		if ( null === $this->registry ) {
+			// Assign before firing the action: a re-entrant settings read from
+			// inside a registration callback gets the partially built registry
+			// instead of recursing forever.
+			$this->registry = new Section_Registry();
+
+			// Core sections are registered here as they are migrated
+			// (Tasks 3-11 append register() calls above the action).
+
+			/**
+			 * Fires when the Section Registry is built, letting Pro and
+			 * extensions register their own Settings Sections.
+			 *
+			 * Fires lazily on the FIRST settings read of the request. Hook
+			 * this action at plugin file load or early plugins_loaded —
+			 * callbacks added after the first read never run.
+			 *
+			 * @since 1.10.0
+			 *
+			 * @param Section_Registry $registry The Section Registry.
+			 *
+			 * @hook woocommerce_pos_register_settings_sections
+			 */
+			do_action( 'woocommerce_pos_register_settings_sections', $this->registry );
+		}
+
+		return $this->registry;
+	}
+
+	/**
+	 * Drop the built registry so tests can exercise registration. Not for
+	 * production use.
+	 */
+	public function reset_sections_for_testing(): void {
+		$this->registry = null;
+	}
+
+	/**
 	 * Get capabilities grouped by type.
 	 *
 	 * WooCommerce 9.9 replaced promote_users with create_customers for
@@ -205,12 +258,34 @@ class Settings {
 	 * @return null|array|mixed|WP_Error
 	 */
 	public function get_settings( string $id, $key = null ) {
+		$section = $this->sections()->get( $id );
+
+		if ( $section instanceof Settings_Section_Interface ) {
+			$settings = $section->read();
+
+			// If key is not provided, return the entire settings.
+			if ( ! \is_string( $key ) ) {
+				return $settings;
+			}
+
+			if ( ! isset( $settings[ $key ] ) ) {
+				return new WP_Error(
+					'woocommerce_pos_settings_error',
+					// translators: 1. %s: Settings group id, 2. %s: Settings key.
+					\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
+					array( 'status' => 400 )
+				);
+			}
+
+			return $settings[ $key ];
+		}
+
+		// Legacy path for sections not yet registered.
 		$method_name = 'get_' . $id . '_settings';
 
 		if ( method_exists( $this, $method_name ) ) {
 			$settings = $this->$method_name();
 
-			// If key is not provided, return the entire settings.
 			if ( ! \is_string( $key ) ) {
 				return $settings;
 			}
@@ -244,6 +319,11 @@ class Settings {
 	 * @return array|WP_Error Returns the updated settings array on success or WP_Error on failure.
 	 */
 	public function save_settings( string $id, array $settings ) {
+		$section = $this->sections()->get( $id );
+		if ( $section instanceof Settings_Section_Interface ) {
+			return $section->write( $settings );
+		}
+
 		$sanitize_method = 'sanitize_' . $id . '_settings';
 		if ( method_exists( $this, $sanitize_method ) ) {
 			$settings = $this->$sanitize_method( $settings );
@@ -1045,7 +1125,13 @@ class Settings {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
 
-		foreach ( self::$default_settings as $id => $settings ) {
+		$ids = array_unique(
+			array_merge(
+				array_keys( self::$default_settings ),
+				array_keys( self::instance()->sections()->all() )
+			)
+		);
+		foreach ( $ids as $id ) {
 			delete_option( self::$db_prefix . $id );
 		}
 

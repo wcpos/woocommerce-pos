@@ -72,4 +72,41 @@ class Test_Section_Registry extends WP_UnitTestCase {
 
 		$this->assertSame( $second, $registry->get( 'fixture' ) );
 	}
+
+	/**
+	 * The Settings facade routes get_settings/save_settings through a
+	 * registered section, and fires the registration action once.
+	 */
+	public function test_facade_routes_through_registered_section(): void {
+		$fired = 0;
+		add_action(
+			'woocommerce_pos_register_settings_sections',
+			function ( $registry ) use ( &$fired ) {
+				++$fired;
+				$registry->register( new Registry_Fixture_Section() );
+			}
+		);
+
+		// Force a fresh registry build: the facade is a singleton, so use a
+		// dedicated method to reset it for tests.
+		\WCPOS\WooCommercePOS\Services\Settings::instance()->reset_sections_for_testing();
+
+		$settings = wcpos_get_settings( 'fixture' );
+		$this->assertIsArray( $settings );
+		$this->assertEquals( 'b-default', $settings['beta'] );
+
+		$value = wcpos_get_settings( 'fixture', 'alpha' );
+		$this->assertTrue( $value );
+
+		$error = wcpos_get_settings( 'fixture', 'missing_key' );
+		$this->assertInstanceOf( \WP_Error::class, $error );
+
+		// Accessing settings again must not re-fire registration.
+		wcpos_get_settings( 'fixture' );
+		$this->assertEquals( 1, $fired );
+
+		remove_all_actions( 'woocommerce_pos_register_settings_sections' );
+		\WCPOS\WooCommercePOS\Services\Settings::instance()->reset_sections_for_testing();
+		delete_option( 'woocommerce_pos_settings_fixture' );
+	}
 }
