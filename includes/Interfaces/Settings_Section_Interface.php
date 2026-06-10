@@ -27,8 +27,10 @@ interface Settings_Section_Interface {
 
 	/**
 	 * Read the section's public view: defaults merged, legacy shapes migrated
-	 * in memory, the woocommerce_pos_{id}_settings filter applied, secrets
-	 * redacted. Reads are pure — they never write to the database.
+	 * in memory, the woocommerce_pos_{id}_settings filter applied where the
+	 * section uses the option-backed template (wholesale-override sections may
+	 * skip it), secrets redacted. Reads are pure — they never write to the
+	 * database.
 	 *
 	 * @return array
 	 */
@@ -39,7 +41,7 @@ interface Settings_Section_Interface {
 	 *
 	 * @param array $settings The full settings array to persist.
 	 *
-	 * @return array|WP_Error The post-save read on success.
+	 * @return array|WP_Error The section's post-save response on success — typically the post-save read; sections may return a bespoke shape (e.g. cloud_print includes one-time generated poll tokens).
 	 */
 	public function write( array $settings );
 

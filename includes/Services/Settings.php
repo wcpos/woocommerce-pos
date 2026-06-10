@@ -11,6 +11,7 @@ use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\License_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
@@ -68,6 +69,7 @@ class Settings {
 			$this->registry->register( new Payment_Gateways_Section() );
 			$this->registry->register( new Access_Section() );
 			$this->registry->register( new License_Section() );
+			$this->registry->register( new Cloud_Print_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and

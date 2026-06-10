@@ -16,8 +16,8 @@ use WP_Error;
  * Owns the read/write template: read = option + migrate + defaults merge +
  * compose + filter + redact (pure, no DB writes); write = sanitize + stamp +
  * pre_save filter + update_option + saved action. Sections override the
- * protected hooks; non-option-backed sections (access, license) override
- * read()/write() wholesale.
+ * protected hooks; sections with bespoke behaviour (access, license,
+ * cloud_print) override read()/write() wholesale.
  */
 abstract class Abstract_Section implements Settings_Section_Interface {
 	/**
