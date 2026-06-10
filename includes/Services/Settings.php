@@ -10,8 +10,10 @@ namespace WCPOS\WooCommercePOS\Services;
 use WC_Payment_Gateways;
 use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
+use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -161,6 +163,8 @@ class Settings {
 			// Core sections are registered here as they are migrated
 			// (Tasks 3-11 append register() calls above the action).
 			$this->registry->register( new General_Section() );
+			$this->registry->register( new Checkout_Section() );
+			$this->registry->register( new Tools_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -467,34 +471,9 @@ class Settings {
 	 * @return array
 	 */
 	public function get_checkout_settings(): array {
-		$default_settings = self::$default_settings['checkout'];
-		$settings         = get_option( self::$db_prefix . 'checkout', array() );
+		$section = $this->sections()->get( 'checkout' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		// Migrate legacy boolean email settings to array format.
-		foreach ( array( 'admin_emails', 'customer_emails' ) as $key ) {
-			if ( isset( $settings[ $key ] ) && \is_bool( $settings[ $key ] ) ) {
-				$defaults            = $default_settings[ $key ];
-				$defaults['enabled'] = $settings[ $key ];
-				$settings[ $key ]    = $defaults;
-			}
-		}
-
-		/*
-		 * Filters the checkout settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_checkout_settings
-		 */
-		return apply_filters( 'woocommerce_pos_checkout_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -545,27 +524,13 @@ class Settings {
 	 * Get tools settings.
 	 *
 	 * @return array
+	 *
+	 * @hook woocommerce_pos_tools_settings
 	 */
 	public function get_tools_settings(): array {
-		$default_settings = self::$default_settings['tools'];
-		$settings         = get_option( self::$db_prefix . 'tools', array() );
+		$section = $this->sections()->get( 'tools' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the tools settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.3.6
-		 * @hook woocommerce_pos_general_settings
-		 */
-		return apply_filters( 'woocommerce_pos_tools_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
