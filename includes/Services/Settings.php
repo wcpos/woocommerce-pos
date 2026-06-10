@@ -15,6 +15,7 @@ use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Settings\Tax_Ids_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -169,6 +170,7 @@ class Settings {
 			$this->registry->register( new Tools_Section() );
 			$this->registry->register( new Tax_Ids_Section() );
 			$this->registry->register( new Visibility_Section() );
+			$this->registry->register( new Payment_Gateways_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -564,75 +566,10 @@ class Settings {
 	 *
 	 * @return array
 	 */
-	public function get_payment_gateways_settings() {
-		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
-		WC_Payment_Gateways::instance()->init();
-		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
-		$raw_gw_option     = get_option( self::$db_prefix . 'payment_gateways', array() );
-		$gateways_settings = array_replace_recursive(
-			self::$default_settings['payment_gateways'],
-			$raw_gw_option
-		);
+	public function get_payment_gateways_settings(): array {
+		$section = $this->sections()->get( 'payment_gateways' );
 
-		// Migrate: if old global checkout order_status exists, apply to all gateways.
-		$checkout_settings = get_option( self::$db_prefix . 'checkout', array() );
-		if ( isset( $checkout_settings['order_status'] ) ) {
-			$global_status = $checkout_settings['order_status'];
-			if ( \is_string( $global_status ) && '' !== $global_status ) {
-				foreach ( $gateways_settings['gateways'] as $gw_id => &$gw_data ) {
-					// Check the raw DB value, not the merged value (which includes defaults).
-					if ( ! isset( $raw_gw_option['gateways'][ $gw_id ]['order_status'] ) ) {
-						$gw_data['order_status'] = $global_status;
-					}
-				}
-				unset( $gw_data );
-			}
-			// Remove the old global setting.
-			unset( $checkout_settings['order_status'] );
-			update_option( self::$db_prefix . 'checkout', $checkout_settings );
-			update_option( self::$db_prefix . 'payment_gateways', $gateways_settings );
-		}
-
-		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
-		$response = array(
-			'default_gateway' => $gateways_settings['default_gateway'],
-			'gateways'        => array(),
-		);
-
-		// Gateways that represent deferred/unverified payment default to on-hold.
-		$on_hold_gateways = array( 'bacs', 'cheque' );
-
-		// loop through installed gateways and merge with saved settings.
-		foreach ( $installed_gateways as $id => $gateway ) {
-			// sanity check for gateway class.
-			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
-				continue;
-			}
-
-			$default_status = in_array( $id, $on_hold_gateways, true ) ? 'wc-on-hold' : 'wc-completed';
-
-			$response['gateways'][ $id ] = array_replace_recursive(
-				array(
-					'id'           => $gateway->id,
-					'title'        => $gateway->title,
-					'description'  => $gateway->description,
-					'enabled'      => false,
-					'order'        => 999,
-					'order_status' => $default_status,
-				),
-				$gateways_settings['gateways'][ $id ] ?? array()
-			);
-		}
-
-		/*
-		 * Filters the payment gateways settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_payment_gateways_settings
-		 */
-		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+		return $section ? $section->read() : array();
 	}
 
 	/**
