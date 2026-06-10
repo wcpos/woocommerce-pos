@@ -12,6 +12,7 @@ use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
+use WCPOS\WooCommercePOS\Services\Settings\License_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Settings\Tax_Ids_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
@@ -30,112 +31,6 @@ class Settings {
 	 */
 	protected static $db_prefix = 'woocommerce_pos_settings_';
 
-	/**
-	 * Default settings for all sections.
-	 *
-	 * @var array
-	 */
-	protected static $default_settings = array(
-		'general' => array(
-			'pos_only_products'           => false,
-			'decimal_qty'                 => false,
-			'force_ssl'                   => true,
-			'default_customer'            => 0,
-			'default_customer_is_cashier' => false,
-			'barcode_field'               => '_sku',
-			'generate_username'           => true,
-			'restore_stock_on_delete'     => true,
-			'tracking_consent'            => 'undecided',
-			'store_name'                  => '',
-			'store_phone'                 => '',
-			'store_email'                 => '',
-			'policies_and_conditions'     => '',
-			'store_tax_ids'               => array(),
-		),
-		'tax_ids' => array(
-			// Per-type meta-key write overrides. Empty by default: the composed
-			// write_map (defaults + plugin detection + scan) is used.
-			'write_map' => array(),
-		),
-		'checkout' => array(
-			'receipt_default_mode' => 'fiscal',
-			'admin_emails'    => array(
-				'enabled'         => true,
-				'new_order'       => true,
-				'cancelled_order' => true,
-				'failed_order'    => true,
-			),
-			'customer_emails' => array(
-				'enabled'                   => true,
-				'customer_on_hold_order'    => true,
-				'customer_processing_order' => true,
-				'customer_completed_order'  => true,
-				'customer_refunded_order'   => true,
-				'customer_failed_order'     => true,
-			),
-			'cashier_emails'  => array(
-				'enabled'   => false,
-				'new_order' => true,
-			),
-			// this is used in the POS, not in WP Admin (at the moment).
-			'dequeue_script_handles' => array(
-				'admin-bar',
-				'wc-add-to-cart',
-				'wc-stripe-upe-classic',
-			),
-			'dequeue_style_handles' => array(
-				'admin-bar',
-				'woocommerce-general',
-				'woocommerce-inline',
-				'woocommerce-layout',
-				'woocommerce-smallscreen',
-				'woocommerce-blocktheme',
-				'wp-block-library',
-			),
-			'disable_wp_head'   => false,
-			'disable_wp_footer' => false,
-		),
-		'payment_gateways' => array(
-			'default_gateway' => 'pos_cash',
-			'gateways'        => array(
-				'pos_cash' => array(
-					'order'        => 0,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
-				),
-				'pos_card' => array(
-					'order'        => 1,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
-				),
-			),
-		),
-		'tools' => array(
-			'use_jwt_as_param' => false,
-		),
-		'visibility' => array(
-			'products' => array(
-				'default' => array(
-					'pos_only' => array(
-						'ids' => array(),
-					),
-					'online_only' => array(
-						'ids' => array(),
-					),
-				),
-			),
-			'variations' => array(
-				'default' => array(
-					'pos_only' => array(
-						'ids' => array(),
-					),
-					'online_only' => array(
-						'ids' => array(),
-					),
-				),
-			),
-		),
-	);
 	/**
 	 * The single instance of the class.
 	 *
@@ -172,6 +67,7 @@ class Settings {
 			$this->registry->register( new Visibility_Section() );
 			$this->registry->register( new Payment_Gateways_Section() );
 			$this->registry->register( new Access_Section() );
+			$this->registry->register( new License_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -434,16 +330,10 @@ class Settings {
 	 *
 	 * @return array
 	 */
-	public function get_license_settings() {
-		/*
-		 * Filters the license settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_license_settings
-		 */
-		return apply_filters( 'woocommerce_pos_license_settings', array() );
+	public function get_license_settings(): array {
+		$section = $this->sections()->get( 'license' );
+
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -794,13 +684,7 @@ class Settings {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
 
-		$ids = array_unique(
-			array_merge(
-				array_keys( self::$default_settings ),
-				array_keys( self::instance()->sections()->all() )
-			)
-		);
-		foreach ( $ids as $id ) {
+		foreach ( array_keys( self::instance()->sections()->all() ) as $id ) {
 			delete_option( self::$db_prefix . $id );
 		}
 
