@@ -122,6 +122,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Test updating access settings.
 	 */
 	public function test_update_access_settings(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
 		$request = $this->mock_rest_request(
 			array(
 				'administrator' => array(
@@ -173,6 +175,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue( $response['pos_only_products'] );
 	}
 
+	/**
+	 * Test that store_tax_ids round-trips with sanitization applied.
+	 */
 	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
 		$request = $this->mock_rest_request(
 			array(
@@ -214,6 +219,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Test that updating with an empty array replaces the stored store_tax_ids.
+	 */
 	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
 		update_option(
 			'woocommerce_pos_settings_general',

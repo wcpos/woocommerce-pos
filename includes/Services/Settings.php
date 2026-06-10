@@ -7,9 +7,9 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use WC_Payment_Gateways;
 use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
@@ -171,6 +171,7 @@ class Settings {
 			$this->registry->register( new Tax_Ids_Section() );
 			$this->registry->register( new Visibility_Section() );
 			$this->registry->register( new Payment_Gateways_Section() );
+			$this->registry->register( new Access_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -198,46 +199,6 @@ class Settings {
 	 */
 	public function reset_sections_for_testing(): void {
 		$this->registry = null;
-	}
-
-	/**
-	 * Get capabilities grouped by type.
-	 *
-	 * WooCommerce 9.9 replaced promote_users with create_customers for
-	 * customer creation via the REST API. We show the correct capability
-	 * on the Access settings page based on the installed WC version.
-	 *
-	 * @return array
-	 */
-	private static function get_caps(): array {
-		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
-			? 'create_customers'
-			: 'promote_users';
-
-		return array(
-			'wcpos' => array(
-				'access_woocommerce_pos',
-				'manage_woocommerce_pos',
-			),
-			'wc' => array(
-				$customer_create_cap,
-				'read_private_products',
-				'edit_product',
-				'edit_others_products',
-				'edit_published_products',
-				'read_private_shop_orders',
-				'publish_shop_orders',
-				'edit_shop_orders',
-				'edit_others_shop_orders',
-				'edit_users',
-				'list_users',
-				'manage_product_terms',
-				'read_private_shop_coupons',
-			),
-			'wp' => array(
-				'read',
-			),
-		);
 	}
 
 	/**
@@ -450,42 +411,9 @@ class Settings {
 	 * @return array
 	 */
 	public function get_access_settings(): array {
-		global $wp_roles;
-		$role_caps = array();
-		$caps      = self::get_caps();
+		$section = $this->sections()->get( 'access' );
 
-		$roles = $wp_roles->roles;
-		if ( $roles ) {
-			foreach ( $roles as $slug => $role ) {
-				$role_caps[ $slug ] = array(
-					'name'         => $role['name'],
-					'capabilities' => array(
-						'wcpos' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wcpos'], false ), $role['capabilities'] ),
-							array_flip( $caps['wcpos'] )
-						),
-						'wc' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wc'], false ), $role['capabilities'] ),
-							array_flip( $caps['wc'] )
-						),
-						'wp' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wp'], false ), $role['capabilities'] ),
-							array_flip( $caps['wp'] )
-						),
-					),
-				);
-			}
-		}
-
-		/*
-		 * Filters the access settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_access_settings
-		 */
-		return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
+		return $section ? $section->read() : array();
 	}
 
 	/**

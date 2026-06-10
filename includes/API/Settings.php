@@ -934,49 +934,18 @@ class Settings extends WP_REST_Controller {
 	/**
 	 * Update access settings.
 	 *
-	 * @TODO - shouldn't the update return a WP_REST_Response?
-	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
 	 * @return array
 	 */
 	public function update_access_settings( WP_REST_Request $request ): array {
-		global $wp_roles;
-		$data = $request->get_json_params();
+		$section = SettingsService::instance()->sections()->get( 'access' );
+		$result  = $section ? $section->write( (array) $request->get_json_params() ) : array();
 
-		// get all role slugs.
-		$roles = array_keys( $wp_roles->roles );
-
-		// get property from $data where key is in $roles.
-		$update = array_intersect_key( $data, array_flip( $roles ) );
-
-		// if $role is array with one property, update the capabilities.
-		if ( 1 === \count( $update ) ) {
-			$slugs = array_keys( $update );
-			$slug  = $slugs[0];
-			$role  = get_role( $slug );
-
-			// flatten capabilities array from 'wc', 'wp', 'wcpos' grouping.
-			$flattened_caps = array();
-			foreach ( $update[ $slug ]['capabilities'] as $capabilities ) {
-				$flattened_caps = array_merge( $flattened_caps, $capabilities );
-			}
-
-			// update capabilities for each $flattened_cap (should only be one).
-			foreach ( $flattened_caps as $cap => $grant ) {
-				// sanity check for admin role, read capability.
-				if ( 'administrator' === $slug && 'read' === $cap ) {
-					continue;
-				}
-				if ( $grant ) {
-					$role->add_cap( $cap );
-				} else {
-					$role->remove_cap( $cap );
-				}
-			}
-		}
-
-		return woocommerce_pos_get_settings( 'access' );
+		// Access_Section::write() always returns the fresh view, but the
+		// interface docblock allows WP_Error — narrow for the native `: array`
+		// return type (PHPStan level 5 treats docblock types as certain).
+		return \is_array( $result ) ? $result : array();
 	}
 
 	/**
