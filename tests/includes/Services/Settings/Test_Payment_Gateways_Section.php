@@ -82,4 +82,31 @@ class Test_Payment_Gateways_Section extends WP_UnitTestCase {
 			$this->assertEquals( 'wc-completed', $settings['gateways']['pos_cash']['order_status'] );
 		}
 	}
+
+	/**
+	 * Convergence contract: a payment-gateways save persists the in-memory
+	 * seeded per-gateway statuses (because the REST handler merges over the
+	 * seeded read view), after which a checkout save strips the legacy seed.
+	 */
+	public function test_legacy_seed_converges_via_saves(): void {
+		update_option( 'woocommerce_pos_settings_checkout', array( 'order_status' => 'wc-processing' ) );
+		delete_option( 'woocommerce_pos_settings_payment_gateways' );
+
+		$settings_service = \WCPOS\WooCommercePOS\Services\Settings::instance();
+		$pg_section       = $settings_service->sections()->get( 'payment_gateways' );
+
+		// Simulate the REST update handler: merge an empty patch over the
+		// seeded view, then save.
+		$settings_service->save_settings( 'payment_gateways', $pg_section->merge( $pg_section->read(), array() ) );
+
+		$stored_pg = get_option( 'woocommerce_pos_settings_payment_gateways' );
+		$this->assertEquals( 'wc-processing', $stored_pg['gateways']['pos_cash']['order_status'], 'pg save persists the seeded status' );
+
+		// Now a checkout save strips the legacy key (seed reflected).
+		$checkout_section = $settings_service->sections()->get( 'checkout' );
+		$settings_service->save_settings( 'checkout', $checkout_section->merge( $checkout_section->read(), array() ) );
+
+		$stored_checkout = get_option( 'woocommerce_pos_settings_checkout' );
+		$this->assertArrayNotHasKey( 'order_status', $stored_checkout, 'checkout save strips the reflected seed' );
+	}
 }

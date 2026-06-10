@@ -251,153 +251,40 @@ class Settings extends WP_REST_Controller {
 	/**
 	 * Get general endpoint arguments.
 	 *
+	 * Delegates to the registered General Settings Section.
+	 *
 	 * @return Closure[][]
 	 */
 	public function get_general_endpoint_args(): array {
-		return array(
-			'pos_only_products' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'decimal_qty' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'force_ssl' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'default_customer' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_integer( $param );
-				},
-			),
-			'default_customer_is_cashier' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'barcode_field' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'generate_username' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'restore_stock_on_delete' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'tracking_consent' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param ) && \in_array( $param, array( 'allowed', 'denied', 'undecided' ), true );
-				},
-			),
-			'store_tax_ids' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-			'store_name' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'store_phone' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'store_email' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'policies_and_conditions' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-		);
+		$section = SettingsService::instance()->sections()->get( 'general' );
+
+		return $section ? $section->endpoint_args() : array();
 	}
 
 	/**
 	 * Get tax IDs endpoint arguments.
 	 *
+	 * Delegates to the registered Tax IDs Settings Section.
+	 *
 	 * @return Closure[][]
 	 */
 	public function get_tax_ids_endpoint_args(): array {
-		return array(
-			'write_map' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					if ( ! \is_array( $param ) ) {
-						return false;
-					}
-					foreach ( $param as $type => $meta_key ) {
-						if ( ! \is_string( $type ) || ! Tax_Id_Types::is_valid_type( $type ) ) {
-							return false;
-						}
-						if ( ! \is_string( $meta_key ) ) {
-							return false;
-						}
-					}
+		$section = SettingsService::instance()->sections()->get( 'tax_ids' );
 
-					return true;
-				},
-			),
-		);
+		return $section ? $section->endpoint_args() : array();
 	}
 
 	/**
 	 * Get checkout endpoint arguments.
 	 *
+	 * Delegates to the registered Checkout Settings Section.
+	 *
 	 * @return Closure[][]
 	 */
 	public function get_checkout_endpoint_args(): array {
-		return array(
-			'receipt_default_mode' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param ) && \in_array( $param, array( 'fiscal', 'live' ), true );
-				},
-			),
-			'admin_emails' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-			'customer_emails' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-			'cashier_emails' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-			'auto_print_receipt' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'default_gateway' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'gateways' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-		);
+		$section = SettingsService::instance()->sections()->get( 'checkout' );
+
+		return $section ? $section->endpoint_args() : array();
 	}
 
 	/**
@@ -498,17 +385,12 @@ class Settings extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_tax_ids_settings( WP_REST_Request $request ) {
-		$old_settings = woocommerce_pos_get_settings( 'tax_ids' );
-		$payload      = $request->get_json_params();
-
-		// `write_map` is intentionally a full replacement (not deep-merged) so
-		// users can remove entries by sending the trimmed map.
-		$settings = array_replace_recursive( $old_settings, $payload );
-		if ( isset( $payload['write_map'] ) && \is_array( $payload['write_map'] ) ) {
-			$settings['write_map'] = $payload['write_map'];
-		}
-
 		$settings_service = SettingsService::instance();
+		$section          = $settings_service->sections()->get( 'tax_ids' );
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
 
 		return $settings_service->save_settings( 'tax_ids', $settings );
 	}
@@ -879,12 +761,14 @@ class Settings extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_payment_gateways_settings( WP_REST_Request $request ) {
-		$old_settings     = woocommerce_pos_get_settings( 'payment_gateways' );
-		$updated_settings = array_replace_recursive( $old_settings, $request->get_json_params() );
-
 		$settings_service = SettingsService::instance();
+		$section          = $settings_service->sections()->get( 'payment_gateways' );
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
 
-		return $settings_service->save_settings( 'payment_gateways', $updated_settings );
+		return $settings_service->save_settings( 'payment_gateways', $settings );
 	}
 
 	/**
@@ -897,14 +781,12 @@ class Settings extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_general_settings( WP_REST_Request $request ) {
-		$old_settings = woocommerce_pos_get_settings( 'general' );
-		$payload      = $request->get_json_params();
-		$settings     = array_replace_recursive( $old_settings, $payload );
-		if ( isset( $payload['store_tax_ids'] ) && \is_array( $payload['store_tax_ids'] ) ) {
-			$settings['store_tax_ids'] = $payload['store_tax_ids'];
-		}
-
 		$settings_service = SettingsService::instance();
+		$section          = $settings_service->sections()->get( 'general' );
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
 
 		return $settings_service->save_settings( 'general', $settings );
 	}
@@ -921,10 +803,12 @@ class Settings extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_checkout_settings( WP_REST_Request $request ) {
-		$old_settings = woocommerce_pos_get_settings( 'checkout' );
-		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
-
 		$settings_service = SettingsService::instance();
+		$section          = $settings_service->sections()->get( 'checkout' );
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
 
 		return $settings_service->save_settings( 'checkout', $settings );
 	}
@@ -958,10 +842,12 @@ class Settings extends WP_REST_Controller {
 	 * @return array|WP_Error
 	 */
 	public function update_tools_settings( WP_REST_Request $request ) {
-		$old_settings = woocommerce_pos_get_settings( 'tools' );
-		$settings     = array_replace_recursive( $old_settings, $request->get_json_params() );
-
 		$settings_service = SettingsService::instance();
+		$section          = $settings_service->sections()->get( 'tools' );
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
+		$settings = $section->merge( $section->read(), (array) $request->get_json_params() );
 
 		return $settings_service->save_settings( 'tools', $settings );
 	}
