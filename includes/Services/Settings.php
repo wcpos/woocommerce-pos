@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
+use WCPOS\WooCommercePOS\Services\Settings\Tax_Ids_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -165,6 +166,7 @@ class Settings {
 			$this->registry->register( new General_Section() );
 			$this->registry->register( new Checkout_Section() );
 			$this->registry->register( new Tools_Section() );
+			$this->registry->register( new Tax_Ids_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -419,50 +421,12 @@ class Settings {
 	/**
 	 * Get tax IDs settings.
 	 *
-	 * Defaults are merged for any missing keys so the SPA always receives the
-	 * full subtree shape.
-	 *
 	 * @return array
 	 */
 	public function get_tax_ids_settings(): array {
-		$default_settings = self::$default_settings['tax_ids'];
-		$settings         = get_option( self::$db_prefix . 'tax_ids', array() );
+		$section = $this->sections()->get( 'tax_ids' );
 
-		if ( ! \is_array( $settings ) ) {
-			$settings = array();
-		}
-
-		if ( ! \array_key_exists( 'write_map', $settings ) ) {
-			$legacy_general = get_option( self::$db_prefix . 'general', array() );
-			$legacy_tax_ids = array();
-
-			if (
-				\is_array( $legacy_general )
-				&& isset( $legacy_general['tax_ids'] )
-				&& \is_array( $legacy_general['tax_ids'] )
-			) {
-				$legacy_tax_ids = $legacy_general['tax_ids'];
-			}
-
-			if ( isset( $legacy_tax_ids['write_map'] ) && \is_array( $legacy_tax_ids['write_map'] ) ) {
-				$settings['write_map'] = $legacy_tax_ids['write_map'];
-			}
-		}
-
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the tax IDs settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @hook woocommerce_pos_tax_ids_settings
-		 */
-		return apply_filters( 'woocommerce_pos_tax_ids_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
