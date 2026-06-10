@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Services;
 use WC_Payment_Gateways;
 use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\General_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use const WCPOS\WooCommercePOS\VERSION;
 
@@ -159,6 +160,7 @@ class Settings {
 
 			// Core sections are registered here as they are migrated
 			// (Tasks 3-11 append register() calls above the action).
+			$this->registry->register( new General_Section() );
 
 			/**
 			 * Fires when the Section Registry is built, letting Pro and
@@ -392,137 +394,22 @@ class Settings {
 	 * @return array
 	 */
 	public function get_general_settings(): array {
-		$default_settings = self::$default_settings['general'];
-		$settings         = get_option( self::$db_prefix . 'general', array() );
+		$section = $this->sections()->get( 'general' );
 
-		// Migrate tracking_consent from the legacy `tools` option if it was set there
-		// before being moved to `general`. Only applies when the general option has no
-		// value yet, so an explicit general-level choice always wins.
-		if ( ! \array_key_exists( 'tracking_consent', $settings ) ) {
-			$legacy_tools = get_option( self::$db_prefix . 'tools', array() );
-			if ( \is_array( $legacy_tools ) && \array_key_exists( 'tracking_consent', $legacy_tools ) ) {
-				$settings['tracking_consent'] = $legacy_tools['tracking_consent'];
-			}
-		}
-
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-		$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
-
-		// Expose resolved fallbacks so the React UI can render them as
-		// placeholders for store_name / store_phone / store_email /
-		// policies_and_conditions when the user has not entered a value.
-		$settings['store_defaults'] = Store_Defaults::fallbacks();
-
-		/*
-		 * Filters the general settings.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $settings
-		 *
-		 * @return array $settings
-		 *
-		 * @hook woocommerce_pos_general_settings
-		 */
-		return apply_filters( 'woocommerce_pos_general_settings', $settings );
-	}
-
-	/**
-	 * Sanitize general settings before persisting.
-	 *
-	 * @param array $settings General settings.
-	 * @return array
-	 */
-	protected function sanitize_general_settings( array $settings ): array {
-		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
-			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
-		}
-
-		foreach ( array( 'store_name', 'store_phone' ) as $key ) {
-			if ( \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = \is_string( $settings[ $key ] )
-					? sanitize_text_field( $settings[ $key ] )
-					: '';
-			}
-		}
-
-		if ( \array_key_exists( 'store_email', $settings ) ) {
-			$email                  = \is_string( $settings['store_email'] ) ? trim( $settings['store_email'] ) : '';
-			$settings['store_email'] = ( '' !== $email && is_email( $email ) ) ? sanitize_email( $email ) : '';
-		}
-
-		if ( \array_key_exists( 'policies_and_conditions', $settings ) ) {
-			$settings['policies_and_conditions'] = \is_string( $settings['policies_and_conditions'] )
-				? sanitize_textarea_field( $settings['policies_and_conditions'] )
-				: '';
-		}
-
-		// store_defaults is a read-only computed field for the UI; never persist it.
-		unset( $settings['store_defaults'] );
-
-		return $settings;
+		return $section ? $section->read() : array();
 	}
 
 	/**
 	 * Sanitize the additional free-store tax IDs entered in General settings.
 	 *
-	 * Drops malformed rows and keeps optional country/label fields only when
-	 * non-empty. Values are preserved verbatim apart from normal text-field
-	 * sanitization and surrounding whitespace.
+	 * Delegates to General_Section::sanitize_store_tax_ids(). Kept here as a
+	 * static façade because Store_Defaults::tax_ids() calls this method.
 	 *
 	 * @param mixed $tax_ids Raw tax IDs.
 	 * @return array<int,array<string,string>>
 	 */
 	public static function sanitize_store_tax_ids( $tax_ids ): array {
-		if ( ! \is_array( $tax_ids ) ) {
-			return array();
-		}
-
-		$sanitized = array();
-		foreach ( $tax_ids as $tax_id ) {
-			if ( ! \is_array( $tax_id ) ) {
-				continue;
-			}
-
-			$type  = isset( $tax_id['type'] ) && \is_string( $tax_id['type'] )
-				? sanitize_key( $tax_id['type'] )
-				: '';
-			$value = isset( $tax_id['value'] ) && \is_string( $tax_id['value'] )
-				? trim( sanitize_text_field( $tax_id['value'] ) )
-				: '';
-
-			if ( '' === $type || '' === $value ) {
-				continue;
-			}
-
-			$entry = array(
-				'type'  => $type,
-				'value' => $value,
-			);
-
-			$country = isset( $tax_id['country'] ) && \is_string( $tax_id['country'] )
-				? strtoupper( trim( sanitize_text_field( $tax_id['country'] ) ) )
-				: '';
-			if ( '' !== $country ) {
-				$entry['country'] = $country;
-			}
-
-			$label = isset( $tax_id['label'] ) && \is_string( $tax_id['label'] )
-				? trim( sanitize_text_field( $tax_id['label'] ) )
-				: '';
-			if ( '' !== $label ) {
-				$entry['label'] = $label;
-			}
-
-			$sanitized[] = $entry;
-		}
-
-		return $sanitized;
+		return General_Section::sanitize_store_tax_ids( $tax_ids );
 	}
 
 	/**
