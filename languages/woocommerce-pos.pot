@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.9.1\n"
+"Project-Id-Version: WCPOS 1.9.2\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-08T18:47:59+00:00\n"
+"POT-Creation-Date: 2026-06-11T14:43:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -518,7 +518,7 @@ msgstr ""
 
 #. translators: Use default WordPress translation.
 #: includes/API/Customers_Controller.php:326
-#: includes/API/Orders_Controller.php:777
+#: includes/API/Orders_Controller.php:784
 msgid "Invalid email address."
 msgstr ""
 
@@ -566,41 +566,41 @@ msgstr ""
 
 #: includes/API/Orders_Controller.php:463
 #: includes/API/Orders_Controller.php:477
-#: includes/API/Orders_Controller.php:487
+#: includes/API/Orders_Controller.php:494
 msgid "date_created_gmt must be a valid ISO 8601 UTC date."
 msgstr ""
 
-#: includes/API/Orders_Controller.php:497
+#: includes/API/Orders_Controller.php:504
 msgid "date_created_gmt cannot be more than 24 hours in the future."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Orders_Controller.php:806
+#: includes/API/Orders_Controller.php:813
 msgid "Filter orders by POS cashier."
 msgstr ""
 
 #. translators: REST API schema field label or error message.
-#: includes/API/Orders_Controller.php:814
+#: includes/API/Orders_Controller.php:821
 msgid "Filter orders by POS store."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/Orders_Controller.php:842
+#: includes/API/Orders_Controller.php:849
 #, php-format
 msgid "Email address %s added to billing details from WCPOS."
 msgstr ""
 
 #. translators: %s: email address.
-#: includes/API/Orders_Controller.php:855
+#: includes/API/Orders_Controller.php:862
 #, php-format
 msgid "Order details manually sent to %s from WCPOS."
 msgstr ""
 
-#: includes/API/Orders_Controller.php:920
+#: includes/API/Orders_Controller.php:927
 msgid "Unique identifier for the order status."
 msgstr ""
 
-#: includes/API/Orders_Controller.php:926
+#: includes/API/Orders_Controller.php:933
 msgid "Display name of the order status."
 msgstr ""
 
