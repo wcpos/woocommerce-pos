@@ -16,6 +16,7 @@
 namespace WCPOS\WooCommercePOS\Services;
 
 use Ramsey\Uuid\Uuid;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_User;
 use const WCPOS\WooCommercePOS\VERSION as PLUGIN_VERSION;
 
@@ -106,7 +107,7 @@ class Analytics {
 			return $this->enabled_cache;
 		}
 
-		$consent             = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
+		$consent             = Settings::instance()->tracking_consent();
 		$this->enabled_cache = ( 'allowed' === $consent );
 
 		return $this->enabled_cache;

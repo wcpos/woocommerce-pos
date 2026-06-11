@@ -62,7 +62,7 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 	 */
 	function wcpos_url( $page = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$slug   = Permalink::get_slug();
-		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+		$scheme = Settings::instance()->force_ssl_enabled() ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
