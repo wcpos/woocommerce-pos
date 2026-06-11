@@ -28,7 +28,7 @@ class Test_General_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * tracking_consent migrates from the legacy tools option, in memory only.
+	 * The tracking_consent value migrates from the legacy tools option, in memory only.
 	 */
 	public function test_tracking_consent_migrates_from_tools_without_db_write(): void {
 		update_option( 'woocommerce_pos_settings_tools', array( 'tracking_consent' => 'allowed' ) );
@@ -62,8 +62,14 @@ class Test_General_Section extends WP_UnitTestCase {
 			'woocommerce_pos_settings_general',
 			array(
 				'store_tax_ids' => array(
-					array( 'type' => 'abn', 'value' => ' 123 ' ),
-					array( 'type' => '', 'value' => 'dropme' ),
+					array(
+						'type' => 'abn',
+						'value' => ' 123 ',
+					),
+					array(
+						'type' => '',
+						'value' => 'dropme',
+					),
 					'not-an-array',
 				),
 			)
@@ -98,13 +104,31 @@ class Test_General_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * merge() fully replaces store_tax_ids instead of deep-merging rows.
+	 * Merging fully replaces store_tax_ids instead of deep-merging rows.
 	 */
 	public function test_merge_replaces_store_tax_ids(): void {
 		$section = new General_Section();
 		$merged  = $section->merge(
-			array( 'store_tax_ids' => array( array( 'type' => 'abn', 'value' => '1' ), array( 'type' => 'vat', 'value' => '2' ) ) ),
-			array( 'store_tax_ids' => array( array( 'type' => 'abn', 'value' => '9' ) ) )
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type' => 'abn',
+						'value' => '1',
+					),
+					array(
+						'type' => 'vat',
+						'value' => '2',
+					),
+				),
+			),
+			array(
+				'store_tax_ids' => array(
+					array(
+						'type' => 'abn',
+						'value' => '9',
+					),
+				),
+			)
 		);
 		$this->assertCount( 1, $merged['store_tax_ids'] );
 		$this->assertEquals( '9', $merged['store_tax_ids'][0]['value'] );
