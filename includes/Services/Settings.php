@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section;
@@ -708,6 +709,151 @@ class Settings {
 	 */
 	public static function bump_versions(): void {
 		update_option( 'woocommerce_pos_db_version', VERSION );
+	}
+
+	/**
+	 * Read one key from a section's filtered view, falling back to the
+	 * section default. Never returns WP_Error — typed accessors are the safe
+	 * read surface for PHP callers.
+	 *
+	 * @param string $id  Section id.
+	 * @param string $key Setting key.
+	 *
+	 * @return mixed
+	 */
+	private function section_value( string $id, string $key ) {
+		$settings = $this->get_settings( $id );
+		if ( \is_array( $settings ) && \array_key_exists( $key, $settings ) ) {
+			return $settings[ $key ];
+		}
+
+		$section = $this->sections()->get( $id );
+		if ( $section instanceof Abstract_Section ) {
+			$defaults = $section->defaults();
+
+			return $defaults[ $key ] ?? null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether the POS-only products feature is enabled.
+	 */
+	public function pos_only_products_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'pos_only_products' );
+	}
+
+	/**
+	 * Whether decimal stock/cart quantities are enabled.
+	 */
+	public function decimal_qty_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'decimal_qty' );
+	}
+
+	/**
+	 * Whether the POS frontend forces HTTPS.
+	 */
+	public function force_ssl_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'force_ssl' );
+	}
+
+	/**
+	 * The product meta key used as the barcode field.
+	 */
+	public function barcode_field(): string {
+		return (string) $this->section_value( 'general', 'barcode_field' );
+	}
+
+	/**
+	 * The default customer id for new POS orders.
+	 */
+	public function default_customer_id(): int {
+		return (int) $this->section_value( 'general', 'default_customer' );
+	}
+
+	/**
+	 * Whether the logged-in cashier is the default customer.
+	 */
+	public function default_customer_is_cashier(): bool {
+		return (bool) $this->section_value( 'general', 'default_customer_is_cashier' );
+	}
+
+	/**
+	 * Whether usernames are auto-generated for new customers.
+	 */
+	public function generate_username_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'generate_username' );
+	}
+
+	/**
+	 * Whether stock is restored when a POS order is deleted.
+	 */
+	public function restore_stock_on_delete_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'restore_stock_on_delete' );
+	}
+
+	/**
+	 * The analytics tracking consent state: allowed | denied | undecided.
+	 */
+	public function tracking_consent(): string {
+		return (string) $this->section_value( 'general', 'tracking_consent' );
+	}
+
+	/**
+	 * Whether the JWT may be passed as a query parameter (Tools).
+	 */
+	public function use_jwt_as_param_enabled(): bool {
+		return (bool) $this->section_value( 'tools', 'use_jwt_as_param' );
+	}
+
+	/**
+	 * Admin email toggles for POS orders.
+	 */
+	public function admin_emails(): array {
+		return (array) $this->section_value( 'checkout', 'admin_emails' );
+	}
+
+	/**
+	 * Customer email toggles for POS orders.
+	 */
+	public function customer_emails(): array {
+		return (array) $this->section_value( 'checkout', 'customer_emails' );
+	}
+
+	/**
+	 * Cashier email toggles for POS orders.
+	 */
+	public function cashier_emails(): array {
+		return (array) $this->section_value( 'checkout', 'cashier_emails' );
+	}
+
+	/**
+	 * Script handles dequeued on the POS checkout pages.
+	 */
+	public function dequeue_script_handles(): array {
+		return (array) $this->section_value( 'checkout', 'dequeue_script_handles' );
+	}
+
+	/**
+	 * Style handles dequeued on the POS checkout pages.
+	 */
+	public function dequeue_style_handles(): array {
+		return (array) $this->section_value( 'checkout', 'dequeue_style_handles' );
+	}
+
+	/**
+	 * The default receipt mode: fiscal | live.
+	 */
+	public function receipt_default_mode(): string {
+		return (string) $this->section_value( 'checkout', 'receipt_default_mode' );
+	}
+
+	/**
+	 * The user-override tax-ID write map (type => meta key).
+	 */
+	public function tax_id_write_map(): array {
+		return (array) $this->section_value( 'tax_ids', 'write_map' );
 	}
 
 	/**
