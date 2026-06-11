@@ -50,11 +50,14 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The receipt wrapper carries a ch width and a monospace font.
+	 * The receipt wrapper uses a monospace font without ch units.
+	 *
+	 * Dompdf has no `ch` unit support — a ch-based wrapper width is silently
+	 * dropped and the receipt collapses to the page width.
 	 *
 	 * @return void
 	 */
-	public function test_receipt_wrapper_has_width_ch_and_monospace(): void {
+	public function test_receipt_wrapper_is_monospace_without_ch_units(): void {
 		// Arrange.
 		$ast = $this->receipt( array(), 42 );
 
@@ -62,13 +65,32 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( 'width: 42ch', $html );
 		$this->assertStringContainsString( 'monospace', $html );
+		$this->assertStringNotContainsString( 'ch;', $html );
 		$this->assertStringStartsWith( '<div', $html );
 	}
 
 	/**
-	 * The paper width clamps to a default and bounds.
+	 * The base font scales so the character grid fills the given paper width.
+	 *
+	 * 80mm paper is 302.36 CSS px; minus 2 × 12px side padding the printable
+	 * width is 278.36px, so 48 columns at 0.6em advance need a 9.66px font.
+	 *
+	 * @return void
+	 */
+	public function test_font_size_scales_to_paper_width(): void {
+		// Arrange.
+		$ast = $this->receipt( array(), 48 );
+
+		// Act.
+		$html = $this->emitter->emit( $ast, array( 'paper_width_px' => 302.36 ) );
+
+		// Assert.
+		$this->assertStringContainsString( 'font-size: 9.67px', $html );
+	}
+
+	/**
+	 * Without a paper width the wrapper keeps the preview's 13px base font.
 	 *
 	 * @return void
 	 */
@@ -80,7 +102,7 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( 'width: 48ch', $html );
+		$this->assertStringContainsString( 'font-size: 13px', $html );
 	}
 
 	/**
@@ -253,11 +275,14 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Row renders a flex container and its columns carry flex values.
+	 * Row renders a fixed-layout table and its columns carry em widths.
+	 *
+	 * Dompdf has no flexbox engine and no `ch` unit, so rows are real tables:
+	 * fixed columns get chars × 0.6em widths and `*` columns share the rest.
 	 *
 	 * @return void
 	 */
-	public function test_row_renders_flex_with_col_flex_values(): void {
+	public function test_row_renders_table_with_em_col_widths(): void {
 		// Arrange.
 		$ast = $this->receipt(
 			array(
@@ -295,10 +320,11 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( 'display: flex', $html );
-		$this->assertStringContainsString( 'flex: 1', $html );
-		$this->assertStringContainsString( 'flex: 0 0 8ch', $html );
+		$this->assertStringContainsString( '<table style="width: 100%; table-layout: fixed', $html );
+		$this->assertStringContainsString( 'width: 4.8em', $html );
 		$this->assertStringContainsString( 'text-align: right', $html );
+		$this->assertStringNotContainsString( 'display: flex', $html );
+		$this->assertEquals( 2, substr_count( $html, '<td' ) );
 	}
 
 	/**
@@ -421,17 +447,48 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Image nodes emit nothing.
+	 * Image nodes emit a centered <img> scaled by the paper's dot budget.
+	 *
+	 * Widths are authored in printer dots; 200 dots on a 576-dot (48-column)
+	 * roll is 200/576 of the receipt = 16.67ch = 10em. Pdf_Renderer embeds
+	 * local URLs (store logos) as data URIs before Dompdf renders.
 	 *
 	 * @return void
 	 */
-	public function test_image_emits_nothing(): void {
+	public function test_image_emits_centered_img_scaled_by_dot_budget(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type' => 'image',
+					'src' => 'https://x/y.png',
+					'width' => 200,
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringContainsString( '<img src="https://x/y.png"', $html );
+		$this->assertStringContainsString( 'width: 10em', $html );
+		$this->assertStringContainsString( 'max-width: 100%', $html );
+		$this->assertStringContainsString( 'text-align: center', $html );
+	}
+
+	/**
+	 * Image nodes without a src emit nothing.
+	 *
+	 * @return void
+	 */
+	public function test_image_without_src_emits_nothing(): void {
 		// Arrange.
 		$with    = $this->receipt(
 			array(
 				array(
 					'type' => 'image',
-					'src' => 'https://x/y.png',
+					'src' => '   ',
 					'width' => 200,
 				),
 			)
@@ -566,8 +623,36 @@ class Html_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$html = $this->emitter->emit( $ast );
 
 		// Assert.
-		$this->assertStringContainsString( 'width: 32ch', $html );
 		$this->assertStringContainsString( '<strong>Store</strong>', $html );
 		$this->assertStringContainsString( 'border-top: 3px double #000', $html );
+	}
+
+	/**
+	 * 1D barcodes carry the human-readable value beneath the bars.
+	 *
+	 * bwip-js renders the value under the bars in the client-side previews, so
+	 * the PDF mirrors it.
+	 *
+	 * @return void
+	 */
+	public function test_barcode_includes_human_readable_value(): void {
+		// Arrange.
+		$ast = $this->receipt(
+			array(
+				array(
+					'type'         => 'barcode',
+					'barcode_type' => 'code128',
+					'height'       => 40,
+					'value'        => '12345678',
+				),
+			)
+		);
+
+		// Act.
+		$html = $this->emitter->emit( $ast );
+
+		// Assert.
+		$this->assertStringContainsString( '<img src="data:image/png;base64,', $html );
+		$this->assertStringContainsString( '>12345678</div>', $html );
 	}
 }

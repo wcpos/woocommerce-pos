@@ -123,11 +123,11 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	/**
 	 * Render_html survives nested flex-inside-grid layout.
 	 *
-	 * Dompdf has no flex/grid engine, so the compatibility shim rewrites those
-	 * containers as tables/floats. An earlier all-tables approach nested anonymous
-	 * tables and triggered a "Frame not found in cellmap" fatal on this exact
-	 * structure (a grid cell containing space-between rows plus a flex-end
-	 * wrapper, as in the detailed receipt). This guards that regression.
+	 * Dompdf has no flex/grid engine, so Pdf_Layout_Preprocessor rewrites those
+	 * containers as real tables. An earlier CSS-only display:table approach
+	 * nested anonymous tables and triggered a "Frame not found in cellmap" fatal
+	 * on this exact structure (a grid cell containing space-between rows plus a
+	 * flex-end wrapper, as in the detailed receipt). This guards that regression.
 	 */
 	public function test_render_html_handles_nested_flex_and_grid(): void {
 		// Arrange.
@@ -143,7 +143,7 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 			. '</div>';
 
 		// Act.
-		$pdf = $this->renderer->render_html( $html, array( 'flex_grid_shim' => true ) );
+		$pdf = $this->renderer->render_html( $html, array( 'receipt_layout' => true ) );
 
 		// Assert.
 		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
@@ -214,26 +214,123 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The PDF flex/grid shim preserves fixed receipt columns.
+	 * Receipt preparation rewrites grids into tables with carried widths.
 	 *
 	 * Invoice/packing-slip templates use grid/flex wrappers with fixed trailing
-	 * columns for totals, order details, and barcodes. The Dompdf table fallback
+	 * columns for totals, order details, and barcodes. The Dompdf table rewrite
 	 * must carry those widths across so the right-hand blocks do not stretch or
 	 * overlap the left-hand content.
 	 */
-	public function test_flex_grid_shim_preserves_fixed_receipt_columns(): void {
+	public function test_receipt_layout_rewrites_grid_with_fixed_columns(): void {
 		// Act.
 		$html = $this->invoke_private_method(
-			'inject_flex_grid_shim',
-			array( '<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px;"></div>' )
+			'prepare_html_for_render',
+			array(
+				'<div style="display: grid; grid-template-columns: 1fr 320px; gap: 28px;"><div>left</div><div>right</div></div>',
+				array( 'receipt_layout' => true ),
+			)
 		);
 
 		// Assert.
-		$this->assertStringContainsString( '[style*="grid-template-columns: 1fr 320px"]>*:last-child', $html );
-		$this->assertStringContainsString( 'width:320px !important', $html );
-		$this->assertStringContainsString( '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]', $html );
-		$this->assertStringContainsString( '[style*="gap: 28px"],[style*="gap:28px"]', $html );
-		$this->assertStringContainsString( 'border-spacing:28px 0 !important', $html );
+		$this->assertStringContainsString( '<table', $html );
+		$this->assertStringContainsString( 'width: 320px', $html );
+		$this->assertStringContainsString( 'padding-left: 28px', $html );
+		$this->assertStringNotContainsString( 'display: grid', $html );
+	}
+
+	/**
+	 * Receipt preparation lifts the root padding into @page margins.
+	 *
+	 * The browser preview shows the template's root padding as the only
+	 * whitespace around the receipt; Dompdf's default 1.2cm page margin must be
+	 * replaced by it so PDF pages match the preview.
+	 */
+	public function test_receipt_layout_lifts_root_padding_into_page_margins(): void {
+		// Act.
+		$html = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array(
+				'<div style="font-size: 13px; padding: 32px 36px;"><p>Receipt</p></div>',
+				array( 'receipt_layout' => true ),
+			)
+		);
+
+		// Assert.
+		$this->assertStringContainsString( '@page { margin: 24pt 27pt 24pt 27pt; }', $html );
+		$this->assertStringContainsString( 'body { margin: 0; padding: 0; }', $html );
+		$this->assertStringNotContainsString( 'padding: 32px 36px', $html );
+	}
+
+	/**
+	 * Full-document receipts (legacy-php template) keep their head stylesheet.
+	 *
+	 * The fragment-oriented preprocessor serializes only body children, which
+	 * would silently discard the legacy template's entire <head><style> block;
+	 * full documents must bypass it and only receive the class-based shim.
+	 */
+	public function test_receipt_layout_preserves_full_document_head(): void {
+		// Arrange.
+		$html = '<html><head><style>.receipt{padding:24px;font-family:serif}</style></head>'
+			. '<body><div class="receipt">Legacy receipt</div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert.
+		$this->assertStringContainsString( '.receipt{padding:24px;font-family:serif}', $out );
+		$this->assertStringContainsString( '.receipt-header{display:table', $out );
+		$this->assertStringNotContainsString( '@page', $out );
+	}
+
+	/**
+	 * Full-document receipts keep inline flex/grid compatibility styles.
+	 *
+	 * Custom legacy and Template Studio receipts can be full HTML documents that
+	 * include inline flex/grid layout in their existing head/body markup. They
+	 * must bypass the DOM preprocessor without dropping the CSS shim that Dompdf
+	 * needs for those inline styles.
+	 */
+	public function test_receipt_layout_preserves_inline_flex_grid_shim_for_full_documents(): void {
+		// Arrange.
+		$html = '<html><head><style>.receipt{padding:24px}</style></head>'
+			. '<body><div style="display:flex;justify-content:space-between"><span>Cash</span><span>10.00</span></div>'
+			. '<div style="display:grid;grid-template-columns:1fr 220px"><span>Left</span><span>Right</span></div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert.
+		$this->assertStringContainsString( '.receipt{padding:24px}', $out );
+		$this->assertStringContainsString( '[style*="display:flex"]', $out );
+		$this->assertStringContainsString( '[style*="display:grid"]', $out );
+		$this->assertStringContainsString( '.receipt-header{display:table', $out );
+		$this->assertStringNotContainsString( '@page', $out );
+	}
+
+	/**
+	 * Receipt preparation declares UTF-8 so Dompdf cannot mis-sniff the charset.
+	 *
+	 * Mostly-ASCII receipts with a single multibyte character (an em dash in an
+	 * empty SKU cell) were mis-decoded by Dompdf's encoding detection.
+	 */
+	public function test_receipt_layout_declares_utf8_charset(): void {
+		// Act.
+		$html = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array(
+				'<div><p>Order #1 — total</p></div>',
+				array( 'receipt_layout' => true ),
+			)
+		);
+
+		// Assert.
+		$this->assertStringContainsString( 'charset=utf-8', $html );
 	}
 
 	/**

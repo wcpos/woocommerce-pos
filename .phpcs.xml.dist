@@ -74,6 +74,11 @@
 				<element value="childNodes"/>
 				<element value="nodeType"/>
 				<element value="textContent"/>
+				<element value="nodeValue"/>
+				<element value="ownerDocument"/>
+				<element value="parentNode"/>
+				<element value="firstChild"/>
+				<element value="lastChild"/>
 			</property>
 		</properties>
 	</rule>

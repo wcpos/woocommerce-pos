@@ -61,10 +61,25 @@ class Barcode_Image {
 				}
 			);
 
-			return self::img_from_png( $png );
+			// bwip-js renders the human-readable value under the bars in the
+			// client-side previews; mirror it so the PDF matches on-screen.
+			return self::img_from_png( $png ) . self::barcode_text( $text );
 		} catch ( Throwable $error ) {
 			return '';
 		}
+	}
+
+	/**
+	 * Build the human-readable text line shown beneath a 1D barcode.
+	 *
+	 * @param string $value The barcode value.
+	 *
+	 * @return string The HTML fragment.
+	 */
+	private static function barcode_text( string $value ): string {
+		return '<div style="text-align: center; font-family: \'DejaVu Sans Mono\', Menlo, Consolas, monospace; '
+			. 'font-size: 1em; letter-spacing: 2px; line-height: 1.3; margin-top: 1px">'
+			. esc_html( $value ) . '</div>';
 	}
 
 	/**

@@ -88,7 +88,7 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 		$order = OrderHelper::create_order();
 		$template = array(
 			'engine'  => 'thermal',
-			'content' => '<receipt paper-width="48">' . str_repeat( '<text>Line item {{order.number}}</text>', 80 ) . '<barcode type="code128">12345</barcode></receipt>',
+			'content' => '<receipt paper-width="48">' . str_repeat( '<text>Line item {{order.number}}</text>', 150 ) . '<barcode type="code128">12345</barcode></receipt>',
 		);
 		$service  = new Template_Pdf_Service();
 
@@ -101,6 +101,28 @@ class Template_Pdf_Service_Test extends \WC_REST_Unit_Test_Case {
 		$this->assertEquals( 1, $this->get_pdf_page_count( $pdf ) );
 		$this->assertEquals( 226.77, $box['width'], '', 0.01 );
 		$this->assertGreaterThan( 1000.0, $box['height'] );
+	}
+
+	/**
+	 * It honors the template's declared 58mm paper width.
+	 */
+	public function test_render_thermal_58mm_template_uses_declared_paper_width(): void {
+		// Arrange.
+		$order    = OrderHelper::create_order();
+		$template = array(
+			'engine'      => 'thermal',
+			'paper_width' => '58mm',
+			'content'     => '<receipt paper-width="32"><text>Order {{order.number}}</text></receipt>',
+		);
+		$service  = new Template_Pdf_Service();
+
+		// Act.
+		$pdf = $service->render( $template, $order );
+		$box = $this->get_media_box( $pdf );
+
+		// Assert.
+		$this->assertEquals( '%PDF-', substr( $pdf, 0, 5 ) );
+		$this->assertEquals( 164.41, $box['width'], '', 0.01 );
 	}
 
 	/**
