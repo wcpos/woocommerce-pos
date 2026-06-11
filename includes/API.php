@@ -10,7 +10,6 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
@@ -354,11 +353,7 @@ class API {
 	 * @return WP_REST_Response
 	 */
 	public function rest_index( WP_REST_Response $response ): WP_REST_Response {
-		$uuid = get_option( 'woocommerce_pos_uuid' );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $uuid );
-		}
+		$uuid                               = wcpos_get_site_uuid();
 		$response->data['uuid']             = $uuid;
 		$response->data['wp_version']       = get_bloginfo( 'version' );
 		$response->data['wc_version']       = WC()->version;

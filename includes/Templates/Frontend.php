@@ -139,11 +139,7 @@ class Frontend {
 			wcpos_get_stores()
 		);
 
-		$site_uuid = get_option( 'woocommerce_pos_uuid' );
-		if ( ! $site_uuid ) {
-			$site_uuid = Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $site_uuid );
-		}
+		$site_uuid = wcpos_get_site_uuid();
 
 		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
 		if ( ! $user_uuid ) {

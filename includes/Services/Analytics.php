@@ -303,15 +303,7 @@ class Analytics {
 	 * still have a stable site identifier for grouping.
 	 */
 	public function get_site_id(): string {
-		$uuid = get_option( 'woocommerce_pos_uuid', '' );
-		if ( \is_string( $uuid ) && '' !== $uuid ) {
-			return $uuid;
-		}
-
-		$uuid = Uuid::uuid4()->toString();
-		update_option( 'woocommerce_pos_uuid', $uuid );
-
-		return $uuid;
+		return wcpos_get_site_uuid();
 	}
 
 	/**

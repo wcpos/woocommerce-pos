@@ -153,6 +153,43 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 }
 
 /*
+ * Get the site UUID (Plugin State), generating and persisting it on first use.
+ *
+ * @return string Site UUID.
+ */
+if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
+	/**
+	 * Get the site UUID, generating and persisting it on first use.
+	 *
+	 * Single owner for the woocommerce_pos_uuid option — the
+	 * generate-if-missing logic previously lived in three places (REST index,
+	 * POS frontend, analytics) and could race.
+	 *
+	 * @return string Site UUID.
+	 */
+	function wcpos_get_site_uuid(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$uuid = get_option( 'woocommerce_pos_uuid', '' );
+		if ( \is_string( $uuid ) && '' !== $uuid ) {
+			return $uuid;
+		}
+
+		$uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
+
+		// add_option() is a no-op when the option already exists, so a
+		// concurrent request that won the race keeps its value.
+		if ( ! add_option( 'woocommerce_pos_uuid', $uuid ) ) {
+			$existing = get_option( 'woocommerce_pos_uuid', '' );
+			if ( \is_string( $existing ) && '' !== $existing ) {
+				return $existing;
+			}
+			update_option( 'woocommerce_pos_uuid', $uuid );
+		}
+
+		return $uuid;
+	}
+}
+
+/*
  * Simple wrapper for json_encode.
  *
  * Use JSON_FORCE_OBJECT for PHP 5.3 or higher with fallback for
