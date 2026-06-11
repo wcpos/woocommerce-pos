@@ -42,19 +42,29 @@ class Template_Pdf_Service {
 		}
 
 		if ( 'thermal' === $engine ) {
-			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
-			$html = ( new Html_Thermal_Emitter() )->emit( $ast );
+			$paper_width_pt = $this->thermal_paper_width_pt( $template );
 
-			// Narrow continuous-roll receipt page: ~80mm wide (226.77pt). Render on
-			// a tall probe page, then let Pdf_Renderer fit the height to the content
-			// so downloaded PDFs and PrintNode PDFs avoid blank tails/overflow pages.
+			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
+			$html = ( new Html_Thermal_Emitter() )->emit(
+				$ast,
+				array(
+					// CSS pixels (96dpi) for the paper width, so the emitter can
+					// scale the monospace character grid to fit the page.
+					'paper_width_px' => $paper_width_pt * 4 / 3,
+				)
+			);
+
+			// Narrow continuous-roll receipt page at the template's declared paper
+			// width (58/80mm). Render on a tall probe page, then let Pdf_Renderer
+			// fit the height to the content so downloaded PDFs and PrintNode PDFs
+			// avoid blank tails/overflow pages.
 			return ( new Pdf_Renderer() )->render_html(
 				$html,
 				array(
-					'paper'          => array( 0, 0, 226.77, 14000.0 ),
+					'paper'          => array( 0, 0, $paper_width_pt, 14000.0 ),
 					'default_font'   => 'dejavu sans mono',
 					'fit_height'     => true,
-					'flex_grid_shim' => true,
+					'receipt_layout' => true,
 				)
 			);
 		}
@@ -62,7 +72,29 @@ class Template_Pdf_Service {
 		$html = $this->render_html_engine( $engine, $template, $order );
 
 		// Non-thermal templates render to a standard A4 portrait page (Pdf_Renderer default).
-		return ( new Pdf_Renderer() )->render_html( $html, array( 'flex_grid_shim' => true ) );
+		return ( new Pdf_Renderer() )->render_html( $html, array( 'receipt_layout' => true ) );
+	}
+
+	/**
+	 * Resolve a thermal template's paper width in points.
+	 *
+	 * Template metadata declares the physical roll ('58mm' / '80mm'); fall back
+	 * to 80mm when absent so templates without metadata keep the previous page
+	 * size.
+	 *
+	 * @param array $template Template metadata/content.
+	 *
+	 * @return float Paper width in pt.
+	 */
+	private function thermal_paper_width_pt( array $template ): float {
+		$raw = isset( $template['paper_width'] ) ? (string) $template['paper_width'] : '';
+		$mm  = (float) $raw; // Leading-number cast: '58mm' → 58.0.
+
+		if ( $mm < 25.0 || $mm > 250.0 ) {
+			$mm = 80.0;
+		}
+
+		return round( $mm * 72 / 25.4, 2 );
 	}
 
 	/**

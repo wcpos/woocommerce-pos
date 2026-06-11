@@ -36,77 +36,15 @@ class Pdf_Renderer {
 	private const FIT_HEIGHT_SEARCH_STEPS = 18;
 
 	/**
-	 * Dompdf flex/grid compatibility stylesheet.
+	 * Legacy-template flex compatibility stylesheet.
 	 *
-	 * Dompdf has no CSS Flexbox or Grid layout engine — it silently maps
-	 * `display:flex` and `display:grid` to `block`, which collapses receipt
-	 * rows built as columns (labels and values run together, multi-column
-	 * blocks stack vertically). This stylesheet re-expresses those containers
-	 * as tables, which Dompdf lays out correctly, so the downloaded PDF matches
-	 * the on-screen receipt. It targets both inline-style flex/grid (thermal
-	 * emitter output and the HTML gallery templates) and the class-based flex
-	 * used by the bundled legacy receipt template. `!important` is required to
-	 * win over the templates' inline `display` declarations.
-	 *
-	 * Injected only into the PDF render path; gallery templates and live
-	 * previews are never modified.
+	 * Inline-style flex/grid containers are rewritten into real tables by
+	 * Pdf_Layout_Preprocessor, but the bundled legacy receipt.php template uses
+	 * class-based flex from its own embedded stylesheet, which the DOM
+	 * preprocessor leaves alone. These rules re-express those known classes as
+	 * tables/floats. `!important` wins over the template's stylesheet.
 	 */
-	private const FLEX_GRID_SHIM = '<style>'
-		// 1. Multi-column LAYOUT containers (header, footer, page grids) become a
-		// single-level table. Leaf label/value rows are handled by rule 2 instead
-		// of nesting, because stacked anonymous tables crash Dompdf's cellmap.
-		. '[style*="display: flex"],[style*="display:flex"],'
-		. '[style*="display: grid"],[style*="display:grid"]'
-		. '{display:table !important;width:100% !important;border-spacing:0 !important}'
-		. '[style*="gap: 22px"],[style*="gap:22px"]'
-		. '{border-collapse:separate !important;border-spacing:22px 0 !important}'
-		. '[style*="gap: 24px"],[style*="gap:24px"]'
-		. '{border-collapse:separate !important;border-spacing:24px 0 !important}'
-		. '[style*="gap: 28px"],[style*="gap:28px"]'
-		. '{border-collapse:separate !important;border-spacing:28px 0 !important}'
-		. '[style*="display: flex"]>*,[style*="display:flex"]>*,'
-		. '[style*="display: grid"]>*,[style*="display:grid"]>*'
-		. '{display:table-cell !important;vertical-align:top !important}'
-		. '[style*="flex: 0 0 auto"],[style*="flex:0 0 auto"]'
-		. '{width:1% !important;white-space:nowrap !important}'
-		. '[style*="flex: 0 0 92px"],[style*="flex:0 0 92px"]'
-		. '{width:92px !important}'
-		. '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]'
-		. '{width:280px !important}'
-		. '[style*="grid-template-columns: 1fr 220px"]>*:last-child,'
-		. '[style*="grid-template-columns:1fr 220px"]>*:last-child'
-		. '{width:220px !important}'
-		. '[style*="grid-template-columns: 1fr 320px"]>*:last-child,'
-		. '[style*="grid-template-columns:1fr 320px"]>*:last-child'
-		. '{width:320px !important}'
-		. '[style*="grid-template-columns: 2fr 1fr"]>*:first-child,'
-		. '[style*="grid-template-columns:2fr 1fr"]>*:first-child'
-		. '{width:66.666% !important}'
-		. '[style*="grid-template-columns: 2fr 1fr"]>*:last-child,'
-		. '[style*="grid-template-columns:2fr 1fr"]>*:last-child'
-		. '{width:33.333% !important}'
-		. '[style*="grid-template-columns: 1fr 1fr 1fr"]>*,'
-		. '[style*="grid-template-columns:1fr 1fr 1fr"]>*'
-		. '{width:33.333% !important}'
-		// 2. Label/value rows (justify-content:space-between) stay block-level and
-		// float the value to the right edge — no nested table. These rules are
-		// declared after rule 1, so they win the cascade at equal specificity (and
-		// the :last-child rule is also higher specificity).
-		. '[style*="justify-content: space-between"],[style*="justify-content:space-between"]'
-		. '{display:block !important;width:auto !important}'
-		. '[style*="justify-content: space-between"]>*,[style*="justify-content:space-between"]>*'
-		. '{display:inline !important}'
-		. '[style*="justify-content: space-between"]>*:last-child,'
-		. '[style*="justify-content:space-between"]>*:last-child'
-		. '{display:block !important;float:right !important;text-align:right !important}'
-		// 3. flex-end wrappers (e.g. the order barcode) right-align their child
-		// without a table, so they do not nest inside a grid cell table.
-		. '[style*="justify-content: flex-end"],[style*="justify-content:flex-end"]'
-		. '{display:block !important;width:auto !important;text-align:right !important}'
-		. '[style*="justify-content: flex-end"]>*,[style*="justify-content:flex-end"]>*'
-		. '{display:inline-block !important}'
-		// 4. Legacy receipt.php uses class-based flex. Header is a layout table;
-		// totals/payment rows use the same float-the-value approach as rule 2.
+	private const LEGACY_FLEX_SHIM = '<style>'
 		. '.receipt-header{display:table !important;width:100% !important;border-spacing:0 !important}'
 		. '.receipt-header>*{display:table-cell !important;vertical-align:top !important}'
 		. '.totals-row,.payment-row,.payment-sub,.card .row'
@@ -123,7 +61,8 @@ class Pdf_Renderer {
 	 * @param string $html HTML document to render.
 	 * @param array  $opts Optional: 'paper' (size name or [x0,y0,x1,y1]), 'orientation'
 	 *                     ('portrait'|'landscape'), 'default_font', 'fit_height',
-	 *                     'flex_grid_shim' (inject the receipt flex/grid compat CSS).
+	 *                     'receipt_layout' (rewrite receipt flex/grid markup for Dompdf
+	 *                     and lift the root padding into @page margins).
 	 *
 	 * @return string The PDF document bytes (begins with '%PDF-').
 	 */
@@ -147,35 +86,85 @@ class Pdf_Renderer {
 	 * @return string Prepared HTML.
 	 */
 	private function prepare_html_for_render( string $html, array $opts ): string {
-		// Opt-in: the shim encodes receipt-layout knowledge (including legacy
+		// Opt-in: the rewrite encodes receipt-layout knowledge (including legacy
 		// template class names), so it is only applied when the caller asks for it
 		// (receipt rendering) rather than for every generic HTML document.
-		if ( ! empty( $opts['flex_grid_shim'] ) ) {
-			$html = $this->inject_flex_grid_shim( $html );
+		if ( ! empty( $opts['receipt_layout'] ) ) {
+			if ( false !== stripos( $html, '</head>' ) ) {
+				// Full HTML documents (the legacy-php receipt template) carry
+				// their stylesheet and charset in <head>; the fragment-oriented
+				// preprocessor would discard them, so they only get the
+				// class-based flex shim and keep Dompdf's default page margins,
+				// exactly as before the preprocessor existed.
+				$html = $this->inject_head_styles( $html, self::LEGACY_FLEX_SHIM );
+			} else {
+				$preprocessor = new Pdf_Layout_Preprocessor();
+				$html         = $preprocessor->process( $html );
+
+				// Match the browser preview: the template's own root padding is
+				// the only whitespace around the receipt, so it replaces Dompdf's
+				// default 1.2cm page margin (and keeps later pages consistent
+				// with page one).
+				$margins = $preprocessor->get_page_margins_pt();
+
+				$page_style = '<style>@page { margin: '
+					. implode(
+						' ',
+						array_map(
+							static function ( float $pt ): string {
+								return self::css_number( $pt ) . 'pt';
+							},
+							$margins
+						)
+					)
+					. '; } body { margin: 0; padding: 0; }</style>';
+
+				// Receipts are UTF-8 fragments with no charset declaration;
+				// without one Dompdf sniffs the encoding and mostly-ASCII
+				// receipts with a stray multibyte character (e.g. an em dash)
+				// get mis-decoded.
+				$charset_meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">';
+
+				$html = $this->inject_head_styles( $html, $charset_meta . $page_style . self::LEGACY_FLEX_SHIM );
+			}
 		}
 
 		return $this->embed_local_images( $html );
 	}
 
 	/**
-	 * Prepend the flex/grid compatibility stylesheet to the receipt HTML.
+	 * Format a float for CSS output, immune to LC_NUMERIC comma locales.
+	 *
+	 * @param float $value The value to format.
+	 *
+	 * @return string The formatted number.
+	 */
+	private static function css_number( float $value ): string {
+		$formatted = rtrim( rtrim( number_format( $value, 2, '.', '' ), '0' ), '.' );
+
+		return '' === $formatted ? '0' : $formatted;
+	}
+
+	/**
+	 * Prepend compatibility stylesheets to the receipt HTML.
 	 *
 	 * Inserted just before `</head>` when the HTML is a full document, otherwise
 	 * prepended to the fragment (Dompdf wraps loose markup in html/body itself).
 	 * Placing the stylesheet last in the head lets its `!important` rules win the
 	 * cascade over template styles.
 	 *
-	 * @param string $html The receipt HTML.
+	 * @param string $html   The receipt HTML.
+	 * @param string $styles The <style> block(s) to inject.
 	 *
-	 * @return string The HTML with the compatibility stylesheet injected.
+	 * @return string The HTML with the stylesheets injected.
 	 */
-	private function inject_flex_grid_shim( string $html ): string {
+	private function inject_head_styles( string $html, string $styles ): string {
 		$head_close = stripos( $html, '</head>' );
 		if ( false !== $head_close ) {
-			return substr_replace( $html, self::FLEX_GRID_SHIM, $head_close, 0 );
+			return substr_replace( $html, $styles, $head_close, 0 );
 		}
 
-		return self::FLEX_GRID_SHIM . $html;
+		return $styles . $html;
 	}
 
 	/**

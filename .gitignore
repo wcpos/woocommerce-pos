@@ -56,3 +56,6 @@ docs/
 # Generated from includes/Services/Receipt_Data_Schema.php
 /packages/receipt-schema/src/receipt-data.schema.json
 /packages/receipt-schema/src/receipt-data.types.ts
+
+# WCPOS PDF dev-harness output
+tests/Tools/pdf-harness/out/

@@ -5,15 +5,21 @@
  * Renders an HTML receipt string from a thermal AST (produced by
  * Thermal_Markup_Parser). This is a PHP port of the JS receipt-renderer
  * `render-html.ts`, used for the thermal -> PDF path (Dompdf). The output mirrors
- * the JS renderer's STRUCTURE; bwip-js is swapped for the vendor-prefixed picqer
+ * the JS renderer's CONTENT; bwip-js is swapped for the vendor-prefixed picqer
  * barcode generator (1D barcodes) and chillerlan QR code generator (QR codes).
  *
- * Deliberate deviations from the JS renderer:
- *  - Images (`<image>`) are skipped entirely; server-side rasterization is out of
- *    scope, so the emitter writes nothing for image nodes.
- *  - Barcode/QR rendering uses PHP libraries that emit standalone SVG, which is
- *    constrained to fit the receipt width. On any failure the value is rendered as
- *    escaped monospace text instead of throwing.
+ * Deliberate deviations from the JS renderer (Dompdf has no flexbox engine and
+ * no `ch` unit, so the JS renderer's flex rows would collapse):
+ *  - Rows are emitted as real single-row tables with em-based column widths
+ *    (1 monospace character ≈ 0.6em), Dompdf's most reliable layout primitive.
+ *  - The base font size is scaled so the template's character grid exactly
+ *    fills the paper width passed by the caller, matching what the printer
+ *    does on a physical roll.
+ *  - Images (`<image>`) are emitted as plain `<img>` tags; Pdf_Renderer embeds
+ *    local WordPress images (store logos) as data URIs before Dompdf renders.
+ *    Remote image URLs stay blank because Dompdf remote access is disabled.
+ *  - Barcode/QR rendering uses PHP libraries that emit PNG `<img>` tags. On any
+ *    failure the value is rendered as escaped monospace text instead of throwing.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -31,20 +37,71 @@ use WCPOS\WooCommercePOS\Templates\Barcode_Image;
 class Html_Thermal_Emitter {
 
 	/**
+	 * Advance width of a monospace character relative to the font size.
+	 */
+	private const CHAR_WIDTH_EM = 0.6;
+
+	/**
+	 * Printer dot budgets for image sizing: wide (80mm, ≥40 columns) printers
+	 * are 576 dots across, narrow (58mm) 384. Mirrors the JS preview renderer —
+	 * keep in sync with packages/receipt-renderer/src/render-html.ts in the
+	 * wcpos monorepo, or PDF/preview parity silently drifts.
+	 */
+	private const DOT_BUDGET_WIDE = 576;
+
+	/**
+	 * Narrow-roll printer dot budget (see DOT_BUDGET_WIDE sync note).
+	 */
+	private const DOT_BUDGET_NARROW = 384;
+
+	/**
+	 * Column count at/above which the wide dot budget applies.
+	 */
+	private const NARROW_PAPER_THRESHOLD_CHARS = 40;
+
+	/**
+	 * Wrapper side padding in px. Mirrors the JS preview renderer's receipt
+	 * frame (render-html.ts, see DOT_BUDGET_WIDE sync note); in the PDF path
+	 * Pdf_Layout_Preprocessor lifts this padding into the @page margins.
+	 */
+	private const PADDING_X_PX = 12.0;
+
+	/**
+	 * Wrapper top/bottom padding in px (see PADDING_X_PX).
+	 */
+	private const PADDING_Y_PX = 16.0;
+
+	/**
 	 * Render an HTML receipt string from a thermal AST.
 	 *
-	 * @param array $ast The thermal AST root (a receipt node).
+	 * @param array $ast  The thermal AST root (a receipt node).
+	 * @param array $opts Optional: 'paper_width_px' — the PDF paper width in CSS
+	 *                    px; the base font is scaled so the template's character
+	 *                    grid fills the printable width like a real roll printer.
 	 *
 	 * @return string The receipt HTML.
 	 */
-	public function emit( array $ast ): string {
+	public function emit( array $ast, array $opts = array() ): string {
 		$width_chars = $this->safe_integer( isset( $ast['paper_width'] ) ? $ast['paper_width'] : null, 48, 16, 120 );
+
+		// 13px matches the JS preview renderer's base font; with a known paper
+		// width the font scales so the grid fills the printable width instead.
+		$font_px = 13.0;
+		if ( isset( $opts['paper_width_px'] ) && is_numeric( $opts['paper_width_px'] ) ) {
+			$inner_px = (float) $opts['paper_width_px'] - 2 * self::PADDING_X_PX;
+			if ( $inner_px > 50 ) {
+				// Clamp to a legible range so a malformed paper/column combination
+				// cannot produce microscopic or oversized receipt text.
+				$font_px = max( 6.0, min( 14.0, $inner_px / ( $width_chars * self::CHAR_WIDTH_EM ) ) );
+			}
+		}
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
 		$inner    = $this->render_nodes( $children, $width_chars );
 
-		return '<div style="width: ' . $width_chars . 'ch; font-family: \'Courier New\', Courier, monospace; '
-			. 'font-size: 13px; line-height: 1.4; background: #fff; color: #000; padding: 16px 12px; '
+		return '<div style="font-family: \'Courier New\', Courier, monospace; '
+			. 'font-size: ' . $this->format_float( $font_px ) . 'px; line-height: 1.4; background: #fff; color: #000; '
+			. 'padding: ' . $this->format_float( self::PADDING_Y_PX ) . 'px ' . $this->format_float( self::PADDING_X_PX ) . 'px; '
 			. 'overflow: hidden; white-space: pre-wrap; word-break: break-all;">' . $inner . '</div>';
 	}
 
@@ -99,7 +156,9 @@ class Html_Thermal_Emitter {
 			case 'row':
 				return $this->render_row( $node, $width_chars );
 			case 'col':
-				return $this->render_col( $node, $width_chars );
+				// Standalone column outside a row: plain aligned block.
+				return '<div style="text-align: ' . $this->safe_align( isset( $node['align'] ) ? $node['align'] : null ) . '">'
+					. $this->render_nodes( $children, $width_chars ) . '</div>';
 			case 'line':
 				return $this->render_line( $node );
 			case 'barcode':
@@ -117,12 +176,14 @@ class Html_Thermal_Emitter {
 				$lines = $this->safe_integer( isset( $node['lines'] ) ? $node['lines'] : null, 1, 1, 50 );
 				return '<div style="height: ' . $this->format_float( $lines * 1.4 ) . 'em"></div>';
 			case 'cut':
+				// The scissors glyph is missing from the monospace core fonts, so
+				// it gets the bundled DejaVu face (present in every Dompdf install).
 				return '<div style="border-top: 1px dashed #ccc; margin: 12px 0; position: relative">'
-					. '<span style="position: absolute; top: -8px; left: -4px; font-size: 14px">&#9986;</span></div>';
+					. '<span style="position: absolute; top: -8px; left: -4px; font-size: 14px; font-family: \'DejaVu Sans\', sans-serif">&#9986;</span></div>';
 			case 'receipt':
 				return $this->render_nodes( $children, $width_chars );
 			case 'image':
-				// Skipped: server-side rasterization is out of scope.
+				return $this->render_image( $node, $width_chars );
 			case 'drawer':
 			default:
 				return '';
@@ -130,7 +191,11 @@ class Html_Thermal_Emitter {
 	}
 
 	/**
-	 * Render a row as a flex container of columns.
+	 * Render a row as a single-row table of columns.
+	 *
+	 * Dompdf has no flexbox engine and no `ch` unit, so the JS renderer's flex
+	 * rows are expressed as a fixed-layout table: fixed columns get em widths
+	 * (chars × 0.6em) and `*` columns share the remaining width.
 	 *
 	 * @param array $node        The row AST node.
 	 * @param int   $width_chars The receipt character width.
@@ -138,38 +203,68 @@ class Html_Thermal_Emitter {
 	 * @return string The HTML fragment.
 	 */
 	private function render_row( array $node, int $width_chars ): string {
-		$cols = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
-		$html = '';
+		$cols  = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
+		$cells = '';
 		foreach ( $cols as $col ) {
 			if ( \is_array( $col ) ) {
-				$html .= $this->render_col( $col, $width_chars );
+				$cells .= $this->render_row_cell( $col, $width_chars );
 			}
 		}
 
-		return '<div style="display: flex">' . $html . '</div>';
+		return '<table style="width: 100%; table-layout: fixed; border-collapse: collapse"><tr>' . $cells . '</tr></table>';
 	}
 
 	/**
-	 * Render a single column.
+	 * Render a single row column as a table cell.
 	 *
 	 * @param array $node        The col AST node.
 	 * @param int   $width_chars The receipt character width.
 	 *
 	 * @return string The HTML fragment.
 	 */
-	private function render_col( array $node, int $width_chars ): string {
-		$width = isset( $node['width'] ) ? $node['width'] : 12;
-		if ( '*' === $width ) {
-			$flex = 'flex: 1';
-		} else {
-			$flex = 'flex: 0 0 ' . $this->safe_integer( $width, 12, 1, 120 ) . 'ch';
+	private function render_row_cell( array $node, int $width_chars ): string {
+		$width       = isset( $node['width'] ) ? $node['width'] : 12;
+		$width_style = '';
+		if ( '*' !== $width ) {
+			$chars       = $this->safe_integer( $width, 12, 1, 120 );
+			$width_style = 'width: ' . $this->format_float( $chars * self::CHAR_WIDTH_EM ) . 'em; ';
 		}
 
 		$align    = $this->safe_align( isset( $node['align'] ) ? $node['align'] : null );
 		$children = isset( $node['children'] ) && \is_array( $node['children'] ) ? $node['children'] : array();
 
-		return '<span style="' . $flex . '; text-align: ' . $align . '; overflow: hidden">'
-			. $this->render_nodes( $children, $width_chars ) . '</span>';
+		return '<td style="' . $width_style . 'text-align: ' . $align . '; vertical-align: top; padding: 0; overflow: hidden">'
+			. $this->render_nodes( $children, $width_chars ) . '</td>';
+	}
+
+	/**
+	 * Render an image node as a centered <img>.
+	 *
+	 * Image widths are authored in printer dots; mirroring the JS renderer they
+	 * scale by the paper's dot budget so the image keeps the same fraction of
+	 * the receipt width (em-based because Dompdf has no `ch` unit). Local
+	 * WordPress URLs (store logos, uploads) are embedded as data URIs by
+	 * Pdf_Renderer before Dompdf sees the HTML; remote URLs render blank because
+	 * remote access stays disabled.
+	 *
+	 * @param array $node        The image AST node.
+	 * @param int   $width_chars The receipt character width.
+	 *
+	 * @return string The HTML fragment.
+	 */
+	private function render_image( array $node, int $width_chars ): string {
+		$src = trim( isset( $node['src'] ) ? (string) $node['src'] : '' );
+		if ( '' === $src ) {
+			return '';
+		}
+
+		$width_dots = $this->safe_integer( isset( $node['width'] ) ? $node['width'] : null, 200, 1, 2000 );
+		$dot_budget = $width_chars >= self::NARROW_PAPER_THRESHOLD_CHARS ? self::DOT_BUDGET_WIDE : self::DOT_BUDGET_NARROW;
+		$width_em   = $width_dots * $width_chars / $dot_budget * self::CHAR_WIDTH_EM;
+
+		return '<div style="text-align: center; padding: 8px 0">'
+			. '<img src="' . $this->escape_html( $src ) . '" alt="" style="width: ' . $this->format_float( $width_em ) . 'em; max-width: 100%; height: auto" />'
+			. '</div>';
 	}
 
 	/**
