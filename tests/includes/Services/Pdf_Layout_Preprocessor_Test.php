@@ -269,6 +269,23 @@ class Pdf_Layout_Preprocessor_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Style parsing keeps semicolons inside CSS function values.
+	 */
+	public function test_css_function_values_keep_inner_semicolons(): void {
+		// Arrange.
+		$html = '<div><div style="display: grid; grid-template-columns: 1fr 1fr;">'
+			. '<div style="background-image: url(data:image/svg+xml;utf8,%3Csvg%3E%3C/svg%3E); border: 1px solid #111;">logo</div>'
+			. '<div>order</div></div></div>';
+
+		// Act.
+		$out = $this->preprocessor->process( $html );
+
+		// Assert.
+		$this->assertStringContainsString( 'background-image: url(data:image/svg+xml;utf8,%3Csvg%3E%3C/svg%3E)', $out );
+		$this->assertStringContainsString( 'border: 1px solid #111', $out );
+	}
+
+	/**
 	 * Multibyte content survives the DOM round-trip.
 	 */
 	public function test_multibyte_content_survives_round_trip(): void {

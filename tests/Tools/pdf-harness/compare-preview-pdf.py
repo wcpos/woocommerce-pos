@@ -57,25 +57,28 @@ def chrome_screenshot(html_file: pathlib.Path, width: int, out_png: pathlib.Path
         tmp.write(wrapper)
         tmp_path = tmp.name
 
-    subprocess.run(
-        [
-            CHROME,
-            "--headless=new",
-            "--disable-gpu",
-            "--hide-scrollbars",
-            "--force-device-scale-factor=1",
-            f"--window-size={max(width + 40, 800)},4000",
-            f"--screenshot={out_png}",
-            f"file://{tmp_path}",
-        ],
-        check=True,
-        capture_output=True,
-    )
+    try:
+        subprocess.run(
+            [
+                CHROME,
+                "--headless=new",
+                "--disable-gpu",
+                "--hide-scrollbars",
+                "--force-device-scale-factor=1",
+                f"--window-size={max(width + 40, 800)},4000",
+                f"--screenshot={out_png}",
+                f"file://{tmp_path}",
+            ],
+            check=True,
+            capture_output=True,
+        )
 
-    from PIL import Image
+        from PIL import Image
 
-    with Image.open(out_png) as shot:
-        shot.crop((0, 0, width, shot.size[1])).save(out_png)
+        with Image.open(out_png) as shot:
+            shot.crop((0, 0, width, shot.size[1])).save(out_png)
+    finally:
+        pathlib.Path(tmp_path).unlink(missing_ok=True)
 
 
 def pdf_to_png(pdf_file: pathlib.Path, prefix: pathlib.Path) -> list[pathlib.Path]:

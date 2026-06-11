@@ -36,6 +36,61 @@ class Pdf_Renderer {
 	private const FIT_HEIGHT_SEARCH_STEPS = 18;
 
 	/**
+	 * Inline flex/grid compatibility stylesheet for full-document receipts.
+	 *
+	 * Fragment receipts use Pdf_Layout_Preprocessor to rewrite inline flex/grid
+	 * into real tables, but full documents bypass that DOM pass to preserve
+	 * their existing <head>. These rules preserve the preprocessor-era support
+	 * for custom legacy/Template Studio documents that use inline flex/grid.
+	 */
+	private const INLINE_FLEX_GRID_SHIM = '<style>'
+		. '[style*="display: flex"],[style*="display:flex"],'
+		. '[style*="display: grid"],[style*="display:grid"]'
+		. '{display:table !important;width:100% !important;border-spacing:0 !important}'
+		. '[style*="gap: 22px"],[style*="gap:22px"]'
+		. '{border-collapse:separate !important;border-spacing:22px 0 !important}'
+		. '[style*="gap: 24px"],[style*="gap:24px"]'
+		. '{border-collapse:separate !important;border-spacing:24px 0 !important}'
+		. '[style*="gap: 28px"],[style*="gap:28px"]'
+		. '{border-collapse:separate !important;border-spacing:28px 0 !important}'
+		. '[style*="display: flex"]>*,[style*="display:flex"]>*,'
+		. '[style*="display: grid"]>*,[style*="display:grid"]>*'
+		. '{display:table-cell !important;vertical-align:top !important}'
+		. '[style*="flex: 0 0 auto"],[style*="flex:0 0 auto"]'
+		. '{width:1% !important;white-space:nowrap !important}'
+		. '[style*="flex: 0 0 92px"],[style*="flex:0 0 92px"]'
+		. '{width:92px !important}'
+		. '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]'
+		. '{width:280px !important}'
+		. '[style*="grid-template-columns: 1fr 220px"]>*:last-child,'
+		. '[style*="grid-template-columns:1fr 220px"]>*:last-child'
+		. '{width:220px !important}'
+		. '[style*="grid-template-columns: 1fr 320px"]>*:last-child,'
+		. '[style*="grid-template-columns:1fr 320px"]>*:last-child'
+		. '{width:320px !important}'
+		. '[style*="grid-template-columns: 2fr 1fr"]>*:first-child,'
+		. '[style*="grid-template-columns:2fr 1fr"]>*:first-child'
+		. '{width:66.666% !important}'
+		. '[style*="grid-template-columns: 2fr 1fr"]>*:last-child,'
+		. '[style*="grid-template-columns:2fr 1fr"]>*:last-child'
+		. '{width:33.333% !important}'
+		. '[style*="grid-template-columns: 1fr 1fr 1fr"]>*,'
+		. '[style*="grid-template-columns:1fr 1fr 1fr"]>*'
+		. '{width:33.333% !important}'
+		. '[style*="justify-content: space-between"],[style*="justify-content:space-between"]'
+		. '{display:block !important;width:auto !important}'
+		. '[style*="justify-content: space-between"]>*,[style*="justify-content:space-between"]>*'
+		. '{display:inline !important}'
+		. '[style*="justify-content: space-between"]>*:last-child,'
+		. '[style*="justify-content:space-between"]>*:last-child'
+		. '{display:block !important;float:right !important;text-align:right !important}'
+		. '[style*="justify-content: flex-end"],[style*="justify-content:flex-end"]'
+		. '{display:block !important;width:auto !important;text-align:right !important}'
+		. '[style*="justify-content: flex-end"]>*,[style*="justify-content:flex-end"]>*'
+		. '{display:inline-block !important}'
+		. '</style>';
+
+	/**
 	 * Legacy-template flex compatibility stylesheet.
 	 *
 	 * Inline-style flex/grid containers are rewritten into real tables by
@@ -93,10 +148,10 @@ class Pdf_Renderer {
 			if ( false !== stripos( $html, '</head>' ) ) {
 				// Full HTML documents (the legacy-php receipt template) carry
 				// their stylesheet and charset in <head>; the fragment-oriented
-				// preprocessor would discard them, so they only get the
-				// class-based flex shim and keep Dompdf's default page margins,
-				// exactly as before the preprocessor existed.
-				$html = $this->inject_head_styles( $html, self::LEGACY_FLEX_SHIM );
+				// preprocessor would discard them, so they get CSS shims and keep
+				// Dompdf's default page margins, exactly as before the
+				// preprocessor existed.
+				$html = $this->inject_head_styles( $html, self::INLINE_FLEX_GRID_SHIM . self::LEGACY_FLEX_SHIM );
 			} else {
 				$preprocessor = new Pdf_Layout_Preprocessor();
 				$html         = $preprocessor->process( $html );

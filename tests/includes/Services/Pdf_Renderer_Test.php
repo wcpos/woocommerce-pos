@@ -286,6 +286,34 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Full-document receipts keep inline flex/grid compatibility styles.
+	 *
+	 * Custom legacy and Template Studio receipts can be full HTML documents that
+	 * include inline flex/grid layout in their existing head/body markup. They
+	 * must bypass the DOM preprocessor without dropping the CSS shim that Dompdf
+	 * needs for those inline styles.
+	 */
+	public function test_receipt_layout_preserves_inline_flex_grid_shim_for_full_documents(): void {
+		// Arrange.
+		$html = '<html><head><style>.receipt{padding:24px}</style></head>'
+			. '<body><div style="display:flex;justify-content:space-between"><span>Cash</span><span>10.00</span></div>'
+			. '<div style="display:grid;grid-template-columns:1fr 220px"><span>Left</span><span>Right</span></div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert.
+		$this->assertStringContainsString( '.receipt{padding:24px}', $out );
+		$this->assertStringContainsString( '[style*="display:flex"]', $out );
+		$this->assertStringContainsString( '[style*="display:grid"]', $out );
+		$this->assertStringContainsString( '.receipt-header{display:table', $out );
+		$this->assertStringNotContainsString( '@page', $out );
+	}
+
+	/**
 	 * Receipt preparation declares UTF-8 so Dompdf cannot mis-sniff the charset.
 	 *
 	 * Mostly-ASCII receipts with a single multibyte character (an em dash in an

@@ -162,19 +162,22 @@ $template_files = array_merge( (array) glob( $gallery . '/*.html' ), (array) glo
 foreach ( $template_files as $file ) {
 	$slug   = pathinfo( $file, PATHINFO_FILENAME );
 	$is_xml = 'xml' === pathinfo( $file, PATHINFO_EXTENSION );
+	$mm     = (float) ( false !== strpos( $slug, '58mm' ) ? 58 : 80 );
 
 	$template = array(
 		'id'      => $slug,
 		'engine'  => $is_xml ? 'thermal' : 'logicless',
 		'content' => file_get_contents( $file ),
 	);
+	if ( $is_xml ) {
+		$template['paper_width'] = $mm . 'mm';
+	}
 
 	try {
-		// Intermediate HTML (what Dompdf receives, minus renderer-level prep).
-		if ( $is_xml ) {
-			// Mirror Template_Pdf_Service: 58/80mm paper width in CSS px.
-			$mm = (float) ( strpos( $slug, '58mm' ) !== false ? 58 : 80 );
-			$paper_width_px = round( $mm * 72 / 25.4, 2 ) * 4 / 3;
+			// Intermediate HTML (what Dompdf receives, minus renderer-level prep).
+			if ( $is_xml ) {
+				// Mirror Template_Pdf_Service: 58/80mm paper width in CSS px.
+				$paper_width_px = round( $mm * 72 / 25.4, 2 ) * 4 / 3;
 
 			$ast  = ( new Thermal_Renderer() )->build_ast( $template, $order );
 			$html = ( new Html_Thermal_Emitter() )->emit( $ast, array( 'paper_width_px' => $paper_width_px ) );

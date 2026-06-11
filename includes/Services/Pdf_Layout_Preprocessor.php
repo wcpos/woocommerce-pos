@@ -879,8 +879,48 @@ class Pdf_Layout_Preprocessor {
 	 * @return array<string,string>
 	 */
 	private static function parse_styles( string $style ): array {
-		$styles = array();
-		foreach ( explode( ';', $style ) as $declaration ) {
+		$styles       = array();
+		$declarations = array();
+		$buffer       = '';
+		$depth        = 0;
+		$quote        = '';
+		$length       = \strlen( $style );
+
+		for ( $i = 0; $i < $length; $i++ ) {
+			$char = $style[ $i ];
+
+			if ( '' !== $quote ) {
+				$buffer .= $char;
+				if ( $char === $quote && ( 0 === $i || '\\' !== $style[ $i - 1 ] ) ) {
+					$quote = '';
+				}
+				continue;
+			}
+
+			if ( '"' === $char || "'" === $char ) {
+				$quote   = $char;
+				$buffer .= $char;
+				continue;
+			}
+
+			if ( '(' === $char ) {
+				$depth++;
+			} elseif ( ')' === $char && $depth > 0 ) {
+				$depth--;
+			}
+
+			if ( ';' === $char && 0 === $depth ) {
+				$declarations[] = $buffer;
+				$buffer         = '';
+				continue;
+			}
+
+			$buffer .= $char;
+		}
+
+		$declarations[] = $buffer;
+
+		foreach ( $declarations as $declaration ) {
 			$colon = strpos( $declaration, ':' );
 			if ( false === $colon ) {
 				continue;
