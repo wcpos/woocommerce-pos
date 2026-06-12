@@ -15,12 +15,23 @@
  * @author    Paul Kilmurray <paul@kilbot.com.au>
  *
  * @see      http://www.woopos.com.au
+ * @package  WooCommercePOS
  */
 
-// If uninstall not called from WordPress, then exit
+// If uninstall not called from WordPress, then exit.
 if ( ! \defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
 // Analytics identity (landing-experiments spec §5.1: deleted on uninstall).
-delete_option( 'wcpos_anon_id' );
+if ( \function_exists( 'is_multisite' ) && is_multisite() ) {
+	$woocommerce_pos_sites = get_sites( array( 'fields' => 'ids' ) );
+
+	foreach ( $woocommerce_pos_sites as $woocommerce_pos_site_id ) {
+		switch_to_blog( (int) $woocommerce_pos_site_id );
+		delete_option( 'wcpos_anon_id' );
+		restore_current_blog();
+	}
+} else {
+	delete_option( 'wcpos_anon_id' );
+}

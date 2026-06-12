@@ -1,5 +1,14 @@
 export type ConsentChoice = 'allowed' | 'denied';
 
+export interface ConsentCopy {
+	title?: string;
+	body?: string;
+	fields_intro?: string;
+	allow_label?: string;
+	deny_label?: string;
+	privacy_note?: string;
+}
+
 export interface ConsentConfig {
 	/** REST URL for saving the consent choice. */
 	restUrl: string;
@@ -7,6 +16,8 @@ export interface ConsentConfig {
 	dismissUrl: string;
 	/** Nonce for authenticating the REST request. */
 	nonce: string;
+	/** Optional consent prompt copy overrides from the inline config. */
+	copy?: ConsentCopy;
 }
 
 /**
