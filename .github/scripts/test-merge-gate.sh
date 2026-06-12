@@ -203,6 +203,15 @@ run_case "dependabot GitHub Actions group bypasses CodeRabbit but waits for smok
   MOCK_PATCH="" \
   MOCK_CODERABBIT="missing"
 
+run_case "dependabot GitHub Actions group with merge-gate maintenance bypasses CodeRabbit" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps): bump the actions group across 1 directory with 13 updates" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml
+.github/scripts/merge-gate.sh
+.github/scripts/test-merge-gate.sh" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing"
+
 run_case "dependabot GitHub Actions group with extra file still requires CodeRabbit" fail \
   PR_AUTHOR="dependabot[bot]" \
   PR_TITLE="build(deps): bump the actions group across 1 directory with 13 updates" \

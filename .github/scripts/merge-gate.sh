@@ -170,7 +170,7 @@ is_allowed_dependabot_github_actions_pr() {
 
   while IFS= read -r file; do
     case "$file" in
-      .github/workflows/*.yml|.github/workflows/*.yaml)
+      .github/workflows/*.yml|.github/workflows/*.yaml|.github/scripts/merge-gate.sh|.github/scripts/test-merge-gate.sh)
         ;;
       *)
         return 1
