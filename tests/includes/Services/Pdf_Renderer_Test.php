@@ -349,6 +349,29 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Headless full documents get the full-document treatment too.
+	 *
+	 * The renderer previously sniffed `</head>` while the preprocessor sniffed
+	 * `<html`, so an `<html><body>` document without a head fell down the
+	 * fragment path: zero-margin @page markup prepended before `<html>` while
+	 * the preprocessor had already skipped the padding lift.
+	 */
+	public function test_receipt_layout_full_document_without_head_keeps_default_margins(): void {
+		// Arrange.
+		$html = '<html><body><div style="padding: 32px;">Custom receipt</div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert: no fragment-path injections, root padding not lifted.
+		$this->assertStringNotContainsString( '@page', $out );
+		$this->assertStringContainsString( 'padding: 32px', $out );
+	}
+
+	/**
 	 * Receipt preparation declares UTF-8 so Dompdf cannot mis-sniff the charset.
 	 *
 	 * Mostly-ASCII receipts with a single multibyte character (an em dash in an

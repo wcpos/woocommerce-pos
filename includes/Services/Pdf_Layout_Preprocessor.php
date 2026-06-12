@@ -62,6 +62,13 @@ class Pdf_Layout_Preprocessor {
 	private $page_margins_pt = array( 0.0, 0.0, 0.0, 0.0 );
 
 	/**
+	 * Whether the last process() input was a full HTML document.
+	 *
+	 * @var bool
+	 */
+	private $full_document = false;
+
+	/**
 	 * Rewrite flex/grid receipt markup into Dompdf-friendly tables.
 	 *
 	 * Fragments (logicless/thermal output) additionally get their root padding
@@ -75,12 +82,14 @@ class Pdf_Layout_Preprocessor {
 	 */
 	public function process( string $html ): string {
 		$this->page_margins_pt = array( 0.0, 0.0, 0.0, 0.0 );
+		$this->full_document   = false;
 
 		if ( '' === trim( $html ) ) {
 			return $html;
 		}
 
-		$full_document = false !== stripos( $html, '<html' );
+		$full_document       = false !== stripos( $html, '<html' );
+		$this->full_document = $full_document;
 
 		$dom      = new DOMDocument( '1.0', 'UTF-8' );
 		$previous = libxml_use_internal_errors( true );
@@ -134,6 +143,19 @@ class Pdf_Layout_Preprocessor {
 	 */
 	public function get_page_margins_pt(): array {
 		return $this->page_margins_pt;
+	}
+
+	/**
+	 * Whether the last process() input was a full HTML document.
+	 *
+	 * Callers branch on this instead of sniffing the markup themselves, so the
+	 * renderer and the preprocessor can never disagree about which treatment
+	 * (fragment @page margins vs. document-owned page box) an input received.
+	 *
+	 * @return bool
+	 */
+	public function is_full_document(): bool {
+		return $this->full_document;
 	}
 
 	/**

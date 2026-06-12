@@ -70,12 +70,12 @@ class Pdf_Renderer {
 		// template class names), so it is only applied when the caller asks for it
 		// (receipt rendering) rather than for every generic HTML document.
 		if ( ! empty( $opts['receipt_layout'] ) ) {
-			$full_document = false !== stripos( $html, '</head>' );
-
 			$preprocessor = new Pdf_Layout_Preprocessor();
 			$html         = $preprocessor->process( $html );
 
-			if ( $full_document ) {
+			// The preprocessor owns full-document detection so the two sides
+			// can never disagree about which treatment an input received.
+			if ( $preprocessor->is_full_document() ) {
 				// Full HTML documents (the legacy-php receipt template) keep
 				// their own <head> stylesheet, charset and Dompdf's default
 				// page margins; the preprocessor rewrote their flex containers
