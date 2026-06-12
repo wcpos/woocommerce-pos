@@ -641,6 +641,11 @@ jobs:
           echo "Coverage using WP ${{ needs.smoke-test.outputs.wp_version }}, WC ${{ needs.smoke-test.outputs.wc_version }}"
 
       - name: Start WordPress Environment with Xdebug
+        id: wp-env-xdebug
+        # Coverage is informational only. wp-env's image build runs
+        # `pecl install xdebug`, so a pecl.php.net outage would otherwise
+        # fail this job and paint unrelated PRs red.
+        continue-on-error: true
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           timeout_minutes: 5
@@ -648,10 +653,27 @@ jobs:
           retry_wait_seconds: 10
           command: pnpm run wp-env start --xdebug=coverage
 
+      - name: Check coverage environment
+        id: coverage-env
+        run: |
+          if [ "${{ steps.wp-env-xdebug.outcome }}" = "success" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Coverage skipped::wp-env failed to start with Xdebug (commonly a pecl.php.net outage during the xdebug install). Coverage was not collected for this run; unit tests still ran in the test matrix."
+            {
+              echo "## :warning: Coverage skipped"
+              echo "wp-env failed to start with Xdebug (commonly a pecl.php.net outage during the xdebug install)."
+              echo "Coverage was not collected for this run; unit tests still ran in the test matrix."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Run PHPUnit with coverage
+        if: steps.coverage-env.outputs.available == 'true'
         run: pnpm run test:unit:php
 
       - name: Upload coverage report
+        if: steps.coverage-env.outputs.available == 'true'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-report
@@ -659,6 +681,7 @@ jobs:
           retention-days: 7
 
       - name: Upload to Codecov
+        if: steps.coverage-env.outputs.available == 'true'
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v5
         with:
           files: coverage/clover.xml
