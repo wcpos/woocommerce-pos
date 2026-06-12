@@ -264,9 +264,9 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 	/**
 	 * Full-document receipts (legacy-php template) keep their head stylesheet.
 	 *
-	 * The fragment-oriented preprocessor serializes only body children, which
-	 * would silently discard the legacy template's entire <head><style> block;
-	 * full documents must bypass it and only receive the class-based shim.
+	 * Full documents run through the DOM preprocessor in full-document mode:
+	 * their <head> stylesheet survives and Dompdf's default page margins stay
+	 * (no @page override is injected).
 	 */
 	public function test_receipt_layout_preserves_full_document_head(): void {
 		// Arrange.
@@ -281,19 +281,18 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 		// Assert.
 		$this->assertStringContainsString( '.receipt{padding:24px;font-family:serif}', $out );
-		$this->assertStringContainsString( '.receipt-header{display:table', $out );
+		$this->assertStringContainsString( 'Legacy receipt', $out );
 		$this->assertStringNotContainsString( '@page', $out );
 	}
 
 	/**
-	 * Full-document receipts keep inline flex/grid compatibility styles.
+	 * Inline flex/grid inside full documents is rewritten to real tables.
 	 *
-	 * Custom legacy and Template Studio receipts can be full HTML documents that
-	 * include inline flex/grid layout in their existing head/body markup. They
-	 * must bypass the DOM preprocessor without dropping the CSS shim that Dompdf
-	 * needs for those inline styles.
+	 * Custom legacy and Template Studio receipts can be full HTML documents
+	 * that include inline flex/grid layout. The DOM preprocessor rewrites
+	 * those containers in place without dropping the document head.
 	 */
-	public function test_receipt_layout_preserves_inline_flex_grid_shim_for_full_documents(): void {
+	public function test_receipt_layout_rewrites_inline_flex_grid_in_full_documents(): void {
 		// Arrange.
 		$html = '<html><head><style>.receipt{padding:24px}</style></head>'
 			. '<body><div style="display:flex;justify-content:space-between"><span>Cash</span><span>10.00</span></div>'
@@ -307,10 +306,69 @@ class Pdf_Renderer_Test extends \WP_UnitTestCase {
 
 		// Assert.
 		$this->assertStringContainsString( '.receipt{padding:24px}', $out );
-		$this->assertStringContainsString( '[style*="display:flex"]', $out );
-		$this->assertStringContainsString( '[style*="display:grid"]', $out );
-		$this->assertStringContainsString( '.receipt-header{display:table', $out );
+		$this->assertStringContainsString( '<table', $out );
+		$this->assertStringContainsString( 'width: 220px', $out );
+		$this->assertStringNotContainsString( 'display:flex', $out );
+		$this->assertStringNotContainsString( 'display:grid', $out );
 		$this->assertStringNotContainsString( '@page', $out );
+	}
+
+	/**
+	 * Legacy class-based rows become tables with right-aligned values.
+	 *
+	 * The bundled legacy receipt.php declares its flex in a <head> stylesheet;
+	 * the old class-keyed float shim drifted consecutive values (tendered /
+	 * change) leftward, and the hint-less header cells let Dompdf's auto table
+	 * layout inflate the logo cell, pushing the store name toward the center.
+	 */
+	public function test_receipt_layout_rewrites_legacy_classes_in_full_documents(): void {
+		// Arrange.
+		$html = '<html><head><style>.payment-sub{display:flex;justify-content:space-between}</style></head>'
+			. '<body><header class="receipt-header">'
+			. '<div class="logo"><img src="x.png" alt=""></div>'
+			. '<div class="store"><div class="store-name">Store</div></div>'
+			. '<div class="meta"><div class="status-pill"><span class="dot"></span>Completed</div></div>'
+			. '</header>'
+			. '<div class="payments">'
+			. '<div class="payment-sub"><span>Change</span><span class="amount">7,16</span></div>'
+			. '</div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert: header cells carry shrink hints, rows get right-aligned
+		// value cells, and the pill becomes an unbreakable inline-block chip.
+		$this->assertStringContainsString( '<table', $out );
+		$this->assertStringContainsString( 'width: 1%', $out );
+		$this->assertStringContainsString( 'text-align: right', $out );
+		$this->assertStringContainsString( 'display: inline-block', $out );
+		$this->assertStringNotContainsString( 'float', $out );
+	}
+
+	/**
+	 * Headless full documents get the full-document treatment too.
+	 *
+	 * The renderer previously sniffed `</head>` while the preprocessor sniffed
+	 * `<html`, so an `<html><body>` document without a head fell down the
+	 * fragment path: zero-margin @page markup prepended before `<html>` while
+	 * the preprocessor had already skipped the padding lift.
+	 */
+	public function test_receipt_layout_full_document_without_head_keeps_default_margins(): void {
+		// Arrange.
+		$html = '<html><body><div style="padding: 32px;">Custom receipt</div></body></html>';
+
+		// Act.
+		$out = $this->invoke_private_method(
+			'prepare_html_for_render',
+			array( $html, array( 'receipt_layout' => true ) )
+		);
+
+		// Assert: no fragment-path injections, root padding not lifted.
+		$this->assertStringNotContainsString( '@page', $out );
+		$this->assertStringContainsString( 'padding: 32px', $out );
 	}
 
 	/**

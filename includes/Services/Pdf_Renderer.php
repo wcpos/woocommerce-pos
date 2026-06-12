@@ -36,81 +36,6 @@ class Pdf_Renderer {
 	private const FIT_HEIGHT_SEARCH_STEPS = 18;
 
 	/**
-	 * Inline flex/grid compatibility stylesheet for full-document receipts.
-	 *
-	 * Fragment receipts use Pdf_Layout_Preprocessor to rewrite inline flex/grid
-	 * into real tables, but full documents bypass that DOM pass to preserve
-	 * their existing <head>. These rules preserve the preprocessor-era support
-	 * for custom legacy/Template Studio documents that use inline flex/grid.
-	 */
-	private const INLINE_FLEX_GRID_SHIM = '<style>'
-		. '[style*="display: flex"],[style*="display:flex"],'
-		. '[style*="display: grid"],[style*="display:grid"]'
-		. '{display:table !important;width:100% !important;border-spacing:0 !important}'
-		. '[style*="gap: 22px"],[style*="gap:22px"]'
-		. '{border-collapse:separate !important;border-spacing:22px 0 !important}'
-		. '[style*="gap: 24px"],[style*="gap:24px"]'
-		. '{border-collapse:separate !important;border-spacing:24px 0 !important}'
-		. '[style*="gap: 28px"],[style*="gap:28px"]'
-		. '{border-collapse:separate !important;border-spacing:28px 0 !important}'
-		. '[style*="display: flex"]>*,[style*="display:flex"]>*,'
-		. '[style*="display: grid"]>*,[style*="display:grid"]>*'
-		. '{display:table-cell !important;vertical-align:top !important}'
-		. '[style*="flex: 0 0 auto"],[style*="flex:0 0 auto"]'
-		. '{width:1% !important;white-space:nowrap !important}'
-		. '[style*="flex: 0 0 92px"],[style*="flex:0 0 92px"]'
-		. '{width:92px !important}'
-		. '[style*="flex: 0 0 280px"],[style*="flex:0 0 280px"]'
-		. '{width:280px !important}'
-		. '[style*="grid-template-columns: 1fr 220px"]>*:last-child,'
-		. '[style*="grid-template-columns:1fr 220px"]>*:last-child'
-		. '{width:220px !important}'
-		. '[style*="grid-template-columns: 1fr 320px"]>*:last-child,'
-		. '[style*="grid-template-columns:1fr 320px"]>*:last-child'
-		. '{width:320px !important}'
-		. '[style*="grid-template-columns: 2fr 1fr"]>*:first-child,'
-		. '[style*="grid-template-columns:2fr 1fr"]>*:first-child'
-		. '{width:66.666% !important}'
-		. '[style*="grid-template-columns: 2fr 1fr"]>*:last-child,'
-		. '[style*="grid-template-columns:2fr 1fr"]>*:last-child'
-		. '{width:33.333% !important}'
-		. '[style*="grid-template-columns: 1fr 1fr 1fr"]>*,'
-		. '[style*="grid-template-columns:1fr 1fr 1fr"]>*'
-		. '{width:33.333% !important}'
-		. '[style*="justify-content: space-between"],[style*="justify-content:space-between"]'
-		. '{display:block !important;width:auto !important}'
-		. '[style*="justify-content: space-between"]>*,[style*="justify-content:space-between"]>*'
-		. '{display:inline !important}'
-		. '[style*="justify-content: space-between"]>*:last-child,'
-		. '[style*="justify-content:space-between"]>*:last-child'
-		. '{display:block !important;float:right !important;text-align:right !important}'
-		. '[style*="justify-content: flex-end"],[style*="justify-content:flex-end"]'
-		. '{display:block !important;width:auto !important;text-align:right !important}'
-		. '[style*="justify-content: flex-end"]>*,[style*="justify-content:flex-end"]>*'
-		. '{display:inline-block !important}'
-		. '</style>';
-
-	/**
-	 * Legacy-template flex compatibility stylesheet.
-	 *
-	 * Inline-style flex/grid containers are rewritten into real tables by
-	 * Pdf_Layout_Preprocessor, but the bundled legacy receipt.php template uses
-	 * class-based flex from its own embedded stylesheet, which the DOM
-	 * preprocessor leaves alone. These rules re-express those known classes as
-	 * tables/floats. `!important` wins over the template's stylesheet.
-	 */
-	private const LEGACY_FLEX_SHIM = '<style>'
-		. '.receipt-header{display:table !important;width:100% !important;border-spacing:0 !important}'
-		. '.receipt-header>*{display:table-cell !important;vertical-align:top !important}'
-		. '.totals-row,.payment-row,.payment-sub,.card .row'
-		. '{display:block !important;width:auto !important}'
-		. '.totals-row>*,.payment-row>*,.payment-sub>*,.card .row>*{display:inline !important}'
-		. '.totals-row>*:last-child,.payment-row>*:last-child,'
-		. '.payment-sub>*:last-child,.card .row>*:last-child'
-		. '{display:block !important;float:right !important;text-align:right !important}'
-		. '</style>';
-
-	/**
 	 * Render an HTML document to PDF bytes.
 	 *
 	 * @param string $html HTML document to render.
@@ -145,43 +70,44 @@ class Pdf_Renderer {
 		// template class names), so it is only applied when the caller asks for it
 		// (receipt rendering) rather than for every generic HTML document.
 		if ( ! empty( $opts['receipt_layout'] ) ) {
-			if ( false !== stripos( $html, '</head>' ) ) {
-				// Full HTML documents (the legacy-php receipt template) carry
-				// their stylesheet and charset in <head>; the fragment-oriented
-				// preprocessor would discard them, so they get CSS shims and keep
-				// Dompdf's default page margins, exactly as before the
-				// preprocessor existed.
-				$html = $this->inject_head_styles( $html, self::INLINE_FLEX_GRID_SHIM . self::LEGACY_FLEX_SHIM );
-			} else {
-				$preprocessor = new Pdf_Layout_Preprocessor();
-				$html         = $preprocessor->process( $html );
+			$preprocessor = new Pdf_Layout_Preprocessor();
+			$html         = $preprocessor->process( $html );
 
-				// Match the browser preview: the template's own root padding is
-				// the only whitespace around the receipt, so it replaces Dompdf's
-				// default 1.2cm page margin (and keeps later pages consistent
-				// with page one).
-				$margins = $preprocessor->get_page_margins_pt();
-
-				$page_style = '<style>@page { margin: '
-					. implode(
-						' ',
-						array_map(
-							static function ( float $pt ): string {
-								return self::css_number( $pt ) . 'pt';
-							},
-							$margins
-						)
-					)
-					. '; } body { margin: 0; padding: 0; }</style>';
-
-				// Receipts are UTF-8 fragments with no charset declaration;
-				// without one Dompdf sniffs the encoding and mostly-ASCII
-				// receipts with a stray multibyte character (e.g. an em dash)
-				// get mis-decoded.
-				$charset_meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">';
-
-				$html = $this->inject_head_styles( $html, $charset_meta . $page_style . self::LEGACY_FLEX_SHIM );
+			// The preprocessor owns full-document detection so the two sides
+			// can never disagree about which treatment an input received.
+			if ( $preprocessor->is_full_document() ) {
+				// Full HTML documents (the legacy-php receipt template) keep
+				// their own <head> stylesheet, charset and Dompdf's default
+				// page margins; the preprocessor rewrote their flex containers
+				// (inline-styled and known legacy classes) in place.
+				return $this->embed_local_images( $html );
 			}
+
+			// Match the browser preview: the template's own root padding is
+			// the only whitespace around the receipt, so it replaces Dompdf's
+			// default 1.2cm page margin (and keeps later pages consistent
+			// with page one).
+			$margins = $preprocessor->get_page_margins_pt();
+
+			$page_style = '<style>@page { margin: '
+				. implode(
+					' ',
+					array_map(
+						static function ( float $pt ): string {
+							return self::css_number( $pt ) . 'pt';
+						},
+						$margins
+					)
+				)
+				. '; } body { margin: 0; padding: 0; }</style>';
+
+			// Receipts are UTF-8 fragments with no charset declaration;
+			// without one Dompdf sniffs the encoding and mostly-ASCII
+			// receipts with a stray multibyte character (e.g. an em dash)
+			// get mis-decoded.
+			$charset_meta = '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">';
+
+			$html = $this->inject_head_styles( $html, $charset_meta . $page_style );
 		}
 
 		return $this->embed_local_images( $html );

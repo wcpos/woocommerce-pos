@@ -62,7 +62,19 @@ class Pdf_Layout_Preprocessor {
 	private $page_margins_pt = array( 0.0, 0.0, 0.0, 0.0 );
 
 	/**
+	 * Whether the last process() input was a full HTML document.
+	 *
+	 * @var bool
+	 */
+	private $full_document = false;
+
+	/**
 	 * Rewrite flex/grid receipt markup into Dompdf-friendly tables.
+	 *
+	 * Fragments (logicless/thermal output) additionally get their root padding
+	 * lifted into @page margins. Full documents (the legacy-php template) keep
+	 * their <head> stylesheet and page box untouched: only the in-body flex
+	 * containers and known legacy classes are rewritten.
 	 *
 	 * @param string $html Receipt HTML (fragment or full document).
 	 *
@@ -70,10 +82,14 @@ class Pdf_Layout_Preprocessor {
 	 */
 	public function process( string $html ): string {
 		$this->page_margins_pt = array( 0.0, 0.0, 0.0, 0.0 );
+		$this->full_document   = false;
 
 		if ( '' === trim( $html ) ) {
 			return $html;
 		}
+
+		$full_document       = false !== stripos( $html, '<html' );
+		$this->full_document = $full_document;
 
 		$dom      = new DOMDocument( '1.0', 'UTF-8' );
 		$previous = libxml_use_internal_errors( true );
@@ -92,8 +108,23 @@ class Pdf_Layout_Preprocessor {
 			return $html;
 		}
 
-		$this->lift_root_padding( $body );
+		if ( ! $full_document ) {
+			$this->lift_root_padding( $body );
+		}
 		$this->transform_children( $body );
+
+		if ( $full_document ) {
+			// Serialize the whole document so <head> styles survive, dropping
+			// the synthetic XML prolog the UTF-8 pinning added.
+			foreach ( $dom->childNodes as $node ) {
+				if ( XML_PI_NODE === $node->nodeType ) {
+					$dom->removeChild( $node );
+					break;
+				}
+			}
+
+			return (string) $dom->saveHTML();
+		}
 
 		$out = '';
 		foreach ( $body->childNodes as $child ) {
@@ -112,6 +143,19 @@ class Pdf_Layout_Preprocessor {
 	 */
 	public function get_page_margins_pt(): array {
 		return $this->page_margins_pt;
+	}
+
+	/**
+	 * Whether the last process() input was a full HTML document.
+	 *
+	 * Callers branch on this instead of sniffing the markup themselves, so the
+	 * renderer and the preprocessor can never disagree about which treatment
+	 * (fragment @page margins vs. document-owned page box) an input received.
+	 *
+	 * @return bool
+	 */
+	public function is_full_document(): bool {
+		return $this->full_document;
 	}
 
 	/**
@@ -193,6 +237,10 @@ class Pdf_Layout_Preprocessor {
 		}
 
 		if ( 'flex' !== $display && 'grid' !== $display ) {
+			// The bundled legacy-php template declares its flex in a <head>
+			// stylesheet rather than inline styles; its class names are stable,
+			// so they get the same table treatment, keyed by class.
+			$this->convert_legacy_classes( $element );
 			return;
 		}
 
@@ -456,7 +504,7 @@ class Pdf_Layout_Preprocessor {
 		}
 
 		$children = self::element_children( $element );
-		foreach ( $children as $i => $child ) {
+		foreach ( $children as $child ) {
 			$child_styles = self::parse_styles( $child->getAttribute( 'style' ) );
 			self::strip_flex_child_styles( $child_styles );
 			// Natural baseline alignment, not vertical-align:middle — Dompdf
@@ -466,11 +514,235 @@ class Pdf_Layout_Preprocessor {
 			// flex centering (Dompdf ignores length values for vertical-align,
 			// so a fine-tuned offset is not an option).
 			$child_styles['display'] = 'inline-block';
-			if ( $i > 0 && $gap[1] > 0 ) {
-				$child_styles['margin-left'] = self::css_number( $gap[1] ) . 'px';
+			// Mirror the flex gap after every child that has following content
+			// — a chip's label may be a bare text node, which margin-left on
+			// the next element child could never reach.
+			if ( $gap[1] > 0 && self::has_following_content( $child ) ) {
+				$child_styles['margin-right'] = self::css_number( $gap[1] ) . 'px';
 			}
 			self::set_styles( $child, $child_styles );
 		}
+	}
+
+	/**
+	 * Rewrite the bundled legacy template's class-based flex containers.
+	 *
+	 * The legacy receipt.php keeps its layout in a <head> stylesheet, which the
+	 * inline-style transforms cannot see. Its class names are stable, so the
+	 * known containers are wrapped IN PLACE: the element keeps its class (the
+	 * stylesheet's colors/spacing still apply; its display:flex degrades to
+	 * block under Dompdf) and the children move into a real table inside it.
+	 * Without width hints Dompdf's auto table layout distributes leftover width
+	 * across all cells, inflating the logo cell and drifting floated values.
+	 *
+	 * @param DOMElement $element The candidate element.
+	 */
+	private function convert_legacy_classes( DOMElement $element ): void {
+		if ( self::has_class( $element, 'receipt-header' ) ) {
+			$this->wrap_legacy_header( $element );
+			return;
+		}
+
+		if ( self::has_class( $element, 'status-pill' ) ) {
+			$this->convert_legacy_status_pill( $element );
+			return;
+		}
+
+		$is_label_value_row = self::has_class( $element, 'totals-row' )
+			|| self::has_class( $element, 'payment-row' )
+			|| self::has_class( $element, 'payment-sub' )
+			|| ( self::has_class( $element, 'row' ) && self::has_ancestor_class( $element, 'card' ) );
+
+		if ( $is_label_value_row ) {
+			$this->wrap_legacy_label_value_row( $element );
+		}
+	}
+
+	/**
+	 * Convert the legacy status pill into an unbreakable inline-block chip.
+	 *
+	 * The stylesheet's inline-flex/gap are invisible here, so the chip gets
+	 * inline display:inline-block (winning over the stylesheet), the dot keeps
+	 * natural baseline alignment (Dompdf raises vertical-align:middle to cap
+	 * height), and the flex gap is mirrored as a margin on element children
+	 * that have following content (the label is a bare text node).
+	 *
+	 * @param DOMElement $element The .status-pill element.
+	 */
+	private function convert_legacy_status_pill( DOMElement $element ): void {
+		self::append_style( $element, 'display', 'inline-block' );
+
+		foreach ( self::element_children( $element ) as $child ) {
+			$child_styles            = self::parse_styles( $child->getAttribute( 'style' ) );
+			$child_styles['display'] = 'inline-block';
+			if ( self::has_following_content( $child ) ) {
+				// The stylesheet's flex gap (6px), mirrored from receipt.php.
+				$child_styles['margin-right'] = '6px';
+			}
+			self::set_styles( $child, $child_styles );
+		}
+
+		// Non-breaking whitespace: a flex chip never wraps, and Dompdf's
+		// word-based minimum width would otherwise wrap it inside
+		// shrink-to-content table cells.
+		foreach ( $element->childNodes as $node ) {
+			if ( XML_TEXT_NODE === $node->nodeType && null !== $node->nodeValue ) {
+				$node->nodeValue = (string) preg_replace( '/\s+/u', "\u{00A0}", trim( (string) $node->nodeValue ) );
+			}
+		}
+	}
+
+	/**
+	 * Wrap the legacy header's logo/store/meta children in a hinted table.
+	 *
+	 * @param DOMElement $element The .receipt-header element.
+	 */
+	private function wrap_legacy_header( DOMElement $element ): void {
+		$children = self::element_children( $element );
+		if ( 0 === \count( $children ) ) {
+			return;
+		}
+
+		$cells = array();
+		foreach ( $children as $i => $child ) {
+			$cell_styles = array( 'vertical-align' => 'top' );
+			if ( $i > 0 ) {
+				// The stylesheet's flex gap (22px) — gaps are unreachable from
+				// class-based CSS here, so the bundled value is mirrored.
+				$cell_styles['padding-left'] = '22px';
+			}
+
+			// .logo / .meta shrink to content like flex 0 0 auto; the .store
+			// column stays width-less and absorbs the leftover width.
+			if ( ! self::has_class( $child, 'store' ) ) {
+				$cell_styles['width']       = '1%';
+				$cell_styles['white-space'] = 'nowrap';
+			}
+
+			$cells[] = $cell_styles;
+		}
+
+		$this->wrap_children_in_row_table( $element, $children, $cells );
+	}
+
+	/**
+	 * Wrap a legacy label/value row in a table with a right-aligned last cell.
+	 *
+	 * Replaces the old float-right shim for .totals-row/.payment-row/
+	 * .payment-sub/.card .row: Dompdf stacks consecutive floats leftward,
+	 * drifting the lower values (tendered/change) off the edge.
+	 *
+	 * @param DOMElement $element The row element.
+	 */
+	private function wrap_legacy_label_value_row( DOMElement $element ): void {
+		$children = self::element_children( $element );
+		if ( \count( $children ) < 2 ) {
+			return;
+		}
+
+		$last  = \count( $children ) - 1;
+		$cells = array();
+		foreach ( $children as $i => $child ) {
+			$cell_styles = array( 'vertical-align' => 'top' );
+			if ( $i === $last ) {
+				$cell_styles['text-align'] = 'right';
+			}
+			$cells[] = $cell_styles;
+		}
+
+		$this->wrap_children_in_row_table( $element, $children, $cells );
+	}
+
+	/**
+	 * Move an element's children into a single-row table inside the element.
+	 *
+	 * The container element itself is preserved so its class-based styling
+	 * (padding, borders, typography) keeps applying.
+	 *
+	 * @param DOMElement   $element  The container element.
+	 * @param DOMElement[] $children The container's element children.
+	 * @param array[]      $cells    Style maps for each cell, by child index.
+	 */
+	private function wrap_children_in_row_table( DOMElement $element, array $children, array $cells ): void {
+		$document = $element->ownerDocument;
+
+		$table = $document->createElement( 'table' );
+		$table->setAttribute( 'style', 'width: 100%; border-spacing: 0' );
+		$row = $document->createElement( 'tr' );
+		$table->appendChild( $row );
+
+		foreach ( $children as $i => $child ) {
+			$cell       = $document->createElement( 'td' );
+			$style_text = self::build_styles( isset( $cells[ $i ] ) ? $cells[ $i ] : array() );
+			if ( '' !== $style_text ) {
+				$cell->setAttribute( 'style', $style_text );
+			}
+			$row->appendChild( $cell );
+			$cell->appendChild( $child );
+		}
+
+		// Drop leftover inter-child whitespace so it cannot form an extra line
+		// box above the table.
+		foreach ( iterator_to_array( $element->childNodes ) as $node ) {
+			if ( XML_TEXT_NODE === $node->nodeType && '' === trim( (string) $node->nodeValue ) ) {
+				$element->removeChild( $node );
+			}
+		}
+
+		$element->appendChild( $table );
+	}
+
+	/**
+	 * Whether a node is followed by rendered content (element or real text).
+	 *
+	 * Whitespace-only and NBSP-only text nodes do not count: chip edge
+	 * whitespace is trimmed to empty nodes that must not attract gap margins.
+	 *
+	 * @param \DOMNode $node The node.
+	 *
+	 * @return bool
+	 */
+	private static function has_following_content( \DOMNode $node ): bool {
+		for ( $next = $node->nextSibling; null !== $next; $next = $next->nextSibling ) {
+			if ( $next instanceof DOMElement ) {
+				return true;
+			}
+			if ( XML_TEXT_NODE === $next->nodeType && 1 === preg_match( '/[^\s\x{00A0}]/u', (string) $next->nodeValue ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether an element carries a class name.
+	 *
+	 * @param DOMElement $element The element.
+	 * @param string     $name    The class name.
+	 *
+	 * @return bool
+	 */
+	private static function has_class( DOMElement $element, string $name ): bool {
+		return \in_array( $name, preg_split( '/\s+/', trim( $element->getAttribute( 'class' ) ) ), true );
+	}
+
+	/**
+	 * Whether any ancestor element carries a class name.
+	 *
+	 * @param DOMElement $element The element.
+	 * @param string     $name    The class name.
+	 *
+	 * @return bool
+	 */
+	private static function has_ancestor_class( DOMElement $element, string $name ): bool {
+		for ( $parent = $element->parentNode; $parent instanceof DOMElement; $parent = $parent->parentNode ) {
+			if ( self::has_class( $parent, $name ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

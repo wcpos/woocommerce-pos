@@ -225,6 +225,72 @@ class Pdf_Layout_Preprocessor_Test extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The legacy header's children get a hinted table inside the header.
+	 *
+	 * Without width hints Dompdf's auto table layout distributes leftover
+	 * width across all cells, inflating the logo cell and pushing the store
+	 * name toward the center when the meta column is narrow.
+	 */
+	public function test_legacy_receipt_header_becomes_hinted_table(): void {
+		// Arrange.
+		$html = '<div><header class="receipt-header">'
+			. '<div class="logo"><img src="x.png" alt=""></div>'
+			. '<div class="store"><div class="store-name">Store</div></div>'
+			. '<div class="meta">#123</div>'
+			. '</header></div>';
+
+		// Act.
+		$out = $this->preprocessor->process( $html );
+
+		// Assert: header element (and its class styling) survives; logo and
+		// meta cells shrink to content; the store cell absorbs the leftover.
+		$this->assertStringContainsString( 'class="receipt-header"', $out );
+		$this->assertStringContainsString( '<table', $out );
+		$this->assertEquals( 2, substr_count( $out, 'width: 1%' ) );
+		$this->assertEquals( 2, substr_count( $out, 'padding-left: 22px' ) );
+	}
+
+	/**
+	 * Legacy label/value rows become tables, not floats.
+	 *
+	 * Dompdf stacks consecutive floated values leftward, drifting the lower
+	 * rows (tendered/change) off the right edge.
+	 */
+	public function test_legacy_payment_sub_becomes_right_aligned_table(): void {
+		// Arrange.
+		$html = '<div><div class="payment-sub"><span>Change</span><span class="amount">7,16</span></div></div>';
+
+		// Act.
+		$out = $this->preprocessor->process( $html );
+
+		// Assert.
+		$this->assertStringContainsString( 'class="payment-sub"', $out );
+		$this->assertStringContainsString( '<table', $out );
+		$this->assertStringContainsString( 'text-align: right', $out );
+		$this->assertStringNotContainsString( 'float', $out );
+	}
+
+	/**
+	 * The legacy status pill becomes an unbreakable inline-block chip.
+	 *
+	 * Its inline-flex and 6px gap live in the <head> stylesheet, which Dompdf
+	 * cannot honor: without inline display the fixed-size dot collapses to
+	 * nothing, and without the mirrored gap the dot touches the label.
+	 */
+	public function test_legacy_status_pill_becomes_inline_block_chip(): void {
+		// Arrange.
+		$html = '<div><div class="status-pill"><span class="dot"></span>Completed</div></div>';
+
+		// Act.
+		$out = $this->preprocessor->process( $html );
+
+		// Assert.
+		$this->assertEquals( 2, substr_count( $out, 'display: inline-block' ) );
+		$this->assertStringContainsString( 'margin-right: 6px', $out );
+		$this->assertStringContainsString( 'Completed', $out );
+	}
+
+	/**
 	 * The root element's padding is lifted and reported as @page margins in pt.
 	 */
 	public function test_root_padding_is_lifted_into_page_margins(): void {
