@@ -1,5 +1,7 @@
 <?php
 /**
+ * Tests for the Anon ID service.
+ *
  * @package WCPOS\WooCommercePOS\Tests\Services
  */
 
@@ -9,21 +11,30 @@ use WCPOS\WooCommercePOS\Services\Anon_ID;
 use WP_UnitTestCase;
 
 /**
- * @internal
+ * Tests the anonymous analytics identity service.
  *
- * @coversNothing
+ * @covers \WCPOS\WooCommercePOS\Services\Anon_ID
  */
 class Test_Anon_ID extends WP_UnitTestCase {
+	/**
+	 * Set up test fixtures.
+	 */
 	public function setUp(): void {
 		parent::setUp();
 		delete_option( Anon_ID::OPTION );
 	}
 
+	/**
+	 * Tear down test fixtures.
+	 */
 	public function tearDown(): void {
 		delete_option( Anon_ID::OPTION );
 		parent::tearDown();
 	}
 
+	/**
+	 * Asserts that get() creates and persists a v4 UUID when no value is stored.
+	 */
 	public function test_get_with_no_stored_value_creates_and_persists_uuid4(): void {
 		$service = new Anon_ID();
 		$id      = $service->get();
@@ -36,6 +47,9 @@ class Test_Anon_ID extends WP_UnitTestCase {
 		$this->assertSame( $id, get_option( Anon_ID::OPTION ), 'generated id must be persisted' );
 	}
 
+	/**
+	 * Asserts that repeated get() calls return the same UUID.
+	 */
 	public function test_get_with_existing_value_is_stable_across_calls(): void {
 		$service = new Anon_ID();
 		$first   = $service->get();
@@ -46,6 +60,9 @@ class Test_Anon_ID extends WP_UnitTestCase {
 		$this->assertSame( $first, $third );
 	}
 
+	/**
+	 * Asserts that rotate() replaces the stored UUID with a new one.
+	 */
 	public function test_rotate_replaces_the_stored_uuid(): void {
 		$service = new Anon_ID();
 		$old     = $service->get();
@@ -56,6 +73,9 @@ class Test_Anon_ID extends WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/^[0-9a-f-]{36}$/', $new );
 	}
 
+	/**
+	 * Asserts that delete() removes the stored option.
+	 */
 	public function test_delete_removes_the_option(): void {
 		$service = new Anon_ID();
 		$service->get();
@@ -64,6 +84,9 @@ class Test_Anon_ID extends WP_UnitTestCase {
 		$this->assertFalse( get_option( Anon_ID::OPTION ) );
 	}
 
+	/**
+	 * Asserts that get() after delete() generates a fresh UUID.
+	 */
 	public function test_get_after_delete_generates_a_fresh_uuid(): void {
 		$service = new Anon_ID();
 		$old     = $service->get();

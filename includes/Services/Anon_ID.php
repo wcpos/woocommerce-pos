@@ -32,7 +32,10 @@ class Anon_ID {
 		if ( ! \is_string( $id ) || '' === $id ) {
 			$id = wp_generate_uuid4();
 			// Autoload off: only the landing page (and WP-CLI) ever reads it.
-			add_option( self::OPTION, $id, '', false );
+			if ( ! add_option( self::OPTION, $id, '', false ) ) {
+				// Lost a first-load race — return the persisted winner, never a stray id.
+				$id = (string) get_option( self::OPTION );
+			}
 		}
 
 		return $id;

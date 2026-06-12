@@ -119,6 +119,9 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 		return (int) $method->invoke( new Landing_Profile() );
 	}
 
+	/**
+	 * Asserts anon_id is present regardless of consent state.
+	 */
 	public function test_functional_data_carries_anon_id_for_all_consent_states(): void {
 		delete_option( \WCPOS\WooCommercePOS\Services\Anon_ID::OPTION );
 
@@ -132,6 +135,9 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Asserts schema_version is 2 after the anon_id addition.
+	 */
 	public function test_functional_data_schema_version_is_bumped_to_2(): void {
 		$profile = new Landing_Profile();
 		$data    = $profile->get_functional_data();
@@ -139,6 +145,9 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 		$this->assertSame( 2, $data['schema_version'] );
 	}
 
+	/**
+	 * Asserts the same anon_id is returned on successive calls (stable across page-loads).
+	 */
 	public function test_functional_data_anon_id_is_stable_across_pageloads(): void {
 		$profile = new Landing_Profile();
 
