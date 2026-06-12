@@ -43,23 +43,21 @@ $i18n = $receipt_data['i18n'] ?? array();
 		}
 
 		/* Header */
+		/*
+		 * Layout-critical flex/gap properties live inline on the markup below:
+		 * the PDF renderer's Pdf_Layout_Preprocessor rewrites inline flex/grid
+		 * into Dompdf-safe tables (Dompdf has no flexbox engine), and inline
+		 * styles are the only declarations it can see.
+		 */
 		.receipt-header {
-			display: flex;
-			align-items: flex-start;
-			gap: 22px;
 			padding-bottom: 18px;
 			border-bottom: 2px solid #111827;
 		}
-		.receipt-header .logo { flex: 0 0 auto; }
 		.receipt-header .logo img { width: 88px; height: auto; display: block; }
-		.receipt-header .store { flex: 1 1 auto; min-width: 0; }
 		.receipt-header .store-name { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
 		.receipt-header .store-info { color: #6b7280; font-size: 12px; margin-top: 2px; }
-		.receipt-header .meta { flex: 0 0 auto; text-align: right; }
+		.receipt-header .meta { text-align: right; }
 		.status-pill {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
 			padding: 4px 10px;
 			background: #f3f4f6;
 			color: #1f2937;
@@ -97,7 +95,7 @@ $i18n = $receipt_data['i18n'] ?? array();
 
 		/* Totals */
 		.totals { margin-top: 20px; max-width: 280px; margin-left: auto; font-size: 13px; }
-		.totals-row { display: flex; justify-content: space-between; padding: 2px 0; }
+		.totals-row { padding: 2px 0; }
 		.totals-row .label { color: #6b7280; }
 		.totals-row .amount { font-variant-numeric: tabular-nums; }
 		.totals-divider { border-top: 2px solid #111827; margin: 8px 0; }
@@ -110,7 +108,7 @@ $i18n = $receipt_data['i18n'] ?? array();
 		.card { margin-top: 20px; padding: 14px 16px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
 		.card-label { font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700; }
 		.card.refunds { background: #fff1f2; border: 1px solid #fecdd3; }
-		.card.refunds .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+		.card.refunds .row { padding: 4px 0; }
 		.card.refunds .row .amount { font-variant-numeric: tabular-nums; font-weight: 700; }
 		.card.refunds .reason { color: #6b7280; font-size: 11px; }
 		.card.note { background: #fffbeb; border: 1px solid #fde68a; }
@@ -119,9 +117,9 @@ $i18n = $receipt_data['i18n'] ?? array();
 		/* Payments */
 		.payments { margin-top: 24px; padding-top: 18px; border-top: 1px solid #e5e7eb; }
 		.payments-label { font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700; }
-		.payment-row { display: flex; justify-content: space-between; padding: 2px 0; }
+		.payment-row { padding: 2px 0; }
 		.payment-row .amount { font-variant-numeric: tabular-nums; }
-		.payment-sub { font-size: 11px; color: #6b7280; padding-left: 4px; display: flex; justify-content: space-between; }
+		.payment-sub { font-size: 11px; color: #6b7280; padding-left: 4px; }
 		.payment-sub .amount { font-variant-numeric: tabular-nums; }
 
 		/* Footer */
@@ -141,14 +139,14 @@ $i18n = $receipt_data['i18n'] ?? array();
 <div class="receipt">
 
 	<!-- Header -->
-	<header class="receipt-header">
+	<header class="receipt-header" style="display: flex; align-items: flex-start; gap: 22px;">
 		<?php if ( ! empty( $receipt_data['store']['logo'] ) ) : ?>
-			<div class="logo">
+			<div class="logo" style="flex: 0 0 auto;">
 				<img src="<?php echo esc_url( $receipt_data['store']['logo'] ); ?>" alt="<?php echo esc_attr( $receipt_data['store']['name'] ?? '' ); ?>">
 			</div>
 		<?php endif; ?>
 
-		<div class="store">
+		<div class="store" style="flex: 1 1 auto; min-width: 0;">
 			<div class="store-name"><?php echo esc_html( $receipt_data['store']['name'] ?? get_bloginfo( 'name' ) ); ?></div>
 			<?php if ( ! empty( $receipt_data['store']['address_lines'] ) ) : ?>
 				<?php foreach ( $receipt_data['store']['address_lines'] as $address_line ) : ?>
@@ -170,14 +168,14 @@ $i18n = $receipt_data['i18n'] ?? array();
 			<?php endif; ?>
 		</div>
 
-		<div class="meta">
+		<div class="meta" style="flex: 0 0 auto;">
 			<?php
 			$status_label = $receipt_data['order']['status_label'] ?? '';
 			$wc_status    = $receipt_data['order']['wc_status'] ?? '';
 			$status_text  = '' !== $status_label ? $status_label : $wc_status;
 			?>
 			<?php if ( '' !== $status_text ) : ?>
-				<div class="status-pill"><span class="dot"></span><?php echo esc_html( $status_text ); ?></div>
+				<div class="status-pill" style="display: inline-flex; align-items: center; gap: 6px;"><span class="dot"></span><?php echo esc_html( $status_text ); ?></div>
 			<?php endif; ?>
 
 			<?php
@@ -283,14 +281,14 @@ $i18n = $receipt_data['i18n'] ?? array();
 
 	<!-- Totals -->
 	<div class="totals">
-		<div class="totals-row">
+		<div class="totals-row" style="display: flex; justify-content: space-between;">
 			<span class="label"><?php echo esc_html( $i18n['subtotal'] ?? __( 'Subtotal', 'woocommerce' ) ); ?></span>
 			<span class="amount"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['subtotal'] ?? 0, $currency_args ) ); ?></span>
 		</div>
 
 		<?php $tax_total = $receipt_data['totals']['tax_total'] ?? 0; ?>
 		<?php if ( ! empty( $tax_total ) ) : ?>
-			<div class="totals-row">
+			<div class="totals-row" style="display: flex; justify-content: space-between;">
 				<span class="label"><?php echo esc_html( $i18n['total_tax'] ?? __( 'Total Tax', 'woocommerce' ) ); ?></span>
 				<span class="amount"><?php echo wp_kses_post( wc_price( $tax_total, $currency_args ) ); ?></span>
 			</div>
@@ -298,18 +296,18 @@ $i18n = $receipt_data['i18n'] ?? array();
 
 		<div class="totals-divider"></div>
 
-		<div class="totals-row grand">
+		<div class="totals-row grand" style="display: flex; justify-content: space-between;">
 			<span class="label"><?php echo esc_html( $i18n['total'] ?? __( 'Total', 'woocommerce' ) ); ?></span>
 			<span class="amount"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['total'] ?? 0, $currency_args ) ); ?></span>
 		</div>
 
 		<?php $refund_total = $receipt_data['totals']['refund_total'] ?? 0; ?>
 		<?php if ( ! empty( $refund_total ) ) : ?>
-			<div class="totals-row refund">
+			<div class="totals-row refund" style="display: flex; justify-content: space-between;">
 				<span><?php echo esc_html( $i18n['refunded'] ?? __( 'Refunded', 'woocommerce' ) ); ?></span>
 				<span class="amount">-<?php echo wp_kses_post( wc_price( $refund_total, $currency_args ) ); ?></span>
 			</div>
-			<div class="totals-row net">
+			<div class="totals-row net" style="display: flex; justify-content: space-between;">
 				<span><?php echo esc_html( $i18n['net_total'] ?? __( 'Net Total', 'woocommerce-pos' ) ); ?></span>
 				<span class="amount"><?php echo wp_kses_post( wc_price( $receipt_data['totals']['net_total'] ?? 0, $currency_args ) ); ?></span>
 			</div>
@@ -321,7 +319,7 @@ $i18n = $receipt_data['i18n'] ?? array();
 		<div class="card refunds">
 			<div class="card-label"><?php echo esc_html( $i18n['returned_items'] ?? __( 'Returned Items', 'woocommerce-pos' ) ); ?></div>
 			<?php foreach ( $receipt_data['refunds'] as $refund ) : ?>
-				<div class="row">
+				<div class="row" style="display: flex; justify-content: space-between; gap: 12px;">
 					<div>
 						<strong>#<?php echo esc_html( (string) ( $refund['id'] ?? '' ) ); ?></strong>
 						<?php if ( ! empty( $refund['date']['datetime'] ) ) : ?>
@@ -351,16 +349,16 @@ $i18n = $receipt_data['i18n'] ?? array();
 		<div class="payments">
 			<div class="payments-label"><?php echo esc_html( $i18n['paid'] ?? /* translators: Receipt payment-section heading for amounts already paid by the customer. */ __( 'Paid', 'woocommerce-pos' ) ); ?></div>
 			<?php foreach ( $receipt_data['payments'] as $payment ) : ?>
-				<div class="payment-row">
+				<div class="payment-row" style="display: flex; justify-content: space-between;">
 					<span><strong><?php echo esc_html( $payment['method_title'] ?? '' ); ?></strong></span>
 					<span class="amount"><?php echo wp_kses_post( wc_price( $payment['amount'] ?? 0, $currency_args ) ); ?></span>
 				</div>
 				<?php if ( ! empty( $payment['tendered'] ) && (float) $payment['tendered'] > 0 ) : ?>
-					<div class="payment-sub">
+					<div class="payment-sub" style="display: flex; justify-content: space-between;">
 						<span><?php echo esc_html( $i18n['tendered'] ?? /* translators: Standalone receipt/payment label meaning money received from the customer at checkout. Use the target-language equivalent of "Received" as a concise label; do not use wording that means "Amount paid/deposited", and do not use procurement tender/bid language. */ __( 'Tendered', 'woocommerce-pos' ) ); ?></span>
 						<span class="amount"><?php echo wp_kses_post( wc_price( $payment['tendered'], $currency_args ) ); ?></span>
 					</div>
-					<div class="payment-sub">
+					<div class="payment-sub" style="display: flex; justify-content: space-between;">
 						<span><?php echo esc_html( $i18n['change'] ?? /* translators: Receipt/payment label for cash returned to the customer when the received amount is greater than the total; not "change" meaning modify. */ __( 'Change', 'woocommerce-pos' ) ); ?></span>
 						<span class="amount"><?php echo wp_kses_post( wc_price( $payment['change'] ?? 0, $currency_args ) ); ?></span>
 					</div>

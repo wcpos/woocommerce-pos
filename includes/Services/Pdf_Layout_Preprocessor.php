@@ -482,7 +482,7 @@ class Pdf_Layout_Preprocessor {
 		}
 
 		$children = self::element_children( $element );
-		foreach ( $children as $i => $child ) {
+		foreach ( $children as $child ) {
 			$child_styles = self::parse_styles( $child->getAttribute( 'style' ) );
 			self::strip_flex_child_styles( $child_styles );
 			// Natural baseline alignment, not vertical-align:middle — Dompdf
@@ -492,8 +492,11 @@ class Pdf_Layout_Preprocessor {
 			// flex centering (Dompdf ignores length values for vertical-align,
 			// so a fine-tuned offset is not an option).
 			$child_styles['display'] = 'inline-block';
-			if ( $i > 0 && $gap[1] > 0 ) {
-				$child_styles['margin-left'] = self::css_number( $gap[1] ) . 'px';
+			// Mirror the flex gap after every child that has following content
+			// — a chip's label may be a bare text node, which margin-left on
+			// the next element child could never reach.
+			if ( $gap[1] > 0 && self::has_following_content( $child ) ) {
+				$child_styles['margin-right'] = self::css_number( $gap[1] ) . 'px';
 			}
 			self::set_styles( $child, $child_styles );
 		}
@@ -550,7 +553,7 @@ class Pdf_Layout_Preprocessor {
 		foreach ( self::element_children( $element ) as $child ) {
 			$child_styles            = self::parse_styles( $child->getAttribute( 'style' ) );
 			$child_styles['display'] = 'inline-block';
-			if ( null !== $child->nextSibling ) {
+			if ( self::has_following_content( $child ) ) {
 				// The stylesheet's flex gap (6px), mirrored from receipt.php.
 				$child_styles['margin-right'] = '6px';
 			}
@@ -665,6 +668,29 @@ class Pdf_Layout_Preprocessor {
 		}
 
 		$element->appendChild( $table );
+	}
+
+	/**
+	 * Whether a node is followed by rendered content (element or real text).
+	 *
+	 * Whitespace-only and NBSP-only text nodes do not count: chip edge
+	 * whitespace is trimmed to empty nodes that must not attract gap margins.
+	 *
+	 * @param \DOMNode $node The node.
+	 *
+	 * @return bool
+	 */
+	private static function has_following_content( \DOMNode $node ): bool {
+		for ( $next = $node->nextSibling; null !== $next; $next = $next->nextSibling ) {
+			if ( $next instanceof DOMElement ) {
+				return true;
+			}
+			if ( XML_TEXT_NODE === $next->nodeType && 1 === preg_match( '/[^\s\x{00A0}]/u', (string) $next->nodeValue ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
