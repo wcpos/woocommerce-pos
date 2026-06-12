@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.2
+Stable tag: 1.9.3
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -96,6 +96,18 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.3 - 2026/06/12 =
+- **Improved web printer setup** -- network printer scans now explain browser limitations, show structured connection diagnostics, and give protocol-aware error guidance for web printing.
+- **Added Local Network Access support** -- web print requests and printer probes opt into Chrome's Local Network Access permission so printers on your LAN keep working in newer browsers.
+- **Fixed Star WebPRNT connections** -- the print protocol is now derived from the printer port instead of the page origin, and scanned printer ports are preserved when switching vendors.
+- **Improved product sorting settings** -- expanded sort options with a more compact sort settings row in POS product settings.
+- **Fixed stale variation images** -- product variations no longer briefly show a previous variation's image.
+- **Fixed receipt tax breakdown** -- client-rendered receipts keep the tax breakdown, and the tax summary stays hidden when taxes are hidden.
+- **Fixed PDF receipt rendering** -- receipt markup rewritten for Dompdf so downloaded PDFs match previews, with fixed image and column rendering and aligned status-chip dots.
+- **Fixed order date syncing** -- bare GMT order creation dates are accepted and legacy order date validation retries, fixing failed order syncs for some stores.
+- **Added WooCommerce 10.9 compatibility** -- accepts the new variation gallery field in the WooCommerce 10.9 REST API.
+- **Updated translations** -- includes the latest POT and translation metadata through 2026.6.2.
 
 = 1.9.2 - 2026/06/09 =
 - **Added Star Online cloud printing support** -- connect Star Online printers, fetch registered devices, validate printer settings, and submit cloud print jobs from WCPOS.
