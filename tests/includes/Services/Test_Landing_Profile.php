@@ -118,4 +118,33 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 
 		return (int) $method->invoke( new Landing_Profile() );
 	}
+
+	public function test_functional_data_carries_anon_id_for_all_consent_states(): void {
+		delete_option( \WCPOS\WooCommercePOS\Services\Anon_ID::OPTION );
+
+		$profile = new Landing_Profile();
+		$data    = $profile->get_functional_data();
+
+		$this->assertArrayHasKey( 'anon_id', $data );
+		$this->assertMatchesRegularExpression(
+			'/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+			$data['anon_id']
+		);
+	}
+
+	public function test_functional_data_schema_version_is_bumped_to_2(): void {
+		$profile = new Landing_Profile();
+		$data    = $profile->get_functional_data();
+
+		$this->assertSame( 2, $data['schema_version'] );
+	}
+
+	public function test_functional_data_anon_id_is_stable_across_pageloads(): void {
+		$profile = new Landing_Profile();
+
+		$this->assertSame(
+			$profile->get_functional_data()['anon_id'],
+			$profile->get_functional_data()['anon_id']
+		);
+	}
 }

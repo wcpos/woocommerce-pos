@@ -52,10 +52,11 @@ class Landing_Profile {
 	 */
 	public function get_functional_data(): array {
 		return array(
-			'schema_version'  => 1,
-			'locale'          => get_locale(),
-			'plugin_version'  => PLUGIN_VERSION,
-			'pro_active'      => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'schema_version' => 2, // bumped: anon_id added (landing-experiments spec §5.1).
+			'locale'         => get_locale(),
+			'plugin_version' => PLUGIN_VERSION,
+			'pro_active'     => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'anon_id'        => ( new Anon_ID() )->get(),
 		);
 	}
 
