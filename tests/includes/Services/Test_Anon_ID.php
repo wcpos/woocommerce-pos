@@ -95,4 +95,15 @@ class Test_Anon_ID extends WP_UnitTestCase {
 
 		$this->assertNotSame( $old, $new );
 	}
+
+	/**
+	 * Asserts that the global accessor woocommerce_pos_get_anon_id() returns
+	 * the same value as the Anon_ID service for the same site.
+	 */
+	public function test_global_accessor_returns_the_service_value(): void {
+		$id = woocommerce_pos_get_anon_id();
+
+		$this->assertSame( ( new Anon_ID() )->get(), $id );
+		$this->assertMatchesRegularExpression( '/^[0-9a-f-]{36}$/', $id );
+	}
 }
