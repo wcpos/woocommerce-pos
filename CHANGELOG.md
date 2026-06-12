@@ -2,6 +2,12 @@
 
 > **The biggest WCPOS release ever.** Almost three months of work, ~330 substantive PRs. Highlights below.
 
+## Unreleased
+
+- Added: anonymous analytics identifier (`wcpos_anon_id`) for the admin welcome screen — random UUID, no store data, deleted on uninstall, manageable via `wp wcpos anon-id rotate|delete`. Landing data contract `schema_version` bumped to 2.
+- Added: `woocommerce_pos_consent_copy` filter so the tracking-consent prompt copy can be overridden.
+- Added: `woocommerce_pos_get_anon_id()` accessor (used by the Pro licence-activation request).
+
 ---
 
 ## 🧾 Receipt Templates — Complete Rebuild

@@ -95,6 +95,16 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 1. WCPOS main screen
 
+== Privacy ==
+
+WooCommerce POS stores a random identifier (a UUID, option name `wcpos_anon_id`) on your site. It contains no information about your store and is not derived from your site address. It is used only on this plugin's own admin welcome screen to keep the page's self-hosted, first-party analytics consistent between visits (no data is sold or shared; analytics are processed on wcpos.com infrastructure). The identifier:
+
+* is generated locally by WordPress (`wp_generate_uuid4()`),
+* is deleted when you uninstall the plugin,
+* can be rotated or removed at any time with WP-CLI: `wp wcpos anon-id rotate` / `wp wcpos anon-id delete`.
+
+Detailed store information (product counts, order counts, WooCommerce version) is sent only if you explicitly opt in via the tracking-consent prompt, and you can withdraw consent at any time in POS settings.
+
 == Changelog ==
 
 = 1.9.3 - 2026/06/12 =
