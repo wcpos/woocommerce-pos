@@ -50,6 +50,7 @@ class Anon_ID_Command {
 	 * @param string $message Success message.
 	 */
 	protected function success( string $message ): void {
+		// @phpstan-ignore-next-line -- WP_CLI exists only under the wp-cli runtime; unit tests override this seam.
 		\WP_CLI::success( $message );
 	}
 }
