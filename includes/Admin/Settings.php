@@ -141,6 +141,8 @@ class Settings {
 			? WC()->countries->get_base_country()
 			: '';
 		$store_options   = apply_filters( 'woocommerce_pos_cloud_print_store_options', array() );
+		$anon_id         = ( new \WCPOS\WooCommercePOS\Services\Anon_ID() )->get();
+		$site_uuid       = get_option( 'woocommerce_pos_uuid', '' );
 
 		return \sprintf(
 			'var wcpos = wcpos || {}; wcpos.settings = {
@@ -151,7 +153,9 @@ class Settings {
             cloudPrintStoreOptions: %s,
             updateExtensionsCount: %s,
             unreadLogCounts: %s,
-            currentUserId: %s
+            currentUserId: %s,
+            anon_id: %s,
+            site_uuid: %s
         }; wcpos.translationVersion = %s;',
 			json_encode( $barcodes ),
 			json_encode( $order_statuses ),
@@ -161,6 +165,8 @@ class Settings {
 			json_encode( $update_ext_count ),
 			json_encode( $unread_logs ),
 			json_encode( $current_user_id ),
+			json_encode( $anon_id ),
+			json_encode( $site_uuid ),
 			json_encode( TRANSLATION_VERSION )
 		);
 	}
