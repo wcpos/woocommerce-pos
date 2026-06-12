@@ -195,6 +195,22 @@ README.md" \
   MOCK_PATCH="$composer_dev_dependency_patch" \
   MOCK_CODERABBIT="missing"
 
+run_case "dependabot GitHub Actions group bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps): bump the actions group across 1 directory with 13 updates" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml
+.github/workflows/tests-php.yml" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing"
+
+run_case "dependabot GitHub Actions group with extra file still requires CodeRabbit" fail \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps): bump the actions group across 1 directory with 13 updates" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml
+README.md" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing"
+
 run_case "translation-version bypass" pass \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
