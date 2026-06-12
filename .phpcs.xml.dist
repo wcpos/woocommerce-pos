@@ -79,6 +79,7 @@
 				<element value="parentNode"/>
 				<element value="firstChild"/>
 				<element value="lastChild"/>
+				<element value="nextSibling"/>
 			</property>
 		</properties>
 	</rule>

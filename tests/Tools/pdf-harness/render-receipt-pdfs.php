@@ -33,19 +33,25 @@ if ( ! is_dir( $out_dir ) ) {
 // ── Store logo: generate a PNG and set it as the site logo ──────────────
 $logo_id = (int) get_option( 'wcpos_repro_logo_id' );
 if ( $logo_id <= 0 || ! wp_get_attachment_image_src( $logo_id ) ) {
-	$img = imagecreatetruecolor( 240, 160 );
+	// Large photo-sized logo: reproduces real stores uploading camera images.
+	$img = imagecreatetruecolor( 900, 600 );
 	$bg  = imagecolorallocate( $img, 255, 255, 255 );
 	$fg  = imagecolorallocate( $img, 17, 24, 39 );
-	imagefilledrectangle( $img, 0, 0, 239, 159, $bg );
-	imagefilledellipse( $img, 60, 80, 90, 90, $fg );
-	imagefilledrectangle( $img, 110, 35, 230, 60, $fg );
-	imagefilledrectangle( $img, 110, 70, 200, 90, $fg );
-	imagefilledrectangle( $img, 110, 100, 220, 125, $fg );
+	imagefilledrectangle( $img, 0, 0, 899, 599, $bg );
+	imagefilledellipse( $img, 225, 300, 340, 340, $fg );
+	imagefilledrectangle( $img, 410, 130, 860, 225, $fg );
+	imagefilledrectangle( $img, 410, 260, 750, 340, $fg );
+	imagefilledrectangle( $img, 410, 375, 825, 470, $fg );
+	// JPEG with 300 DPI metadata: matches photo logos uploaded from cameras
+	// (Dompdf reads image DPI when sizing).
+	if ( function_exists( 'imageresolution' ) ) {
+		imageresolution( $img, 300, 300 );
+	}
 	ob_start();
-	imagepng( $img );
+	imagejpeg( $img, null, 90 );
 	$png = ob_get_clean();
 
-	$upload = wp_upload_bits( 'wcpos-repro-logo.png', null, $png );
+	$upload = wp_upload_bits( 'wcpos-repro-logo.jpg', null, $png );
 	if ( empty( $upload['error'] ) ) {
 		$logo_id = wp_insert_attachment(
 			array(
@@ -199,6 +205,49 @@ foreach ( $template_files as $file ) {
 	} catch ( Throwable $e ) {
 		WP_CLI::warning( $slug . ' FAILED: ' . $e->getMessage() );
 	}
+}
+
+// ── Legacy PHP template (full-document path) ────────────────────────────
+// Rendered with a guest order: the narrow meta column leaves leftover table
+// width, which un-hinted cells would absorb (inflated logo cell).
+$legacy_order_id = (int) get_option( 'wcpos_repro_guest_order_id' );
+$legacy_order    = $legacy_order_id > 0 ? wc_get_order( $legacy_order_id ) : false;
+if ( ! $legacy_order ) {
+	$legacy_order = wc_create_order( array( 'status' => 'completed' ) );
+	$products     = wc_get_products( array( 'limit' => 1 ) );
+	if ( $products ) {
+		$legacy_order->add_product( $products[0], 1 );
+	}
+	$legacy_order->set_payment_method_title( 'Cash' );
+	$legacy_order->update_meta_data( '_pos_cash_amount_tendered', 50 );
+	$legacy_order->update_meta_data( '_pos_cash_change', 7.16 );
+	$legacy_order->calculate_totals( true );
+	$legacy_order->save();
+	update_option( 'wcpos_repro_guest_order_id', $legacy_order->get_id() );
+}
+
+$template = array(
+	'id'        => 'legacy-receipt',
+	'engine'    => 'legacy-php',
+	'file_path' => $plugin_dir . '/templates/receipt.php',
+);
+
+try {
+	$receipt_data = ( new Receipt_Data_Builder() )->build( $legacy_order, 'live' );
+	$renderer     = ( new Receipt_Renderer_Factory() )->create( 'legacy-php' );
+	ob_start();
+	try {
+		$renderer->render( $template, $legacy_order, $receipt_data );
+	} finally {
+		$html = ob_get_clean();
+	}
+	file_put_contents( $out_dir . '/legacy-receipt.html', $html );
+
+	$pdf = $service->render( $template, $legacy_order );
+	file_put_contents( $out_dir . '/legacy-receipt.pdf', $pdf );
+	WP_CLI::log( sprintf( '%-32s PDF %6.1f KB', 'legacy-receipt', strlen( $pdf ) / 1024 ) );
+} catch ( Throwable $e ) {
+	WP_CLI::warning( 'legacy-receipt FAILED: ' . $e->getMessage() );
 }
 
 WP_CLI::success( 'Wrote ' . $out_dir );
