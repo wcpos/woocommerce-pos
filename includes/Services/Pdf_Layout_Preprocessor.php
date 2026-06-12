@@ -459,8 +459,13 @@ class Pdf_Layout_Preprocessor {
 		foreach ( $children as $i => $child ) {
 			$child_styles = self::parse_styles( $child->getAttribute( 'style' ) );
 			self::strip_flex_child_styles( $child_styles );
-			$child_styles['display']        = 'inline-block';
-			$child_styles['vertical-align'] = 'middle';
+			// Natural baseline alignment, not vertical-align:middle — Dompdf
+			// raises "middle" inline-blocks to cap height, floating the chip's
+			// dot above the label. On the baseline a fixed-size dot's optical
+			// center lands at the uppercase midline, matching the browser's
+			// flex centering (Dompdf ignores length values for vertical-align,
+			// so a fine-tuned offset is not an option).
+			$child_styles['display'] = 'inline-block';
 			if ( $i > 0 && $gap[1] > 0 ) {
 				$child_styles['margin-left'] = self::css_number( $gap[1] ) . 'px';
 			}

@@ -166,9 +166,11 @@ class Pdf_Layout_Preprocessor_Test extends \WP_UnitTestCase {
 		// Act.
 		$out = $this->preprocessor->process( $html );
 
-		// Assert.
+		// Assert: children stay on the natural baseline — Dompdf raises
+		// vertical-align:middle inline-blocks to cap height, floating the dot
+		// above the chip label.
 		$this->assertStringContainsString( 'display: inline-block', $out );
-		$this->assertStringContainsString( 'vertical-align: middle', $out );
+		$this->assertStringNotContainsString( 'vertical-align', $out );
 		$this->assertStringContainsString( "\u{00A0}Completed", $out );
 		$this->assertStringNotContainsString( 'inline-flex', $out );
 	}
