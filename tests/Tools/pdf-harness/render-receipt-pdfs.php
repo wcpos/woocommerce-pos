@@ -49,13 +49,13 @@ if ( $logo_id <= 0 || ! wp_get_attachment_image_src( $logo_id ) ) {
 	}
 	ob_start();
 	imagejpeg( $img, null, 90 );
-	$png = ob_get_clean();
+	$image_data = ob_get_clean();
 
-	$upload = wp_upload_bits( 'wcpos-repro-logo.jpg', null, $png );
+	$upload = wp_upload_bits( 'wcpos-repro-logo.jpg', null, $image_data );
 	if ( empty( $upload['error'] ) ) {
 		$logo_id = wp_insert_attachment(
 			array(
-				'post_mime_type' => 'image/png',
+				'post_mime_type' => 'image/jpeg',
 				'post_title'     => 'WCPOS repro logo',
 				'post_status'    => 'inherit',
 			),
