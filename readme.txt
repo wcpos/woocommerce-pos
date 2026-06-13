@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.3
+Stable tag: 1.9.4
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -106,6 +106,17 @@ WooCommerce POS stores a random identifier (a UUID, option name `wcpos_anon_id`)
 Detailed store information (product counts, order counts, WooCommerce version) is sent only if you explicitly opt in via the tracking-consent prompt, and you can withdraw consent at any time in POS settings.
 
 == Changelog ==
+
+= 1.9.4 - 2026/06/13 =
+- **Redesigned Bluetooth printer setup** -- a managed Bluetooth chooser with connection timeouts, paired-device discovery on macOS and Linux, clearer scan feedback, and guidance to add a printer manually when none are found.
+- **Added serial printing** -- OS-paired Bluetooth Classic printers can now print over a serial connection.
+- **Improved Windows printing** -- raw printing routes through the Windows print spooler, with a dedicated installed-printers section for Windows.
+- **Improved USB printer flow** -- the USB printer list loads automatically when you open the tab, and the Scan button becomes Refresh.
+- **Clearer network printer scans** -- empty network scans now explain how to add a printer by manual IP entry, and a crash when closing network printer connections was fixed.
+- **Improved PDF receipts for legacy templates** -- the legacy receipt template renders through the PDF preprocessor with inline layout styles so downloaded PDFs match previews, and the receipt logo uses the correct image type.
+- **Fixed template syncing** -- stopped an infinite sync loop affecting receipt templates.
+- **Added an anonymous analytics identifier** -- a random, consent-gated identifier (`wcpos_anon_id`) used only on the plugin's admin welcome screen to keep its first-party analytics consistent; it contains no store data, can be rotated or removed via WP-CLI, and is deleted on uninstall (see the Privacy section).
+- **Updated translations** -- latest POT and translation metadata through 2026.6.4.
 
 = 1.9.3 - 2026/06/12 =
 - **Improved web printer setup** -- network printer scans now explain browser limitations, show structured connection diagnostics, and give protocol-aware error guidance for web printing.
