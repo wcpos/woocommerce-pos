@@ -2,8 +2,9 @@ import * as React from 'react';
 
 import { Button } from '@wcpos/ui';
 
+import type { ConsentCopy } from './api';
 import { PrivacyInfoModal } from './privacy-info-modal';
-import { t } from './translations';
+import { consentText, t } from './translations';
 
 export interface ConsentCalloutProps {
 	onDecide: (choice: 'allowed' | 'denied') => void;
@@ -13,6 +14,8 @@ export interface ConsentCalloutProps {
 	busy?: boolean;
 	/** The previous save failed — surface a retry message. */
 	error?: boolean;
+	/** Optional copy overrides from the inline config. */
+	copy?: ConsentCopy;
 }
 
 /**
@@ -35,6 +38,7 @@ export function ConsentCallout({
 	onDismiss,
 	busy = false,
 	error = false,
+	copy,
 }: ConsentCalloutProps) {
 	const [learnMoreOpen, setLearnMoreOpen] = React.useState(false);
 
@@ -52,10 +56,10 @@ export function ConsentCallout({
 			</button>
 			<div className="wcpos:py-2 wcpos:max-w-3xl">
 				<p className="wcpos:text-base wcpos:font-semibold wcpos:mb-1 wcpos:mt-0">
-					{t('consent.callout_title')}
+					{consentText(copy, 'title', 'consent.callout_title')}
 				</p>
 				<p className="wcpos:text-[13px] wcpos:leading-relaxed wcpos:mt-0 wcpos:mb-3 wcpos:text-gray-700">
-					{t('consent.callout_body')}{' '}
+					{consentText(copy, 'body', 'consent.callout_body')}{' '}
 					<button
 						type="button"
 						onClick={() => setLearnMoreOpen(true)}
@@ -75,20 +79,21 @@ export function ConsentCallout({
 						disabled={busy}
 						onClick={() => onDecide('allowed')}
 					>
-						{t('consent.allow')}
+						{consentText(copy, 'allow_label', 'consent.allow')}
 					</Button>
 					<Button
 						variant="secondary"
 						disabled={busy}
 						onClick={() => onDecide('denied')}
 					>
-						{t('consent.deny')}
+						{consentText(copy, 'deny_label', 'consent.deny')}
 					</Button>
 				</div>
 			</div>
 			<PrivacyInfoModal
 				open={learnMoreOpen}
 				onClose={() => setLearnMoreOpen(false)}
+				copy={copy}
 			/>
 		</>
 	);

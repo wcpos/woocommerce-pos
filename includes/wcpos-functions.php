@@ -423,6 +423,20 @@ if ( ! \function_exists( 'woocommerce_pos_get_settings' ) ) {
 	}
 }
 
+if ( ! \function_exists( 'woocommerce_pos_get_anon_id' ) ) {
+	/**
+	 * Returns the anonymous analytics id (wcpos_anon_id), creating it on first use.
+	 *
+	 * Supported accessor for the Pro plugin's licence-activation request and the
+	 * wcpos.com purchase reconciler join (landing-experiments spec §5.3c).
+	 *
+	 * @return string v4 UUID.
+	 */
+	function woocommerce_pos_get_anon_id(): string {
+		return ( new \WCPOS\WooCommercePOS\Services\Anon_ID() )->get();
+	}
+}
+
 if ( ! \function_exists( 'woocommerce_pos_json_encode' ) ) {
 	/**
 	 * Legacy alias for wcpos_json_encode().

@@ -2,11 +2,14 @@ import * as React from 'react';
 
 import { Button, Modal } from '@wcpos/ui';
 
-import { t } from './translations';
+import type { ConsentCopy } from './api';
+import { consentText, t } from './translations';
 
 export interface PrivacyInfoModalProps {
 	open: boolean;
 	onClose: () => void;
+	/** Optional copy overrides from the inline config. */
+	copy?: ConsentCopy;
 }
 
 /**
@@ -14,14 +17,14 @@ export interface PrivacyInfoModalProps {
  * by the opt-in callout/modal and by the settings "Learn what's
  * collected" link.
  */
-export function PrivacyInfoModal({ open, onClose }: PrivacyInfoModalProps) {
+export function PrivacyInfoModal({ open, onClose, copy }: PrivacyInfoModalProps) {
 	return (
-		<Modal open={open} onClose={onClose} title={t('consent.modal_title')}>
+		<Modal open={open} onClose={onClose} title={consentText(copy, 'title', 'consent.modal_title')}>
 			<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-3">
-				{t('consent.modal_intro')}
+				{consentText(copy, 'body', 'consent.modal_intro')}
 			</p>
 			<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-2">
-				{t('consent.modal_includes')}
+				{consentText(copy, 'fields_intro', 'consent.modal_includes')}
 			</p>
 			<ul className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-4 wcpos:pl-4 wcpos:list-disc wcpos:space-y-2">
 				<li>
@@ -38,7 +41,7 @@ export function PrivacyInfoModal({ open, onClose }: PrivacyInfoModalProps) {
 				</li>
 			</ul>
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">
-				{t('consent.modal_exclusions')}
+				{consentText(copy, 'privacy_note', 'consent.modal_exclusions')}
 			</p>
 			<div className="wcpos:flex wcpos:justify-end">
 				<Button onClick={onClose}>{t('consent.dismiss')}</Button>

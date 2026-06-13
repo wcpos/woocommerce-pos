@@ -2,8 +2,9 @@ import * as React from 'react';
 
 import { Button, Modal } from '@wcpos/ui';
 
+import type { ConsentCopy } from './api';
 import { PrivacyInfoModal } from './privacy-info-modal';
-import { t } from './translations';
+import { consentText, t } from './translations';
 
 export interface ConsentModalProps {
 	open: boolean;
@@ -12,6 +13,8 @@ export interface ConsentModalProps {
 	busy?: boolean;
 	/** The previous save failed — surface a retry message. */
 	error?: boolean;
+	/** Optional copy overrides from the inline config. */
+	copy?: ConsentCopy;
 }
 
 /**
@@ -20,7 +23,13 @@ export interface ConsentModalProps {
  * not yet made a decision. Does not offer a close/dismiss button — the
  * user must explicitly choose.
  */
-export function ConsentModal({ open, onDecide, busy = false, error = false }: ConsentModalProps) {
+export function ConsentModal({
+	open,
+	onDecide,
+	busy = false,
+	error = false,
+	copy,
+}: ConsentModalProps) {
 	const [learnMoreOpen, setLearnMoreOpen] = React.useState(false);
 
 	return (
@@ -29,10 +38,10 @@ export function ConsentModal({ open, onDecide, busy = false, error = false }: Co
 				open={open}
 				// User must make a decision — ignore backdrop/escape closes.
 				onClose={() => {}}
-				title={t('consent.modal_title')}
+				title={consentText(copy, 'title', 'consent.modal_title')}
 			>
 				<p className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-4">
-					{t('consent.modal_intro')}
+					{consentText(copy, 'body', 'consent.modal_intro')}
 				</p>
 				{error && (
 					<p
@@ -56,14 +65,14 @@ export function ConsentModal({ open, onDecide, busy = false, error = false }: Co
 							disabled={busy}
 							onClick={() => onDecide('denied')}
 						>
-							{t('consent.deny')}
+							{consentText(copy, 'deny_label', 'consent.deny')}
 						</Button>
 						<Button
 							variant="primary"
 							disabled={busy}
 							onClick={() => onDecide('allowed')}
 						>
-							{t('consent.allow')}
+							{consentText(copy, 'allow_label', 'consent.allow')}
 						</Button>
 					</div>
 				</div>
@@ -71,6 +80,7 @@ export function ConsentModal({ open, onDecide, busy = false, error = false }: Co
 			<PrivacyInfoModal
 				open={learnMoreOpen}
 				onClose={() => setLearnMoreOpen(false)}
+				copy={copy}
 			/>
 		</>
 	);

@@ -49,6 +49,18 @@ function License() {
 			captureLicenseActivationAttempted();
 		}
 
+		// Carry the site's anonymous identity on activation so wcpos.com can join
+		// this purchase back to the landing-page exposure (see wcpos-com#143).
+		// Older builds may not inject these — omit the args rather than send junk.
+		const settings = window.wcpos?.settings;
+		const identityArgs =
+			deactivate || !settings
+				? {}
+				: {
+						...(settings.anon_id ? { anon_id: settings.anon_id } : {}),
+						...(settings.site_uuid ? { site_uuid: settings.site_uuid } : {}),
+					};
+
 		const url = addQueryArgs('https://wcpos.com', {
 			'wc-api': 'am-software-api',
 			request: deactivate ? 'deactivation' : 'activation',
@@ -58,6 +70,7 @@ function License() {
 			platform: data?.platform,
 			version: data?.version,
 			timestamp: Date.now(),
+			...identityArgs,
 		});
 
 		const response = await fetch(url, {

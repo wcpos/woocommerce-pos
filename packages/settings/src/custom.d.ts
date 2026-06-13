@@ -11,6 +11,8 @@ declare global {
 		unreadLogCounts?: Record<string, number>;
 		currentUserId?: number;
 		cloudPrintStoreOptions?: { id: number; name: string }[];
+		anon_id?: string;
+		site_uuid?: string;
 	}
 
 	interface Window {

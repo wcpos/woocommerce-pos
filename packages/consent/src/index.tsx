@@ -94,6 +94,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 					onDismiss={handleDismiss}
 					busy={isSaving}
 					error={hasError}
+					copy={config.copy}
 				/>
 			)}
 			<ConsentModal
@@ -101,6 +102,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 				onDecide={handleDecide}
 				busy={isSaving}
 				error={hasError}
+				copy={config.copy}
 			/>
 		</>
 	);
@@ -137,6 +139,7 @@ function mount(): void {
 				restUrl: config.restUrl,
 				dismissUrl: config.dismissUrl,
 				nonce: config.nonce,
+				copy: config.copy,
 			}}
 			container={container}
 			initialModal={showModal}
@@ -150,4 +153,3 @@ if (document.readyState === 'loading') {
 } else {
 	mount();
 }
-

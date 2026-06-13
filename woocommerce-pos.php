@@ -119,6 +119,10 @@ function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConven
 
 wcpos_load_autoloaders();
 
+if ( \defined( 'WP_CLI' ) && WP_CLI ) {
+	\WP_CLI::add_command( 'wcpos anon-id', \WCPOS\WooCommercePOS\CLI\Anon_ID_Command::class );
+}
+
 // Environment variables.
 wcpos_load_env( __DIR__ . '/.env' );
 

@@ -1,5 +1,6 @@
 import { createI18nInstance } from '@wcpos/i18n';
 
+import type { ConsentCopy } from '../api';
 import en from './locales/en/wp-admin-consent.json';
 
 const { i18n, i18nPromise, t, Trans } = createI18nInstance({
@@ -10,4 +11,10 @@ const { i18n, i18nPromise, t, Trans } = createI18nInstance({
 	},
 });
 
-export { t, Trans, i18nPromise, i18n };
+function consentText(copy: ConsentCopy | undefined, key: keyof ConsentCopy, fallback: string): string {
+	const value = copy?.[key];
+
+	return typeof value === 'string' && value !== '' ? value : t(fallback);
+}
+
+export { t, Trans, i18nPromise, i18n, consentText };
