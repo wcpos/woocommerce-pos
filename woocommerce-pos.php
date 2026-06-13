@@ -25,7 +25,7 @@ namespace WCPOS\WooCommercePOS;
 
 // Define plugin constants (use define() with checks to avoid conflicts when Pro plugin is active).
 if ( ! \defined( __NAMESPACE__ . '\VERSION' ) ) {
-	\define( __NAMESPACE__ . '\VERSION', '1.9.3' );
+	\define( __NAMESPACE__ . '\VERSION', '1.9.4' );
 }
 if ( ! \defined( __NAMESPACE__ . '\TRANSLATION_VERSION' ) ) {
 	\define( __NAMESPACE__ . '\TRANSLATION_VERSION', '2026.6.4' );
