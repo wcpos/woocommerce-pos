@@ -35,6 +35,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # wp-cli/i18n-command is a public package, so no GitHub auth is needed.
+          # setup-php registers GITHUB_TOKEN into Composer's global auth.json, but
+          # the older Composer bundled in the wp-cli phar rejects GitHub's new
+          # token format ("contains invalid characters"), aborting the install
+          # (CVE-2026-45793). Drop the token so the public package installs cleanly.
+          composer config --global --unset github-oauth.github.com || true
           wp package install wp-cli/i18n-command:v2.2.13
 
       - name: Update POT file
