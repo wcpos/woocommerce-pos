@@ -26,6 +26,14 @@ interface Settings_Section_Interface {
 	public function id(): string;
 
 	/**
+	 * The full default shape for this section (used for typed-accessor
+	 * fallback). Non-option-backed sections may return an empty array.
+	 *
+	 * @return array
+	 */
+	public function defaults(): array;
+
+	/**
 	 * Read the section's public view: defaults merged, legacy shapes migrated
 	 * in memory, the woocommerce_pos_{id}_settings filter applied where the
 	 * section uses the option-backed template (wholesale-override sections may

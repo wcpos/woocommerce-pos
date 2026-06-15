@@ -9,7 +9,6 @@ namespace WCPOS\WooCommercePOS\Services;
 
 use WP_Error;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
-use WCPOS\WooCommercePOS\Services\Settings\Abstract_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
 use WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section;
@@ -60,8 +59,8 @@ class Settings {
 			// instead of recursing forever.
 			$this->registry = new Section_Registry();
 
-			// Core sections are registered here as they are migrated
-			// (Tasks 3-11 append register() calls above the action).
+			// All core sections are registered here, before the action fires so
+			// extensions can rely on core sections already being present.
 			$this->registry->register( new General_Section() );
 			$this->registry->register( new Checkout_Section() );
 			$this->registry->register( new Tools_Section() );
@@ -728,7 +727,7 @@ class Settings {
 		}
 
 		$section = $this->sections()->get( $id );
-		if ( $section instanceof Abstract_Section ) {
+		if ( $section instanceof Settings_Section_Interface ) {
 			$defaults = $section->defaults();
 
 			return $defaults[ $key ] ?? null;

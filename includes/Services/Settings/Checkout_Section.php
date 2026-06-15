@@ -89,6 +89,7 @@ class Checkout_Section extends Abstract_Section {
 	 * stripping earlier would destroy the seed before any payment-gateways
 	 * save persists per-gateway statuses, silently reverting them to
 	 * defaults on pre-1.9 sites.
+	 * This guard can become an unconditional unset once every active site has saved payment-gateways settings under the per-gateway-status schema (post-1.10 migration window).
 	 *
 	 * @param array $settings Settings about to be saved.
 	 */

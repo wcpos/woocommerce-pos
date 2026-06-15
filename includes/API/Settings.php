@@ -499,10 +499,12 @@ class Settings extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_cloud_print_settings() {
-		return new WP_REST_Response(
-			SettingsService::instance()->sections()->get( 'cloud_print' )->read(),
-			200
-		);
+		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
+		if ( ! $section ) {
+			return new WP_REST_Response( array(), 200 );
+		}
+
+		return new WP_REST_Response( $section->read(), 200 );
 	}
 
 	/**
@@ -513,12 +515,23 @@ class Settings extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function update_cloud_print_settings( WP_REST_Request $request ) {
+		$section = SettingsService::instance()->sections()->get( 'cloud_print' );
+		if ( ! $section ) {
+			return new WP_REST_Response(
+				array(
+					'code'    => 'woocommerce_pos_settings_error',
+					'message' => 'Cloud print section not registered.',
+				),
+				500
+			);
+		}
+
 		$payload = $request->get_json_params();
 		if ( empty( $payload ) ) {
 			$payload = $request->get_body_params();
 		}
 
-		$result = SettingsService::instance()->sections()->get( 'cloud_print' )->write( (array) $payload );
+		$result = $section->write( (array) $payload );
 
 		if ( is_wp_error( $result ) ) {
 			// Keep the historical error body shape {code, message} — clients do

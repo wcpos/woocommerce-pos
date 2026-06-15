@@ -11,7 +11,7 @@ User-configurable intent stored in `woocommerce_pos_settings_*` options and read
 _Avoid_: options, config, preferences
 
 **Settings Section**:
-The unit that owns one settings group end to end: schema, defaults, sanitization, secret redaction, merge strategy, and (when not option-backed) custom read/write behaviour. Eight exist: general, checkout, tax_ids, payment_gateways, tools, visibility, access (role-backed), license (Pro-injected). Classes are named `{Id}_Section`.
+The unit that owns one settings group end to end: schema, defaults, sanitization, secret redaction, merge strategy, and (when not option-backed) custom read/write behaviour. Nine exist: general, checkout, tax_ids, payment_gateways, tools, visibility, cloud_print, access (role-backed), license (Pro-injected). Classes are named `{Id}_Section`.
 _Avoid_: settings group, settings schema, settings tab
 
 **Section Registry**:

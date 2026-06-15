@@ -13,7 +13,7 @@ use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
  * The Section Registry — the seam where Settings Sections are registered.
  *
  * The free plugin registers its core sections; Pro and extensions register
- * theirs via the `woocommerce_pos_register_settings_sections` action (added in a later phase of this refactor) instead
+ * theirs via the `woocommerce_pos_register_settings_sections` action instead
  * of hooking ad-hoc filters. Registering an existing id replaces the previous
  * section (last-wins), which is also the supported override mechanism.
  * Override sections should extend Abstract_Section (not implement the
