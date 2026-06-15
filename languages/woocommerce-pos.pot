@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.9.4\n"
+"Project-Id-Version: WCPOS 1.9.5\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-15T10:51:32+00:00\n"
+"POT-Creation-Date: 2026-06-15T14:10:20+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -602,6 +602,38 @@ msgstr ""
 
 #: includes/API/Orders_Controller.php:933
 msgid "Display name of the order status."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:154
+msgid "Payment gateway ID."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:160
+msgid "Payment gateway title shown at the POS."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:166
+msgid "Payment gateway description."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:172
+msgid "Whether the gateway is enabled for the POS."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:178
+msgid "Provider family identifier."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:184
+msgid "POS handling type for the gateway."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:190
+msgid "POS capabilities exposed by the gateway."
+msgstr ""
+
+#: includes/API/Payment_Gateways.php:214
+msgid "Provider-specific public metadata."
 msgstr ""
 
 #: includes/API/Print_Jobs_Controller.php:194
