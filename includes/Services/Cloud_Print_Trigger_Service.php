@@ -141,7 +141,8 @@ class Cloud_Print_Trigger_Service {
 	 * @return int Created job id, or 0 when the template is not printable on the provider.
 	 */
 	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template, array $drawer_options = array() ): int {
-		$provider = (string) ( $printer['provider'] ?? '' );
+		$provider       = (string) ( $printer['provider'] ?? '' );
+		$drawer_options = self::drawer_options_for_provider( $provider, $drawer_options );
 
 		if ( 'printnode' === $provider ) {
 			$fmt = ( new Print_Format_Resolver() )->resolve( $printer, $template );
@@ -190,6 +191,31 @@ class Cloud_Print_Trigger_Service {
 		}
 
 		return $job_id;
+	}
+
+	/**
+	 * Keep drawer metadata scoped to providers implemented by this server change.
+	 *
+	 * Star providers use Star-specific drawer commands and are intentionally not
+	 * changed by the Epson/PrintNode implementation.
+	 *
+	 * @param string $provider       Provider key.
+	 * @param array  $drawer_options Drawer options.
+	 *
+	 * @return array{auto_open_drawer:bool, drawer_connector:string}
+	 */
+	private static function drawer_options_for_provider( string $provider, array $drawer_options ): array {
+		if ( ! in_array( $provider, array( 'epson-sdp', 'printnode' ), true ) ) {
+			return array(
+				'auto_open_drawer' => false,
+				'drawer_connector' => 'pin2',
+			);
+		}
+
+		return array(
+			'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
+			'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
+		);
 	}
 
 	/**
