@@ -339,4 +339,55 @@ class Test_Analytics extends WP_UnitTestCase {
 
 		$this->assertSame( 'https://ph.example.test', Analytics::instance()->get_host() );
 	}
+
+	/**
+	 * First call to capture_once() dispatches; later calls for the same user
+	 * + key within the de-dup window are suppressed. This is what prevents
+	 * impression events from firing on every page render.
+	 */
+	public function test_capture_once_dispatches_once_then_suppresses(): void {
+		$this->login_user_with_uuid( 'user-uuid-once' );
+		update_option( 'woocommerce_pos_uuid', 'site-uuid-xyz' );
+		$analytics = $this->enable_consent();
+
+		$first  = $analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'plugin_row_action' ), 'plugin_row_action' );
+		$second = $analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'plugin_row_action' ), 'plugin_row_action' );
+		$third  = $analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'plugin_row_action' ), 'plugin_row_action' );
+
+		$this->assertTrue( $first );
+		$this->assertFalse( $second );
+		$this->assertFalse( $third );
+		$this->assertCount( 1, $this->captured_requests );
+
+		$payload = json_decode( $this->captured_requests[0]['args']['body'], true );
+		$this->assertSame( 'upgrade_cta_viewed', $payload['event'] );
+		$this->assertSame( 'plugin_row_action', $payload['properties']['placement'] );
+	}
+
+	/**
+	 * Distinct de-dup keys are tracked independently, so different
+	 * placements each get their own once-per-window impression.
+	 */
+	public function test_capture_once_distinct_keys_dispatch_independently(): void {
+		$this->login_user_with_uuid( 'user-uuid-keys' );
+		$analytics = $this->enable_consent();
+
+		$price = $analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'product_edit_price' ), 'product_edit_price' );
+		$tax   = $analytics->capture_once( 'upgrade_cta_viewed', array( 'placement' => 'product_edit_tax' ), 'product_edit_tax' );
+
+		$this->assertTrue( $price );
+		$this->assertTrue( $tax );
+		$this->assertCount( 2, $this->captured_requests );
+	}
+
+	/**
+	 * Disabled analytics short-circuits capture_once() to a no-op.
+	 */
+	public function test_capture_once_is_no_op_when_disabled(): void {
+		$this->login_user_with_uuid();
+		$analytics = Analytics::instance();
+
+		$this->assertFalse( $analytics->capture_once( 'upgrade_cta_viewed', array(), 'plugin_row_action' ) );
+		$this->assertSame( array(), $this->captured_requests );
+	}
 }
