@@ -345,6 +345,43 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It injects ESC/POS drawer bytes for PrintNode raw jobs when requested.
+	 */
+	public function test_render_payload_printnode_escpos_auto_open_drawer_injects_pin5_pulse(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'               => 'pn',
+						'name'             => 'PrintNode',
+						'provider'         => 'printnode',
+						'printnode_format' => 'raw',
+					),
+				),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$tid   = $this->create_thermal_template( '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' );
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'       => 'pn',
+				'order_id'         => $order->get_id(),
+				'template_id'      => (string) $tid,
+				'content_type'     => 'application/octet-stream',
+				'pn_kind'          => 'escpos',
+				'auto_open_drawer' => true,
+				'drawer_connector' => 'pin5',
+			)
+		);
+
+		$payload = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		$this->assertStringContainsString( "\x1B\x70\x01\x19\xFA", $payload );
+	}
+
+	/**
 	 * It returns an empty string (no throw) when the thermal renderer fails.
 	 *
 	 * A template whose root is not <receipt> makes the markup parser throw even
