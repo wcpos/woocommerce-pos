@@ -194,12 +194,11 @@ class Menu {
 		);
 		$pos_submenu[1][2] = woocommerce_pos_url();
 
-		Analytics::instance()->capture(
-			'upgrade_cta_viewed',
-			array(
-				'placement' => 'menu_submenu',
-			)
-		);
+		// The "Upgrade to Pro" submenu link is persistent navigation rendered
+		// on every wp-admin page, so we deliberately do NOT emit an
+		// `upgrade_cta_viewed` impression here — doing so fired the event on
+		// every admin request and buried the rest of the funnel. Clicks are
+		// still tracked via the tracking URL set on $pos_submenu[0][2] above.
 
 		/*
 		 * Fires after POS admin menus are registered.
@@ -236,11 +235,12 @@ class Menu {
 			$analytics = Analytics::instance();
 			$site_id   = $analytics->get_site_id();
 
-			$analytics->capture(
+			$analytics->capture_once(
 				'upgrade_cta_viewed',
 				array(
 					'placement' => 'admin_landing_banner',
-				)
+				),
+				'admin_landing_banner'
 			);
 
 			if ( '' !== $site_id ) {

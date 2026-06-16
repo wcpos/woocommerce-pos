@@ -137,4 +137,49 @@ class Test_Menu_Analytics extends WP_UnitTestCase {
 		$this->assertSame( 'site', $group_events[0]['properties']['$group_type'] );
 		$this->assertSame( 'site-uuid-xyz', $group_events[0]['properties']['$group_key'] );
 	}
+
+	/**
+	 * Registering the POS admin menu runs on every wp-admin page load, so it
+	 * must not emit an `upgrade_cta_viewed` impression. This previously fired
+	 * once per request and dominated 85% of the analytics stream.
+	 */
+	public function test_menu_registration_emits_no_upgrade_view(): void {
+		$this->captured_requests = array();
+
+		// Re-run menu registration (constructor → register_pos_admin()).
+		new Menu();
+
+		$views = array_filter(
+			$this->captured_requests,
+			static function ( array $request ): bool {
+				$payload = json_decode( $request['args']['body'], true );
+
+				return isset( $payload['event'] ) && 'upgrade_cta_viewed' === $payload['event'];
+			}
+		);
+
+		$this->assertSame( array(), $views, 'Menu registration must not emit upgrade_cta_viewed.' );
+	}
+
+	/**
+	 * The admin landing banner impression is de-duplicated, so reloading the
+	 * landing screen does not emit a fresh `upgrade_cta_viewed` each time.
+	 */
+	public function test_admin_landing_banner_view_is_deduplicated(): void {
+		$this->menu->enqueue_landing_scripts_and_styles( $this->menu->toplevel_screen_id );
+		$this->menu->enqueue_landing_scripts_and_styles( $this->menu->toplevel_screen_id );
+
+		$banner_views = array_filter(
+			$this->captured_requests,
+			static function ( array $request ): bool {
+				$payload = json_decode( $request['args']['body'], true );
+
+				return isset( $payload['event'] )
+					&& 'upgrade_cta_viewed' === $payload['event']
+					&& 'admin_landing_banner' === ( $payload['properties']['placement'] ?? '' );
+			}
+		);
+
+		$this->assertCount( 1, $banner_views, 'Landing banner view should be captured once per de-dup window.' );
+	}
 }
