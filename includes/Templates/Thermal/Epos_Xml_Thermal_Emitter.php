@@ -34,6 +34,13 @@ namespace WCPOS\WooCommercePOS\Templates\Thermal;
 class Epos_Xml_Thermal_Emitter {
 
 	/**
+	 * Render options.
+	 *
+	 * @var array
+	 */
+	private $options = array();
+
+	/**
 	 * Accumulated output XML.
 	 *
 	 * @var string
@@ -90,6 +97,15 @@ class Epos_Xml_Thermal_Emitter {
 	private $dh = false;
 
 	/**
+	 * Constructor.
+	 *
+	 * @param array $options Render options.
+	 */
+	public function __construct( array $options = array() ) {
+		$this->options = $options;
+	}
+
+	/**
 	 * Emit ePOS-Print XML from a thermal AST.
 	 *
 	 * @param array $ast The thermal AST root (a receipt node).
@@ -110,7 +126,7 @@ class Epos_Xml_Thermal_Emitter {
 		$this->buffer .= '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
 
 		$children = isset( $ast['children'] ) && \is_array( $ast['children'] ) ? $ast['children'] : array();
-		$this->walk_nodes( $children );
+		$this->walk_nodes( $this->nodes_with_auto_drawer( $children ) );
 
 		$this->buffer .= '</epos-print>';
 
@@ -130,6 +146,73 @@ class Epos_Xml_Thermal_Emitter {
 				$this->walk_node( $node );
 			}
 		}
+	}
+
+	/**
+	 * Insert an auto drawer node before the first trailing cut when enabled.
+	 *
+	 * @param array $nodes AST nodes.
+	 *
+	 * @return array
+	 */
+	private function nodes_with_auto_drawer( array $nodes ): array {
+		if ( empty( $this->options['auto_open_drawer'] ) || $this->nodes_contain_drawer( $nodes ) ) {
+			return $nodes;
+		}
+
+		$drawer = array(
+			'type'      => 'drawer',
+			'connector' => \WCPOS\WooCommercePOS\Services\Print_Job_Service::normalize_drawer_connector( (string) ( $this->options['drawer_connector'] ?? 'pin2' ) ),
+		);
+
+		for ( $i = count( $nodes ) - 1; $i >= 0; $i-- ) {
+			$type = isset( $nodes[ $i ]['type'] ) ? (string) $nodes[ $i ]['type'] : '';
+			if ( 'cut' === $type ) {
+				array_splice( $nodes, $i, 0, array( $drawer ) );
+				return $nodes;
+			}
+			if ( in_array( $type, array( 'feed' ), true ) ) {
+				continue;
+			}
+			break;
+		}
+
+		$nodes[] = $drawer;
+		return $nodes;
+	}
+
+	/**
+	 * Whether a node list contains an explicit drawer node.
+	 *
+	 * @param array $nodes AST nodes.
+	 *
+	 * @return bool
+	 */
+	private function nodes_contain_drawer( array $nodes ): bool {
+		foreach ( $nodes as $node ) {
+			if ( ! is_array( $node ) ) {
+				continue;
+			}
+			if ( 'drawer' === ( $node['type'] ?? '' ) ) {
+				return true;
+			}
+			if ( ! empty( $node['children'] ) && is_array( $node['children'] ) && $this->nodes_contain_drawer( $node['children'] ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Emit an Epson ePOS-Print drawer pulse.
+	 *
+	 * @param string $connector Drawer connector.
+	 */
+	private function emit_pulse( string $connector ): void {
+		$connector = \WCPOS\WooCommercePOS\Services\Print_Job_Service::normalize_drawer_connector( $connector );
+		$drawer    = 'pin5' === $connector ? 'drawer_2' : 'drawer_1';
+		$this->buffer .= '<pulse drawer="' . $drawer . '" time="pulse_100"/>';
 	}
 
 	/**
@@ -186,7 +269,7 @@ class Epos_Xml_Thermal_Emitter {
 				$this->emit_feed( $node );
 				break;
 			case 'drawer':
-				$this->buffer .= '<pulse/>';
+				$this->emit_pulse( isset( $node['connector'] ) ? (string) $node['connector'] : 'pin2' );
 				break;
 			case 'receipt':
 				$this->walk_nodes( isset( $node['children'] ) ? $node['children'] : array() );

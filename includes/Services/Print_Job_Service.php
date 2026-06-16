@@ -254,7 +254,12 @@ class Print_Job_Service {
 			}
 
 			try {
-				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, $wire );
+				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render(
+					$template,
+					$order,
+					$wire,
+					$this->drawer_render_options( $job )
+				);
 			} catch ( \Throwable $e ) {
 				// Defense in depth: never let a malformed template/payload bubble up
 				// as a 500 and leave the poll's claimed job stuck. Returning empty
@@ -282,6 +287,20 @@ class Print_Job_Service {
 		$payload = base64_decode( (string) $job['payload'], true );
 
 		return false === $payload ? '' : $payload;
+	}
+
+	/**
+	 * Build drawer options for thermal rendering.
+	 *
+	 * @param array $job Job array.
+	 *
+	 * @return array{auto_open_drawer:bool, drawer_connector:string}
+	 */
+	private function drawer_render_options( array $job ): array {
+		return array(
+			'auto_open_drawer' => ! empty( $job['auto_open_drawer'] ),
+			'drawer_connector' => (string) ( $job['drawer_connector'] ?? 'pin2' ),
+		);
 	}
 
 	/**

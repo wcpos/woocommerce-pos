@@ -178,6 +178,41 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It injects an Epson drawer pulse before cut when the job requests auto-open.
+	 */
+	public function test_render_payload_epos_xml_auto_open_drawer_injects_pulse_before_cut(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'epson1',
+						'name'     => 'Epson',
+						'provider' => 'epson-sdp',
+					),
+				),
+			)
+		);
+
+		$order = OrderHelper::create_order();
+		$tid   = $this->create_thermal_template( '<receipt paper-width="48"><text>Order #{{order.number}}</text><cut /></receipt>' );
+		$id    = $this->jobs->create(
+			array(
+				'printer_id'       => 'epson1',
+				'order_id'         => $order->get_id(),
+				'template_id'      => (string) $tid,
+				'auto_open_drawer' => true,
+				'drawer_connector' => 'pin5',
+			)
+		);
+
+		$xml = $this->jobs->render_payload( $this->jobs->get( $id ) );
+
+		$this->assertStringContainsString( '<pulse drawer="drawer_2" time="pulse_100"/>', $xml );
+		$this->assertLessThan( strpos( $xml, '<cut type="feed"/>' ), strpos( $xml, '<pulse drawer="drawer_2" time="pulse_100"/>' ) );
+	}
+
+	/**
 	 * It renders PDF bytes for a PrintNode pdf job.
 	 */
 	public function test_render_payload_renders_pdf_for_printnode_pdf_job(): void {
@@ -221,14 +256,29 @@ class Print_Job_Service_Render_Test extends \WC_REST_Unit_Test_Case {
 		add_filter( 'woocommerce_pos_wp_overnight_pdf_templates_enabled', '__return_true' );
 
 		$native_pdf = "%PDF-1.4\n% native wp overnight invoice from cloud print\n";
-		$callback   = static function () use ( $native_pdf ) {
+		$callback   = function () use ( $native_pdf ) {
 			return new class( $native_pdf ) {
+				/**
+				 * Native PDF bytes.
+				 *
+				 * @var string
+				 */
 				private $pdf;
 
+				/**
+				 * Constructor.
+				 *
+				 * @param string $pdf Native PDF bytes.
+				 */
 				public function __construct( string $pdf ) {
 					$this->pdf = $pdf;
 				}
 
+				/**
+				 * Return native PDF bytes.
+				 *
+				 * @return string
+				 */
 				public function get_pdf(): string {
 					return $this->pdf;
 				}
