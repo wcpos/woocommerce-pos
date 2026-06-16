@@ -158,7 +158,7 @@ class Cloud_Print_Trigger_Service {
 					'content_type' => $fmt['content_type'],
 					'pn_kind'      => $fmt['kind'],
 					'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
-					'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
+					'drawer_connector' => $drawer_options['drawer_connector'],
 				)
 			);
 			if ( $job_id > 0 ) {
@@ -181,7 +181,7 @@ class Cloud_Print_Trigger_Service {
 				'order_id'     => $order_id,
 				'template_id'  => $template_id,
 				'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
-				'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
+				'drawer_connector' => $drawer_options['drawer_connector'],
 			)
 		);
 
