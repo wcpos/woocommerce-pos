@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-15T14:10:20+00:00\n"
+"POT-Creation-Date: 2026-06-16T15:28:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -128,8 +128,8 @@ msgstr ""
 #. translators: Plugin admin screen label or notice for WCPOS.
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
 #: includes/Admin/Menu.php:190
-#: includes/Admin/Plugins.php:52
-#: includes/Admin/Products/Single_Product.php:207
+#: includes/Admin/Plugins.php:53
+#: includes/Admin/Products/Single_Product.php:209
 msgid "Upgrade to Pro"
 msgstr ""
 
@@ -171,26 +171,26 @@ msgid "POS base"
 msgstr ""
 
 #. translators: Prefix for an important plugin update notice in the WordPress plugins screen.
-#: includes/Admin/Plugins.php:82
+#: includes/Admin/Plugins.php:83
 msgid "Important:"
 msgstr ""
 
 #. translators: Plugin admin screen label or notice for WCPOS.
-#: includes/Admin/Plugins.php:96
+#: includes/Admin/Plugins.php:97
 msgid "Major Update"
 msgstr ""
 
-#: includes/Admin/Plugins.php:99
+#: includes/Admin/Plugins.php:100
 msgid "Update when you have time to test the POS. You can rollback to the previous version if needed."
 msgstr ""
 
 #. translators: Plugin admin screen label or notice for WCPOS.
-#: includes/Admin/Plugins.php:103
+#: includes/Admin/Plugins.php:104
 msgid "Pro Users:"
 msgstr ""
 
 #. translators: %s: URL to My Account page
-#: includes/Admin/Plugins.php:107
+#: includes/Admin/Plugins.php:108
 #, php-format
 msgid "WCPOS Pro is now a standalone plugin. Download the latest version from %s"
 msgstr ""
@@ -230,14 +230,14 @@ msgid "Product barcode used at the point of sale"
 msgstr ""
 
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
-#: includes/Admin/Products/Single_Product.php:105
-#: includes/Admin/Products/Single_Product.php:180
+#: includes/Admin/Products/Single_Product.php:106
+#: includes/Admin/Products/Single_Product.php:182
 msgid "Enable POS specific prices."
 msgstr ""
 
 #. translators: Product POS visibility or barcode label in WooCommerce admin.
-#: includes/Admin/Products/Single_Product.php:128
-#: includes/Admin/Products/Single_Product.php:194
+#: includes/Admin/Products/Single_Product.php:130
+#: includes/Admin/Products/Single_Product.php:196
 msgid "Enable POS specific taxes."
 msgstr ""
 
