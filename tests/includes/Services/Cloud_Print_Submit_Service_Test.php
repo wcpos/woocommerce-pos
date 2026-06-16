@@ -31,6 +31,13 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 	private $captured_body;
 
 	/**
+	 * Captured PrintNode request bodies from mocked HTTP calls.
+	 *
+	 * @var array<int, array>
+	 */
+	private $captured_bodies = array();
+
+	/**
 	 * Whether the mocked HTTP transport was hit.
 	 *
 	 * @var bool
@@ -44,8 +51,9 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		parent::setUp();
 		$this->jobs          = new Print_Job_Service();
 		$this->jobs->register_post_type();
-		$this->captured_body = null;
-		$this->http_called   = false;
+		$this->captured_body   = null;
+		$this->captured_bodies = array();
+		$this->http_called     = false;
 	}
 
 	/**
@@ -146,8 +154,9 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 				if ( false === strpos( (string) $url, '/printjobs' ) ) {
 					return $pre;
 				}
-				$this->http_called   = true;
-				$this->captured_body = json_decode( (string) ( $args['body'] ?? '' ), true );
+				$this->http_called       = true;
+				$this->captured_body     = json_decode( (string) ( $args['body'] ?? '' ), true );
+				$this->captured_bodies[] = $this->captured_body;
 
 				if ( is_wp_error( $return ) ) {
 					return $return;
@@ -195,6 +204,97 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 		$job = $this->jobs->get( $job_id );
 		$this->assertEquals( '987', $job['external_job_id'] );
 		$this->assertEquals( Print_Job_Service::STATUS_PRINTED, $job['status'] );
+	}
+
+	/**
+	 * It submits a separate raw drawer kick after a PrintNode PDF receipt when auto-open is requested.
+	 */
+	public function test_submit_pdf_job_with_auto_drawer_submits_second_raw_kick(): void {
+		$this->seed_printnode_printer();
+		$this->mock_printnode( '987' );
+		$tid    = $this->create_thermal_template();
+		$order  = OrderHelper::create_order();
+		$job_id = $this->jobs->create(
+			array(
+				'printer_id'       => 'pn',
+				'order_id'         => $order->get_id(),
+				'template_id'      => (string) $tid,
+				'content_type'     => 'application/pdf',
+				'pn_kind'          => 'pdf',
+				'auto_open_drawer' => true,
+				'drawer_connector' => 'pin5',
+			)
+		);
+
+		( new Cloud_Print_Submit_Service() )->submit( $job_id );
+
+		$this->assertCount( 2, $this->captured_bodies );
+		$this->assertEquals( 'pdf_base64', $this->captured_bodies[0]['contentType'] );
+		$this->assertEquals( 'raw_base64', $this->captured_bodies[1]['contentType'] );
+		$this->assertSame( "\x1B\x70\x01\x19\xFA", base64_decode( $this->captured_bodies[1]['content'], true ) );
+		$this->assertStringContainsString( 'Cash Drawer', $this->captured_bodies[1]['title'] );
+	}
+
+	/**
+	 * It does not retry or fail the accepted PDF receipt when the best-effort drawer kick fails.
+	 */
+	public function test_submit_pdf_job_drawer_failure_marks_printed_with_drawer_error(): void {
+		$this->seed_printnode_printer();
+		add_filter(
+			'pre_http_request',
+			function ( $pre, $args, $url ) {
+				if ( false === strpos( (string) $url, '/printjobs' ) ) {
+					return $pre;
+				}
+				$this->http_called       = true;
+				$this->captured_body     = json_decode( (string) ( $args['body'] ?? '' ), true );
+				$this->captured_bodies[] = $this->captured_body;
+
+				if ( 1 === count( $this->captured_bodies ) ) {
+					return array(
+						'headers'  => array(),
+						'body'     => '123',
+						'response' => array(
+							'code'    => 201,
+							'message' => 'Created',
+						),
+					);
+				}
+
+				return array(
+					'headers'  => array(),
+					'body'     => '',
+					'response' => array(
+						'code'    => 500,
+						'message' => 'Server Error',
+					),
+				);
+			},
+			10,
+			3
+		);
+
+		$tid    = $this->create_thermal_template();
+		$order  = OrderHelper::create_order();
+		$job_id = $this->jobs->create(
+			array(
+				'printer_id'       => 'pn',
+				'order_id'         => $order->get_id(),
+				'template_id'      => (string) $tid,
+				'content_type'     => 'application/pdf',
+				'pn_kind'          => 'pdf',
+				'auto_open_drawer' => true,
+			)
+		);
+
+		( new Cloud_Print_Submit_Service() )->submit( $job_id );
+
+		$job = $this->jobs->get( $job_id );
+		$this->assertCount( 2, $this->captured_bodies );
+		$this->assertEquals( Print_Job_Service::STATUS_PRINTED, $job['status'] );
+		$this->assertEquals( '123', $job['external_job_id'] );
+		$this->assertNotEquals( '', $job['drawer_error'] );
+		$this->assertFalse( wp_next_scheduled( Cloud_Print_Trigger_Service::CRON_SUBMIT, array( $job_id ) ) );
 	}
 
 	/**
@@ -380,7 +480,10 @@ class Cloud_Print_Submit_Service_Test extends \WC_REST_Unit_Test_Case {
 				return array(
 					'headers'  => array(),
 					'body'     => wp_json_encode( array( 'JobId' => '777' ) ),
-					'response' => array( 'code' => 201, 'message' => 'Created' ),
+					'response' => array(
+						'code'    => 201,
+						'message' => 'Created',
+					),
 				);
 			},
 			10,
