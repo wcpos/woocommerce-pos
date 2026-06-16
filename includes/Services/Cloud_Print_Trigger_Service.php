@@ -135,11 +135,12 @@ class Cloud_Print_Trigger_Service {
 	 * @param array             $printer     Registered printer config.
 	 * @param int               $order_id    Order id to render.
 	 * @param string            $template_id Template id (numeric) or virtual slug.
-	 * @param array             $template    Loaded template array.
+	 * @param array             $template       Loaded template array.
+	 * @param array             $drawer_options Drawer options.
 	 *
 	 * @return int Created job id, or 0 when the template is not printable on the provider.
 	 */
-	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template ): int {
+	public static function enqueue_order_job( Print_Job_Service $jobs, string $printer_id, array $printer, int $order_id, string $template_id, array $template, array $drawer_options = array() ): int {
 		$provider = (string) ( $printer['provider'] ?? '' );
 
 		if ( 'printnode' === $provider ) {
@@ -155,6 +156,8 @@ class Cloud_Print_Trigger_Service {
 					'template_id'  => $template_id,
 					'content_type' => $fmt['content_type'],
 					'pn_kind'      => $fmt['kind'],
+					'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
+					'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
 				)
 			);
 			if ( $job_id > 0 ) {
@@ -176,6 +179,8 @@ class Cloud_Print_Trigger_Service {
 				'content_type' => Provider::content_type( $provider ),
 				'order_id'     => $order_id,
 				'template_id'  => $template_id,
+				'auto_open_drawer' => ! empty( $drawer_options['auto_open_drawer'] ),
+				'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) ( $drawer_options['drawer_connector'] ?? 'pin2' ) ),
 			)
 		);
 
