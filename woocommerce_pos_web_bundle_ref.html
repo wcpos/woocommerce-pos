@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Action: woocommerce_pos_development_mode - 10up Distributor Hook Docs</title>
+    <title>Action: woocommerce_pos_web_bundle_ref - 10up Distributor Hook Docs</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -21,7 +21,7 @@
 <div id="main">
 
 	
-    <h1 class="page-title">Action: woocommerce_pos_development_mode</h1>
+    <h1 class="page-title">Action: woocommerce_pos_web_bundle_ref</h1>
 	
 
     
@@ -43,68 +43,24 @@
 
     
 
-    <h4 class="name" id="woocommerce_pos_development_mode">do_action( 'woocommerce_pos_development_mode', <span class="signature">bool )</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="woocommerce_pos_web_bundle_ref">do_action( 'woocommerce_pos_web_bundle_ref' )</h4>
 
     
 
 
 
 <div class="description">
-    <p>Filters whether the POS is in development mode.</p>
-<p>When true, loads the web bundle from localhost instead of CDN.
-Useful for local development of the web application.</p>
+    <p>The web-bundle ref served from jsDelivr (or a full base URL).</p>
+<p>Override via the WCPOS_WEB_BUNDLE_REF constant / env var or this filter to
+point a site at another lane for testing the in-development build locally
+or on staging: a branch (e.g. <code>next</code>), a tag, a commit, or a full base URL
+(anything containing <code>://</code>, e.g. a local dev server or an EAS preview).</p>
 </div>
 
 
 
 
 
-
-
-    <h5>Parameters:</h5>
-    
-
-<table class="params">
-    <thead>
-    <tr>
-        
-        <th>Name</th>
-        
-
-        <th>Type</th>
-
-        
-
-        
-
-        <th class="last">Description</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    
-
-        <tr>
-            
-                <td class="name"><code>bool</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last"><p>$development Whether development mode is enabled.
-Defaults to checking WCPOS_DEVELOPMENT constant,
-then $_ENV['DEVELOPMENT'].</p></td>
-        </tr>
-
-    
-    </tbody>
-</table>
 
 
 
@@ -115,9 +71,6 @@ then $_ENV['DEVELOPMENT'].</p></td>
 
     
 
-    
-    <dt class="tag-since">Since:</dt>
-    <dd class="tag-since"><ul class="dummy"><li>1.8.0</li></ul></dd>
     
 
     
@@ -143,7 +96,7 @@ then $_ENV['DEVELOPMENT'].</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="Templates_Frontend.php.html">Templates/Frontend.php</a>, <a href="Templates_Frontend.php.html#line109">line 109</a>
+        <a href="Templates_Frontend.php.html">Templates/Frontend.php</a>, <a href="Templates_Frontend.php.html#line148">line 148</a>
     </li></ul></dd>
     
 
