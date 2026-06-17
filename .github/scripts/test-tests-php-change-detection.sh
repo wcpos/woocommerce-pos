@@ -33,6 +33,26 @@ has_filter_path() {
   ' "$WORKFLOW_FILE"
 }
 
+has_pull_request_branch() {
+  local required_branch="$1"
+
+  awk -v required_branch="$required_branch" '
+    /^on:/ { in_on=1; next }
+    in_on && /^jobs:/ { exit }
+    in_on && /^  pull_request:/ { in_pull_request=1; next }
+    in_pull_request && /^  [A-Za-z_][^:]*:/ { in_pull_request=0 }
+    in_pull_request && /^[[:space:]]*-[[:space:]]/ && index($0, required_branch) { found=1 }
+    END { exit(found ? 0 : 1) }
+  ' "$WORKFLOW_FILE"
+}
+
+for required_branch in main next; do
+  if ! has_pull_request_branch "$required_branch"; then
+    echo "Expected $WORKFLOW_FILE to run on pull requests targeting $required_branch" >&2
+    exit 1
+  fi
+done
+
 for required_path in \
   '.github/test-matrix.json' \
   '.github/scripts/generate-matrix.sh' \
@@ -46,7 +66,7 @@ done
 
 for required_condition in \
   "if: needs.changes.outputs.php == 'true' || github.event_name == 'workflow_dispatch'" \
-  "if: needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch'" \
+  "if: (needs.smoke-test.result == 'success' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'" \
   "if: \"!cancelled() && (needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch')\""
 do
   if ! grep -Fq -- "$required_condition" "$WORKFLOW_FILE"; then
