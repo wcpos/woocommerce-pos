@@ -101,7 +101,7 @@ class Gateway_Bootstrap_Controller extends WC_REST_Controller {
 		}
 
 		$context = (array) $request->get_param( 'context' );
-		$data    = $this->gateway_contract->get_bootstrap_response( $gateway_id, $context, $request );
+		$data    = $this->gateway_contract->get_bootstrap_response( $gateway_id, $context, $request, $gateway );
 
 		return rest_ensure_response( $data );
 	}

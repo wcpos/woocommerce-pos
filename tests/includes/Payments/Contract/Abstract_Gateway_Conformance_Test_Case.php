@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Payments\Contract;
 
+use WCPOS\WooCommercePOS\Payments\Gateway_Adapter_Interface;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -33,6 +34,29 @@ abstract class Abstract_Gateway_Conformance_Test_Case extends WCPOS_REST_Unit_Te
 		$this->assertArrayHasKey( 'provider_data', $gateway );
 		$this->assertIsArray( $gateway['capabilities'] );
 		$this->assertIsArray( $gateway['provider_data'] );
+	}
+
+	/**
+	 * Assert a gateway implements the direct POS adapter interface.
+	 *
+	 * @param Gateway_Adapter_Interface $gateway Gateway adapter.
+	 */
+	protected function assert_gateway_adapter_contract( Gateway_Adapter_Interface $gateway ): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v1/payment-gateways' );
+
+		$this->assertIsString( $gateway->get_pos_provider( $request ) );
+		$this->assertIsString( $gateway->get_pos_type( $request ) );
+		$this->assertIsArray( $gateway->get_pos_provider_data( $request ) );
+		$this->assertIsBool( $gateway->supports_pos_checkout( $request ) );
+		$this->assertIsBool( $gateway->supports_pos_automatic_refunds( $request ) );
+		$this->assertIsBool( $gateway->supports_pos_provider_refunds( $request ) );
+
+		$bootstrap = $gateway->get_pos_bootstrap_response( array(), $request );
+		$this->assertSame( $this->gateway_id, $bootstrap['gateway_id'] ?? '' );
+		$this->assertArrayHasKey( 'status', $bootstrap );
+		$this->assertArrayHasKey( 'provider_data', $bootstrap );
+		$this->assertArrayHasKey( 'expires_at', $bootstrap );
+		$this->assertIsArray( $bootstrap['provider_data'] );
 	}
 
 	/**

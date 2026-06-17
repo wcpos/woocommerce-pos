@@ -14,12 +14,13 @@ namespace WCPOS\WooCommercePOS\Gateways;
 
 use WC_Order;
 use WC_Order_Item_Fee;
-use WC_Payment_Gateway;
+use WCPOS\WooCommercePOS\Payments\Abstract_POS_Gateway;
+use WP_REST_Request;
 
 /**
  * Cash class.
  */
-class Cash extends WC_Payment_Gateway {
+class Cash extends Abstract_POS_Gateway {
 	/**
 	 * Constructor for the gateway.
 	 */
@@ -42,11 +43,7 @@ class Cash extends WC_Payment_Gateway {
 			)
 		);
 		add_action( 'woocommerce_thankyou_pos_cash', array( $this, 'calculate_change' ) );
-		add_filter( 'wcpos_payment_gateway_provider', array( $this, 'wcpos_provider' ), 10, 3 );
-		add_filter( 'wcpos_payment_gateway_pos_type', array( $this, 'wcpos_pos_type' ), 10, 3 );
-		add_filter( 'wcpos_payment_gateway_provider_data', array( $this, 'wcpos_provider_data' ), 10, 3 );
-		add_filter( 'wcpos_payment_gateway_bootstrap', array( $this, 'wcpos_bootstrap' ), 10, 4 );
-		add_filter( 'wcpos_process_checkout_action_' . $this->id, array( $this, 'wcpos_process_checkout_action' ), 10, 5 );
+		$this->register_pos_gateway_contract_hooks();
 	}
 
 	/**
@@ -208,89 +205,26 @@ class Cash extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * POS provider family.
+	 * Provider family identifier.
 	 *
-	 * @param string $provider Provider value.
-	 * @param mixed  $gateway  Gateway object.
-	 * @param mixed  $request  REST request.
+	 * @param WP_REST_Request|null $request Request object.
 	 */
-	public function wcpos_provider( $provider, $gateway, $request = null ) {
-		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
-			return 'wcpos';
-		}
-
-		return $provider;
+	public function get_pos_provider( ?WP_REST_Request $request = null ): string {
+		return 'wcpos';
 	}
 
 	/**
-	 * POS type.
+	 * Process a POS checkout action for cash.
 	 *
-	 * @param string $pos_type POS type.
-	 * @param mixed  $gateway  Gateway object.
-	 * @param mixed  $request  REST request.
-	 */
-	public function wcpos_pos_type( $pos_type, $gateway, $request = null ) {
-		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
-			return 'manual';
-		}
-
-		return $pos_type;
-	}
-
-	/**
-	 * Non-secret provider data.
+	 * @param array                $state        Checkout state.
+	 * @param string               $action       Checkout action.
+	 * @param array                $payment_data Payment data.
+	 * @param WC_Order             $order        Order object.
+	 * @param WP_REST_Request|null $request      Request object.
 	 *
-	 * @param array $provider_data Provider data.
-	 * @param mixed $gateway       Gateway object.
-	 * @param mixed $request       REST request.
+	 * @return array|\WP_Error
 	 */
-	public function wcpos_provider_data( $provider_data, $gateway, $request = null ) {
-		if ( $gateway instanceof WC_Payment_Gateway && $this->id === $gateway->id ) {
-			return array();
-		}
-
-		return $provider_data;
-	}
-
-	/**
-	 * Bootstrap response for POS cash.
-	 *
-	 * @param array  $response   Bootstrap response.
-	 * @param string $gateway_id Gateway ID.
-	 * @param array  $context    Bootstrap context.
-	 * @param mixed  $request    REST request.
-	 */
-	public function wcpos_bootstrap( $response, $gateway_id, $context = array(), $request = null ) {
-		if ( $this->id === $gateway_id ) {
-			return array(
-				'gateway_id'    => $gateway_id,
-				'status'        => 'ready',
-				'expires_at'    => null,
-				'provider_data' => array(),
-			);
-		}
-
-		return $response;
-	}
-
-	/**
-	 * Handle POS checkout contract.
-	 *
-	 * @param array|\WP_Error $state        Checkout state.
-	 * @param string          $action       Checkout action.
-	 * @param array           $payment_data Payment data.
-	 * @param WC_Order        $order      Order object.
-	 * @param mixed           $request      REST request.
-	 */
-	public function wcpos_process_checkout_action( $state, $action, $payment_data, $order, $request = null ) {
-		if ( is_wp_error( $state ) ) {
-			return $state;
-		}
-
-		if ( ( $state['gateway_id'] ?? '' ) !== $this->id ) {
-			return $state;
-		}
-
+	public function process_pos_checkout_action( array $state, string $action, array $payment_data, WC_Order $order, ?WP_REST_Request $request = null ) {
 		if ( 'cancel' === $action ) {
 			$state['status'] = 'cancelled';
 			return $state;
