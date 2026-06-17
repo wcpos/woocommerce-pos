@@ -72,7 +72,7 @@ flowchart LR
     AUTH <--> WC
 ```
 
-- **REST API** — a dedicated `wcpos/v1` namespace (`/wp-json/wcpos/v1/…`) with controllers for products, variations, categories, tags, brands, orders, customers, coupons, taxes, shipping, payment gateways, checkout, receipts, templates, stores, settings, print jobs and more. For requests it doesn't own, it transparently adapts the standard WooCommerce REST API for POS clients.
+- **REST API** — a dedicated `wcpos/v1` namespace (`/wp-json/wcpos/v1/…`) with controllers for products, variations, categories, tags, brands, orders, customers, coupons, taxes, shipping, payment gateways, checkout, receipts, templates, stores, settings, print jobs and more. POS REST requests must include the `X-WCPOS: 1` header (or `?wcpos=1` for manual requests) so WordPress registers the WCPOS routes. For requests it doesn't own, the plugin transparently adapts the standard WooCommerce REST API for POS clients.
 - **Authentication** — JWT (HS256) with per-site access and refresh secrets. Tokens are read from the `Authorization` header, the Apache `REDIRECT_HTTP_AUTHORIZATION` fallback, or an `?authorization=` query param for hosts that strip auth headers. CORS and frame headers are relaxed on POS routes so the desktop/mobile apps can embed login and load the bundle.
 - **Templates** — a custom rewrite router serves the POS app, login, auth and checkout/receipt pages outside the normal WordPress theme. The POS UI bundle itself is loaded from `cdn.jsdelivr.net/gh/wcpos/web-bundle@<ref>/build` (the ref is derived from the plugin version and overridable via the `WCPOS_WEB_BUNDLE_REF` constant/env for local development).
 - **Admin** — adds a top-level **POS** menu (View POS, Settings, Templates). The settings, template gallery/editor, analytics and consent screens are small React apps that live in `packages/`.
@@ -81,7 +81,7 @@ WooCommerce **HPOS** (custom order tables) and product-instance caching are both
 
 ## 📁 Project structure
 
-```
+```text
 woocommerce-pos.php   # Main plugin file / entry point
 readme.txt            # The canonical WordPress.org plugin readme & changelog
 includes/             # All plugin PHP (PSR-4: WCPOS\WooCommercePOS\)
@@ -120,9 +120,6 @@ The plugin combines PHP (Composer) with a pnpm/Turborepo workspace for its admin
 git clone https://github.com/wcpos/woocommerce-pos.git
 cd woocommerce-pos
 
-# set the local-development flag
-cp .env.example .env
-
 # PHP: scope the bundled JWT/vendor deps, then install
 composer prefix-dependencies
 composer install
@@ -134,12 +131,14 @@ pnpm install
 pnpm wp-env start
 ```
 
+Copy `.env.example` to `.env` only when you are also running the separate WCPOS web-bundle dev server. It sets `DEVELOPMENT=true`, which makes the POS UI load assets from `http://localhost:4567/build`; otherwise the plugin uses the jsDelivr bundle. To test a different hosted bundle or branch, set the `WCPOS_WEB_BUNDLE_REF` constant or environment variable.
+
 **Common commands**
 
 | Command | Description |
 | --- | --- |
 | `pnpm build` | Build all admin React apps (`pnpm -r run build` via Turborepo) |
-| `pnpm settings start` | Run an individual admin app in watch mode (also `template-gallery`, etc.) |
+| `pnpm settings dev` / `pnpm template-gallery dev` | Run an individual admin app in watch mode |
 | `composer lint` / `composer format` | PHP_CodeSniffer (WordPress standards) check / autofix |
 | `composer fix` | Run PHP-CS-Fixer |
 | `composer phpstan` | Static analysis (PHPStan) |
