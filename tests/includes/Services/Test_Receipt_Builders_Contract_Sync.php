@@ -358,6 +358,33 @@ class Test_Receipt_Builders_Contract_Sync extends WC_REST_Unit_Test_Case {
 		$preview = ( new Preview_Receipt_Builder() )->build();
 
 		$this->assertSame( array_keys( $live ), array_keys( $preview ) );
+		foreach ( array( 'order', 'store', 'cashier', 'customer', 'totals', 'tax', 'presentation_hints', 'fiscal' ) as $section ) {
+			$live_keys    = array_keys( $live[ $section ] );
+			$preview_keys = array_keys( $preview[ $section ] );
+			sort( $live_keys );
+			sort( $preview_keys );
+
+			$this->assertSame(
+				$live_keys,
+				$preview_keys,
+				sprintf( 'Live and preview receipt payloads must emit matching %s keys.', $section )
+			);
+		}
+
+		$this->assertNotEmpty( $live['lines'], 'Live receipt sample must include lines.' );
+		$this->assertNotEmpty( $preview['lines'], 'Preview receipt sample must include lines.' );
+
+		$live_line_keys    = array_keys( $live['lines'][0] );
+		$preview_line_keys = array_keys( $preview['lines'][0] );
+		sort( $live_line_keys );
+		sort( $preview_line_keys );
+
+		$this->assertSame(
+			$live_line_keys,
+			$preview_line_keys,
+			'Live and preview receipt payloads must emit matching line item keys.'
+		);
+
 		$this->assertSame( array_keys( $live['tax'] ), array_keys( $preview['tax'] ) );
 		$this->assertSame( array_keys( $live['presentation_hints'] ), array_keys( $preview['presentation_hints'] ) );
 		$this->assertArrayNotHasKey( 'display_tax', $live['presentation_hints'] );
