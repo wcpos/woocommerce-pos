@@ -4,6 +4,10 @@ on:
   issues:
     types: [opened]
 
+# Project board writes use a GitHub App token; the GITHUB_TOKEN only reads.
+permissions:
+  contents: read
+
 jobs:
   add-to-project:
     name: Add issue to Roadmap
