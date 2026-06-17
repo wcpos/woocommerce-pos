@@ -143,7 +143,7 @@ class Settings extends WP_REST_Controller {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => array( $this, 'update_payment_gateways_settings' ),
 				'permission_callback' => array( $this, 'update_permission_check' ),
-				'args'                => $this->get_checkout_endpoint_args(),
+				'args'                => $this->get_payment_gateways_endpoint_args(),
 			)
 		);
 
@@ -281,6 +281,19 @@ class Settings extends WP_REST_Controller {
 	 */
 	public function get_checkout_endpoint_args(): array {
 		$section = SettingsService::instance()->sections()->get( 'checkout' );
+
+		return $section ? $section->endpoint_args() : array();
+	}
+
+	/**
+	 * Get payment gateways endpoint arguments.
+	 *
+	 * Delegates to the registered Payment Gateways Settings Section.
+	 *
+	 * @return Closure[][]
+	 */
+	public function get_payment_gateways_endpoint_args(): array {
+		$section = SettingsService::instance()->sections()->get( 'payment_gateways' );
 
 		return $section ? $section->endpoint_args() : array();
 	}

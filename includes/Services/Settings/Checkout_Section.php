@@ -114,9 +114,8 @@ class Checkout_Section extends Abstract_Section {
 	}
 
 	/**
-	 * REST endpoint args. Moved verbatim from
-	 * API\Settings::get_checkout_endpoint_args() (also reused by the
-	 * payment-gateways update route, as before).
+	 * REST endpoint args for checkout updates. Payment-gateway update
+	 * validation lives in Payment_Gateways_Section.
 	 */
 	public function endpoint_args(): array {
 		return array(
@@ -136,21 +135,6 @@ class Checkout_Section extends Abstract_Section {
 				},
 			),
 			'cashier_emails' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_array( $param );
-				},
-			),
-			'auto_print_receipt' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_bool( $param );
-				},
-			),
-			'default_gateway' => array(
-				'validate_callback' => function ( $param, $request, $key ) {
-					return \is_string( $param );
-				},
-			),
-			'gateways' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_array( $param );
 				},

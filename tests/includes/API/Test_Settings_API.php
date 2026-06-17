@@ -277,6 +277,22 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Payment-gateway update validation belongs to the payment-gateway section,
+	 * not the checkout section.
+	 */
+	public function test_payment_gateways_endpoint_args_are_owned_by_payment_gateways_section(): void {
+		$checkout_args = $this->api->get_checkout_endpoint_args();
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $checkout_args );
+		$this->assertArrayNotHasKey( 'default_gateway', $checkout_args );
+		$this->assertArrayNotHasKey( 'gateways', $checkout_args );
+
+		$payment_gateway_args = $this->api->get_payment_gateways_endpoint_args();
+		$this->assertArrayHasKey( 'auto_print_receipt', $payment_gateway_args );
+		$this->assertArrayHasKey( 'default_gateway', $payment_gateway_args );
+		$this->assertArrayHasKey( 'gateways', $payment_gateway_args );
+	}
+
+	/**
 	 * Test updating payment gateways settings.
 	 */
 	public function test_update_payment_gateways_settings(): void {

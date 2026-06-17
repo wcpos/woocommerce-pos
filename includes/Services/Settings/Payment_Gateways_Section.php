@@ -48,6 +48,29 @@ class Payment_Gateways_Section extends Abstract_Section {
 	}
 
 	/**
+	 * REST endpoint args for payment-gateway updates.
+	 */
+	public function endpoint_args(): array {
+		return array(
+			'auto_print_receipt' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
+			'default_gateway' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_string( $param );
+				},
+			),
+			'gateways' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_array( $param );
+				},
+			),
+		);
+	}
+
+	/**
 	 * Read the gateway settings view. Pure — no DB writes.
 	 */
 	public function read(): array {

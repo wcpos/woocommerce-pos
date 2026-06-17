@@ -40,6 +40,25 @@ class Settings {
 	private static $instance = null;
 
 	/**
+	 * Core options deleted by delete_all_settings(). This is the explicit
+	 * factory-reset scope for the free plugin; extension-registered sections are
+	 * not included implicitly just because they participate in the registry.
+	 *
+	 * @var string[]
+	 */
+	private const CORE_RESET_SECTION_IDS = array(
+		'general',
+		'tax_ids',
+		'checkout',
+		'payment_gateways',
+		'tools',
+		'visibility',
+		'access',
+		'license',
+		'cloud_print',
+	);
+
+	/**
 	 * The Section Registry. Built lazily on first access so registrants can
 	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
 	 *
@@ -151,7 +170,8 @@ class Settings {
 			return $settings[ $key ];
 		}
 
-		// Legacy path for sections not yet registered.
+		// Supported legacy fallback for public get_{id}_settings() delegates
+		// and third-party ids that have not registered a Settings Section.
 		$method_name = 'get_' . $id . '_settings';
 
 		if ( method_exists( $this, $method_name ) ) {
@@ -195,6 +215,9 @@ class Settings {
 			return $section->write( $settings );
 		}
 
+		// Supported legacy generic persist path for third-party ids that have
+		// not registered a Settings Section. Preserves the frozen option name
+		// and pre_save/saved hook contract.
 		$sanitize_method = 'sanitize_' . $id . '_settings';
 		if ( method_exists( $this, $sanitize_method ) ) {
 			$settings = $this->$sanitize_method( $settings );
@@ -256,6 +279,12 @@ class Settings {
 
 		return $saved_settings;
 	}
+
+	/*
+	 * Public get_{id}_settings() delegates are supported read API for Pro and
+	 * extensions. Keep them as non-deprecated facades until that public surface
+	 * is intentionally replaced.
+	 */
 
 	/**
 	 * Get general settings.
@@ -686,7 +715,7 @@ class Settings {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
 
-		foreach ( array_keys( self::instance()->sections()->all() ) as $id ) {
+		foreach ( self::CORE_RESET_SECTION_IDS as $id ) {
 			delete_option( self::$db_prefix . $id );
 		}
 
