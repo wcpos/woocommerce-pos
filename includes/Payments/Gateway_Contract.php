@@ -9,7 +9,9 @@ namespace WCPOS\WooCommercePOS\Payments;
 
 \defined( 'ABSPATH' ) || die;
 
+use WC_Order;
 use WC_Payment_Gateway;
+use WP_Error;
 use WP_REST_Request;
 
 /**
@@ -17,20 +19,13 @@ use WP_REST_Request;
  */
 class Gateway_Contract {
 	/**
-	 * Built-in gateways with manual POS handling.
-	 */
-	private const MANUAL_GATEWAYS = array( 'pos_cash', 'pos_card' );
-
-	/**
 	 * Infer POS type for a gateway.
 	 *
 	 * @param WC_Payment_Gateway $gateway Gateway object.
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function infer_pos_type( WC_Payment_Gateway $gateway, WP_REST_Request $request ): string {
-		$default = in_array( $gateway->id, self::MANUAL_GATEWAYS, true ) ? 'manual' : 'manual';
-
-		return (string) apply_filters( 'wcpos_payment_gateway_pos_type', $default, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return $this->get_adapter( $gateway )->get_pos_type( $request );
 	}
 
 	/**
@@ -40,7 +35,7 @@ class Gateway_Contract {
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function get_provider( WC_Payment_Gateway $gateway, WP_REST_Request $request ): string {
-		return (string) apply_filters( 'wcpos_payment_gateway_provider', $gateway->id, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return $this->get_adapter( $gateway )->get_pos_provider( $request );
 	}
 
 	/**
@@ -50,7 +45,7 @@ class Gateway_Contract {
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function get_provider_data( WC_Payment_Gateway $gateway, WP_REST_Request $request ): array {
-		return (array) apply_filters( 'wcpos_payment_gateway_provider_data', array(), $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return $this->get_adapter( $gateway )->get_pos_provider_data( $request );
 	}
 
 	/**
@@ -77,9 +72,7 @@ class Gateway_Contract {
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function supports_checkout( WC_Payment_Gateway $gateway, WP_REST_Request $request ): bool {
-		$has_handler = false !== has_action( 'wcpos_process_checkout_action_' . $gateway->id );
-
-		return (bool) apply_filters( 'wcpos_payment_gateway_supports_checkout', $has_handler, $gateway, $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+		return $this->get_adapter( $gateway )->supports_pos_checkout( $request );
 	}
 
 	/**
@@ -89,13 +82,13 @@ class Gateway_Contract {
 	 * @param WP_REST_Request    $request Request object.
 	 */
 	public function get_capabilities( WC_Payment_Gateway $gateway, WP_REST_Request $request ): array {
-		$pos_type                  = $this->infer_pos_type( $gateway, $request );
-		$supports_provider_refunds = ! in_array( $gateway->id, self::MANUAL_GATEWAYS, true ) && $gateway->supports( 'refunds' );
+		$adapter  = $this->get_adapter( $gateway );
+		$pos_type = $adapter->get_pos_type( $request );
 
 		return array(
-			'supports_checkout'          => $this->supports_checkout( $gateway, $request ),
-			'supports_automatic_refunds' => (bool) apply_filters( 'wcpos_payment_gateway_supports_automatic_refunds', $supports_provider_refunds, $gateway, $request ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
-			'supports_provider_refunds'  => (bool) apply_filters( 'wcpos_payment_gateway_supports_provider_refunds', $supports_provider_refunds, $gateway, $request ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
+			'supports_checkout'          => $adapter->supports_pos_checkout( $request ),
+			'supports_automatic_refunds' => $adapter->supports_pos_automatic_refunds( $request ),
+			'supports_provider_refunds'  => $adapter->supports_pos_provider_refunds( $request ),
 			'requires_hardware'          => 'terminal' === $pos_type,
 		);
 	}
@@ -103,11 +96,20 @@ class Gateway_Contract {
 	/**
 	 * Default bootstrap response.
 	 *
-	 * @param string          $gateway_id Gateway ID.
-	 * @param array           $context    Bootstrap context.
-	 * @param WP_REST_Request $request    Request object.
+	 * The optional gateway parameter allows direct PHP adapters to provide the
+	 * response while preserving the existing public method signature for callers
+	 * that only have a gateway ID and depend on the legacy filter contract.
+	 *
+	 * @param string                  $gateway_id Gateway ID.
+	 * @param array                   $context    Bootstrap context.
+	 * @param WP_REST_Request         $request    Request object.
+	 * @param WC_Payment_Gateway|null $gateway    Gateway object.
 	 */
-	public function get_bootstrap_response( string $gateway_id, array $context, WP_REST_Request $request ): array {
+	public function get_bootstrap_response( string $gateway_id, array $context, WP_REST_Request $request, ?WC_Payment_Gateway $gateway = null ): array {
+		if ( $gateway instanceof WC_Payment_Gateway ) {
+			return $this->get_adapter( $gateway )->get_pos_bootstrap_response( $context, $request );
+		}
+
 		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS gateway contract filter.
 		return (array) apply_filters(
 			'wcpos_payment_gateway_bootstrap',
@@ -125,11 +127,45 @@ class Gateway_Contract {
 	}
 
 	/**
+	 * Process a POS checkout action through the gateway adapter.
+	 *
+	 * @param WC_Payment_Gateway $gateway      Gateway object.
+	 * @param int                $order_id     Order ID.
+	 * @param string             $action       Checkout action.
+	 * @param array              $payment_data Payment data.
+	 * @param WC_Order           $order        Order object.
+	 * @param WP_REST_Request    $request      Request object.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function process_checkout_action( WC_Payment_Gateway $gateway, int $order_id, string $action, array $payment_data, WC_Order $order, WP_REST_Request $request ) {
+		$state = array(
+			'checkout_id'   => wp_generate_uuid4(),
+			'order_id'      => $order_id,
+			'gateway_id'    => $gateway->id,
+			'status'        => 'processing',
+			'provider_data' => array(),
+			'terminal'      => false,
+		);
+
+		return $this->get_adapter( $gateway )->process_pos_checkout_action( $state, $action, $payment_data, $order, $request );
+	}
+
+	/**
 	 * Whether a checkout status is terminal.
 	 *
 	 * @param string $status Checkout status.
 	 */
 	public function is_terminal_status( string $status ): bool {
 		return in_array( $status, array( 'completed', 'failed', 'cancelled', 'awaiting_customer' ), true );
+	}
+
+	/**
+	 * Wrap a WooCommerce gateway with the POS adapter shim.
+	 *
+	 * @param WC_Payment_Gateway $gateway Gateway object.
+	 */
+	private function get_adapter( WC_Payment_Gateway $gateway ): Gateway_Adapter_Interface {
+		return new Filter_Gateway_Adapter( $gateway );
 	}
 }

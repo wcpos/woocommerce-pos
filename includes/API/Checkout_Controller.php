@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API;
 \defined( 'ABSPATH' ) || die;
 
 use WC_Payment_Gateway;
+use WC_Order;
 use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
@@ -183,7 +184,7 @@ class Checkout_Controller extends WC_REST_Controller {
 		try {
 			$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
 			$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
-			$state        = $this->dispatch_checkout_action( $gateway_id, $order->get_id(), $action, $payment_data, $order, $request );
+			$state        = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
 
 			if ( is_wp_error( $state ) ) {
 				return $state;
@@ -269,33 +270,17 @@ class Checkout_Controller extends WC_REST_Controller {
 	/**
 	 * Dispatch checkout processing to the resolved gateway only.
 	 *
-	 * @param string          $gateway_id    Gateway ID.
-	 * @param int             $order_id      Order ID.
-	 * @param string          $action        Checkout action.
-	 * @param array           $payment_data  Payment data.
-	 * @param \WC_Order       $order         Order object.
-	 * @param WP_REST_Request $request       Request object.
+	 * @param WC_Payment_Gateway $gateway      Gateway object.
+	 * @param int                $order_id     Order ID.
+	 * @param string             $action       Checkout action.
+	 * @param array              $payment_data Payment data.
+	 * @param WC_Order           $order        Order object.
+	 * @param WP_REST_Request    $request      Request object.
 	 *
 	 * @return array|WP_Error
 	 */
-	private function dispatch_checkout_action( string $gateway_id, int $order_id, string $action, array $payment_data, $order, WP_REST_Request $request ) {
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Public POS checkout contract filter.
-		return apply_filters(
-			"wcpos_process_checkout_action_{$gateway_id}",
-			array(
-				'checkout_id'   => wp_generate_uuid4(),
-				'order_id'      => $order_id,
-				'gateway_id'    => $gateway_id,
-				'status'        => 'processing',
-				'provider_data' => array(),
-				'terminal'      => false,
-			),
-			$action,
-			$payment_data,
-			$order,
-			$request
-		);
-		// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+	private function dispatch_checkout_action( WC_Payment_Gateway $gateway, int $order_id, string $action, array $payment_data, WC_Order $order, WP_REST_Request $request ) {
+		return $this->gateway_contract->process_checkout_action( $gateway, $order_id, $action, $payment_data, $order, $request );
 	}
 
 	/**
