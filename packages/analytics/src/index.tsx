@@ -28,7 +28,7 @@ const WrappedReport = ({ Component, ...props }) => {
 					rel="noopener noreferrer"
 					href="https://wcpos.com/pro"
 					onClick={() =>
-						window?.wcpos?.posthog?.capture?.('upgrade_cta_clicked', {
+						window?.wcpos?.posthog?.capture?.('pro_link_clicked', {
 							placement: 'analytics_screen',
 							destination: 'https://wcpos.com/pro',
 						})
