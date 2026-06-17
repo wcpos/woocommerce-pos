@@ -40,6 +40,14 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		delete_option( 'woocommerce_pos_settings_general' );
+
+		$subscriber = get_role( 'subscriber' );
+		if ( $subscriber ) {
+			$subscriber->remove_cap( 'access_woocommerce_pos' );
+			$subscriber->remove_cap( 'manage_options' );
+			$subscriber->remove_cap( 'wcpos_extension_test_cap' );
+		}
+
 		parent::tearDown();
 	}
 
@@ -149,6 +157,101 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 		$response = $this->api->update_access_settings( $request );
 		$this->assertTrue( $response['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/**
+	 * Test granting an in-group access capability.
+	 */
+	public function test_update_access_settings_grants_in_group_capability(): void {
+		$role = get_role( 'subscriber' );
+		$role->remove_cap( 'access_woocommerce_pos' );
+
+		$request = $this->mock_rest_request(
+			array(
+				'subscriber' => array(
+					'capabilities' => array(
+						'wcpos' => array(
+							'access_woocommerce_pos' => true,
+						),
+					),
+				),
+			)
+		);
+
+		$response = $this->api->update_access_settings( $request );
+
+		$this->assertTrue( get_role( 'subscriber' )->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertTrue( $response['subscriber']['capabilities']['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/**
+	 * Test granting a filtered extension capability.
+	 */
+	public function test_update_access_settings_grants_filter_added_capability(): void {
+		$capability = 'wcpos_extension_test_cap';
+		$role       = get_role( 'subscriber' );
+		$role->remove_cap( $capability );
+
+		$filter = static function ( array $settings ) use ( $capability ): array {
+			foreach ( array_keys( $settings ) as $slug ) {
+				$role = get_role( $slug );
+
+				$settings[ $slug ]['capabilities']['extensions'][ $capability ] = $role
+					? $role->has_cap( $capability )
+					: false;
+			}
+
+			return $settings;
+		};
+
+		add_filter( 'woocommerce_pos_access_settings', $filter );
+
+		try {
+			$request = $this->mock_rest_request(
+				array(
+					'subscriber' => array(
+						'capabilities' => array(
+							'extensions' => array(
+								$capability => true,
+							),
+						),
+					),
+				)
+			);
+
+			$response = $this->api->update_access_settings( $request );
+
+			$this->assertTrue( get_role( 'subscriber' )->has_cap( $capability ) );
+			$this->assertTrue( $response['subscriber']['capabilities']['extensions'][ $capability ] );
+		} finally {
+			remove_filter( 'woocommerce_pos_access_settings', $filter );
+		}
+	}
+
+	/**
+	 * Test rejecting a capability outside the filtered access matrix.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/1159
+	 */
+	public function test_update_access_settings_ignores_out_of_band_capability(): void {
+		$role = get_role( 'subscriber' );
+		$role->remove_cap( 'manage_options' );
+
+		$request = $this->mock_rest_request(
+			array(
+				'subscriber' => array(
+					'capabilities' => array(
+						'wp' => array(
+							'manage_options' => true,
+						),
+					),
+				),
+			)
+		);
+
+		$this->api->update_access_settings( $request );
+
+		$this->assertFalse( get_role( 'subscriber' )->has_cap( 'manage_options' ) );
 	}
 
 	/**
