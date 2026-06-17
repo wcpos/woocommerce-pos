@@ -107,6 +107,68 @@ class Test_Taxes_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array_merge( $gb_tax_ids, $us_tax_ids ), $ids );
 	}
 
+	public function test_taxes_api_get_all_ids_with_include_filter(): void {
+		$tax_id1 = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'NY',
+				'rate'    => '8.375',
+				'name'    => 'NY Fast Tax',
+			)
+		);
+		$tax_id2 = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'CA',
+				'rate'    => '7.25',
+				'name'    => 'CA Fast Tax',
+			)
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $tax_id1 ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $tax_id1 ), $ids );
+		$this->assertNotContains( $tax_id2, $ids );
+	}
+
+	public function test_taxes_api_get_all_ids_with_exclude_filter(): void {
+		$tax_id1 = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'NY',
+				'rate'    => '8.375',
+				'name'    => 'NY Fast Exclude Tax',
+			)
+		);
+		$tax_id2 = TaxHelper::create_tax_rate(
+			array(
+				'country' => 'US',
+				'state'   => 'CA',
+				'rate'    => '7.25',
+				'name'    => 'CA Fast Exclude Tax',
+			)
+		);
+		$request = $this->wp_rest_get_request( '/wcpos/v1/taxes' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $tax_id1 ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $tax_id1, $ids );
+		$this->assertContains( $tax_id2, $ids );
+	}
+
 	/**
 	 * The Tax endpoint is not accessible by cashiers by default.
 	 */

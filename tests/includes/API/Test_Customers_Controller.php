@@ -127,6 +127,57 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( 1, $this->user, $customer->get_id() ), $ids );
 	}
 
+	public function test_customer_api_get_all_ids_with_include_filter(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $customer1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $customer1->get_id() ), $ids );
+		$this->assertNotContains( $customer2->get_id(), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_exclude_filter(): void {
+		$customer1 = CustomerHelper::create_customer();
+		$customer2 = CustomerHelper::create_customer();
+		$request   = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $customer1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $customer1->get_id(), $ids );
+		$this->assertContains( $customer2->get_id(), $ids );
+	}
+
+	public function test_customer_api_get_all_ids_with_modified_after_returns_updated_ids_without_date_field(): void {
+		$customer = CustomerHelper::create_customer();
+		update_user_meta( $customer->get_id(), 'last_update', time() );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'modified_after', gmdate( 'Y-m-d\TH:i:s', time() - 60 ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertContains( $customer->get_id(), $ids );
+	}
+
 	/**
 	 * Each customer needs a UUID.
 	 */

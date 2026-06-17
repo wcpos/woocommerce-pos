@@ -236,7 +236,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * Check if the request is for all orders and if the 'posts_per_page' is set to -1.
 		 * Optimised query for getting all order IDs.
 		 */
-		if ( -1 == $request->get_param( 'posts_per_page' ) && null !== $request->get_param( 'fields' ) ) {
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
 			return $this->wcpos_get_all_posts( $request );
 		}
 
@@ -1191,15 +1191,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
-		// Start timing execution.
 		$start_time = microtime( true );
 
-		$modified_after        = $request->get_param( 'modified_after' );
-		$dates_are_gmt         = true; // Dates are always in GMT.
-		$fields                = $request->get_param( 'fields' );
-		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
-
-		// Check if HPOS is enabled and custom orders table is used.
 		$hpos_enabled = class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled();
 		$sql          = '';
 
@@ -1211,55 +1204,37 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		);
 
 		if ( $hpos_enabled ) {
-			$select_fields = $id_with_modified_date ? 'id, date_updated_gmt as date_modified_gmt' : 'id';
+			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'id', 'date_updated_gmt' );
 			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->prefix}wc_orders WHERE type = 'shop_order'";
 			$sql .= ' AND status IN (' . implode( ',', $statuses ) . ')';
 
-			// Add modified_after condition if provided.
-			if ( $modified_after ) {
-				$modified_after_date = gmdate( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
+			if ( $modified_after_date ) {
 				$sql .= $wpdb->prepare( ' AND date_updated_gmt > %s', $modified_after_date );
 			}
 
-			// Order by date_created_gmt DESC to maintain order consistency.
+			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->prefix}wc_orders.id" );
 			$sql .= " ORDER BY {$wpdb->prefix}wc_orders.date_created_gmt DESC";
 		} else {
-			$select_fields = $id_with_modified_date ? 'ID as id, post_modified_gmt as date_modified_gmt' : 'ID as id';
+			$select_fields = Bulk_ID_Fast_Path::select_fields( $request, 'ID', 'post_modified_gmt' );
 			$sql .= "SELECT DISTINCT {$select_fields} FROM {$wpdb->posts} WHERE post_type = 'shop_order'";
 			$sql .= ' AND post_status IN (' . implode( ',', $statuses ) . ')';
 
-			// Add modified_after condition if provided.
-			if ( $modified_after ) {
-				$modified_after_date = gmdate( 'Y-m-d H:i:s', strtotime( $modified_after ) );
+			$modified_after_date = Bulk_ID_Fast_Path::modified_after_gmt( $request );
+			if ( $modified_after_date ) {
 				$sql .= $wpdb->prepare( ' AND post_modified_gmt > %s', $modified_after_date );
 			}
 
-			// Order by post_date DESC to maintain order consistency.
+			$sql = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->posts}.ID" );
 			$sql .= " ORDER BY {$wpdb->posts}.post_date DESC";
 		}
 
 		try {
-			$results           = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is built with prepare() for dynamic parts, static parts are safe.
-			$formatted_results = $this->wcpos_format_all_posts_response( $results );
+			$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is built with prepare() for dynamic parts, static parts are safe.
 
-			// Get the total number of orders for the given criteria.
-			$total = \count( $formatted_results );
-
-			// Collect execution time and server load.
-			$execution_time    = microtime( true ) - $start_time;
-			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load       = $this->get_server_load();
-
-			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (string) $total );
-			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
-			$response->header( 'X-Server-Load', json_encode( $server_load ) );
-
-			return $response;
+			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching order data: ' . $e->getMessage() );
-
-			return new WP_Error( 'woocommerce_pos_rest_cannot_fetch', 'Error fetching order data.', array( 'status' => 500 ) );
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching order data: ' . $e->getMessage(), 'Error fetching order data.' );
 		}
 	}
 

@@ -21,8 +21,8 @@ class TaxHelper {
 				'tax_rate'              => $data['rate'],
 				'tax_rate_name'         => $data['name'],
 				'tax_rate_priority'     => $data['priority'] ?? 1,
-				'tax_rate_compound'     => $data['compound'] ? 1 : 0,
-				'tax_rate_shipping'     => $data['shipping'] ? 1 : 0,
+				'tax_rate_compound'     => ! empty( $data['compound'] ) ? 1 : 0,
+				'tax_rate_shipping'     => ! empty( $data['shipping'] ) ? 1 : 0,
 				'tax_rate_order'        => $data['order'] ?? 1,
 				'tax_rate_class'        => $data['class'] ?? '',
 			)

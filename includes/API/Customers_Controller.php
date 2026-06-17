@@ -76,7 +76,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		 * Check if the request is for all customers and if the 'posts_per_page' is set to -1.
 		 * Optimised query for getting all customer IDs.
 		 */
-		if ( -1 == $request->get_param( 'posts_per_page' ) && null !== $request->get_param( 'fields' ) ) {
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
 			return $this->wcpos_get_all_posts( $request );
 		}
 
@@ -413,18 +413,16 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
-		// Start timing execution.
-		$start_time = microtime( true );
-
-		$modified_after        = $request->get_param( 'modified_after' );
-		$dates_are_gmt         = true;
-		$fields                = $request->get_param( 'fields' );
-		$id_with_modified_date = array( 'id', 'date_modified_gmt' ) === $fields;
+		$start_time            = microtime( true );
+		$modified_after        = Bulk_ID_Fast_Path::modified_after_timestamp( $request );
+		$has_modified_after    = null !== $modified_after;
+		$id_with_modified_date = Bulk_ID_Fast_Path::wants_modified_date( $request );
 
 		$args = array(
 			'fields' => array( 'ID', 'user_registered' ), // Return only the ID and registered date.
 			// 'role__in' => 'all', // @TODO: could be an array of roles, like ['customer', 'cashier'].
 		);
+		$args = Bulk_ID_Fast_Path::apply_id_filters_to_args( $args, $request );
 
 		/*
 		 * The user query is too complex to do a direct sql query, eg: multisite would return all users from all sites,
@@ -437,7 +435,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			$users        = $user_query->get_results();
 			$last_updates = array();
 
-			if ( $id_with_modified_date ) {
+			if ( $id_with_modified_date || $has_modified_after ) {
 				$query = "
 					SELECT user_id, meta_value 
 					FROM $wpdb->usermeta 
@@ -445,9 +443,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				";
 
 				// If modified_after param is set, add the condition to the query.
-				if ( $modified_after ) {
-					$modified_after_timestamp = strtotime( $modified_after );
-					$query .= $wpdb->prepare( ' AND meta_value > %d', $modified_after_timestamp );
+				if ( $has_modified_after ) {
+					$query .= $wpdb->prepare( ' AND meta_value > %d', (int) $modified_after );
 				}
 
 				$last_update_results = $wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared conditionally above.
@@ -472,7 +469,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			 */
 			$formatted_results = array();
 
-			if ( $modified_after ) {
+			if ( $has_modified_after ) {
 				foreach ( $users as $user ) {
 					if ( isset( $last_updates[ $user->ID ] ) ) {
 						$user_info = array( 'id' => (int) $user->ID );
@@ -500,28 +497,9 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 				);
 			}
 
-			// Get the total number of orders for the given criteria.
-			$total = \count( $formatted_results );
-
-			// Collect execution time and server load.
-			$execution_time    = microtime( true ) - $start_time;
-			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load       = $this->get_server_load();
-
-			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (string) $total );
-			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
-			$response->header( 'X-Server-Load', json_encode( $server_load ) );
-
-			return $response;
+			return Bulk_ID_Fast_Path::response( $this, $formatted_results, $start_time, false );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching order IDs: ' . $e->getMessage() );
-
-			return new WP_Error(
-				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching customer IDs.',
-				array( 'status' => 500 )
-			);
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching order IDs: ' . $e->getMessage(), 'Error fetching customer IDs.' );
 		}
 	}
 

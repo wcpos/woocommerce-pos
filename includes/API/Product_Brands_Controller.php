@@ -61,7 +61,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 		 * Check if the request is for all brands and if the 'posts_per_page' is set to -1.
 		 * Optimised query for getting all brand IDs.
 		 */
-		if ( -1 == $request->get_param( 'posts_per_page' ) && null !== $request->get_param( 'fields' ) ) {
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
 			return $this->wcpos_get_all_posts( $request );
 		}
 
@@ -142,7 +142,6 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function wcpos_get_all_posts( $request ) {
-		// Start timing execution.
 		$start_time     = microtime( true );
 		$modified_after = $request->get_param( 'modified_after' );
 
@@ -151,6 +150,7 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 			'hide_empty' => false,
 			'fields'     => 'ids',
 		);
+		$args = Bulk_ID_Fast_Path::apply_id_filters_to_args( $args, $request );
 
 		try {
 			/**
@@ -160,38 +160,12 @@ class Product_Brands_Controller extends WC_REST_Product_Brands_Controller {
 			 * - ideally WooCommerce would provide a modified_after filter for terms
 			 * - for now we'll just return empty for modified terms
 			 */
-			$results = $modified_after ? array() : get_terms( $args );
+			$ids     = $modified_after ? array() : get_terms( $args );
+			$results = Bulk_ID_Fast_Path::rows_from_ids( $ids );
 
-			// Format the response.
-			$formatted_results = array_map(
-				function ( $id ) {
-					return array( 'id' => (int) $id );
-				},
-				$results
-			);
-
-			// Get the total number of brands for the given criteria.
-			$total = \count( $formatted_results );
-
-			// Collect execution time and server load.
-			$execution_time    = microtime( true ) - $start_time;
-			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load       = $this->get_server_load();
-
-			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (string) $total );
-			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
-			$response->header( 'X-Server-Load', json_encode( $server_load ) );
-
-			return $response;
+			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching product brand IDs: ' . $e->getMessage() );
-
-			return new \WP_Error(
-				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching product brand IDs.',
-				array( 'status' => 500 )
-			);
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching product brand IDs: ' . $e->getMessage(), 'Error fetching product brand IDs.' );
 		}
 	}
 }
