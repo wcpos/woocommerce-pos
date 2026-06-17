@@ -137,10 +137,53 @@ class Cloud_Print_Submit_Service {
 			}
 
 			$this->jobs->record_external_submission( $job_id, 'printnode', (string) $result['id'], 'submitted' );
+
+			if ( 'pdf' === $job['pn_kind'] && ! empty( $job['auto_open_drawer'] ) ) {
+				$drawer_result = $this->submit_printnode_drawer_kick( $api_key, $pn_printer_id, $job );
+				if ( is_wp_error( $drawer_result ) ) {
+					update_post_meta( $job_id, Print_Job_Service::META_DRAWER_ERROR, sanitize_text_field( $drawer_result->get_error_message() ) );
+					Logger::log( sprintf( 'Cloud print: PrintNode drawer kick failed for job %d after receipt submission.', $job_id ) );
+				}
+			}
+
 			$this->jobs->set_status( $job_id, Print_Job_Service::STATUS_PRINTED );
 		} finally {
 			$this->release_lock( $job_id );
 		}
+	}
+
+	/**
+	 * Submit a best-effort raw ESC/POS drawer kick for a PrintNode PDF job.
+	 *
+	 * @param string $api_key       PrintNode API key.
+	 * @param int    $pn_printer_id PrintNode printer id.
+	 * @param array  $job           Job data.
+	 *
+	 * @return array|\WP_Error
+	 */
+	private function submit_printnode_drawer_kick( string $api_key, int $pn_printer_id, array $job ) {
+		$title = $this->title_for( $job ) . ' Cash Drawer';
+
+		return ( new PrintNode_Client( $api_key ) )->submit_job(
+			$pn_printer_id,
+			$title,
+			'raw_base64',
+			base64_encode( $this->drawer_kick_bytes( (string) ( $job['drawer_connector'] ?? 'pin2' ) ) )
+		);
+	}
+
+	/**
+	 * Build ESC/POS drawer kick bytes for PrintNode raw jobs.
+	 *
+	 * @param string $connector pin2 or pin5.
+	 *
+	 * @return string
+	 */
+	private function drawer_kick_bytes( string $connector ): string {
+		$connector = Print_Job_Service::normalize_drawer_connector( $connector );
+		$pin       = 'pin5' === $connector ? "\x01" : "\x00";
+
+		return "\x1B\x70" . $pin . "\x19\xFA";
 	}
 
 	/**

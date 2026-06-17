@@ -207,6 +207,85 @@ class Print_Jobs_Controller_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It persists drawer options from a manual order-based cloud print request.
+	 */
+	public function test_create_order_job_persists_drawer_options(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers'    => array(
+					array(
+						'id'       => 'epson1',
+						'name'     => 'Epson',
+						'provider' => 'epson-sdp',
+					),
+				),
+				'assignments' => array(),
+			)
+		);
+
+		$template_id = $this->create_thermal_template();
+		$order       = OrderHelper::create_order();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'      => 'epson1',
+				'order_id'        => $order->get_id(),
+				'template_id'     => (string) $template_id,
+				'autoOpenDrawer'  => true,
+				'drawerConnector' => 'pin5',
+			)
+		);
+
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertEquals( true, $data['auto_open_drawer'] );
+		$this->assertEquals( 'pin5', $data['drawer_connector'] );
+	}
+
+	/**
+	 * It ignores drawer options for Star CloudPRNT order jobs; Star remains client-rendered/out of scope.
+	 */
+	public function test_create_order_job_ignores_drawer_options_for_star_cloudprnt(): void {
+		update_option(
+			'woocommerce_pos_settings_cloud_print',
+			array(
+				'printers' => array(
+					array(
+						'id'       => 'star1',
+						'name'     => 'Star',
+						'provider' => 'star-cloudprnt',
+					),
+				),
+			)
+		);
+
+		$template_id = $this->create_thermal_template();
+		$order       = OrderHelper::create_order();
+
+		$request = $this->wp_rest_post_request( '/wcpos/v1/print-jobs' );
+		$request->set_body_params(
+			array(
+				'printer_id'      => 'star1',
+				'order_id'        => $order->get_id(),
+				'template_id'     => (string) $template_id,
+				'autoOpenDrawer'  => true,
+				'drawerConnector' => 'pin5',
+			)
+		);
+
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertFalse( $data['auto_open_drawer'] );
+		$this->assertEquals( 'pin2', $data['drawer_connector'] );
+	}
+
+	/**
 	 * It returns 404 for an order-based job targeting an unknown printer
 	 * (rather than silently enqueuing a job that can never be delivered).
 	 */

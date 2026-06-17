@@ -167,7 +167,46 @@ class Epos_Xml_Thermal_Emitter_Test extends WP_UnitTestCase {
 		$this->assertNotFalse( simplexml_load_string( $drawer ) );
 		$this->assertStringContainsString( '<feed line="3"/>', $feed );
 		$this->assertStringContainsString( '<cut type="feed"/>', $cut );
-		$this->assertStringContainsString( '<pulse/>', $drawer );
+		$this->assertStringContainsString( '<pulse drawer="drawer_1" time="pulse_100"/>', $drawer );
+	}
+
+	/**
+	 * Auto drawer emits a configured pulse before a trailing cut.
+	 *
+	 * @return void
+	 */
+	public function test_auto_drawer_emits_pulse_before_cut(): void {
+		$ast = ( new Thermal_Markup_Parser() )->parse(
+			'<receipt><text>Hi</text><cut/></receipt>'
+		);
+
+		$xml = ( new Epos_Xml_Thermal_Emitter(
+			array(
+				'auto_open_drawer' => true,
+				'drawer_connector' => 'pin5',
+			)
+		) )->emit( $ast );
+
+		$this->assertStringContainsString( '<pulse drawer="drawer_2" time="pulse_100"/>', $xml );
+		$this->assertLessThan( strpos( $xml, '<cut type="feed"/>' ), strpos( $xml, '<pulse drawer="drawer_2" time="pulse_100"/>' ) );
+	}
+
+	/**
+	 * Auto drawer does not add a second pulse when the template has an explicit drawer.
+	 *
+	 * @return void
+	 */
+	public function test_auto_drawer_does_not_duplicate_explicit_drawer(): void {
+		$ast = ( new Thermal_Markup_Parser() )->parse(
+			'<receipt><text>Hi</text><drawer/><cut/></receipt>'
+		);
+
+		$xml = ( new Epos_Xml_Thermal_Emitter(
+			array( 'auto_open_drawer' => true )
+		) )->emit( $ast );
+
+		$this->assertSame( 1, substr_count( $xml, '<pulse ' ) );
+		$this->assertStringContainsString( '<pulse drawer="drawer_1" time="pulse_100"/>', $xml );
 	}
 
 	/**
