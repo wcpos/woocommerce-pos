@@ -27,6 +27,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default token scope; jobs that need more declare it explicitly.
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: Detect Changes

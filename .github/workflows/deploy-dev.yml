@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Deploy uses an external SSH key to a Hetzner host; the GITHUB_TOKEN only reads.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     concurrency:
