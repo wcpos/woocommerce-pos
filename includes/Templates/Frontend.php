@@ -129,10 +129,15 @@ class Frontend {
 
 		// Explicit web-bundle override (constant or env). Null when unset.
 		$explicit_bundle_ref = null;
+		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
 		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) && WCPOS_WEB_BUNDLE_REF ) {
 			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
 		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
 			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
+		} elseif ( false !== $env_bundle_ref && '' !== $env_bundle_ref ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
+		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
 		}
 
 		// Default to the plugin's own major.minor so the stable lane tracks the
@@ -150,7 +155,11 @@ class Frontend {
 		 *
 		 * @hook woocommerce_pos_web_bundle_ref
 		 */
-		$bundle_ref        = apply_filters( 'woocommerce_pos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = (string) apply_filters( 'woocommerce_pos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = trim( $bundle_ref );
+		if ( '' === $bundle_ref ) {
+			$bundle_ref = $default_bundle_ref;
+		}
 		$bundle_overridden = $bundle_ref !== $default_bundle_ref;
 
 		// No trailing slash: Metro's runtime concatenates `cdnBaseUrl` with leading-slash paths
@@ -164,7 +173,7 @@ class Frontend {
 			$cdn_base_url = 'http://localhost:4567/build';
 		} else {
 			// jsDelivr web-bundle lane (e.g. `1.9`, `1.10`, `next`, a tag or commit).
-			$cdn_base_url = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@' . $bundle_ref . '/build';
+			$cdn_base_url = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@' . rawurlencode( $bundle_ref ) . '/build';
 		}
 		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
@@ -225,6 +234,7 @@ class Frontend {
 		 */
 		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
+		$cdn_base_url  = wp_json_encode( $cdn_base_url );
 
 		/**
 		 * Add path to worker scripts.
@@ -269,7 +279,7 @@ class Frontend {
     var idbWorker = '{$idb_worker}';
     var opfsWorker = '{$opfs_worker}';
     var initialProps = {$initial_props};
-    var cdnBaseUrl = '{$cdn_base_url}';
+    var cdnBaseUrl = {$cdn_base_url};
 	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
 
