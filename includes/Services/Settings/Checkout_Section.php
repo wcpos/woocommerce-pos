@@ -94,6 +94,8 @@ class Checkout_Section extends Abstract_Section {
 	 * @param array $settings Settings about to be saved.
 	 */
 	protected function sanitize( array $settings ): array {
+		unset( $settings['auto_print_receipt'], $settings['default_gateway'], $settings['gateways'] );
+
 		if ( \array_key_exists( 'order_status', $settings ) ) {
 			$gateways_option = get_option( self::DB_PREFIX . 'payment_gateways', array() );
 			$seed_reflected  = false;
