@@ -8,7 +8,11 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WP_Error;
 use WP_REST_Request;
 use WP_UnitTestCase;
 
@@ -151,6 +155,65 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 		$response = $this->api->update_access_settings( $request );
 		$this->assertTrue( $response['administrator']['capabilities']['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/**
+	 * Test access update preserves write errors from registered sections.
+	 */
+	public function test_update_access_settings_returns_section_write_error(): void {
+		$error  = new WP_Error( 'woocommerce_pos_settings_error', 'Write failed.', array( 'status' => 500 ) );
+		$filter = static function ( Section_Registry $registry ) use ( $error ): void {
+			$registry->register(
+				new class( $error ) implements Settings_Section_Interface {
+					/**
+					 * Error returned by write().
+					 *
+					 * @var WP_Error
+					 */
+					private $error;
+
+					public function __construct( WP_Error $error ) {
+						$this->error = $error;
+					}
+
+					public function id(): string {
+						return 'access';
+					}
+
+					public function defaults(): array {
+						return array();
+					}
+
+					public function read(): array {
+						return array();
+					}
+
+					public function write( array $settings ) {
+						return $this->error;
+					}
+
+					public function merge( array $existing, array $patch ): array {
+						return array_replace_recursive( $existing, $patch );
+					}
+
+					public function endpoint_args(): array {
+						return array();
+					}
+				}
+			);
+		};
+
+		add_action( 'woocommerce_pos_register_settings_sections', $filter );
+		SettingsService::instance()->reset_sections_for_testing();
+
+		try {
+			$response = $this->api->update_access_settings( $this->mock_rest_request() );
+		} finally {
+			remove_action( 'woocommerce_pos_register_settings_sections', $filter );
+			SettingsService::instance()->reset_sections_for_testing();
+		}
+
+		$this->assertSame( $error, $response );
 	}
 
 	/**

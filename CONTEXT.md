@@ -15,7 +15,7 @@ The unit that owns one settings group end to end: schema, defaults, sanitization
 _Avoid_: settings group, settings schema, settings tab
 
 **Section Registry**:
-The seam where Settings Sections are registered. The free plugin registers its eight; Pro and extensions register theirs through it instead of hooking ad-hoc filters.
+The seam where Settings Sections are registered. The free plugin registers its nine; Pro and extensions register theirs through it instead of hooking ad-hoc filters.
 _Avoid_: section manager, settings factory
 
 **Plugin State**:
