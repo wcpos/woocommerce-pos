@@ -340,6 +340,46 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Payment-gateway update validation belongs to the payment-gateway section,
+	 * not the checkout section.
+	 */
+	public function test_payment_gateways_endpoint_args_are_owned_by_payment_gateways_section(): void {
+		$checkout_args = $this->api->get_checkout_endpoint_args();
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $checkout_args );
+		$this->assertArrayNotHasKey( 'default_gateway', $checkout_args );
+		$this->assertArrayNotHasKey( 'gateways', $checkout_args );
+
+		$payment_gateway_args = $this->api->get_payment_gateways_endpoint_args();
+		$this->assertArrayHasKey( 'auto_print_receipt', $payment_gateway_args );
+		$this->assertArrayHasKey( 'default_gateway', $payment_gateway_args );
+		$this->assertArrayHasKey( 'gateways', $payment_gateway_args );
+	}
+
+	/**
+	 * Checkout saves must not persist payment-gateway-owned fields.
+	 */
+	public function test_update_checkout_settings_drops_payment_gateway_fields(): void {
+		$request  = $this->mock_rest_request(
+			array(
+				'receipt_default_mode' => 'live',
+				'auto_print_receipt'   => 'not-a-bool',
+				'default_gateway'      => array( 'not-a-string' ),
+				'gateways'             => 'not-an-array',
+			)
+		);
+		$response = $this->api->update_checkout_settings( $request );
+		$raw      = get_option( 'woocommerce_pos_settings_checkout' );
+
+		$this->assertEquals( 'live', $response['receipt_default_mode'] );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $response );
+		$this->assertArrayNotHasKey( 'default_gateway', $response );
+		$this->assertArrayNotHasKey( 'gateways', $response );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $raw );
+		$this->assertArrayNotHasKey( 'default_gateway', $raw );
+		$this->assertArrayNotHasKey( 'gateways', $raw );
+	}
+
+	/**
 	 * Test updating payment gateways settings.
 	 */
 	public function test_update_payment_gateways_settings(): void {
