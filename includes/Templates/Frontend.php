@@ -127,10 +127,55 @@ class Frontend {
 		);
 
 		$user                 = wp_get_current_user();
+
+		// Explicit web-bundle override (constant or env). Null when unset.
+		$explicit_bundle_ref = null;
+		$env_bundle_ref      = getenv( 'WCPOS_WEB_BUNDLE_REF' );
+		if ( \defined( 'WCPOS_WEB_BUNDLE_REF' ) && WCPOS_WEB_BUNDLE_REF ) {
+			$explicit_bundle_ref = WCPOS_WEB_BUNDLE_REF;
+		} elseif ( ! empty( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_ENV['WCPOS_WEB_BUNDLE_REF'] ) );
+		} elseif ( false !== $env_bundle_ref && '' !== $env_bundle_ref ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $env_bundle_ref ) );
+		} elseif ( ! empty( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) ) {
+			$explicit_bundle_ref = sanitize_text_field( wp_unslash( $_SERVER['WCPOS_WEB_BUNDLE_REF'] ) );
+		}
+
+		// Default to the plugin's own major.minor so the stable lane tracks the
+		// version automatically: a 1.9.x plugin loads `@1.9`, a 1.10.x plugin loads
+		// `@1.10`, etc. — no edit needed as versions roll.
+		$default_bundle_ref = implode( '.', \array_slice( explode( '.', VERSION ), 0, 2 ) );
+
+		/**
+		 * The web-bundle ref served from jsDelivr (or a full base URL).
+		 *
+		 * Override via the WCPOS_WEB_BUNDLE_REF constant / env var or this filter to
+		 * point a site at another lane for testing the in-development build locally
+		 * or on staging: a branch (e.g. `next`), a tag, a commit, or a full base URL
+		 * (anything containing `://`, e.g. a local dev server or an EAS preview).
+		 *
+		 * @hook woocommerce_pos_web_bundle_ref
+		 */
+		$bundle_ref = (string) apply_filters( 'woocommerce_pos_web_bundle_ref', $explicit_bundle_ref ?? $default_bundle_ref );
+		$bundle_ref = trim( $bundle_ref );
+		if ( '' === $bundle_ref ) {
+			$bundle_ref = $default_bundle_ref;
+		}
+		$bundle_overridden = $bundle_ref !== $default_bundle_ref;
+
 		// No trailing slash: Metro's runtime concatenates `cdnBaseUrl` with leading-slash paths
 		// (`/_expo/...`, `/assets/...`); a trailing slash here would produce `//`, which jsDelivr
 		// 301-redirects with a year-long cache, breaking lazy chunk loads in the browser.
-		$cdn_base_url         = $development ? 'http://localhost:4567/build' : 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@1.9/build';
+		if ( false !== strpos( (string) $bundle_ref, '://' ) ) {
+			// Full base URL (local dev server, EAS preview, etc.).
+			$cdn_base_url = rtrim( $bundle_ref, '/' );
+		} elseif ( $development && ! $bundle_overridden ) {
+			// Development default: the local web build server.
+			$cdn_base_url = 'http://localhost:4567/build';
+		} else {
+			// jsDelivr web-bundle lane (e.g. `1.9`, `1.10`, `next`, a tag or commit).
+			$cdn_base_url = 'https://cdn.jsdelivr.net/gh/wcpos/web-bundle@' . rawurlencode( $bundle_ref ) . '/build';
+		}
 		$wcpos_base_path      = rtrim( wp_parse_url( woocommerce_pos_url(), PHP_URL_PATH ), '/' );
 		$stores               = array_map(
 			function ( $store ) {
@@ -186,6 +231,7 @@ class Frontend {
 		 */
 		$vars          = apply_filters( 'woocommerce_pos_inline_vars', $vars );
 		$initial_props = wp_json_encode( $vars );
+		$cdn_base_url  = wp_json_encode( $cdn_base_url );
 
 		/**
 		 * Add path to worker scripts.
@@ -230,7 +276,7 @@ class Frontend {
     var idbWorker = '{$idb_worker}';
     var opfsWorker = '{$opfs_worker}';
     var initialProps = {$initial_props};
-    var cdnBaseUrl = '{$cdn_base_url}';
+    var cdnBaseUrl = {$cdn_base_url};
 	var baseUrl = '{$wcpos_base_path}';
     </script>" . "\n";
 

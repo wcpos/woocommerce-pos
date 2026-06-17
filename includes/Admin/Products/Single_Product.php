@@ -89,11 +89,12 @@ class Single_Product {
 	 * Add store price fields to the product edit page.
 	 */
 	public function add_store_price_fields(): void {
-		Analytics::instance()->capture(
+		Analytics::instance()->capture_once(
 			'upgrade_cta_viewed',
 			array(
 				'placement' => 'product_edit_price',
-			)
+			),
+			'product_edit_price'
 		);
 
 		woocommerce_wp_checkbox(
@@ -112,11 +113,12 @@ class Single_Product {
 	 * Add store tax fields to the product edit page.
 	 */
 	public function add_store_tax_fields(): void {
-		Analytics::instance()->capture(
+		Analytics::instance()->capture_once(
 			'upgrade_cta_viewed',
 			array(
 				'placement' => 'product_edit_tax',
-			)
+			),
+			'product_edit_tax'
 		);
 
 		woocommerce_wp_checkbox(

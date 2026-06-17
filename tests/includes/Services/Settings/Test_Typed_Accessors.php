@@ -66,16 +66,14 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 	 * Accessors see the section filter (Pro filters must keep working).
 	 */
 	public function test_accessors_apply_section_filters(): void {
-		add_filter(
-			'woocommerce_pos_general_settings',
-			function ( $settings ) {
-				$settings['barcode_field'] = '_filtered';
+		$filter = function ( $settings ) {
+			$settings['barcode_field'] = '_filtered';
 
-				return $settings;
-			}
-		);
+			return $settings;
+		};
+		add_filter( 'woocommerce_pos_general_settings', $filter );
 
 		$this->assertEquals( '_filtered', Settings::instance()->barcode_field() );
-		remove_all_filters( 'woocommerce_pos_general_settings' );
+		remove_filter( 'woocommerce_pos_general_settings', $filter );
 	}
 }

@@ -40,11 +40,12 @@ class Plugins {
 
 		// Add "Upgrade to Pro" link if Pro is not installed.
 		if ( ! defined( 'WCPOS\WooCommercePOSPro\VERSION' ) ) {
-			Analytics::instance()->capture(
+			Analytics::instance()->capture_once(
 				'upgrade_cta_viewed',
 				array(
 					'placement' => 'plugin_row_action',
-				)
+				),
+				'plugin_row_action'
 			);
 
 			$actions['upgrade'] = '<a href="https://wcpos.com/pro" target="_blank" rel="noopener noreferrer" data-wcpos-upgrade-placement="plugin_row_action" style="color: #d63638; font-weight: 600;">' .

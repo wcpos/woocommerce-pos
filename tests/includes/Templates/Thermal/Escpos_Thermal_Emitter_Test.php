@@ -426,6 +426,33 @@ class Escpos_Thermal_Emitter_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Auto drawer emits pin 5 ESC/POS pulse before cut.
+	 *
+	 * @return void
+	 */
+	public function test_auto_drawer_pin5_emits_before_cut(): void {
+		// Arrange.
+		$ast = ( new Thermal_Markup_Parser() )->parse(
+			'<receipt><text>Hi</text><cut/></receipt>'
+		);
+
+		// Act.
+		$bytes = ( new Escpos_Thermal_Emitter(
+			array(
+				'auto_open_drawer' => true,
+				'drawer_connector' => 'pin5',
+			)
+		) )->emit( $ast );
+
+		// Assert.
+		$pulse = "\x1B\x70\x01\x19\xFA";
+		$cut   = "\x1D\x56";
+
+		$this->assertStringContainsString( $pulse, $bytes );
+		$this->assertLessThan( strpos( $bytes, $cut ), strpos( $bytes, $pulse ) );
+	}
+
+	/**
 	 * Barcode and QR code emit native command sequences with their data.
 	 *
 	 * @return void

@@ -176,6 +176,53 @@ class Analytics {
 	}
 
 	/**
+	 * Capture an impression-style event at most once per de-dup window.
+	 *
+	 * Impression events such as upgrade CTA views can otherwise fire on
+	 * every page render — a persistent admin link or a product-edit upsell
+	 * field would emit hundreds of identical events per user, drowning the
+	 * funnel and inflating ingestion. This de-duplicates per current user +
+	 * key using a short-lived transient, so each impression slot is counted
+	 * at most once per window.
+	 *
+	 * @param string $event      Event name, e.g. `upgrade_cta_viewed`.
+	 * @param array  $properties Event properties.
+	 * @param string $dedup_key  Stable key for the impression slot (for
+	 *                           example, the placement). Combined with the
+	 *                           event name and current user UUID to form the
+	 *                           transient key.
+	 * @param int    $ttl        De-dup window in seconds. Defaults to a day.
+	 *
+	 * @return bool True when an event was dispatched, false when suppressed
+	 *              or analytics is disabled.
+	 */
+	public function capture_once( string $event, array $properties = array(), string $dedup_key = '', int $ttl = DAY_IN_SECONDS ): bool {
+		if ( ! $this->is_enabled() ) {
+			return false;
+		}
+
+		$distinct_id = $this->get_distinct_id();
+		if ( '' === $distinct_id ) {
+			return false;
+		}
+
+		$transient_key = 'wcpos_imp_' . md5( $distinct_id . '|' . $event . '|' . $dedup_key );
+		if ( false !== get_transient( $transient_key ) ) {
+			return false;
+		}
+
+		$dispatched = $this->capture( $event, $properties );
+
+		// Only record the de-dup marker once the event actually dispatched, so
+		// a transient network failure does not permanently suppress the slot.
+		if ( $dispatched ) {
+			set_transient( $transient_key, 1, $ttl );
+		}
+
+		return $dispatched;
+	}
+
+	/**
 	 * Set person properties on the current user.
 	 *
 	 * Uses the PostHog `$identify` event. Properties set via `$set_once`

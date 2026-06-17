@@ -2,11 +2,15 @@ name: Deploy to Dev Site
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   workflow_dispatch:
 
 jobs:
   deploy:
+    # Stable lane (main) deploys to the dev sites below. The `next` lane only
+    # deploys once the dev-next target is configured: set repo variable
+    # DEV_NEXT_SITES (e.g. "dev-next-free dev-next-pro"). Until then `next` is skipped.
+    if: ${{ github.ref_name != 'next' || vars.DEV_NEXT_SITES != '' }}
     concurrency:
       group: deploy-dev
       cancel-in-progress: false
@@ -77,19 +81,31 @@ jobs:
           ssh-keyscan -H 213.239.218.130 >> ~/.ssh/known_hosts
 
       - name: 🚀 Deploy to dev sites
+        env:
+          LANE: ${{ github.ref_name }}
+          DEV_NEXT_SITES: ${{ vars.DEV_NEXT_SITES }}
         run: |
           TARBALL="woocommerce-pos-${GITHUB_RUN_ID}.tar.gz"
+
+          # Target sites by lane: main -> stable dev sites; next -> dev-next sites
+          # (from repo variable DEV_NEXT_SITES, e.g. "dev-next-free dev-next-pro").
+          if [ "$LANE" = "next" ]; then
+            SITES="$DEV_NEXT_SITES"
+          else
+            SITES="dev-free dev-pro"
+          fi
+          echo "Deploying lane '$LANE' to: $SITES"
 
           # Upload tarball with per-run name to avoid races
           scp -o StrictHostKeyChecking=yes woocommerce-pos.tar.gz "root@213.239.218.130:/tmp/${TARBALL}"
 
-          # Deploy to both dev-free and dev-pro
-          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 bash -s -- "${TARBALL}" << 'EOF'
+          ssh -o StrictHostKeyChecking=yes root@213.239.218.130 bash -s -- "${TARBALL}" "${SITES}" << 'EOF'
             TARBALL="$1"
+            SITES="$2"
             set -e
             FAILED=0
 
-            for SITE in dev-free dev-pro; do
+            for SITE in $SITES; do
               if (
                 set -e
                 PLUGIN_DIR="/data/wordpress/${SITE}/html/wp-content/plugins/woocommerce-pos"

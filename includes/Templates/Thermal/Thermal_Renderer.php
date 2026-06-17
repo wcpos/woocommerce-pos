@@ -36,19 +36,20 @@ class Thermal_Renderer {
 	 * @param array             $template    Template metadata/content.
 	 * @param WC_Abstract_Order $order       The order to render.
 	 * @param string            $wire_format The target wire format ('escpos' or 'epos-xml').
+	 * @param array             $options     Render options.
 	 *
 	 * @throws InvalidArgumentException When the wire format is not supported.
 	 *
 	 * @return string The rendered wire-format payload.
 	 */
-	public function render( array $template, WC_Abstract_Order $order, string $wire_format ): string {
+	public function render( array $template, WC_Abstract_Order $order, string $wire_format, array $options = array() ): string {
 		$ast = $this->build_ast( $template, $order );
 
 		switch ( $wire_format ) {
 			case 'escpos':
-				return ( new Escpos_Thermal_Emitter() )->emit( $ast );
+				return ( new Escpos_Thermal_Emitter( $options ) )->emit( $ast );
 			case 'epos-xml':
-				return ( new Epos_Xml_Thermal_Emitter() )->emit( $ast );
+				return ( new Epos_Xml_Thermal_Emitter( $options ) )->emit( $ast );
 			case 'star-markup':
 				return ( new Star_Markup_Thermal_Emitter() )->emit( $ast );
 			default:

@@ -570,8 +570,9 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		$payload     = (string) $request->get_param( 'payload' );
 		$format      = (string) $request->get_param( 'format' );
-		$template_id = sanitize_text_field( (string) $request->get_param( 'template_id' ) );
-		$order_id    = (int) $request->get_param( 'order_id' );
+		$template_id     = sanitize_text_field( (string) $request->get_param( 'template_id' ) );
+		$order_id        = (int) $request->get_param( 'order_id' );
+		$drawer_options = $this->drawer_options_from_request( $request );
 
 		$printer    = $this->registry->get_printer( $printer_id );
 		$validation = $this->validate_job_for_printer( $printer, $payload, $format );
@@ -606,7 +607,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				);
 			}
 
-			return $this->create_order_job( $printer_id, $printer, $order_id, $template_id );
+			return $this->create_order_job( $printer_id, $printer, $order_id, $template_id, $drawer_options );
 		}
 
 		$id = $this->jobs->create(
@@ -639,11 +640,12 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	 * @param string $printer_id  Registered printer id.
 	 * @param array  $printer     Registered printer config.
 	 * @param int    $order_id    Order id to render.
-	 * @param string $template_id Template id (numeric) or virtual slug.
+	 * @param string $template_id     Template id (numeric) or virtual slug.
+	 * @param array  $drawer_options Drawer options.
 	 *
 	 * @return \WP_REST_Response|WP_Error
 	 */
-	private function create_order_job( string $printer_id, array $printer, int $order_id, string $template_id ) {
+	private function create_order_job( string $printer_id, array $printer, int $order_id, string $template_id, array $drawer_options = array() ) {
 		if ( ! wc_get_order( $order_id ) ) {
 			// Surface the bad order up front rather than enqueue a job that
 			// render_payload() can only ever resolve to an empty (never-printing) payload.
@@ -669,7 +671,8 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 			$printer,
 			$order_id,
 			$template_id,
-			$template
+			$template,
+			$drawer_options
 		);
 		if ( $id <= 0 ) {
 			return new WP_Error(
@@ -851,6 +854,30 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 				'external_state'    => 'submitted',
 			),
 			201
+		);
+	}
+
+	/**
+	 * Extract sanitized cash-drawer options from a REST request.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 *
+	 * @return array{auto_open_drawer:bool, drawer_connector:string}
+	 */
+	private function drawer_options_from_request( WP_REST_Request $request ): array {
+		$auto = $request->get_param( 'autoOpenDrawer' );
+		if ( null === $auto ) {
+			$auto = $request->get_param( 'auto_open_drawer' );
+		}
+
+		$connector = $request->get_param( 'drawerConnector' );
+		if ( null === $connector ) {
+			$connector = $request->get_param( 'drawer_connector' );
+		}
+
+		return array(
+			'auto_open_drawer' => rest_sanitize_boolean( $auto ),
+			'drawer_connector' => Print_Job_Service::normalize_drawer_connector( (string) $connector ),
 		);
 	}
 

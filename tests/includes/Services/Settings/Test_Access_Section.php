@@ -135,7 +135,9 @@ class Test_Access_Section extends WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		// Confirm the cashier role does not have edit_others_products before we attempt the write.
-		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_others_products' ) );
+		$cashier_role = get_role( 'cashier' );
+		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
+		$this->assertFalse( $cashier_role->has_cap( 'edit_others_products' ) );
 
 		$section = new Access_Section();
 		$result  = $section->write(
@@ -151,6 +153,8 @@ class Test_Access_Section extends WP_UnitTestCase {
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertEquals( 403, $result->get_error_data()['status'] );
 		// Capability must not have been mutated.
-		$this->assertFalse( get_role( 'cashier' )->has_cap( 'edit_others_products' ) );
+		$cashier_role = get_role( 'cashier' );
+		$this->assertNotNull( $cashier_role, 'Expected cashier role to be registered in test fixtures.' );
+		$this->assertFalse( $cashier_role->has_cap( 'edit_others_products' ) );
 	}
 }

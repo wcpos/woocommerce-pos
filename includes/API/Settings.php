@@ -653,16 +653,15 @@ class Settings extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 *
-	 * @return array
+	 * @return array|WP_Error
 	 */
-	public function update_access_settings( WP_REST_Request $request ): array {
+	public function update_access_settings( WP_REST_Request $request ) {
 		$section = SettingsService::instance()->sections()->get( 'access' );
-		$result  = $section ? $section->write( (array) $request->get_json_params() ) : array();
+		if ( ! $section ) {
+			return new WP_Error( 'woocommerce_pos_settings_error', __( 'Settings section not registered.', 'woocommerce-pos' ), array( 'status' => 500 ) );
+		}
 
-		// Access_Section::write() always returns the fresh view, but the
-		// interface docblock allows WP_Error — narrow for the native `: array`
-		// return type (PHPStan level 5 treats docblock types as certain).
-		return \is_array( $result ) ? $result : array();
+		return $section->write( (array) $request->get_json_params() );
 	}
 
 	/**

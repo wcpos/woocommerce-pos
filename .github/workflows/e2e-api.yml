@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - next
     paths:
       - "includes/API/**"
       - "tests/e2e/api/**"

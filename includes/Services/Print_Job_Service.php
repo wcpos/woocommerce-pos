@@ -25,6 +25,9 @@ class Print_Job_Service {
 	const META_EXTERNAL_JOB_ID   = '_wcpos_pj_external_job_id';
 	const META_EXTERNAL_STATE    = '_wcpos_pj_external_state';
 	const META_SUBMIT_ATTEMPTS   = '_wcpos_pj_submit_attempts';
+	const META_AUTO_OPEN_DRAWER = '_wcpos_pj_auto_open_drawer';
+	const META_DRAWER_CONNECTOR = '_wcpos_pj_drawer_connector';
+	const META_DRAWER_ERROR     = '_wcpos_pj_drawer_error';
 	const CLAIM_LOCK_PREFIX = 'wcpos_pj_claim_lock_';
 
 	/** Seconds a claimed job stays in-flight before it is treated as stale and re-queued. */
@@ -97,6 +100,12 @@ class Print_Job_Service {
 		if ( ! empty( $args['pn_kind'] ) ) {
 			update_post_meta( $id, self::META_PN_KIND, sanitize_text_field( (string) $args['pn_kind'] ) );
 		}
+		if ( array_key_exists( 'auto_open_drawer', $args ) ) {
+			update_post_meta( $id, self::META_AUTO_OPEN_DRAWER, ! empty( $args['auto_open_drawer'] ) ? 'yes' : 'no' );
+		}
+		if ( ! empty( $args['drawer_connector'] ) ) {
+			update_post_meta( $id, self::META_DRAWER_CONNECTOR, self::normalize_drawer_connector( (string) $args['drawer_connector'] ) );
+		}
 
 		return (int) $id;
 	}
@@ -127,6 +136,9 @@ class Print_Job_Service {
 			'external_job_id'   => (string) get_post_meta( $id, self::META_EXTERNAL_JOB_ID, true ),
 			'external_state'    => (string) get_post_meta( $id, self::META_EXTERNAL_STATE, true ),
 			'payload'           => (string) $post->post_content,
+			'auto_open_drawer'  => 'yes' === (string) get_post_meta( $id, self::META_AUTO_OPEN_DRAWER, true ),
+			'drawer_connector'  => self::normalize_drawer_connector( (string) get_post_meta( $id, self::META_DRAWER_CONNECTOR, true ) ),
+			'drawer_error'      => (string) get_post_meta( $id, self::META_DRAWER_ERROR, true ),
 		);
 	}
 
@@ -142,6 +154,23 @@ class Print_Job_Service {
 		update_post_meta( $id, self::META_EXTERNAL_PROVIDER, sanitize_text_field( $provider ) );
 		update_post_meta( $id, self::META_EXTERNAL_JOB_ID, sanitize_text_field( $job_id ) );
 		update_post_meta( $id, self::META_EXTERNAL_STATE, sanitize_text_field( $state ) );
+	}
+
+	/**
+	 * Normalize a cash-drawer connector identifier to the server contract.
+	 *
+	 * @param string $connector Incoming connector value.
+	 *
+	 * @return string pin2 or pin5.
+	 */
+	public static function normalize_drawer_connector( string $connector ): string {
+		$connector = strtolower( trim( $connector ) );
+
+		if ( in_array( $connector, array( 'pin5', 'drawer_2', '1' ), true ) ) {
+			return 'pin5';
+		}
+
+		return 'pin2';
 	}
 
 	/**
@@ -193,7 +222,12 @@ class Print_Job_Service {
 
 			if ( 'escpos' === $job['pn_kind'] ) {
 				try {
-					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, 'escpos' );
+					return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render(
+						$template,
+						$order,
+						'escpos',
+						$this->drawer_render_options( $job )
+					);
 				} catch ( \Throwable $e ) {
 					\WCPOS\WooCommercePOS\Logger::log(
 						sprintf( 'Cloud print: PrintNode ESC/POS render failed for job %d: %s', (int) $job['id'], $e->getMessage() )
@@ -225,7 +259,12 @@ class Print_Job_Service {
 			}
 
 			try {
-				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render( $template, $order, $wire );
+				return ( new \WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer() )->render(
+					$template,
+					$order,
+					$wire,
+					$this->drawer_render_options( $job )
+				);
 			} catch ( \Throwable $e ) {
 				// Defense in depth: never let a malformed template/payload bubble up
 				// as a 500 and leave the poll's claimed job stuck. Returning empty
@@ -253,6 +292,20 @@ class Print_Job_Service {
 		$payload = base64_decode( (string) $job['payload'], true );
 
 		return false === $payload ? '' : $payload;
+	}
+
+	/**
+	 * Build drawer options for thermal rendering.
+	 *
+	 * @param array $job Job array.
+	 *
+	 * @return array{auto_open_drawer:bool, drawer_connector:string}
+	 */
+	private function drawer_render_options( array $job ): array {
+		return array(
+			'auto_open_drawer' => ! empty( $job['auto_open_drawer'] ),
+			'drawer_connector' => (string) ( $job['drawer_connector'] ?? 'pin2' ),
+		);
 	}
 
 	/**

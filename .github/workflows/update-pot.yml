@@ -33,23 +33,21 @@ jobs:
           php-version: '7.3'
           tools: composer, wp-cli
 
-      - name: Install dependencies
-        env:
-          # `wp package install` resolves the package via the GitHub VCS API, which
-          # rate-limits/blocks anonymous access. The previous mitigation unset the
-          # global github-oauth token entirely, leaving Composer with no credentials
-          # ("Could not authenticate against github.com"). Supply the token via the
-          # COMPOSER_AUTH env instead: it gives Composer authenticated access AND
-          # bypasses the `composer config` token validation that rejected the new
-          # token format. We also clear any stale/malformed token from the global
-          # auth.json so the bundled Composer never tries to load it.
-          COMPOSER_AUTH: '{"github-oauth":{"github.com":"${{ secrets.GITHUB_TOKEN }}"}}'
+      - name: Install i18n-command
         run: |
-          composer config --global --unset github-oauth.github.com || true
-          wp package install wp-cli/i18n-command:v2.2.13
+          # The Composer bundled inside the wp-cli phar is too old to accept
+          # GitHub's new (hyphenated) Actions token format, so `wp package install`
+          # fails with 'github oauth token ... contains invalid characters'
+          # (CVE-2026-45793) no matter how the token is supplied. Install the
+          # command with the patched standalone Composer instead and load it via
+          # --require below, bypassing the bundled Composer entirely. The git clone
+          # is an anonymous public checkout and the dependencies come from Packagist,
+          # so no GitHub token is needed.
+          git clone --depth 1 --branch v2.2.13 https://github.com/wp-cli/i18n-command.git "$RUNNER_TEMP/i18n-command"
+          composer install --no-dev --no-interaction --working-dir="$RUNNER_TEMP/i18n-command"
 
       - name: Update POT file
-        run: wp i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WCPOS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}" --skip-audit
+        run: wp --require="$RUNNER_TEMP/i18n-command/i18n-command.php" i18n make-pot . languages/woocommerce-pos.pot --domain=woocommerce-pos --slug=woocommerce-pos --package-name="WCPOS" --headers="{\"Report-Msgid-Bugs-To\":\"https://github.com/wcpos/woocommerce-pos/issues\"}" --skip-audit
 
       - name: Check for changes
         id: git-diff

@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.4
+Stable tag: 1.9.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -106,6 +106,14 @@ WooCommerce POS stores a random identifier (a UUID, option name `wcpos_anon_id`)
 Detailed store information (product counts, order counts, WooCommerce version) is sent only if you explicitly opt in via the tracking-consent prompt, and you can withdraw consent at any time in POS settings.
 
 == Changelog ==
+
+= 1.9.6 - 2026/06/17 =
+- **Cash drawer support** -- open a connected cash drawer automatically after payment or on demand with a new Open Drawer button. Choose a drawer connector per printer, with support for thermal/ESC-POS printers, Epson, PrintNode, and cloud/remote print jobs.
+- **Fixed an analytics event firing too often** -- the upgrade prompt "viewed" event no longer fires on every admin page load.
+- **Updated translations.**
+
+= 1.9.5 - 2026/06/15 =
+- **Fixed a payment gateways API crash** -- the POS payment-gateways endpoint no longer initialises every gateway's admin settings, which could cause a fatal error (HTTP 500) on stores using certain third-party payment gateways (e.g. ToyyibPay) that only register their settings in the WordPress admin.
 
 = 1.9.4 - 2026/06/13 =
 - **Redesigned Bluetooth printer setup** -- a managed Bluetooth chooser with connection timeouts, paired-device discovery on macOS and Linux, clearer scan feedback, and guidance to add a printer manually when none are found.
