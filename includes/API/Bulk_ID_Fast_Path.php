@@ -36,8 +36,11 @@ class Bulk_ID_Fast_Path {
 
 		$fields = $request->get_param( 'fields' );
 
-		return \is_array( $fields )
-			&& ( array( 'id' ) === $fields || array( 'id', 'date_modified_gmt' ) === $fields );
+		return 'id' === $fields
+			|| (
+				\is_array( $fields )
+				&& ( array( 'id' ) === $fields || array( 'id', 'date_modified_gmt' ) === $fields )
+			);
 	}
 
 	/**
@@ -105,12 +108,15 @@ class Bulk_ID_Fast_Path {
 	 */
 	public static function apply_id_filters_to_args( array $args, WP_REST_Request $request ): array {
 		$include_ids = self::id_list_from_request( $request, 'wcpos_include' );
-		if ( ! empty( $include_ids ) ) {
-			$args['include'] = $include_ids;
-		}
-
 		$exclude_ids = self::id_list_from_request( $request, 'wcpos_exclude' );
-		if ( ! empty( $exclude_ids ) ) {
+		if ( ! empty( $include_ids ) ) {
+			$args['include'] = ! empty( $exclude_ids )
+				? array_values( array_diff( $include_ids, $exclude_ids ) )
+				: $include_ids;
+			if ( empty( $args['include'] ) ) {
+				$args['include'] = array( 0 );
+			}
+		} elseif ( ! empty( $exclude_ids ) ) {
 			$args['exclude'] = $exclude_ids;
 		}
 
