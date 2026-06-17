@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - "**.ts"
       - "**.tsx"
@@ -17,6 +18,7 @@ on:
   pull_request:
     branches:
       - main
+      - next
     paths:
       - "**.ts"
       - "**.tsx"
