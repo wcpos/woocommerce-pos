@@ -46,7 +46,7 @@ done
 
 for required_condition in \
   "if: needs.changes.outputs.php == 'true' || github.event_name == 'workflow_dispatch'" \
-  "if: needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch'" \
+  "if: (needs.smoke-test.result == 'success' && needs.changes.outputs.translation_version_only != 'true') || github.event_name == 'workflow_dispatch'" \
   "if: \"!cancelled() && (needs.smoke-test.result == 'success' || github.event_name == 'workflow_dispatch')\""
 do
   if ! grep -Fq -- "$required_condition" "$WORKFLOW_FILE"; then
@@ -54,6 +54,16 @@ do
     exit 1
   fi
 done
+
+if awk '
+  /^  pull_request:/ { in_pull_request=1; next }
+  in_pull_request && /^  [A-Za-z_][^:]*:/ { in_pull_request=0 }
+  in_pull_request && /^[[:space:]]*branches:/ { found=1 }
+  END { exit(found ? 0 : 1) }
+' "$WORKFLOW_FILE"; then
+  echo "Expected $WORKFLOW_FILE pull_request trigger to run for stacked PR base branches" >&2
+  exit 1
+fi
 
 if grep -Fq "github.event_name == 'pull_request' || github.ref == 'refs/heads/main'" "$WORKFLOW_FILE"; then
   echo "Expected $WORKFLOW_FILE matrix jobs to run on workflow_dispatch too" >&2

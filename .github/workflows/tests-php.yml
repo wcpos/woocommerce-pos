@@ -18,8 +18,6 @@ on:
       - ".github/workflows/tests-js.yml"
       - ".github/workflows/tests-php.yml"
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
