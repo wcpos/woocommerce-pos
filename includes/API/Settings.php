@@ -956,13 +956,27 @@ class Settings extends WP_REST_Controller {
 			$slug  = $slugs[0];
 			$role  = get_role( $slug );
 
+			$access_settings = woocommerce_pos_get_settings( 'access' );
+			$allowed_caps    = array();
+
+			if ( ! is_wp_error( $access_settings ) && isset( $access_settings[ $slug ]['capabilities'] ) ) {
+				foreach ( $access_settings[ $slug ]['capabilities'] as $capabilities ) {
+					if ( \is_array( $capabilities ) ) {
+						$allowed_caps = array_merge( $allowed_caps, array_keys( $capabilities ) );
+					}
+				}
+			}
+
 			// flatten capabilities array from 'wc', 'wp', 'wcpos' grouping.
 			$flattened_caps = array();
 			foreach ( $update[ $slug ]['capabilities'] as $capabilities ) {
-				$flattened_caps = array_merge( $flattened_caps, $capabilities );
+				if ( \is_array( $capabilities ) ) {
+					$flattened_caps = array_merge( $flattened_caps, $capabilities );
+				}
 			}
+			$flattened_caps = array_intersect_key( $flattened_caps, array_flip( $allowed_caps ) );
 
-			// update capabilities for each $flattened_cap (should only be one).
+			// update capabilities for each allowed $flattened_cap (should only be one).
 			foreach ( $flattened_caps as $cap => $grant ) {
 				// sanity check for admin role, read capability.
 				if ( 'administrator' === $slug && 'read' === $cap ) {
