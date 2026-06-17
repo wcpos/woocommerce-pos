@@ -39,7 +39,7 @@ class List_Products {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$this->barcode_field = Settings::instance()->barcode_field();
 
 		// visibility options.
 		$this->options = array(
@@ -65,7 +65,7 @@ class List_Products {
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
-		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
+		if ( Settings::instance()->pos_only_products_enabled() ) {
 			add_filter( 'posts_clauses', array( $this, 'posts_clauses' ), 10, 2 );
 			add_filter( 'views_edit-product', array( $this, 'pos_visibility_filters' ), 10, 1 );
 			add_action( 'bulk_edit_custom_box', array( $this, 'bulk_edit' ), 10, 2 );

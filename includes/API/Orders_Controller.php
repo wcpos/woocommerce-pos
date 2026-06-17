@@ -24,6 +24,7 @@ use WC_Order_Item_Product;
 use WC_REST_Orders_Controller;
 use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -169,7 +170,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			return parent::delete_item( $request );
 		}
 
-		$setting = woocommerce_pos_get_settings( 'general', 'restore_stock_on_delete' );
+		$setting = SettingsService::instance()->restore_stock_on_delete_enabled();
 
 		/**
 		 * Filter whether to restore stock when an order is deleted via the POS API.
@@ -179,7 +180,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 		 * @param bool $restore_stock Whether to restore stock. Default from settings.
 		 * @param int  $order_id      The order ID being deleted.
 		 */
-		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', (bool) $setting, $order_id );
+		$restore_stock = apply_filters( 'woocommerce_pos_restore_stock_on_delete', $setting, $order_id );
 		$force         = (bool) $request->get_param( 'force' );
 
 		// Force-delete permanently removes the order, so restore stock beforehand.

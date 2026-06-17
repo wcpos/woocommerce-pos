@@ -8,7 +8,11 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WP_Error;
 use WP_REST_Request;
 use WP_UnitTestCase;
 
@@ -122,6 +126,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Test updating access settings.
 	 */
 	public function test_update_access_settings(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
 		$request = $this->mock_rest_request(
 			array(
 				'administrator' => array(
@@ -152,6 +158,65 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test access update preserves write errors from registered sections.
+	 */
+	public function test_update_access_settings_returns_section_write_error(): void {
+		$error  = new WP_Error( 'woocommerce_pos_settings_error', 'Write failed.', array( 'status' => 500 ) );
+		$filter = static function ( Section_Registry $registry ) use ( $error ): void {
+			$registry->register(
+				new class( $error ) implements Settings_Section_Interface {
+					/**
+					 * Error returned by write().
+					 *
+					 * @var WP_Error
+					 */
+					private $error;
+
+					public function __construct( WP_Error $error ) {
+						$this->error = $error;
+					}
+
+					public function id(): string {
+						return 'access';
+					}
+
+					public function defaults(): array {
+						return array();
+					}
+
+					public function read(): array {
+						return array();
+					}
+
+					public function write( array $settings ) {
+						return $this->error;
+					}
+
+					public function merge( array $existing, array $patch ): array {
+						return array_replace_recursive( $existing, $patch );
+					}
+
+					public function endpoint_args(): array {
+						return array();
+					}
+				}
+			);
+		};
+
+		add_action( 'woocommerce_pos_register_settings_sections', $filter );
+		SettingsService::instance()->reset_sections_for_testing();
+
+		try {
+			$response = $this->api->update_access_settings( $this->mock_rest_request() );
+		} finally {
+			remove_action( 'woocommerce_pos_register_settings_sections', $filter );
+			SettingsService::instance()->reset_sections_for_testing();
+		}
+
+		$this->assertSame( $error, $response );
+	}
+
+	/**
 	 * Test default license settings.
 	 */
 	public function test_get_license_default_settings(): void {
@@ -173,6 +238,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue( $response['pos_only_products'] );
 	}
 
+	/**
+	 * Test that store_tax_ids round-trips with sanitization applied.
+	 */
 	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
 		$request = $this->mock_rest_request(
 			array(
@@ -214,6 +282,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Test that updating with an empty array replaces the stored store_tax_ids.
+	 */
 	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
 		update_option(
 			'woocommerce_pos_settings_general',

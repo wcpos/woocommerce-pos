@@ -7,8 +7,18 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
-use WC_Payment_Gateways;
 use WP_Error;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings\Access_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Checkout_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Cloud_Print_Section;
+use WCPOS\WooCommercePOS\Services\Settings\General_Section;
+use WCPOS\WooCommercePOS\Services\Settings\License_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
+use WCPOS\WooCommercePOS\Services\Settings\Tax_Ids_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Tools_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Payment_Gateways_Section;
+use WCPOS\WooCommercePOS\Services\Settings\Visibility_Section;
 use const WCPOS\WooCommercePOS\VERSION;
 
 /**
@@ -23,112 +33,6 @@ class Settings {
 	protected static $db_prefix = 'woocommerce_pos_settings_';
 
 	/**
-	 * Default settings for all sections.
-	 *
-	 * @var array
-	 */
-	protected static $default_settings = array(
-		'general' => array(
-			'pos_only_products'           => false,
-			'decimal_qty'                 => false,
-			'force_ssl'                   => true,
-			'default_customer'            => 0,
-			'default_customer_is_cashier' => false,
-			'barcode_field'               => '_sku',
-			'generate_username'           => true,
-			'restore_stock_on_delete'     => true,
-			'tracking_consent'            => 'undecided',
-			'store_name'                  => '',
-			'store_phone'                 => '',
-			'store_email'                 => '',
-			'policies_and_conditions'     => '',
-			'store_tax_ids'               => array(),
-		),
-		'tax_ids' => array(
-			// Per-type meta-key write overrides. Empty by default: the composed
-			// write_map (defaults + plugin detection + scan) is used.
-			'write_map' => array(),
-		),
-		'checkout' => array(
-			'receipt_default_mode' => 'fiscal',
-			'admin_emails'    => array(
-				'enabled'         => true,
-				'new_order'       => true,
-				'cancelled_order' => true,
-				'failed_order'    => true,
-			),
-			'customer_emails' => array(
-				'enabled'                   => true,
-				'customer_on_hold_order'    => true,
-				'customer_processing_order' => true,
-				'customer_completed_order'  => true,
-				'customer_refunded_order'   => true,
-				'customer_failed_order'     => true,
-			),
-			'cashier_emails'  => array(
-				'enabled'   => false,
-				'new_order' => true,
-			),
-			// this is used in the POS, not in WP Admin (at the moment).
-			'dequeue_script_handles' => array(
-				'admin-bar',
-				'wc-add-to-cart',
-				'wc-stripe-upe-classic',
-			),
-			'dequeue_style_handles' => array(
-				'admin-bar',
-				'woocommerce-general',
-				'woocommerce-inline',
-				'woocommerce-layout',
-				'woocommerce-smallscreen',
-				'woocommerce-blocktheme',
-				'wp-block-library',
-			),
-			'disable_wp_head'   => false,
-			'disable_wp_footer' => false,
-		),
-		'payment_gateways' => array(
-			'default_gateway' => 'pos_cash',
-			'gateways'        => array(
-				'pos_cash' => array(
-					'order'        => 0,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
-				),
-				'pos_card' => array(
-					'order'        => 1,
-					'enabled'      => true,
-					'order_status' => 'wc-completed',
-				),
-			),
-		),
-		'tools' => array(
-			'use_jwt_as_param' => false,
-		),
-		'visibility' => array(
-			'products' => array(
-				'default' => array(
-					'pos_only' => array(
-						'ids' => array(),
-					),
-					'online_only' => array(
-						'ids' => array(),
-					),
-				),
-			),
-			'variations' => array(
-				'default' => array(
-					'pos_only' => array(
-						'ids' => array(),
-					),
-					'online_only' => array(
-						'ids' => array(),
-					),
-				),
-			),
-		),
-	);
-	/**
 	 * The single instance of the class.
 	 *
 	 * @var null|Settings
@@ -136,43 +40,63 @@ class Settings {
 	private static $instance = null;
 
 	/**
-	 * Get capabilities grouped by type.
+	 * The Section Registry. Built lazily on first access so registrants can
+	 * hook `woocommerce_pos_register_settings_sections` during plugins_loaded.
 	 *
-	 * WooCommerce 9.9 replaced promote_users with create_customers for
-	 * customer creation via the REST API. We show the correct capability
-	 * on the Access settings page based on the installed WC version.
-	 *
-	 * @return array
+	 * @var null|Section_Registry
 	 */
-	private static function get_caps(): array {
-		$customer_create_cap = version_compare( WC()->version, '9.9', '>=' )
-			? 'create_customers'
-			: 'promote_users';
+	private $registry = null;
 
-		return array(
-			'wcpos' => array(
-				'access_woocommerce_pos',
-				'manage_woocommerce_pos',
-			),
-			'wc' => array(
-				$customer_create_cap,
-				'read_private_products',
-				'edit_product',
-				'edit_others_products',
-				'edit_published_products',
-				'read_private_shop_orders',
-				'publish_shop_orders',
-				'edit_shop_orders',
-				'edit_others_shop_orders',
-				'edit_users',
-				'list_users',
-				'manage_product_terms',
-				'read_private_shop_coupons',
-			),
-			'wp' => array(
-				'read',
-			),
-		);
+	/**
+	 * Get the Section Registry, building and populating it on first access.
+	 *
+	 * @return Section_Registry
+	 */
+	public function sections(): Section_Registry {
+		if ( null === $this->registry ) {
+			// Assign before firing the action: a re-entrant settings read from
+			// inside a registration callback gets the partially built registry
+			// instead of recursing forever.
+			$this->registry = new Section_Registry();
+
+			// All core sections are registered here, before the action fires so
+			// extensions can rely on core sections already being present.
+			$this->registry->register( new General_Section() );
+			$this->registry->register( new Checkout_Section() );
+			$this->registry->register( new Tools_Section() );
+			$this->registry->register( new Tax_Ids_Section() );
+			$this->registry->register( new Visibility_Section() );
+			$this->registry->register( new Payment_Gateways_Section() );
+			$this->registry->register( new Access_Section() );
+			$this->registry->register( new License_Section() );
+			$this->registry->register( new Cloud_Print_Section() );
+
+			/**
+			 * Fires when the Section Registry is built, letting Pro and
+			 * extensions register their own Settings Sections.
+			 *
+			 * Fires lazily on the FIRST settings read of the request. Hook
+			 * this action at plugin file load or early plugins_loaded —
+			 * callbacks added after the first read never run.
+			 *
+			 * @since 1.10.0
+			 *
+			 * @param Section_Registry $registry The Section Registry.
+			 *
+			 * @hook woocommerce_pos_register_settings_sections
+			 */
+			do_action( 'woocommerce_pos_register_settings_sections', $this->registry );
+		}
+
+		return $this->registry;
+	}
+
+	/**
+	 * Drop the built registry so tests can exercise registration. Not for
+	 * production use.
+	 */
+	public function reset_sections_for_testing(): void {
+		$this->registry = null;
 	}
 
 	/**
@@ -205,12 +129,34 @@ class Settings {
 	 * @return null|array|mixed|WP_Error
 	 */
 	public function get_settings( string $id, $key = null ) {
+		$section = $this->sections()->get( $id );
+
+		if ( $section instanceof Settings_Section_Interface ) {
+			$settings = $section->read();
+
+			// If key is not provided, return the entire settings.
+			if ( ! \is_string( $key ) ) {
+				return $settings;
+			}
+
+			if ( ! isset( $settings[ $key ] ) ) {
+				return new WP_Error(
+					'woocommerce_pos_settings_error',
+					// translators: 1. %s: Settings group id, 2. %s: Settings key.
+					\sprintf( __( 'Settings with id %1$s and key %2$s not found', 'woocommerce-pos' ), $id, $key ),
+					array( 'status' => 400 )
+				);
+			}
+
+			return $settings[ $key ];
+		}
+
+		// Legacy path for sections not yet registered.
 		$method_name = 'get_' . $id . '_settings';
 
 		if ( method_exists( $this, $method_name ) ) {
 			$settings = $this->$method_name();
 
-			// If key is not provided, return the entire settings.
 			if ( ! \is_string( $key ) ) {
 				return $settings;
 			}
@@ -244,6 +190,11 @@ class Settings {
 	 * @return array|WP_Error Returns the updated settings array on success or WP_Error on failure.
 	 */
 	public function save_settings( string $id, array $settings ) {
+		$section = $this->sections()->get( $id );
+		if ( $section instanceof Settings_Section_Interface ) {
+			return $section->write( $settings );
+		}
+
 		$sanitize_method = 'sanitize_' . $id . '_settings';
 		if ( method_exists( $this, $sanitize_method ) ) {
 			$settings = $this->$sanitize_method( $settings );
@@ -312,186 +263,33 @@ class Settings {
 	 * @return array
 	 */
 	public function get_general_settings(): array {
-		$default_settings = self::$default_settings['general'];
-		$settings         = get_option( self::$db_prefix . 'general', array() );
+		$section = $this->sections()->get( 'general' );
 
-		// Migrate tracking_consent from the legacy `tools` option if it was set there
-		// before being moved to `general`. Only applies when the general option has no
-		// value yet, so an explicit general-level choice always wins.
-		if ( ! \array_key_exists( 'tracking_consent', $settings ) ) {
-			$legacy_tools = get_option( self::$db_prefix . 'tools', array() );
-			if ( \is_array( $legacy_tools ) && \array_key_exists( 'tracking_consent', $legacy_tools ) ) {
-				$settings['tracking_consent'] = $legacy_tools['tracking_consent'];
-			}
-		}
-
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-		$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
-
-		// Expose resolved fallbacks so the React UI can render them as
-		// placeholders for store_name / store_phone / store_email /
-		// policies_and_conditions when the user has not entered a value.
-		$settings['store_defaults'] = Store_Defaults::fallbacks();
-
-		/*
-		 * Filters the general settings.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $settings
-		 *
-		 * @return array $settings
-		 *
-		 * @hook woocommerce_pos_general_settings
-		 */
-		return apply_filters( 'woocommerce_pos_general_settings', $settings );
-	}
-
-	/**
-	 * Sanitize general settings before persisting.
-	 *
-	 * @param array $settings General settings.
-	 * @return array
-	 */
-	protected function sanitize_general_settings( array $settings ): array {
-		if ( \array_key_exists( 'store_tax_ids', $settings ) ) {
-			$settings['store_tax_ids'] = self::sanitize_store_tax_ids( $settings['store_tax_ids'] );
-		}
-
-		foreach ( array( 'store_name', 'store_phone' ) as $key ) {
-			if ( \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = \is_string( $settings[ $key ] )
-					? sanitize_text_field( $settings[ $key ] )
-					: '';
-			}
-		}
-
-		if ( \array_key_exists( 'store_email', $settings ) ) {
-			$email                  = \is_string( $settings['store_email'] ) ? trim( $settings['store_email'] ) : '';
-			$settings['store_email'] = ( '' !== $email && is_email( $email ) ) ? sanitize_email( $email ) : '';
-		}
-
-		if ( \array_key_exists( 'policies_and_conditions', $settings ) ) {
-			$settings['policies_and_conditions'] = \is_string( $settings['policies_and_conditions'] )
-				? sanitize_textarea_field( $settings['policies_and_conditions'] )
-				: '';
-		}
-
-		// store_defaults is a read-only computed field for the UI; never persist it.
-		unset( $settings['store_defaults'] );
-
-		return $settings;
+		return $section ? $section->read() : array();
 	}
 
 	/**
 	 * Sanitize the additional free-store tax IDs entered in General settings.
 	 *
-	 * Drops malformed rows and keeps optional country/label fields only when
-	 * non-empty. Values are preserved verbatim apart from normal text-field
-	 * sanitization and surrounding whitespace.
+	 * Delegates to General_Section::sanitize_store_tax_ids(). Kept here as a
+	 * static façade because Store_Defaults::tax_ids() calls this method.
 	 *
 	 * @param mixed $tax_ids Raw tax IDs.
 	 * @return array<int,array<string,string>>
 	 */
 	public static function sanitize_store_tax_ids( $tax_ids ): array {
-		if ( ! \is_array( $tax_ids ) ) {
-			return array();
-		}
-
-		$sanitized = array();
-		foreach ( $tax_ids as $tax_id ) {
-			if ( ! \is_array( $tax_id ) ) {
-				continue;
-			}
-
-			$type  = isset( $tax_id['type'] ) && \is_string( $tax_id['type'] )
-				? sanitize_key( $tax_id['type'] )
-				: '';
-			$value = isset( $tax_id['value'] ) && \is_string( $tax_id['value'] )
-				? trim( sanitize_text_field( $tax_id['value'] ) )
-				: '';
-
-			if ( '' === $type || '' === $value ) {
-				continue;
-			}
-
-			$entry = array(
-				'type'  => $type,
-				'value' => $value,
-			);
-
-			$country = isset( $tax_id['country'] ) && \is_string( $tax_id['country'] )
-				? strtoupper( trim( sanitize_text_field( $tax_id['country'] ) ) )
-				: '';
-			if ( '' !== $country ) {
-				$entry['country'] = $country;
-			}
-
-			$label = isset( $tax_id['label'] ) && \is_string( $tax_id['label'] )
-				? trim( sanitize_text_field( $tax_id['label'] ) )
-				: '';
-			if ( '' !== $label ) {
-				$entry['label'] = $label;
-			}
-
-			$sanitized[] = $entry;
-		}
-
-		return $sanitized;
+		return General_Section::sanitize_store_tax_ids( $tax_ids );
 	}
 
 	/**
 	 * Get tax IDs settings.
 	 *
-	 * Defaults are merged for any missing keys so the SPA always receives the
-	 * full subtree shape.
-	 *
 	 * @return array
 	 */
 	public function get_tax_ids_settings(): array {
-		$default_settings = self::$default_settings['tax_ids'];
-		$settings         = get_option( self::$db_prefix . 'tax_ids', array() );
+		$section = $this->sections()->get( 'tax_ids' );
 
-		if ( ! \is_array( $settings ) ) {
-			$settings = array();
-		}
-
-		if ( ! \array_key_exists( 'write_map', $settings ) ) {
-			$legacy_general = get_option( self::$db_prefix . 'general', array() );
-			$legacy_tax_ids = array();
-
-			if (
-				\is_array( $legacy_general )
-				&& isset( $legacy_general['tax_ids'] )
-				&& \is_array( $legacy_general['tax_ids'] )
-			) {
-				$legacy_tax_ids = $legacy_general['tax_ids'];
-			}
-
-			if ( isset( $legacy_tax_ids['write_map'] ) && \is_array( $legacy_tax_ids['write_map'] ) ) {
-				$settings['write_map'] = $legacy_tax_ids['write_map'];
-			}
-		}
-
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the tax IDs settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @hook woocommerce_pos_tax_ids_settings
-		 */
-		return apply_filters( 'woocommerce_pos_tax_ids_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -500,34 +298,9 @@ class Settings {
 	 * @return array
 	 */
 	public function get_checkout_settings(): array {
-		$default_settings = self::$default_settings['checkout'];
-		$settings         = get_option( self::$db_prefix . 'checkout', array() );
+		$section = $this->sections()->get( 'checkout' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		// Migrate legacy boolean email settings to array format.
-		foreach ( array( 'admin_emails', 'customer_emails' ) as $key ) {
-			if ( isset( $settings[ $key ] ) && \is_bool( $settings[ $key ] ) ) {
-				$defaults            = $default_settings[ $key ];
-				$defaults['enabled'] = $settings[ $key ];
-				$settings[ $key ]    = $defaults;
-			}
-		}
-
-		/*
-		 * Filters the checkout settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_checkout_settings
-		 */
-		return apply_filters( 'woocommerce_pos_checkout_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -536,69 +309,22 @@ class Settings {
 	 * @return array
 	 */
 	public function get_access_settings(): array {
-		global $wp_roles;
-		$role_caps = array();
-		$caps      = self::get_caps();
+		$section = $this->sections()->get( 'access' );
 
-		$roles = $wp_roles->roles;
-		if ( $roles ) {
-			foreach ( $roles as $slug => $role ) {
-				$role_caps[ $slug ] = array(
-					'name'         => $role['name'],
-					'capabilities' => array(
-						'wcpos' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wcpos'], false ), $role['capabilities'] ),
-							array_flip( $caps['wcpos'] )
-						),
-						'wc' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wc'], false ), $role['capabilities'] ),
-							array_flip( $caps['wc'] )
-						),
-						'wp' => array_intersect_key(
-							array_merge( array_fill_keys( $caps['wp'], false ), $role['capabilities'] ),
-							array_flip( $caps['wp'] )
-						),
-					),
-				);
-			}
-		}
-
-		/*
-		 * Filters the access settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_access_settings
-		 */
-		return apply_filters( 'woocommerce_pos_access_settings', $role_caps );
+		return $section ? $section->read() : array();
 	}
 
 	/**
 	 * Get tools settings.
 	 *
 	 * @return array
+	 *
+	 * @hook woocommerce_pos_tools_settings
 	 */
 	public function get_tools_settings(): array {
-		$default_settings = self::$default_settings['tools'];
-		$settings         = get_option( self::$db_prefix . 'tools', array() );
+		$section = $this->sections()->get( 'tools' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the tools settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.3.6
-		 * @hook woocommerce_pos_general_settings
-		 */
-		return apply_filters( 'woocommerce_pos_tools_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -606,16 +332,10 @@ class Settings {
 	 *
 	 * @return array
 	 */
-	public function get_license_settings() {
-		/*
-		 * Filters the license settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_license_settings
-		 */
-		return apply_filters( 'woocommerce_pos_license_settings', array() );
+	public function get_license_settings(): array {
+		$section = $this->sections()->get( 'license' );
+
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -666,100 +386,21 @@ class Settings {
 	 *
 	 * @return array
 	 */
-	public function get_payment_gateways_settings() {
-		// Note: I need to re-init the gateways here to pass the tests, but it seems to work fine in the app.
-		WC_Payment_Gateways::instance()->init();
-		$installed_gateways = WC_Payment_Gateways::instance()->payment_gateways();
-		$raw_gw_option     = get_option( self::$db_prefix . 'payment_gateways', array() );
-		$gateways_settings = array_replace_recursive(
-			self::$default_settings['payment_gateways'],
-			$raw_gw_option
-		);
+	public function get_payment_gateways_settings(): array {
+		$section = $this->sections()->get( 'payment_gateways' );
 
-		// Migrate: if old global checkout order_status exists, apply to all gateways.
-		$checkout_settings = get_option( self::$db_prefix . 'checkout', array() );
-		if ( isset( $checkout_settings['order_status'] ) ) {
-			$global_status = $checkout_settings['order_status'];
-			if ( \is_string( $global_status ) && '' !== $global_status ) {
-				foreach ( $gateways_settings['gateways'] as $gw_id => &$gw_data ) {
-					// Check the raw DB value, not the merged value (which includes defaults).
-					if ( ! isset( $raw_gw_option['gateways'][ $gw_id ]['order_status'] ) ) {
-						$gw_data['order_status'] = $global_status;
-					}
-				}
-				unset( $gw_data );
-			}
-			// Remove the old global setting.
-			unset( $checkout_settings['order_status'] );
-			update_option( self::$db_prefix . 'checkout', $checkout_settings );
-			update_option( self::$db_prefix . 'payment_gateways', $gateways_settings );
-		}
-
-		// NOTE - gateways can be installed and uninstalled, so we need to assume the settings data is stale.
-		$response = array(
-			'default_gateway' => $gateways_settings['default_gateway'],
-			'gateways'        => array(),
-		);
-
-		// Gateways that represent deferred/unverified payment default to on-hold.
-		$on_hold_gateways = array( 'bacs', 'cheque' );
-
-		// loop through installed gateways and merge with saved settings.
-		foreach ( $installed_gateways as $id => $gateway ) {
-			// sanity check for gateway class.
-			if ( ! is_a( $gateway, 'WC_Payment_Gateway' ) || 'pre_install_woocommerce_payments_promotion' === $id ) {
-				continue;
-			}
-
-			$default_status = in_array( $id, $on_hold_gateways, true ) ? 'wc-on-hold' : 'wc-completed';
-
-			$response['gateways'][ $id ] = array_replace_recursive(
-				array(
-					'id'           => $gateway->id,
-					'title'        => $gateway->title,
-					'description'  => $gateway->description,
-					'enabled'      => false,
-					'order'        => 999,
-					'order_status' => $default_status,
-				),
-				$gateways_settings['gateways'][ $id ] ?? array()
-			);
-		}
-
-		/*
-		 * Filters the payment gateways settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_payment_gateways_settings
-		 */
-		return apply_filters( 'woocommerce_pos_payment_gateways_settings', $response );
+		return $section ? $section->read() : array();
 	}
 
 	/**
 	 * POS Visibility settings.
+	 *
+	 * @return array
 	 */
-	public function get_visibility_settings() {
-		$default_settings = self::$default_settings['visibility'];
-		$settings         = get_option( self::$db_prefix . 'visibility', array() );
+	public function get_visibility_settings(): array {
+		$section = $this->sections()->get( 'visibility' );
 
-		// if the key does not exist in db settings, use the default settings.
-		foreach ( $default_settings as $key => $value ) {
-			if ( ! \array_key_exists( $key, $settings ) ) {
-				$settings[ $key ] = $value;
-			}
-		}
-
-		/*
-		 * Filters the visibility settings.
-		 *
-		 * @param {array} $settings
-		 * @returns {array} $settings
-		 * @since 1.0.0
-		 * @hook woocommerce_pos_visibility_settings
-		 */
-		return apply_filters( 'woocommerce_pos_visibility_settings', $settings );
+		return $section ? $section->read() : array();
 	}
 
 	/**
@@ -1045,7 +686,7 @@ class Settings {
 			return new WP_Error( 'unauthorized', 'You do not have permission to delete this option.' );
 		}
 
-		foreach ( self::$default_settings as $id => $settings ) {
+		foreach ( array_keys( self::instance()->sections()->all() ) as $id ) {
 			delete_option( self::$db_prefix . $id );
 		}
 
@@ -1067,6 +708,151 @@ class Settings {
 	 */
 	public static function bump_versions(): void {
 		update_option( 'woocommerce_pos_db_version', VERSION );
+	}
+
+	/**
+	 * Read one key from a section's filtered view, falling back to the
+	 * section default. Never returns WP_Error — typed accessors are the safe
+	 * read surface for PHP callers.
+	 *
+	 * @param string $id  Section id.
+	 * @param string $key Setting key.
+	 *
+	 * @return mixed
+	 */
+	private function section_value( string $id, string $key ) {
+		$settings = $this->get_settings( $id );
+		if ( \is_array( $settings ) && \array_key_exists( $key, $settings ) ) {
+			return $settings[ $key ];
+		}
+
+		$section = $this->sections()->get( $id );
+		if ( $section instanceof Settings_Section_Interface ) {
+			$defaults = $section->defaults();
+
+			return $defaults[ $key ] ?? null;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Whether the POS-only products feature is enabled.
+	 */
+	public function pos_only_products_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'pos_only_products' );
+	}
+
+	/**
+	 * Whether decimal stock/cart quantities are enabled.
+	 */
+	public function decimal_qty_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'decimal_qty' );
+	}
+
+	/**
+	 * Whether the POS frontend forces HTTPS.
+	 */
+	public function force_ssl_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'force_ssl' );
+	}
+
+	/**
+	 * The product meta key used as the barcode field.
+	 */
+	public function barcode_field(): string {
+		return (string) $this->section_value( 'general', 'barcode_field' );
+	}
+
+	/**
+	 * The default customer id for new POS orders.
+	 */
+	public function default_customer_id(): int {
+		return (int) $this->section_value( 'general', 'default_customer' );
+	}
+
+	/**
+	 * Whether the logged-in cashier is the default customer.
+	 */
+	public function default_customer_is_cashier(): bool {
+		return (bool) $this->section_value( 'general', 'default_customer_is_cashier' );
+	}
+
+	/**
+	 * Whether usernames are auto-generated for new customers.
+	 */
+	public function generate_username_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'generate_username' );
+	}
+
+	/**
+	 * Whether stock is restored when a POS order is deleted.
+	 */
+	public function restore_stock_on_delete_enabled(): bool {
+		return (bool) $this->section_value( 'general', 'restore_stock_on_delete' );
+	}
+
+	/**
+	 * The analytics tracking consent state: allowed | denied | undecided.
+	 */
+	public function tracking_consent(): string {
+		return (string) $this->section_value( 'general', 'tracking_consent' );
+	}
+
+	/**
+	 * Whether the JWT may be passed as a query parameter (Tools).
+	 */
+	public function use_jwt_as_param_enabled(): bool {
+		return (bool) $this->section_value( 'tools', 'use_jwt_as_param' );
+	}
+
+	/**
+	 * Admin email toggles for POS orders.
+	 */
+	public function admin_emails(): array {
+		return (array) $this->section_value( 'checkout', 'admin_emails' );
+	}
+
+	/**
+	 * Customer email toggles for POS orders.
+	 */
+	public function customer_emails(): array {
+		return (array) $this->section_value( 'checkout', 'customer_emails' );
+	}
+
+	/**
+	 * Cashier email toggles for POS orders.
+	 */
+	public function cashier_emails(): array {
+		return (array) $this->section_value( 'checkout', 'cashier_emails' );
+	}
+
+	/**
+	 * Script handles dequeued on the POS checkout pages.
+	 */
+	public function dequeue_script_handles(): array {
+		return (array) $this->section_value( 'checkout', 'dequeue_script_handles' );
+	}
+
+	/**
+	 * Style handles dequeued on the POS checkout pages.
+	 */
+	public function dequeue_style_handles(): array {
+		return (array) $this->section_value( 'checkout', 'dequeue_style_handles' );
+	}
+
+	/**
+	 * The default receipt mode: fiscal | live.
+	 */
+	public function receipt_default_mode(): string {
+		return (string) $this->section_value( 'checkout', 'receipt_default_mode' );
+	}
+
+	/**
+	 * The user-override tax-ID write map (type => meta key).
+	 */
+	public function tax_id_write_map(): array {
+		return (array) $this->section_value( 'tax_ids', 'write_map' );
 	}
 
 	/**

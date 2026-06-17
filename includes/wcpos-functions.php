@@ -62,7 +62,7 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 	 */
 	function wcpos_url( $page = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$slug   = Permalink::get_slug();
-		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+		$scheme = Settings::instance()->force_ssl_enabled() ? 'https' : null;
 
 		return home_url( $slug . '/' . $page, $scheme );
 	}
@@ -149,6 +149,43 @@ if ( ! \function_exists( 'wcpos_get_settings' ) ) {
 		$settings_service = Settings::instance();
 
 		return $settings_service->get_settings( $id, $key );
+	}
+}
+
+/*
+ * Get the site UUID (Plugin State), generating and persisting it on first use.
+ *
+ * @return string Site UUID.
+ */
+if ( ! \function_exists( 'wcpos_get_site_uuid' ) ) {
+	/**
+	 * Get the site UUID, generating and persisting it on first use.
+	 *
+	 * Single owner for the woocommerce_pos_uuid option — the
+	 * generate-if-missing logic previously lived in three places (REST index,
+	 * POS frontend, analytics) and could race.
+	 *
+	 * @return string Site UUID.
+	 */
+	function wcpos_get_site_uuid(): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$uuid = get_option( 'woocommerce_pos_uuid', '' );
+		if ( \is_string( $uuid ) && '' !== $uuid ) {
+			return $uuid;
+		}
+
+		$uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
+
+		// add_option() is a no-op when the option already exists, so a
+		// concurrent request that won the race keeps its value.
+		if ( ! add_option( 'woocommerce_pos_uuid', $uuid ) ) {
+			$existing = get_option( 'woocommerce_pos_uuid', '' );
+			if ( \is_string( $existing ) && '' !== $existing ) {
+				return $existing;
+			}
+			update_option( 'woocommerce_pos_uuid', $uuid );
+		}
+
+		return $uuid;
 	}
 }
 

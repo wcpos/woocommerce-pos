@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS;
 
 use WC_Email;
 use WC_Order;
+use WCPOS\WooCommercePOS\Services\Settings;
 
 /**
  * Emails Class
@@ -81,7 +82,7 @@ class Emails {
 		}
 
 		$email_id = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
-		$settings = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
+		$settings = Settings::instance()->admin_emails();
 
 		// Master toggle off = all disabled.
 		if ( empty( $settings['enabled'] ) ) {
@@ -119,7 +120,7 @@ class Emails {
 		}
 
 		$email_id = $email_class instanceof WC_Email ? $email_class->id : 'unknown';
-		$settings = woocommerce_pos_get_settings( 'checkout', 'customer_emails' );
+		$settings = Settings::instance()->customer_emails();
 
 		// Master toggle off = all disabled.
 		if ( empty( $settings['enabled'] ) ) {
@@ -160,8 +161,8 @@ class Emails {
 			return $recipient;
 		}
 
-		$admin_settings   = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
-		$cashier_settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+		$admin_settings   = Settings::instance()->admin_emails();
+		$cashier_settings = Settings::instance()->cashier_emails();
 
 		$admin_wants_new_order = ! empty( $admin_settings['enabled'] )
 			&& ( $admin_settings['new_order'] ?? true );
@@ -213,8 +214,8 @@ class Emails {
 		}
 
 		// Check if anyone wants the new_order email.
-		$admin_settings   = woocommerce_pos_get_settings( 'checkout', 'admin_emails' );
-		$cashier_settings = woocommerce_pos_get_settings( 'checkout', 'cashier_emails' );
+		$admin_settings   = Settings::instance()->admin_emails();
+		$cashier_settings = Settings::instance()->cashier_emails();
 
 		$admin_wants = ! empty( $admin_settings['enabled'] )
 			&& ( $admin_settings['new_order'] ?? true );
