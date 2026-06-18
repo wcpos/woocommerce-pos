@@ -183,7 +183,7 @@ class Test_Analytics extends WP_UnitTestCase {
 		$analytics = $this->enable_consent();
 
 		$result = $analytics->capture(
-			'upgrade_cta_clicked',
+			'pro_link_clicked',
 			array( 'placement' => 'settings_header' )
 		);
 
@@ -196,7 +196,7 @@ class Test_Analytics extends WP_UnitTestCase {
 		$this->assertFalse( $request['args']['blocking'] );
 
 		$payload = json_decode( $request['args']['body'], true );
-		$this->assertSame( 'upgrade_cta_clicked', $payload['event'] );
+		$this->assertSame( 'pro_link_clicked', $payload['event'] );
 		$this->assertSame( 'user-uuid-123', $payload['distinct_id'] );
 		$this->assertSame( Analytics::DEFAULT_TOKEN, $payload['api_key'] );
 		$this->assertSame( 'settings_header', $payload['properties']['placement'] );
