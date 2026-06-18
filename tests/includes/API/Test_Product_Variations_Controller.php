@@ -185,6 +185,40 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 	}
 
+	public function test_variation_api_get_all_ids_with_include_filter(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $variation_ids[0] ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $variation_ids[0] ), $ids );
+		$this->assertNotContains( $variation_ids[1], $ids );
+	}
+
+	public function test_variation_api_get_all_ids_with_exclude_filter(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/variations' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $variation_ids[0] ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $variation_ids[0], $ids );
+		$this->assertContains( $variation_ids[1], $ids );
+	}
+
 	/**
 	 * Test getting all variation IDs.
 	 */
