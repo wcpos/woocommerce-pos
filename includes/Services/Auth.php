@@ -166,6 +166,24 @@ class Auth {
 	 * @return string|WP_Error
 	 */
 	public function generate_access_token( WP_User $user, string $refresh_jti = '' ) {
+		$token_data = $this->generate_access_token_data( $user, $refresh_jti );
+
+		if ( is_wp_error( $token_data ) ) {
+			return $token_data;
+		}
+
+		return $token_data['token'];
+	}
+
+	/**
+	 * Generate an access token and return the token metadata used by callers.
+	 *
+	 * @param WP_User $user        The user object.
+	 * @param string  $refresh_jti Optional refresh token JTI to link access token to session.
+	 *
+	 * @return array|WP_Error
+	 */
+	private function generate_access_token_data( WP_User $user, string $refresh_jti = '' ) {
 		// First thing, check the secret key if not exist return a error.
 		if ( ! $this->get_secret_key() ) {
 			return new WP_Error(
@@ -179,21 +197,7 @@ class Auth {
 
 		/** Valid credentials, the user exists create the according Token */
 		$issued_at = time();
-
-		/**
-		 * Filters the JWT access token expire time.
-		 * Default: 30 minutes for access tokens.
-		 *
-		 * @param int $expire_time
-		 * @param int $issued_at
-		 *
-		 * @returns int Expire time
-		 *
-		 * @since 1.8.0
-		 *
-		 * @hook woocommerce_pos_jwt_access_token_expire
-		 */
-		$expire = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+		$expire    = $this->get_access_token_expire( $issued_at );
 
 		// Generate unique JTI for access token.
 		$jti = wp_generate_uuid4();
@@ -228,7 +232,27 @@ class Auth {
 		 *
 		 * @hook woocommerce_pos_jwt_access_token_before_sign
 		 */
-		return JWT::encode( apply_filters( 'woocommerce_pos_jwt_access_token_before_sign', $token, $user ), $this->get_secret_key(), 'HS256' );
+		$payload = apply_filters( 'woocommerce_pos_jwt_access_token_before_sign', $token, $user );
+		$token   = JWT::encode( $payload, $this->get_secret_key(), 'HS256' );
+
+		$expires_at        = $this->get_payload_claim( $payload, 'exp' );
+		$access_jti        = $this->get_payload_claim( $payload, 'jti' );
+		$linked_refresh_jti = $this->get_payload_claim( $payload, 'refresh_jti' );
+
+		$expires_at = null === $expires_at ? $expire : (int) $expires_at;
+		$access_jti = null === $access_jti ? $jti : (string) $access_jti;
+
+		if ( null !== $linked_refresh_jti ) {
+			$linked_refresh_jti = (string) $linked_refresh_jti;
+			$this->store_access_token_expiry( $user->ID, $linked_refresh_jti, $expires_at );
+		}
+
+		return array(
+			'token'       => $token,
+			'expires_at'  => $expires_at,
+			'jti'         => $access_jti,
+			'refresh_jti' => $linked_refresh_jti,
+		);
 	}
 
 	/**
@@ -252,21 +276,7 @@ class Auth {
 
 		/** Valid credentials, the user exists create the according Token */
 		$issued_at = time();
-
-		/**
-		 * Filters the JWT refresh token expire time.
-		 * Default: 30 days for refresh tokens.
-		 *
-		 * @param int $expire_time
-		 * @param int $issued_at
-		 *
-		 * @returns int Expire time
-		 *
-		 * @since 1.8.0
-		 *
-		 * @hook woocommerce_pos_jwt_refresh_token_expire
-		 */
-		$expire = apply_filters( 'woocommerce_pos_jwt_refresh_token_expire', $issued_at + ( DAY_IN_SECONDS * 30 ), $issued_at );
+		$expire    = $this->get_refresh_token_expire( $issued_at );
 
 		// Generate unique JTI (JWT ID) for refresh token tracking.
 		$jti = wp_generate_uuid4();
@@ -325,19 +335,16 @@ class Auth {
 		}
 
 		// Generate access token with link to refresh token.
-		$access_token = $this->generate_access_token( $user, $decoded_refresh->jti ?? '' );
-		if ( is_wp_error( $access_token ) ) {
-			return $access_token;
+		$access_token_data = $this->generate_access_token_data( $user, $decoded_refresh->jti ?? '' );
+		if ( is_wp_error( $access_token_data ) ) {
+			return $access_token_data;
 		}
 
-		$issued_at = time();
-		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-
 		return array(
-			'access_token'  => $access_token,
+			'access_token'  => $access_token_data['token'],
 			'refresh_token' => $refresh_token,
 			'token_type'    => 'Bearer',
-			'expires_at'    => (int) $expire,
+			'expires_at'    => (int) $access_token_data['expires_at'],
 		);
 	}
 
@@ -460,18 +467,15 @@ class Auth {
 		$this->update_session_activity( $decoded->data->user->id, $decoded->jti ?? '' );
 
 		// Generate new access token with link to refresh token (refresh token stays the same).
-		$new_access_token = $this->generate_access_token( $user, $decoded->jti ?? '' );
-		if ( is_wp_error( $new_access_token ) ) {
-			return $new_access_token;
+		$new_access_token_data = $this->generate_access_token_data( $user, $decoded->jti ?? '' );
+		if ( is_wp_error( $new_access_token_data ) ) {
+			return $new_access_token_data;
 		}
 
-		$issued_at = time();
-		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-
 		return array(
-			'access_token' => $new_access_token,
+			'access_token' => $new_access_token_data['token'],
 			'token_type'   => 'Bearer',
-			'expires_at'   => (int) $expire,
+			'expires_at'   => (int) $new_access_token_data['expires_at'],
 		);
 	}
 
@@ -518,11 +522,11 @@ class Auth {
 
 		// Blacklist all sessions for instant access token invalidation.
 		if ( \is_array( $refresh_tokens ) ) {
-			$issued_at = time();
-			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-			$ttl       = max( 0, $expire - $issued_at );
+			$issued_at     = time();
+			$access_expire = $this->get_access_token_expire( $issued_at );
 
 			foreach ( $refresh_tokens as $jti => $token_data ) {
+				$ttl = $this->get_access_token_blacklist_ttl( $token_data, $issued_at, $access_expire );
 				$this->blacklist_token( $jti, $ttl );
 			}
 		}
@@ -609,12 +613,12 @@ class Auth {
 		}
 
 		// Blacklist all sessions except current for instant access token invalidation.
-		$issued_at = time();
-		$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-		$ttl       = max( 0, $expire - $issued_at );
+		$issued_at     = time();
+		$access_expire = $this->get_access_token_expire( $issued_at );
 
 		foreach ( $refresh_tokens as $jti => $token_data ) {
 			if ( $jti !== $current_jti ) {
+				$ttl = $this->get_access_token_blacklist_ttl( $token_data, $issued_at, $access_expire );
 				$this->blacklist_token( $jti, $ttl );
 			}
 		}
@@ -711,16 +715,16 @@ class Auth {
 	 * @return bool
 	 */
 	public function revoke_session_with_blacklist( int $user_id, string $refresh_jti ): bool {
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		$session_data   = \is_array( $refresh_tokens ) && isset( $refresh_tokens[ $refresh_jti ] ) ? $refresh_tokens[ $refresh_jti ] : array();
+		$ttl            = $this->get_access_token_blacklist_ttl( $session_data );
+
 		// Revoke the refresh token (session) from user meta.
 		$revoked = $this->revoke_session( $user_id, $refresh_jti );
 
 		if ( $revoked ) {
 			// Blacklist the session JTI - this invalidates ALL access tokens for this session
-			// TTL matches access token expiry (30 min default) since that's how long we need to block.
-			$issued_at = time();
-			$expire    = apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
-			$ttl       = max( 0, $expire - $issued_at );
-
+			// TTL covers the current policy and any access token expiry recorded for the session.
 			$this->blacklist_token( $refresh_jti, $ttl );
 		}
 
@@ -797,6 +801,113 @@ class Auth {
 		);
 
 		update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Filters the JWT access token expire time.
+	 * Default: 30 minutes for access tokens.
+	 *
+	 * @param int $issued_at Token issued timestamp.
+	 *
+	 * @return int Expire time.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @hook woocommerce_pos_jwt_access_token_expire
+	 */
+	private function get_access_token_expire( int $issued_at ): int {
+		return (int) apply_filters( 'woocommerce_pos_jwt_access_token_expire', $issued_at + ( HOUR_IN_SECONDS / 2 ), $issued_at );
+	}
+
+	/**
+	 * Filters the JWT refresh token expire time.
+	 * Default: 30 days for refresh tokens.
+	 *
+	 * @param int $issued_at Token issued timestamp.
+	 *
+	 * @return int Expire time.
+	 *
+	 * @since 1.8.0
+	 *
+	 * @hook woocommerce_pos_jwt_refresh_token_expire
+	 */
+	private function get_refresh_token_expire( int $issued_at ): int {
+		return (int) apply_filters( 'woocommerce_pos_jwt_refresh_token_expire', $issued_at + ( DAY_IN_SECONDS * 30 ), $issued_at );
+	}
+
+	/**
+	 * Read a top-level claim from a JWT payload array/object.
+	 *
+	 * @param mixed  $payload The filtered JWT payload.
+	 * @param string $claim   The claim name.
+	 *
+	 * @return mixed|null
+	 */
+	private function get_payload_claim( $payload, string $claim ) {
+		if ( \is_array( $payload ) && array_key_exists( $claim, $payload ) ) {
+			return $payload[ $claim ];
+		}
+
+		if ( \is_object( $payload ) && isset( $payload->{$claim} ) ) {
+			return $payload->{$claim};
+		}
+
+		return null;
+	}
+
+	/**
+	 * Record the latest access token expiry linked to a refresh-token session.
+	 *
+	 * @param int    $user_id        The user ID.
+	 * @param string $refresh_jti    Refresh token JTI.
+	 * @param int    $access_expires Access token expiry timestamp.
+	 *
+	 * @return bool
+	 */
+	private function store_access_token_expiry( int $user_id, string $refresh_jti, int $access_expires ): bool {
+		if ( empty( $refresh_jti ) || $access_expires <= 0 ) {
+			return false;
+		}
+
+		$refresh_tokens = get_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', true );
+		if ( ! \is_array( $refresh_tokens ) || ! isset( $refresh_tokens[ $refresh_jti ] ) ) {
+			return false;
+		}
+
+		$current_access_expires = isset( $refresh_tokens[ $refresh_jti ]['access_expires'] ) ? (int) $refresh_tokens[ $refresh_jti ]['access_expires'] : 0;
+		if ( $access_expires <= $current_access_expires ) {
+			return true;
+		}
+
+		$refresh_tokens[ $refresh_jti ]['access_expires'] = $access_expires;
+
+		return update_user_meta( $user_id, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+	}
+
+	/**
+	 * Calculate blacklist TTL for a session.
+	 *
+	 * @param array    $session_data  Session metadata.
+	 * @param null|int $issued_at     Current timestamp.
+	 * @param null|int $access_expire Current access token expiry policy value.
+	 *
+	 * @return int
+	 */
+	private function get_access_token_blacklist_ttl(
+		array $session_data = array(),
+		?int $issued_at = null,
+		?int $access_expire = null
+	): int {
+		$issued_at     = null === $issued_at ? time() : $issued_at;
+		$access_expire = null === $access_expire ? $this->get_access_token_expire( $issued_at ) : $access_expire;
+
+		if ( isset( $session_data['access_expires'] ) ) {
+			$access_expire = max( $access_expire, (int) $session_data['access_expires'] );
+		} elseif ( isset( $session_data['expires'] ) ) {
+			$access_expire = max( $access_expire, (int) $session_data['expires'] );
+		}
+
+		return max( 0, $access_expire - $issued_at );
 	}
 
 	/**
