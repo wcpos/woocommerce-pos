@@ -277,9 +277,13 @@ class Menu {
 				true
 			);
 
+			// Inject functional data (locale, version, anon_id, experiment
+			// bootstrap flags). The landing bundle owns PostHog initialisation,
+			// flag resolution, and identify ordering (flag-before-identify, spec
+			// §5.1); the plugin must NOT init PostHog or identify here — doing so
+			// shares the bundle's localStorage identity, breaks the anon-bucket
+			// exposure, and double-fires CTA tracking.
 			wp_add_inline_script( 'wcpos-welcome', $this->landing_inline_script(), 'before' );
-			wp_add_inline_script( 'wcpos-welcome', self::get_posthog_inline_script(), 'before' );
-			wp_add_inline_script( 'wcpos-welcome', $this->landing_tracking_inline_script(), 'after' );
 		}
 	}
 
@@ -428,39 +432,6 @@ JS;
 			'var wcpos = wcpos || {}; wcpos.landing = %s;',
 			$encoded
 		);
-	}
-
-	/**
-	 * Track clicks from the remote upgrade landing content.
-	 *
-	 * @return string
-	 */
-	private function landing_tracking_inline_script(): string {
-		return <<<JS
-(function() {
-	var root = document.getElementById('woocommerce-pos-upgrade');
-	if (!root) {
-		return;
-	}
-
-	document.addEventListener('click', function(event) {
-		var target = event.target;
-		if (!target || !target.closest) {
-			return;
-		}
-
-		var link = target.closest('#woocommerce-pos-upgrade a[href*="wcpos.com/pro"]');
-		if (!link || !window.wcpos || !window.wcpos.posthog || !window.wcpos.posthog.capture) {
-			return;
-		}
-
-		window.wcpos.posthog.capture('upgrade_cta_clicked', {
-			placement: 'admin_landing_banner',
-			destination: link.href
-		});
-	});
-})();
-JS;
 	}
 
 	/**
