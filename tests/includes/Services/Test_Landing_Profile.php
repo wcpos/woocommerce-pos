@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use ReflectionMethod;
+use WCPOS\WooCommercePOS\Services\Feature_Flags;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
 use WP_UnitTestCase;
 
@@ -154,6 +155,34 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 		$this->assertSame(
 			$profile->get_functional_data()['anon_id'],
 			$profile->get_functional_data()['anon_id']
+		);
+	}
+
+	/**
+	 * Functional data must carry the server-resolved experiment bootstrap flags
+	 * so the bundle can seed PostHog at first paint (no client flag fetch).
+	 */
+	public function test_functional_data_carries_landing_variant_bootstrap_flag(): void {
+		$profile = new Landing_Profile();
+		$data    = $profile->get_functional_data();
+
+		$this->assertArrayHasKey( 'bootstrap_flags', $data );
+		$this->assertArrayHasKey( 'landing-variant', $data['bootstrap_flags'] );
+		$this->assertContains( $data['bootstrap_flags']['landing-variant'], array( 'indie', 'free-plus' ) );
+	}
+
+	/**
+	 * The bootstrapped variant must equal what the resolver assigns for the
+	 * payload's own anon_id — the client buckets on that id, so a mismatch would
+	 * corrupt assignment.
+	 */
+	public function test_functional_data_bootstrap_variant_matches_anon_id_assignment(): void {
+		$profile = new Landing_Profile();
+		$data    = $profile->get_functional_data();
+
+		$this->assertSame(
+			( new Feature_Flags() )->get_landing_variant( $data['anon_id'] ),
+			$data['bootstrap_flags']['landing-variant']
 		);
 	}
 }

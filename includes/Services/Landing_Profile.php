@@ -46,17 +46,23 @@ class Landing_Profile {
 	/**
 	 * Get functional data that is always available (no consent required).
 	 *
-	 * Used for translations, feature gating, and schema versioning.
+	 * Used for translations, feature gating, and schema versioning. Includes the
+	 * anonymous identity and the server-resolved experiment flags so the landing
+	 * bundle can bootstrap its A/B variant at first paint without a network flag
+	 * fetch (landing-experiments spec §5.1).
 	 *
 	 * @return array
 	 */
 	public function get_functional_data(): array {
+		$anon_id = ( new Anon_ID() )->get();
+
 		return array(
-			'schema_version' => 2, // bumped: anon_id added (landing-experiments spec §5.1).
-			'locale'         => get_locale(),
-			'plugin_version' => PLUGIN_VERSION,
-			'pro_active'     => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
-			'anon_id'        => ( new Anon_ID() )->get(),
+			'schema_version'  => 2, // bumped: anon_id added (landing-experiments spec §5.1).
+			'locale'          => get_locale(),
+			'plugin_version'  => PLUGIN_VERSION,
+			'pro_active'      => class_exists( '\WCPOS\WooCommercePOSPro\WooCommercePOSPro' ),
+			'anon_id'         => $anon_id,
+			'bootstrap_flags' => ( new Feature_Flags() )->get_landing_bootstrap_flags( $anon_id ),
 		);
 	}
 
