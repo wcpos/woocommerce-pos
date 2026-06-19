@@ -26,6 +26,13 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 	private $menu;
 
 	/**
+	 * Original general settings snapshot for restoration.
+	 *
+	 * @var array
+	 */
+	private $original_general_settings = array();
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -47,7 +54,8 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 		// Consent ON: under the old code this is exactly when the plugin emitted
 		// a real posthog.init + identify, so the regression assertions below are
 		// meaningful rather than vacuous.
-		$settings                     = (array) woocommerce_pos_get_settings( 'general' );
+		$this->original_general_settings = (array) woocommerce_pos_get_settings( 'general' );
+		$settings                        = $this->original_general_settings;
 		$settings['tracking_consent'] = 'allowed';
 		SettingsService::instance()->save_settings( 'general', $settings );
 
@@ -58,6 +66,7 @@ class Test_Menu_Landing_Bootstrap extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		SettingsService::instance()->save_settings( 'general', $this->original_general_settings );
 		remove_filter( 'pre_http_request', '__return_empty_array' );
 		Analytics::reset_instance();
 		wp_set_current_user( 0 );
