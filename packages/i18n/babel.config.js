@@ -3,14 +3,7 @@ module.exports = function (api) {
 
 	const presets = ['@babel/preset-env', '@babel/preset-react', '@babel/preset-typescript'];
 
-	const plugins = [
-		[
-			'@babel/plugin-transform-runtime',
-			{
-				regenerator: true,
-			},
-		],
-	];
+	const plugins = ['@babel/plugin-transform-runtime'];
 
 	return {
 		presets,
