@@ -143,7 +143,7 @@ is_allowed_test_matrix_pr() {
 
 is_allowed_dependabot_composer_dev_dependency_pr() {
   [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || return 1
-  [[ "$PR_TITLE" == build\(deps-dev\):\ bump\ * || "$PR_TITLE" == build\(deps-dev\):\ update\ *\ in\ the\ dev-dependencies\ group ]] || return 1
+  [[ "$PR_TITLE" == build\(deps-dev\):\ bump\ * ]] || return 1
 
   local changed_files file
   changed_files="$(pr_diff_names)"
