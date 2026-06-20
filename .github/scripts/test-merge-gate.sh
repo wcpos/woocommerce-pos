@@ -187,6 +187,15 @@ run_case "dependabot dev-dependency bypasses CodeRabbit but waits for smoke test
   MOCK_PATCH="$composer_dev_dependency_patch" \
   MOCK_CODERABBIT="missing"
 
+run_case "dependabot npm dev-dependency allows skipped smoke test without CodeRabbit" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
+  MOCK_CHANGED_FILES="packages/analytics/package.json
+packages/i18n/package.json" \
+  MOCK_PATCH="" \
+  MOCK_CODERABBIT="missing" \
+  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
+
 run_case "dependabot dev-dependency with extra file still requires CodeRabbit" fail \
   PR_AUTHOR="dependabot[bot]" \
   PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
