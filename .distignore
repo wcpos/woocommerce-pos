@@ -21,3 +21,6 @@ docs
 scripts
 CLAUDE.md
 AGENTS.md
+codecov.yml
+phpstan.neon
+phpstan-constants.php
