@@ -10,8 +10,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
-    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
+    "@atlaskit/pragmatic-drag-and-drop": "^2.0.1",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^2.0.0",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.169.2",
     "@wcpos/i18n": "workspace:*",
@@ -20,8 +20,8 @@
     "@wordpress/api-fetch": "^7.45.0",
     "@wordpress/url": "^4.45.0",
     "classnames": "^2.5.1",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-error-boundary": "^6.1.1"
   },
   "devDependencies": {
