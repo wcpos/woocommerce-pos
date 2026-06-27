@@ -11,8 +11,8 @@
   ],
   "require-dev": {
     "dealerdirect/phpcodesniffer-composer-installer": "v1.2.1",
-    "friendsofphp/php-cs-fixer": "v3.95.7",
-    "php-stubs/woocommerce-stubs": "v10.8.0",
+    "friendsofphp/php-cs-fixer": "v3.95.11",
+    "php-stubs/woocommerce-stubs": "v10.9.1",
     "php-stubs/wordpress-stubs": "^6.9",
     "phpcompatibility/phpcompatibility-wp": "2.1.8",
     "phpstan/phpstan": "^1.12",
