@@ -187,6 +187,13 @@ run_case "dependabot dev-dependency bypasses CodeRabbit but waits for smoke test
   MOCK_PATCH="$composer_dev_dependency_patch" \
   MOCK_CODERABBIT="missing"
 
+run_case "dependabot single composer dev-dependency update bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps-dev): update php-stubs/woocommerce-stubs requirement from v10.9.1 to v10.9.2 in the dev-dependencies group" \
+  MOCK_CHANGED_FILES="composer.json" \
+  MOCK_PATCH="$composer_dev_dependency_patch" \
+  MOCK_CODERABBIT="missing"
+
 run_case "dependabot dev-dependency with extra file still requires CodeRabbit" fail \
   PR_AUTHOR="dependabot[bot]" \
   PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
