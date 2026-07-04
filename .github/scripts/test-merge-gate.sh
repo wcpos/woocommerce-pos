@@ -150,6 +150,15 @@ composer_dev_dependency_patch="diff --git a/composer.json b/composer.json
 -    \"friendsofphp/php-cs-fixer\": \"v3.95.1\",
 +    \"friendsofphp/php-cs-fixer\": \"v3.95.4\","
 
+github_actions_dependency_patch="diff --git a/.github/workflows/tests-js.yml b/.github/workflows/tests-js.yml
+--- a/.github/workflows/tests-js.yml
++++ b/.github/workflows/tests-js.yml
+@@ -20,7 +20,7 @@
+-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
++        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+-      - uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
++      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0"
+
 run_case "test-matrix bot bypasses CodeRabbit but waits for smoke test" pass \
   PR_AUTHOR="wcpos-bot[bot]" \
   PR_TITLE="chore: update test matrix versions" \
@@ -193,6 +202,13 @@ run_case "dependabot dev-dependency with extra file still requires CodeRabbit" f
   MOCK_CHANGED_FILES="composer.json
 README.md" \
   MOCK_PATCH="$composer_dev_dependency_patch" \
+  MOCK_CODERABBIT="missing"
+
+run_case "dependabot GitHub Actions group bypasses CodeRabbit but waits for smoke test" pass \
+  PR_AUTHOR="dependabot[bot]" \
+  PR_TITLE="build(deps): bump the actions group across 1 directory with 15 updates" \
+  MOCK_CHANGED_FILES=".github/workflows/tests-js.yml" \
+  MOCK_PATCH="$github_actions_dependency_patch" \
   MOCK_CODERABBIT="missing"
 
 run_case "translation-version bypass" pass \

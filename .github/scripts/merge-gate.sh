@@ -160,6 +160,54 @@ is_allowed_dependabot_composer_dev_dependency_pr() {
   done <<< "$changed_files"
 }
 
+is_allowed_dependabot_github_actions_dependency_pr() {
+  [[ "$PR_AUTHOR" == "dependabot[bot]" ]] || return 1
+  [[ "$PR_TITLE" == build\(deps\):\ bump\ the\ actions\ group\ * ]] || return 1
+
+  local changed_files file
+  changed_files="$(pr_diff_names)"
+  [[ -n "$changed_files" ]] || return 1
+
+  while IFS= read -r file; do
+    case "$file" in
+      .github/workflows/*.yml|.github/workflows/*.yaml)
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<< "$changed_files"
+
+  local changed_lines invalid_lines added removed
+  local uses_pattern="^[+-][[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}([[:space:]]*#.*)?[[:space:]]*$"
+  changed_lines="$({ pr_diff_patch || true; } | awk '
+    /^diff --git / { in_diff=1; next }
+    !in_diff { next }
+    /^index / { next }
+    /^@@ / { next }
+    /^---$/ { next }
+    /^--- / { next }
+    /^\+\+\+ / { next }
+    /^From / { next }
+    /^Date: / { next }
+    /^Subject: / { next }
+    /^[+-]/ { print }
+  ')"
+
+  [[ -n "$changed_lines" ]] || return 1
+
+  invalid_lines="$(grep -Ev "$uses_pattern" <<< "$changed_lines" || true)"
+  [[ -z "$invalid_lines" ]] || {
+    log "Unexpected GitHub Actions dependency diff line: $(head -n 1 <<< "$invalid_lines")"
+    return 1
+  }
+
+  added="$(grep -c '^+' <<< "$changed_lines")"
+  removed="$(grep -c '^-' <<< "$changed_lines")"
+
+  [[ "$added" -ge 1 && "$removed" -eq "$added" ]]
+}
+
 requires_php_tests() {
   local file
   while IFS= read -r file; do
@@ -284,6 +332,9 @@ main() {
     coderabbit_required=false
   elif is_allowed_dependabot_composer_dev_dependency_pr; then
     log "Validated automated Dependabot Composer dev-dependency PR; waiting for required checks without CodeRabbit."
+    coderabbit_required=false
+  elif is_allowed_dependabot_github_actions_dependency_pr; then
+    log "Validated automated Dependabot GitHub Actions dependency PR; waiting for required checks without CodeRabbit."
     coderabbit_required=false
   else
     log "CodeRabbit and smoke test are required for this PR."
