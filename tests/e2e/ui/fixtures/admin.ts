@@ -19,7 +19,7 @@ interface FailedResponse {
  * the assertion in afterEach. Off-origin failures (analytics, external CDN
  * images, etc.) are always ignored — they aren't the plugin's responsibility.
  */
-function isIgnoredFailure(url: string, status: number): boolean {
+function isIgnoredFailure(url: string, status: number, errorText = ''): boolean {
 	let parsed: URL;
 	try {
 		parsed = new URL(url);
@@ -34,6 +34,16 @@ function isIgnoredFailure(url: string, status: number): boolean {
 
 	// WP doesn't ship a favicon by default; ignore.
 	if (parsed.pathname === '/favicon.ico') {
+		return true;
+	}
+
+	// WP dashboard background AJAX can be aborted when a test immediately
+	// navigates from wp-admin to a plugin settings page.
+	if (
+		status === 0 &&
+		parsed.pathname === '/wp-admin/admin-ajax.php' &&
+		errorText.includes('ERR_ABORTED')
+	) {
 		return true;
 	}
 
@@ -82,7 +92,7 @@ export const test = base.extend<{ adminPage: Page }>({
 		});
 
 		page.on('requestfailed', (req) => {
-			if (isIgnoredFailure(req.url(), 0)) return;
+			if (isIgnoredFailure(req.url(), 0, req.failure()?.errorText)) return;
 			failedResponses.push({
 				url: req.url(),
 				status: 0,
