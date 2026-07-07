@@ -95,7 +95,7 @@ No. If you have a WooCommerce store, install WCPOS and you're taking orders in u
 Any modern browser, plus native desktop apps (Windows, macOS) and iOS & Android apps (mobile in beta). One login, everything stays in sync.
 
 = Does it work offline? =
-Yes. Products are stored locally for instant search, and orders sync automatically when your connection returns.
+Yes. Products are stored locally for instant search, so you can keep browsing products and building carts during a connection drop. Reconnect before completing checkout so the order can be created in WooCommerce.
 
 = What hardware do I need? =
 Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
