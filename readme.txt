@@ -11,7 +11,7 @@ Turn any device into a register for your WooCommerce store — same catalog, sto
 
 == Description ==
 
-**WCPOS turns any device into a point of sale for your [WooCommerce](https://www.woocommerce.com/) store.** Same catalog, same stock, same prices — at the counter, on the road, or over the phone. Run it in a browser or as a native desktop, iOS or Android app, and keep selling even when the internet drops. _(WCPOS was formerly known as WooCommerce POS.)_
+**WCPOS turns any device into a point of sale for your [WooCommerce](https://www.woocommerce.com/) store.** Same catalog, same stock, same prices — at the counter, on the road, or over the phone. Run it in a browser or as a native desktop, iOS or Android app, with offline product browsing and cart building during connection drops. _(WCPOS was formerly known as WooCommerce POS.)_
 
 > 🕒 Install and start taking orders in less than 2 minutes.
 
@@ -124,7 +124,7 @@ WCPOS runs on your own site and stores your data in your own WooCommerce databas
 * **Anonymous usage analytics** are sent to wcpos.com *only if you opt in*, to help us improve the plugin. You can withdraw consent at any time in POS settings. A local random identifier (`wcpos_anon_id`) keeps the admin welcome screen's analytics consistent; it contains no store data and is deleted when you uninstall.
 * **Pro license activation** sends a request to wcpos.com with your license key and subscription details needed to validate the license. On activation, it may also include the local anonymous/site identifiers used to connect the purchase to this site.
 
-No data is ever sold or shared. Full details are in our [privacy policy](https://wcpos.com/privacy).
+Data is transferred only to the service providers described above, including jsDelivr and wcpos.com. Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
