@@ -113,7 +113,7 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-WCPOS keeps your data in your own WooCommerce database and only contacts outside services to: load translations from a CDN (jsDelivr); send anonymous usage analytics to wcpos.com **if you opt in** (withdraw any time in settings); and validate your license key and site identifier with wcpos.com when you activate Pro. Full details are in our [privacy policy](https://wcpos.com/privacy).
+WCPOS keeps your data in your own WooCommerce database and only contacts outside services to: load translations from a CDN (jsDelivr); send anonymous usage analytics to wcpos.com **if you opt in** (withdraw any time in settings); and validate your license key, site identifier (`site_uuid`), and anonymous identifier (`anon_id`) with wcpos.com when you activate Pro. Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Screenshots ==
 
