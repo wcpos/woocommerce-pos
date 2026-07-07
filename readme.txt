@@ -104,7 +104,7 @@ Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 
 Cash and manual card payments are built in. WCPOS Pro adds integrated payment terminals (Stripe Terminal, SumUp) so you can take chip-and-PIN payments right from the register.
 
 = What's the difference between free and Pro? =
-Free is a full POS for taking orders. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders and customers, apply coupons and refunds, use any payment gateway or terminal, and print end-of-day reports. See [wcpos.com/pro](https://wcpos.com/pro).
+Free is a full POS for taking orders. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders and customers, apply coupons and refunds, use supported payment gateways and integrated terminals such as Stripe Terminal and SumUp, and print end-of-day reports. See [wcpos.com/pro](https://wcpos.com/pro).
 
 = Can I try it before installing? =
 Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) (login `demo` / `demo`).
