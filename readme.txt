@@ -7,11 +7,11 @@ Stable tag: 1.9.6
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
-WCPOS is a simple application for taking orders at the Point of Sale (POS) using your WooCommerce store.
+Turn any device into a register for your WooCommerce store — same catalog, stock and prices, online or off.
 
 == Description ==
 
-WCPOS (formerly WooCommerce POS) is a simple application for taking orders at the Point of Sale using your [WooCommerce](https://www.woocommerce.com/) store. _It's great for phone orders too!_
+**WCPOS turns any device into a point of sale for your [WooCommerce](https://www.woocommerce.com/) store.** Same catalog, same stock, same prices — at the counter, on the road, or over the phone. Run it in a browser or as a native desktop, iOS or Android app, with offline product browsing and cart building during connection drops. _(WCPOS was formerly known as WooCommerce POS.)_
 
 > 🕒 Install and start taking orders in less than 2 minutes.
 
@@ -42,7 +42,8 @@ You can see a demo of the WCPOS plugin in action by going to [demo.wcpos.com/pos
 * **Stock Management:** quickly adjust stock levels, pricing and more
 * **Order Management:** re-open and print receipts for older orders
 * **Customer Management:** create new customers and edit customer details
-* **Payment Gateways:** use any gateway for checkout
+* **Payment Terminals:** take in-person card payments with Stripe Terminal and SumUp readers
+* **Payment Gateways:** check out with any WooCommerce gateway — Stripe, PayPal, Square, Mollie and more
 * **Coupons:** apply coupons at the POS with search, coupon pills, and sequential discounts
 * **Refunds:** refund POS orders directly from the till
 * **End of Day Reports:** summarise daily sales, transactions, and cash flow for reconciliation
@@ -84,12 +85,32 @@ To install a WordPress Plugin manually:
 
 == Frequently Asked Questions ==
 
-= Where can I find more information on WCPOS? =
-There is more information on our website at [https://wcpos.com](https://wcpos.com).
+= Is WCPOS really free? =
+Yes. The free plugin is a complete point of sale — unlimited products, orders and customers, with no transaction fees and no per-register charges. Pro adds advanced tools (see below), but you never need it to start selling.
 
-* FAQ - https://wcpos.com/faq
-* Documentation - https://wcpos.com/docs
-* Blog - https://wcpos.com/blog
+= Do I need anything besides WooCommerce? =
+No. If you have a WooCommerce store, install WCPOS and you're taking orders in under two minutes — same catalog, same stock, same prices, at the counter.
+
+= Which devices does it run on? =
+Any modern browser, plus native desktop apps (Windows, macOS) and iOS & Android apps (mobile in beta). One login, everything stays in sync.
+
+= Does it work offline? =
+Yes. Products are stored locally for instant search, so you can keep browsing products and building carts during a connection drop. Reconnect before completing checkout so the order can be created in WooCommerce.
+
+= What hardware do I need? =
+Whatever you already have. WCPOS works with standard barcode scanners, 58mm and 80mm thermal receipt printers (network, Bluetooth or USB), and cash drawers — no proprietary equipment and no lock-in.
+
+= Can I take card payments? =
+Cash and manual card payments are built in. WCPOS Pro adds integrated payment terminals (Stripe Terminal, SumUp) so you can take chip-and-PIN payments right from the register.
+
+= What's the difference between free and Pro? =
+Free is a full POS for taking orders. Pro lets you run your whole store from the register without opening wp-admin: adjust stock and prices, manage orders and customers, apply coupons and refunds, use supported payment gateways and integrated terminals such as Stripe Terminal and SumUp, and print end-of-day reports. See [wcpos.com/pro](https://wcpos.com/pro).
+
+= Can I try it before installing? =
+Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) (login `demo` / `demo`).
+
+= Where do I get help? =
+Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 == Screenshots ==
 
@@ -97,13 +118,13 @@ There is more information on our website at [https://wcpos.com](https://wcpos.co
 
 == Privacy ==
 
-WooCommerce POS stores a random identifier (a UUID, option name `wcpos_anon_id`) on your site. It contains no information about your store and is not derived from your site address. It is used only on this plugin's own admin welcome screen to keep the page's self-hosted, first-party analytics consistent between visits (no data is sold or shared; analytics are processed on wcpos.com infrastructure). The identifier:
+WCPOS runs on your own site and stores your data in your own WooCommerce database. A few things reach the internet:
 
-* is generated locally by WordPress (`wp_generate_uuid4()`),
-* is deleted when you uninstall the plugin,
-* can be rotated or removed at any time with WP-CLI: `wp wcpos anon-id rotate` / `wp wcpos anon-id delete`.
+* **Translations** are loaded on demand from a public CDN (jsDelivr).
+* **Anonymous usage analytics** are sent to wcpos.com *only if you opt in*, to help us improve the plugin. You can withdraw consent at any time in POS settings. A local random identifier (`wcpos_anon_id`) keeps the admin welcome screen's analytics consistent; it contains no store data and is deleted when you uninstall.
+* **Pro license activation** sends a request to wcpos.com with your license key and subscription details needed to validate the license. On activation, it may also include the local anonymous/site identifiers used to connect the purchase to this site.
 
-Detailed store information (product counts, order counts, WooCommerce version) is sent only if you explicitly opt in via the tracking-consent prompt, and you can withdraw consent at any time in POS settings.
+Data is transferred only to the service providers described above, including jsDelivr and wcpos.com. Full details are in our [privacy policy](https://wcpos.com/privacy).
 
 == Changelog ==
 
