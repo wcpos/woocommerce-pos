@@ -118,10 +118,11 @@ Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach t
 
 == Privacy ==
 
-WCPOS runs on your own site and stores your data in your own WooCommerce database. Two things reach the internet:
+WCPOS runs on your own site and stores your data in your own WooCommerce database. A few things reach the internet:
 
 * **Translations** are loaded on demand from a public CDN (jsDelivr).
 * **Anonymous usage analytics** are sent to wcpos.com *only if you opt in*, to help us improve the plugin. You can withdraw consent at any time in POS settings. A local random identifier (`wcpos_anon_id`) keeps the admin welcome screen's analytics consistent; it contains no store data and is deleted when you uninstall.
+* **Pro license activation** sends a request to wcpos.com with your license key and subscription details needed to validate the license. On activation, it may also include the local anonymous/site identifiers used to connect the purchase to this site.
 
 No data is ever sold or shared. Full details are in our [privacy policy](https://wcpos.com/privacy).
 
