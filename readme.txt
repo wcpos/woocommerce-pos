@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.6
+Stable tag: 1.9.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,9 @@ WCPOS keeps your data in your own WooCommerce database and only contacts outside
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.7 - 2026/07/09 =
+- **Improved welcome-screen analytics** -- consented admin landing payloads now include hostname-only site and admin domains so WCPOS can understand where opted-in stores come from without sending full URLs or paths.
 
 = 1.9.6 - 2026/06/17 =
 - **Cash drawer support** -- open a connected cash drawer automatically after payment or on demand with a new Open Drawer button. Choose a drawer connector per printer, with support for thermal/ESC-POS printers, Epson, PrintNode, and cloud/remote print jobs.
