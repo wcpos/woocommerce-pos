@@ -91,6 +91,33 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test token pair expiry metadata comes from the issued access token.
+	 */
+	public function test_generate_token_pair_expires_at_matches_access_token_exp_claim(): void {
+		$filter_calls         = 0;
+		$access_expiry_filter = function ( $expire, $issued_at ) use ( &$filter_calls ) {
+			++$filter_calls;
+
+			return $issued_at + ( 300 * $filter_calls );
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+		}
+
+		$this->assertIsArray( $tokens );
+
+		$access_decoded = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertEquals( (int) $access_decoded->exp, $tokens['expires_at'] );
+	}
+
+	/**
 	 * Test access token validation.
 	 */
 	public function test_validate_access_token(): void {
@@ -553,6 +580,35 @@ class Test_Auth_Service extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test refresh expiry metadata comes from the issued access token.
+	 */
+	public function test_refresh_access_token_expires_at_matches_access_token_exp_claim(): void {
+		$refresh_token = $this->auth_service->generate_refresh_token( $this->test_user );
+
+		$filter_calls         = 0;
+		$access_expiry_filter = function ( $expire, $issued_at ) use ( &$filter_calls ) {
+			++$filter_calls;
+
+			return $issued_at + ( 300 * $filter_calls );
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10, 2 );
+
+		try {
+			$result = $this->auth_service->refresh_access_token( $refresh_token );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $access_expiry_filter, 10 );
+		}
+
+		$this->assertIsArray( $result );
+
+		$access_decoded = $this->auth_service->validate_token( $result['access_token'], 'access' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertEquals( (int) $access_decoded->exp, $result['expires_at'] );
+	}
+
+	/**
 	 * Test permission checking for self.
 	 */
 	public function test_can_manage_own_sessions(): void {
@@ -721,6 +777,105 @@ class Test_Auth_Service extends WP_UnitTestCase {
 
 		// Access token should be invalid because its refresh_jti is blacklisted
 		$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Test session blacklist outlives previously issued access tokens.
+	 */
+	public function test_revoke_session_blacklist_covers_previously_issued_access_token_expiry(): void {
+		$long_access_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 10;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+		}
+
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh_decoded );
+
+		$short_blacklist_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 1;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+
+		try {
+			$result = $this->auth_service->revoke_session_with_blacklist(
+				$this->test_user->ID,
+				$refresh_decoded->jti
+			);
+
+			sleep( 2 );
+
+			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+		}
+
+		$this->assertTrue( $result );
+		$this->assertInstanceOf( WP_Error::class, $validated );
+		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
+	}
+
+	/**
+	 * Test legacy sessions without recorded access expiry still get conservative blacklists.
+	 */
+	public function test_revoke_session_blacklist_covers_legacy_session_without_recorded_access_expiry(): void {
+		$long_access_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 10;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10, 2 );
+
+		try {
+			$tokens = $this->auth_service->generate_token_pair( $this->test_user );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $long_access_expiry, 10 );
+		}
+
+		$access_decoded  = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		$refresh_decoded = $this->auth_service->validate_token( $tokens['refresh_token'], 'refresh' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $access_decoded );
+		$this->assertNotInstanceOf( WP_Error::class, $refresh_decoded );
+
+		$refresh_tokens = get_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', true );
+		$this->assertIsArray( $refresh_tokens );
+		$this->assertArrayHasKey( $refresh_decoded->jti, $refresh_tokens );
+
+		unset( $refresh_tokens[ $refresh_decoded->jti ]['access_expires'] );
+		update_user_meta( $this->test_user->ID, '_woocommerce_pos_refresh_tokens', $refresh_tokens );
+
+		$short_blacklist_expiry = function ( $expire, $issued_at ) {
+			return $issued_at + 1;
+		};
+
+		add_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10, 2 );
+
+		try {
+			$result = $this->auth_service->revoke_session_with_blacklist(
+				$this->test_user->ID,
+				$refresh_decoded->jti
+			);
+
+			sleep( 2 );
+
+			$validated = $this->auth_service->validate_token( $tokens['access_token'], 'access' );
+		} finally {
+			remove_filter( 'woocommerce_pos_jwt_access_token_expire', $short_blacklist_expiry, 10 );
+		}
+
+		$this->assertTrue( $result );
 		$this->assertInstanceOf( WP_Error::class, $validated );
 		$this->assertEquals( 'woocommerce_pos_auth_session_revoked', $validated->get_error_code() );
 	}
