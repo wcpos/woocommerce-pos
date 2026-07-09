@@ -10,6 +10,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
@@ -19,6 +20,7 @@ use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
  */
 class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	use HPOSToggleTrait;
+	use Order_Address_Scrub_Helpers;
 
 	/**
 	 * @var OrdersTableDataStore
@@ -927,27 +929,6 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 0, \count( $data ) );
-	}
-
-	/**
-	 * Strip digit-bearing address fields so an order-ID search term cannot
-	 * LIKE-match this order's address index. Order IDs follow the global
-	 * auto-increment, so they can collide with the fixture postcode/phone
-	 * (e.g. searching "123" matches postcode "123456").
-	 *
-	 * @param \WC_Order $order Order to scrub.
-	 *
-	 * @return \WC_Order
-	 */
-	private function scrub_numeric_address_fields( \WC_Order $order ): \WC_Order {
-		$order->set_billing_postcode( 'WooPostcode' );
-		$order->set_billing_phone( 'WooPhone' );
-		$order->set_shipping_address_1( 'Mercer Street' );
-		$order->set_shipping_postcode( 'WooZip' );
-		$order->set_shipping_phone( 'WooShipPhone' );
-		$order->save();
-
-		return $order;
 	}
 
 	public function test_order_search_by_billing_first_name_with_includes(): void {
