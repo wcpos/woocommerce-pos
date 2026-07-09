@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - "**.php"
       - "composer.json"
@@ -20,6 +21,7 @@ on:
   pull_request:
     branches:
       - main
+      - next
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
@@ -27,10 +29,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default token scope; jobs that need more declare it explicitly.
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       php: ${{ steps.filter.outputs.php }}
       translation_version_only: ${{ steps.translation-version.outputs.translation_version_only || 'false' }}

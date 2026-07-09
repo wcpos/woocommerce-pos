@@ -3,6 +3,10 @@ name: Sync assets with wordpress.org
 on:
   workflow_dispatch:
 
+# Asset sync uses external SVN credentials to wordpress.org; the GITHUB_TOKEN only reads.
+permissions:
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-latest

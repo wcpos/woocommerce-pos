@@ -83,3 +83,11 @@ If wp-env fails because of port conflicts or environment initialization, diagnos
 - Use `pnpm` for workspace commands.
 - For changed packages, run the relevant package test/build/lint scripts when available.
 - If package lint is blocked by known tooling/config mismatch, document the exact command and error rather than claiming it passed.
+
+## Branch lanes
+
+This repo has two permanent trunks:
+- **`main`** — the **stable**, released line (1.9.x patches ship from here).
+- **`next`** — the **in-development** major/minor (1.10, then 1.11, 2.0 …).
+
+Feature work usually targets `next`; patches to the shipped release target `main`. Never commit directly to either trunk — branch off the correct one in a worktree, and target the PR's base at the same lane. **If it isn't clear which lane a task belongs to, ask "main or next?" before branching, pulling (`git pull origin <lane>`), or opening a PR — don't default to `main`.**
