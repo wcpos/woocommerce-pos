@@ -10,8 +10,8 @@
 
 namespace WCPOS\WooCommercePOS;
 
-use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -353,16 +353,12 @@ class API {
 	 * @return WP_REST_Response
 	 */
 	public function rest_index( WP_REST_Response $response ): WP_REST_Response {
-		$uuid = get_option( 'woocommerce_pos_uuid' );
-		if ( ! $uuid ) {
-			$uuid = Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $uuid );
-		}
+		$uuid                               = wcpos_get_site_uuid();
 		$response->data['uuid']             = $uuid;
 		$response->data['wp_version']       = get_bloginfo( 'version' );
 		$response->data['wc_version']       = WC()->version;
 		$response->data['wcpos_version']    = VERSION;
-		$response->data['use_jwt_as_param'] = woocommerce_pos_get_settings( 'tools', 'use_jwt_as_param' );
+		$response->data['use_jwt_as_param'] = SettingsService::instance()->use_jwt_as_param_enabled();
 
 		// Add WCPOS authentication endpoint to the response.
 		$response->data['authentication']['wcpos'] = array(

@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Templates;
 
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\Services\Auth;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
@@ -39,7 +40,7 @@ class Frontend {
 	 */
 	public function get_template(): void {
 		// force ssl.
-		if ( ! is_ssl() && woocommerce_pos_get_settings( 'general', 'force_ssl' ) ) {
+		if ( ! is_ssl() && Settings::instance()->force_ssl_enabled() ) {
 			wp_safe_redirect( woocommerce_pos_url() );
 			exit;
 		}
@@ -183,11 +184,7 @@ class Frontend {
 			wcpos_get_stores()
 		);
 
-		$site_uuid = get_option( 'woocommerce_pos_uuid' );
-		if ( ! $site_uuid ) {
-			$site_uuid = Uuid::uuid4()->toString();
-			update_option( 'woocommerce_pos_uuid', $site_uuid );
-		}
+		$site_uuid = wcpos_get_site_uuid();
 
 		$user_uuid = get_user_meta( $user->ID, '_woocommerce_pos_uuid', true );
 		if ( ! $user_uuid ) {

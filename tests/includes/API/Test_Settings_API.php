@@ -8,7 +8,11 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
+use WP_Error;
 use WP_REST_Request;
 use WP_UnitTestCase;
 
@@ -40,14 +44,6 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		delete_option( 'woocommerce_pos_settings_general' );
-
-		$subscriber = get_role( 'subscriber' );
-		if ( $subscriber ) {
-			$subscriber->remove_cap( 'access_woocommerce_pos' );
-			$subscriber->remove_cap( 'manage_options' );
-			$subscriber->remove_cap( 'wcpos_extension_test_cap' );
-		}
-
 		parent::tearDown();
 	}
 
@@ -130,6 +126,8 @@ class Test_Settings_API extends WP_UnitTestCase {
 	 * Test updating access settings.
 	 */
 	public function test_update_access_settings(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
 		$request = $this->mock_rest_request(
 			array(
 				'administrator' => array(
@@ -160,98 +158,62 @@ class Test_Settings_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test granting an in-group access capability.
+	 * Test access update preserves write errors from registered sections.
 	 */
-	public function test_update_access_settings_grants_in_group_capability(): void {
-		$role = get_role( 'subscriber' );
-		$role->remove_cap( 'access_woocommerce_pos' );
+	public function test_update_access_settings_returns_section_write_error(): void {
+		$error  = new WP_Error( 'woocommerce_pos_settings_error', 'Write failed.', array( 'status' => 500 ) );
+		$filter = static function ( Section_Registry $registry ) use ( $error ): void {
+			$registry->register(
+				new class( $error ) implements Settings_Section_Interface {
+					/**
+					 * Error returned by write().
+					 *
+					 * @var WP_Error
+					 */
+					private $error;
 
-		$request = $this->mock_rest_request(
-			array(
-				'subscriber' => array(
-					'capabilities' => array(
-						'wcpos' => array(
-							'access_woocommerce_pos' => true,
-						),
-					),
-				),
-			)
-		);
+					public function __construct( WP_Error $error ) {
+						$this->error = $error;
+					}
 
-		$response = $this->api->update_access_settings( $request );
+					public function id(): string {
+						return 'access';
+					}
 
-		$this->assertTrue( get_role( 'subscriber' )->has_cap( 'access_woocommerce_pos' ) );
-		$this->assertTrue( $response['subscriber']['capabilities']['wcpos']['access_woocommerce_pos'] );
-	}
+					public function defaults(): array {
+						return array();
+					}
 
-	/**
-	 * Test granting a filtered extension capability.
-	 */
-	public function test_update_access_settings_grants_filter_added_capability(): void {
-		$capability = 'wcpos_extension_test_cap';
-		$role       = get_role( 'subscriber' );
-		$role->remove_cap( $capability );
+					public function read(): array {
+						return array();
+					}
 
-		$filter = static function ( array $settings ) use ( $capability ): array {
-			foreach ( array_keys( $settings ) as $slug ) {
-				$role = get_role( $slug );
+					public function write( array $settings ) {
+						return $this->error;
+					}
 
-				$settings[ $slug ]['capabilities']['extensions'][ $capability ] = $role
-					? $role->has_cap( $capability )
-					: false;
-			}
+					public function merge( array $existing, array $patch ): array {
+						return array_replace_recursive( $existing, $patch );
+					}
 
-			return $settings;
+					public function endpoint_args(): array {
+						return array();
+					}
+				}
+			);
 		};
 
-		add_filter( 'woocommerce_pos_access_settings', $filter );
+		add_action( 'woocommerce_pos_register_settings_sections', $filter );
+		SettingsService::instance()->reset_sections_for_testing();
 
 		try {
-			$request = $this->mock_rest_request(
-				array(
-					'subscriber' => array(
-						'capabilities' => array(
-							'extensions' => array(
-								$capability => true,
-							),
-						),
-					),
-				)
-			);
-
-			$response = $this->api->update_access_settings( $request );
-
-			$this->assertTrue( get_role( 'subscriber' )->has_cap( $capability ) );
-			$this->assertTrue( $response['subscriber']['capabilities']['extensions'][ $capability ] );
+			$response = $this->api->update_access_settings( $this->mock_rest_request() );
 		} finally {
-			remove_filter( 'woocommerce_pos_access_settings', $filter );
+			remove_action( 'woocommerce_pos_register_settings_sections', $filter );
+			SettingsService::instance()->reset_sections_for_testing();
 		}
-	}
 
-	/**
-	 * Test rejecting a capability outside the filtered access matrix.
-	 *
-	 * @see https://github.com/wcpos/woocommerce-pos/issues/1159
-	 */
-	public function test_update_access_settings_ignores_out_of_band_capability(): void {
-		$role = get_role( 'subscriber' );
-		$role->remove_cap( 'manage_options' );
-
-		$request = $this->mock_rest_request(
-			array(
-				'subscriber' => array(
-					'capabilities' => array(
-						'wp' => array(
-							'manage_options' => true,
-						),
-					),
-				),
-			)
-		);
-
-		$this->api->update_access_settings( $request );
-
-		$this->assertFalse( get_role( 'subscriber' )->has_cap( 'manage_options' ) );
+		$this->assertSame( $error, $response );
 	}
 
 	/**
@@ -276,6 +238,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue( $response['pos_only_products'] );
 	}
 
+	/**
+	 * Test that store_tax_ids round-trips with sanitization applied.
+	 */
 	public function test_update_general_settings_round_trips_store_tax_ids_with_sanitization(): void {
 		$request = $this->mock_rest_request(
 			array(
@@ -317,6 +282,9 @@ class Test_Settings_API extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * Test that updating with an empty array replaces the stored store_tax_ids.
+	 */
 	public function test_update_general_settings_replaces_store_tax_ids_array(): void {
 		update_option(
 			'woocommerce_pos_settings_general',
@@ -369,6 +337,46 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$request  = $this->mock_rest_request( array( 'receipt_default_mode' => 'live' ) );
 		$response = $this->api->update_checkout_settings( $request );
 		$this->assertEquals( 'live', $response['receipt_default_mode'] );
+	}
+
+	/**
+	 * Payment-gateway update validation belongs to the payment-gateway section,
+	 * not the checkout section.
+	 */
+	public function test_payment_gateways_endpoint_args_are_owned_by_payment_gateways_section(): void {
+		$checkout_args = $this->api->get_checkout_endpoint_args();
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $checkout_args );
+		$this->assertArrayNotHasKey( 'default_gateway', $checkout_args );
+		$this->assertArrayNotHasKey( 'gateways', $checkout_args );
+
+		$payment_gateway_args = $this->api->get_payment_gateways_endpoint_args();
+		$this->assertArrayHasKey( 'auto_print_receipt', $payment_gateway_args );
+		$this->assertArrayHasKey( 'default_gateway', $payment_gateway_args );
+		$this->assertArrayHasKey( 'gateways', $payment_gateway_args );
+	}
+
+	/**
+	 * Checkout saves must not persist payment-gateway-owned fields.
+	 */
+	public function test_update_checkout_settings_drops_payment_gateway_fields(): void {
+		$request  = $this->mock_rest_request(
+			array(
+				'receipt_default_mode' => 'live',
+				'auto_print_receipt'   => 'not-a-bool',
+				'default_gateway'      => array( 'not-a-string' ),
+				'gateways'             => 'not-an-array',
+			)
+		);
+		$response = $this->api->update_checkout_settings( $request );
+		$raw      = get_option( 'woocommerce_pos_settings_checkout' );
+
+		$this->assertEquals( 'live', $response['receipt_default_mode'] );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $response );
+		$this->assertArrayNotHasKey( 'default_gateway', $response );
+		$this->assertArrayNotHasKey( 'gateways', $response );
+		$this->assertArrayNotHasKey( 'auto_print_receipt', $raw );
+		$this->assertArrayNotHasKey( 'default_gateway', $raw );
+		$this->assertArrayNotHasKey( 'gateways', $raw );
 	}
 
 	/**

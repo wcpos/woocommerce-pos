@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Admin;
 
 use WCPOS\WooCommercePOS\Services\Analytics;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
+use WCPOS\WooCommercePOS\Services\Settings;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
 use const WCPOS\WooCommercePOS\PLUGIN_URL;
 use const WCPOS\WooCommercePOS\TRANSLATION_VERSION;
@@ -411,7 +412,7 @@ JS;
 		$profile    = new Landing_Profile();
 		$data       = $profile->get_functional_data();
 
-		$consent = woocommerce_pos_get_settings( 'general', 'tracking_consent' );
+		$consent = Settings::instance()->tracking_consent();
 		if ( 'allowed' === $consent ) {
 			$data = array_merge( $data, $profile->get_consented_data() );
 		}

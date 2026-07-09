@@ -1031,9 +1031,10 @@ class Test_Orders extends WC_Unit_Test_Case {
 		// The global value should have been applied to all gateways.
 		$this->assertEquals( 'wc-processing', $gw_settings['gateways']['pos_cash']['order_status'] );
 
-		// The global checkout setting should have been removed.
+		// Approved behaviour change (settings-section-registry plan): reads are pure;
+		// the legacy seed persists until a payment-gateways save reflects it.
 		$checkout = get_option( 'woocommerce_pos_settings_checkout', array() );
-		$this->assertArrayNotHasKey( 'order_status', $checkout );
+		$this->assertArrayHasKey( 'order_status', $checkout );
 	}
 
 	// ==========================================================================

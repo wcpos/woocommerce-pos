@@ -149,7 +149,7 @@ class Consent {
 	 * opted in or out.
 	 */
 	private function maybe_set_modal_transient(): void {
-		if ( 'undecided' !== woocommerce_pos_get_settings( 'general', 'tracking_consent' ) ) {
+		if ( 'undecided' !== SettingsService::instance()->tracking_consent() ) {
 			return;
 		}
 
@@ -394,7 +394,7 @@ class Consent {
 			return false;
 		}
 
-		if ( 'undecided' !== woocommerce_pos_get_settings( 'general', 'tracking_consent' ) ) {
+		if ( 'undecided' !== SettingsService::instance()->tracking_consent() ) {
 			return false;
 		}
 
