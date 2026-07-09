@@ -124,7 +124,10 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 	 * @param WP_REST_Request|null $request Request object.
 	 */
 	public function get_pos_bootstrap_response( array $context, ?WP_REST_Request $request = null ): array {
-		$default = $this->direct_adapter
+		// When the base-class wcpos_bootstrap shim is registered on the filter,
+		// let the filter run the adapter — a direct call here would bootstrap
+		// twice, repeating any terminal/payment-session side effects.
+		$default = $this->direct_adapter && false === $this->get_direct_bootstrap_shim_priority()
 			? $this->direct_adapter->get_pos_bootstrap_response( $context, $request )
 			: array(
 				'gateway_id'    => $this->gateway->id,
@@ -176,6 +179,19 @@ class Filter_Gateway_Adapter implements Gateway_Adapter_Interface {
 		}
 
 		return has_filter( $hook, array( $this->direct_adapter, 'wcpos_process_checkout_action' ) );
+	}
+
+	/**
+	 * Get this adapter's base-class bootstrap shim priority, when present.
+	 *
+	 * @return int|false
+	 */
+	private function get_direct_bootstrap_shim_priority() {
+		if ( ! $this->direct_adapter || ! method_exists( $this->direct_adapter, 'wcpos_bootstrap' ) ) {
+			return false;
+		}
+
+		return has_filter( 'wcpos_payment_gateway_bootstrap', array( $this->direct_adapter, 'wcpos_bootstrap' ) );
 	}
 
 	/**

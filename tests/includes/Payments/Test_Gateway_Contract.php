@@ -157,6 +157,87 @@ class Test_Gateway_Contract extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A base-class adapter with legacy hooks registered bootstraps exactly once.
+	 *
+	 * The adapter must not call get_pos_bootstrap_response() directly when the
+	 * base-class wcpos_bootstrap shim is registered on the filter — a bootstrap
+	 * that creates a terminal/payment session would otherwise run twice.
+	 */
+	public function test_direct_adapter_bootstrap_runs_once_with_legacy_hook_registered(): void {
+		$gateway = new class() extends Abstract_POS_Gateway {
+			/**
+			 * Number of times get_pos_bootstrap_response() ran.
+			 *
+			 * @var int
+			 */
+			public $bootstrap_calls = 0;
+
+			/**
+			 * Constructor.
+			 */
+			public function __construct() {
+				$this->id          = 'wcpos_counting_adapter';
+				$this->title       = 'Counting Adapter';
+				$this->description = '';
+				$this->enabled     = 'yes';
+				$this->supports    = array( 'products' );
+
+				$this->register_pos_gateway_contract_hooks();
+			}
+
+			/**
+			 * Count bootstrap invocations.
+			 *
+			 * @param array                $context Bootstrap context.
+			 * @param WP_REST_Request|null $request Request object.
+			 */
+			public function get_pos_bootstrap_response( array $context, ?WP_REST_Request $request = null ): array {
+				++$this->bootstrap_calls;
+
+				return array(
+					'gateway_id'    => $this->id,
+					'status'        => 'requires_action',
+					'expires_at'    => null,
+					'provider_data' => array(),
+				);
+			}
+
+			/**
+			 * No-op checkout action.
+			 *
+			 * @param array                $state        Checkout state.
+			 * @param string               $action       Checkout action.
+			 * @param array                $payment_data Payment data.
+			 * @param \WC_Order            $order        Order object.
+			 * @param WP_REST_Request|null $request      Request object.
+			 *
+			 * @return array
+			 */
+			public function process_pos_checkout_action( array $state, string $action, array $payment_data, \WC_Order $order, ?WP_REST_Request $request = null ) {
+				return $state;
+			}
+		};
+
+		try {
+			// Arrange: a bootstrap request routed through the gateway adapter.
+			$request = new WP_REST_Request( 'GET', '/wcpos/v1/payment-gateways' );
+
+			// Act.
+			$response = ( new Gateway_Contract() )->get_bootstrap_response( 'wcpos_counting_adapter', array(), $request, $gateway );
+
+			// Assert: the adapter response survives and the bootstrap ran once.
+			$this->assertEquals( 'requires_action', $response['status'] );
+			$this->assertEquals( 1, $gateway->bootstrap_calls );
+		} finally {
+			remove_filter( 'wcpos_payment_gateway_provider', array( $gateway, 'wcpos_provider' ), 10 );
+			remove_filter( 'wcpos_payment_gateway_pos_type', array( $gateway, 'wcpos_pos_type' ), 10 );
+			remove_filter( 'wcpos_payment_gateway_provider_data', array( $gateway, 'wcpos_provider_data' ), 10 );
+			remove_filter( 'wcpos_payment_gateway_bootstrap', array( $gateway, 'wcpos_bootstrap' ), 10 );
+			remove_filter( 'wcpos_process_checkout_action_wcpos_counting_adapter', array( $gateway, 'wcpos_process_checkout_action' ), 10 );
+		}
+	}
+
+	/**
 	 * It preserves the public WordPress filter contract as the compatibility shim.
 	 */
 	public function test_filter_gateway_adapter_preserves_legacy_hook_contract(): void {
