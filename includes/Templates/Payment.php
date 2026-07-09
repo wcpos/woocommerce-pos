@@ -129,7 +129,7 @@ class Payment {
 		 */
 		$script_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_script_handles',
-			woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
+			Settings::instance()->dequeue_script_handles()
 		);
 
 		/**
@@ -139,7 +139,7 @@ class Payment {
 		 */
 		$style_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_style_handles',
-			woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
+			Settings::instance()->dequeue_style_handles()
 		);
 
 		// Loop through all enqueued styles and dequeue those that are in the exclusion list.
@@ -241,12 +241,12 @@ class Payment {
 
 		$style_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_style_handles',
-			woocommerce_pos_get_settings( 'checkout', 'dequeue_style_handles' )
+			Settings::instance()->dequeue_style_handles()
 		);
 
 		$script_exclude_list = apply_filters(
 			'woocommerce_pos_payment_template_dequeue_script_handles',
-			woocommerce_pos_get_settings( 'checkout', 'dequeue_script_handles' )
+			Settings::instance()->dequeue_script_handles()
 		);
 
 		$merged_style_handles  = array_unique( array_merge( $style_handles, $style_exclude_list ) );

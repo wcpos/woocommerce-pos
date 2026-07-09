@@ -35,7 +35,7 @@ class WC_API {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$pos_only_products = woocommerce_pos_get_settings( 'general', 'pos_only_products' );
+		$pos_only_products = Settings::instance()->pos_only_products_enabled();
 
 		if ( $pos_only_products ) {
 			add_filter( 'rest_pre_dispatch', array( $this, 'set_woocommerce_rest_api_request_flags' ), 10, 3 );

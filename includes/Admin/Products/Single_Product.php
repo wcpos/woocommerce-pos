@@ -42,7 +42,7 @@ class Single_Product {
 	public function __construct() {
 		Registry::get_instance()->set( static::class, $this );
 
-		$this->barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
+		$this->barcode_field = Settings::instance()->barcode_field();
 
 		// visibility options.
 		$this->options = array(
@@ -58,7 +58,7 @@ class Single_Product {
 			add_action( 'woocommerce_save_product_variation', array( $this, 'save_product_variation_barcode_field' ) );
 		}
 
-		if ( woocommerce_pos_get_settings( 'general', 'pos_only_products' ) ) {
+		if ( Settings::instance()->pos_only_products_enabled() ) {
 			add_action( 'save_post', array( $this, 'save_post' ), 10, 2 );
 			add_action( 'post_submitbox_misc_actions', array( $this, 'post_submitbox_misc_actions' ), 99 );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_pos_only_products' ), 10, 3 );
