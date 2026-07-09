@@ -329,8 +329,28 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 		}
 
 		if ( $wp_filesystem && is_object( $wp_filesystem ) ) {
-			$wp_filesystem->put_contents( $file, $wrapped, FS_CHMOD_FILE );
+			$wp_filesystem->put_contents( $file, $wrapped, $this->get_fs_chmod_file() );
 		}
+	}
+
+	/**
+	 * Resolve the file permission mode for translation writes.
+	 *
+	 * FS_CHMOD_FILE only exists once WP_Filesystem() has defined it. When the
+	 * runtime pre-populates $wp_filesystem without calling WP_Filesystem()
+	 * (WP-CLI does this), referencing the bare constant is a fatal error.
+	 * Mirror the fallback WordPress core uses when defining the constant.
+	 *
+	 * @return int
+	 */
+	protected function get_fs_chmod_file(): int {
+		if ( \defined( 'FS_CHMOD_FILE' ) ) {
+			return FS_CHMOD_FILE;
+		}
+
+		// Core derives the file mode from a known file (ABSPATH is a directory,
+		// so its mode carries execute bits that must not land on written files).
+		return ( fileperms( ABSPATH . 'index.php' ) & 0777 ) | 0644;
 	}
 
 	/**
@@ -357,7 +377,7 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return false;
 		}
 
-		if ( ! $wp_filesystem->put_contents( $file, $body, FS_CHMOD_FILE ) ) {
+		if ( ! $wp_filesystem->put_contents( $file, $body, $this->get_fs_chmod_file() ) ) {
 			return false;
 		}
 

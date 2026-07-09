@@ -94,10 +94,29 @@ class Landing_Profile {
 				'site_uuid'   => wcpos_get_site_uuid(),
 				'user_uuid'   => get_user_meta( $user->ID, '_woocommerce_pos_uuid', true ),
 				'user_role'   => ! empty( $user->roles ) ? $user->roles[0] : '',
+				'site_domain'  => $this->get_url_host( home_url() ),
+				'admin_domain' => $this->get_url_host( admin_url() ),
 				'wc_currency' => get_woocommerce_currency(),
 				'wc_country'  => WC()->countries->get_base_country(),
 			)
 		);
+	}
+
+	/**
+	 * Extract a hostname from a WordPress URL without retaining paths or query strings.
+	 *
+	 * @param string $url URL to parse.
+	 *
+	 * @return string
+	 */
+	private function get_url_host( string $url ): string {
+		$host = wp_parse_url( $url, PHP_URL_HOST );
+
+		if ( ! is_string( $host ) ) {
+			return '';
+		}
+
+		return strtolower( $host );
 	}
 
 	/**
