@@ -160,13 +160,30 @@ class Access_Section implements Settings_Section_Interface {
 			$role  = get_role( $slug );
 
 			if ( $role ) {
+				// Build the allow-list of capabilities exposed for this role, including
+				// extension groups added via the woocommerce_pos_access_settings filter.
+				$access_settings = $this->read();
+				$allowed_caps    = array();
+				if ( isset( $access_settings[ $slug ]['capabilities'] ) ) {
+					foreach ( $access_settings[ $slug ]['capabilities'] as $capabilities ) {
+						if ( \is_array( $capabilities ) ) {
+							$allowed_caps = array_merge( $allowed_caps, array_keys( $capabilities ) );
+						}
+					}
+				}
+
 				// Flatten capability groups (wcpos / wc / wp) into a single map.
 				$flattened_caps = array();
 				foreach ( $update[ $slug ]['capabilities'] as $capabilities ) {
-					$flattened_caps = array_merge( $flattened_caps, $capabilities );
+					if ( \is_array( $capabilities ) ) {
+						$flattened_caps = array_merge( $flattened_caps, $capabilities );
+					}
 				}
 
-				// Apply each capability grant/revoke.
+				// Ignore capabilities outside the access settings view (issue #1159).
+				$flattened_caps = array_intersect_key( $flattened_caps, array_flip( $allowed_caps ) );
+
+				// Apply each allowed capability grant/revoke.
 				foreach ( $flattened_caps as $cap => $grant ) {
 					// Sanity check: administrator role must always keep the `read` capability.
 					if ( 'administrator' === $slug && 'read' === $cap ) {

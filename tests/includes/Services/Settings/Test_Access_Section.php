@@ -106,6 +106,95 @@ class Test_Access_Section extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Granting a capability listed in the access settings view succeeds.
+	 */
+	public function test_write_grants_in_group_capability(): void {
+		$role = get_role( 'subscriber' );
+		$role->remove_cap( 'access_woocommerce_pos' );
+
+		$result = $this->section->write(
+			array(
+				'subscriber' => array(
+					'capabilities' => array(
+						'wcpos' => array(
+							'access_woocommerce_pos' => true,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertTrue( get_role( 'subscriber' )->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertTrue( $result['subscriber']['capabilities']['wcpos']['access_woocommerce_pos'] );
+	}
+
+	/**
+	 * Granting a capability added via the woocommerce_pos_access_settings filter succeeds.
+	 */
+	public function test_write_grants_filter_added_capability(): void {
+		$capability = 'wcpos_extension_test_cap';
+		$role       = get_role( 'subscriber' );
+		$role->remove_cap( $capability );
+
+		$filter = static function ( array $settings ) use ( $capability ): array {
+			foreach ( array_keys( $settings ) as $slug ) {
+				$role = get_role( $slug );
+
+				$settings[ $slug ]['capabilities']['extensions'][ $capability ] = $role
+					? $role->has_cap( $capability )
+					: false;
+			}
+
+			return $settings;
+		};
+
+		add_filter( 'woocommerce_pos_access_settings', $filter );
+
+		try {
+			$result = $this->section->write(
+				array(
+					'subscriber' => array(
+						'capabilities' => array(
+							'extensions' => array(
+								$capability => true,
+							),
+						),
+					),
+				)
+			);
+
+			$this->assertTrue( get_role( 'subscriber' )->has_cap( $capability ) );
+			$this->assertTrue( $result['subscriber']['capabilities']['extensions'][ $capability ] );
+		} finally {
+			remove_filter( 'woocommerce_pos_access_settings', $filter );
+		}
+	}
+
+	/**
+	 * A capability outside the access settings view is ignored.
+	 *
+	 * @see https://github.com/wcpos/woocommerce-pos/issues/1159
+	 */
+	public function test_write_ignores_out_of_band_capability(): void {
+		$role = get_role( 'subscriber' );
+		$role->remove_cap( 'manage_options' );
+
+		$this->section->write(
+			array(
+				'subscriber' => array(
+					'capabilities' => array(
+						'wp' => array(
+							'manage_options' => true,
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertFalse( get_role( 'subscriber' )->has_cap( 'manage_options' ) );
+	}
+
+	/**
 	 * The administrator `read` capability cannot be removed via write().
 	 */
 	public function test_write_cannot_remove_administrator_read_capability(): void {
