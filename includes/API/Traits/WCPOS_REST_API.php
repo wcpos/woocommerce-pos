@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\API\Traits;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use WC_Data;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_REST_Response;
 use Exception;
 
@@ -312,8 +313,8 @@ trait WCPOS_REST_API {
 				$meta_id = 'meta_id';
 
 				// Add barcode field if it's a custom meta key.
-				$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-				if ( \is_string( $barcode_field ) && ! empty( $barcode_field )
+				$barcode_field = Settings::instance()->barcode_field();
+				if ( ! empty( $barcode_field )
 					&& '_sku' !== $barcode_field && '_global_unique_id' !== $barcode_field ) {
 					$keys[] = $barcode_field;
 				}
@@ -367,22 +368,12 @@ trait WCPOS_REST_API {
 	}
 
 	/**
-	 * Get barcode field from settings.
+	 * Whether decimal stock/cart quantities are enabled.
 	 *
 	 * @return bool
 	 */
 	public function wcpos_allow_decimal_quantities() {
-		$allow_decimal_quantities = woocommerce_pos_get_settings( 'general', 'decimal_qty' );
-
-		// Check for WP_Error.
-		if ( is_wp_error( $allow_decimal_quantities ) ) {
-			Logger::log( 'Error retrieving decimal_qty: ' . $allow_decimal_quantities->get_error_message() );
-
-			return false;
-		}
-
-		// make sure it's true, just in case there's a corrupt setting.
-		return true === $allow_decimal_quantities;
+		return Settings::instance()->decimal_qty_enabled();
 	}
 
 	/**

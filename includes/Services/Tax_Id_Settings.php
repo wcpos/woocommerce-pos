@@ -12,6 +12,8 @@
 
 namespace WCPOS\WooCommercePOS\Services;
 
+use WCPOS\WooCommercePOS\Services\Settings;
+
 /**
  * Tax_Id_Settings class.
  */
@@ -54,10 +56,7 @@ class Tax_Id_Settings {
 	 * @return array<string,string>
 	 */
 	public static function get_overrides(): array {
-		$raw = \wcpos_get_settings( 'tax_ids', 'write_map' );
-		if ( ! \is_array( $raw ) ) {
-			$raw = array();
-		}
+		$raw = Settings::instance()->tax_id_write_map();
 
 		$out = array();
 		foreach ( $raw as $type => $meta_key ) {

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - "**.php"
       - "composer.json"
@@ -20,6 +21,7 @@ on:
   pull_request:
     branches:
       - main
+      - next
   workflow_dispatch:
 
 # Cancel in-progress runs for the same branch
