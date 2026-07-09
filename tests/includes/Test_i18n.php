@@ -1457,4 +1457,41 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			'Download lock should be cleared after download completes'
 		);
 	}
+
+	/**
+	 * write_translation_file() must not fatal when the runtime pre-populates
+	 * $wp_filesystem without calling WP_Filesystem() (WP-CLI does this), in
+	 * which case FS_CHMOD_FILE is never defined.
+	 *
+	 * @covers ::write_translation_file
+	 */
+	public function test_write_translation_file_works_with_preset_filesystem_and_no_chmod_constant(): void {
+		if ( \defined( 'FS_CHMOD_FILE' ) ) {
+			$this->markTestSkipped( 'FS_CHMOD_FILE is already defined in this process; the undefined-constant branch cannot be exercised.' );
+		}
+
+		// Arrange: pre-populate $wp_filesystem the way WP-CLI does, without
+		// WP_Filesystem() (which is what defines FS_CHMOD_FILE).
+		global $wp_filesystem;
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-base.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-filesystem-direct.php';
+		$previous_filesystem = $wp_filesystem;
+		$wp_filesystem       = new \WP_Filesystem_Direct( false ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulating WP-CLI runtime state.
+
+		try {
+			$i18n   = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+			$file   = $this->temp_lang_dir . 'woocommerce-pos-de_DE.l10n.php';
+			$method = new \ReflectionMethod( $i18n, 'write_translation_file' );
+			$method->setAccessible( true );
+
+			// Act.
+			$result = $method->invoke( $i18n, $file, "<?php\nreturn array( 'messages' => array() );" );
+
+			// Assert.
+			$this->assertTrue( $result );
+			$this->assertFileExists( $file );
+		} finally {
+			$wp_filesystem = $previous_filesystem; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring global state.
+		}
+	}
 }
