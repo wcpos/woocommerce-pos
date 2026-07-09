@@ -61,7 +61,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 		 * Check if the request is for all tax rates and if the 'posts_per_page' is set to -1.
 		 * Optimised query for getting all rate IDs.
 		 */
-		if ( $request->get_param( 'posts_per_page' ) == -1 && $request->get_param( 'fields' ) !== null ) {
+		if ( Bulk_ID_Fast_Path::supports_request( $request ) ) {
 			return $this->wcpos_get_all_posts( $request );
 		}
 
@@ -216,8 +216,7 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 	public function wcpos_get_all_posts( $request ) {
 		global $wpdb;
 
-		// Start timing execution.
-		$start_time = microtime( true );
+		$start_time     = microtime( true );
 		$modified_after = $request->get_param( 'modified_after' );
 
 		try {
@@ -229,43 +228,17 @@ class Taxes_Controller extends WC_REST_Taxes_Controller {
 			 *
 			 * @TODO Add modified_after support for taxes.
 			 */
-			$results = $modified_after ? array() : $wpdb->get_results(
-				'
-				SELECT tax_rate_id as id FROM ' . $wpdb->prefix . 'woocommerce_tax_rates
-			',
-				ARRAY_A
-			);
+			if ( $modified_after ) {
+				$results = array();
+			} else {
+				$sql     = 'SELECT tax_rate_id as id FROM ' . $wpdb->prefix . 'woocommerce_tax_rates';
+				$sql     = Bulk_ID_Fast_Path::append_id_filters_sql( $sql, $request, "{$wpdb->prefix}woocommerce_tax_rates.tax_rate_id" );
+				$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- SQL is built with prepare() above.
+			}
 
-			// Format the response.
-			$formatted_results = array_map(
-				function ( $item ) {
-					return array( 'id' => (int) $item['id'] );
-				},
-				$results
-			);
-
-			// Get the total number of orders for the given criteria.
-			$total = count( $formatted_results );
-
-			// Collect execution time and server load.
-			$execution_time = microtime( true ) - $start_time;
-			$execution_time_ms = number_format( $execution_time * 1000, 2 );
-			$server_load = $this->get_server_load();
-
-			$response = rest_ensure_response( $formatted_results );
-			$response->header( 'X-WP-Total', (string) $total );
-			$response->header( 'X-Execution-Time', $execution_time_ms . ' ms' );
-			$response->header( 'X-Server-Load', json_encode( $server_load ) );
-
-			return $response;
+			return Bulk_ID_Fast_Path::response( $this, $results, $start_time );
 		} catch ( Exception $e ) {
-			Logger::log( 'Error fetching product tax rate IDs: ' . $e->getMessage() );
-
-			return new \WP_Error(
-				'woocommerce_pos_rest_cannot_fetch',
-				'Error fetching product tax rate IDs.',
-				array( 'status' => 500 )
-			);
+			return Bulk_ID_Fast_Path::fetch_error( 'Error fetching product tax rate IDs: ' . $e->getMessage(), 'Error fetching product tax rate IDs.' );
 		}
 	}
 }

@@ -182,6 +182,23 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
 	}
 
+	public function test_product_api_get_all_ids_accepts_scalar_fields_id(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', 'id' );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$ids  = wp_list_pluck( $data, 'id' );
+
+		$this->assertEqualsCanonicalizing( array( $product1->get_id(), $product2->get_id() ), $ids );
+		$this->assertEquals( array( 'id' ), array_keys( $data[0] ) );
+	}
+
 	public function test_product_api_get_all_id_with_date_modified_gmt(): void {
 		$product1  = ProductHelper::create_simple_product();
 		$product2  = ProductHelper::create_simple_product();
@@ -1503,5 +1520,39 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 2, \count( $uuids ) );
 		$this->assertContains( $uuid, $uuids );
 		$this->assertEquals( 2, \count( array_unique( $uuids ) ) );
+	}
+
+	public function test_product_api_get_all_ids_with_include_filter(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $product1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $product1->get_id() ), $ids );
+		$this->assertNotContains( $product2->get_id(), $ids );
+	}
+
+	public function test_product_api_get_all_ids_with_exclude_filter(): void {
+		$product1 = ProductHelper::create_simple_product();
+		$product2 = ProductHelper::create_simple_product();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $product1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $product1->get_id(), $ids );
+		$this->assertContains( $product2->get_id(), $ids );
 	}
 }

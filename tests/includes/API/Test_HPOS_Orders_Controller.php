@@ -10,6 +10,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
 /**
@@ -19,6 +20,7 @@ use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
  */
 class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 	use HPOSToggleTrait;
+	use Order_Address_Scrub_Helpers;
 
 	/**
 	 * @var OrdersTableDataStore
@@ -198,6 +200,40 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 			$this->assertArrayHasKey( 'date_modified_gmt', $d, "The 'date_modified_gmt' field is missing for product ID {$d['id']}." );
 			$this->assertMatchesRegularExpression( '/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|(\+\d{2}:\d{2}))?/', $d['date_modified_gmt'], "The 'date_modified_gmt' field for product ID {$d['id']} is not correctly formatted." );
 		}
+	}
+
+	public function test_order_api_get_all_ids_with_include_filter_hpos(): void {
+		$order1  = OrderHelper::create_order();
+		$order2  = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $order1->get_id() ), $ids );
+		$this->assertNotContains( $order2->get_id(), $ids );
+	}
+
+	public function test_order_api_get_all_ids_with_exclude_filter_hpos(): void {
+		$order1  = OrderHelper::create_order();
+		$order2  = OrderHelper::create_order();
+		$request = $this->wp_rest_get_request( '/wcpos/v1/orders' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $order1->get_id() ) );
+
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $order1->get_id(), $ids );
+		$this->assertContains( $order2->get_id(), $ids );
 	}
 
 	/**
@@ -799,7 +835,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -869,7 +905,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_includes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -883,7 +919,7 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_excludes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );

@@ -214,6 +214,44 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEqualsCanonicalizing( array( $coupon1->get_id(), $coupon2->get_id() ), $ids );
 	}
 
+	public function test_coupon_api_get_all_ids_with_include_filter(): void {
+		$coupon1 = CouponHelper::create_coupon( 'fastincludeone' );
+		$coupon2 = CouponHelper::create_coupon( 'fastincludetwo' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'include', array( $coupon1->get_id() ) );
+
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertEquals( array( $coupon1->get_id() ), $ids );
+		$this->assertNotContains( $coupon2->get_id(), $ids );
+	}
+
+	public function test_coupon_api_get_all_ids_with_exclude_filter(): void {
+		$coupon1 = CouponHelper::create_coupon( 'fastexcludeone' );
+		$coupon2 = CouponHelper::create_coupon( 'fastexcludetwo' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons' );
+		$request->set_param( 'posts_per_page', -1 );
+		$request->set_param( 'fields', array( 'id' ) );
+		$request->set_param( 'exclude', array( $coupon1->get_id() ) );
+
+		$this->trigger_dispatch( $request );
+		$response = $this->server->dispatch( $request );
+		$this->assertEquals( 200, $response->get_status() );
+
+		$ids = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $coupon1->get_id(), $ids );
+		$this->assertContains( $coupon2->get_id(), $ids );
+	}
+
 	/**
 	 * The coupon endpoint should be accessible by cashiers.
 	 */
