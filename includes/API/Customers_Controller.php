@@ -17,6 +17,7 @@ use Exception;
 use WC_Customer;
 use WC_REST_Customers_Controller;
 use WCPOS\WooCommercePOS\Logger;
+use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -240,7 +241,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		 * store-level 'woocommerce_registration_generate_username' option so the
 		 * POS behaviour is independent of the online-checkout setting.
 		 */
-		$generate_username = wcpos_get_settings( 'general', 'generate_username' );
+		$generate_username = SettingsService::instance()->generate_username_enabled();
 		add_filter(
 			'pre_option_woocommerce_registration_generate_username',
 			function () use ( $generate_username ) {

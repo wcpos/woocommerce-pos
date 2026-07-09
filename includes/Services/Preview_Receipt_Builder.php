@@ -678,6 +678,7 @@ class Preview_Receipt_Builder {
 			'currency'      => $currency,
 			'customer_note' => __( 'Please gift wrap this order. Thank you!', 'woocommerce-pos' ),
 			'wc_status'     => 'completed',
+			'status_label'  => wc_get_order_status_name( 'completed' ),
 			'created_via'   => 'woocommerce-pos',
 			'created'       => Receipt_Date_Formatter::from_timestamp( $created_timestamp, $date_timezone, $date_locale ),
 			'paid'          => Receipt_Date_Formatter::from_timestamp( $paid_timestamp, $date_timezone, $date_locale ),
@@ -739,6 +740,8 @@ class Preview_Receipt_Builder {
 			'total_excl'    => $total_excl,
 			'paid_total'          => $total_incl,
 			'change_total'        => $change_total,
+			'refund_total'        => 0.0,
+			'net_total'           => 0.0,
 			'total_qty'           => $total_qty,
 			'line_count'          => $line_count,
 		);
