@@ -348,7 +348,9 @@ class i18n { // phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapi
 			return FS_CHMOD_FILE;
 		}
 
-		return fileperms( ABSPATH ) & 0777 | 0644;
+		// Core derives the file mode from a known file (ABSPATH is a directory,
+		// so its mode carries execute bits that must not land on written files).
+		return ( fileperms( ABSPATH . 'index.php' ) & 0777 ) | 0644;
 	}
 
 	/**

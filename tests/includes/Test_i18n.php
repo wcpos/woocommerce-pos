@@ -1494,4 +1494,29 @@ class Test_I18n extends WC_Unit_Test_Case { // phpcs:ignore Generic.Classes.Open
 			$wp_filesystem = $previous_filesystem; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring global state.
 		}
 	}
+
+	/**
+	 * The FS_CHMOD_FILE fallback must be derived from a file, the way core does
+	 * it. Deriving it from ABSPATH (a directory) would apply directory execute
+	 * bits to the .l10n.php files we write.
+	 *
+	 * @covers ::get_fs_chmod_file
+	 */
+	public function test_get_fs_chmod_file_without_constant_derives_mode_from_a_file(): void {
+		if ( \defined( 'FS_CHMOD_FILE' ) ) {
+			$this->markTestSkipped( 'FS_CHMOD_FILE is already defined in this process; the fallback branch cannot be exercised.' );
+		}
+
+		// Arrange: this is the exact expression WP_Filesystem() uses to define FS_CHMOD_FILE.
+		$expected = ( fileperms( ABSPATH . 'index.php' ) & 0777 ) | 0644;
+		$i18n     = new i18n( 'woocommerce-pos', '1.8.7', $this->temp_lang_dir );
+		$method   = new \ReflectionMethod( $i18n, 'get_fs_chmod_file' );
+		$method->setAccessible( true );
+
+		// Act.
+		$mode = $method->invoke( $i18n );
+
+		// Assert.
+		$this->assertEquals( $expected, $mode );
+	}
 }
