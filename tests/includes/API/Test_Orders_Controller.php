@@ -904,7 +904,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_order_search_by_id(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -974,7 +974,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_includes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -988,7 +988,7 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 
 	public function test_order_search_by_id_with_excludes(): void {
 		$order1 = OrderHelper::create_order();
-		$order2 = OrderHelper::create_order();
+		$order2 = $this->scrub_numeric_address_fields( OrderHelper::create_order() );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders' );
 		$request->set_param( 'search', (string) $order1->get_id() );
@@ -998,6 +998,27 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$data     = $response->get_data();
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 0, \count( $data ) );
+	}
+
+	/**
+	 * Strip digit-bearing address fields so an order-ID search term cannot
+	 * LIKE-match this order's address index. Order IDs follow the global
+	 * auto-increment, so they can collide with the fixture postcode/phone
+	 * (e.g. searching "123" matches postcode "123456").
+	 *
+	 * @param \WC_Order $order Order to scrub.
+	 *
+	 * @return \WC_Order
+	 */
+	private function scrub_numeric_address_fields( \WC_Order $order ): \WC_Order {
+		$order->set_billing_postcode( 'WooPostcode' );
+		$order->set_billing_phone( 'WooPhone' );
+		$order->set_shipping_address_1( 'Mercer Street' );
+		$order->set_shipping_postcode( 'WooZip' );
+		$order->set_shipping_phone( 'WooShipPhone' );
+		$order->save();
+
+		return $order;
 	}
 
 	public function test_order_search_by_billing_first_name_with_includes(): void {
