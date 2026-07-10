@@ -77,7 +77,10 @@ Note: Logicless output passes through wp_kses_post, which strips
 		<tbody>
 			{{#lines}}
 			<tr>
-				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{name}}</div></td>
+				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;">
+					<div style="font-weight: 600;">{{name}}</div>
+					{{#line_savings}}<div style="color: #6b7280; font-size: 10px;"><span style="text-decoration: line-through;">{{line_regular_total_display}}</span><span style="color: #15803d;"> · {{i18n.savings}} -{{line_savings_display}}</span></div>{{/line_savings}}
+				</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{qty}}</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: right; font-variant-numeric: tabular-nums;">{{line_total_display}}</td>
 			</tr>

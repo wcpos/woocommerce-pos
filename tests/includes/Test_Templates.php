@@ -90,6 +90,103 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Render one gallery template with deterministic savings/coupon markers.
+	 *
+	 * @param string $filename             Gallery template filename.
+	 * @param float  $line_savings         Recorded line savings.
+	 * @param bool   $savings_in_discounts Whether legacy discounts contain savings.
+	 * @param bool   $has_exclusive_savings Whether tax-exclusive savings are provable.
+	 * @param bool   $include_order_coupon Whether to include an independent order coupon.
+	 *
+	 * @return string
+	 */
+	private function render_gallery_savings_template(
+		string $filename,
+		float $line_savings,
+		bool $savings_in_discounts,
+		bool $has_exclusive_savings = true,
+		bool $include_order_coupon = true
+	): string {
+		$template = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $filename );
+		if ( false === $template ) {
+			$this->fail( 'Gallery template must be readable: ' . $filename );
+		}
+		$template = preg_replace( '/<!--.*?-->/s', '', $template );
+		if ( null === $template ) {
+			$this->fail( 'Gallery template comments could not be stripped: ' . $filename );
+		}
+
+		$data = array(
+			'store'     => array( 'name' => 'Test Store' ),
+			'order'     => array(
+				'number'       => '1001',
+				'created'      => array( 'datetime' => '2026-07-10 10:00' ),
+				'printed'      => array( 'datetime' => '2026-07-10 10:01' ),
+				'status_label' => 'Completed',
+			),
+			'customer'  => array( 'name' => 'Ada Lovelace' ),
+			'lines'     => array(
+				array(
+					'name'                       => 'Savings Product',
+					'sku'                        => 'SAVE-1',
+					'qty'                        => 1,
+					'regular_price_display'      => 'REGULAR-UNIT',
+					'regular_price_excl_display' => 'REGULAR-EXCL',
+					'line_regular_total_display' => 'REGULAR-LINE',
+					'line_savings'               => $line_savings,
+					'line_savings_excl'          => $has_exclusive_savings ? $line_savings : null,
+					'line_savings_display'       => 'SAVINGS-LINE',
+					'line_savings_excl_display'  => 'SAVINGS-EXCL',
+					'savings_in_discounts'       => $savings_in_discounts,
+					'unit_price_display'         => 'SELLING-UNIT',
+					'unit_price_excl_display'    => 'SELLING-EXCL',
+					'unit_subtotal_display'      => 'SUBTOTAL-UNIT',
+					'unit_subtotal_excl_display' => 'SUBTOTAL-EXCL',
+					'line_total_display'         => 'FINAL-LINE',
+					'line_total_incl_display'    => 'FINAL-INCL',
+					'discounts'                  => 2,
+					'discounts_display'          => 'LINE-COUPON',
+					'discounts_excl_display'     => 'LINE-COUPON-EXCL',
+					'meta'                       => array(),
+					'taxes'                      => array(),
+				),
+			),
+			'fees'      => array(),
+			'shipping'  => array(),
+			'discounts' => $include_order_coupon
+				? array(
+					array(
+						'label'              => 'Coupon row',
+						'code'               => 'SAVE10',
+						'total_display'      => 'COUPON-ROW',
+						'total_incl_display' => 'COUPON-ROW',
+						'total_excl_display' => 'COUPON-ROW',
+					),
+				)
+				: array(),
+			'totals'    => array(
+				'subtotal_display'      => 'SUBTOTAL',
+				'subtotal_excl_display' => 'SUBTOTAL-EXCL',
+				'total_display'         => 'TOTAL',
+				'total_incl_display'    => 'TOTAL-INCL',
+				'total_excl_display'    => 'TOTAL-EXCL',
+			),
+			'tax'       => array(
+				'display_excl'       => true,
+				'display_incl'       => false,
+				'breakdown_hidden'   => true,
+				'breakdown_single'   => false,
+				'breakdown_itemized' => false,
+			),
+			'payments'  => array(),
+			'refunds'   => array(),
+			'i18n'      => Receipt_I18n_Labels::get_labels(),
+		);
+
+		return ( new \Mustache\Engine() )->render( $template, $data );
+	}
+
+	/**
 	 * Test gallery templates do not reference fields absent from canonical receipt data.
 	 */
 	public function test_gallery_templates_do_not_reference_orphaned_receipt_fields(): void {
@@ -118,6 +215,92 @@ class Test_Templates extends WP_UnitTestCase {
 			$this->assertStringNotContainsString( 'tax_summary.0', $content, $label );
 			$this->assertStringNotContainsString( 'i18n.order_date', $content, $label );
 			$this->assertDoesNotMatchRegularExpression( '/store\\.tax_id(?!s)/', $content, $label );
+		}
+	}
+
+	/**
+	 * Price-bearing HTML and thermal templates render savings without duplicating legacy discounts.
+	 */
+	public function test_price_bearing_gallery_templates_render_savings_conditionally(): void {
+		$templates = array(
+			'detailed-receipt.html'       => array( 'REGULAR-EXCL', 'SAVINGS-EXCL', null, false ),
+			'invoice.html'                => array( 'REGULAR-UNIT', 'SAVINGS-LINE', 'LINE-COUPON', true ),
+			'minimal-receipt.html'        => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
+			'narrow-receipt.html'         => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
+			'quote.html'                  => array( 'REGULAR-UNIT', 'SAVINGS-LINE', null, false ),
+			'standard-receipt.html'       => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
+			'standard-receipt-rtl.html'   => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
+			'thermal-detailed-58mm.xml'   => array( 'REGULAR-EXCL', 'SAVINGS-EXCL', 'LINE-COUPON-EXCL', true ),
+			'thermal-detailed-80mm.xml'   => array( 'REGULAR-EXCL', 'SAVINGS-EXCL', 'LINE-COUPON-EXCL', true ),
+			'thermal-simple-58mm.xml'     => array( 'REGULAR-UNIT', 'SAVINGS-LINE', 'LINE-COUPON', true ),
+			'thermal-simple-80mm.xml'     => array( 'REGULAR-UNIT', 'SAVINGS-LINE', 'LINE-COUPON', true ),
+			'thermal-simple-80mm-rtl.xml' => array( 'REGULAR-UNIT', 'SAVINGS-LINE', 'LINE-COUPON', true ),
+		);
+
+		foreach ( $templates as $filename => $expectation ) {
+			list( $regular_marker, $savings_marker, $line_discount_marker, $suppress_legacy ) = $expectation;
+			$current = $this->render_gallery_savings_template( $filename, 5.0, false );
+			$this->assertStringContainsString( $regular_marker, $current, $filename );
+			$this->assertStringContainsString( $savings_marker, $current, $filename );
+			$this->assertStringContainsString( 'COUPON-ROW', $current, $filename );
+			if ( null !== $line_discount_marker ) {
+				$this->assertStringContainsString( $line_discount_marker, $current, $filename );
+			}
+
+			$without_savings = $this->render_gallery_savings_template( $filename, 0.0, false );
+			$this->assertStringNotContainsString( $regular_marker, $without_savings, $filename );
+			$this->assertStringNotContainsString( $savings_marker, $without_savings, $filename );
+
+			$legacy = $this->render_gallery_savings_template( $filename, 5.0, true );
+			$this->assertStringContainsString( $regular_marker, $legacy, $filename );
+			if ( $suppress_legacy ) {
+				$this->assertStringNotContainsString( $savings_marker, $legacy, $filename );
+			} else {
+				$this->assertStringContainsString( $savings_marker, $legacy, $filename );
+			}
+			$this->assertStringContainsString( 'COUPON-ROW', $legacy, $filename );
+			if ( null !== $line_discount_marker ) {
+				$this->assertStringContainsString( $line_discount_marker, $legacy, $filename );
+			}
+		}
+	}
+
+	/**
+	 * Legacy lines still show one reduction when a template has no line-discount row.
+	 */
+	public function test_legacy_templates_without_line_discount_render_savings_without_coupon(): void {
+		$templates = array(
+			'detailed-receipt.html'     => 'SAVINGS-EXCL',
+			'minimal-receipt.html'      => 'SAVINGS-LINE',
+			'narrow-receipt.html'       => 'SAVINGS-LINE',
+			'quote.html'                => 'SAVINGS-LINE',
+			'standard-receipt.html'     => 'SAVINGS-LINE',
+			'standard-receipt-rtl.html' => 'SAVINGS-LINE',
+		);
+
+		foreach ( $templates as $filename => $savings_marker ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, true, true, false );
+
+			$this->assertStringContainsString( $savings_marker, $rendered, $filename );
+			$this->assertStringNotContainsString( 'COUPON-ROW', $rendered, $filename );
+		}
+	}
+
+	/**
+	 * Tax-exclusive templates omit convenience values when that historical basis is unknown.
+	 */
+	public function test_detailed_templates_hide_unprovable_exclusive_savings(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, false );
+
+			$this->assertStringNotContainsString( 'REGULAR-EXCL', $rendered, $filename );
+			$this->assertStringNotContainsString( 'SAVINGS-EXCL', $rendered, $filename );
 		}
 	}
 
