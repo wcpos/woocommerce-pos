@@ -180,10 +180,12 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	/**
 	 * Create a taxable POS order with prices entered inclusive of 10% tax.
 	 *
-	 * @param string $selling_price Recorded tax-inclusive selling price.
-	 * @param string $regular_price Recorded tax-inclusive regular price.
-	 * @param float  $subtotal_excl Stored tax-exclusive line subtotal.
-	 * @param float  $subtotal_tax  Stored line subtotal tax.
+	 * @param string     $selling_price Recorded tax-inclusive selling price.
+	 * @param string     $regular_price Recorded tax-inclusive regular price.
+	 * @param float      $subtotal_excl Stored tax-exclusive line subtotal.
+	 * @param float      $subtotal_tax  Stored line subtotal tax.
+	 * @param float|null $total_excl    Stored tax-exclusive line total, defaults to the subtotal.
+	 * @param float|null $total_tax     Stored line total tax, defaults to the subtotal tax.
 	 *
 	 * @return \WC_Order
 	 */
@@ -191,7 +193,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		string $selling_price,
 		string $regular_price,
 		float $subtotal_excl,
-		float $subtotal_tax
+		float $subtotal_tax,
+		?float $total_excl = null,
+		?float $total_tax = null
 	): \WC_Order {
 		$product = new \WC_Product_Simple();
 		$product->set_name( 'Taxed Savings Test Product' );
@@ -204,8 +208,8 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$item->set_quantity( 1 );
 		$item->set_subtotal( $subtotal_excl );
 		$item->set_subtotal_tax( $subtotal_tax );
-		$item->set_total( $subtotal_excl );
-		$item->set_total_tax( $subtotal_tax );
+		$item->set_total( $total_excl ?? $subtotal_excl );
+		$item->set_total_tax( $total_tax ?? $subtotal_tax );
 		$item->add_meta_data(
 			'_woocommerce_pos_data',
 			wp_json_encode(
@@ -437,6 +441,23 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'line_savings', $line );
 		$this->assertEquals( 13.0, $line['discounts'] );
 		$this->assertEquals( 10.0, $line['line_savings'] );
+		$this->assertTrue( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Pre-1.9 tax-inclusive lines detect legacy overlap despite WooCommerce tax rounding.
+	 */
+	public function test_build_pre_1_9_tax_inclusive_line_marks_savings_already_in_discounts(): void {
+		// Legacy shape at 10% tax: subtotal stored at the recorded regular price
+		// (gross 20.00), total at the recorded selling price (gross 15.00). The
+		// stored exclusive amounts carry WooCommerce's 2dp rounding, so the
+		// derived exclusive discount (4.54) undershoots the derived exclusive
+		// savings (4.545) — the recorded inclusive basis must decide instead.
+		$order = $this->create_tax_inclusive_pos_price_order( '15.00', '20.00', 18.18, 1.82, 13.64, 1.36 );
+
+		$line = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertEqualsWithDelta( 5.0, $line['line_savings_incl'], 0.001 );
 		$this->assertTrue( $line['savings_in_discounts'] );
 	}
 

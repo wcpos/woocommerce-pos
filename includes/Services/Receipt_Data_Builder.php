@@ -503,8 +503,9 @@ class Receipt_Data_Builder {
 		float $total_incl,
 		float $total_excl
 	): array {
-		$pos_data = $this->get_pos_price_data( $item );
-		$selling  = array(
+		$pos_data           = $this->get_pos_price_data( $item );
+		$prices_include_tax = method_exists( $order, 'get_prices_include_tax' ) && $order->get_prices_include_tax();
+		$selling            = array(
 			'incl' => $unit_subtotal_incl,
 			'excl' => $unit_subtotal_excl,
 		);
@@ -514,15 +515,14 @@ class Receipt_Data_Builder {
 		);
 
 		if ( null !== $pos_data ) {
-			$prices_include_tax = method_exists( $order, 'get_prices_include_tax' ) && $order->get_prices_include_tax();
-			$recorded_selling   = $this->convert_recorded_price_bases(
+			$recorded_selling = $this->convert_recorded_price_bases(
 				$pos_data['price'],
 				$pos_data['tax_status'],
 				$prices_include_tax,
 				$subtotal_incl,
 				$subtotal_excl
 			);
-			$regular           = $this->convert_recorded_price_bases(
+			$regular          = $this->convert_recorded_price_bases(
 				$pos_data['regular_price'],
 				$pos_data['tax_status'],
 				$prices_include_tax,
@@ -558,7 +558,7 @@ class Receipt_Data_Builder {
 		);
 
 		$savings_in_discounts = false;
-		$stored                = array(
+		$stored               = array(
 			'incl' => array(
 				'subtotal' => $subtotal_incl,
 				'total'    => $total_incl,
@@ -568,8 +568,12 @@ class Receipt_Data_Builder {
 				'total'    => $total_excl,
 			),
 		);
-		$precision             = function_exists( 'wc_get_rounding_precision' ) ? wc_get_rounding_precision() : wc_get_price_decimals();
-		foreach ( array( 'excl', 'incl' ) as $basis ) {
+		// Compare on the recorded-price basis first: the opposite basis is float-derived
+		// from stored line ratios, and WooCommerce's own tax rounding can shift it by a
+		// sub-cent. Price-decimal precision tolerates that noise; rounding precision does not.
+		$precision   = wc_get_price_decimals();
+		$basis_order = $prices_include_tax ? array( 'incl', 'excl' ) : array( 'excl', 'incl' );
+		foreach ( $basis_order as $basis ) {
 			if ( null === $line_savings[ $basis ] || $line_savings[ $basis ] <= 0.0 ) {
 				continue;
 			}

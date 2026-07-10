@@ -137,6 +137,10 @@ class Test_Templates extends WP_UnitTestCase {
 					'line_savings_excl'          => $has_exclusive_savings ? $line_savings : null,
 					'line_savings_display'       => 'SAVINGS-LINE',
 					'line_savings_excl_display'  => 'SAVINGS-EXCL',
+					'unit_savings'               => $line_savings,
+					'unit_savings_excl'          => $has_exclusive_savings ? $line_savings : null,
+					'unit_savings_display'       => 'SAVINGS-UNIT',
+					'unit_savings_excl_display'  => 'SAVINGS-UNIT-EXCL',
 					'savings_in_discounts'       => $savings_in_discounts,
 					'unit_price_display'         => 'SELLING-UNIT',
 					'unit_price_excl_display'    => 'SELLING-EXCL',
@@ -165,11 +169,17 @@ class Test_Templates extends WP_UnitTestCase {
 				)
 				: array(),
 			'totals'    => array(
-				'subtotal_display'      => 'SUBTOTAL',
-				'subtotal_excl_display' => 'SUBTOTAL-EXCL',
-				'total_display'         => 'TOTAL',
-				'total_incl_display'    => 'TOTAL-INCL',
-				'total_excl_display'    => 'TOTAL-EXCL',
+				'subtotal_display'            => 'SUBTOTAL',
+				'subtotal_excl_display'       => 'SUBTOTAL-EXCL',
+				'total_display'               => 'TOTAL',
+				'total_incl_display'          => 'TOTAL-INCL',
+				'total_excl_display'          => 'TOTAL-EXCL',
+				'discount_total'              => 3,
+				'discount_total_incl'         => 3,
+				'discount_total_excl'         => 3,
+				'discount_total_display'      => 'DISCOUNT-TOTAL',
+				'discount_total_incl_display' => 'DISCOUNT-TOTAL',
+				'discount_total_excl_display' => 'DISCOUNT-TOTAL',
 			),
 			'tax'       => array(
 				'display_excl'       => true,
@@ -223,11 +233,11 @@ class Test_Templates extends WP_UnitTestCase {
 	 */
 	public function test_price_bearing_gallery_templates_render_savings_conditionally(): void {
 		$templates = array(
-			'detailed-receipt.html'       => array( 'REGULAR-EXCL', 'SAVINGS-EXCL', null, false ),
-			'invoice.html'                => array( 'REGULAR-UNIT', 'SAVINGS-LINE', 'LINE-COUPON', true ),
+			'detailed-receipt.html'       => array( 'REGULAR-EXCL', 'SAVINGS-UNIT-EXCL', 'DISCOUNT-TOTAL', true ),
+			'invoice.html'                => array( 'REGULAR-UNIT', 'SAVINGS-UNIT', 'LINE-COUPON', true ),
 			'minimal-receipt.html'        => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
 			'narrow-receipt.html'         => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
-			'quote.html'                  => array( 'REGULAR-UNIT', 'SAVINGS-LINE', null, false ),
+			'quote.html'                  => array( 'REGULAR-UNIT', 'SAVINGS-UNIT', 'DISCOUNT-TOTAL', true ),
 			'standard-receipt.html'       => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
 			'standard-receipt-rtl.html'   => array( 'REGULAR-LINE', 'SAVINGS-LINE', null, false ),
 			'thermal-detailed-58mm.xml'   => array( 'REGULAR-EXCL', 'SAVINGS-EXCL', 'LINE-COUPON-EXCL', true ),
@@ -270,10 +280,8 @@ class Test_Templates extends WP_UnitTestCase {
 	 */
 	public function test_legacy_templates_without_line_discount_render_savings_without_coupon(): void {
 		$templates = array(
-			'detailed-receipt.html'     => 'SAVINGS-EXCL',
 			'minimal-receipt.html'      => 'SAVINGS-LINE',
 			'narrow-receipt.html'       => 'SAVINGS-LINE',
-			'quote.html'                => 'SAVINGS-LINE',
 			'standard-receipt.html'     => 'SAVINGS-LINE',
 			'standard-receipt-rtl.html' => 'SAVINGS-LINE',
 		);
@@ -301,6 +309,7 @@ class Test_Templates extends WP_UnitTestCase {
 
 			$this->assertStringNotContainsString( 'REGULAR-EXCL', $rendered, $filename );
 			$this->assertStringNotContainsString( 'SAVINGS-EXCL', $rendered, $filename );
+			$this->assertStringNotContainsString( 'SAVINGS-UNIT-EXCL', $rendered, $filename );
 		}
 	}
 
