@@ -129,7 +129,7 @@ class Analytics {
 	 * current user's UUID as `distinct_id`, groups the event under the
 	 * site UUID, and merges in a small set of default context properties.
 	 *
-	 * @param string $event      Event name, e.g. `upgrade_cta_clicked`.
+	 * @param string $event      Event name, e.g. `pro_link_clicked`.
 	 * @param array  $properties Event properties. Caller-supplied values
 	 *                           take precedence over defaults.
 	 *
