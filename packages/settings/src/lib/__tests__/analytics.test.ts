@@ -25,7 +25,7 @@ describe('settings analytics helper', () => {
 	it('captures upgrade CTA click events', () => {
 		captureUpgradeCtaClicked('license_screen_link', 'https://wcpos.com/pro');
 
-		expect(window.wcpos.posthog.capture).toHaveBeenCalledWith('upgrade_cta_clicked', {
+		expect(window.wcpos.posthog.capture).toHaveBeenCalledWith('pro_link_clicked', {
 			placement: 'license_screen_link',
 			destination: 'https://wcpos.com/pro',
 		});
