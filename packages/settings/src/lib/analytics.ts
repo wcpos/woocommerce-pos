@@ -23,7 +23,7 @@ export function captureUpgradeCtaViewed(placement: string) {
 }
 
 export function captureUpgradeCtaClicked(placement: string, destination: string) {
-	captureEvent('upgrade_cta_clicked', { placement, destination });
+	captureEvent('pro_link_clicked', { placement, destination });
 }
 
 export function captureLicenseActivationAttempted() {
