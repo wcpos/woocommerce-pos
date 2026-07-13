@@ -5,6 +5,10 @@ on:
     types: [ released ]
   workflow_dispatch:
 
+# Deploy uses external SVN credentials to wordpress.org; the GITHUB_TOKEN only reads.
+permissions:
+  contents: read
+
 jobs:
   tag:
     name: New release

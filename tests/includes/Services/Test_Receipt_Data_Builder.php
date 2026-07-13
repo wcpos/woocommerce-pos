@@ -126,6 +126,113 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Create a deterministic POS order item with recorded selling/regular prices.
+	 *
+	 * @param string      $selling_price    Recorded pre-coupon selling price.
+	 * @param string      $regular_price    Recorded regular price.
+	 * @param float       $qty              Item quantity.
+	 * @param string|null $final_total      Stored post-discount line total.
+	 * @param string      $pos_data_override Raw POS metadata override.
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_pos_price_order(
+		string $selling_price,
+		string $regular_price,
+		float $qty = 1.0,
+		?string $final_total = null,
+		string $pos_data_override = ''
+	): \WC_Order {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Savings Test Product' );
+		$product->set_regular_price( $regular_price );
+		$product->set_tax_status( 'none' );
+		$product->save();
+
+		$item = new \WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( $qty );
+		$item->set_subtotal( (float) $selling_price * $qty );
+		$item->set_total( null === $final_total ? (float) $selling_price * $qty : (float) $final_total );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			'' !== $pos_data_override
+				? $pos_data_override
+				: wp_json_encode(
+					array(
+						'price'         => $selling_price,
+						'regular_price' => $regular_price,
+						'tax_status'    => 'none',
+					)
+				)
+		);
+
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
+	 * Create a taxable POS order with prices entered inclusive of 10% tax.
+	 *
+	 * @param string     $selling_price Recorded tax-inclusive selling price.
+	 * @param string     $regular_price Recorded tax-inclusive regular price.
+	 * @param float      $subtotal_excl Stored tax-exclusive line subtotal.
+	 * @param float      $subtotal_tax  Stored line subtotal tax.
+	 * @param float|null $total_excl    Stored tax-exclusive line total, defaults to the subtotal.
+	 * @param float|null $total_tax     Stored line total tax, defaults to the subtotal tax.
+	 *
+	 * @return \WC_Order
+	 */
+	private function create_tax_inclusive_pos_price_order(
+		string $selling_price,
+		string $regular_price,
+		float $subtotal_excl,
+		float $subtotal_tax,
+		?float $total_excl = null,
+		?float $total_tax = null
+	): \WC_Order {
+		$product = new \WC_Product_Simple();
+		$product->set_name( 'Taxed Savings Test Product' );
+		$product->set_regular_price( $regular_price );
+		$product->set_tax_status( 'taxable' );
+		$product->save();
+
+		$item = new \WC_Order_Item_Product();
+		$item->set_product( $product );
+		$item->set_quantity( 1 );
+		$item->set_subtotal( $subtotal_excl );
+		$item->set_subtotal_tax( $subtotal_tax );
+		$item->set_total( $total_excl ?? $subtotal_excl );
+		$item->set_total_tax( $total_tax ?? $subtotal_tax );
+		$item->add_meta_data(
+			'_woocommerce_pos_data',
+			wp_json_encode(
+				array(
+					'price'         => $selling_price,
+					'regular_price' => $regular_price,
+					'tax_status'    => 'taxable',
+				)
+			)
+		);
+
+		$order = wc_create_order();
+		$order->set_created_via( 'woocommerce-pos' );
+		$order->update_meta_data( '_pos', '1' );
+		$order->set_prices_include_tax( true );
+		$order->add_item( $item );
+		$order->calculate_totals( false );
+		$order->save();
+
+		return $order;
+	}
+
+	/**
 	 * Get a tax summary row by rate id.
 	 *
 	 * @param array<int,array<string,mixed>> $summary Tax summary rows.
@@ -244,6 +351,165 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( 'unit_price_excl', $line );
 		$this->assertArrayHasKey( 'line_total_incl', $line );
 		$this->assertArrayHasKey( 'line_total_excl', $line );
+	}
+
+	/**
+	 * Recorded prices expose savings independently from WooCommerce discounts.
+	 */
+	public function test_build_exposes_recorded_prices_and_savings_without_changing_discounts(): void {
+		$order   = $this->create_pos_price_order( '15.00', '20.00', 2.0, '27.00' );
+		$payload = $this->builder->build( $order, 'live' );
+		$line    = $payload['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price', $line );
+		$this->assertEquals( 20.0, $line['regular_price'] );
+		$this->assertEquals( 15.0, $line['selling_price'] );
+		$this->assertEquals( 5.0, $line['unit_savings'] );
+		$this->assertEquals( 40.0, $line['line_regular_total'] );
+		$this->assertEquals( 30.0, $line['line_selling_total'] );
+		$this->assertEquals( 10.0, $line['line_savings'] );
+		$this->assertEquals( 3.0, $line['discounts'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Price increases keep both recorded prices but never create negative savings.
+	 */
+	public function test_build_price_increase_clamps_savings_to_zero(): void {
+		$line = $this->builder->build( $this->create_pos_price_order( '25.00', '20.00' ), 'live' )['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price', $line );
+		$this->assertEquals( 20.0, $line['regular_price'] );
+		$this->assertEquals( 25.0, $line['selling_price'] );
+		$this->assertEquals( 0.0, $line['unit_savings'] );
+		$this->assertEquals( 0.0, $line['line_savings'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Invalid historical metadata must not fabricate a regular price.
+	 */
+	public function test_build_malformed_pos_data_keeps_only_order_derived_selling_price(): void {
+		$line = $this->builder->build(
+			$this->create_pos_price_order( '15.00', '20.00', 1.0, null, '{invalid-json' ),
+			'live'
+		)['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price', $line );
+		$this->assertNull( $line['regular_price'] );
+		$this->assertEquals( 15.0, $line['selling_price'] );
+		$this->assertNull( $line['unit_savings'] );
+		$this->assertNull( $line['line_savings'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Tax status is required because it determines whether historical conversion is safe.
+	 */
+	public function test_build_partial_pos_data_without_tax_status_does_not_fabricate_savings(): void {
+		$pos_data = wp_json_encode(
+			array(
+				'price'         => '15.00',
+				'regular_price' => '20.00',
+			)
+		);
+		$line     = $this->builder->build(
+			$this->create_pos_price_order( '15.00', '20.00', 1.0, null, $pos_data ),
+			'live'
+		)['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price', $line );
+		$this->assertNull( $line['regular_price'] );
+		$this->assertEquals( 15.0, $line['selling_price'] );
+		$this->assertNull( $line['unit_savings'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Pre-1.9 line shape already contains the recorded savings in discounts.
+	 */
+	public function test_build_pre_1_9_line_marks_savings_already_in_discounts(): void {
+		$order = $this->create_pos_price_order( '15.00', '20.00', 2.0, '27.00' );
+		$item  = array_values( $order->get_items( 'line_item' ) )[0];
+		$item->set_subtotal( 40.00 );
+		$item->save();
+		$order->calculate_totals( false );
+		$order->save();
+
+		$line = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertArrayHasKey( 'line_savings', $line );
+		$this->assertEquals( 13.0, $line['discounts'] );
+		$this->assertEquals( 10.0, $line['line_savings'] );
+		$this->assertTrue( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Pre-1.9 tax-inclusive lines detect legacy overlap despite WooCommerce tax rounding.
+	 */
+	public function test_build_pre_1_9_tax_inclusive_line_marks_savings_already_in_discounts(): void {
+		// Legacy shape at 10% tax: subtotal stored at the recorded regular price
+		// (gross 20.00), total at the recorded selling price (gross 15.00). The
+		// stored exclusive amounts carry WooCommerce's 2dp rounding, so the
+		// derived exclusive discount (4.54) undershoots the derived exclusive
+		// savings (4.545) — the recorded inclusive basis must decide instead.
+		$order = $this->create_tax_inclusive_pos_price_order( '15.00', '20.00', 18.18, 1.82, 13.64, 1.36 );
+
+		$line = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertEqualsWithDelta( 5.0, $line['line_savings_incl'], 0.001 );
+		$this->assertTrue( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * A regular-price subtotal alone is insufficient proof that discounts contain savings.
+	 */
+	public function test_build_regular_subtotal_without_covering_discount_does_not_mark_legacy_overlap(): void {
+		$order = $this->create_pos_price_order( '15.00', '20.00', 1.0, '20.00' );
+		$item  = array_values( $order->get_items( 'line_item' ) )[0];
+		$item->set_subtotal( 20.00 );
+		$item->save();
+		$order->calculate_totals( false );
+		$order->save();
+
+		$line = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertArrayHasKey( 'line_savings', $line );
+		$this->assertEquals( 0.0, $line['discounts'] );
+		$this->assertEquals( 5.0, $line['line_savings'] );
+		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Tax-inclusive recorded prices derive their exclusive counterparts from order history.
+	 */
+	public function test_build_tax_basis_derives_recorded_price_counterparts_from_stored_line_ratio(): void {
+		$order = $this->create_tax_inclusive_pos_price_order( '16.50', '22.00', 15.00, 1.50 );
+		$line  = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price_incl', $line );
+		$this->assertEqualsWithDelta( 22.0, $line['regular_price_incl'], 0.001 );
+		$this->assertEqualsWithDelta( 20.0, $line['regular_price_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 16.5, $line['selling_price_incl'], 0.001 );
+		$this->assertEqualsWithDelta( 15.0, $line['selling_price_excl'], 0.001 );
+		$this->assertEqualsWithDelta( 5.5, $line['unit_savings_incl'], 0.001 );
+		$this->assertEqualsWithDelta( 5.0, $line['unit_savings_excl'], 0.001 );
+	}
+
+	/**
+	 * A taxable zero-price line cannot prove the opposite basis for its regular price.
+	 */
+	public function test_build_zero_selling_price_keeps_only_provable_recorded_price_basis(): void {
+		$order = $this->create_tax_inclusive_pos_price_order( '0.00', '22.00', 0.00, 0.00 );
+		$line  = $this->builder->build( $order, 'live' )['lines'][0];
+
+		$this->assertArrayHasKey( 'regular_price_incl', $line );
+		$this->assertEquals( 22.0, $line['regular_price_incl'] );
+		$this->assertNull( $line['regular_price_excl'] );
+		$this->assertEquals( 0.0, $line['selling_price_incl'] );
+		$this->assertEquals( 0.0, $line['selling_price_excl'] );
+		$this->assertEquals( 22.0, $line['unit_savings_incl'] );
+		$this->assertNull( $line['unit_savings_excl'] );
 	}
 
 	/**

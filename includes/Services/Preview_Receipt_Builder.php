@@ -454,6 +454,7 @@ class Preview_Receipt_Builder {
 		array(
 			'name'       => 'Premium Widget',
 			'price'      => 29.99,
+			'regular_price' => 34.99,
 			'sku'        => 'WIDGET-001',
 			'meta'       => array(
 				array(
@@ -479,6 +480,7 @@ class Preview_Receipt_Builder {
 		array(
 			'name'       => 'Standard Gadget',
 			'price'      => 15.50,
+			'regular_price' => 15.50,
 			'sku'        => 'GADGET-002',
 			'meta'       => array(
 				array(
@@ -496,6 +498,7 @@ class Preview_Receipt_Builder {
 		array(
 			'name'       => 'Deluxe Component',
 			'price'      => 42.00,
+			'regular_price' => 42.00,
 			'sku'        => 'COMP-003',
 			'meta'       => array(),
 			'attributes' => array(),
@@ -546,21 +549,36 @@ class Preview_Receipt_Builder {
 		$lines_total_incl = 0.0;
 
 		foreach ( $raw_products as $index => $product ) {
-			$qty        = self::LINE_QUANTITIES[ $index ] ?? 1;
-			$base_price = (float) $product['price'];
+			$qty                = self::LINE_QUANTITIES[ $index ] ?? 1;
+			$base_price         = (float) $product['price'];
+			$regular_base_price = (float) $product['regular_price'];
 
 			if ( $prices_include_tax ) {
-				$unit_incl = $base_price;
-				$unit_excl = $base_price / ( 1 + $tax_rate / 100 );
+				$unit_incl         = $base_price;
+				$unit_excl         = $base_price / ( 1 + $tax_rate / 100 );
+				$regular_unit_incl = $regular_base_price;
+				$regular_unit_excl = $regular_base_price / ( 1 + $tax_rate / 100 );
 			} else {
-				$unit_excl = $base_price;
-				$unit_incl = $base_price * ( 1 + $tax_rate / 100 );
+				$unit_excl         = $base_price;
+				$unit_incl         = $base_price * ( 1 + $tax_rate / 100 );
+				$regular_unit_excl = $regular_base_price;
+				$regular_unit_incl = $regular_base_price * ( 1 + $tax_rate / 100 );
 			}
 
-			$line_total_incl = round( $unit_incl * $qty, $dp );
-			$line_total_excl = round( $unit_excl * $qty, $dp );
+			$selling_unit_incl = round( $unit_incl, $dp );
+			$selling_unit_excl = round( $unit_excl, $dp );
+			$regular_unit_incl = round( $regular_unit_incl, $dp );
+			$regular_unit_excl = round( $regular_unit_excl, $dp );
+			$unit_savings_incl = max( 0.0, $regular_unit_incl - $selling_unit_incl );
+			$unit_savings_excl = max( 0.0, $regular_unit_excl - $selling_unit_excl );
+			$line_total_incl   = round( $selling_unit_incl * $qty, $dp );
+			$line_total_excl   = round( $selling_unit_excl * $qty, $dp );
+			$line_regular_incl = round( $regular_unit_incl * $qty, $dp );
+			$line_regular_excl = round( $regular_unit_excl * $qty, $dp );
+			$line_savings_incl = round( $unit_savings_incl * $qty, $dp );
+			$line_savings_excl = round( $unit_savings_excl * $qty, $dp );
 
-			$unit_price_rounded = round( $display_incl ? $unit_incl : $unit_excl, $dp );
+			$unit_price_rounded = $display_incl ? $selling_unit_incl : $selling_unit_excl;
 
 			$lines[] = array(
 				'key'                => (string) ( $index + 1 ),
@@ -568,12 +586,31 @@ class Preview_Receipt_Builder {
 				'name'               => $product['name'],
 				'qty'                => (float) $qty,
 				'qty_refunded'       => 0.0,
+				'regular_price'      => $display_incl ? $regular_unit_incl : $regular_unit_excl,
+				'regular_price_incl' => $regular_unit_incl,
+				'regular_price_excl' => $regular_unit_excl,
+				'selling_price'      => $unit_price_rounded,
+				'selling_price_incl' => $selling_unit_incl,
+				'selling_price_excl' => $selling_unit_excl,
+				'unit_savings'       => $display_incl ? $unit_savings_incl : $unit_savings_excl,
+				'unit_savings_incl'  => $unit_savings_incl,
+				'unit_savings_excl'  => $unit_savings_excl,
+				'line_regular_total' => $display_incl ? $line_regular_incl : $line_regular_excl,
+				'line_regular_total_incl' => $line_regular_incl,
+				'line_regular_total_excl' => $line_regular_excl,
+				'line_selling_total' => $display_incl ? $line_total_incl : $line_total_excl,
+				'line_selling_total_incl' => $line_total_incl,
+				'line_selling_total_excl' => $line_total_excl,
+				'line_savings'       => $display_incl ? $line_savings_incl : $line_savings_excl,
+				'line_savings_incl'  => $line_savings_incl,
+				'line_savings_excl'  => $line_savings_excl,
+				'savings_in_discounts' => false,
 				'unit_subtotal'      => $unit_price_rounded,
-				'unit_subtotal_incl' => round( $unit_incl, $dp ),
-				'unit_subtotal_excl' => round( $unit_excl, $dp ),
+				'unit_subtotal_incl' => $selling_unit_incl,
+				'unit_subtotal_excl' => $selling_unit_excl,
 				'unit_price'         => $unit_price_rounded,
-				'unit_price_incl'    => round( $unit_incl, $dp ),
-				'unit_price_excl'    => round( $unit_excl, $dp ),
+				'unit_price_incl'    => $selling_unit_incl,
+				'unit_price_excl'    => $selling_unit_excl,
 				'line_subtotal'      => $display_incl ? $line_total_incl : $line_total_excl,
 				'line_subtotal_incl' => $line_total_incl,
 				'line_subtotal_excl' => $line_total_excl,
@@ -1163,13 +1200,18 @@ class Preview_Receipt_Builder {
 				if ( $price <= 0 ) {
 					$price = 19.99;
 				}
+				$regular_price = (float) $product->get_regular_price();
+				if ( $regular_price <= 0 ) {
+					$regular_price = $price;
+				}
 
 				$result[] = array(
-					'name'       => $product->get_name(),
-					'price'      => $price,
-					'sku'        => $product->get_sku() ? $product->get_sku() : '',
-					'meta'       => $meta,
-					'attributes' => $meta,
+					'name'          => $product->get_name(),
+					'price'         => $price,
+					'regular_price' => $regular_price,
+					'sku'           => $product->get_sku() ? $product->get_sku() : '',
+					'meta'          => $meta,
+					'attributes'    => $meta,
 				);
 			}
 		}
@@ -1189,7 +1231,15 @@ class Preview_Receipt_Builder {
 			++$result_count;
 		}
 
-		return array_slice( $result, 0, 3 );
+		$result = array_slice( $result, 0, 3 );
+
+		// Preview data intentionally demonstrates the savings fields even when
+		// the store's sampled catalog products are all at regular price.
+		if ( isset( $result[0] ) && (float) $result[0]['regular_price'] <= (float) $result[0]['price'] ) {
+			$result[0]['regular_price'] = (float) $result[0]['price'] + 5.0;
+		}
+
+		return $result;
 	}
 
 	/**

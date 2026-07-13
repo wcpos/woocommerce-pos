@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Services;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use ReflectionMethod;
+use WCPOS\WooCommercePOS\Services\Extensions;
 use WCPOS\WooCommercePOS\Services\Landing_Profile;
 use WP_UnitTestCase;
 
@@ -53,6 +54,7 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 
 		OrderHelper::toggle_cot_feature_and_usage( $this->original_hpos_state );
 		delete_transient( Landing_Profile::TRANSIENT_KEY );
+		delete_transient( Extensions::TRANSIENT_KEY );
 
 		parent::tearDown();
 	}
@@ -155,5 +157,22 @@ class Test_Landing_Profile extends WP_UnitTestCase {
 			$profile->get_functional_data()['anon_id'],
 			$profile->get_functional_data()['anon_id']
 		);
+	}
+
+	/**
+	 * Asserts opted-in landing profiles include domain-only hosts for analytics grouping.
+	 */
+	public function test_profile_includes_domain_only_site_and_admin_hosts(): void {
+		set_transient( Extensions::TRANSIENT_KEY, array(), \HOUR_IN_SECONDS );
+
+		$profile = new Landing_Profile();
+		$data    = $profile->get_profile();
+
+		$this->assertSame( wp_parse_url( home_url(), PHP_URL_HOST ), $data['site_domain'] );
+		$this->assertSame( wp_parse_url( admin_url(), PHP_URL_HOST ), $data['admin_domain'] );
+		$this->assertStringNotContainsString( '://', $data['site_domain'] );
+		$this->assertStringNotContainsString( '/', $data['site_domain'] );
+		$this->assertStringNotContainsString( '://', $data['admin_domain'] );
+		$this->assertStringNotContainsString( '/', $data['admin_domain'] );
 	}
 }

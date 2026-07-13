@@ -61,6 +61,53 @@ class Test_Menu_PostHog_Inline_Script extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Enabled PostHog config must strip browser URL/referrer properties
+	 * before events leave wp-admin.
+	 */
+	public function test_enabled_inline_script_strips_url_properties_before_send(): void {
+		$script = Menu::get_posthog_inline_script();
+
+		$this->assertStringContainsString(
+			'before_send: function(event)',
+			$script,
+			'Expected PostHog before_send hook to sanitize event properties.'
+		);
+
+		foreach ( array( '$current_url', '$host', '$pathname', '$referrer', '$referring_domain' ) as $property ) {
+			$this->assertStringContainsString(
+				"delete properties['" . $property . "'];",
+				$script,
+				"Expected before_send to delete {$property}."
+			);
+		}
+
+		$this->assertStringContainsString(
+			"key.indexOf('\$session_entry_') === 0",
+			$script,
+			'Expected before_send to strip every $session_entry_* property.'
+		);
+
+		foreach ( array( '$initial_current_url', '$initial_host', '$initial_pathname', '$initial_referrer', '$initial_referring_domain' ) as $property ) {
+			$this->assertStringContainsString(
+				"delete properties['" . $property . "'];",
+				$script,
+				"Expected before_send to delete {$property}."
+			);
+		}
+
+		$this->assertStringContainsString(
+			"stripUrlProperties(event['\$set_once'])",
+			$script,
+			'Expected before_send to scrub PostHog top-level $set_once properties.'
+		);
+		$this->assertStringContainsString(
+			"key.indexOf('\$initial_session_entry_') === 0",
+			$script,
+			'Expected before_send to strip every $initial_session_entry_* property.'
+		);
+	}
+
+	/**
 	 * When consent is denied, PostHog must not be initialized and the
 	 * emitted snippet should fall back to the no-op stub.
 	 */

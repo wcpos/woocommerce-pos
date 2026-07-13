@@ -106,7 +106,7 @@ class Test_Menu_Analytics extends WP_UnitTestCase {
 		$this->assertCount( 1, $this->captured_requests );
 
 		$payload = json_decode( $this->captured_requests[0]['args']['body'], true );
-		$this->assertSame( 'upgrade_cta_clicked', $payload['event'] );
+		$this->assertSame( 'pro_link_clicked', $payload['event'] );
 		$this->assertSame( 'plugin_row_action', $payload['properties']['placement'] );
 		$this->assertSame( 'https://wcpos.com/pro', $payload['properties']['destination'] );
 	}

@@ -737,6 +737,27 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	 */
 	public function test_lines_are_populated(): void {
 		$data = $this->builder->build();
+		$savings_fields = array(
+			'regular_price',
+			'regular_price_incl',
+			'regular_price_excl',
+			'selling_price',
+			'selling_price_incl',
+			'selling_price_excl',
+			'unit_savings',
+			'unit_savings_incl',
+			'unit_savings_excl',
+			'line_regular_total',
+			'line_regular_total_incl',
+			'line_regular_total_excl',
+			'line_selling_total',
+			'line_selling_total_incl',
+			'line_selling_total_excl',
+			'line_savings',
+			'line_savings_incl',
+			'line_savings_excl',
+			'savings_in_discounts',
+		);
 
 		$this->assertGreaterThanOrEqual( 2, count( $data['lines'] ) );
 
@@ -749,6 +770,57 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 			$this->assertIsArray( $line['attributes'] );
 			$this->assertNotEmpty( $line['name'] );
 			$this->assertGreaterThan( 0, $line['qty'] );
+			foreach ( $savings_fields as $field ) {
+				$this->assertArrayHasKey( $field, $line );
+			}
+		}
+	}
+
+	/**
+	 * Preview data demonstrates savings and coupon discounts as separate values.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_savings_are_separate_from_coupon_discounts(): void {
+		$data = $this->builder->build();
+		$lines_with_both = array_filter(
+			$data['lines'],
+			static function ( array $line ): bool {
+				return ( $line['line_savings'] ?? 0 ) > 0 && ( $line['discounts'] ?? 0 ) > 0;
+			}
+		);
+
+		$this->assertNotEmpty( $lines_with_both );
+		$this->assertFalse( array_values( $lines_with_both )[0]['savings_in_discounts'] );
+	}
+
+	/**
+	 * A catalog with only regular-price products still gets a savings example.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_savings_are_demonstrated_with_regular_catalog_products(): void {
+		$products = array();
+		try {
+			foreach ( array( 'One', 'Two', 'Three' ) as $name ) {
+				$product = new \WC_Product_Simple();
+				$product->set_name( "Preview Product {$name}" );
+				$product->set_regular_price( '25.00' );
+				$product->set_price( '25.00' );
+				$product->set_status( 'publish' );
+				$product->save();
+				$products[] = $product;
+			}
+
+			$data = $this->builder->build();
+
+			$this->assertNotEmpty( $data['lines'] );
+			$this->assertArrayHasKey( 'line_savings', $data['lines'][0] );
+			$this->assertGreaterThan( 0, max( array_column( $data['lines'], 'line_savings' ) ) );
+		} finally {
+			foreach ( $products as $product ) {
+				$product->delete( true );
+			}
 		}
 	}
 
