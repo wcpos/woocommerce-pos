@@ -24,7 +24,8 @@ final class Health {
 	public static function table_exists( string $table ): bool {
 		global $wpdb;
 
-		return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The known table name is escaped for LIKE and must not be double-escaped by prepare().
+		return $table === $wpdb->get_var( "SHOW TABLES LIKE '" . $wpdb->esc_like( $table ) . "'" );
 	}
 
 	/**
