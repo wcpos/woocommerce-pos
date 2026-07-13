@@ -74,7 +74,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 		Health::table_exists( $table );
 
-		$this->assertStringContainsString( $wpdb->esc_like( $table ), $wpdb->last_query );
+		$this->assertSame( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ), $wpdb->last_query );
 	}
 
 	/**
