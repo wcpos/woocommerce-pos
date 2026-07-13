@@ -97,6 +97,7 @@ class Test_Templates extends WP_UnitTestCase {
 	 * @param bool   $savings_in_discounts Whether legacy discounts contain savings.
 	 * @param bool   $has_exclusive_savings Whether tax-exclusive savings are provable.
 	 * @param bool   $include_order_coupon Whether to include an independent order coupon.
+	 * @param array  $totals_overrides     Overrides merged into the totals block.
 	 *
 	 * @return string
 	 */
@@ -105,7 +106,8 @@ class Test_Templates extends WP_UnitTestCase {
 		float $line_savings,
 		bool $savings_in_discounts,
 		bool $has_exclusive_savings = true,
-		bool $include_order_coupon = true
+		bool $include_order_coupon = true,
+		array $totals_overrides = array()
 	): string {
 		$template = file_get_contents( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/' . $filename );
 		if ( false === $template ) {
@@ -199,6 +201,8 @@ class Test_Templates extends WP_UnitTestCase {
 			'refunds'   => array(),
 			'i18n'      => Receipt_I18n_Labels::get_labels(),
 		);
+
+		$data['totals'] = array_merge( $data['totals'], $totals_overrides );
 
 		return ( new \Mustache\Engine() )->render( $template, $data );
 	}
@@ -303,7 +307,51 @@ class Test_Templates extends WP_UnitTestCase {
 
 		foreach ( $templates as $filename ) {
 			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false );
-			$this->assertStringContainsString( 'TOTAL-SAVED', $rendered, $filename );
+			$this->assertStringContainsString( 'TOTAL-SAVED-INCL', $rendered, $filename );
+		}
+	}
+
+	/**
+	 * Price-bearing templates omit the combined savings row when it is incomplete or zero.
+	 */
+	public function test_price_bearing_gallery_templates_omit_incomplete_or_zero_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		// Display markers stay present so the assertions prove the template
+		// guards hide the row, not merely the absence of formatted values.
+		$incomplete = array(
+			'total_saved'          => null,
+			'total_saved_incl'     => null,
+			'total_saved_excl'     => null,
+			'total_saved_complete' => false,
+		);
+
+		$zero = array(
+			'total_saved'          => 0,
+			'total_saved_incl'     => 0,
+			'total_saved_excl'     => 0,
+			'total_saved_complete' => true,
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $incomplete );
+			$this->assertStringNotContainsString( 'TOTAL-SAVED', $rendered, $filename . ' must omit the row when the aggregate is incomplete' );
+
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false, true, true, $zero );
+			$this->assertStringNotContainsString( 'TOTAL-SAVED', $rendered, $filename . ' must omit the row when the aggregate is zero' );
 		}
 	}
 
