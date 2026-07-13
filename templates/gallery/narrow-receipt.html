@@ -68,6 +68,7 @@ that would smear or waste ink on thermal/B&W printers.
 
 	{{#lines}}
 	<div style="font-weight: 700; word-wrap: break-word;">{{name}}</div>
+	{{#line_savings}}<div style="font-size: 10px; padding-left: 8px;"><span style="text-decoration: line-through;">{{line_regular_total_display}}</span><span> · {{i18n.savings}} -{{line_savings_display}}</span></div>{{/line_savings}}
 	<table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 4px;">
 		<tr>
 			<td style="text-align: left; padding-left: 8px; word-wrap: break-word; vertical-align: top;">
