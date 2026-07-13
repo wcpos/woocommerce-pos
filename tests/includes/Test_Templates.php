@@ -283,6 +283,24 @@ class Test_Templates extends WP_UnitTestCase {
 
 		$palette = array_merge( $neutral_ink, $print_safe_accents );
 
+		// CSS named colours with unequal red, green, and blue channels.
+		$chromatic_named_colors = explode(
+			' ',
+			'aliceblue antiquewhite aqua aquamarine azure beige bisque blanchedalmond blue blueviolet brown burlywood ' .
+			'cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod ' .
+			'darkgreen darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen ' .
+			'darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dodgerblue firebrick ' .
+			'floralwhite forestgreen fuchsia ghostwhite gold goldenrod green greenyellow honeydew hotpink indianred indigo ' .
+			'ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow ' .
+			'lightgreen lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue ' .
+			'lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple ' .
+			'mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream ' .
+			'mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen ' .
+			'paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown ' .
+			'royalblue saddlebrown salmon sandybrown seagreen seashell sienna skyblue slateblue slategray slategrey snow ' .
+			'springgreen steelblue tan teal thistle tomato turquoise violet wheat yellow yellowgreen'
+		);
+
 		$templates = glob( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/*.html' );
 		$this->assertNotFalse( $templates );
 		$this->assertNotEmpty( $templates );
@@ -293,8 +311,13 @@ class Test_Templates extends WP_UnitTestCase {
 
 			$this->assertNotFalse( $content, 'Unable to read gallery template: ' . $template );
 
-			// Functional colour notation would bypass the hex allowlist below.
-			$this->assertDoesNotMatchRegularExpression( '/\b(?:rgb|hsl|oklch|lab|lch|color)a?\s*\(/i', $content, $label . ' must declare colours as hex values from the curated palette only' );
+			// Functional and named colour notation would bypass the hex allowlist below.
+			$this->assertDoesNotMatchRegularExpression( '/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color(?:-mix|-contrast)?|device-cmyk|light-dark|contrast-color)\s*\(/i', $content, $label . ' must declare colours as hex values from the curated palette only' );
+
+			preg_match_all( '/\bstyle=(["\'])(.*?)\1/is', $content, $style_attributes );
+			foreach ( $style_attributes[2] as $style ) {
+				$this->assertDoesNotMatchRegularExpression( '/\b(?:' . implode( '|', $chromatic_named_colors ) . ')\b/i', $style, $label . ' uses a named colour outside the curated print-safe palette' );
+			}
 
 			// Lookbehind skips Mustache sections ({{#fees}}) and numeric entities (&#8212;).
 			preg_match_all( '/(?<![{&])#[0-9a-fA-F]{3,8}\b/', $content, $matches );
