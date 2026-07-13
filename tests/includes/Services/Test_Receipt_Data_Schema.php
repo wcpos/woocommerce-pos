@@ -63,7 +63,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree         = Receipt_Data_Schema::get_field_tree();
 		$line_fields  = $tree['lines']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertArrayHasKey( $field, $line_fields );
@@ -81,7 +81,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Aggregate savings fields are an additive nullable v1.2 totals contract.
+	 * Aggregate savings fields extend the unreleased nullable v1.1 contract.
 	 */
 	public function test_total_saved_fields_are_published_as_nullable_money_contract(): void {
 		$money_fields = array(
@@ -95,7 +95,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree          = Receipt_Data_Schema::get_field_tree();
 		$total_fields  = $tree['totals']['fields'];
 
-		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );
