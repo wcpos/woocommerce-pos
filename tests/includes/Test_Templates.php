@@ -240,6 +240,60 @@ class Test_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Gallery HTML templates keep to neutral ink so receipts print cleanly in B&W.
+	 *
+	 * Receipts are designed for black-and-white output: hierarchy must come from
+	 * weight, size, rules, and whitespace — never from chromatic colour, which
+	 * dithers to unpredictable grays on thermal and mono laser printers.
+	 */
+	public function test_gallery_html_templates_use_only_neutral_ink(): void {
+		$neutral_ink = array(
+			'#000',
+			'#000000',
+			'#111',
+			'#111827',
+			'#1f2937',
+			'#374151',
+			'#4b4b4b',
+			'#4b5563',
+			'#6b6b6b',
+			'#6b7280',
+			'#9ca3af',
+			'#d1d5db',
+			'#e5e5e5',
+			'#e5e7eb',
+			'#f3f4f6',
+			'#f9fafb',
+			'#fff',
+			'#ffffff',
+		);
+
+		$templates = glob( \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/gallery/*.html' );
+		$this->assertNotFalse( $templates );
+		$this->assertNotEmpty( $templates );
+
+		foreach ( $templates as $template ) {
+			$content = file_get_contents( $template );
+			$label   = basename( $template );
+
+			$this->assertNotFalse( $content, 'Unable to read gallery template: ' . $template );
+
+			// Functional colour notation would bypass the hex allowlist below.
+			$this->assertDoesNotMatchRegularExpression( '/\b(?:rgb|hsl|oklch|lab|lch|color)a?\s*\(/i', $content, $label . ' must declare colours as neutral hex values only' );
+
+			// Lookbehind skips Mustache sections ({{#fees}}) and numeric entities (&#8212;).
+			preg_match_all( '/(?<![{&])#[0-9a-fA-F]{3,8}\b/', $content, $matches );
+			foreach ( $matches[0] as $color ) {
+				$this->assertContains(
+					strtolower( $color ),
+					$neutral_ink,
+					$label . ' must not use chromatic ink for B&W printing, found: ' . $color
+				);
+			}
+		}
+	}
+
+	/**
 	 * Price-bearing HTML and thermal templates render savings without duplicating legacy discounts.
 	 */
 	public function test_price_bearing_gallery_templates_render_savings_conditionally(): void {
