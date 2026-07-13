@@ -24,7 +24,7 @@ final class Health {
 	public static function table_exists( string $table ): bool {
 		global $wpdb;
 
-		return (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 	}
 
 	/**

@@ -37,10 +37,12 @@ final class Status_Controller extends WP_REST_Controller {
 	 * @param WP_REST_Request $request Request object.
 	 */
 	public function get_status( WP_REST_Request $request ): WP_REST_Response {
+		$missing_tables = Health::missing_tables();
+
 		return new WP_REST_Response(
 			array(
-				'healthy'        => Health::is_healthy(),
-				'missing_tables' => Health::missing_tables(),
+				'healthy'        => array() === $missing_tables,
+				'missing_tables' => $missing_tables,
 				'schema_version' => null,
 			),
 			200
