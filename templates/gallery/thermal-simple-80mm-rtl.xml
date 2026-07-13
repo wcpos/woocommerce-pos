@@ -123,6 +123,14 @@ these star columns with hard-coded widths.
     <col width="14"><bold>{{totals.total_incl_display}}</bold></col>
     <col width="*" align="right"><bold>{{i18n.total}}</bold></col>
   </row>
+  {{#totals.total_saved_complete}}
+  {{#totals.total_saved_incl}}
+  <row>
+    <col width="14">{{totals.total_saved_incl_display}}</col>
+    <col width="*" align="right">{{i18n.total_saved}}</col>
+  </row>
+  {{/totals.total_saved_incl}}
+  {{/totals.total_saved_complete}}
   <line style="double" />
 
   <!-- ── Customer note ─────────────── -->

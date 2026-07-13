@@ -156,6 +156,15 @@
         "taxes": []
       }
     ],
+    "totals": {
+      "savings_total": 10,
+      "savings_total_incl": 10,
+      "savings_total_excl": 10,
+      "total_saved": 15.28,
+      "total_saved_incl": 15.28,
+      "total_saved_excl": 15.28,
+      "total_saved_complete": true
+    },
     "payments": [
       {
         "method_id": "pos_card",

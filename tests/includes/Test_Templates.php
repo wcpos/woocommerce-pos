@@ -180,6 +180,13 @@ class Test_Templates extends WP_UnitTestCase {
 				'discount_total_display'      => 'DISCOUNT-TOTAL',
 				'discount_total_incl_display' => 'DISCOUNT-TOTAL',
 				'discount_total_excl_display' => 'DISCOUNT-TOTAL',
+				'total_saved'                => 8,
+				'total_saved_incl'           => 8,
+				'total_saved_excl'           => 8,
+				'total_saved_complete'       => true,
+				'total_saved_display'        => 'TOTAL-SAVED',
+				'total_saved_incl_display'   => 'TOTAL-SAVED-INCL',
+				'total_saved_excl_display'   => 'TOTAL-SAVED-EXCL',
 			),
 			'tax'       => array(
 				'display_excl'       => true,
@@ -272,6 +279,31 @@ class Test_Templates extends WP_UnitTestCase {
 			if ( null !== $line_discount_marker ) {
 				$this->assertStringContainsString( $line_discount_marker, $legacy, $filename );
 			}
+		}
+	}
+
+	/**
+	 * Price-bearing templates show the complete combined savings total.
+	 */
+	public function test_price_bearing_gallery_templates_render_total_saved(): void {
+		$templates = array(
+			'detailed-receipt.html',
+			'invoice.html',
+			'minimal-receipt.html',
+			'narrow-receipt.html',
+			'quote.html',
+			'standard-receipt.html',
+			'standard-receipt-rtl.html',
+			'thermal-detailed-58mm.xml',
+			'thermal-detailed-80mm.xml',
+			'thermal-simple-58mm.xml',
+			'thermal-simple-80mm.xml',
+			'thermal-simple-80mm-rtl.xml',
+		);
+
+		foreach ( $templates as $filename ) {
+			$rendered = $this->render_gallery_savings_template( $filename, 5.0, false );
+			$this->assertStringContainsString( 'TOTAL-SAVED', $rendered, $filename );
 		}
 	}
 

@@ -63,7 +63,7 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$tree         = Receipt_Data_Schema::get_field_tree();
 		$line_fields  = $tree['lines']['fields'];
 
-		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
 		foreach ( $money_fields as $field ) {
 			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
 			$this->assertArrayHasKey( $field, $line_fields );
@@ -78,6 +78,38 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['regular_price']['type'] );
 		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['line_savings']['type'] );
 		$this->assertSame( 'boolean', $json_fields['savings_in_discounts']['type'] );
+	}
+
+	/**
+	 * Aggregate savings fields are an additive nullable v1.2 totals contract.
+	 */
+	public function test_total_saved_fields_are_published_as_nullable_money_contract(): void {
+		$money_fields = array(
+			'savings_total',
+			'savings_total_incl',
+			'savings_total_excl',
+			'total_saved',
+			'total_saved_incl',
+			'total_saved_excl',
+		);
+		$tree          = Receipt_Data_Schema::get_field_tree();
+		$total_fields  = $tree['totals']['fields'];
+
+		$this->assertSame( '1.2.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		foreach ( $money_fields as $field ) {
+			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
+			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );
+			$this->assertArrayHasKey( $field, $total_fields );
+			$this->assertSame( 'money', $total_fields[ $field ]['type'] );
+			$this->assertTrue( $total_fields[ $field ]['nullable'] );
+		}
+
+		$this->assertArrayHasKey( 'total_saved_complete', $total_fields );
+		$this->assertSame( 'boolean', $total_fields['total_saved_complete']['type'] );
+
+		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['totals']['properties'];
+		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['total_saved']['type'] );
+		$this->assertSame( 'boolean', $json_fields['total_saved_complete']['type'] );
 	}
 
 	/**

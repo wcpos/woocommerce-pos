@@ -12,6 +12,7 @@ use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * @internal
@@ -452,6 +453,30 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'pending', $data['status'] );
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
 		$this->assertEquals( 0, $data['customer_id'] );
+	}
+
+	/**
+	 * Newly created POS orders record the accepting WCPOS plugin version.
+	 */
+	public function test_create_order_records_wcpos_version_meta(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( VERSION, $order->get_meta( '_woocommerce_pos_version' ) );
 	}
 
 	/**
