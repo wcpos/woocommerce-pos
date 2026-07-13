@@ -113,11 +113,13 @@ Yes — there's a live demo at [demo.wcpos.com/pos](https://demo.wcpos.com/pos) 
 Browse the documentation at [docs.wcpos.com](https://docs.wcpos.com), or reach the community and Pro priority support on [Discord](https://wcpos.com/discord).
 
 = What data does WCPOS send outside my site? =
-WCPOS keeps your data in your own WooCommerce database and only contacts outside services to:
+Your products, orders, and customer data stay between your WooCommerce site and your POS devices. The services below never receive product details, order contents, or customer personal data.
 
-* load the POS web bundle from jsDelivr;
+WCPOS contacts these outside services to:
+
+* load the POS web bundle and other interface assets from jsDelivr;
 * load translations from jsDelivr;
-* send anonymous usage analytics to wcpos.com **if you opt in**; and
+* send limited technical and aggregate usage information to wcpos.com **only if you opt in** (you can withdraw consent at any time in settings); and
 * validate Pro license and site identifiers with wcpos.com when activating Pro.
 
 Full details are in our [privacy policy](https://wcpos.com/privacy).
