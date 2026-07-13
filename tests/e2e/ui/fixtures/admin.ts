@@ -54,7 +54,7 @@ function isIgnoredFailure(url: string, status: number): boolean {
  * endpoints and missing assets pass silently because the DOM still loads.
  */
 export const test = base.extend<{ adminPage: Page }>({
-	adminPage: async ({ page }, use) => {
+	adminPage: [async ({ page }, use) => {
 		const failedResponses: FailedResponse[] = [];
 		const pageErrors: string[] = [];
 
@@ -82,6 +82,8 @@ export const test = base.extend<{ adminPage: Page }>({
 		});
 
 		page.on('requestfailed', (req) => {
+			// Navigating away from wp-admin aborts its background AJAX/REST requests.
+			if (req.failure()?.errorText === 'net::ERR_ABORTED') return;
 			if (isIgnoredFailure(req.url(), 0)) return;
 			failedResponses.push({
 				url: req.url(),
@@ -102,13 +104,15 @@ export const test = base.extend<{ adminPage: Page }>({
 		});
 
 		// Login to WordPress admin
-		await page.goto('/wp-login.php');
+		await page.goto('/wp-login.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
 		await page.fill('#user_login', ADMIN_USER.username);
 		await page.fill('#user_pass', ADMIN_USER.password);
-		await page.click('#wp-submit');
 
-		// Wait for dashboard to load
-		await page.waitForURL(/\/wp-admin\//);
+		// Wait for the dashboard DOM, not slow background dashboard requests.
+		await Promise.all([
+			page.waitForURL(/\/wp-admin\//, { waitUntil: 'domcontentloaded', timeout: 60000 }),
+			page.click('#wp-submit'),
+		]);
 
 		await use(page);
 
@@ -126,7 +130,7 @@ export const test = base.extend<{ adminPage: Page }>({
 			pageErrors,
 			`Test triggered uncaught page errors:\n${pageErrors.join('\n')}`
 		).toEqual([]);
-	},
+	}, { timeout: 90000 }],
 });
 
 export { expect };

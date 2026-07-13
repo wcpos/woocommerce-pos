@@ -795,6 +795,25 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Preview totals demonstrate combined coupon and regular-price savings.
+	 *
+	 * @covers ::build
+	 */
+	public function test_preview_includes_complete_total_saved_example(): void {
+		$data   = $this->builder->build();
+		$totals = $data['totals'];
+
+		$this->assertTrue( $totals['total_saved_complete'] );
+		$this->assertGreaterThan( 0, $totals['savings_total'] );
+		$this->assertGreaterThan( $totals['savings_total'], $totals['total_saved'] );
+		$this->assertEqualsWithDelta(
+			$totals['discount_total'] + $totals['savings_total'],
+			$totals['total_saved'],
+			0.001
+		);
+	}
+
+	/**
 	 * A catalog with only regular-price products still gets a savings example.
 	 *
 	 * @covers ::build

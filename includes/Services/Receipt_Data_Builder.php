@@ -316,6 +316,60 @@ class Receipt_Data_Builder {
 		$discount_total_tax  = (float) $order->get_discount_tax();
 		$discount_total_incl = $discount_total_excl + $discount_total_tax;
 
+		// Legacy POS lines already include regular-to-selling savings in WooCommerce's
+		// discount total. Add only current-shape savings to total_saved to avoid overlap.
+		$savings_totals     = array(
+			'incl' => 0.0,
+			'excl' => 0.0,
+		);
+		$additional_savings = array(
+			'incl' => 0.0,
+			'excl' => 0.0,
+		);
+		$savings_complete   = array(
+			'incl' => true,
+			'excl' => true,
+		);
+		$price_precision = wc_get_price_decimals();
+		foreach ( $lines as $line ) {
+			foreach ( array( 'incl', 'excl' ) as $basis ) {
+				$key = 'line_savings_' . $basis;
+				if ( ! isset( $line[ $key ] ) || ! is_numeric( $line[ $key ] ) ) {
+					$savings_complete[ $basis ] = false;
+					continue;
+				}
+
+				$line_savings = (float) $line[ $key ];
+				$savings_totals[ $basis ] += $line_savings;
+				if ( empty( $line['savings_in_discounts'] ) ) {
+					$subtotal_key = 'line_subtotal_' . $basis;
+					$selling_key  = 'line_selling_total_' . $basis;
+					if (
+						$line_savings > 0.0
+						&& (
+							! isset( $line[ $subtotal_key ], $line[ $selling_key ] )
+							|| round( abs( (float) $line[ $subtotal_key ] - (float) $line[ $selling_key ] ), $price_precision ) > 0.0
+						)
+					) {
+						$savings_complete[ $basis ] = false;
+						continue;
+					}
+					$additional_savings[ $basis ] += $line_savings;
+				}
+			}
+		}
+
+		$total_saved = array(
+			'incl' => $savings_complete['incl'] ? $discount_total_incl + $additional_savings['incl'] : null,
+			'excl' => $savings_complete['excl'] ? $discount_total_excl + $additional_savings['excl'] : null,
+		);
+		foreach ( array( 'incl', 'excl' ) as $basis ) {
+			if ( ! $savings_complete[ $basis ] ) {
+				$savings_totals[ $basis ] = null;
+			}
+		}
+		$display_basis = $display_incl ? 'incl' : 'excl';
+
 		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
 		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
 
@@ -343,6 +397,13 @@ class Receipt_Data_Builder {
 			'discount_total'       => $display_incl ? $discount_total_incl : $discount_total_excl,
 			'discount_total_incl'  => $discount_total_incl,
 			'discount_total_excl'  => $discount_total_excl,
+			'savings_total'        => $savings_totals[ $display_basis ],
+			'savings_total_incl'   => $savings_totals['incl'],
+			'savings_total_excl'   => $savings_totals['excl'],
+			'total_saved'          => $total_saved[ $display_basis ],
+			'total_saved_incl'     => $total_saved['incl'],
+			'total_saved_excl'     => $total_saved['excl'],
+			'total_saved_complete' => $savings_complete[ $display_basis ],
 			'tax_total'            => $tax_total,
 			'total'          => $display_incl ? $total : $total_excl,
 			'total_incl'     => $total,

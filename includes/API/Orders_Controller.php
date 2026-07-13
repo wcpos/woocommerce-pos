@@ -28,6 +28,7 @@ use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;
+use const WCPOS\WooCommercePOS\VERSION;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -424,6 +425,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+			$this->is_creating = false;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
@@ -1077,6 +1079,9 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
+			// This is the server plugin version that accepted the new order. The
+			// line-item storage shape remains authoritative for offline-synced orders.
+			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
 		}
 
 		/**
