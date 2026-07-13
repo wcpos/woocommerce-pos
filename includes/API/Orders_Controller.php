@@ -425,6 +425,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			$response = parent::create_item( $request );
 		} finally {
 			remove_filter( 'woocommerce_rest_pre_insert_shop_order_object', array( $this, 'wcpos_preserve_client_created_date_gmt' ), 10 );
+			$this->is_creating = false;
 		}
 
 		$this->wcpos_snapshot_tax_ids_to_order( $response, $request, true );
