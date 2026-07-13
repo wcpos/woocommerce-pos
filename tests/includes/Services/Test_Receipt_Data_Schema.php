@@ -37,6 +37,50 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Savings convenience fields are an additive nullable v1.1 line contract.
+	 */
+	public function test_savings_fields_are_published_as_nullable_money_contract(): void {
+		$money_fields = array(
+			'regular_price',
+			'regular_price_incl',
+			'regular_price_excl',
+			'selling_price',
+			'selling_price_incl',
+			'selling_price_excl',
+			'unit_savings',
+			'unit_savings_incl',
+			'unit_savings_excl',
+			'line_regular_total',
+			'line_regular_total_incl',
+			'line_regular_total_excl',
+			'line_selling_total',
+			'line_selling_total_incl',
+			'line_selling_total_excl',
+			'line_savings',
+			'line_savings_incl',
+			'line_savings_excl',
+		);
+		$tree         = Receipt_Data_Schema::get_field_tree();
+		$line_fields  = $tree['lines']['fields'];
+
+		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		foreach ( $money_fields as $field ) {
+			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
+			$this->assertArrayHasKey( $field, $line_fields );
+			$this->assertSame( 'money', $line_fields[ $field ]['type'] );
+			$this->assertTrue( $line_fields[ $field ]['nullable'] );
+		}
+
+		$this->assertArrayHasKey( 'savings_in_discounts', $line_fields );
+		$this->assertSame( 'boolean', $line_fields['savings_in_discounts']['type'] );
+
+		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['lines']['items']['properties'];
+		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['regular_price']['type'] );
+		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['line_savings']['type'] );
+		$this->assertSame( 'boolean', $json_fields['savings_in_discounts']['type'] );
+	}
+
+	/**
 	 * Test MONEY_FIELDS constant contains totals fields.
 	 */
 	public function test_money_fields_contains_totals_fields(): void {
@@ -106,6 +150,35 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 		// falsy; the _display companion is an empty string for the same case.
 		$this->assertSame( 0, $formatted['totals']['change_total'] );
 		$this->assertSame( '', $formatted['totals']['change_total_display'] );
+	}
+
+	/**
+	 * Savings values keep numeric bare keys and zero-falsy display companions.
+	 */
+	public function test_format_money_fields_formats_savings_and_preserves_unknown_nulls(): void {
+		$data = array(
+			'lines' => array(
+				array(
+					'regular_price' => 20,
+					'line_savings'  => 10,
+				),
+				array(
+					'regular_price' => null,
+					'line_savings'  => 0,
+				),
+			),
+		);
+
+		$formatted = Receipt_Data_Schema::format_money_fields( $data, 'USD' );
+
+		$this->assertSame( 20.0, $formatted['lines'][0]['regular_price'] );
+		$this->assertNotEmpty( $formatted['lines'][0]['regular_price_display'] );
+		$this->assertSame( 10.0, $formatted['lines'][0]['line_savings'] );
+		$this->assertNotEmpty( $formatted['lines'][0]['line_savings_display'] );
+		$this->assertNull( $formatted['lines'][1]['regular_price'] );
+		$this->assertArrayNotHasKey( 'regular_price_display', $formatted['lines'][1] );
+		$this->assertSame( 0, $formatted['lines'][1]['line_savings'] );
+		$this->assertSame( '', $formatted['lines'][1]['line_savings_display'] );
 	}
 
 	/**

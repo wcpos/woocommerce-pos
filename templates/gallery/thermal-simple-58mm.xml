@@ -45,6 +45,15 @@ columns with hard-coded numeric widths.
   {{#lines}}
   <bold><text>{{name}}</text></bold>
   {{#sku}}<text>  SKU: {{sku}}</text>{{/sku}}
+  {{#line_savings}}
+  <text>  {{i18n.regular_price}}: {{regular_price_display}}</text>
+  {{^savings_in_discounts}}
+  <row>
+    <col width="*">  {{i18n.savings}}</col>
+    <col width="12" align="right">-{{line_savings_display}}</col>
+  </row>
+  {{/savings_in_discounts}}
+  {{/line_savings}}
   {{#discounts}}
   <row>
     <col width="*">  @ {{unit_subtotal_display}}</col>

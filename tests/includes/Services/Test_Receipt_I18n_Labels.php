@@ -38,6 +38,17 @@ class Test_Receipt_I18n_Labels extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Savings templates expose concise merchant-facing labels.
+	 */
+	public function test_get_labels_includes_receipt_savings_keys(): void {
+		$labels = Receipt_I18n_Labels::get_labels();
+
+		$this->assertSame( 'Regular price', $labels['regular_price'] ?? null );
+		$this->assertSame( 'Selling price', $labels['selling_price'] ?? null );
+		$this->assertSame( 'Savings', $labels['savings'] ?? null );
+	}
+
+	/**
 	 * Test get_labels values are all strings.
 	 */
 	public function test_get_labels_values_are_strings(): void {

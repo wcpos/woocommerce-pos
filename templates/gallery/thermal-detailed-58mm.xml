@@ -131,6 +131,15 @@ the star to the remaining 32-CPL space at render time.
   {{#sku}}
   <text>  SKU: {{sku}}</text>
   {{/sku}}
+  {{#line_savings_excl}}
+  <text>  {{i18n.regular_price}}: {{regular_price_excl_display}}</text>
+  {{^savings_in_discounts}}
+  <row>
+    <col width="*">  {{i18n.savings}}</col>
+    <col width="12" align="right">-{{line_savings_excl_display}}</col>
+  </row>
+  {{/savings_in_discounts}}
+  {{/line_savings_excl}}
   {{#discounts}}
   <row>
     <col width="*">  @ {{unit_subtotal_excl_display}}</col>

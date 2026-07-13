@@ -43,7 +43,7 @@ class Receipt_Data_Schema {
 	/**
 	 * Receipt data schema contract version.
 	 */
-	const SCHEMA_VERSION = '1.0.0';
+	const SCHEMA_VERSION = '1.1.0';
 
 	/**
 	 * Money keys that must be present in totals.
@@ -78,6 +78,12 @@ class Receipt_Data_Schema {
 		'discounts',
 		'discounts_incl',
 		'discounts_excl',
+		'unit_savings',
+		'unit_savings_incl',
+		'unit_savings_excl',
+		'line_savings',
+		'line_savings_incl',
+		'line_savings_excl',
 		'change_total',
 		'discount_total',
 		'discount_total_incl',
@@ -94,6 +100,12 @@ class Receipt_Data_Schema {
 	 */
 	const MONEY_FIELDS = array(
 		// Line items (display).
+		'regular_price',
+		'selling_price',
+		'unit_savings',
+		'line_regular_total',
+		'line_selling_total',
+		'line_savings',
 		'unit_subtotal',
 		'unit_price',
 		'line_subtotal',
@@ -110,6 +122,18 @@ class Receipt_Data_Schema {
 		'discounts_excl',
 		'line_total_incl',
 		'line_total_excl',
+		'regular_price_incl',
+		'regular_price_excl',
+		'selling_price_incl',
+		'selling_price_excl',
+		'unit_savings_incl',
+		'unit_savings_excl',
+		'line_regular_total_incl',
+		'line_regular_total_excl',
+		'line_selling_total_incl',
+		'line_selling_total_excl',
+		'line_savings_incl',
+		'line_savings_excl',
 		// Shared by fees / shipping / discounts arrays AND by totals — same key
 		// names appear in both contexts; listing once is enough since the
 		// `array_flip` lookup uses values as keys.
@@ -521,6 +545,100 @@ class Receipt_Data_Schema {
 					'qty_refunded'       => array(
 						'type'  => 'number',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Quantity Refunded', 'woocommerce-pos' ),
+					),
+					'regular_price'      => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular price per item', 'woocommerce-pos' ),
+					),
+					'regular_price_incl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular price per item (incl tax)', 'woocommerce-pos' ),
+					),
+					'regular_price_excl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular price per item (excl tax)', 'woocommerce-pos' ),
+					),
+					'selling_price'      => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling price per item, before coupons', 'woocommerce-pos' ),
+					),
+					'selling_price_incl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling price per item, before coupons (incl tax)', 'woocommerce-pos' ),
+					),
+					'selling_price_excl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling price per item, before coupons (excl tax)', 'woocommerce-pos' ),
+					),
+					'unit_savings'       => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings per item', 'woocommerce-pos' ),
+					),
+					'unit_savings_incl'  => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings per item (incl tax)', 'woocommerce-pos' ),
+					),
+					'unit_savings_excl'  => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings per item (excl tax)', 'woocommerce-pos' ),
+					),
+					'line_regular_total' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular-price total', 'woocommerce-pos' ),
+					),
+					'line_regular_total_incl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular-price total (incl tax)', 'woocommerce-pos' ),
+					),
+					'line_regular_total_excl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Regular-price total (excl tax)', 'woocommerce-pos' ),
+					),
+					'line_selling_total' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling-price total, before coupons', 'woocommerce-pos' ),
+					),
+					'line_selling_total_incl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling-price total, before coupons (incl tax)', 'woocommerce-pos' ),
+					),
+					'line_selling_total_excl' => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Selling-price total, before coupons (excl tax)', 'woocommerce-pos' ),
+					),
+					'line_savings'       => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total savings for this item', 'woocommerce-pos' ),
+					),
+					'line_savings_incl'  => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total savings for this item (incl tax)', 'woocommerce-pos' ),
+					),
+					'line_savings_excl'  => array(
+						'type'     => 'money',
+						'nullable' => true,
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total savings for this item (excl tax)', 'woocommerce-pos' ),
+					),
+					'savings_in_discounts' => array(
+						'type'  => 'boolean',
+						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings already included in WooCommerce discounts', 'woocommerce-pos' ),
 					),
 					'unit_subtotal'      => array(
 						'type'  => 'money',
