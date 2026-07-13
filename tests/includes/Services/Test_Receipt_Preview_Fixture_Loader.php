@@ -70,8 +70,9 @@ class Test_Receipt_Preview_Fixture_Loader extends WP_UnitTestCase {
 		$this->assertSame( 'بطاقة', $data['payments'][0]['method_title'] );
 		$this->assertSame( 170, $data['totals']['total'] );
 		$this->assertSame( 10, $data['totals']['savings_total'] );
-		$this->assertSame( 15.28, $data['totals']['total_saved'] );
+		$this->assertSame( 10, $data['totals']['total_saved'] );
 		$this->assertSame( array(), $data['discounts'] );
+		$this->assertSame( 'إجمالي التوفير', $data['i18n']['total_saved'] );
 		$this->assertSame( 'إيصال', $data['i18n']['receipt'] );
 		$this->assertSame( 'الإجمالي', $data['i18n']['total'] );
 	}
