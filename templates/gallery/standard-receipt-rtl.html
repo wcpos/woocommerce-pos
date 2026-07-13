@@ -85,7 +85,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			<tr>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;">
 					<div style="font-weight: 600;">{{name}}</div>
-					{{#line_savings}}<div style="color: #6b7280; font-size: 10px; text-align: start;"><span style="text-decoration: line-through;">{{line_regular_total_display}}</span><span> · {{i18n.savings}} -{{line_savings_display}}</span></div>{{/line_savings}}
+					{{#line_savings}}<div style="color: #6b7280; font-size: 10px; text-align: start;"><span style="text-decoration: line-through;">{{line_regular_total_display}}</span><span style="color: #15803d;"> · {{i18n.savings}} -{{line_savings_display}}</span></div>{{/line_savings}}
 				</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{qty}}</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">{{line_total_display}}</td>
@@ -106,7 +106,7 @@ Note: Logicless output passes through wp_kses_post, which strips
 			</tr>
 			{{/shipping}}
 			{{#discounts}}
-			<tr>
+			<tr style="color: #15803d;">
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6;"><div style="font-weight: 600;">{{i18n.discount}}{{#label}} · {{label}}{{/label}}</div></td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end;">—</td>
 				<td style="padding: 10px 6px; border-bottom: 1px solid #f3f4f6; text-align: end; font-variant-numeric: tabular-nums;">-{{total_display}}</td>
@@ -125,18 +125,18 @@ Note: Logicless output passes through wp_kses_post, which strips
 		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 18px; font-weight: 700;"><span>{{i18n.total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_incl_display}}</span></div>
 		{{#totals.total_saved_complete}}
 		{{#totals.total_saved_incl}}
-		<div style="display: flex; justify-content: space-between; padding: 2px 0;"><span>{{i18n.total_saved}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_saved_incl_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; color: #15803d;"><span>{{i18n.total_saved}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.total_saved_incl_display}}</span></div>
 		{{/totals.total_saved_incl}}
 		{{/totals.total_saved_complete}}
 		{{#totals.refund_total}}
-		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; font-weight: 600;"><span>{{i18n.refunded}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.refund_total_display}}</span></div>
+		<div style="display: flex; justify-content: space-between; padding: 2px 0; font-size: 12px; color: #b91c1c;"><span>{{i18n.refunded}}</span><span style="font-variant-numeric: tabular-nums;">-{{totals.refund_total_display}}</span></div>
 		<div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; font-weight: 600; border-top: 1px solid #e5e7eb;"><span>{{i18n.net_total}}</span><span style="font-variant-numeric: tabular-nums;">{{totals.net_total_display}}</span></div>
 		{{/totals.refund_total}}
 	</div>
 
 	<!-- ── Refunds summary (only when refunds present) ─────────────── -->
 	{{#refunds.0}}
-	<div style="margin-top: 20px; padding: 14px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; font-size: 12px; line-height: 1.5;">
 		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; font-weight: 700;">{{i18n.returned_items}}</div>
 		{{#refunds}}
 		<div style="display: flex; justify-content: space-between; gap: 12px; padding: 4px 0;">
@@ -152,9 +152,9 @@ Note: Logicless output passes through wp_kses_post, which strips
 
 	<!-- ── Customer note (only when present) ─────────────── -->
 	{{#order.customer_note}}
-	<div style="margin-top: 20px; padding: 14px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px; line-height: 1.5;">
+	<div style="margin-top: 20px; padding: 14px 16px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 12px; line-height: 1.5;">
 		<div style="font-size: 10px; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">{{i18n.customer_note}}</div>
-		<div style="white-space: pre-wrap; unicode-bidi: plaintext;">{{order.customer_note}}</div>
+		<div style="color: #92400e; white-space: pre-wrap; unicode-bidi: plaintext;">{{order.customer_note}}</div>
 	</div>
 	{{/order.customer_note}}
 

@@ -39,6 +39,80 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Helper to invoke the private render_custom_template method and capture output.
+	 *
+	 * @param Receipt $receipt      Receipt instance.
+	 * @param array   $template     Template metadata/content.
+	 * @param mixed   $order        Order object.
+	 * @param array   $receipt_data Canonical receipt payload.
+	 *
+	 * @return string Rendered output.
+	 */
+	private function invoke_render_custom_template( Receipt $receipt, array $template, $order, array $receipt_data ): string {
+		$method = new \ReflectionMethod( Receipt::class, 'render_custom_template' );
+		$method->setAccessible( true );
+
+		ob_start();
+		try {
+			$method->invoke( $receipt, $template, $order, $receipt_data );
+		} finally {
+			$output = ob_get_clean();
+		}
+
+		return (string) $output;
+	}
+
+	/**
+	 * Logicless output is the browser print surface: it keeps its colour on
+	 * screen (and in PDFs, which render via Template_Pdf_Service and never pass
+	 * here) but must print B&W, so the route wraps it in a print-only grayscale
+	 * filter.
+	 */
+	public function test_render_custom_template_logicless_wraps_output_in_print_grayscale_root(): void {
+		$order   = OrderHelper::create_order();
+		$receipt = new Receipt( $order->get_id() );
+
+		$template = array(
+			'engine'  => 'logicless',
+			'content' => '<div style="color: #15803d;">Order {{order.number}}</div>',
+		);
+
+		$receipt_data = array(
+			'order' => array(
+				'currency' => 'USD',
+				'number'   => '123',
+			),
+		);
+
+		$output = $this->invoke_render_custom_template( $receipt, $template, $order, $receipt_data );
+
+		$this->assertStringContainsString( '@media print { .wcpos-receipt-print-root', $output );
+		$this->assertStringContainsString( 'grayscale(1)', $output );
+		$this->assertStringContainsString( '<div class="wcpos-receipt-print-root">', $output );
+		$this->assertStringContainsString( 'Order 123', $output );
+		// Template colour survives sanitization: only the print media query grayscales it.
+		$this->assertStringContainsString( '#15803d', $output );
+	}
+
+	/**
+	 * Legacy PHP templates emit a full HTML document and own their print styling,
+	 * so the route must not inject the grayscale wrapper around them.
+	 */
+	public function test_render_custom_template_legacy_engine_renders_without_print_wrapper(): void {
+		$order   = OrderHelper::create_order();
+		$receipt = new Receipt( $order->get_id() );
+
+		$template = array(
+			'engine'  => 'legacy-php',
+			'content' => '',
+		);
+
+		$output = $this->invoke_render_custom_template( $receipt, $template, $order, array() );
+
+		$this->assertStringNotContainsString( 'wcpos-receipt-print-root', $output );
+	}
+
+	/**
 	 * Helper to invoke the private get_custom_template method.
 	 *
 	 * @param Receipt $receipt Receipt instance.
