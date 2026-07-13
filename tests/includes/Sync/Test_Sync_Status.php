@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
 
 /**
@@ -61,6 +62,19 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			),
 			$response->get_data()
 		);
+	}
+
+	/**
+	 * Table existence checks escape underscores in the LIKE pattern.
+	 */
+	public function test_table_exists_with_underscores_escapes_like_pattern(): void {
+		global $wpdb;
+
+		$table = $wpdb->prefix . Health::ORDER_INDEX_TABLE;
+
+		Health::table_exists( $table );
+
+		$this->assertStringContainsString( $wpdb->esc_like( $table ), $wpdb->last_query );
 	}
 
 	/**
