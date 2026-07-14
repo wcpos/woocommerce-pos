@@ -763,33 +763,33 @@ class Preview_Receipt_Builder {
 			),
 		);
 
-		$savings_total_incl = (float) array_sum( array_column( $lines, 'line_savings_incl' ) );
-		$savings_total_excl = (float) array_sum( array_column( $lines, 'line_savings_excl' ) );
-		$total_saved_incl   = $discount_incl + $savings_total_incl;
-		$total_saved_excl   = $discount_excl + $savings_total_excl;
+		$sale_savings_total_incl = (float) array_sum( array_column( $lines, 'line_savings_incl' ) );
+		$sale_savings_total_excl = (float) array_sum( array_column( $lines, 'line_savings_excl' ) );
+		$total_saved_incl        = $discount_incl + $sale_savings_total_incl;
+		$total_saved_excl        = $discount_excl + $sale_savings_total_excl;
 
 		$totals = array(
-			'subtotal'            => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'       => $subtotal_incl,
-			'subtotal_excl'       => $subtotal_excl,
-			'discount_total'      => $display_incl ? $discount_incl : $discount_excl,
-			'discount_total_incl' => $discount_incl,
-			'discount_total_excl' => $discount_excl,
-			'savings_total'       => $display_incl ? $savings_total_incl : $savings_total_excl,
-			'savings_total_incl'  => $savings_total_incl,
-			'savings_total_excl'  => $savings_total_excl,
-			'total_saved'         => $display_incl ? $total_saved_incl : $total_saved_excl,
-			'total_saved_incl'    => $total_saved_incl,
-			'total_saved_excl'    => $total_saved_excl,
-			'total_saved_complete' => true,
-			'tax_total'           => $total_tax,
-			'total'         => $display_incl ? $total_incl : $total_excl,
-			'total_incl'    => $total_incl,
-			'total_excl'    => $total_excl,
-			'paid_total'          => $total_incl,
-			'change_total'        => $change_total,
-			'total_qty'           => $total_qty,
-			'line_count'          => $line_count,
+			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
+			'subtotal_incl'           => $subtotal_incl,
+			'subtotal_excl'           => $subtotal_excl,
+			'discount_total'          => $display_incl ? $discount_incl : $discount_excl,
+			'discount_total_incl'     => $discount_incl,
+			'discount_total_excl'     => $discount_excl,
+			'sale_savings_total'      => $display_incl ? $sale_savings_total_incl : $sale_savings_total_excl,
+			'sale_savings_total_incl' => $sale_savings_total_incl,
+			'sale_savings_total_excl' => $sale_savings_total_excl,
+			'total_saved'             => $display_incl ? $total_saved_incl : $total_saved_excl,
+			'total_saved_incl'        => $total_saved_incl,
+			'total_saved_excl'        => $total_saved_excl,
+			'total_saved_complete'    => true,
+			'tax_total'               => $total_tax,
+			'total'                   => $display_incl ? $total_incl : $total_excl,
+			'total_incl'              => $total_incl,
+			'total_excl'              => $total_excl,
+			'paid_total'              => $total_incl,
+			'change_total'            => $change_total,
+			'total_qty'               => $total_qty,
+			'line_count'              => $line_count,
 		);
 
 		$taxable_amount_incl = $taxable_excl + $total_tax;
