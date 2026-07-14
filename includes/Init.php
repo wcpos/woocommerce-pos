@@ -45,10 +45,32 @@ class Init {
 		// latching is already survivable (observer writes fail open and the
 		// REST health gate 503s the sync endpoints).
 		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
-		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() && $sync_schema_latched ) {
-			( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
-			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
-			( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
+		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
+			if ( $sync_schema_latched ) {
+				// Stamp canonical revisions first, while the proxied payload is still bare.
+				// UUID and digest stamps run at priority 10 and must not change the bytes
+				// used by the write-side revision recomputation.
+				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
+				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
+				\WCPOS\WooCommercePOS\Sync\Revision::register_proxy_stamps();
+				\WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper::register_proxy_stampers();
+				\WCPOS\WooCommercePOS\Sync\Integrity_Digest::register_proxy_digest_stampers();
+				add_filter( 'woocommerce_pos_sync_proxy_response', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_proxy_variable_prices' ), 10, 3 );
+			}
+
+			// Identity is core, not an observer benchmark variable: every product is
+			// born with a UUID whenever the sync feature is enabled, even before the
+			// schema latch is healthy. The before-save hook writes it in the same save.
+			\WCPOS\WooCommercePOS\Sync\Pos_Uuid::register_hooks();
+
+			if ( $sync_schema_latched ) {
+				( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
+				( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
+			}
+
+			( new \WCPOS\WooCommercePOS\Sync\Config_Fingerprint() )->maybe_cleanup_legacy_options();
 		}
 
 		// Init hooks.

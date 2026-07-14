@@ -103,7 +103,7 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 			'db_upgrade should be queued when the sync schema is unlatched'
 		);
 
-		do_action( 'woocommerce_init' );
+		do_action( 'woocommerce_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
 
 		$this->assertTrue( Health::is_healthy() );
 		$this->assertSame( Api::SCHEMA_VERSION, get_option( Api::SCHEMA_OPTION, null ) );
