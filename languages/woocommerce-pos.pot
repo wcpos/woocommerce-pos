@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-14T10:32:40+00:00\n"
+"POT-Creation-Date: 2026-07-14T15:46:07+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -1827,32 +1827,32 @@ msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:859
-msgid "Savings Total"
+msgid "Sale Savings Total"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:864
-msgid "Savings Total (incl tax)"
+msgid "Sale Savings Total (incl tax)"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:869
-msgid "Savings Total (excl tax)"
+msgid "Sale Savings Total (excl tax)"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:874
-msgid "Total Saved"
+msgid "Total Saved (sale savings + discounts)"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:879
-msgid "Total Saved (incl tax)"
+msgid "Total Saved (sale savings + discounts, incl tax)"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
 #: includes/Services/Receipt_Data_Schema.php:884
-msgid "Total Saved (excl tax)"
+msgid "Total Saved (sale savings + discounts, excl tax)"
 msgstr ""
 
 #. translators: Label for a receipt data field in the template editor.
