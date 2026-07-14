@@ -804,10 +804,10 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		$totals = $data['totals'];
 
 		$this->assertTrue( $totals['total_saved_complete'] );
-		$this->assertGreaterThan( 0, $totals['savings_total'] );
-		$this->assertGreaterThan( $totals['savings_total'], $totals['total_saved'] );
+		$this->assertGreaterThan( 0, $totals['sale_savings_total'] );
+		$this->assertGreaterThan( $totals['sale_savings_total'], $totals['total_saved'] );
 		$this->assertEqualsWithDelta(
-			$totals['discount_total'] + $totals['savings_total'],
+			$totals['discount_total'] + $totals['sale_savings_total'],
 			$totals['total_saved'],
 			0.001
 		);

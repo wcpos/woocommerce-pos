@@ -310,9 +310,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order   = OrderHelper::create_order();
 		$payload = $this->builder->build( $order, 'live' );
 		$nullable_totals = array(
-			'savings_total',
-			'savings_total_incl',
-			'savings_total_excl',
+			'sale_savings_total',
+			'sale_savings_total_incl',
+			'sale_savings_total_excl',
 			'total_saved',
 			'total_saved_incl',
 			'total_saved_excl',
@@ -393,9 +393,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$totals  = $payload['totals'];
 
 		$this->assertTrue( $totals['total_saved_complete'] );
-		$this->assertEquals( 10.0, $totals['savings_total'] );
-		$this->assertEquals( 10.0, $totals['savings_total_incl'] );
-		$this->assertEquals( 10.0, $totals['savings_total_excl'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total_incl'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total_excl'] );
 		$this->assertEquals( 13.0, $totals['total_saved'] );
 		$this->assertEquals( 13.0, $totals['total_saved_incl'] );
 		$this->assertEquals( 13.0, $totals['total_saved_excl'] );
@@ -487,7 +487,7 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$totals = $this->builder->build( $order, 'live' )['totals'];
 
 		$this->assertTrue( $totals['total_saved_complete'] );
-		$this->assertEquals( 10.0, $totals['savings_total'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total'] );
 		$this->assertEquals( 13.0, $totals['discount_total'] );
 		$this->assertEquals( 13.0, $totals['total_saved'] );
 	}
@@ -500,9 +500,9 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$totals  = $this->builder->build( $order, 'live' )['totals'];
 
 		$this->assertFalse( $totals['total_saved_complete'] );
-		$this->assertNull( $totals['savings_total'] );
-		$this->assertNull( $totals['savings_total_incl'] );
-		$this->assertNull( $totals['savings_total_excl'] );
+		$this->assertNull( $totals['sale_savings_total'] );
+		$this->assertNull( $totals['sale_savings_total_incl'] );
+		$this->assertNull( $totals['sale_savings_total_excl'] );
 		$this->assertNull( $totals['total_saved'] );
 		$this->assertNull( $totals['total_saved_incl'] );
 		$this->assertNull( $totals['total_saved_excl'] );

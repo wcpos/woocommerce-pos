@@ -85,9 +85,9 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	 */
 	public function test_total_saved_fields_are_published_as_nullable_money_contract(): void {
 		$money_fields = array(
-			'savings_total',
-			'savings_total_incl',
-			'savings_total_excl',
+			'sale_savings_total',
+			'sale_savings_total_incl',
+			'sale_savings_total_excl',
 			'total_saved',
 			'total_saved_incl',
 			'total_saved_excl',

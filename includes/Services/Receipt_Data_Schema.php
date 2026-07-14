@@ -55,9 +55,9 @@ class Receipt_Data_Schema {
 		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
-		'savings_total',
-		'savings_total_incl',
-		'savings_total_excl',
+		'sale_savings_total',
+		'sale_savings_total_incl',
+		'sale_savings_total_excl',
 		'total_saved',
 		'total_saved_incl',
 		'total_saved_excl',
@@ -94,9 +94,9 @@ class Receipt_Data_Schema {
 		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
-		'savings_total',
-		'savings_total_incl',
-		'savings_total_excl',
+		'sale_savings_total',
+		'sale_savings_total_incl',
+		'sale_savings_total_excl',
 		'total_saved',
 		'total_saved_incl',
 		'total_saved_excl',
@@ -159,9 +159,9 @@ class Receipt_Data_Schema {
 		'discount_total',
 		'discount_total_incl',
 		'discount_total_excl',
-		'savings_total',
-		'savings_total_incl',
-		'savings_total_excl',
+		'sale_savings_total',
+		'sale_savings_total_incl',
+		'sale_savings_total_excl',
 		'total_saved',
 		'total_saved_incl',
 		'total_saved_excl',
@@ -829,101 +829,101 @@ class Receipt_Data_Schema {
 			'totals'      => array(
 				'label'  => /* translators: Label for a receipt data field in the template editor. */ __( 'Totals', 'woocommerce-pos' ),
 				'fields' => array(
-					'subtotal'            => array(
+					'subtotal'                => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal', 'woocommerce-pos' ),
 					),
-					'subtotal_incl'       => array(
+					'subtotal_incl'           => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (incl tax)', 'woocommerce-pos' ),
 					),
-					'subtotal_excl'       => array(
+					'subtotal_excl'           => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Subtotal (excl tax)', 'woocommerce-pos' ),
 					),
-					'discount_total'      => array(
+					'discount_total'          => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total', 'woocommerce-pos' ),
 					),
-					'discount_total_incl' => array(
+					'discount_total_incl'     => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total (incl tax)', 'woocommerce-pos' ),
 					),
-					'discount_total_excl' => array(
+					'discount_total_excl'     => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Discount Total (excl tax)', 'woocommerce-pos' ),
 					),
-					'savings_total'       => array(
+					'sale_savings_total'      => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings Total', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Savings Total', 'woocommerce-pos' ),
 					),
-					'savings_total_incl'  => array(
+					'sale_savings_total_incl' => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings Total (incl tax)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Savings Total (incl tax)', 'woocommerce-pos' ),
 					),
-					'savings_total_excl'  => array(
+					'sale_savings_total_excl' => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Savings Total (excl tax)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Sale Savings Total (excl tax)', 'woocommerce-pos' ),
 					),
-					'total_saved'         => array(
+					'total_saved'             => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved (sale savings + discounts)', 'woocommerce-pos' ),
 					),
-					'total_saved_incl'    => array(
+					'total_saved_incl'        => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved (incl tax)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved (sale savings + discounts, incl tax)', 'woocommerce-pos' ),
 					),
-					'total_saved_excl'    => array(
+					'total_saved_excl'        => array(
 						'type'     => 'money',
 						'nullable' => true,
-						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved (excl tax)', 'woocommerce-pos' ),
+						'label'    => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved (sale savings + discounts, excl tax)', 'woocommerce-pos' ),
 					),
-					'total_saved_complete' => array(
+					'total_saved_complete'    => array(
 						'type'  => 'boolean',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Saved Is Complete', 'woocommerce-pos' ),
 					),
-					'tax_total'           => array(
+					'tax_total'               => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Tax Total', 'woocommerce-pos' ),
 					),
-					'total'         => array(
+					'total'                   => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total', 'woocommerce-pos' ),
 					),
-					'total_incl'    => array(
+					'total_incl'              => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (incl. tax)', 'woocommerce-pos' ),
 					),
-					'total_excl'    => array(
+					'total_excl'              => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total (excl. tax)', 'woocommerce-pos' ),
 					),
-					'paid_total'          => array(
+					'paid_total'              => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Paid Total', 'woocommerce-pos' ),
 					),
-					'change_total'        => array(
+					'change_total'            => array(
 						'type'  => 'money',
 						'label' => /* translators: Template-editor field label for total cash returned to the customer after payments; not "change" meaning modify. */ __( 'Change', 'woocommerce-pos' ),
 					),
-					'refund_total'        => array(
+					'refund_total'            => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Refund Total', 'woocommerce-pos' ),
 					),
-					'net_total'           => array(
+					'net_total'               => array(
 						'type'  => 'money',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Net Total', 'woocommerce-pos' ),
 					),
-					'total_qty'           => array(
+					'total_qty'               => array(
 						'type'  => 'number',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Total Quantity', 'woocommerce-pos' ),
 					),
-					'line_count'          => array(
+					'line_count'              => array(
 						'type'  => 'number',
 						'label' => /* translators: Label for a receipt data field in the template editor. */ __( 'Line Count', 'woocommerce-pos' ),
 					),
