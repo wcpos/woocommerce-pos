@@ -284,7 +284,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$order->set_date_modified( '2026-01-15 12:34:56' );
 		$order->save();
 
-		$modified = $order->get_date_modified();
+		$modified = wc_get_order( $order->get_id() )->get_date_modified();
 		$expected = gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() );
 		$this->sync_index->record_order_change( $order->get_id(), 'test:gmt', false );
 		$stored = $wpdb->get_var(
