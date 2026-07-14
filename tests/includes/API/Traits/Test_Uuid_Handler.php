@@ -480,6 +480,24 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Trashed CPT orders do not own UUIDs returned to sync callers.
+	 */
+	public function test_get_order_ids_by_uuid_ignores_trashed_orders(): void {
+		$uuid    = Uuid::uuid4()->toString();
+		$active  = OrderHelper::create_order();
+		$trashed = OrderHelper::create_order();
+		$active->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$active->save_meta_data();
+		$trashed->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$trashed->save_meta_data();
+		$trashed->delete( false );
+
+		$order_ids = $this->handler->test_get_order_ids_by_uuid( $uuid );
+
+		$this->assertSame( array( (string) $active->get_id() ), $order_ids );
+	}
+
+	/**
 	 * Test get_order_ids_by_uuid returns empty for non-existent UUID.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_order_ids_by_uuid

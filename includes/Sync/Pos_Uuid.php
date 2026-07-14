@@ -261,9 +261,11 @@ class Pos_Uuid {
 		if ( $hpos ) {
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_orders_meta"
-					. ' WHERE meta_key = %s AND meta_value = %s'
-					. ' ORDER BY order_id ASC LIMIT 2',
+					"SELECT DISTINCT m.order_id FROM {$wpdb->prefix}wc_orders_meta m"
+					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id"
+					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
+					. " AND o.status NOT IN ('trash','auto-draft')"
+					. ' ORDER BY m.order_id ASC LIMIT 2',
 					self::META_KEY,
 					$uuid
 				)
@@ -271,9 +273,11 @@ class Pos_Uuid {
 		} else {
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT DISTINCT post_id FROM {$wpdb->postmeta}"
-					. ' WHERE meta_key = %s AND meta_value = %s'
-					. ' ORDER BY post_id ASC LIMIT 2',
+					"SELECT DISTINCT m.post_id FROM {$wpdb->postmeta} m"
+					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id"
+					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
+					. " AND p.post_status NOT IN ('trash','auto-draft')"
+					. ' ORDER BY m.post_id ASC LIMIT 2',
 					self::META_KEY,
 					$uuid
 				)
