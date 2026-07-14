@@ -77,15 +77,25 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		$rows = $wpdb->get_results( 'SELECT sequence, object_type, object_id, change_type FROM ' . $this->change_log->table_name() . ' ORDER BY sequence ASC', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		$this->assertNotEmpty( $rows );
-		$this->assertSame( range( 1, count( $rows ) ), array_map( 'intval', array_column( $rows, 'sequence' ) ) );
+		// AUTO_INCREMENT survives the per-test row cleanup (and prior suite
+		// runs), so assert consecutiveness from the observed base, never
+		// absolute values.
+		$sequences = array_map( 'intval', array_column( $rows, 'sequence' ) );
+		$this->assertSame( range( $sequences[0], $sequences[0] + count( $rows ) - 1 ), $sequences );
+		$rows_without_sequence = array_map(
+			static function ( array $row ): array {
+				unset( $row['sequence'] );
+				return $row;
+			},
+			$rows
+		);
 		$this->assertContains(
 			array(
-				'sequence' => '1',
 				'object_type' => 'product',
 				'object_id' => (string) $product->get_id(),
 				'change_type' => 'create',
 			),
-			$rows
+			$rows_without_sequence
 		);
 		$this->assertContains( 'customer', array_column( $rows, 'object_type' ) );
 		$this->assertContains( (string) $customer, array_column( $rows, 'object_id' ) );
@@ -130,5 +140,56 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		$this->assertSame( 'hook:untrash', $rows[ count( $rows ) - 2 ]['origin'] );
 		$this->assertSame( '0', $rows[ count( $rows ) - 2 ]['deleted'] );
 		$this->assertSame( 'hook:delete', $rows[ count( $rows ) - 1 ]['origin'] );
+	}
+
+	/**
+	 * A failing digest store must not break the host write that fired the
+	 * observer (the P1 from the increment-2a review): the save succeeds, the
+	 * journal still records it, only the digest row is missing.
+	 */
+	public function test_digest_failure_does_not_break_the_host_write(): void {
+		global $wpdb;
+
+		$digest_table = $this->integrity_digest->table_name();
+		$break_digest = static function ( $query ) use ( $digest_table ) {
+			if ( \is_string( $query ) && false !== strpos( $query, $digest_table ) ) {
+				return str_replace( $digest_table, $digest_table . '_gone', $query );
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $break_digest );
+		$product = ProductHelper::create_simple_product();
+		remove_filter( 'query', $break_digest );
+
+		$this->assertInstanceOf( \WC_Product::class, $product );
+		$this->assertGreaterThan( 0, $product->get_id(), 'The host write must survive a broken digest store' );
+
+		$journal = $wpdb->get_col( 'SELECT object_id FROM ' . $this->change_log->table_name() . " WHERE object_type = 'product'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertContains( (string) $product->get_id(), $journal, 'The journal observer must be unaffected' );
+
+		$digests = $wpdb->get_col( 'SELECT object_id FROM ' . $digest_table . " WHERE object_type = 'product'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		$this->assertNotContains( (string) $product->get_id(), $digests, 'The digest write itself failed open' );
+	}
+
+	/**
+	 * add_role()/remove_role() fire only add_user_role/remove_user_role — the
+	 * digest must follow those transitions too (the P2 from the review).
+	 */
+	public function test_add_and_remove_customer_role_maintain_the_customer_digest(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_user_by( 'id', $user_id );
+
+		$customer_digests = function () use ( $wpdb ) {
+			return $wpdb->get_col( 'SELECT object_id FROM ' . $this->integrity_digest->table_name() . " WHERE object_type = 'customer'" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		};
+
+		$user->add_role( 'customer' );
+		$this->assertContains( (string) $user_id, $customer_digests(), 'add_role(customer) must create the digest' );
+
+		$user->remove_role( 'customer' );
+		$this->assertNotContains( (string) $user_id, $customer_digests(), 'remove_role(customer) must remove the digest' );
 	}
 }

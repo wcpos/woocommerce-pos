@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Logger;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries use internal table names and generated SQL fragments.
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
@@ -134,6 +136,11 @@ final class Integrity_Digest {
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_update_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'set_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
+		// add_role()/remove_role() fire ONLY add_user_role/remove_user_role (no
+		// set_user_role, no profile_update) — the role-aware handler is idempotent,
+		// so registering it on both keeps multi-role transitions digested.
+		add_action( 'add_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
+		add_action( 'remove_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'delete_user', array( $this, 'record_customer_deleted' ), 10, 1 );
 
 		// Leg-3 phase 7 (ADR 0015): order digest maintenance. Storage-agnostic WC order hooks (fire under
@@ -534,15 +541,40 @@ final class Integrity_Digest {
 	 * for Leg 3, so the same handler covers save AND un-customer without a separate role hook.
 	 */
 	public function record_customer_saved( int $user_id ): void {
-		if ( $this->is_customer( $user_id ) ) {
-			$this->upsert_customer_digest( $user_id );
-		} else {
-			$this->delete_customer_digest( $user_id );
-		}
+		$this->observe(
+			function () use ( $user_id ): void {
+				if ( $this->is_customer( $user_id ) ) {
+					$this->upsert_customer_digest( $user_id );
+				} else {
+					$this->delete_customer_digest( $user_id );
+				}
+			}
+		);
 	}
 
 	public function record_customer_deleted( int $user_id ): void {
-		$this->delete_customer_digest( $user_id );
+		$this->observe(
+			function () use ( $user_id ): void {
+				$this->delete_customer_digest( $user_id );
+			}
+		);
+	}
+
+	/**
+	 * Observation hooks must never break the host write that fired them: a
+	 * broken or missing digest store is a sync problem (the integrity scan and
+	 * the health gate surface it), not a reason to fatal a WooCommerce save.
+	 * The ops paths (rebuild/prune) keep throwing — they run on demand and
+	 * want the loudness.
+	 *
+	 * @param callable $observer The digest write to attempt.
+	 */
+	private function observe( callable $observer ): void {
+		try {
+			$observer();
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Sync digest observer failed (sync will self-heal via scan/rebuild): ' . $e->getMessage() );
+		}
 	}
 
 	private function delete_customer_digest( int $user_id ): void {
@@ -584,11 +616,19 @@ final class Integrity_Digest {
 	 * non-order, so no type re-check is needed here.
 	 */
 	public function record_order_saved( int $order_id ): void {
-		$this->upsert_order_digest( $order_id );
+		$this->observe(
+			function () use ( $order_id ): void {
+				$this->upsert_order_digest( $order_id );
+			}
+		);
 	}
 
 	public function record_order_deleted( int $order_id ): void {
-		$this->delete_order_digest( $order_id );
+		$this->observe(
+			function () use ( $order_id ): void {
+				$this->delete_order_digest( $order_id );
+			}
+		);
 	}
 
 	private function delete_order_digest( int $order_id ): void {
@@ -624,7 +664,11 @@ final class Integrity_Digest {
 	}
 
 	public function record_post_saved( int $post_id ): void {
-		$this->upsert_digest( $post_id );
+		$this->observe(
+			function () use ( $post_id ): void {
+				$this->upsert_digest( $post_id );
+			}
+		);
 	}
 
 	public function record_post_deleted( int $post_id ): void {
@@ -632,12 +676,27 @@ final class Integrity_Digest {
 		if ( ! in_array( $post_type, array( 'product', 'product_variation' ), true ) ) {
 			return;
 		}
+		$this->observe(
+			function () use ( $post_id, $post_type ): void {
+				$this->delete_post_digest( $post_id, $post_type );
+			}
+		);
+	}
+
+	/**
+	 * Remove a product/variation digest row after a hooked delete.
+	 *
+	 * A hooked delete removes the stored row so stored == current again.
+	 * Only a hook-BYPASSING delete leaves an orphan digest behind, which
+	 * the scan reports as a mismatch (stored side carries a row the
+	 * current side lacks) and the drill-down labels status=deleted.
+	 *
+	 * @param int    $post_id   The deleted post id.
+	 * @param string $post_type Its post type (product | product_variation).
+	 */
+	private function delete_post_digest( int $post_id, string $post_type ): void {
 		global $wpdb;
 		$started = microtime( true );
-		// A hooked delete removes the stored row so stored == current again.
-		// Only a hook-BYPASSING delete leaves an orphan digest behind, which
-		// the scan reports as a mismatch (stored side carries a row the
-		// current side lacks) and the drill-down labels status=deleted.
 		$deleted = $wpdb->delete(
 			$this->table_name(),
 			array(
