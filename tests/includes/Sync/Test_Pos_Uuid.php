@@ -124,4 +124,26 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 
 		$this->assertTrue( Pos_Uuid::is_uuid( $product->get_meta( Api::UUID_META_KEY ) ) );
 	}
+
+	/**
+	 * A term collision re-key on duplicate uuid rows collapses to ONE row
+	 * (update_term_meta alone rewrites all rows without pruning — codex P2).
+	 */
+	public function test_term_collision_rekey_collapses_duplicate_rows(): void {
+		$term = wp_insert_term( 'Dup Uuid Term ' . wp_generate_uuid4(), 'product_cat' );
+		$term_id = (int) $term['term_id'];
+		$other = wp_insert_term( 'Owner Term ' . wp_generate_uuid4(), 'product_cat' );
+		$owned = wp_generate_uuid4();
+		add_term_meta( (int) $other['term_id'], Api::UUID_META_KEY, $owned );
+		// Two duplicate rows, the first colliding with the other term's uuid.
+		add_term_meta( $term_id, Api::UUID_META_KEY, $owned );
+		add_term_meta( $term_id, Api::UUID_META_KEY, wp_generate_uuid4() );
+
+		$resolved = Pos_Uuid::ensure_term_uuid( $term_id );
+
+		$rows = get_term_meta( $term_id, Api::UUID_META_KEY, false );
+		$this->assertCount( 1, $rows, 'duplicate uuid rows must collapse to one' );
+		$this->assertSame( $resolved, $rows[0] );
+		$this->assertNotSame( $owned, $resolved );
+	}
 }

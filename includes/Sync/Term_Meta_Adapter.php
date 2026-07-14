@@ -81,6 +81,16 @@ final class Term_Meta_Adapter {
 	public function save_meta_data(): void {
 		if ( \function_exists( 'update_term_meta' ) ) {
 			foreach ( $this->pending as $key => $value ) {
+				// update_term_meta() rewrites EVERY matching row to the new value
+				// without collapsing extras — a collision re-key on a term with
+				// duplicate uuid rows would keep the duplicates. Enforce the
+				// one-row contract: delete all rows for the key, then add one.
+				if ( \function_exists( 'get_term_meta' ) && \function_exists( 'delete_term_meta' )
+					&& \count( (array) get_term_meta( $this->term_id, $key, false ) ) > 1 ) {
+					delete_term_meta( $this->term_id, $key );
+					add_term_meta( $this->term_id, $key, $value, true );
+					continue;
+				}
 				update_term_meta( $this->term_id, $key, $value );
 			}
 		}
