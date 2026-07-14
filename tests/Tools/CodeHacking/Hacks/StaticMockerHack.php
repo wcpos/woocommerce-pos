@@ -111,7 +111,19 @@ final class StaticMockerHack extends CodeHack {
 	 * @return string The hacked code.
 	 */
 	public function hack( $code, $path ) {
-		$tokens                         = $this->tokenize( $code );
+		return $this->hack_tokens( $this->tokenize( $code ) );
+	}
+
+	/**
+	 * Rewrite a token stream containing mockable static method calls.
+	 *
+	 * Kept separate from tokenization so both PHP 7.4 and PHP 8 token shapes can
+	 * be covered on every CI leg.
+	 *
+	 * @param array $tokens PHP source tokens.
+	 * @return string Rewritten PHP source.
+	 */
+	private function hack_tokens( array $tokens ): string {
 		$count                          = \count( $tokens );
 		$code                           = '';
 		$previous_token_is_ns_separator = false;
@@ -119,6 +131,9 @@ final class StaticMockerHack extends CodeHack {
 		for ( $i = 0; $i < $count; $i++ ) {
 			$current_token = $tokens[ $i ];
 
+			// PHP 7.4 splits qualified names into T_STRING/T_NS_SEPARATOR chains.
+			// Mock only unqualified short names; PHP 8's T_NAME_* tokens already skip
+			// this branch.
 			if ( ! $previous_token_is_ns_separator && $this->is_token_of_type( $current_token, T_STRING ) && \in_array( $current_token[1], $this->mockable_classes, true ) ) {
 				$class_name = $current_token[1];
 				$next_token = $tokens[ $i + 1 ] ?? null;
