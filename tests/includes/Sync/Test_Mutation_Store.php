@@ -118,12 +118,12 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * A crashed pending claim becomes reclaimable after its fixed lease.
+	 * A crashed pending non-create claim becomes reclaimable after its fixed lease.
 	 */
 	public function test_stale_pending_reservation_is_reclaimed(): void {
 		global $wpdb;
 
-		$this->store->reserve( 'products', 'mutation-stale', 'record-1', 'create' );
+		$this->store->reserve( 'products', 'mutation-stale', 'record-1', 'update' );
 		$wpdb->update(
 			$this->store->table_name(),
 			array( 'created_at' => '2000-01-01 00:00:00' ),
@@ -132,6 +132,23 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 
 		$this->assertTrue( $this->store->reclaim_stale( 'mutation-stale', 60 ) );
 		$this->assertNull( $this->store->lookup( 'products', 'mutation-stale' ) );
+	}
+
+	/**
+	 * A stale create may already have applied and must remain for manual recovery.
+	 */
+	public function test_stale_pending_create_is_not_reclaimed(): void {
+		global $wpdb;
+
+		$this->store->reserve( 'products', 'mutation-stale-create', 'record-1', 'create' );
+		$wpdb->update(
+			$this->store->table_name(),
+			array( 'created_at' => '2000-01-01 00:00:00' ),
+			array( 'mutation_id' => 'mutation-stale-create' )
+		);
+
+		$this->assertFalse( $this->store->reclaim_stale( 'mutation-stale-create', 60 ) );
+		$this->assertSame( 'pending', $this->store->lookup( 'products', 'mutation-stale-create' )['status'] );
 	}
 
 	/**

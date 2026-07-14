@@ -254,8 +254,9 @@ class Mutation_Store {
 	}
 
 	/**
-	 * Reclaim a STALE pending reservation (a crashed in-flight push) so a retry can
-	 * proceed. Deletes only a `pending` row older than the TTL — never a `done` one.
+	 * Reclaim a STALE pending non-create reservation (a crashed in-flight push) so
+	 * a retry can proceed. A pending create may already have reached WooCommerce;
+	 * retain it for manual recovery rather than risk forwarding a duplicate.
 	 * Returns true if one was reclaimed.
 	 */
 	public function reclaim_stale( string $mutation_id, int $ttl_seconds ): bool {
@@ -263,7 +264,7 @@ class Mutation_Store {
 		$cutoff   = gmdate( 'Y-m-d H:i:s', time() - $ttl_seconds );
 		$affected = $wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$this->table_name()} WHERE mutation_id = %s AND status = 'pending' AND created_at < %s",
+				"DELETE FROM {$this->table_name()} WHERE mutation_id = %s AND status = 'pending' AND operation <> 'create' AND created_at < %s",
 				$mutation_id,
 				$cutoff
 			)
