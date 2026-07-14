@@ -43,7 +43,7 @@ final class Status_Controller extends WP_REST_Controller {
 			array(
 				'healthy'        => array() === $missing_tables,
 				'missing_tables' => $missing_tables,
-				'schema_version' => null,
+				'schema_version' => get_option( Api::SCHEMA_OPTION, null ),
 			),
 			200
 		);

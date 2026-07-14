@@ -34,9 +34,10 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	 * Remove the sync feature flag after each test.
 	 */
 	public function tearDown(): void {
-		delete_option( Api::OPTION_ENABLED );
-
 		parent::tearDown();
+		// setUp committed the flag before the transaction started; delete it
+		// after the rollback or the rollback restores the committed row.
+		delete_option( Api::OPTION_ENABLED );
 	}
 
 	/**

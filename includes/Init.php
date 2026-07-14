@@ -39,6 +39,11 @@ class Init {
 		// fire on a plugin activation or update request.
 		new Consent();
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
+		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
+			( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
+		}
 
 		// Init hooks.
 		add_action( 'init', array( $this, 'init' ) );
