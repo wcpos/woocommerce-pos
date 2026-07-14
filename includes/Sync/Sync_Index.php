@@ -284,6 +284,7 @@ final class Sync_Index {
 				$last_order_id = $id;
 			} else {
 				$failed_this_run++;
+				break;
 			}
 		}
 

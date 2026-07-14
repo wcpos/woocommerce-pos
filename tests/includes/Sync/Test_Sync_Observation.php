@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\HPOSToggleTrait;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -23,6 +24,8 @@ use WCPOS\WooCommercePOS\Sync\Sync_Index;
  * @covers \WCPOS\WooCommercePOS\Sync\Sync_Index
  */
 class Test_Sync_Observation extends Sync_Store_Test_Case {
+	use HPOSToggleTrait;
+
 	/** @var Change_Log */
 	private $change_log;
 
@@ -330,5 +333,73 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			$wpdb->get_col( 'SELECT order_id FROM ' . $this->sync_index->table_name() . " WHERE origin = 'backfill' ORDER BY sequence ASC" ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 		);
 		$this->assertSame( array( $order_ids[0], $order_ids[1] ), $backfilled_ids );
+	}
+
+	/**
+	 * A failed write keeps the cursor before that order so a later chunk retries it.
+	 */
+	public function test_order_backfill_does_not_advance_cursor_past_a_failed_write(): void {
+		global $wpdb;
+
+		wc_create_order();
+		wc_create_order();
+		wc_create_order();
+		$order_ids = array_map(
+			'intval',
+			wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+		);
+		$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+
+		$write_count = 0;
+		$fail_second_write = static function ( $query ) use ( $wpdb, &$write_count ) {
+			if ( is_string( $query ) && false !== strpos( $query, 'INSERT INTO ' . $wpdb->prefix . 'wcpos_sync_order_index' ) && false !== strpos( $query, "'backfill'" ) ) {
+				$write_count++;
+				if ( 2 === $write_count ) {
+					return str_replace( $wpdb->prefix . 'wcpos_sync_order_index', $wpdb->prefix . 'wcpos_sync_order_index_missing', $query );
+				}
+			}
+			return $query;
+		};
+		add_filter( 'query', $fail_second_write );
+		$failed_chunk = $this->sync_index->run_backfill_chunk( 3 );
+		remove_filter( 'query', $fail_second_write );
+
+		$this->assertSame( $order_ids[0], $failed_chunk['lastOrderId'] );
+		$this->assertSame( 1, $failed_chunk['processedThisRun'] );
+
+		$retry_chunk = $this->sync_index->run_backfill_chunk( 3 );
+		$this->assertSame( $order_ids[2], $retry_chunk['lastOrderId'] );
+		$this->assertSame(
+			$order_ids,
+			array_map( 'intval', $wpdb->get_col( 'SELECT order_id FROM ' . $this->sync_index->table_name() . " WHERE origin = 'backfill' ORDER BY sequence ASC" ) ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		);
+	}
+
+	/**
+	 * HPOS backfill applies the same id cursor as the CPT path.
+	 */
+	public function test_order_backfill_uses_last_order_id_cursor_with_hpos(): void {
+		global $wpdb;
+
+		add_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		$this->setup_cot();
+		try {
+			wc_create_order();
+			wc_create_order();
+			$order_ids = array_map(
+				'intval',
+				wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+			);
+			$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+
+			$first = $this->sync_index->run_backfill_chunk( 1 );
+			$second = $this->sync_index->run_backfill_chunk( 1 );
+
+			$this->assertSame( $order_ids[0], $first['lastOrderId'] );
+			$this->assertSame( $order_ids[1], $second['lastOrderId'] );
+		} finally {
+			$this->clean_up_cot_setup();
+			remove_filter( 'wc_allow_changing_orders_storage_while_sync_is_pending', '__return_true' );
+		}
 	}
 }
