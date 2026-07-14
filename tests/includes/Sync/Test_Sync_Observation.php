@@ -352,7 +352,7 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		$write_count = 0;
 		$fail_second_write = static function ( $query ) use ( $wpdb, &$write_count ) {
-			if ( is_string( $query ) && false !== strpos( $query, 'INSERT INTO ' . $wpdb->prefix . 'wcpos_sync_order_index' ) && false !== strpos( $query, "'backfill'" ) ) {
+			if ( is_string( $query ) && false !== strpos( $query, $wpdb->prefix . 'wcpos_sync_order_index' ) && false !== strpos( $query, "'backfill'" ) ) {
 				$write_count++;
 				if ( 2 === $write_count ) {
 					return str_replace( $wpdb->prefix . 'wcpos_sync_order_index', $wpdb->prefix . 'wcpos_sync_order_index_missing', $query );
