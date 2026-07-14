@@ -36,7 +36,9 @@ final class Fake_Mutation_Store {
 	public array $finalized = array();
 	public array $applied = array();
 	public array $poisoned = array();
+	public array $fingerprints = array();
 	public bool $finalizeOk = true;
+	public bool $poisonOk = true;
 	public bool $persistUuidOk = true;
 	/** @var string[] mutationIds released */
 	public array $released = array();
@@ -52,15 +54,27 @@ final class Fake_Mutation_Store {
 	public function lookup( string $collection, string $mutation_id ): ?array {
 		return $this->lookups[ $mutation_id ] ?? null;
 	}
-	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation ): bool {
+	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		$this->reserved[] = $mutation_id;
+		$this->fingerprints[ $mutation_id ] = $fingerprint;
 		return array_shift( $this->reserveResults ) ?? true;
 	}
 	public function mark_applied( string $mutation_id, int $remote_id, int $response_status ): bool {
 		$this->applied[ $mutation_id ] = $remote_id;
+		$this->lookups[ $mutation_id ] = array(
+			'remote_id' => $remote_id,
+			'operation' => 'create',
+			'record_uuid' => Test_Write_Controller::REC,
+			'status' => 'applied',
+			'response_status' => $response_status,
+			'fingerprint' => $this->fingerprints[ $mutation_id ] ?? '',
+		);
 		return true;
 	}
 	public function mark_poison( string $mutation_id, int $remote_id, int $response_status = 201 ): bool {
+		if ( ! $this->poisonOk ) {
+			return false;
+		}
 		$this->poisoned[ $mutation_id ] = $remote_id;
 		$this->lookups[ $mutation_id ] = array(
 			'remote_id' => $remote_id,
@@ -68,17 +82,12 @@ final class Fake_Mutation_Store {
 			'record_uuid' => Test_Write_Controller::REC,
 			'status' => 'poison',
 			'response_status' => $response_status,
+			'fingerprint' => $this->fingerprints[ $mutation_id ] ?? '',
 		);
 		return true;
 	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
 		if ( ! $this->finalizeOk ) {
-			$this->lookups[ $mutation_id ] = array(
-				'remote_id' => $remote_id,
-				'operation' => 'create',
-				'record_uuid' => Test_Write_Controller::REC,
-				'status' => 'applied',
-			);
 			return false;
 		}
 		$this->finalized[ $mutation_id ] = $remote_id;
@@ -880,6 +889,36 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->released );
 	}
 
+	public function test_create_no_id_checkpoint_failure_keeps_the_reservation(): void {
+		$store = new Fake_Mutation_Store();
+		$store->poisonOk = false;
+		$this->setRestResponse( array( 'email' => 'a@b.c' ), 201 );
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $result->get_error_code() );
+		$this->assertSame( array(), $store->released );
+	}
+
+	public function test_create_checkpoint_failure_stamps_known_identity_before_returning(): void {
+		$store = new Fake_Mutation_Store();
+		$store->poisonOk = false;
+		$this->setRestResponse(
+			array(
+				'id' => 4242,
+				'email' => 'a@b.c',
+			),
+			201
+		);
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $result->get_error_code() );
+		$this->assertSame( 4242, $store->resolve );
+		$this->assertSame( 4242, $store->persisted[0]['id'] );
+		$this->assertSame( array(), $store->released );
+	}
+
 	public function test_create_identity_persistence_failure_poison_retries_stamp_original_without_reforwarding(): void {
 		$store = new Fake_Mutation_Store();
 		$store->persistUuidOk = false;
@@ -1281,6 +1320,34 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
 		$this->assertSame( 422, $result->get_error_data()['status'] );
+	}
+
+	/** @dataProvider mutationFingerprintMismatches */
+	public function test_replay_rejects_mutation_id_reused_with_a_different_envelope( array $override ): void {
+		$store = new Fake_Mutation_Store();
+		$this->setRestResponse(
+			array(
+				'id' => 4242,
+				'email' => 'a@b.c',
+			),
+			201
+		);
+		$this->assertSame( 201, $this->push( $store )->get_status() );
+		$this->assertNotSame( '', $store->fingerprints[ self::MID ] );
+
+		$result = $this->push( $store, $override );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+	}
+
+	public static function mutationFingerprintMismatches(): array {
+		return array(
+			'base revision' => array( array( 'baseRevision' => 'sha256:different' ) ),
+			'payload' => array( array( 'payload' => array( 'email' => 'different@example.test' ) ) ),
+			'collection' => array( array( 'collection' => 'products' ) ),
+		);
 	}
 
 	public static function recordedCreateReplayStatuses(): array {

@@ -48,6 +48,15 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$this->assertSame( '42', $row['remote_id'] );
 	}
 
+	public function test_reservation_persists_fingerprint_and_lookup_finds_cross_collection_reuse(): void {
+		$this->assertTrue( $this->store->reserve( 'products', 'mutation-global', 'record-1', 'create', 'fingerprint-1' ) );
+
+		$row = $this->store->lookup( 'customers', 'mutation-global' );
+
+		$this->assertSame( 'products', $row['collection'] );
+		$this->assertSame( 'fingerprint-1', $row['fingerprint'] );
+	}
+
 	/**
 	 * Finalization is idempotent for the same id and rejects a different id.
 	 */

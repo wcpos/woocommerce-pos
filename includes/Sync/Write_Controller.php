@@ -126,11 +126,12 @@ class Write_Controller extends WP_REST_Controller {
 		if ( is_wp_error( $mirror ) ) {
 			return $mirror;
 		}
+		$fingerprint = $this->envelope_fingerprint( $m );
 
 		// Idempotent replay: a mutationId already APPLIED returns its canonical result.
 		$hit = $this->store->lookup( $collection, $m['mutationId'] );
 		if ( is_array( $hit ) ) {
-			$mismatch = $this->replay_target_mismatch( $hit, $m );
+			$mismatch = $this->replay_target_mismatch( $hit, $m, $fingerprint );
 			if ( $mismatch ) {
 				return $mismatch;
 			}
@@ -149,10 +150,10 @@ class Write_Controller extends WP_REST_Controller {
 		// concurrent retries (e.g. a timeout-retry overlapping its own in-flight push)
 		// can't both create. The loser replays if it's done, else reports in-progress;
 		// a crashed winner's stale reservation is reclaimed after the TTL.
-		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'] ) ) {
+		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'], $fingerprint ) ) {
 			$hit = $this->store->lookup( $collection, $m['mutationId'] );
 			if ( is_array( $hit ) ) {
-				$mismatch = $this->replay_target_mismatch( $hit, $m );
+				$mismatch = $this->replay_target_mismatch( $hit, $m, $fingerprint );
 				if ( $mismatch ) {
 					return $mismatch;
 				}
@@ -166,7 +167,7 @@ class Write_Controller extends WP_REST_Controller {
 				}
 				return $this->replay( $meta, $hit );
 			}
-			if ( ! $this->reclaim_and_reserve( $collection, $m ) ) {
+			if ( ! $this->reclaim_and_reserve( $collection, $m, $fingerprint ) ) {
 				return new WP_REST_Response(
 					array(
 						'code' => 'woo_rxdb_sync_in_progress',
@@ -208,36 +209,43 @@ class Write_Controller extends WP_REST_Controller {
 	/**
 	 * Reclaim a crashed pending reservation, then atomically claim it again.
 	 */
-	private function reclaim_and_reserve( string $collection, array $mutation ): bool {
+	private function reclaim_and_reserve( string $collection, array $mutation, string $fingerprint ): bool {
 		if ( ! $this->store->reclaim_stale( $mutation['mutationId'], $this->store->reservation_ttl() ) ) {
 			return false;
 		}
 
-		return $this->store->reserve( $collection, $mutation['mutationId'], $mutation['recordId'], $mutation['operation'] );
+		return $this->store->reserve( $collection, $mutation['mutationId'], $mutation['recordId'], $mutation['operation'], $fingerprint );
 	}
 
 	/**
-	 * A stored mutationId must be replayed only for ITS record and operation —
-	 * a reused id targeting a different record/operation would silently ack a
-	 * mutation that was never applied (codex increment-3 finding; the lab's
-	 * replay branches share the hole — reserve() guards reservation only).
+	 * A stored mutationId must be replayed only for its original envelope. The
+	 * record/operation comparison remains as a fallback for pre-fingerprint rows.
 	 *
 	 * @param array $hit The stored mutation row.
 	 * @param array $m   The incoming envelope.
 	 * @return WP_Error|null An envelope rejection on mismatch, null when aligned.
 	 */
-	private function replay_target_mismatch( array $hit, array $m ) {
-		if ( 'poison' === ( $hit['status'] ?? '' ) ) {
-			// Poison retries own their identity comparison (retry_identity_stamp
-			// rejects a different recordId with identity_conflict — #518 semantics).
-			return null;
-		}
+	private function replay_target_mismatch( array $hit, array $m, string $fingerprint ) {
 		$stored_uuid = strtolower( (string) ( $hit['record_uuid'] ?? '' ) );
 		$stored_op   = (string) ( $hit['operation'] ?? '' );
+		$stored_fingerprint = (string) ( $hit['fingerprint'] ?? '' );
+		if ( '' !== $stored_fingerprint ) {
+			if ( hash_equals( $stored_fingerprint, $fingerprint ) ) {
+				return null;
+			}
+			if ( 'poison' === ( $hit['status'] ?? '' ) && strtolower( (string) $m['recordId'] ) !== $stored_uuid ) {
+				// Keep #518's identity_conflict response for a poison retry that changes recordId.
+				return null;
+			}
+			return new WP_Error( 'woo_rxdb_sync_bad_mutation_id', 'mutationId was already used for a different envelope.', array( 'status' => 422 ) );
+		}
+		if ( 'poison' === ( $hit['status'] ?? '' ) ) {
+			return null;
+		}
 		if ( '' === $stored_uuid && '' === $stored_op ) {
 			return null;
 		}
-		if ( $stored_uuid === strtolower( (string) $m['recordId'] ) && $stored_op === (string) $m['operation'] ) {
+		if ( strtolower( (string) $m['recordId'] ) === $stored_uuid && (string) $m['operation'] === $stored_op ) {
 			return null;
 		}
 		return new WP_Error(
@@ -245,6 +253,22 @@ class Write_Controller extends WP_REST_Controller {
 			'mutationId was already used for a different record or operation.',
 			array( 'status' => 422 )
 		);
+	}
+
+	private function envelope_fingerprint( array $envelope ): string {
+		return hash( 'sha256', (string) wp_json_encode( $this->sort_envelope_keys( $envelope ) ) );
+	}
+
+	private function sort_envelope_keys( array $value ): array {
+		if ( array_values( $value ) !== $value ) {
+			ksort( $value );
+		}
+		foreach ( $value as $key => $item ) {
+			if ( is_array( $item ) ) {
+				$value[ $key ] = $this->sort_envelope_keys( $item );
+			}
+		}
+		return $value;
 	}
 
 	private function apply( string $operation, string $collection, array $meta, array $m ) {
@@ -400,24 +424,31 @@ class Write_Controller extends WP_REST_Controller {
 		if ( $new_id <= 0 ) {
 			// wc/v3 returned 2xx but no usable id — fail closed rather than record a
 			// create we could never resolve (a replay would return a wrong document).
-			$this->store->mark_poison( $m['mutationId'], 0, $response->get_status() );
+			if ( ! $this->store->mark_poison( $m['mutationId'], 0, $response->get_status() ) ) {
+				return $this->finalize_error();
+			}
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
-		if ( ! $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() ) ) {
-			return $this->finalize_error();
-		}
+		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() );
 		// The controller OWNS identity: wc/v3 dropped our uuid as protected meta, so
 		// force the client's recordId onto the new record (direct meta write) — it is
 		// the persisted, resolvable key (reuse-the-client's-uuid, never re-key).
+		$identity_error = null;
 		if ( ! $this->store->persist_uuid( $meta['id_type'], $new_id, $m['recordId'] ) ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
+			$identity_error = new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
+		} else {
+			$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
+			if ( is_wp_error( $resolved ) ) {
+				$identity_error = $resolved;
+			} elseif ( $resolved !== $new_id ) {
+				$identity_error = new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
+			}
 		}
-		$resolved = $this->store->resolve_id_by_uuid( $meta['id_type'], $m['recordId'], $meta );
-		if ( is_wp_error( $resolved ) ) {
-			return $resolved;
+		if ( ! $checkpointed ) {
+			return $this->finalize_error();
 		}
-		if ( $resolved !== $new_id ) {
-			return new WP_Error( 'woo_rxdb_sync_identity_persistence_failed', 'Unable to persist created record identity.', array( 'status' => 500 ) );
+		if ( $identity_error ) {
+			return $identity_error;
 		}
 		if ( 'order' === ( $meta['id_type'] ?? '' ) ) {
 			// Orders carry POS audit fields Pro analytics joins on (gap §3.3). They are PROTECTED

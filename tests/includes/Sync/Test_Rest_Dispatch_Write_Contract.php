@@ -29,7 +29,7 @@ final class Dispatch_Fake_Mutation_Store {
 	public function lookup( string $collection, string $mutation_id ): ?array {
 		return $this->lookups[ $mutation_id ] ?? null;
 	}
-	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation ): bool {
+	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		return true;
 	}
 	public function acquire_record_lock( string $collection, string $uuid ): bool {
