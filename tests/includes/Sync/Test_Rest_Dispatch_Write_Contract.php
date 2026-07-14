@@ -72,7 +72,11 @@ final class Dispatch_Fake_Mutation_Store {
 		$this->finalized[ $mutation_id ] = $remote_id;
 		return true;
 	}
-	public function release( string $mutation_id ): void {}
+	public function release( string $mutation_id ): void {
+		if ( 'pending' === ( $this->lookups[ $mutation_id ]['status'] ?? '' ) ) {
+			unset( $this->lookups[ $mutation_id ] );
+		}
+	}
 	public function reclaim_stale( string $mutation_id, int $ttl ): bool {
 		return false;
 	}
@@ -171,6 +175,8 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		);
 		$this->assertFalse( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
 		$this->assertFalse( $this->store->reserve( 'orders', 'mutation-1', 'record-2', 'delete', 'fingerprint-2' ) );
+		$this->store->release( 'mutation-1' );
+		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
 	}
 
 	public function test_valid_golden_create_round_trips_through_rest_dispatch(): void {
