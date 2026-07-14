@@ -104,12 +104,17 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The orders proxy belongs to increment 2c and is not registered by 2b.
+	 * The orders read lanes (increment 2c) are registered and health-gated: with
+	 * no tables installed they 503 rather than 404, proving both the flag
+	 * registration and the shared install-health gate apply.
 	 */
-	public function test_sync_orders_proxy_is_not_registered(): void {
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/orders' ) );
+	public function test_sync_orders_lanes_are_registered_and_health_gated(): void {
+		foreach ( array( '/wcpos/v1/sync/orders', '/wcpos/v1/sync/orders/pull' ) as $path ) {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
 
-		$this->assertEquals( 404, $response->get_status() );
+			$this->assertEquals( 503, $response->get_status(), $path . ' was not registered or not health-gated.' );
+			$this->assertEquals( 'wcpos_sync_unavailable', $response->get_data()['code'] );
+		}
 	}
 
 	/**
@@ -151,6 +156,8 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_sync_read_endpoints_with_missing_tables_return_503(): void {
 		$paths = array(
 			'/wcpos/v1/sync/products',
+			'/wcpos/v1/sync/orders',
+			'/wcpos/v1/sync/orders/pull',
 			'/wcpos/v1/sync/changes/sequence-log',
 			'/wcpos/v1/sync/changes/revision-hash',
 			'/wcpos/v1/sync/changes/range-checksum',
@@ -184,6 +191,8 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $user_id );
 		$paths = array(
 			'/wcpos/v1/sync/products',
+			'/wcpos/v1/sync/orders',
+			'/wcpos/v1/sync/orders/pull',
 			'/wcpos/v1/sync/changes/sequence-log',
 			'/wcpos/v1/sync/digests',
 			'/wcpos/v1/sync/integrity/scan',

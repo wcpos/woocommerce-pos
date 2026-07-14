@@ -90,17 +90,16 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 * our namespace route => [ wc/v3 route to forward to, resource slug for
 	 * the seam ] — a PROJECTION of the registry's proxy capability (#421
 	 * increment 4): the route/forward/slug vocabulary now has one home
-	 * (Collections), and adding a proxied collection is one
-	 * registry row. (The orders custom-pull lane keeps its own cursor
-	 * endpoint, /orders/pull, in class-rest-controller.php.).
+	 * (Collections), and adding a proxied collection is one registry row.
+	 *
+	 * Orders proxy /orders here for the browser-window / targeted / query-total
+	 * reads (the client assembles each document's uuid identity from the served
+	 * payload); the checkpointed greedy order lane keeps its own cursor endpoint
+	 * /orders/pull in Orders_Controller.
 	 */
 	private static function resources(): array {
 		$resources = array();
-		foreach ( Collections::with( 'proxy' ) as $collection => $row ) {
-			// Orders use the custom-pull lane introduced in increment 2c.
-			if ( 'orders' === $collection ) {
-				continue;
-			}
+		foreach ( Collections::with( 'proxy' ) as $row ) {
 			$resources[ $row['proxy']['route'] ] = array( $row['proxy']['wc_route'], $row['proxy']['slug'] );
 		}
 
