@@ -198,6 +198,18 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Operations endpoints cannot run against or cure an unhealthy sync store.
+	 */
+	public function test_sync_ops_endpoints_with_missing_tables_return_503(): void {
+		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
+			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
+
+			$this->assertSame( 503, $response->get_status(), $path );
+			$this->assertSame( 'wcpos_sync_unavailable', $response->get_data()['code'], $path );
+		}
+	}
+
+	/**
 	 * Capability checks run before the health gate on every read endpoint.
 	 */
 	public function test_sync_read_endpoints_without_manage_woocommerce_are_not_authorized(): void {

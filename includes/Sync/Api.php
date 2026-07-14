@@ -42,6 +42,7 @@ final class Api {
 			$controllers['sync-changes']    = Changes_Controller::class;
 			$controllers['sync-digests']    = Digests_Controller::class;
 			$controllers['sync-integrity']  = Integrity_Controller::class;
+			$controllers['sync-uuid']       = Uuid_Backfill_Controller::class;
 			$controllers['sync-variations'] = Variations_Controller::class;
 			$controllers['sync-resolve']    = Resolve_Controller::class;
 			$controllers['sync-write']      = Write_Controller::class;

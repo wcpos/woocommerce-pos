@@ -42,7 +42,8 @@ namespace WCPOS\WooCommercePOS\Sync;
  *                   OWNER row (products carries product+variation
  *                   object_types; a copy on variations would double-project).
  *  - fingerprint  — config-change detection membership + the barcode flag.
- *  - backfill     — uuid backfill support: the meta-store kind and the SCAN
+ *  - backfill     — uuid backfill support: the meta-store kind (post, order,
+ *                   user, or term) and the SCAN
  *                   scope (products+variations scan together — which is why
  *                   scan_post_types lives here and not on identity).
  *
@@ -124,7 +125,7 @@ final class Collections {
 				'object_types' => array( 'order' ),
 			),
 			'fingerprint' => null,
-			'backfill'    => null, // read-stamp-only; orders are not posts
+			'backfill'    => array( 'kind' => 'order' ),
 		),
 		'customers' => array(
 			'object_type' => 'customer',

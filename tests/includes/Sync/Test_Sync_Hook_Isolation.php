@@ -86,11 +86,12 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '/wcpos/v1/sync/digests', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/scan', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/bucket', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/rebuild', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/sync/uuid/backfill', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/sync/variations', $routes );
 		$this->assertArrayHasKey( '/wcpos/v1/sync/resolve/barcode', $routes );
 		$this->assertArrayNotHasKey( '/wcpos/v1/sync/changes/date-modified', $routes );
 		$this->assertArrayNotHasKey( '/wcpos/v1/sync/changes/audit-list', $routes );
-		$this->assertArrayNotHasKey( '/wcpos/v1/sync/integrity/rebuild', $routes );
 		$this->assertArrayNotHasKey( '/wc/v3/sync', $routes );
 		$this->assertArrayNotHasKey( '/wc/v3/sync/status', $routes );
 	}

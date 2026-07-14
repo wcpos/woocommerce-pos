@@ -67,6 +67,16 @@ final class Integrity_Controller extends WP_REST_Controller {
 			)
 		);
 
+		register_rest_route(
+			Api::ROUTE_NAMESPACE,
+			'/' . Api::ROUTE_PREFIX . 'integrity/rebuild',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'rebuild' ),
+				'permission_callback' => array( $this, 'permissions_check' ),
+			)
+		);
+
 		// Leg-3 existence reconcile (ADR 0014 increment 5b): the authoritative LIVE {id, digest,
 		// object_type} for one bucket's id-range — the FULL current set, not the drift subset the scan
 		// drill-down returns. The client set-differences its manifest against this to prune stale records.
@@ -92,6 +102,29 @@ final class Integrity_Controller extends WP_REST_Controller {
 						'default' => 'products',
 						'sanitize_callback' => 'sanitize_key',
 					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Backfill pre-existing rows and repair stored digest drift.
+	 */
+	public function rebuild( WP_REST_Request $request ): WP_REST_Response {
+		$started = microtime( true );
+		$result  = $this->digests->rebuild();
+
+		return rest_ensure_response(
+			array(
+				'candidate'       => 'hash-checksum',
+				'collection'      => 'products',
+				'writes'          => $result['writes'],
+				'orphans_deleted' => $result['orphans_deleted'],
+				'stored_total'    => $result['stored_total'],
+				'meta'            => array(
+					'duration_ms'         => round( ( microtime( true ) - $started ) * 1000, 3 ),
+					'rebuild_duration_ms' => $result['duration_ms'],
+					'supported'           => true,
 				),
 			)
 		);
