@@ -468,23 +468,7 @@ class Mutation_Store {
 				);
 				return empty( $found ) ? 0 : $resolved;
 			case 'order':
-				// HPOS-aware: orders live in WooCommerce's own table (not posts). HPOS honors
-				// meta_query (not meta_key/meta_value) for order-meta filtering, so use the same
-				// meta_query shape the other order-uuid lookups use (class-pos-uuid.php).
-				$found = wc_get_orders(
-					array(
-						'limit'      => 2,
-						'orderby'    => 'ID',
-						'order'      => 'ASC',
-						'return'     => 'ids',
-						'meta_query' => array(
-							array(
-								'key' => $key,
-								'value' => $uuid,
-							),
-						),
-					)
-				);
+				$found = Pos_Uuid::get_order_ids_by_uuid( $uuid );
 				break;
 			default:
 				return 0;

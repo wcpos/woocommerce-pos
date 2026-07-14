@@ -262,7 +262,7 @@ class Pos_Uuid {
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
 					"SELECT DISTINCT m.order_id FROM {$wpdb->prefix}wc_orders_meta m"
-					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id"
+					. " JOIN {$wpdb->prefix}wc_orders o ON o.id = m.order_id AND o.type = 'shop_order'"
 					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
 					. " AND o.status NOT IN ('trash','auto-draft')"
 					. ' ORDER BY m.order_id ASC LIMIT 2',
@@ -274,7 +274,7 @@ class Pos_Uuid {
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
 					"SELECT DISTINCT m.post_id FROM {$wpdb->postmeta} m"
-					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id"
+					. " JOIN {$wpdb->posts} p ON p.ID = m.post_id AND p.post_type = 'shop_order'"
 					. ' WHERE m.meta_key = %s AND m.meta_value = %s'
 					. " AND p.post_status NOT IN ('trash','auto-draft')"
 					. ' ORDER BY m.post_id ASC LIMIT 2',

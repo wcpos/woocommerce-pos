@@ -13,6 +13,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
 
 /**
@@ -166,6 +167,86 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'woo_rxdb_sync_identity_ambiguous', $result->get_error_code() );
 		$this->assertSame( 409, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * CPT order UUID lookup resolves the matching live order.
+	 */
+	public function test_resolve_order_uuid_returns_matching_cpt_order(): void {
+		$order = OrderHelper::create_order();
+		$uuid  = '91f7fc84-d70e-4da5-bfe8-45193d61191d';
+		$order->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$order->save();
+
+		$result = $this->store->resolve_id_by_uuid( 'order', $uuid );
+
+		$this->assertSame( $order->get_id(), $result );
+	}
+
+	/**
+	 * A published product carrying an order UUID is not an order owner.
+	 */
+	public function test_resolve_order_uuid_ignores_published_product_without_order(): void {
+		$uuid    = '4a3a60c2-b2cc-470f-8c25-441829f718ac';
+		$product = ProductHelper::create_simple_product();
+		update_post_meta( $product->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$this->assertSame( 'publish', get_post_status( $product->get_id() ) );
+		$this->assertSame( array(), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+		$this->assertSame( 0, $this->store->resolve_id_by_uuid( 'order', $uuid ) );
+	}
+
+	/**
+	 * A product sharing an order UUID does not make order identity ambiguous.
+	 */
+	public function test_resolve_order_uuid_returns_order_when_published_product_shares_uuid(): void {
+		$uuid    = '82af2782-c57f-452e-876b-2295a19feb87';
+		$order   = OrderHelper::create_order();
+		$product = ProductHelper::create_simple_product();
+		$order->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$order->save();
+		update_post_meta( $product->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$this->assertSame( array( (string) $order->get_id() ), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+		$this->assertSame( $order->get_id(), $this->store->resolve_id_by_uuid( 'order', $uuid ) );
+	}
+
+	/**
+	 * Duplicate live order UUID owners fail closed with the canonical wire error.
+	 */
+	public function test_resolve_order_uuid_fails_closed_when_two_live_orders_own_it(): void {
+		$uuid   = 'b1b2a999-fc3e-4465-8cc6-b39e16b862e9';
+		$first  = OrderHelper::create_order();
+		$second = OrderHelper::create_order();
+		$first->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$first->save();
+		$second->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$second->save();
+
+		$result = $this->store->resolve_id_by_uuid( 'order', $uuid );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_identity_ambiguous', $result->get_error_code() );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
+	}
+
+	/**
+	 * A trashed CPT order retaining the UUID is not a live owner.
+	 */
+	public function test_resolve_order_uuid_ignores_trashed_cpt_order_when_live_owner_exists(): void {
+		$uuid          = 'e4b36ca3-0686-40b9-a987-bf14b415f346';
+		$trashed_order = OrderHelper::create_order();
+		$trashed_order->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$trashed_order->save();
+		$trashed_id = $trashed_order->get_id();
+		$trashed_order->delete( false );
+
+		$live_order = OrderHelper::create_order();
+		$live_order->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$live_order->save();
+
+		$this->assertSame( $uuid, get_post_meta( $trashed_id, Api::UUID_META_KEY, true ), 'The trashed order must retain its UUID for this regression.' );
+		$this->assertSame( $live_order->get_id(), $this->store->resolve_id_by_uuid( 'order', $uuid ) );
 	}
 
 	/**

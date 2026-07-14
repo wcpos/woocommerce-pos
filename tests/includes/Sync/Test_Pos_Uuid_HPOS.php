@@ -65,4 +65,32 @@ class Test_Pos_Uuid_HPOS extends WP_UnitTestCase {
 		$this->assertSame( $uuid, $retained_uuid, 'The trashed order must retain its UUID for this regression.' );
 		$this->assertSame( array( (string) $live_order->get_id() ), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
 	}
+
+	/**
+	 * An HPOS refund sharing a UUID does not count as a second order owner.
+	 */
+	public function test_get_order_ids_by_uuid_ignores_hpos_refund_when_live_order_exists(): void {
+		$uuid    = wp_generate_uuid4();
+		$product = new \WC_Product_Simple();
+		$product->set_regular_price( '10.00' );
+		$product->save();
+
+		$order = wc_create_order();
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$order->save();
+
+		$refund = wc_create_refund(
+			array(
+				'amount'   => '10.00',
+				'order_id' => $order->get_id(),
+			)
+		);
+		$this->assertNotWPError( $refund );
+		$refund->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$refund->save();
+
+		$this->assertSame( array( (string) $order->get_id() ), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+	}
 }
