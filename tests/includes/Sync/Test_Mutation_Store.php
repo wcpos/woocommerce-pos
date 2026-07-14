@@ -13,6 +13,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_Error;
 
 /**
@@ -180,6 +181,34 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$result = $this->store->resolve_id_by_uuid( 'order', $uuid );
 
 		$this->assertSame( $order->get_id(), $result );
+	}
+
+	/**
+	 * A published product carrying an order UUID is not an order owner.
+	 */
+	public function test_resolve_order_uuid_ignores_published_product_without_order(): void {
+		$uuid    = '4a3a60c2-b2cc-470f-8c25-441829f718ac';
+		$product = ProductHelper::create_simple_product();
+		update_post_meta( $product->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$this->assertSame( 'publish', get_post_status( $product->get_id() ) );
+		$this->assertSame( array(), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+		$this->assertSame( 0, $this->store->resolve_id_by_uuid( 'order', $uuid ) );
+	}
+
+	/**
+	 * A product sharing an order UUID does not make order identity ambiguous.
+	 */
+	public function test_resolve_order_uuid_returns_order_when_published_product_shares_uuid(): void {
+		$uuid    = '82af2782-c57f-452e-876b-2295a19feb87';
+		$order   = OrderHelper::create_order();
+		$product = ProductHelper::create_simple_product();
+		$order->update_meta_data( Api::UUID_META_KEY, $uuid );
+		$order->save();
+		update_post_meta( $product->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$this->assertSame( array( (string) $order->get_id() ), Pos_Uuid::get_order_ids_by_uuid( $uuid ) );
+		$this->assertSame( $order->get_id(), $this->store->resolve_id_by_uuid( 'order', $uuid ) );
 	}
 
 	/**
