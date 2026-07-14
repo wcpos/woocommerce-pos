@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use Automattic\WooCommerce\Utilities\OrderUtil;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
@@ -48,49 +50,37 @@ final class Order_Query {
 	}
 
 	private function ids_after_modified_checkpoint( string $updated_at_gmt, int $order_id, int $limit ): array {
-		$candidate_ids = $this->candidate_ids_from_verified_woo_query( $updated_at_gmt, $limit * 3 );
-		$filtered = array();
+		global $wpdb;
 
-		$checkpoint_timestamp = $this->timestamp_from_checkpoint( $updated_at_gmt );
+		$checkpoint_modified = gmdate( 'Y-m-d H:i:s', $this->timestamp_from_checkpoint( $updated_at_gmt ) );
+		$limit               = max( 1, min( 251, $limit ) );
 
-		foreach ( $candidate_ids as $id ) {
-			$order = wc_get_order( $id );
-			if ( ! $order || ! $order->get_date_modified() ) {
-				continue;
-			}
-
-			$modified_timestamp = (int) $order->get_date_modified()->getTimestamp();
-			$is_after_timestamp = $modified_timestamp > $checkpoint_timestamp;
-			$is_same_timestamp_after_id = $modified_timestamp === $checkpoint_timestamp && $id > $order_id;
-
-			if ( $is_after_timestamp || $is_same_timestamp_after_id ) {
-				$filtered[] = $id;
-			}
-
-			if ( count( $filtered ) >= $limit ) {
-				break;
-			}
+		if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+			$sql = $wpdb->prepare(
+				"SELECT id FROM {$wpdb->prefix}wc_orders"
+				. " WHERE type = 'shop_order' AND status NOT IN ('trash', 'auto-draft')"
+				. ' AND (date_updated_gmt > %s OR (date_updated_gmt = %s AND id > %d))'
+				. ' ORDER BY date_updated_gmt ASC, id ASC LIMIT %d',
+				$checkpoint_modified,
+				$checkpoint_modified,
+				$order_id,
+				$limit
+			);
+		} else {
+			$sql = $wpdb->prepare(
+				"SELECT ID FROM {$wpdb->posts}"
+				. " WHERE post_type = 'shop_order' AND post_status NOT IN ('trash', 'auto-draft')"
+				. ' AND (post_modified_gmt > %s OR (post_modified_gmt = %s AND ID > %d))'
+				. ' ORDER BY post_modified_gmt ASC, ID ASC LIMIT %d',
+				$checkpoint_modified,
+				$checkpoint_modified,
+				$order_id,
+				$limit
+			);
 		}
 
-		return $filtered;
-	}
-
-	private function candidate_ids_from_verified_woo_query( string $updated_at_gmt, int $limit ): array {
-		$query_args = array(
-			'type' => 'shop_order',
-			'limit' => $limit,
-			'orderby' => 'modified',
-			'order' => 'ASC',
-			'return' => 'ids',
-		);
-		$checkpoint_timestamp = $this->timestamp_from_checkpoint( $updated_at_gmt );
-		if ( $checkpoint_timestamp > 0 ) {
-			$query_args['date_modified'] = '>=' . gmdate( 'Y-m-d H:i:s', $checkpoint_timestamp );
-		}
-
-		$queried = wc_get_orders( $query_args );
-		/** @var array<int, int|string> $ids The `return => ids` query returns scalar ids. */
-		$ids = is_array( $queried ) ? $queried : array();
+		/** @var array<int, int|string> $ids Exact compound-key page from the active order store. */
+		$ids = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above with bounded values and known table names.
 
 		return array_map(
 			static function ( $id ): int {

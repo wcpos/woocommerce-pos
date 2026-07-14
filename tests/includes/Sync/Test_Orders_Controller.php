@@ -200,6 +200,73 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * The modified-date fallback uses the order id as the tie-breaker when more
+	 * than the old bounded overscan can share one modified second.
+	 */
+	public function test_fallback_pull_pages_every_order_sharing_the_checkpoint_second_exactly_once(): void {
+		global $wpdb;
+
+		$limit               = 2;
+		$order_count         = ( 3 * $limit ) + 5;
+		$shared_modified_gmt = '2020-01-02 03:04:05';
+		$expected_order_ids  = array();
+
+		for ( $i = 0; $i < $order_count; $i++ ) {
+			$order                = OrderHelper::create_order();
+			$expected_order_ids[] = $order->get_id();
+			$updated = $wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_modified' => $shared_modified_gmt,
+					'post_modified_gmt' => $shared_modified_gmt,
+				),
+				array( 'ID' => $order->get_id() ),
+				array( '%s', '%s' ),
+				array( '%d' )
+			);
+			$this->assertSame( 1, $updated );
+			clean_post_cache( $order->get_id() );
+		}
+
+		$index = new Sync_Index();
+		$wpdb->query( 'DELETE FROM ' . $index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+
+		$received_order_ids = array();
+		$page_count         = 0;
+		$checkpoint = array(
+			'updated_at_gmt' => gmdate( 'c', strtotime( $shared_modified_gmt ) ),
+			'order_id' => 0,
+			'sequence' => 0,
+		);
+
+		do {
+			$page_count++;
+			$this->assertLessThanOrEqual( $order_count, $page_count );
+			$response = ( new Orders_Controller() )->pull_orders(
+				$this->request(
+					array_merge(
+						$checkpoint,
+						array( 'limit' => $limit )
+					)
+				)
+			);
+			$data = $response->get_data();
+
+			$received_order_ids = array_merge( $received_order_ids, array_column( $data['documents'], 'wooOrderId' ) );
+			$checkpoint = array(
+				'updated_at_gmt' => $data['checkpoint']['updatedAtGmt'],
+				'order_id' => $data['checkpoint']['orderId'],
+				'sequence' => $data['checkpoint']['sequence'],
+			);
+
+			$this->assertSame( count( $received_order_ids ) < $order_count, $data['hasMore'] );
+		} while ( $data['hasMore'] );
+
+		$this->assertCount( $order_count, array_unique( $received_order_ids ) );
+		$this->assertSame( $expected_order_ids, $received_order_ids );
+	}
+
+	/**
 	 * The index backfill runs one bounded chunk.
 	 */
 	public function test_index_backfill_runs_one_bounded_chunk(): void {
