@@ -158,9 +158,7 @@ final class StaticMockerHack extends CodeHack {
 
 					if ( $is_method_call ) {
 						$called_member = $this->token_to_string( $member_token );
-						// Only add leading backslash if the original code didn't already have one.
-						$prefix         = $previous_token_is_ns_separator ? '' : '\\';
-						$code          .= $prefix . __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
+						$code          .= '\\' . __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
 						$i             += 2; // Consumed the class name, '::' and the member.
 						$previous_token_is_ns_separator = false;
 						continue;
