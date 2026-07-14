@@ -68,6 +68,8 @@ class Mutation_Store {
 '
 			. '  operation VARCHAR(8) NOT NULL,
 '
+			. '  fingerprint CHAR(64) NOT NULL,
+'
 			. '  status VARCHAR(8) NOT NULL,
 '
 			. '  response_status SMALLINT NULL,
@@ -90,14 +92,13 @@ class Mutation_Store {
 		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
 
-	/** A prior application of this mutationId in this collection, or null. */
+	/** A prior application of this globally unique mutationId, or null. */
 	public function lookup( string $collection, string $mutation_id ): ?array {
 		global $wpdb;
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT remote_id, operation, record_uuid, status, response_status FROM {$this->table_name()} WHERE mutation_id = %s AND collection = %s",
-				$mutation_id,
-				$collection
+				"SELECT collection, remote_id, operation, record_uuid, fingerprint, status, response_status FROM {$this->table_name()} WHERE mutation_id = %s",
+				$mutation_id
 			),
 			ARRAY_A
 		);
@@ -111,15 +112,16 @@ class Mutation_Store {
 	 * replay or wait. This is what makes the create path safe against a timeout-retry
 	 * overlapping its own in-flight push.
 	 */
-	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation ): bool {
+	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		global $wpdb;
 		$affected = $wpdb->query(
 			$wpdb->prepare(
-				"INSERT IGNORE INTO {$this->table_name()} (mutation_id, collection, record_uuid, remote_id, operation, status, created_at) VALUES (%s, %s, %s, 0, %s, 'pending', %s)",
+				"INSERT IGNORE INTO {$this->table_name()} (mutation_id, collection, record_uuid, remote_id, operation, fingerprint, status, created_at) VALUES (%s, %s, %s, 0, %s, %s, 'pending', %s)",
 				$mutation_id,
 				$collection,
 				$record_uuid,
 				$operation,
+				$fingerprint,
 				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
@@ -152,6 +154,23 @@ class Mutation_Store {
 			array(
 				'remote_id' => $remote_id,
 				'status' => 'poison',
+				'response_status' => $response_status,
+			),
+			array(
+				'mutation_id' => $mutation_id,
+				'status' => 'pending',
+			)
+		);
+		return false !== $affected && 1 === (int) $affected;
+	}
+
+	/** Preserve a create response whose server id could not be determined safely. */
+	public function mark_unknown( string $mutation_id, int $response_status ): bool {
+		global $wpdb;
+		$affected = $wpdb->update(
+			$this->table_name(),
+			array(
+				'status' => 'unknown',
 				'response_status' => $response_status,
 			),
 			array(

@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WCPOS\WooCommercePOS\Services\Extensions;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WP_HTTP_Response;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -203,6 +204,7 @@ class Init {
 				'X-HTTP-Method-Override',   // Used to override the HTTP method.
 				'X-WCPOS',                  // Used to identify WCPOS requests.
 			);
+			$allow_headers = Header_Mirror::allow_cors_headers( $allow_headers );
 
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );

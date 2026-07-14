@@ -15,7 +15,7 @@ final class Api {
 	public const ROUTE_PREFIX    = 'sync/';
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
-	public const SCHEMA_VERSION  = '1';
+	public const SCHEMA_VERSION  = '2';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**

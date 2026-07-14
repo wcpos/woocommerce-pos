@@ -84,11 +84,11 @@ class Test_Sync_Install extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * An unlatched sync schema queues db_upgrade even when the plugin version matches.
+	 * A stale sync schema queues db_upgrade even when the plugin version matches.
 	 */
-	public function test_version_check_queues_upgrade_when_only_sync_schema_is_unlatched(): void {
+	public function test_version_check_queues_upgrade_when_only_sync_schema_is_stale(): void {
 		update_option( 'woocommerce_pos_db_version', \WCPOS\WooCommercePOS\VERSION );
-		delete_option( Api::SCHEMA_OPTION );
+		update_option( Api::SCHEMA_OPTION, '1' );
 		delete_option( 'woocommerce_pos_db_upgrade_lock.lock' );
 		remove_all_actions( 'woocommerce_init' );
 

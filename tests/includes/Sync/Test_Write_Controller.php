@@ -68,6 +68,14 @@ final class Fake_Mutation_Store {
 	}
 	public function mark_applied( string $mutation_id, int $remote_id, int $response_status ): bool {
 		$this->applied[ $mutation_id ] = $remote_id;
+		$this->lookups[ $mutation_id ] = array_merge(
+			$this->lookups[ $mutation_id ],
+			array(
+				'remote_id' => $remote_id,
+				'status' => 'applied',
+				'response_status' => $response_status,
+			)
+		);
 		return true;
 	}
 	public function mark_poison( string $mutation_id, int $remote_id, int $response_status = 201 ): bool {
@@ -93,15 +101,10 @@ final class Fake_Mutation_Store {
 	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
 		if ( ! $this->finalizeOk ) {
-			$this->lookups[ $mutation_id ] = array(
-				'remote_id' => $remote_id,
-				'operation' => 'create',
-				'record_uuid' => Test_Write_Controller::REC,
-				'status' => 'applied',
-			);
 			return false;
 		}
 		$this->finalized[ $mutation_id ] = $remote_id;
+		$this->lookups[ $mutation_id ]['status'] = 'done';
 		return true;
 	}
 	public function finalize_poison( string $mutation_id, int $remote_id ): bool {
@@ -890,13 +893,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'GET', $GLOBALS['wcpos_sync_test_rest_do_request_calls'][0]->get_method() );
 	}
 
-	public function test_create_fails_closed_and_releases_when_wc_v3_returns_no_id(): void {
+	public function test_create_fails_closed_when_wc_v3_returns_no_id(): void {
 		$store = new Fake_Mutation_Store();
 		$this->setRestResponse( array( 'email' => 'a@b.c' ), 201 ); // 2xx but no usable id
 		$result = $this->push( $store );
 		$this->assertSame( 'woo_rxdb_sync_create_no_id', $result->get_error_code() );
 		$this->assertSame( array(), $store->finalized ); // not finalized
-		$this->assertSame( array( self::MID => 0 ), $store->poisoned );
+		$this->assertSame( array( self::MID ), $store->unknown );
 		$this->assertSame( array(), $store->released );
 	}
 
