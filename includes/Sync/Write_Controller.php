@@ -131,7 +131,7 @@ class Write_Controller extends WP_REST_Controller {
 		// Idempotent replay: a mutationId already APPLIED returns its canonical result.
 		$hit = $this->store->lookup( $collection, $m['mutationId'] );
 		if ( is_array( $hit ) ) {
-			$mismatch = $this->replay_target_mismatch( $hit, $m, $fingerprint );
+			$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
 			if ( $mismatch ) {
 				return $mismatch;
 			}
@@ -153,7 +153,7 @@ class Write_Controller extends WP_REST_Controller {
 		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'], $fingerprint ) ) {
 			$hit = $this->store->lookup( $collection, $m['mutationId'] );
 			if ( is_array( $hit ) ) {
-				$mismatch = $this->replay_target_mismatch( $hit, $m, $fingerprint );
+				$mismatch = $this->replay_target_mismatch( $hit, $collection, $fingerprint );
 				if ( $mismatch ) {
 					return $mismatch;
 				}
@@ -218,41 +218,18 @@ class Write_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * A stored mutationId must be replayed only for its original envelope. The
-	 * record/operation comparison remains as a fallback for pre-fingerprint rows.
+	 * A stored mutationId must be replayed only for its original envelope.
 	 *
 	 * @param array $hit The stored mutation row.
-	 * @param array $m   The incoming envelope.
 	 * @return WP_Error|null An envelope rejection on mismatch, null when aligned.
 	 */
-	private function replay_target_mismatch( array $hit, array $m, string $fingerprint ) {
-		$stored_uuid = strtolower( (string) ( $hit['record_uuid'] ?? '' ) );
-		$stored_op   = (string) ( $hit['operation'] ?? '' );
+	private function replay_target_mismatch( array $hit, string $collection, string $fingerprint ) {
 		$stored_fingerprint = (string) ( $hit['fingerprint'] ?? '' );
-		if ( '' !== $stored_fingerprint ) {
-			if ( hash_equals( $stored_fingerprint, $fingerprint ) ) {
-				return null;
-			}
-			if ( 'poison' === ( $hit['status'] ?? '' ) && strtolower( (string) $m['recordId'] ) !== $stored_uuid ) {
-				// Keep #518's identity_conflict response for a poison retry that changes recordId.
-				return null;
-			}
-			return new WP_Error( 'woo_rxdb_sync_bad_mutation_id', 'mutationId was already used for a different envelope.', array( 'status' => 422 ) );
-		}
-		if ( 'poison' === ( $hit['status'] ?? '' ) ) {
+		$stored_collection = (string) ( $hit['collection'] ?? '' );
+		if ( '' !== $stored_fingerprint && hash_equals( $stored_fingerprint, $fingerprint ) && ( '' === $stored_collection || $collection === $stored_collection ) ) {
 			return null;
 		}
-		if ( '' === $stored_uuid && '' === $stored_op ) {
-			return null;
-		}
-		if ( strtolower( (string) $m['recordId'] ) === $stored_uuid && (string) $m['operation'] === $stored_op ) {
-			return null;
-		}
-		return new WP_Error(
-			'woo_rxdb_sync_bad_mutation_id',
-			'mutationId was already used for a different record or operation.',
-			array( 'status' => 422 )
-		);
+		return new WP_Error( 'woo_rxdb_sync_bad_mutation_id', 'mutationId was already used for a different envelope.', array( 'status' => 422 ) );
 	}
 
 	private function envelope_fingerprint( array $envelope ): string {

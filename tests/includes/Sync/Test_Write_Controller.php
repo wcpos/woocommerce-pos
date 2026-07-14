@@ -26,6 +26,8 @@ final class Fake_Mutation_Store {
 	public $resolve = 0;
 	/** resolve_id_by_uuid() return values consumed before falling back to $resolve */
 	public array $resolveResults = array();
+	/** lookup() return values consumed before falling back to $lookups */
+	public array $lookupResults = array();
 	/** @var array[] persist_uuid() calls */
 	public array $persisted = array();
 	/** @var array[] persist_order_audit_meta() calls: {id, meta, created_via} */
@@ -39,6 +41,7 @@ final class Fake_Mutation_Store {
 	public array $fingerprints = array();
 	public bool $finalizeOk = true;
 	public bool $poisonOk = true;
+	public bool $indeterminateOk = true;
 	public bool $persistUuidOk = true;
 	/** @var string[] mutationIds released */
 	public array $released = array();
@@ -52,23 +55,32 @@ final class Fake_Mutation_Store {
 	public array $lockTrace = array();
 
 	public function lookup( string $collection, string $mutation_id ): ?array {
+		if ( array() !== $this->lookupResults ) {
+			return array_shift( $this->lookupResults );
+		}
 		return $this->lookups[ $mutation_id ] ?? null;
 	}
 	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		$this->reserved[] = $mutation_id;
 		$this->fingerprints[ $mutation_id ] = $fingerprint;
-		return array_shift( $this->reserveResults ) ?? true;
+		$reserved = isset( $this->lookups[ $mutation_id ] ) ? false : ( array_shift( $this->reserveResults ) ?? true );
+		if ( ! isset( $this->lookups[ $mutation_id ] ) ) {
+			$this->lookups[ $mutation_id ] = array(
+				'collection' => $collection,
+				'remote_id' => 0,
+				'operation' => $operation,
+				'record_uuid' => $record_uuid,
+				'status' => 'pending',
+				'fingerprint' => $fingerprint,
+			);
+		}
+		return $reserved;
 	}
 	public function mark_applied( string $mutation_id, int $remote_id, int $response_status ): bool {
 		$this->applied[ $mutation_id ] = $remote_id;
-		$this->lookups[ $mutation_id ] = array(
-			'remote_id' => $remote_id,
-			'operation' => 'create',
-			'record_uuid' => Test_Write_Controller::REC,
-			'status' => 'applied',
-			'response_status' => $response_status,
-			'fingerprint' => $this->fingerprints[ $mutation_id ] ?? '',
-		);
+		$this->lookups[ $mutation_id ]['remote_id'] = $remote_id;
+		$this->lookups[ $mutation_id ]['status'] = 'applied';
+		$this->lookups[ $mutation_id ]['response_status'] = $response_status;
 		return true;
 	}
 	public function mark_poison( string $mutation_id, int $remote_id, int $response_status = 201 ): bool {
@@ -76,18 +88,18 @@ final class Fake_Mutation_Store {
 			return false;
 		}
 		$this->poisoned[ $mutation_id ] = $remote_id;
-		$this->lookups[ $mutation_id ] = array(
-			'remote_id' => $remote_id,
-			'operation' => 'create',
-			'record_uuid' => Test_Write_Controller::REC,
-			'status' => 'poison',
-			'response_status' => $response_status,
-			'fingerprint' => $this->fingerprints[ $mutation_id ] ?? '',
-		);
+		$this->lookups[ $mutation_id ]['remote_id'] = $remote_id;
+		$this->lookups[ $mutation_id ]['status'] = 'poison';
+		$this->lookups[ $mutation_id ]['response_status'] = $response_status;
 		return true;
 	}
 	public function mark_indeterminate( string $mutation_id, int $remote_id, int $response_status ): bool {
-		$this->lookups[ $mutation_id ] = array( 'status' => 'blocked' );
+		if ( ! $this->indeterminateOk ) {
+			return false;
+		}
+		$this->lookups[ $mutation_id ]['remote_id'] = $remote_id;
+		$this->lookups[ $mutation_id ]['status'] = 'blocked';
+		$this->lookups[ $mutation_id ]['response_status'] = $response_status;
 		return true;
 	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
@@ -95,6 +107,7 @@ final class Fake_Mutation_Store {
 			return false;
 		}
 		$this->finalized[ $mutation_id ] = $remote_id;
+		$this->lookups[ $mutation_id ]['status'] = 'done';
 		return true;
 	}
 	public function finalize_poison( string $mutation_id, int $remote_id ): bool {
@@ -108,9 +121,19 @@ final class Fake_Mutation_Store {
 	}
 	public function release( string $mutation_id ): void {
 		$this->released[] = $mutation_id;
+		if ( 'pending' === ( $this->lookups[ $mutation_id ]['status'] ?? '' ) ) {
+			unset( $this->lookups[ $mutation_id ] );
+		}
 	}
 	public function reclaim_stale( string $mutation_id, int $ttl ): bool {
-		return $this->reclaimOk;
+		if ( 'create' === ( $this->lookups[ $mutation_id ]['operation'] ?? '' ) ) {
+			return false;
+		}
+		if ( $this->reclaimOk ) {
+			unset( $this->lookups[ $mutation_id ] );
+			return true;
+		}
+		return false;
 	}
 	public function reservation_ttl(): int {
 		return 900;
@@ -144,6 +167,8 @@ final class Fake_Mutation_Store {
 final class Test_Write_Controller extends WP_UnitTestCase {
 	public const REC = '5b8e1a3c-2f4d-4a6b-9c8e-1d2f3a4b5c6d';
 	private const MID = 'a1b2c3d4-1111-4222-8333-444455556666';
+	private const DEFAULT_FINGERPRINT = 'e3e6ca70cef8d8720aeedb9e7df682b8a4349d76774d86682e0943ed87475585';
+	private const ORDER_FINGERPRINT = '987129ae825778cabd9640deb6b3d92fe5b6e3f89ff58e7fd69340587718c62b';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -669,6 +694,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'operation' => 'create',
 			'record_uuid' => self::REC,
 			'status' => 'done',
+			'fingerprint' => self::ORDER_FINGERPRINT,
 		);
 
 		$result = $this->push( $store, array( 'collection' => 'orders' ) );
@@ -905,6 +931,21 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->released );
 	}
 
+	public function test_create_no_id_stays_non_reclaimable_when_blocked_transition_fails(): void {
+		$store = new Fake_Mutation_Store();
+		$store->indeterminateOk = false;
+		$this->setRestResponse( array( 'email' => 'a@b.c' ), 202 );
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_create_no_id', $result->get_error_code() );
+		$this->assertSame( 'pending', $store->lookups[ self::MID ]['status'] );
+		$this->assertSame( array(), $store->released );
+		$retry = $this->push( $store );
+		$this->assertSame( 'woo_rxdb_sync_in_progress', $retry->get_data()['code'] );
+		$this->assertCount( 1, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] );
+	}
+
 	public function test_create_checkpoint_failure_stamps_known_identity_before_returning(): void {
 		$store = new Fake_Mutation_Store();
 		$store->poisonOk = false;
@@ -963,6 +1004,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'operation' => 'create',
 			'record_uuid' => self::REC,
 			'status' => 'poison',
+			'fingerprint' => self::DEFAULT_FINGERPRINT,
 		);
 		$store->resolve = 9999;
 		$result = $this->push( $store );
@@ -978,6 +1020,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'operation' => 'create',
 			'record_uuid' => self::REC,
 			'status' => 'poison',
+			'fingerprint' => self::DEFAULT_FINGERPRINT,
 		);
 
 		$result = $this->push(
@@ -997,7 +1040,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 422, $result->get_error_data()['status'] );
-		$this->assertSame( 'woo_rxdb_sync_identity_conflict', $result->get_error_code() );
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
 		$this->assertSame( array(), $store->persisted );
 		$this->assertSame( 'poison', $store->lookups[ self::MID ]['status'] );
 		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
@@ -1276,6 +1319,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'record_uuid' => self::REC,
 			'status' => 'done',
 			'response_status' => $recorded_status,
+			'fingerprint' => self::DEFAULT_FINGERPRINT,
 		);
 		$this->setRestResponse(
 			array(
@@ -1356,8 +1400,49 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_reserve_loser_rechecks_fingerprint_before_reclaim(): void {
+		$store = new Fake_Mutation_Store();
+		$store->lookupResults = array(
+			null,
+			array(
+				'collection' => 'customers',
+				'remote_id' => 0,
+				'operation' => 'create',
+				'record_uuid' => self::REC,
+				'status' => 'pending',
+				'fingerprint' => str_repeat( 'f', 64 ),
+			),
+		);
+		$store->reserveResults = array( false );
+		$store->reclaimOk = true;
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+		$this->assertSame( array( self::MID ), $store->reserved );
+		$this->assertSame( array(), $store->finalized );
+	}
+
+	public function test_legacy_row_without_fingerprint_fails_closed(): void {
+		$store = new Fake_Mutation_Store();
+		$store->lookups[ self::MID ] = array(
+			'collection' => 'customers',
+			'remote_id' => 4242,
+			'operation' => 'create',
+			'record_uuid' => self::REC,
+			'status' => 'done',
+			'fingerprint' => '',
+		);
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+	}
+
 	public static function recordedCreateReplayStatuses(): array {
 		return array(
+			'accepted create' => array( 202 ),
 			'applied create' => array( 201 ),
 			'born-twice create' => array( 200 ),
 		);
@@ -1371,6 +1456,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			'operation' => 'create',
 			'record_uuid' => self::REC,
 			'status' => 'done',
+			'fingerprint' => self::DEFAULT_FINGERPRINT,
 		);
 		$result = $this->push( $store );
 		$this->assertSame( 'woo_rxdb_sync_orphaned_mutation', $result->get_error_code() );
@@ -1387,10 +1473,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->finalized );
 	}
 
-	public function test_reserve_lost_but_stale_reservation_is_reclaimed_and_applied(): void {
+	public function test_reserve_lost_pending_create_is_not_reclaimed(): void {
 		$store = new Fake_Mutation_Store();
-		$store->reserveResults = array( false, true ); // lose, then win after reclaim
-		$store->reclaimOk = true; // the prior reservation was stale (crashed winner)
+		$store->reserveResults = array( false );
+		$store->reclaimOk = true;
 		$this->setRestResponse(
 			array(
 				'id' => 500,
@@ -1399,9 +1485,11 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			201
 		);
 		$result = $this->push( $store );
-		$this->assertSame( 201, $result->get_status() );
-		$this->assertSame( array( self::MID => 500 ), $store->finalized );
-		$this->assertSame( array( self::MID, self::MID ), $store->reserved ); // reserved twice (lose → reclaim → win)
+		$this->assertSame( 409, $result->get_status() );
+		$this->assertSame( 'woo_rxdb_sync_in_progress', $result->get_data()['code'] );
+		$this->assertSame( array(), $store->finalized );
+		$this->assertSame( array( self::MID ), $store->reserved );
+		$this->assertEmpty( $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ?? array() );
 	}
 
 	private function pushWithHeaders( Fake_Mutation_Store $store, array $headers, array $envOver = array() ) {
