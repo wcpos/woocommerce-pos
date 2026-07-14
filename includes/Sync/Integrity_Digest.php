@@ -637,7 +637,7 @@ final class Integrity_Digest {
 
 	private function delete_order_digest( int $order_id ): void {
 		global $wpdb;
-		$wpdb->delete(
+		$deleted = $wpdb->delete(
 			$this->table_name(),
 			array(
 				'object_type' => 'order',
@@ -645,6 +645,9 @@ final class Integrity_Digest {
 			),
 			array( '%s', '%d' )
 		);
+		if ( false === $deleted ) {
+			throw new RuntimeException( 'delete stored order digest failed: ' . $wpdb->last_error );
+		}
 	}
 
 	/** Order analogue of {@see upsert_customer_digest}: compute + store one order's digest (HPOS or CPT). */

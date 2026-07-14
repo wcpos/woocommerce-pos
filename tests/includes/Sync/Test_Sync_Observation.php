@@ -177,9 +177,9 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
-	 * A failed customer digest delete must fail open and leave an operations log.
+	 * Failed customer and order digest deletes must fail open and leave an operations log.
 	 */
-	public function test_customer_digest_delete_failure_is_logged(): void {
+	public function test_digest_delete_failures_are_logged(): void {
 		global $wpdb;
 
 		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
@@ -201,12 +201,14 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
 		try {
 			$user->remove_role( 'customer' );
+			$this->integrity_digest->record_order_deleted( 1 );
 		} finally {
 			remove_filter( 'query', $break_digest_delete );
 			remove_filter( 'woocommerce_pos_logging', $capture_log );
 		}
 
 		$this->assertStringContainsString( 'delete stored customer digest failed', implode( "\n", $messages ) );
+		$this->assertStringContainsString( 'delete stored order digest failed', implode( "\n", $messages ) );
 	}
 
 	/**
