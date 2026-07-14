@@ -225,12 +225,16 @@ class Test_Order_Pull_Planner extends WP_UnitTestCase {
 		$planner = new Order_Pull_Planner( self::request_checkpoint(), false );
 		$result  = self::plan_result(
 			$planner,
-			array( self::row( 10, 4 ) ),
+			array( self::row( 10, 4 ), self::row( 11, 5 ) ),
 			true,
 			array(
 				10 => self::payload( 10, self::UUID_A ),
+				11 => self::payload( 11, self::UUID_B ),
 			)
 		);
+		$this->assertCount( 1, $result['emits'] );
+		$this->assertSame( 10, $result['emits'][0]['orderId'] );
+		$this->assertSame( 4, $result['complete']['checkpoint']['sequence'] );
 		$this->assertTrue( $result['complete']['hasMore'] );
 	}
 

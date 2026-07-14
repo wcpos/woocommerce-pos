@@ -61,7 +61,7 @@ final class Order_Pull_Planner {
 	 *  - array{type:'tombstone', wooOrderId:int, checkpoint:array} (only when the client opted into deletes)
 	 *  - array{type:'complete', checkpoint:array, hasMore:bool} (EXACTLY ONE, always LAST)
 	 *
-	 * @param array    $change_rows       The page-sliced sync-index rows.
+	 * @param array    $change_rows       The sync-index page including its optional limit+1 probe row.
 	 * @param bool     $page_full         The limit+1 probe overflowed (more rows exist beyond this page).
 	 * @param callable $serialize         fn(int $order_id): array — the FULL payload, or array() when the
 	 *                                    order no longer serializes (absent/inaccessible).
@@ -72,6 +72,9 @@ final class Order_Pull_Planner {
 		$has_more = $page_full;
 		$response_checkpoint = $this->request_checkpoint;
 		$latest_sequence_by_order = self::latest_sequence_by_order( $change_rows );
+		if ( $page_full ) {
+			array_pop( $change_rows );
+		}
 
 		foreach ( $change_rows as $change_row ) {
 			$id = (int) $change_row['order_id'];

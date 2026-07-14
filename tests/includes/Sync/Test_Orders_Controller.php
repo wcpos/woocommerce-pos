@@ -200,6 +200,34 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * A probe-row delete suppresses the page-end update for the same order.
+	 */
+	public function test_probe_delete_coalesces_page_end_update_without_emitting_a_stale_document(): void {
+		$order = OrderHelper::create_order();
+		$index = new Sync_Index();
+		$index->record_order_change( $order->get_id(), 'hook:update', false );
+		$page_sequence = $index->head_sequence();
+		$index->record_order_change( $order->get_id(), 'hook:delete', true );
+
+		$response = ( new Orders_Controller() )->pull_orders(
+			$this->request(
+				array(
+					'limit' => 1,
+					'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+					'order_id' => 0,
+					'sequence' => 0,
+				)
+			)
+		);
+		$data = $response->get_data();
+
+		$this->assertSame( array(), $data['documents'] );
+		$this->assertSame( array(), $data['deletes'] );
+		$this->assertSame( $page_sequence, $data['checkpoint']['sequence'] );
+		$this->assertTrue( $data['hasMore'] );
+	}
+
+	/**
 	 * The modified-date fallback uses the order id as the tie-breaker when more
 	 * than the old bounded overscan can share one modified second.
 	 */

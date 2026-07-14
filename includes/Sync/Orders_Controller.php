@@ -103,7 +103,6 @@ final class Orders_Controller extends WP_REST_Controller {
 		$serializer = new Order_Serializer();
 		$change_rows = $query->changes_after_checkpoint( $updated_at_gmt, $order_id, $sequence, $limit + 1 );
 		$has_more    = count( $change_rows ) > $limit;
-		$change_rows = array_slice( $change_rows, 0, $limit );
 
 		$planner = new Order_Pull_Planner(
 			array(
