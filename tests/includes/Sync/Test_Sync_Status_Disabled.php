@@ -35,10 +35,20 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 	 * The sync status route is unavailable by default.
 	 */
 	public function test_sync_status_with_flag_disabled_returns_404(): void {
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
-		$response = $this->server->dispatch( $request );
+		$paths = array(
+			'/wcpos/v1/sync/status',
+			'/wcpos/v1/sync/products',
+			'/wcpos/v1/sync/changes/sequence-log',
+			'/wcpos/v1/sync/digests',
+			'/wcpos/v1/sync/integrity/scan',
+			'/wcpos/v1/sync/variations',
+			'/wcpos/v1/sync/resolve/barcode',
+		);
 
-		$this->assertEquals( 404, $response->get_status() );
+		foreach ( $paths as $path ) {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
+			$this->assertEquals( 404, $response->get_status(), $path . ' was registered while sync was disabled.' );
+		}
 	}
 
 	/**

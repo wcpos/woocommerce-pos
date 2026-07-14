@@ -427,6 +427,14 @@ class API {
 
 		$max_length = 10000;
 
+		// The sync sub-surface speaks its own wire contract (include = raw id
+		// list validated by its controllers); the wcpos_include/exclude rewrite
+		// below is a legacy extended-WC-controller workaround and must not
+		// mangle sync routes.
+		if ( 0 === strpos( $route, '/wcpos/v1/' . \WCPOS\WooCommercePOS\Sync\Api::ROUTE_PREFIX ) ) {
+			return $result;
+		}
+
 		// Process 'include' parameter.
 		$include = $request->get_param( 'include' );
 		if ( $include ) {

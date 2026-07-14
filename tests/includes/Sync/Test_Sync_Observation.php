@@ -352,7 +352,15 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		wc_create_order();
 		$order_ids = array_map(
 			'intval',
-			wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+			wc_get_orders(
+				array(
+					'type' => 'shop_order',
+					'limit' => -1,
+					'orderby' => 'ID',
+					'order' => 'ASC',
+					'return' => 'ids',
+				)
+			)
 		);
 		$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 
@@ -381,7 +389,15 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 		wc_create_order();
 		$order_ids = array_map(
 			'intval',
-			wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+			wc_get_orders(
+				array(
+					'type' => 'shop_order',
+					'limit' => -1,
+					'orderby' => 'ID',
+					'order' => 'ASC',
+					'return' => 'ids',
+				)
+			)
 		);
 		$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 
@@ -423,7 +439,15 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 			wc_create_order();
 			$order_ids = array_map(
 				'intval',
-				wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+				wc_get_orders(
+					array(
+						'type' => 'shop_order',
+						'limit' => -1,
+						'orderby' => 'ID',
+						'order' => 'ASC',
+						'return' => 'ids',
+					)
+				)
 			);
 			$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
 
