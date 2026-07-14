@@ -14,9 +14,7 @@ if ( ! class_exists( 'WC_REST_Coupons_Controller' ) ) {
 }
 
 use Exception;
-use Ramsey\Uuid\Uuid;
 use WC_Coupon;
-use WC_Meta_Data;
 use WC_REST_Coupons_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WP_Error;
@@ -212,8 +210,7 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 		$data = $response->get_data();
 
 		// Add the UUID to the coupon response.
-		// NOTE: WC_Coupon does not implement get_type(), so we cannot use
-		// the shared maybe_add_post_uuid() from Uuid_Handler.
+		// The retained coupon seam delegates to Uuid_Handler's shared Pos_Uuid path.
 		$this->maybe_add_coupon_uuid( $coupon );
 
 		// Parse the meta data before returning the response.
@@ -231,63 +228,13 @@ class Coupons_Controller extends WC_REST_Coupons_Controller {
 	/**
 	 * Ensure the coupon has a valid UUID.
 	 *
-	 * WC_Coupon does not implement get_type() (unlike WC_Product and WC_Order),
-	 * so we cannot use the shared maybe_add_post_uuid() from Uuid_Handler.
-	 * This method provides equivalent functionality for coupons.
+	 * Retains the legacy controller seam while delegating to the trait's shared
+	 * Pos_Uuid path. That path no longer depends on WC_Data::get_type().
 	 *
 	 * @param WC_Coupon $coupon The coupon object.
 	 */
 	private function maybe_add_coupon_uuid( WC_Coupon $coupon ): void {
-		$meta_data = $coupon->get_meta_data();
-		$uuids     = array_filter(
-			$meta_data,
-			static function ( WC_Meta_Data $meta ): bool {
-				$meta_row = $meta->get_data();
-				return '_woocommerce_pos_uuid' === ( $meta_row['key'] ?? '' );
-			}
-		);
-
-		$uuid_values = array_map(
-			static function ( WC_Meta_Data $meta ) {
-				$meta_row = $meta->get_data();
-				return $meta_row['value'] ?? null;
-			},
-			$uuids
-		);
-
-		// Re-index to ensure sequential keys.
-		$uuid_values = array_values( $uuid_values );
-
-		$did_prune_duplicates = false;
-
-		// If more than one UUID exists, keep the first and delete the rest.
-		if ( count( $uuid_values ) > 1 ) {
-			$first_uuid_key = key( $uuids );
-			foreach ( $uuids as $key => $uuid_meta ) {
-				if ( $key === $first_uuid_key ) {
-					continue;
-				}
-				$uuid_meta_row = $uuid_meta->get_data();
-				if ( isset( $uuid_meta_row['id'] ) ) {
-					$coupon->delete_meta_data_by_mid( (int) $uuid_meta_row['id'] );
-					$did_prune_duplicates = true;
-				}
-			}
-			$first_uuid  = reset( $uuids );
-			$first_row   = $first_uuid ? $first_uuid->get_data() : array();
-			$uuid_values = array( $first_row['value'] ?? '' );
-		}
-
-		$should_update_uuid = empty( $uuid_values )
-			|| ( isset( $uuid_values[0] ) && ! Uuid::isValid( $uuid_values[0] ) );
-
-		if ( $should_update_uuid ) {
-			$coupon->update_meta_data( '_woocommerce_pos_uuid', $this->create_uuid() );
-		}
-
-		if ( $did_prune_duplicates || $should_update_uuid ) {
-			$coupon->save_meta_data();
-		}
+		$this->maybe_add_post_uuid( $coupon );
 	}
 
 	/**

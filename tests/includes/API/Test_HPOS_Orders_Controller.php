@@ -10,6 +10,7 @@ use Automattic\WooCommerce\Utilities\OrderUtil;
 use Ramsey\Uuid\Uuid;
 use WC_Order_Item_Fee;
 use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 
@@ -62,6 +63,24 @@ class Test_HPOS_Orders_Controller extends WCPOS_REST_HPOS_Unit_Test_Case {
 		$this->assertTrue( OrderUtil::custom_orders_table_usage_is_enabled() );
 		$order    = OrderHelper::create_order();
 		$this->assert_order_record_existence( $order->get_id(), true, true );
+	}
+
+	/**
+	 * Trashed HPOS orders do not own UUIDs returned to sync callers.
+	 */
+	public function test_pos_uuid_lookup_ignores_trashed_hpos_orders(): void {
+		$uuid    = wp_generate_uuid4();
+		$active  = OrderHelper::create_order();
+		$trashed = OrderHelper::create_order();
+		$active->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$active->save_meta_data();
+		$trashed->update_meta_data( Pos_Uuid::META_KEY, $uuid );
+		$trashed->save_meta_data();
+		$trashed->delete( false );
+
+		$order_ids = Pos_Uuid::get_order_ids_by_uuid( $uuid );
+
+		$this->assertSame( array( (string) $active->get_id() ), $order_ids );
 	}
 
 	public function test_namespace_property(): void {

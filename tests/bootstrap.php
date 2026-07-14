@@ -86,6 +86,13 @@ class Bootstrap {
 	public function manually_load_plugin(): void {
 		require $this->plugin_dir . '/woocommerce-pos.php';
 		require_once $this->plugin_dir . '/includes/wcpos-functions.php';
+
+		// StaticMockerHack rewrites short class names and falls back through the
+		// global name. Alias the namespaced identity brain so unmocked methods keep
+		// calling the real implementation while focused tests spy on ensure_uuid().
+		if ( ! class_exists( 'Pos_Uuid', false ) ) {
+			class_alias( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'Pos_Uuid' );
+		}
 	}
 
 	/**

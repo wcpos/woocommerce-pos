@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Ramsey\Uuid\Uuid;
 use WCPOS\WooCommercePOS\API\Coupons_Controller;
+use WCPOS\WooCommercePOS\Sync\Api;
 
 /**
  * Coupons controller tests.
@@ -191,6 +192,24 @@ class Test_Coupons_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 1, $count, 'There should only be one _woocommerce_pos_uuid.' );
 		$this->assertTrue( Uuid::isValid( $uuid_value ), 'The UUID value is not valid.' );
+	}
+
+	/**
+	 * Coupon UUID cleanup uses the shared first-valid identity rule.
+	 */
+	public function test_coupon_response_uses_shared_uuid_duplicate_resolution(): void {
+		$coupon     = CouponHelper::create_coupon( 'duplicateuuidcoupon' );
+		$valid_uuid = wp_generate_uuid4();
+		delete_post_meta( $coupon->get_id(), Api::UUID_META_KEY );
+		add_post_meta( $coupon->get_id(), Api::UUID_META_KEY, 'invalid-first' );
+		add_post_meta( $coupon->get_id(), Api::UUID_META_KEY, $valid_uuid );
+		$request = $this->wp_rest_get_request( '/wcpos/v1/coupons/' . $coupon->get_id() );
+		$this->trigger_dispatch( $request );
+
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( $valid_uuid ), get_post_meta( $coupon->get_id(), Api::UUID_META_KEY, false ) );
 	}
 
 	/**
