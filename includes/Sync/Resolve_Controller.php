@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Services\Settings;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -67,17 +68,20 @@ class Resolve_Controller extends WP_REST_Controller {
 
 		// Discovery: raw SQL finds candidate ids only (ADR 0003 — discovery
 		// only, never values). Exact match against the known barcode-bearing
-		// meta keys; GROUP BY collapses records matching on several keys.
+		// meta keys plus the merchant's configured field; GROUP BY collapses
+		// records matching on several keys.
 		global $wpdb;
+		$barcode_field = Settings::instance()->barcode_field();
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
 				. " INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID"
-				. ' WHERE pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL
+				. ' WHERE (pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL . ' OR pm.meta_key = %s)'
 				. ' AND pm.meta_value = %s'
 				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
 				. " AND p.post_status = 'publish'"
 				. ' GROUP BY p.ID ORDER BY p.ID ASC',
+				$barcode_field,
 				$code
 			),
 			ARRAY_A
@@ -92,6 +96,21 @@ class Resolve_Controller extends WP_REST_Controller {
 			);
 		}
 		$matches = $this->apply_matches_filter( $matches, $code );
+		$visibility        = new Pos_Visibility();
+		$hidden_products   = $visibility->online_only_product_ids();
+		$hidden_variations = $visibility->online_only_variation_ids();
+		$matches = array_values(
+			array_filter(
+				$matches,
+				static function ( $candidate ) use ( $hidden_products, $hidden_variations ): bool {
+					$id         = (int) ( $candidate['id'] ?? 0 );
+					$type       = (string) ( $candidate['type'] ?? 'product' );
+					$hidden_ids = 'variation' === $type ? $hidden_variations : $hidden_products;
+
+					return ! \in_array( $id, $hidden_ids, true );
+				}
+			)
+		);
 
 		$match = null;
 		if ( array() !== $matches ) {

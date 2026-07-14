@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Services\Settings;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
@@ -49,11 +51,6 @@ namespace WCPOS\WooCommercePOS\Sync;
  */
 final class Config_Fingerprint {
 	/**
-	 * The option that decides which meta key the POS treats as the barcode.
-	 */
-	public const BARCODE_FIELD_OPTION = 'woocommerce_pos_sync_barcode_field';
-
-	/**
 	 * Default barcode meta key when the option is unset/blank.
 	 */
 	public const DEFAULT_BARCODE_FIELD = '_sku';
@@ -81,8 +78,8 @@ final class Config_Fingerprint {
 
 	/**
 	 * Raw barcode META key -> synced-doc PAYLOAD field name. Keys are the values
-	 * the BARCODE_FIELD_OPTION can hold; values are the doc-shape field names the
-	 * client indexes against. Grows alongside the supported barcode mappings.
+	 * the production barcode setting can hold; values are the doc-shape field
+	 * names the client indexes against. Grows alongside the supported mappings.
 	 */
 	private const BARCODE_META_TO_PAYLOAD = array(
 		'_sku'              => 'sku',
@@ -99,12 +96,12 @@ final class Config_Fingerprint {
 	}
 
 	/**
-	 * The active barcode META key, read from the live option and coerced to a
+	 * The active barcode META key, read from production settings and coerced to a
 	 * non-empty string (a blank option falls back to the default mapping rather
 	 * than producing an empty representation).
 	 */
 	public function active_barcode_meta_key(): string {
-		$value = (string) get_option( self::BARCODE_FIELD_OPTION, self::DEFAULT_BARCODE_FIELD );
+		$value = Settings::instance()->barcode_field();
 
 		return '' === trim( $value ) ? self::DEFAULT_BARCODE_FIELD : $value;
 	}

@@ -104,6 +104,15 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The orders proxy belongs to increment 2c and is not registered by 2b.
+	 */
+	public function test_sync_orders_proxy_is_not_registered(): void {
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/orders' ) );
+
+		$this->assertEquals( 404, $response->get_status() );
+	}
+
+	/**
 	 * Table existence checks escape underscores in the LIKE pattern.
 	 */
 	public function test_table_exists_with_underscores_escapes_like_pattern(): void {

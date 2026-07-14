@@ -33,7 +33,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	 */
 	public function tearDown(): void {
 		delete_option( Pos_Visibility::OPTION );
-		delete_option( Config_Fingerprint::BARCODE_FIELD_OPTION );
+		delete_option( 'woocommerce_pos_settings_general' );
 		delete_option( Config_Fingerprint::CLEANUP_VERSION_OPTION );
 		parent::tearDown();
 	}
@@ -42,6 +42,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	 * Visibility reads the configured scope and sanitizes duplicate/invalid IDs.
 	 */
 	public function test_pos_visibility_returns_unique_positive_online_only_ids(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
 		update_option(
 			Pos_Visibility::OPTION,
 			array(
@@ -54,6 +55,31 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( array( 4, 8 ), ( new Pos_Visibility() )->online_only_product_ids() );
+		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
+	}
+
+	/**
+	 * Stored visibility ids do not apply while the production feature toggle is disabled.
+	 */
+	public function test_pos_visibility_with_toggle_disabled_returns_no_exclusions(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => false ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( 4 ) ),
+					),
+				),
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( 8 ) ),
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_product_ids() );
 		$this->assertSame( array(), ( new Pos_Visibility() )->online_only_variation_ids() );
 	}
 
@@ -138,10 +164,11 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	 * Fingerprints are stable and move with the live barcode option.
 	 */
 	public function test_config_fingerprint_tracks_live_barcode_mapping(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$fingerprint = new Config_Fingerprint();
 		$before      = $fingerprint->fingerprint( 'products' );
 
-		update_option( Config_Fingerprint::BARCODE_FIELD_OPTION, '_global_unique_id' );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
 
 		$this->assertNotSame( $before, $fingerprint->fingerprint( 'products' ) );
 		$this->assertSame( array( 'global_unique_id' ), $fingerprint->barcode_fields( 'products' ) );

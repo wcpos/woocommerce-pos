@@ -7,6 +7,8 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\Services\Settings;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
 /**
@@ -55,6 +57,10 @@ final class Pos_Visibility {
 	 * a missing option can never accidentally hide the whole catalog.
 	 */
 	private function online_only_ids( string $post_type, string $scope ): array {
+		if ( ! Settings::instance()->pos_only_products_enabled() ) {
+			return array();
+		}
+
 		$settings = get_option( self::OPTION, array() );
 		if ( ! \is_array( $settings ) ) {
 			return array();

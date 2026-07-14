@@ -34,6 +34,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 */
 	public function tearDown(): void {
 		delete_option( Pos_Visibility::OPTION );
+		delete_option( 'woocommerce_pos_settings_general' );
 		parent::tearDown();
 	}
 
@@ -114,13 +115,19 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	 * Config fingerprint exposes all supported collection snapshots by default.
 	 */
 	public function test_config_fingerprint_returns_supported_collections(): void {
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
 		$response = ( new Changes_Controller() )->config_fingerprint( $this->request() );
-		$data     = $response->get_data();
+		$before   = $response->get_data();
 
-		$this->assertArrayHasKey( 'products', $data['fingerprints'] );
-		$this->assertArrayHasKey( 'variations', $data['fingerprints'] );
-		$this->assertArrayHasKey( 'tax_rates', $data['fingerprints'] );
-		$this->assertSame( array( 'sku' ), $data['barcode_fields']['products'] );
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_global_unique_id' ) );
+		$response = ( new Changes_Controller() )->config_fingerprint( $this->request() );
+		$after    = $response->get_data();
+
+		$this->assertArrayHasKey( 'products', $after['fingerprints'] );
+		$this->assertArrayHasKey( 'variations', $after['fingerprints'] );
+		$this->assertArrayHasKey( 'tax_rates', $after['fingerprints'] );
+		$this->assertNotSame( $before['fingerprints']['products'], $after['fingerprints']['products'] );
+		$this->assertSame( array( 'global_unique_id' ), $after['barcode_fields']['products'] );
 	}
 
 	/**
@@ -129,6 +136,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	public function test_variations_excludes_online_only_ids(): void {
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = array_map( 'intval', $product->get_children() );
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
 		update_option(
 			Pos_Visibility::OPTION,
 			array(
@@ -165,6 +173,82 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$this->assertTrue( $data['found'] );
 		$this->assertSame( $product->get_id(), $data['match']['id'] );
 		$this->assertSame( 'product', $data['match']['type'] );
+	}
+
+	/**
+	 * Barcode resolution includes the merchant's configured custom meta key.
+	 */
+	public function test_resolve_barcode_returns_product_matching_configured_custom_field(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->update_meta_data( '_alg_ean', 'SYNC-CUSTOM-001' );
+		$product->save_meta_data();
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_alg_ean' ) );
+
+		$response = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'SYNC-CUSTOM-001' ) )
+		);
+		$data = $response->get_data();
+
+		$this->assertTrue( $data['found'] );
+		$this->assertSame( $product->get_id(), $data['match']['id'] );
+	}
+
+	/**
+	 * Barcode resolution does not hydrate an online-only product.
+	 */
+	public function test_resolve_barcode_excludes_online_only_product(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->set_sku( 'SYNC-HIDDEN-PRODUCT' );
+		$product->save();
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $product->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$response = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'SYNC-HIDDEN-PRODUCT' ) )
+		);
+		$data = $response->get_data();
+
+		$this->assertFalse( $data['found'] );
+		$this->assertNull( $data['match'] );
+	}
+
+	/**
+	 * Barcode resolution does not hydrate an online-only variation.
+	 */
+	public function test_resolve_barcode_excludes_online_only_variation(): void {
+		$product      = ProductHelper::create_variation_product();
+		$variation_id = (int) $product->get_children()[0];
+		$variation    = new WC_Product_Variation( $variation_id );
+		$variation->set_sku( 'SYNC-HIDDEN-VARIATION' );
+		$variation->save();
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $variation_id ) ),
+					),
+				),
+			)
+		);
+
+		$response = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'SYNC-HIDDEN-VARIATION' ) )
+		);
+		$data = $response->get_data();
+
+		$this->assertFalse( $data['found'] );
+		$this->assertNull( $data['match'] );
 	}
 
 	/**

@@ -96,7 +96,11 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 	 */
 	private static function resources(): array {
 		$resources = array();
-		foreach ( Collections::with( 'proxy' ) as $row ) {
+		foreach ( Collections::with( 'proxy' ) as $collection => $row ) {
+			// Orders use the custom-pull lane introduced in increment 2c.
+			if ( 'orders' === $collection ) {
+				continue;
+			}
 			$resources[ $row['proxy']['route'] ] = array( $row['proxy']['wc_route'], $row['proxy']['slug'] );
 		}
 
