@@ -30,6 +30,16 @@ final class Dispatch_Fake_Mutation_Store {
 		return $this->lookups[ $mutation_id ] ?? null;
 	}
 	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
+		if ( isset( $this->lookups[ $mutation_id ] ) ) {
+			return false;
+		}
+		$this->lookups[ $mutation_id ] = array(
+			'collection' => $collection,
+			'record_uuid' => $record_uuid,
+			'operation' => $operation,
+			'fingerprint' => $fingerprint,
+			'status' => 'pending',
+		);
 		return true;
 	}
 	public function acquire_record_lock( string $collection, string $uuid ): bool {
@@ -145,6 +155,22 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$request->set_body( (string) wp_json_encode( $envelope ) );
 
 		return $request;
+	}
+
+	public function test_dispatch_fake_reservation_retains_envelope_and_rejects_reuse(): void {
+		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
+		$this->assertSame(
+			array(
+				'collection' => 'products',
+				'record_uuid' => 'record-1',
+				'operation' => 'create',
+				'fingerprint' => 'fingerprint-1',
+				'status' => 'pending',
+			),
+			$this->store->lookup( 'products', 'mutation-1' )
+		);
+		$this->assertFalse( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', 'fingerprint-1' ) );
+		$this->assertFalse( $this->store->reserve( 'orders', 'mutation-1', 'record-2', 'delete', 'fingerprint-2' ) );
 	}
 
 	public function test_valid_golden_create_round_trips_through_rest_dispatch(): void {
