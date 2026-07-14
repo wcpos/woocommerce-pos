@@ -38,6 +38,7 @@ final class Api {
 		if ( self::is_enabled() ) {
 			$controllers['sync-status']     = Status_Controller::class;
 			$controllers['sync-catalog']    = Catalog_Proxy_Controller::class;
+			$controllers['sync-orders']     = Orders_Controller::class;
 			$controllers['sync-changes']    = Changes_Controller::class;
 			$controllers['sync-digests']    = Digests_Controller::class;
 			$controllers['sync-integrity']  = Integrity_Controller::class;

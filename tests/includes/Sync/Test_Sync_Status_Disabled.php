@@ -38,6 +38,8 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 		$paths = array(
 			'/wcpos/v1/sync/status',
 			'/wcpos/v1/sync/products',
+			'/wcpos/v1/sync/orders',
+			'/wcpos/v1/sync/orders/pull',
 			'/wcpos/v1/sync/changes/sequence-log',
 			'/wcpos/v1/sync/digests',
 			'/wcpos/v1/sync/integrity/scan',
