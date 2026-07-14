@@ -78,13 +78,26 @@ final class Config_Fingerprint {
 
 	/**
 	 * Raw barcode META key -> synced-doc PAYLOAD field name. Keys are the values
-	 * the production barcode setting can hold; values are the doc-shape field
-	 * names the client indexes against. Grows alongside the supported mappings.
+	 * the production barcode setting can hold; values are the top-level payload
+	 * field names the client indexes against.
+	 *
+	 * HONESTY CONSTRAINT (review finding 9): this map may ONLY list a field the
+	 * sync read surface ACTUALLY serves. That surface is the catalog proxy →
+	 * raw wc/v3 (Catalog_Proxy_Controller forwards to /wc/v3/products), which
+	 * emits `sku` and `global_unique_id` as native top-level fields but NEVER a
+	 * top-level `barcode` — that stamping lives only on the wcpos/v1
+	 * Products_Controller (an override of a DIFFERENT namespace the proxy never
+	 * dispatches through), and a `_`-prefixed custom key like `_barcode` is
+	 * protected meta wc/v3 strips from meta_data too. So `_barcode` (and any
+	 * other custom key) has NO indexable payload field here and is deliberately
+	 * absent → barcode_fields() reports an empty list for it rather than telling
+	 * the client to index a field that never arrives. (Offline scan resolution
+	 * of a custom field still works via /resolve/barcode, which reads the DB
+	 * directly.)
 	 */
 	private const BARCODE_META_TO_PAYLOAD = array(
 		'_sku'              => 'sku',
 		'_global_unique_id' => 'global_unique_id',
-		'_barcode'          => 'barcode',
 	);
 
 	/** The collections this signal covers, in the engine's vocabulary. */

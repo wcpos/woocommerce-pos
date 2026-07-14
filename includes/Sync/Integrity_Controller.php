@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Sync;
 
 use WCPOS\WooCommercePOS\Logger;
+use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -101,13 +102,30 @@ final class Integrity_Controller extends WP_REST_Controller {
 	 * in bucket [bucket*size, (bucket+1)*size). Digests come from the SAME 64-bit formula the manifest
 	 * stores (row_digest_select_sql), so client and server compare apples-to-apples; object_type lets the
 	 * client route each pull/prune to the right lane (products and variations share the wp_posts id space).
+	 *
+	 * @return WP_Error|WP_REST_Response WP_Error (400) when the requested collection is not a supported
+	 *                                   id-space bucket; a bucket listing otherwise.
 	 */
-	public function bucket_list( WP_REST_Request $request ): WP_REST_Response {
+	public function bucket_list( WP_REST_Request $request ) {
 		global $wpdb;
 		$bucket      = $this->int_param( $request, 'bucket', 0, 0, PHP_INT_MAX );
 		$bucket_size = $this->int_param( $request, 'bucket_size', self::DEFAULT_BUCKET_SIZE, 1, 10000 );
 		$collection  = $request->get_param( 'collection' );
 		$collection  = \is_string( $collection ) ? $collection : 'products';
+
+		// Fail closed (review finding 7): the bucket walk only understands the id-space OWNER collections
+		// (products — which also folds variations — customers, orders). An unsupported collection must NOT
+		// silently fall into the products id-space via the else branch below and mis-report another
+		// id-space as products. Reject with a 400 that names the offending collection.
+		$supported = array_keys( Collections::with( 'digest' ) );
+		if ( ! \in_array( $collection, $supported, true ) ) {
+			return new WP_Error(
+				'woocommerce_pos_sync_unsupported_bucket_collection',
+				\sprintf( 'integrity/bucket does not support the "%s" collection', $collection ),
+				array( 'status' => 400 )
+			);
+		}
+
 		$range_start = $bucket * $bucket_size;
 		$range_end   = $range_start + $bucket_size;
 

@@ -161,6 +161,80 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A POS online-only child's price must not leak into the served range (finding 6).
+	 */
+	public function test_variable_prices_exclude_online_only_child(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$cheap         = new WC_Product_Variation( $variation_ids[0] );
+		$expensive     = new WC_Product_Variation( $variation_ids[1] );
+		$cheap->set_regular_price( '9.50' );
+		$cheap->set_price( '9.50' );
+		$cheap->save();
+		$expensive->set_regular_price( '25.00' );
+		$expensive->set_price( '25.00' );
+		$expensive->save();
+
+		// Hide the expensive child from the POS.
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( (int) $variation_ids[1] ) ),
+					),
+				),
+			)
+		);
+
+		$data = Variable_Prices::stamp_proxy_variable_prices(
+			array(
+				array(
+					'id' => $product->get_id(),
+					'type' => 'variable',
+				),
+			),
+			'products'
+		);
+		$range = null;
+		foreach ( $data[0]['meta_data'] as $meta ) {
+			if ( Variable_Prices::META_KEY === $meta['key'] ) {
+				$range = $meta['value']['price'];
+			}
+		}
+
+		// The hidden child's 25.00 must not set the max — only the visible 9.50 remains.
+		$this->assertSame(
+			array(
+				'min' => '9.50',
+				'max' => '9.50',
+			),
+			$range
+		);
+	}
+
+	/**
+	 * A custom barcode field advertises no payload field (finding 9): the sync proxy
+	 * (raw wc/v3) never serves a top-level field for a custom/`_`-prefixed meta key,
+	 * so the honest advertised list is empty rather than a field that never arrives.
+	 */
+	public function test_config_fingerprint_custom_barcode_field_advertises_no_payload_field(): void {
+		$fingerprint = new Config_Fingerprint();
+
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_alg_ean' ) );
+		$this->assertSame( array(), $fingerprint->barcode_fields( 'products' ) );
+
+		// `_barcode` is protected meta wc/v3 strips — also not served, so also empty.
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_barcode' ) );
+		$this->assertSame( array(), $fingerprint->barcode_fields( 'products' ) );
+
+		// The two natively-served fields remain advertised.
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_sku' ) );
+		$this->assertSame( array( 'sku' ), $fingerprint->barcode_fields( 'products' ) );
+	}
+
+	/**
 	 * Fingerprints are stable and move with the live barcode option.
 	 */
 	public function test_config_fingerprint_tracks_live_barcode_mapping(): void {

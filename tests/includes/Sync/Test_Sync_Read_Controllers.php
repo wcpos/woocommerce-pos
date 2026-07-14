@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
+use WCPOS\WooCommercePOS\Sync\Catalog_Proxy_Controller;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Changes_Controller;
 use WCPOS\WooCommercePOS\Sync\Digests_Controller;
@@ -191,6 +192,133 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 
 		$this->assertTrue( $data['found'] );
 		$this->assertSame( $product->get_id(), $data['match']['id'] );
+	}
+
+	/**
+	 * Active-field-first (finding 1): a value on an inactive hard-coded key must NOT
+	 * beat a match on the merchant's configured active field for the same code.
+	 */
+	public function test_resolve_barcode_active_field_beats_inactive_key_collision(): void {
+		// Active-field match lives on the merchant's configured custom key.
+		$active = ProductHelper::create_simple_product();
+		$active->update_meta_data( '_alg_ean', 'COLLIDE-1' );
+		$active->save_meta_data();
+
+		// A stale value on the inactive hard-coded key (_sku) shares the code.
+		$inactive = ProductHelper::create_simple_product();
+		$inactive->set_sku( 'COLLIDE-1' );
+		$inactive->save();
+
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_alg_ean' ) );
+
+		$response = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'COLLIDE-1' ) )
+		);
+		$data = $response->get_data();
+
+		$this->assertTrue( $data['found'] );
+		$this->assertSame( $active->get_id(), $data['match']['id'] );
+		// The inactive-key product is not even a candidate — the active field matched.
+		$this->assertSame( array(), $data['ambiguous'] );
+	}
+
+	/**
+	 * Fallback (finding 1): with no active-field match, the hard-coded keys still resolve.
+	 */
+	public function test_resolve_barcode_falls_back_to_hardcoded_keys(): void {
+		$product = ProductHelper::create_simple_product();
+		$product->set_sku( 'FALLBACK-1' );
+		$product->save();
+
+		// Active field is a custom key nothing carries → fall back to _sku.
+		update_option( 'woocommerce_pos_settings_general', array( 'barcode_field' => '_alg_ean' ) );
+
+		$response = ( new Resolve_Controller() )->resolve_barcode(
+			$this->request( array( 'code' => 'FALLBACK-1' ) )
+		);
+		$data = $response->get_data();
+
+		$this->assertTrue( $data['found'] );
+		$this->assertSame( $product->get_id(), $data['match']['id'] );
+	}
+
+	/**
+	 * Variation hydration attaches the stored existence digest (finding 3): the
+	 * class_exists() guard previously checked a global class name and never fired.
+	 */
+	public function test_variations_attach_stored_digests(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = array_map( 'intval', $product->get_children() );
+		$digest        = new Integrity_Digest();
+		foreach ( $variation_ids as $variation_id ) {
+			$digest->upsert_digest( $variation_id );
+		}
+
+		$response = ( new Variations_Controller() )->get_variations(
+			$this->request( array( 'include' => $variation_ids ) )
+		);
+		$documents = $response->get_data()['documents'];
+
+		$this->assertNotEmpty( $documents );
+		foreach ( $documents as $document ) {
+			$this->assertArrayHasKey( '_rxdb_digest', $document );
+			$this->assertNotSame( '', $document['_rxdb_digest'] );
+		}
+	}
+
+	/**
+	 * Integrity bucket fails closed for an unsupported collection (finding 7):
+	 * an unknown collection must 400 by name, not fall into the products id-space.
+	 */
+	public function test_integrity_bucket_rejects_unsupported_collection(): void {
+		$result = ( new Integrity_Controller() )->bucket_list(
+			$this->request( array( 'collection' => 'bogus_collection' ) )
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertStringContainsString( 'bogus_collection', $result->get_error_message() );
+	}
+
+	/**
+	 * Catalog proxy targeted pull cannot leak a hidden id (finding 8): include=
+	 * maps to post__in, which WP_Query cannot combine with post__not_in, so the
+	 * hidden id must be subtracted from the include list itself.
+	 */
+	public function test_catalog_proxy_targeted_pull_of_hidden_id_returns_empty(): void {
+		$visible = ProductHelper::create_simple_product();
+		$hidden  = ProductHelper::create_simple_product();
+		update_option( 'woocommerce_pos_settings_general', array( 'pos_only_products' => true ) );
+		update_option(
+			Pos_Visibility::OPTION,
+			array(
+				'products' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$proxy = new Catalog_Proxy_Controller();
+
+		// Targeted pull of ONLY the hidden id returns empty.
+		$hidden_only = $proxy->proxy(
+			$this->request( array( 'include' => (string) $hidden->get_id() ) ),
+			'/wc/v3/products',
+			'products'
+		);
+		$this->assertSame( array(), array_column( (array) $hidden_only->get_data(), 'id' ) );
+
+		// A mixed targeted pull returns the visible id and drops the hidden one.
+		$mixed = $proxy->proxy(
+			$this->request( array( 'include' => $visible->get_id() . ',' . $hidden->get_id() ) ),
+			'/wc/v3/products',
+			'products'
+		);
+		$ids = array_column( (array) $mixed->get_data(), 'id' );
+		$this->assertContains( $visible->get_id(), $ids );
+		$this->assertNotContains( $hidden->get_id(), $ids );
 	}
 
 	/**

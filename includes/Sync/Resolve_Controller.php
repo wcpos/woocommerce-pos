@@ -67,33 +67,17 @@ class Resolve_Controller extends WP_REST_Controller {
 		}
 
 		// Discovery: raw SQL finds candidate ids only (ADR 0003 — discovery
-		// only, never values). Exact match against the known barcode-bearing
-		// meta keys plus the merchant's configured field; GROUP BY collapses
-		// records matching on several keys.
-		global $wpdb;
+		// only, never values). ACTIVE-FIELD-FIRST (review finding 1): a scan
+		// resolves against the merchant's configured barcode field before any
+		// hard-coded key, so a stale value left on an inactive key (e.g. a
+		// left-over `_sku`) can never beat a match on the active field. The
+		// hard-coded barcode-bearing keys are consulted ONLY as a fallback when
+		// the active field yields no match at all. GROUP BY collapses records
+		// matching on several keys within a phase.
 		$barcode_field = Settings::instance()->barcode_field();
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
-				. " INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID"
-				. ' WHERE (pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL . ' OR pm.meta_key = %s)'
-				. ' AND pm.meta_value = %s'
-				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
-				. " AND p.post_status = 'publish'"
-				. ' GROUP BY p.ID ORDER BY p.ID ASC',
-				$barcode_field,
-				$code
-			),
-			ARRAY_A
-		);
-		$rows = \is_array( $rows ) ? $rows : array();
-
-		$matches = array();
-		foreach ( $rows as $row ) {
-			$matches[] = array(
-				'id'   => (int) $row['ID'],
-				'type' => 'product_variation' === (string) $row['post_type'] ? 'variation' : 'product',
-			);
+		$matches       = $this->discover_by_meta_key( $code, $barcode_field );
+		if ( array() === $matches ) {
+			$matches = $this->discover_by_fallback_keys( $code, $barcode_field );
 		}
 		$matches = $this->apply_matches_filter( $matches, $code );
 		$visibility        = new Pos_Visibility();
@@ -147,6 +131,77 @@ class Resolve_Controller extends WP_REST_Controller {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Discover candidate {id,type} matches on a SINGLE meta key (the active
+	 * barcode field). Empty meta key (unconfigured) → no matches, so the caller
+	 * falls through to the hard-coded keys.
+	 */
+	private function discover_by_meta_key( string $code, string $meta_key ): array {
+		if ( '' === trim( $meta_key ) ) {
+			return array();
+		}
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
+				. ' INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
+				. ' WHERE pm.meta_key = %s AND pm.meta_value = %s'
+				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. " AND p.post_status = 'publish'"
+				. ' GROUP BY p.ID ORDER BY p.ID ASC',
+				$meta_key,
+				$code
+			),
+			ARRAY_A
+		);
+
+		return $this->rows_to_matches( $rows );
+	}
+
+	/**
+	 * Fallback discovery across the hard-coded barcode-bearing keys, EXCLUDING
+	 * the active field (already tried by discover_by_meta_key). Runs only when
+	 * the active field produced no match.
+	 */
+	private function discover_by_fallback_keys( string $code, string $active_field ): array {
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, p.post_type FROM {$wpdb->posts} p"
+				. ' INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
+				. ' WHERE pm.meta_key IN ' . self::BARCODE_META_KEYS_SQL
+				. ' AND pm.meta_key <> %s'
+				. ' AND pm.meta_value = %s'
+				. ' AND p.post_type IN ' . self::PRODUCT_POST_TYPES_SQL
+				. " AND p.post_status = 'publish'"
+				. ' GROUP BY p.ID ORDER BY p.ID ASC',
+				$active_field,
+				$code
+			),
+			ARRAY_A
+		);
+
+		return $this->rows_to_matches( $rows );
+	}
+
+	/**
+	 * Map raw {ID,post_type} discovery rows to the {id,type} match shape.
+	 *
+	 * @param mixed $rows
+	 */
+	private function rows_to_matches( $rows ): array {
+		$rows    = \is_array( $rows ) ? $rows : array();
+		$matches = array();
+		foreach ( $rows as $row ) {
+			$matches[] = array(
+				'id'   => (int) $row['ID'],
+				'type' => 'product_variation' === (string) $row['post_type'] ? 'variation' : 'product',
+			);
+		}
+
+		return $matches;
 	}
 
 	/**

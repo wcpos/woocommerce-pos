@@ -76,7 +76,12 @@ class Variations_Controller extends WP_REST_Controller {
 		// Leg-3 (ADR 0014): attach each variation's stored 64-bit digest as `_rxdb_digest` so the client
 		// seeds its existence-reconcile manifest from this pull too (products get theirs via the proxy
 		// filter). Bulk-read once for the whole include set. A string — the digest exceeds int range.
-		$digests = class_exists( 'Integrity_Digest' )
+		// Integrity_Digest is namespaced (WCPOS\WooCommercePOS\Sync); the bare
+		// string 'Integrity_Digest' would resolve to a GLOBAL class and be
+		// forever false from inside this namespace, so variation digests never
+		// emitted (review finding 3). Use the ::class constant so it resolves to
+		// the fully-qualified namespaced name.
+		$digests = class_exists( Integrity_Digest::class )
 			? ( new Integrity_Digest() )->read_digests( $ids )
 			: array();
 

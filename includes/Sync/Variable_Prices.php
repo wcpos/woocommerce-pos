@@ -105,6 +105,15 @@ final class Variable_Prices {
 			$child_ids   = (array) $object->get_children();
 			$prefiltered = false;
 		}
+		// Review finding 6: WC's visible-children resolution applies the store's
+		// WEB visibility rules, NOT the POS `online_only` exclusion. A child
+		// hidden from the POS would otherwise leak its price into the served
+		// range. Subtract the POS-hidden variation ids (gated on the feature
+		// toggle inside Pos_Visibility → empty when the toggle is off).
+		$hidden = ( new Pos_Visibility() )->online_only_variation_ids();
+		if ( array() !== $hidden ) {
+			$child_ids = array_values( array_diff( array_map( 'intval', $child_ids ), $hidden ) );
+		}
 		$collected = array(
 			'price' => array(),
 			'regular_price' => array(),
