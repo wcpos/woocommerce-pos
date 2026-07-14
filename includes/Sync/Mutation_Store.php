@@ -164,6 +164,24 @@ class Mutation_Store {
 		return false !== $affected && 1 === (int) $affected;
 	}
 
+	/** Retain an uncertain create side effect for manual recovery, never stale reclaim. */
+	public function mark_indeterminate( string $mutation_id, int $remote_id, int $response_status ): bool {
+		global $wpdb;
+		$affected = $wpdb->update(
+			$this->table_name(),
+			array(
+				'remote_id' => $remote_id,
+				'status' => 'blocked',
+				'response_status' => $response_status,
+			),
+			array(
+				'mutation_id' => $mutation_id,
+				'status' => 'pending',
+			)
+		);
+		return false !== $affected && 1 === (int) $affected;
+	}
+
 	/** Complete an identity stamp without reopening the non-idempotent create. */
 	public function finalize_poison( string $mutation_id, int $remote_id ): bool {
 		global $wpdb;

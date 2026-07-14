@@ -51,6 +51,9 @@ final class Dispatch_Fake_Mutation_Store {
 	public function mark_poison( string $mutation_id, int $remote_id, int $response_status = 201 ): bool {
 		return true;
 	}
+	public function mark_indeterminate( string $mutation_id, int $remote_id, int $response_status ): bool {
+		return true;
+	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
 		$this->finalized[ $mutation_id ] = $remote_id;
 		return true;

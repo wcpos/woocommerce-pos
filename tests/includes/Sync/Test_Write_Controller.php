@@ -86,6 +86,10 @@ final class Fake_Mutation_Store {
 		);
 		return true;
 	}
+	public function mark_indeterminate( string $mutation_id, int $remote_id, int $response_status ): bool {
+		$this->lookups[ $mutation_id ] = array( 'status' => 'blocked' );
+		return true;
+	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
 		if ( ! $this->finalizeOk ) {
 			return false;
@@ -889,14 +893,15 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->released );
 	}
 
-	public function test_create_no_id_checkpoint_failure_keeps_the_reservation(): void {
+	public function test_create_no_id_retains_blocked_marker_and_existing_error(): void {
 		$store = new Fake_Mutation_Store();
-		$store->poisonOk = false;
 		$this->setRestResponse( array( 'email' => 'a@b.c' ), 201 );
 
 		$result = $this->push( $store );
 
-		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $result->get_error_code() );
+		$this->assertSame( 'woo_rxdb_sync_create_no_id', $result->get_error_code() );
+		$this->assertSame( 502, $result->get_error_data()['status'] );
+		$this->assertSame( 'blocked', $store->lookups[ self::MID ]['status'] );
 		$this->assertSame( array(), $store->released );
 	}
 
@@ -916,6 +921,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $result->get_error_code() );
 		$this->assertSame( 4242, $store->resolve );
 		$this->assertSame( 4242, $store->persisted[0]['id'] );
+		$this->assertSame( 'blocked', $store->lookups[ self::MID ]['status'] );
 		$this->assertSame( array(), $store->released );
 	}
 

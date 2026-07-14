@@ -85,6 +85,15 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$this->assertSame( 'done', $this->store->lookup( 'products', 'mutation-poison' )['status'] );
 	}
 
+	public function test_indeterminate_checkpoint_is_not_released_or_reclaimed(): void {
+		$this->store->reserve( 'products', 'mutation-blocked', 'record-1', 'create', 'fingerprint-1' );
+		$this->assertTrue( $this->store->mark_indeterminate( 'mutation-blocked', 0, 201 ) );
+
+		$this->store->release( 'mutation-blocked' );
+		$this->assertFalse( $this->store->reclaim_stale( 'mutation-blocked', 0 ) );
+		$this->assertSame( 'blocked', $this->store->lookup( 'products', 'mutation-blocked' )['status'] );
+	}
+
 	/**
 	 * An applied checkpoint is durable even if finalization must be retried.
 	 */

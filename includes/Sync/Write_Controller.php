@@ -200,7 +200,7 @@ class Write_Controller extends WP_REST_Controller {
 			$this->store->release_record_lock( $collection, $m['recordId'] );
 		}
 		$checkpoint = $this->store->lookup( $collection, $m['mutationId'] );
-		if ( $this->is_failure( $result ) && ! $this->is_finalize_failure( $result ) && 'poison' !== ( $checkpoint['status'] ?? '' ) ) {
+		if ( $this->is_failure( $result ) && ! $this->retains_mutation( $result ) && ! in_array( ( $checkpoint['status'] ?? '' ), array( 'poison', 'blocked' ), true ) ) {
 			$this->store->release( $m['mutationId'] );
 		}
 		return $result;
@@ -293,8 +293,9 @@ class Write_Controller extends WP_REST_Controller {
 		return false;
 	}
 
-	private function is_finalize_failure( $result ): bool {
-		return $result instanceof WP_Error && 'woo_rxdb_sync_finalize_failed' === $result->get_error_code();
+	private function retains_mutation( $result ): bool {
+		return $result instanceof WP_Error
+			&& in_array( $result->get_error_code(), array( 'woo_rxdb_sync_finalize_failed', 'woo_rxdb_sync_create_no_id' ), true );
 	}
 
 	private function envelope( WP_REST_Request $request ): array {
@@ -424,9 +425,7 @@ class Write_Controller extends WP_REST_Controller {
 		if ( $new_id <= 0 ) {
 			// wc/v3 returned 2xx but no usable id — fail closed rather than record a
 			// create we could never resolve (a replay would return a wrong document).
-			if ( ! $this->store->mark_poison( $m['mutationId'], 0, $response->get_status() ) ) {
-				return $this->finalize_error();
-			}
+			$this->store->mark_indeterminate( $m['mutationId'], 0, $response->get_status() );
 			return new WP_Error( 'woo_rxdb_sync_create_no_id', 'Create returned no server id.', array( 'status' => 502 ) );
 		}
 		$checkpointed = $this->store->mark_poison( $m['mutationId'], $new_id, $response->get_status() );
@@ -445,6 +444,7 @@ class Write_Controller extends WP_REST_Controller {
 			}
 		}
 		if ( ! $checkpointed ) {
+			$this->store->mark_indeterminate( $m['mutationId'], $new_id, $response->get_status() );
 			return $this->finalize_error();
 		}
 		if ( $identity_error ) {
