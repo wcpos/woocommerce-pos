@@ -217,14 +217,16 @@ class Pos_Uuid {
 	 * Order-aware variant of {@see uuid_owned_by_other}. HPOS order meta does NOT live
 	 * in `wp_postmeta`, so the post-scoped detector can't see an order that already owns
 	 * `$uuid` — a duplicated/imported order with a copied uuid would slip through and two
-	 * orders would share one RxDB key. Query the orders store (HPOS-safe via
-	 * `wc_get_orders`) for the uuid; a match on a DIFFERENT order id is a real collision.
+	 * orders would share one RxDB key. Query active owners through
+	 * `get_order_ids_by_uuid()`, which looks up the current datastore directly; a match
+	 * on a DIFFERENT order id is a real collision.
 	 *
 	 * @param mixed $uuid
 	 * @param mixed $object
 	 */
 	public static function uuid_owned_by_other_order( $uuid, $object ): bool {
-		if ( ! \is_object( $object ) || ! method_exists( $object, 'get_id' ) || ! \function_exists( 'wc_get_orders' ) ) {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || ! \is_object( $object ) || ! method_exists( $object, 'get_id' ) ) {
 			return false;
 		}
 		$order_id = (int) $object->get_id();
