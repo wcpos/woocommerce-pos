@@ -184,6 +184,20 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Every supported push collection applies the shared install-health gate.
+	 */
+	public function test_sync_push_endpoints_with_missing_tables_return_503(): void {
+		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
+			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$request  = $this->wp_rest_post_request( $path );
+			$response = $this->server->dispatch( $request );
+
+			$this->assertEquals( 503, $response->get_status(), $path . ' did not apply the sync health gate.' );
+			$this->assertEquals( 'wcpos_sync_unavailable', $response->get_data()['code'] );
+		}
+	}
+
+	/**
 	 * Capability checks run before the health gate on every read endpoint.
 	 */
 	public function test_sync_read_endpoints_without_manage_woocommerce_are_not_authorized(): void {
@@ -205,6 +219,22 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			$request->set_param( 'include', '1' );
 			$request->set_param( 'code', 'missing' );
 			$response = $this->server->dispatch( $request );
+			$this->assertContains( $response->get_status(), array( 401, 403 ), $path . ' bypassed the capability gate.' );
+			$this->assertNotEquals( 503, $response->get_status(), $path . ' exposed health before authorization.' );
+		}
+	}
+
+	/**
+	 * Capability checks run before health disclosure on every push collection.
+	 */
+	public function test_sync_push_endpoints_without_manage_woocommerce_are_not_authorized(): void {
+		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user_id );
+
+		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
+			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
+
 			$this->assertContains( $response->get_status(), array( 401, 403 ), $path . ' bypassed the capability gate.' );
 			$this->assertNotEquals( 503, $response->get_status(), $path . ' exposed health before authorization.' );
 		}

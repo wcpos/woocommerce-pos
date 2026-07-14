@@ -378,7 +378,7 @@ class Mutation_Store {
 	 * a product duplicator, or a staging->prod DB clone can copy the `_woocommerce_pos_uuid`
 	 * meta onto a second record. Resolving such a uuid to an arbitrary first match would
 	 * route a write/delete to the WRONG record, so we fetch up to two and **fail closed**
-	 * (`WP_Error` 409 `woocommerce_pos_sync_identity_ambiguous`) when more than one record carries
+	 * (`WP_Error` 409 `woo_rxdb_sync_identity_ambiguous`) when more than one record carries
 	 * the uuid — the caller aborts the mutation (and releases its reservation) rather than
 	 * corrupt a record. A unique match is returned by lowest id (deterministic) so retries
 	 * are stable.
@@ -482,7 +482,7 @@ class Mutation_Store {
 		$ids = array_values( array_unique( array_map( 'intval', $found ) ) );
 		if ( count( $ids ) > 1 ) {
 			return new WP_Error(
-				'woocommerce_pos_sync_identity_ambiguous',
+				'woo_rxdb_sync_identity_ambiguous',
 				sprintf( 'uuid %s resolves to more than one %s record; refusing to write to an arbitrary match.', $uuid, $id_type ),
 				array( 'status' => 409 )
 			);

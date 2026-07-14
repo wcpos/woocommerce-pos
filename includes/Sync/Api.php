@@ -44,6 +44,7 @@ final class Api {
 			$controllers['sync-integrity']  = Integrity_Controller::class;
 			$controllers['sync-variations'] = Variations_Controller::class;
 			$controllers['sync-resolve']    = Resolve_Controller::class;
+			$controllers['sync-write']      = Write_Controller::class;
 		}
 
 		return $controllers;

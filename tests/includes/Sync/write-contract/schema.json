@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wcpos.dev/contracts/write-contract",
+  "title": "Woo RxDB sync write wire contract",
+  "contractVersion": 1,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    },
+    "pushEnvelope": {
+      "type": "object",
+      "required": [
+        "mutationId",
+        "operation",
+        "collection",
+        "recordId",
+        "baseRevision"
+      ],
+      "properties": {
+        "mutationId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "enum": [
+            "create",
+            "update",
+            "delete"
+          ]
+        },
+        "collection": {
+          "enum": [
+            "products",
+            "orders",
+            "customers",
+            "categories",
+            "brands",
+            "variations",
+            "coupons"
+          ]
+        },
+        "recordId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "baseRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "delete"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "payload"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "payload"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "successResponse": {
+      "type": "object",
+      "required": [
+        "document",
+        "currentRevision"
+      ],
+      "properties": {
+        "document": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "currentRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "deleteSuccessResponse": {
+      "type": "object",
+      "maxProperties": 0,
+      "additionalProperties": false
+    },
+    "conflictResponse": {
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "current",
+        "currentRevision"
+      ],
+      "properties": {
+        "code": {
+          "const": "woo_rxdb_sync_conflict"
+        },
+        "message": {
+          "type": "string"
+        },
+        "current": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "currentRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "codedResponse": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object"
+        }
+      },
+      "not": {
+        "required": [
+          "current",
+          "currentRevision"
+        ]
+      },
+      "additionalProperties": true
+    },
+    "parentRequiredResponse": {
+      "description": "428 response when a variation create has no live parent product.",
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "const": "woo_rxdb_sync_parent_required"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "parentMismatchResponse": {
+      "description": "409 response when an update payload contradicts the stored variation parent.",
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "const": "woo_rxdb_sync_parent_mismatch"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/pushEnvelope"
+    },
+    {
+      "$ref": "#/$defs/successResponse"
+    },
+    {
+      "$ref": "#/$defs/deleteSuccessResponse"
+    },
+    {
+      "$ref": "#/$defs/conflictResponse"
+    },
+    {
+      "$ref": "#/$defs/codedResponse"
+    }
+  ]
+}

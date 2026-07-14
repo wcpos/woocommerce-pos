@@ -51,6 +51,12 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
 			$this->assertEquals( 404, $response->get_status(), $path . ' was registered while sync was disabled.' );
 		}
+
+		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
+			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
+			$this->assertEquals( 404, $response->get_status(), $path . ' was registered while sync was disabled.' );
+		}
 	}
 
 	/**

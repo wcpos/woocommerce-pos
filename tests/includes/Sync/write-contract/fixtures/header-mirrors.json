@@ -1,0 +1,6 @@
+[
+ {"name":"idempotency-match","headers":{"Idempotency-Key":"10000000-0000-4000-8000-000000000001"},"body":{"mutationId":"10000000-0000-4000-8000-000000000001","baseRevision":null},"accepted":true},
+ {"name":"revision-match","headers":{"Idempotency-Key":"10000000-0000-4000-8000-000000000002","If-Match":"\"sha256:before\""},"body":{"mutationId":"10000000-0000-4000-8000-000000000002","baseRevision":"sha256:before"},"accepted":true},
+ {"name":"idempotency-mismatch","headers":{"Idempotency-Key":"10000000-0000-4000-8000-000000000099"},"body":{"mutationId":"10000000-0000-4000-8000-000000000001","baseRevision":null},"accepted":false,"errorCode":"woo_rxdb_sync_header_body_mismatch"},
+ {"name":"revision-mismatch","headers":{"If-Match":"\"sha256:other\""},"body":{"mutationId":"10000000-0000-4000-8000-000000000002","baseRevision":"sha256:before"},"accepted":false,"errorCode":"woo_rxdb_sync_header_body_mismatch"}
+]
