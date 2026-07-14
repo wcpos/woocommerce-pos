@@ -889,7 +889,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$result = $this->push( $store );
 		$this->assertSame( 'woo_rxdb_sync_create_no_id', $result->get_error_code() );
 		$this->assertSame( array(), $store->finalized ); // not finalized
-		$this->assertSame( array( self::MID => 0 ), $store->poisoned );
+		$this->assertSame( 'blocked', $store->lookups[ self::MID ]['status'] );
 		$this->assertSame( array(), $store->released );
 	}
 
