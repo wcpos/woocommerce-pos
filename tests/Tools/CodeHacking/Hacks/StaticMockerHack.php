@@ -111,34 +111,58 @@ final class StaticMockerHack extends CodeHack {
 	 * @return string The hacked code.
 	 */
 	public function hack( $code, $path ) {
-		$last_item = null;
-
-		$tokens                        = $this->tokenize( $code );
-		$code                          = '';
-		$current_token                 = null;
+		$tokens                         = $this->tokenize( $code );
+		$count                          = \count( $tokens );
+		$code                           = '';
 		$previous_token_is_ns_separator = false;
 
-		// phpcs:ignore WordPress.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
-		while ( $current_token = current( $tokens ) ) {
+		for ( $i = 0; $i < $count; $i++ ) {
+			$current_token = $tokens[ $i ];
+
 			if ( $this->is_token_of_type( $current_token, T_STRING ) && \in_array( $current_token[1], $this->mockable_classes, true ) ) {
 				$class_name = $current_token[1];
-				$next_token = next( $tokens );
-				if ( $this->is_token_of_type( $next_token, T_DOUBLE_COLON ) ) {
-					$called_member = next( $tokens )[1];
-					// Only add leading backslash if the original code didn't already have one.
-					$prefix        = $previous_token_is_ns_separator ? '' : '\\';
-					$code         .= $prefix . __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
-				} else {
-					// Reference to source class, but not followed by '::'.
-					$code .= $this->token_to_string( $current_token ) . $this->token_to_string( $next_token );
+				$next_token = $tokens[ $i + 1 ] ?? null;
+
+				if ( null !== $next_token && $this->is_token_of_type( $next_token, T_DOUBLE_COLON ) ) {
+					$member_token = $tokens[ $i + 2 ] ?? null;
+
+					// Only static METHOD CALLS can be routed through the mock apparatus.
+					// Constant fetches (Class::CONST), the ::class magic constant, and
+					// static property access are compile-time constructs with no callable
+					// to intercept; rewriting them into StaticMockerHack::invoke__X__for__Y
+					// produces an undefined class-constant fatal. Confirm a call by peeking
+					// past the member (skipping whitespace) for an opening parenthesis.
+					$is_method_call = null !== $member_token && ! $this->is_token_of_type( $member_token, T_CLASS );
+					if ( $is_method_call ) {
+						$j = $i + 3;
+						while ( $j < $count && $this->is_token_of_type( $tokens[ $j ], T_WHITESPACE ) ) {
+							$j++;
+						}
+						$is_method_call = $j < $count && '(' === $tokens[ $j ];
+					}
+
+					if ( $is_method_call ) {
+						$called_member = $this->token_to_string( $member_token );
+						// Only add leading backslash if the original code didn't already have one.
+						$prefix         = $previous_token_is_ns_separator ? '' : '\\';
+						$code          .= $prefix . __CLASS__ . "::invoke__{$called_member}__for__{$class_name}";
+						$i             += 2; // Consumed the class name, '::' and the member.
+						$previous_token_is_ns_separator = false;
+						continue;
+					}
 				}
+
+				// Reference to the source class, but not a mockable method call
+				// (bare reference, constant, ::class, or static property). Emit it
+				// unchanged and let the loop process the following tokens normally.
+				$code                          .= $this->token_to_string( $current_token );
 				$previous_token_is_ns_separator = false;
-			} else {
-				// Not a reference to source class.
-				$code .= $this->token_to_string( $current_token );
-				$previous_token_is_ns_separator = $this->is_token_of_type( $current_token, T_NS_SEPARATOR );
+				continue;
 			}
-			next( $tokens );
+
+			// Not a reference to a source class.
+			$code                          .= $this->token_to_string( $current_token );
+			$previous_token_is_ns_separator = $this->is_token_of_type( $current_token, T_NS_SEPARATOR );
 		}
 
 		return $code;

@@ -93,6 +93,27 @@ class Test_Pos_Uuid extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The shared identity brain repairs a copied UUID without touching its owner.
+	 */
+	public function test_ensure_uuid_repairs_active_product_collision(): void {
+		$uuid   = wp_generate_uuid4();
+		$owner  = ProductHelper::create_simple_product();
+		$cloned = ProductHelper::create_simple_product();
+		update_post_meta( $owner->get_id(), Api::UUID_META_KEY, $uuid );
+		update_post_meta( $cloned->get_id(), Api::UUID_META_KEY, $uuid );
+
+		$repaired = Pos_Uuid::ensure_uuid(
+			wc_get_product( $cloned->get_id() ),
+			array( 'collides' => array( Pos_Uuid::class, 'uuid_owned_by_other' ) )
+		);
+
+		$this->assertTrue( Pos_Uuid::is_uuid( $repaired ) );
+		$this->assertNotSame( $uuid, $repaired );
+		$this->assertSame( $uuid, get_post_meta( $owner->get_id(), Api::UUID_META_KEY, true ) );
+		$this->assertSame( $repaired, get_post_meta( $cloned->get_id(), Api::UUID_META_KEY, true ) );
+	}
+
+	/**
 	 * Before-save stamping attaches a UUID without recursively saving the object.
 	 */
 	public function test_stamp_on_save_adds_uuid_to_in_progress_product(): void {

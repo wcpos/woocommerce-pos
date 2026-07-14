@@ -7,12 +7,17 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use Exception;
+use WC_Customer;
+use WCPOS\WooCommercePOS\Logger;
+
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries are prepared before execution.
 
 /**
- * Uniform record identity on the server side — stamps `_woocommerce_pos_uuid`
- * onto served records, mirroring the production WCPOS `Uuid_Handler`.
+ * Uniform record identity on the server side — the sole authority that stamps,
+ * validates, deduplicates, and checks ownership of `_woocommerce_pos_uuid`.
+ * Legacy API callers delegate here (ADR 0021, decision c).
  *
  * The client uses this uuid as the stable RxDB primary key (ADR 0008, guardrail
  * G1): a record carries the SAME identity on the server and the client, may be
@@ -23,7 +28,9 @@ namespace WCPOS\WooCommercePOS\Sync;
  * Reads an existing valid uuid from the record's meta; if absent/invalid it
  * generates one and PERSISTS it (so it is stable across pulls), then mirrors it
  * into the serialized payload's `meta_data`. Duck-typed on the WC_Data methods so
- * it stays unit-testable without WooCommerce loaded.
+ * it stays unit-testable without WooCommerce loaded. UUID convergence does not
+ * use a second object-cache lock; sync writes are serialized by their record
+ * lock, while stamping deterministically converges duplicate meta rows.
  */
 class Pos_Uuid {
 	public const META_KEY = Api::UUID_META_KEY;
@@ -106,6 +113,53 @@ class Pos_Uuid {
 	}
 
 	/**
+	 * Legacy WP_User adapter for the shared WC_Data identity path (ADR 0021).
+	 *
+	 * @param mixed $user WP_User-like object or numeric user id.
+	 */
+	public static function ensure_user_uuid( $user ): string {
+		$user_id = \is_object( $user ) && isset( $user->ID ) ? (int) $user->ID : (int) $user;
+		if ( $user_id <= 0 || ! class_exists( WC_Customer::class ) ) {
+			return '';
+		}
+
+		try {
+			$customer = new WC_Customer( $user_id );
+		} catch ( Exception $e ) {
+			Logger::log( 'Unable to load customer for UUID stamping: ' . $e->getMessage() );
+			return '';
+		}
+
+		if ( ! method_exists( $customer, 'get_id' ) || $user_id !== (int) $customer->get_id() ) {
+			return '';
+		}
+
+		return self::ensure_uuid(
+			$customer,
+			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_user' ) )
+		);
+	}
+
+	/**
+	 * Legacy WP_Term adapter for the shared identity path (ADR 0021).
+	 *
+	 * @param mixed $term WP_Term-like object or numeric term id.
+	 */
+	public static function ensure_term_uuid( $term ): string {
+		$term_id = \is_object( $term ) && isset( $term->term_id ) ? (int) $term->term_id : (int) $term;
+		if ( $term_id <= 0 ) {
+			return '';
+		}
+
+		$adapter = new Term_Meta_Adapter( $term_id );
+
+		return self::ensure_uuid(
+			$adapter,
+			array( 'collides' => array( __CLASS__, 'uuid_owned_by_other_term' ) )
+		);
+	}
+
+	/**
 	 * Return a copy of the SERIALIZED payload whose `meta_data` mirrors `$uuid`
 	 * exactly once (entries here are arrays: ['id'=>,'key'=>,'value'=>]). Drops
 	 * blank / duplicate / mismatched `_woocommerce_pos_uuid` entries so the served
@@ -140,7 +194,8 @@ class Pos_Uuid {
 	 * (get/update/save_meta_data), which orders (HPOS-safe), customers, and terms all
 	 * provide. Collision detection IS storage-specific: orders live in HPOS tables
 	 * (not `wp_postmeta`), so they get the order-aware detector; products/variations
-	 * keep the post-scoped one. Customers/terms get theirs as those seams land.
+	 * keep the post-scoped one. Customers and terms use their storage-specific
+	 * adapters and detectors.
 	 *
 	 * @param mixed      $payload
 	 * @param mixed      $object
@@ -173,25 +228,59 @@ class Pos_Uuid {
 			return false;
 		}
 		$order_id = (int) $object->get_id();
-		$matches  = wc_get_orders(
-			array(
-				'limit'      => 2,
-				'return'     => 'ids',
-				'meta_query' => array(
-					array(
-						'key' => self::META_KEY,
-						'value' => $uuid,
-					),
-				),
-			)
-		);
-		foreach ( (array) $matches as $other_id ) {
+		foreach ( self::get_order_ids_by_uuid( (string) $uuid ) as $other_id ) {
 			if ( (int) $other_id !== $order_id ) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/**
+	 * Return at most two order ids carrying a UUID. The legacy create controller
+	 * treats two results as an ambiguous identity and fails closed.
+	 *
+	 * Datastore-aware direct meta lookup: under HPOS the uuid lives in
+	 * `wc_orders_meta`, otherwise in `wp_postmeta`. `wc_get_orders()` with a
+	 * `meta_query` is NOT supported on the CPT order datastore (it fires a
+	 * `doing_it_wrong` and returns unfiltered results), so we query the meta table
+	 * directly — the same shape the plugin's other order-uuid lookups use.
+	 */
+	public static function get_order_ids_by_uuid( string $uuid ): array {
+		global $wpdb;
+		if ( ! isset( $wpdb ) ) {
+			return array();
+		}
+
+		$order_util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
+		$hpos       = class_exists( $order_util )
+			&& method_exists( $order_util, 'custom_orders_table_usage_is_enabled' )
+			&& call_user_func( array( $order_util, 'custom_orders_table_usage_is_enabled' ) );
+
+		if ( $hpos ) {
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT DISTINCT order_id FROM {$wpdb->prefix}wc_orders_meta"
+					. ' WHERE meta_key = %s AND meta_value = %s'
+					. ' ORDER BY order_id ASC LIMIT 2',
+					self::META_KEY,
+					$uuid
+				)
+			);
+		} else {
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT DISTINCT post_id FROM {$wpdb->postmeta}"
+					. ' WHERE meta_key = %s AND meta_value = %s'
+					. ' ORDER BY post_id ASC LIMIT 2',
+					self::META_KEY,
+					$uuid
+				)
+			);
+		}
+
+		return \is_array( $ids ) ? array_values( $ids ) : array();
 	}
 
 	/**
