@@ -44,4 +44,14 @@ class Test_Collections extends WP_UnitTestCase {
 		$this->assertSame( array( 'products', 'orders', 'customers' ), array_keys( $digest ) );
 		$this->assertSame( array( 'product', 'variation' ), $digest['products']['digest']['object_types'] );
 	}
+
+	/**
+	 * The canonical write surface exposes exactly the seven client-push collections.
+	 */
+	public function test_write_projection_has_the_contract_collections(): void {
+		$this->assertSame(
+			array( 'products', 'variations', 'orders', 'customers', 'categories', 'brands', 'coupons' ),
+			array_keys( Collections::with( 'write' ) )
+		);
+	}
 }

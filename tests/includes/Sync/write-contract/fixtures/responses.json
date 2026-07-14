@@ -1,0 +1,17 @@
+[
+  {"name":"created","status":201,"body":{"document":{"id":41,"name":"Fixture product"},"currentRevision":"sha256:created"},"expected":{"outcome":"created","currentRevision":"sha256:created"}},
+  {"name":"replayed-create","status":201,"body":{"document":{"id":41,"name":"Fixture product"},"currentRevision":"sha256:created"},"expected":{"outcome":"created","currentRevision":"sha256:created"}},
+  {"name":"updated","status":200,"body":{"document":{"id":42,"status":"processing"},"currentRevision":"sha256:updated"},"expected":{"outcome":"updated","currentRevision":"sha256:updated"}},
+  {"name":"deleted","status":200,"body":{},"expected":{"outcome":"deleted","currentRevision":null}},
+  {"name":"conflict","status":409,"body":{"code":"woo_rxdb_sync_conflict","message":"baseRevision is stale.","current":{"id":42,"status":"completed"},"currentRevision":"sha256:5fa6e2605bbbef7157e53e8ee25d95b706aff939c650415d7905c91e3f284ffc"},"expected":{"outcome":"conflict","currentRevision":null}},
+  {"name":"in-progress","status":409,"body":{"code":"woo_rxdb_sync_in_progress","message":"Mutation is being applied; retry shortly."},"expectedError":{"reason":"in-progress","permanent":false}},
+  {"name":"record-locked","status":409,"body":{"code":"woo_rxdb_sync_record_locked","message":"Record is being written; retry shortly."},"expectedError":{"reason":"record-locked","permanent":false}},
+  {"name":"identity-ambiguous","status":409,"body":{"code":"woo_rxdb_sync_identity_ambiguous","message":"Identity is ambiguous.","data":{"status":409}},"expectedError":{"reason":"identity-ambiguous","permanent":true}},
+  {"name":"delete-precondition","status":428,"body":{"code":"woo_rxdb_sync_precondition_required","message":"Deleting an existing record requires an If-Match / baseRevision precondition."},"expectedError":{"status":428,"permanent":false}},
+  {"name":"update-precondition","status":428,"body":{"code":"woo_rxdb_sync_revision_required","message":"Updating an existing record requires an If-Match / baseRevision precondition."},"expectedError":{"status":428,"permanent":false}},
+  {"name":"variation-stale-409","status":409,"body":{"code":"woo_rxdb_sync_conflict","message":"baseRevision is stale.","current":{"id":201,"parent_id":100,"payload":{"id":201,"date_modified_gmt":"2026-07-14T10:00:00"}},"currentRevision":"2026-07-14T10:00:00"},"expected":{"outcome":"conflict","currentRevision":null}},
+  {"name":"variation-parent-precondition-428","status":428,"body":{"code":"woo_rxdb_sync_parent_required","message":"Creating a variation requires a live parent product."},"expectedError":{"status":428,"permanent":false}},
+  {"name":"variation-parent-mismatch-409","status":409,"body":{"code":"woo_rxdb_sync_parent_mismatch","message":"payload parent_id does not match the stored variation parent."},"expected":{"outcome":"conflict","currentRevision":null}},
+  {"name":"coupon-stale-409","status":409,"body":{"code":"woo_rxdb_sync_conflict","message":"baseRevision is stale.","current":{"id":301,"code":"save10","amount":"10.00","date_modified_gmt":"2026-07-14T11:00:00"},"currentRevision":"sha256:1cf6d8f167d090bf31405862f67eb35315bf8ea1f098167defbf34f40c49abe9"},"expected":{"outcome":"conflict","currentRevision":null}},
+  {"name":"coupon-missing-428","status":428,"body":{"code":"woo_rxdb_sync_revision_required","message":"Updating an existing record requires an If-Match / baseRevision precondition."},"expectedError":{"status":428,"permanent":false}}
+]

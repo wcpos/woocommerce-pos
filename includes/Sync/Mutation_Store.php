@@ -68,6 +68,8 @@ class Mutation_Store {
 '
 			. '  operation VARCHAR(8) NOT NULL,
 '
+			. '  fingerprint CHAR(64) NOT NULL,
+'
 			. '  status VARCHAR(8) NOT NULL,
 '
 			. '  response_status SMALLINT NULL,
@@ -90,14 +92,13 @@ class Mutation_Store {
 		dbDelta( $this->schema_sql( $this->table_name(), $wpdb->get_charset_collate() ) );
 	}
 
-	/** A prior application of this mutationId in this collection, or null. */
+	/** A prior reservation or application of this globally unique mutationId, or null. */
 	public function lookup( string $collection, string $mutation_id ): ?array {
 		global $wpdb;
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT remote_id, operation, record_uuid, status, response_status FROM {$this->table_name()} WHERE mutation_id = %s AND collection = %s",
-				$mutation_id,
-				$collection
+				"SELECT collection, remote_id, operation, record_uuid, fingerprint, status, response_status FROM {$this->table_name()} WHERE mutation_id = %s",
+				$mutation_id
 			),
 			ARRAY_A
 		);
@@ -111,15 +112,16 @@ class Mutation_Store {
 	 * replay or wait. This is what makes the create path safe against a timeout-retry
 	 * overlapping its own in-flight push.
 	 */
-	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation ): bool {
+	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		global $wpdb;
 		$affected = $wpdb->query(
 			$wpdb->prepare(
-				"INSERT IGNORE INTO {$this->table_name()} (mutation_id, collection, record_uuid, remote_id, operation, status, created_at) VALUES (%s, %s, %s, 0, %s, 'pending', %s)",
+				"INSERT IGNORE INTO {$this->table_name()} (mutation_id, collection, record_uuid, remote_id, operation, fingerprint, status, created_at) VALUES (%s, %s, %s, 0, %s, %s, 'pending', %s)",
 				$mutation_id,
 				$collection,
 				$record_uuid,
 				$operation,
+				$fingerprint,
 				gmdate( 'Y-m-d H:i:s' )
 			)
 		);
@@ -152,6 +154,24 @@ class Mutation_Store {
 			array(
 				'remote_id' => $remote_id,
 				'status' => 'poison',
+				'response_status' => $response_status,
+			),
+			array(
+				'mutation_id' => $mutation_id,
+				'status' => 'pending',
+			)
+		);
+		return false !== $affected && 1 === (int) $affected;
+	}
+
+	/** Retain an uncertain create side effect for manual recovery, never stale reclaim. */
+	public function mark_indeterminate( string $mutation_id, int $remote_id, int $response_status ): bool {
+		global $wpdb;
+		$affected = $wpdb->update(
+			$this->table_name(),
+			array(
+				'remote_id' => $remote_id,
+				'status' => 'blocked',
 				'response_status' => $response_status,
 			),
 			array(
@@ -234,8 +254,9 @@ class Mutation_Store {
 	}
 
 	/**
-	 * Reclaim a STALE pending reservation (a crashed in-flight push) so a retry can
-	 * proceed. Deletes only a `pending` row older than the TTL — never a `done` one.
+	 * Reclaim a STALE pending non-create reservation (a crashed in-flight push) so
+	 * a retry can proceed. A pending create may already have reached WooCommerce;
+	 * retain it for manual recovery rather than risk forwarding a duplicate.
 	 * Returns true if one was reclaimed.
 	 */
 	public function reclaim_stale( string $mutation_id, int $ttl_seconds ): bool {
@@ -243,7 +264,7 @@ class Mutation_Store {
 		$cutoff   = gmdate( 'Y-m-d H:i:s', time() - $ttl_seconds );
 		$affected = $wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$this->table_name()} WHERE mutation_id = %s AND status = 'pending' AND created_at < %s",
+				"DELETE FROM {$this->table_name()} WHERE mutation_id = %s AND status = 'pending' AND operation <> 'create' AND created_at < %s",
 				$mutation_id,
 				$cutoff
 			)
@@ -378,7 +399,7 @@ class Mutation_Store {
 	 * a product duplicator, or a staging->prod DB clone can copy the `_woocommerce_pos_uuid`
 	 * meta onto a second record. Resolving such a uuid to an arbitrary first match would
 	 * route a write/delete to the WRONG record, so we fetch up to two and **fail closed**
-	 * (`WP_Error` 409 `woocommerce_pos_sync_identity_ambiguous`) when more than one record carries
+	 * (`WP_Error` 409 `woo_rxdb_sync_identity_ambiguous`) when more than one record carries
 	 * the uuid — the caller aborts the mutation (and releases its reservation) rather than
 	 * corrupt a record. A unique match is returned by lowest id (deterministic) so retries
 	 * are stable.
@@ -482,7 +503,7 @@ class Mutation_Store {
 		$ids = array_values( array_unique( array_map( 'intval', $found ) ) );
 		if ( count( $ids ) > 1 ) {
 			return new WP_Error(
-				'woocommerce_pos_sync_identity_ambiguous',
+				'woo_rxdb_sync_identity_ambiguous',
 				sprintf( 'uuid %s resolves to more than one %s record; refusing to write to an arbitrary match.', $uuid, $id_type ),
 				array( 'status' => 409 )
 			);

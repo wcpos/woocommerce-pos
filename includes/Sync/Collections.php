@@ -93,7 +93,9 @@ final class Collections {
 				'loader'      => 'product',
 			),
 			'proxy'       => null, // hydrated via the per-id /variations controller
-			'write'       => null, // G1 parent-id ambiguity — deliberately open
+			// Variations use WooCommerce's nested REST resource. The write controller
+			// takes the parent from create payloads and the stored object thereafter.
+			'write'       => array( 'route' => '/wc/v3/products' ),
 			'change_log'  => array( 'object_type' => 'variation' ),
 			'digest'      => null, // folded into the products id-space (owner row carries it)
 			'fingerprint' => array( 'barcode' => true ),
@@ -229,7 +231,7 @@ final class Collections {
 				'wc_route' => '/wc/v3/coupons',
 				'slug' => 'coupons',
 			),
-			'write'       => null, // read-only: no client push path exists
+			'write'       => array( 'route' => '/wc/v3/coupons' ),
 			'change_log'  => array( 'object_type' => 'coupon' ),
 			'digest'      => null,
 			'fingerprint' => null,

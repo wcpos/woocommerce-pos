@@ -203,6 +203,7 @@ class Init {
 				'X-HTTP-Method-Override',   // Used to override the HTTP method.
 				'X-WCPOS',                  // Used to identify WCPOS requests.
 			);
+			$allow_headers = Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 
 			$server->send_header( 'Access-Control-Allow-Origin', '*' );
 			$server->send_header( 'Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE' );

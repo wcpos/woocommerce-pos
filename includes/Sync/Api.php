@@ -15,7 +15,7 @@ final class Api {
 	public const ROUTE_PREFIX    = 'sync/';
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
-	public const SCHEMA_VERSION  = '1';
+	public const SCHEMA_VERSION  = '2';
 	public const SCHEMA_OPTION   = 'wcpos_sync_schema_version';
 
 	/**
@@ -44,6 +44,7 @@ final class Api {
 			$controllers['sync-integrity']  = Integrity_Controller::class;
 			$controllers['sync-variations'] = Variations_Controller::class;
 			$controllers['sync-resolve']    = Resolve_Controller::class;
+			$controllers['sync-write']      = Write_Controller::class;
 		}
 
 		return $controllers;

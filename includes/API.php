@@ -193,6 +193,7 @@ class API {
 		$allow_headers[] = 'X-WCPOS';
 		$allow_headers[] = 'X-HTTP-Method-Override';
 		$allow_headers[] = 'X-WCPOS-Idempotency-Key';
+		$allow_headers   = \WCPOS\WooCommercePOS\Sync\Header_Mirror::allow_cors_headers( $allow_headers );
 
 		return $allow_headers;
 	}
