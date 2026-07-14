@@ -11,6 +11,12 @@
 namespace WCPOS\WooCommercePOS;
 
 use WCPOS\WooCommercePOS\Admin\Consent;
+use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
+use WCPOS\WooCommercePOS\Sync\Change_Log;
+use WCPOS\WooCommercePOS\Sync\Health as Sync_Health;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Sync\Sync_Index;
 use const DOING_AJAX;
 
 /**
@@ -91,8 +97,10 @@ class Activator {
 
 	/**
 	 * Fired when the plugin is activated.
+	 *
+	 * @param bool $install_sync_schema Whether to install the sync schema.
 	 */
-	public function single_activate(): void {
+	public function single_activate( bool $install_sync_schema = true ): void {
 		// create POS specific roles.
 		$this->create_pos_roles();
 
@@ -135,6 +143,26 @@ class Activator {
 			: 'undecided';
 		if ( 'undecided' === $tracking_consent ) {
 			set_transient( Consent::MODAL_TRANSIENT, 1, Consent::MODAL_TRANSIENT_TTL );
+		}
+
+		if ( $install_sync_schema ) {
+			$this->install_sync_schema();
+		}
+	}
+
+	/**
+	 * Install the sync store and latch its aggregate schema version after verification.
+	 */
+	public function install_sync_schema(): void {
+		delete_option( Sync_Api::SCHEMA_OPTION );
+
+		( new Change_Log() )->install();
+		( new Integrity_Digest() )->install();
+		( new Sync_Index() )->install();
+		( new Mutation_Store() )->install();
+
+		if ( Sync_Health::is_healthy() ) {
+			update_option( Sync_Api::SCHEMA_OPTION, Sync_Api::SCHEMA_VERSION, false );
 		}
 	}
 
@@ -224,8 +252,10 @@ class Activator {
 	 * Check version number, runs every admin page load.
 	 */
 	private function version_check(): void {
-		$old = (string) Services\Settings::get_db_version();
-		if ( ! version_compare( $old, VERSION, '<' ) ) {
+		$old                  = (string) Services\Settings::get_db_version();
+		$plugin_needs_upgrade = version_compare( $old, VERSION, '<' );
+		$sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
+		if ( ! $plugin_needs_upgrade && ! $sync_needs_upgrade ) {
 			return;
 		}
 
@@ -233,26 +263,32 @@ class Activator {
 			return;
 		}
 
-		$locked_old = (string) Services\Settings::get_db_version();
-		if ( ! version_compare( $locked_old, VERSION, '<' ) ) {
+		$locked_old                  = (string) Services\Settings::get_db_version();
+		$locked_plugin_needs_upgrade = version_compare( $locked_old, VERSION, '<' );
+		$locked_sync_needs_upgrade   = Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null );
+		if ( ! $locked_plugin_needs_upgrade && ! $locked_sync_needs_upgrade ) {
 			$this->release_db_upgrade_lock();
 			return;
 		}
 
-		Services\Settings::bump_versions();
+		if ( $locked_plugin_needs_upgrade ) {
+			Services\Settings::bump_versions();
+		}
 
-		// Re-run activation to sync role capabilities. add_role() and add_cap()
-		// are both idempotent, so this is safe. Without this, capabilities added
-		// in newer versions would never reach existing installs because add_role()
-		// is a no-op when the role already exists.
-		// Deferred to 'init' because create_pos_roles() calls __() which
-		// requires translations to be loaded (WordPress 6.7+).
-		add_action(
-			'init',
-			function () {
-				$this->single_activate();
-			}
-		);
+		if ( $locked_plugin_needs_upgrade ) {
+			// Re-run activation to sync role capabilities. add_role() and add_cap()
+			// are both idempotent, so this is safe. Without this, capabilities added
+			// in newer versions would never reach existing installs because add_role()
+			// is a no-op when the role already exists.
+			// Deferred to 'init' because create_pos_roles() calls __() which
+			// requires translations to be loaded (WordPress 6.7+).
+			add_action(
+				'init',
+				function () {
+					$this->single_activate( false );
+				}
+			);
+		}
 
 		$lock_released = false;
 		$release_lock  = function () use ( &$lock_released ): void {
@@ -417,6 +453,10 @@ class Activator {
 			 version_compare( $version, $current, '<=' ) ) {
 				include $updater;
 			}
+		}
+
+		if ( Sync_Api::SCHEMA_VERSION !== get_option( Sync_Api::SCHEMA_OPTION, null ) ) {
+			$this->install_sync_schema();
 		}
 	}
 

@@ -39,6 +39,17 @@ class Init {
 		// fire on a plugin activation or update request.
 		new Consent();
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
+		// Gate on the schema latch, not a live Health probe: the latch is only
+		// set AFTER install verified every table (latch-after-verify), so a
+		// per-request SHOW TABLES sweep buys nothing — and a table lost after
+		// latching is already survivable (observer writes fail open and the
+		// REST health gate 503s the sync endpoints).
+		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
+		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() && $sync_schema_latched ) {
+			( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
+			( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();
+		}
 
 		// Init hooks.
 		add_action( 'init', array( $this, 'init' ) );

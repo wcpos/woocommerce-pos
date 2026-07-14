@@ -36,6 +36,10 @@ class Test_Activator extends WP_UnitTestCase {
 		parent::setUp();
 		delete_option( self::DB_VERSION_OPTION );
 		delete_option( self::DB_UPGRADE_LOCK_OPTION );
+		// These tests pin the PLUGIN-version upgrade mechanics. Latch the sync
+		// schema so an unlatched sync store does not co-trigger version_check —
+		// the sync-triggered path has its own coverage in Sync\Test_Sync_Install.
+		update_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION, false );
 		remove_all_actions( 'woocommerce_init' );
 		remove_all_actions( 'shutdown' );
 	}

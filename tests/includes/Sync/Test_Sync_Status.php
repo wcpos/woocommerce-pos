@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+use WCPOS\WooCommercePOS\Activator;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -26,6 +27,8 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function setUp(): void {
 		update_option( Api::OPTION_ENABLED, true );
+		$this->drop_sync_tables();
+		delete_option( Api::SCHEMA_OPTION );
 
 		parent::setUp();
 	}
@@ -34,9 +37,25 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 * Remove the sync feature flag after each test.
 	 */
 	public function tearDown(): void {
-		delete_option( Api::OPTION_ENABLED );
-
 		parent::tearDown();
+		// Post-rollback hygiene: setUp committed state BEFORE the transaction
+		// started (flag on, tables dropped), so cleanup must run AFTER the
+		// rollback or it gets undone. Restore tables for later classes.
+		delete_option( Api::OPTION_ENABLED );
+		delete_option( Api::SCHEMA_OPTION );
+		( new Activator() )->install_sync_schema();
+		delete_option( Api::SCHEMA_OPTION );
+	}
+
+	/**
+	 * Drop every sync table.
+	 */
+	private function drop_sync_tables(): void {
+		global $wpdb;
+
+		foreach ( Health::required_tables() as $table ) {
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Known internal table names.
+		}
 	}
 
 	/**
@@ -59,6 +78,26 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 					$wpdb->prefix . 'wcpos_sync_mutations',
 				),
 				'schema_version' => null,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * An installed store reports healthy with the latched schema version.
+	 */
+	public function test_sync_status_after_install_returns_healthy_status(): void {
+		( new Activator() )->install_sync_schema();
+
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'healthy'        => true,
+				'missing_tables' => array(),
+				'schema_version' => Api::SCHEMA_VERSION,
 			),
 			$response->get_data()
 		);
