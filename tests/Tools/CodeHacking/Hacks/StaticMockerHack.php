@@ -119,7 +119,7 @@ final class StaticMockerHack extends CodeHack {
 		for ( $i = 0; $i < $count; $i++ ) {
 			$current_token = $tokens[ $i ];
 
-			if ( $this->is_token_of_type( $current_token, T_STRING ) && \in_array( $current_token[1], $this->mockable_classes, true ) ) {
+			if ( ! $previous_token_is_ns_separator && $this->is_token_of_type( $current_token, T_STRING ) && \in_array( $current_token[1], $this->mockable_classes, true ) ) {
 				$class_name = $current_token[1];
 				$next_token = $tokens[ $i + 1 ] ?? null;
 

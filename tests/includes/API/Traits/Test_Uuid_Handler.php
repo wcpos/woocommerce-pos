@@ -146,6 +146,17 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	}
 
 	/**
+	 * Qualified calls must remain intact when the static mocker sees Pos_Uuid.
+	 */
+	public function test_static_mocker_preserves_qualified_pos_uuid_calls(): void {
+		$source = '<?php \\WCPOS\\WooCommercePOS\\Sync\\Pos_Uuid::register_hooks();';
+
+		$hacked = StaticMockerHack::get_hack_instance()->hack( $source, '' );
+
+		$this->assertSame( $source, $hacked );
+	}
+
+	/**
 	 * Test create_uuid generates valid UUID v4.
 	 *
 	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
