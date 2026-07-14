@@ -32,6 +32,9 @@ final class Order_Query {
 			if ( ! empty( $indexed_rows ) ) {
 				return $indexed_rows;
 			}
+			if ( 0 < $sequence ) {
+				return array();
+			}
 		}
 
 		return array_map(

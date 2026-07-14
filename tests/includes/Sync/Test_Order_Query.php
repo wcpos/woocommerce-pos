@@ -75,4 +75,22 @@ class Test_Order_Query extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 'fallback:modified', $row['origin'] );
 		}
 	}
+
+	/**
+	 * An exhausted nonzero index cursor must not fall back to sequence-zero rows.
+	 */
+	public function test_nonzero_sequence_returns_an_empty_page_when_the_index_is_exhausted(): void {
+		OrderHelper::create_order();
+
+		$empty_index = new class() {
+			public function rows_after_sequence( int $sequence, int $limit ): array {
+				return array();
+			}
+		};
+
+		$query = new Order_Query( $empty_index );
+		$rows  = $query->changes_after_checkpoint( '1970-01-01T00:00:00.000Z', 0, 41, 10 );
+
+		$this->assertSame( array(), $rows );
+	}
 }
