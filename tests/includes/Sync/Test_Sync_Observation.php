@@ -177,6 +177,39 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 	}
 
 	/**
+	 * A failed customer digest delete must fail open and leave an operations log.
+	 */
+	public function test_customer_digest_delete_failure_is_logged(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		$user    = get_user_by( 'id', $user_id );
+		$messages = array();
+		$break_digest_delete = static function ( $query ) use ( $wpdb ) {
+			$table = $wpdb->prefix . 'wcpos_sync_stored_digest';
+			if ( is_string( $query ) && false !== strpos( $query, 'DELETE FROM' ) && false !== strpos( $query, $table ) ) {
+				return str_replace( $table, $table . '_gone', $query );
+			}
+			return $query;
+		};
+		$capture_log = static function ( $should_log, $message ) use ( &$messages ) {
+			$messages[] = (string) $message;
+			return false;
+		};
+
+		add_filter( 'query', $break_digest_delete );
+		add_filter( 'woocommerce_pos_logging', $capture_log, 10, 2 );
+		try {
+			$user->remove_role( 'customer' );
+		} finally {
+			remove_filter( 'query', $break_digest_delete );
+			remove_filter( 'woocommerce_pos_logging', $capture_log );
+		}
+
+		$this->assertStringContainsString( 'delete stored customer digest failed', implode( "\n", $messages ) );
+	}
+
+	/**
 	 * add_role()/remove_role() fire only add_user_role/remove_user_role — the
 	 * digest must follow those transitions too (the P2 from the review).
 	 */

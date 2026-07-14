@@ -580,7 +580,7 @@ final class Integrity_Digest {
 
 	private function delete_customer_digest( int $user_id ): void {
 		global $wpdb;
-		$wpdb->delete(
+		$deleted = $wpdb->delete(
 			$this->table_name(),
 			array(
 				'object_type' => 'customer',
@@ -588,6 +588,9 @@ final class Integrity_Digest {
 			),
 			array( '%s', '%d' )
 		);
+		if ( false === $deleted ) {
+			throw new RuntimeException( 'delete stored customer digest failed: ' . $wpdb->last_error );
+		}
 	}
 
 	/** Role check identical to the change-log's — only customer-role users carry a digest. */
