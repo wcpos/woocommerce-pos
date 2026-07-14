@@ -37,7 +37,8 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 	 * A mutation can be reserved, checkpointed, and finalized once.
 	 */
 	public function test_mutation_create_and_finalize_persists_done_row(): void {
-		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create' ) );
+		$fingerprint = str_repeat( 'a', 64 );
+		$this->assertTrue( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create', $fingerprint ) );
 		$this->assertFalse( $this->store->reserve( 'products', 'mutation-1', 'record-1', 'create' ) );
 		$this->assertSame( 'pending', $this->store->lookup( 'products', 'mutation-1' )['status'] );
 		$this->assertTrue( $this->store->mark_applied( 'mutation-1', 42, 201 ) );
@@ -46,6 +47,23 @@ class Test_Mutation_Store extends Sync_Store_Test_Case {
 		$row = $this->store->lookup( 'products', 'mutation-1' );
 		$this->assertSame( 'done', $row['status'] );
 		$this->assertSame( '42', $row['remote_id'] );
+		$this->assertSame( $fingerprint, $row['fingerprint'] );
+		$this->assertSame( 'products', $row['collection'] );
+		$this->assertSame( $fingerprint, $this->store->lookup( 'orders', 'mutation-1' )['fingerprint'] );
+	}
+
+	public function test_unknown_create_side_effect_is_not_released_or_reclaimed(): void {
+		$this->store->reserve( 'products', 'mutation-unknown', 'record-1', 'create', str_repeat( 'b', 64 ) );
+		$this->assertTrue( method_exists( $this->store, 'mark_unknown' ) );
+		if ( ! method_exists( $this->store, 'mark_unknown' ) ) {
+			return;
+		}
+		$this->assertTrue( $this->store->mark_unknown( 'mutation-unknown', 201 ) );
+
+		$this->store->release( 'mutation-unknown' );
+
+		$this->assertSame( 'unknown', $this->store->lookup( 'products', 'mutation-unknown' )['status'] );
+		$this->assertFalse( $this->store->reclaim_stale( 'mutation-unknown', 0 ) );
 	}
 
 	/**

@@ -11,8 +11,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\API as WCPOS_API;
+use WCPOS\WooCommercePOS\Init;
 use WP_Error;
 use WP_REST_Request;
+use WP_REST_Response;
+use WP_REST_Server;
 use WP_UnitTestCase;
 
 /**
@@ -47,6 +50,25 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertContains( 'Idempotency-Key', $headers );
 		$this->assertContains( 'If-Match', $headers );
 		$this->assertSame( count( $headers ), count( array_unique( $headers ) ) );
+	}
+
+	public function test_headerless_options_preflight_includes_mirror_headers(): void {
+		$reflection = new \ReflectionClass( Init::class );
+		$init       = $reflection->newInstanceWithoutConstructor();
+		$request    = new WP_REST_Request( 'OPTIONS', '/wcpos/v1/sync/push/products' );
+		$server     = new class() extends WP_REST_Server {
+			public array $sent_headers = array();
+
+			public function send_header( $key, $value ) {
+				$this->sent_headers[ $key ] = $value;
+			}
+		};
+
+		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		$allow_headers = array_map( 'trim', explode( ',', $server->sent_headers['Access-Control-Allow-Headers'] ) );
+		$this->assertContains( 'Idempotency-Key', $allow_headers );
+		$this->assertContains( 'If-Match', $allow_headers );
 	}
 
 	public function test_non_string_base_revision_is_treated_as_empty_not_cast(): void {

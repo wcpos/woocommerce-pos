@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Sync\Write_Controller;
 use WP_Error;
 use WP_REST_Request;
@@ -36,7 +37,9 @@ final class Fake_Mutation_Store {
 	public array $finalized = array();
 	public array $applied = array();
 	public array $poisoned = array();
+	public array $unknown = array();
 	public bool $finalizeOk = true;
+	public bool $markPoisonOk = true;
 	public bool $persistUuidOk = true;
 	/** @var string[] mutationIds released */
 	public array $released = array();
@@ -52,23 +55,40 @@ final class Fake_Mutation_Store {
 	public function lookup( string $collection, string $mutation_id ): ?array {
 		return $this->lookups[ $mutation_id ] ?? null;
 	}
-	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation ): bool {
+	public function reserve( string $collection, string $mutation_id, string $record_uuid, string $operation, string $fingerprint = '' ): bool {
 		$this->reserved[] = $mutation_id;
-		return array_shift( $this->reserveResults ) ?? true;
+		$reserved = array_shift( $this->reserveResults ) ?? true;
+		if ( $reserved ) {
+			$this->lookups[ $mutation_id ] = compact( 'collection', 'record_uuid', 'operation', 'fingerprint' ) + array(
+				'remote_id' => 0,
+				'status' => 'pending',
+			);
+		}
+		return $reserved;
 	}
 	public function mark_applied( string $mutation_id, int $remote_id, int $response_status ): bool {
 		$this->applied[ $mutation_id ] = $remote_id;
 		return true;
 	}
 	public function mark_poison( string $mutation_id, int $remote_id, int $response_status = 201 ): bool {
+		if ( ! $this->markPoisonOk ) {
+			return false;
+		}
 		$this->poisoned[ $mutation_id ] = $remote_id;
-		$this->lookups[ $mutation_id ] = array(
+		$this->lookups[ $mutation_id ] = array_merge(
+			$this->lookups[ $mutation_id ],
+			array(
 			'remote_id' => $remote_id,
-			'operation' => 'create',
-			'record_uuid' => Test_Write_Controller::REC,
 			'status' => 'poison',
 			'response_status' => $response_status,
+			)
 		);
+		return true;
+	}
+	public function mark_unknown( string $mutation_id, int $response_status ): bool {
+		$this->unknown[] = $mutation_id;
+		$this->lookups[ $mutation_id ]['status'] = 'unknown';
+		$this->lookups[ $mutation_id ]['response_status'] = $response_status;
 		return true;
 	}
 	public function finalize( string $mutation_id, int $remote_id ): bool {
@@ -880,6 +900,46 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->released );
 	}
 
+	public function test_create_without_a_returned_id_records_a_non_reclaimable_unknown_side_effect(): void {
+		$store = new Fake_Mutation_Store();
+		$this->setRestResponse( array( 'email' => 'a@b.c' ), 201 );
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_create_no_id', $result->get_error_code() );
+		$this->assertSame( array( self::MID ), $store->unknown );
+		$this->assertSame( 'unknown', $store->lookups[ self::MID ]['status'] );
+		$this->assertSame( array(), $store->released );
+	}
+
+	public function test_create_checkpoint_failure_stamps_and_verifies_identity_before_returning_error(): void {
+		$store = new Fake_Mutation_Store();
+		$store->markPoisonOk = false;
+		$this->setRestResponse(
+			array(
+				'id' => 4242,
+				'email' => 'a@b.c',
+			),
+			201
+		);
+
+		$result = $this->push( $store );
+
+		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $result->get_error_code() );
+		$this->assertSame(
+			array(
+				array(
+					'id_type' => 'user',
+					'id' => 4242,
+					'uuid' => self::REC,
+				),
+			),
+			$store->persisted
+		);
+		$this->assertSame( 4242, $store->resolve );
+		$this->assertSame( array(), $store->released );
+	}
+
 	public function test_create_identity_persistence_failure_poison_retries_stamp_original_without_reforwarding(): void {
 		$store = new Fake_Mutation_Store();
 		$store->persistUuidOk = false;
@@ -1003,6 +1063,49 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array( self::MID => 4242 ), $store->finalized );
 		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ); // replay GET only; no second POST
 		$this->assertSame( 'GET', $GLOBALS['wcpos_sync_test_rest_do_request_calls'][1]->get_method() );
+	}
+
+	public function test_update_finalize_retry_replays_the_applied_response_status(): void {
+		$store = new Fake_Mutation_Store();
+		$store->resolve = 10;
+		$store->finalizeOk = false;
+		$current = array(
+			'id' => 10,
+			'email' => 'before@example.com',
+		);
+		$updated = array(
+			'id' => 10,
+			'email' => 'after@example.com',
+		);
+		$GLOBALS['wcpos_sync_test_rest_do_request_queue'] = array(
+			new WP_REST_Response( $current, 200 ),
+			new WP_REST_Response( $updated, 202 ),
+			new WP_REST_Response( $updated, 200 ),
+		);
+
+		$first = $this->push(
+			$store,
+			array(
+				'operation' => 'update',
+				'baseRevision' => Revision::compute( $current ),
+			)
+		);
+		$this->assertSame( 'woo_rxdb_sync_finalize_failed', $first->get_error_code() );
+
+		$store->finalizeOk = true;
+		$second = $this->push(
+			$store,
+			array(
+				'operation' => 'update',
+				'baseRevision' => Revision::compute( $current ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_REST_Response::class, $second );
+		if ( $second instanceof WP_REST_Response ) {
+			$this->assertSame( 202, $second->get_status() );
+		}
+		$this->assertCount( 3, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] );
 	}
 
 	public function test_update_without_base_revision_is_rejected_428_before_forwarding(): void {
@@ -1281,6 +1384,58 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
 		$this->assertSame( 422, $result->get_error_data()['status'] );
+	}
+
+	public function test_replay_rejects_mutation_id_reused_with_a_different_payload_or_revision(): void {
+		$store = new Fake_Mutation_Store();
+		$this->setRestResponse(
+			array(
+				'id' => 4242,
+				'email' => 'a@b.c',
+			),
+			201
+		);
+		$this->push( $store );
+
+		$payload_mismatch = $this->push(
+			$store,
+			array(
+				'payload' => array( 'email' => 'different@example.com' ),
+			)
+		);
+		$revision_mismatch = $this->push( $store, array( 'baseRevision' => 'sha256:different' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $payload_mismatch );
+		if ( $payload_mismatch instanceof WP_Error ) {
+			$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $payload_mismatch->get_error_code() );
+			$this->assertSame( 422, $payload_mismatch->get_error_data()['status'] );
+		}
+		$this->assertInstanceOf( WP_Error::class, $revision_mismatch );
+		if ( $revision_mismatch instanceof WP_Error ) {
+			$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $revision_mismatch->get_error_code() );
+		}
+		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] );
+	}
+
+	public function test_replay_rejects_mutation_id_reused_across_collections(): void {
+		$store = new Fake_Mutation_Store();
+		$this->setRestResponse(
+			array(
+				'id' => 4242,
+				'email' => 'a@b.c',
+			),
+			201
+		);
+		$this->push( $store );
+
+		$result = $this->push( $store, array( 'collection' => 'orders' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		if ( $result instanceof WP_Error ) {
+			$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+			$this->assertSame( 422, $result->get_error_data()['status'] );
+		}
+		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] );
 	}
 
 	public static function recordedCreateReplayStatuses(): array {
