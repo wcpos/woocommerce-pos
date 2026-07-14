@@ -399,7 +399,6 @@ final class Integrity_Digest {
 	public function customer_digest_select_sql( string $where_sql = '' ): string {
 		global $wpdb;
 		$meta_keys_sql = "('" . implode( "','", self::CUSTOMER_DIGESTED_META_KEYS ) . "')";
-		$capabilities_key = $wpdb->prefix . 'capabilities';
 
 		return 'SELECT u.ID AS id,'
 			. " 'customer' AS object_type,"
@@ -415,8 +414,7 @@ final class Integrity_Digest {
 			// Customer-role filter via INSTR (a substring match on the serialized capabilities meta),
 			// NOT LIKE '%"customer"%' — a literal `%` would be mangled by $wpdb->prepare (every consumer
 			// of this SQL runs it through prepare for the id placeholder). INSTR is wildcard-free.
-			. " INNER JOIN {$wpdb->usermeta} cap ON cap.user_id = u.ID"
-			. " AND cap.meta_key = '{$capabilities_key}' AND INSTR(cap.meta_value, '\"customer\"') > 0"
+			. Customer_Role::sql_join( 'u.ID', 'cap' )
 			. " LEFT JOIN {$wpdb->usermeta} um ON um.user_id = u.ID AND um.meta_key IN {$meta_keys_sql}"
 			. ( '' === $where_sql ? '' : ' WHERE ' . $where_sql )
 			. ' GROUP BY u.ID';
@@ -527,11 +525,9 @@ final class Integrity_Digest {
 	/** Customer analogue of {@see live_row_exists_sql}: the id still names a customer-role user (ADR 0015). */
 	public function customer_live_row_exists_sql( string $id_expr ): string {
 		global $wpdb;
-		$capabilities_key = $wpdb->prefix . 'capabilities';
 
 		return "EXISTS (SELECT 1 FROM {$wpdb->users} lu"
-			. " INNER JOIN {$wpdb->usermeta} lc ON lc.user_id = lu.ID"
-			. " AND lc.meta_key = '{$capabilities_key}' AND INSTR(lc.meta_value, '\"customer\"') > 0"
+			. Customer_Role::sql_join( 'lu.ID', 'lc' )
 			. " WHERE lu.ID = {$id_expr})";
 	}
 
@@ -595,11 +591,7 @@ final class Integrity_Digest {
 
 	/** Role check identical to the change-log's — only customer-role users carry a digest. */
 	private function is_customer( int $user_id ): bool {
-		if ( ! function_exists( 'get_userdata' ) ) {
-			return false;
-		}
-		$user = get_userdata( $user_id );
-		return $user && in_array( 'customer', (array) $user->roles, true );
+		return Customer_Role::is_customer( $user_id );
 	}
 
 	/** Order analogue of {@see live_row_exists_sql} — HPOS/CPT-aware (ADR 0015, Leg-3 phase 7). */

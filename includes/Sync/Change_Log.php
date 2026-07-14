@@ -383,11 +383,7 @@ final class Change_Log {
 	 * wc/v3/customers (a 404 / wrong record).
 	 */
 	private function is_customer( int $user_id ): bool {
-		if ( ! function_exists( 'get_userdata' ) ) {
-			return false;
-		}
-		$user = get_userdata( $user_id );
-		return $user && in_array( 'customer', (array) $user->roles, true );
+		return Customer_Role::is_customer( $user_id );
 	}
 
 	public function record( string $object_type, int $object_id, string $change_type, string $origin = 'hook', bool $dedup = true ): void {

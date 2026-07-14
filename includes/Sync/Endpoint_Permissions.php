@@ -27,13 +27,10 @@ use WP_REST_Request;
  * The write path layers more on top of this: /push/{collection} forwards via
  * rest_do_request, which re-runs wc/v3's own per-collection capability checks.
  *
- * `health_gated()` is the opt-out seam for the rare out-of-band ADMIN endpoint
- * that must stay reachable on a broken install (capability check only) — see
- * Woo_RxDB_Sync_Uuid_Backfill_Controller for the one current case and the
- * reasoning. Endpoints whose work lives IN the gated tables (e.g.
- * /orders/index/backfill, /integrity/rebuild) stay gated: they cannot CURE an
- * unhealthy store (only install()/maybe_install can create the tables, and that
- * self-heals on the next request), they can only fail against it.
+ * `health_gated()` is the reserved opt-out seam for a repair endpoint that can
+ * actually cure a broken install. The current out-of-band operations endpoints
+ * (/uuid/backfill, /orders/index/backfill, /integrity/rebuild) cannot create the
+ * gated tables, so they stay gated and fail against an unhealthy store.
  *
  * NOT for the fixtures controller: its check is deliberately different
  * (manage_options + the lab-mode guard, and the routes are lab-gated at
