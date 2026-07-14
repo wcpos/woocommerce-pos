@@ -281,11 +281,15 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		update_option( 'timezone_string', 'America/New_York' );
 		$order = wc_create_order();
-		$order->set_date_modified( '2026-01-15 12:34:56' );
-		$order->save();
 
-		$modified = wc_get_order( $order->get_id() )->get_date_modified();
+		// WC's save() stamps date_modified itself (a preset value does not
+		// survive), so reload and derive the expectation from the persisted
+		// order — the point is GMT vs site-local rendering, not a fixed value.
+		$reloaded = wc_get_order( $order->get_id() );
+		$modified = $reloaded->get_date_modified();
 		$expected = gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() );
+		$local    = $modified->date( 'Y-m-d H:i:s' );
+		$this->assertNotSame( $expected, $local, 'New York offset must make local differ from GMT for this pin to bite' );
 		$this->sync_index->record_order_change( $order->get_id(), 'test:gmt', false );
 		$stored = $wpdb->get_var(
 			$wpdb->prepare(

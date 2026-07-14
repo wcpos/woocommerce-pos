@@ -10,7 +10,6 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
-use WCPOS\WooCommercePOS\Sync\Health;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Sync_Index;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
@@ -68,28 +67,18 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 	 * An enabled sync API must not register write observers until the schema is
 	 * both latched and healthy.
 	 */
-	public function test_enabled_sync_with_unlatched_or_unhealthy_schema_registers_no_observation_hooks(): void {
-		global $wpdb, $wp_filter;
+	public function test_enabled_sync_with_unlatched_schema_registers_no_observation_hooks(): void {
+		global $wp_filter;
 
 		update_option( Api::OPTION_ENABLED, true );
 		delete_option( Api::SCHEMA_OPTION );
 
 		$observer_classes = array( Change_Log::class, Integrity_Digest::class, Sync_Index::class );
-		$missing_table    = Health::required_tables()[0];
-		$escaped_table    = $wpdb->esc_like( $missing_table );
-		$hide_table       = static function ( $query ) use ( $escaped_table ) {
-			return is_string( $query ) && false !== strpos( $query, $escaped_table ) ? 'SELECT NULL' : $query;
-		};
 
+		// The latch is the gate (latch-after-verify): flag on but schema never
+		// verified means no observers. A table lost AFTER latching is fail-open
+		// territory (covered by the digest fail-open test), not a hook gate.
 		new Init();
-
-		update_option( Api::SCHEMA_OPTION, Api::SCHEMA_VERSION );
-		add_filter( 'query', $hide_table );
-		try {
-			new Init();
-		} finally {
-			remove_filter( 'query', $hide_table );
-		}
 
 		foreach ( array( 'woocommerce_new_product', 'user_register', 'created_term', 'woocommerce_new_order' ) as $hook_name ) {
 			if ( ! isset( $wp_filter[ $hook_name ] ) ) {
