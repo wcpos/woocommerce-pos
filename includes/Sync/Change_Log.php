@@ -76,6 +76,7 @@ final class Change_Log {
 		add_action( 'woocommerce_update_coupon', array( $this, 'record_coupon_updated' ), 10, 1 );
 		add_action( 'wp_trash_post', array( $this, 'record_post_deleted' ), 10, 1 );
 		add_action( 'before_delete_post', array( $this, 'record_post_deleted' ), 10, 1 );
+		add_action( 'untrashed_post', array( $this, 'record_post_untrashed' ), 10, 1 );
 		add_action( 'woocommerce_tax_rate_added', array( $this, 'record_tax_rate_created' ), 10, 1 );
 		add_action( 'woocommerce_tax_rate_updated', array( $this, 'record_tax_rate_updated' ), 10, 1 );
 		add_action( 'woocommerce_tax_rate_deleted', array( $this, 'record_tax_rate_deleted' ), 10, 1 );
@@ -174,6 +175,21 @@ final class Change_Log {
 		}
 		if ( 'shop_coupon' === $post_type ) {
 			$this->record( 'coupon', $post_id, 'delete' );
+		}
+	}
+
+	public function record_post_untrashed( int $post_id ): void {
+		$post_type = get_post_type( $post_id );
+		if ( 'product' === $post_type ) {
+			$this->record_product_updated( $post_id );
+			return;
+		}
+		if ( 'product_variation' === $post_type ) {
+			$this->record_variation_updated( $post_id );
+			return;
+		}
+		if ( 'shop_coupon' === $post_type ) {
+			$this->record_coupon_updated( $post_id );
 		}
 	}
 

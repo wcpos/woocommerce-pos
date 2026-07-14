@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
 
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
@@ -191,5 +192,139 @@ class Test_Sync_Observation extends Sync_Store_Test_Case {
 
 		$user->remove_role( 'customer' );
 		$this->assertNotContains( (string) $user_id, $customer_digests(), 'remove_role(customer) must remove the digest' );
+	}
+
+	/**
+	 * The definitive WC_Customer create hook refreshes the digest after the
+	 * customer data store finishes persisting user meta.
+	 */
+	public function test_new_customer_lifecycle_hook_refreshes_the_customer_digest(): void {
+		global $wpdb;
+
+		$user_id = $this->factory->user->create( array( 'role' => 'customer' ) );
+		update_user_meta( $user_id, 'first_name', 'Final persisted name' );
+
+		do_action( 'woocommerce_new_customer', $user_id, new \WC_Customer( $user_id ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce lifecycle hook under test.
+
+		$current_digest = (string) $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT crc FROM (' . $this->integrity_digest->customer_digest_select_sql( 'u.ID = %d' ) . ') current_digest', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal query with prepared id placeholder.
+				$user_id
+			)
+		);
+		$stored_digests = $this->integrity_digest->read_customer_digests( array( $user_id ) );
+
+		$this->assertArrayHasKey( $user_id, $stored_digests );
+		$this->assertSame( $current_digest, $stored_digests[ $user_id ] );
+	}
+
+	/**
+	 * Restoring a CPT order recreates the digest removed by its trash hook.
+	 */
+	public function test_cpt_order_untrash_recreates_the_order_digest(): void {
+		$order    = wc_create_order();
+		$order_id = $order->get_id();
+
+		if ( 'shop_order' !== get_post_type( $order_id ) ) {
+			$this->markTestSkipped( 'CPT order restore coverage requires legacy order storage.' );
+		}
+
+		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+
+		$order->delete( false );
+		$this->assertArrayNotHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+
+		wp_untrash_post( $order_id );
+		$this->assertArrayHasKey( $order_id, $this->integrity_digest->read_order_digests( array( $order_id ) ) );
+	}
+
+	/**
+	 * Restored products, variations, and coupons are re-emitted as present.
+	 */
+	public function test_catalog_untrash_appends_update_change_log_rows(): void {
+		global $wpdb;
+
+		$product   = ProductHelper::create_simple_product();
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $product->get_id() );
+		$variation->set_regular_price( 5 );
+		$variation->save();
+		$coupon = CouponHelper::create_coupon( 'restore-' . wp_generate_password( 8, false ) );
+
+		$objects = array(
+			'product' => $product->get_id(),
+			'variation' => $variation->get_id(),
+			'coupon' => $coupon->get_id(),
+		);
+
+		foreach ( $objects as $object_type => $object_id ) {
+			wp_trash_post( $object_id );
+			wp_untrash_post( $object_id );
+
+			$latest_change = $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT change_type FROM ' . $this->change_log->table_name() . ' WHERE object_type = %s AND object_id = %d ORDER BY sequence DESC LIMIT 1', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table with prepared placeholders.
+					$object_type,
+					$object_id
+				)
+			);
+			$this->assertSame( 'update', $latest_change, $object_type . ' restore must supersede its delete tombstone.' );
+		}
+	}
+
+	/**
+	 * Order index timestamps are stored in UTC even when WordPress uses a
+	 * named non-UTC timezone.
+	 */
+	public function test_order_index_modified_timestamp_is_stored_in_gmt(): void {
+		global $wpdb;
+
+		update_option( 'timezone_string', 'America/New_York' );
+		$order = wc_create_order();
+		$order->set_date_modified( '2026-01-15 12:34:56' );
+		$order->save();
+
+		$modified = $order->get_date_modified();
+		$expected = gmdate( 'Y-m-d H:i:s', $modified->getTimestamp() );
+		$this->sync_index->record_order_change( $order->get_id(), 'test:gmt', false );
+		$stored = $wpdb->get_var(
+			$wpdb->prepare(
+				'SELECT modified_gmt FROM ' . $this->sync_index->table_name() . ' WHERE order_id = %d AND origin = %s ORDER BY sequence DESC LIMIT 1', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table with prepared placeholders.
+				$order->get_id(),
+				'test:gmt'
+			)
+		);
+
+		$this->assertSame( $expected, $stored );
+	}
+
+	/**
+	 * Backfill resumes after the last processed id, so deleting an earlier
+	 * order cannot shift the next chunk past an unprocessed order.
+	 */
+	public function test_order_backfill_uses_last_order_id_cursor_after_deletion(): void {
+		global $wpdb;
+
+		wc_create_order();
+		wc_create_order();
+		wc_create_order();
+		$order_ids = array_map(
+			'intval',
+			wc_get_orders( array( 'type' => 'shop_order', 'limit' => -1, 'orderby' => 'ID', 'order' => 'ASC', 'return' => 'ids' ) )
+		);
+		$wpdb->query( 'DELETE FROM ' . $this->sync_index->table_name() ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+
+		$first = $this->sync_index->run_backfill_chunk( 1 );
+		$this->assertSame( $order_ids[0], $first['lastOrderId'] );
+
+		wc_get_order( $order_ids[0] )->delete( true );
+		$second = $this->sync_index->run_backfill_chunk( 1 );
+
+		$this->assertSame( $order_ids[1], $second['lastOrderId'] );
+		$backfilled_ids = array_map(
+			'intval',
+			$wpdb->get_col( 'SELECT order_id FROM ' . $this->sync_index->table_name() . " WHERE origin = 'backfill' ORDER BY sequence ASC" ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Known internal table name.
+		);
+		$this->assertSame( array( $order_ids[0], $order_ids[1] ), $backfilled_ids );
 	}
 }

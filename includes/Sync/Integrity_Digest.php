@@ -123,7 +123,7 @@ final class Integrity_Digest {
 		add_action( 'woocommerce_update_product_variation', array( $this, 'record_post_saved' ), 10, 1 );
 		// Untrash does not reliably re-fire woocommerce_update_product; the
 		// upsert is a no-op for non-live rows, so hooking it is free.
-		add_action( 'untrashed_post', array( $this, 'record_post_saved' ), 10, 1 );
+		add_action( 'untrashed_post', array( $this, 'record_post_untrashed' ), 10, 1 );
 		add_action( 'wp_trash_post', array( $this, 'record_post_deleted' ), 10, 1 );
 		add_action( 'before_delete_post', array( $this, 'record_post_deleted' ), 10, 1 );
 
@@ -134,6 +134,7 @@ final class Integrity_Digest {
 		add_action( 'user_register', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'profile_update', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_created_customer', array( $this, 'record_customer_saved' ), 10, 1 );
+		add_action( 'woocommerce_new_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'woocommerce_update_customer', array( $this, 'record_customer_saved' ), 10, 1 );
 		add_action( 'set_user_role', array( $this, 'record_customer_saved' ), 10, 1 );
 		// add_role()/remove_role() fire ONLY add_user_role/remove_user_role (no
@@ -669,6 +670,14 @@ final class Integrity_Digest {
 				$this->upsert_digest( $post_id );
 			}
 		);
+	}
+
+	public function record_post_untrashed( int $post_id ): void {
+		if ( 'shop_order' === get_post_type( $post_id ) ) {
+			$this->record_order_saved( $post_id );
+			return;
+		}
+		$this->record_post_saved( $post_id );
 	}
 
 	public function record_post_deleted( int $post_id ): void {

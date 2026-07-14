@@ -39,7 +39,8 @@ class Init {
 		// fire on a plugin activation or update request.
 		new Consent();
 		add_filter( 'woocommerce_pos_rest_api_controllers', array( \WCPOS\WooCommercePOS\Sync\Api::class, 'register_controllers' ) );
-		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
+		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
+		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() && $sync_schema_latched && \WCPOS\WooCommercePOS\Sync\Health::is_healthy() ) {
 			( new \WCPOS\WooCommercePOS\Sync\Change_Log() )->register_hooks();
 			( new \WCPOS\WooCommercePOS\Sync\Integrity_Digest() )->register_hooks();
 			( new \WCPOS\WooCommercePOS\Sync\Sync_Index() )->register_hooks();

@@ -11,6 +11,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared -- Queries use internal table names and generated SQL fragments.
 // phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Database failures are passed to exceptions, not rendered.
 
+use Automattic\WooCommerce\Utilities\OrderUtil;
 use WP_REST_Request;
 
 final class Sync_Index {
@@ -171,7 +172,8 @@ final class Sync_Index {
 	public function record_order_change( int $order_id, string $origin, bool $deleted ): bool {
 		global $wpdb;
 		$order = wc_get_order( $order_id );
-		$modified = $order && $order->get_date_modified() ? $order->get_date_modified()->date( 'Y-m-d H:i:s' ) : gmdate( 'Y-m-d H:i:s' );
+		$modified_date = $order ? $order->get_date_modified() : null;
+		$modified = $modified_date ? gmdate( 'Y-m-d H:i:s', $modified_date->getTimestamp() ) : gmdate( 'Y-m-d H:i:s' );
 		$revision = 'deleted';
 
 		if ( $order && ! $deleted ) {
@@ -232,18 +234,40 @@ final class Sync_Index {
 			return array_merge( $status, array( 'processedThisRun' => 0 ) );
 		}
 
-		$page = $status['nextPage'];
 		$page_size = null === $status['pageSize'] ? $requested_limit : (int) $status['pageSize'];
-		$queried_ids = wc_get_orders(
-			array(
-				'type' => 'shop_order',
-				'limit' => $page_size,
-				'page' => $page,
-				'orderby' => 'ID',
-				'order' => 'ASC',
-				'return' => 'ids',
-			)
+		$last_order_id = $status['lastOrderId'];
+		$query_args = array(
+			'type' => 'shop_order',
+			'limit' => $page_size,
+			'orderby' => 'ID',
+			'order' => 'ASC',
+			'return' => 'ids',
 		);
+		$posts_where = null;
+		if ( $last_order_id > 0 ) {
+			if ( class_exists( OrderUtil::class ) && OrderUtil::custom_orders_table_usage_is_enabled() ) {
+				$query_args['field_query'] = array(
+					array(
+						'field' => 'id',
+						'value' => $last_order_id,
+						'compare' => '>',
+					),
+				);
+			} else {
+				$posts_where = static function ( string $where ) use ( $last_order_id ): string {
+					global $wpdb;
+					return $where . $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $last_order_id );
+				};
+				add_filter( 'posts_where', $posts_where );
+			}
+		}
+		try {
+			$queried_ids = wc_get_orders( $query_args );
+		} finally {
+			if ( null !== $posts_where ) {
+				remove_filter( 'posts_where', $posts_where );
+			}
+		}
 		/** @var array<int, int|string> $ids The `return => ids` query returns scalar ids. */
 		$ids = is_array( $queried_ids ) ? $queried_ids : array();
 		$ids = array_map(
@@ -254,8 +278,6 @@ final class Sync_Index {
 		);
 		$processed_this_run = 0;
 		$failed_this_run = 0;
-		$last_order_id = $status['lastOrderId'];
-
 		foreach ( $ids as $id ) {
 			if ( $this->record_order_change( $id, 'backfill', false ) ) {
 				$processed_this_run++;
@@ -268,6 +290,7 @@ final class Sync_Index {
 		$all_writes_succeeded = 0 === $failed_this_run;
 		$complete = $all_writes_succeeded && count( $ids ) < $page_size;
 		$advance_page = $all_writes_succeeded && count( $ids ) === $page_size;
+		$page = $status['nextPage'];
 		$next_status = array(
 			'status' => $complete ? 'complete' : 'running',
 			'nextPage' => $advance_page ? $page + 1 : $page,
