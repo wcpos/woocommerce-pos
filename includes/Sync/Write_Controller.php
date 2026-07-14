@@ -129,6 +129,12 @@ class Write_Controller extends WP_REST_Controller {
 
 		// Idempotent replay: a mutationId already APPLIED returns its canonical result.
 		$hit = $this->store->lookup( $collection, $m['mutationId'] );
+		if ( is_array( $hit ) ) {
+			$mismatch = $this->replay_target_mismatch( $hit, $m );
+			if ( $mismatch ) {
+				return $mismatch;
+			}
+		}
 		if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
 			return $this->retry_identity_stamp( $meta, $m, $hit );
 		}
@@ -145,6 +151,12 @@ class Write_Controller extends WP_REST_Controller {
 		// a crashed winner's stale reservation is reclaimed after the TTL.
 		if ( ! $this->store->reserve( $collection, $m['mutationId'], $m['recordId'], $m['operation'] ) ) {
 			$hit = $this->store->lookup( $collection, $m['mutationId'] );
+			if ( is_array( $hit ) ) {
+				$mismatch = $this->replay_target_mismatch( $hit, $m );
+				if ( $mismatch ) {
+					return $mismatch;
+				}
+			}
 			if ( is_array( $hit ) && 'poison' === ( $hit['status'] ?? '' ) ) {
 				return $this->retry_identity_stamp( $meta, $m, $hit );
 			}
@@ -202,6 +214,37 @@ class Write_Controller extends WP_REST_Controller {
 		}
 
 		return $this->store->reserve( $collection, $mutation['mutationId'], $mutation['recordId'], $mutation['operation'] );
+	}
+
+	/**
+	 * A stored mutationId must be replayed only for ITS record and operation —
+	 * a reused id targeting a different record/operation would silently ack a
+	 * mutation that was never applied (codex increment-3 finding; the lab's
+	 * replay branches share the hole — reserve() guards reservation only).
+	 *
+	 * @param array $hit The stored mutation row.
+	 * @param array $m   The incoming envelope.
+	 * @return WP_Error|null An envelope rejection on mismatch, null when aligned.
+	 */
+	private function replay_target_mismatch( array $hit, array $m ) {
+		if ( 'poison' === ( $hit['status'] ?? '' ) ) {
+			// Poison retries own their identity comparison (retry_identity_stamp
+			// rejects a different recordId with identity_conflict — #518 semantics).
+			return null;
+		}
+		$stored_uuid = strtolower( (string) ( $hit['record_uuid'] ?? '' ) );
+		$stored_op   = (string) ( $hit['operation'] ?? '' );
+		if ( '' === $stored_uuid && '' === $stored_op ) {
+			return null;
+		}
+		if ( $stored_uuid === strtolower( (string) $m['recordId'] ) && $stored_op === (string) $m['operation'] ) {
+			return null;
+		}
+		return new WP_Error(
+			'woo_rxdb_sync_bad_mutation_id',
+			'mutationId was already used for a different record or operation.',
+			array( 'status' => 422 )
+		);
 	}
 
 	private function apply( string $operation, string $collection, array $meta, array $m ) {

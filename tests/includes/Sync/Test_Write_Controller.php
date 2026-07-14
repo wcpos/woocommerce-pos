@@ -1246,6 +1246,43 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( array(), $store->reserved ); // replay short-circuits BEFORE reserve
 	}
 
+	/**
+	 * A stored mutationId replays ONLY for its own record and operation — a
+	 * reused id targeting a different record or operation is a 422 envelope
+	 * rejection, never a silent ack (codex increment-3 finding).
+	 */
+	public function test_replay_rejects_mutation_id_reused_for_another_record(): void {
+		$store = new Fake_Mutation_Store();
+		$store->lookups[ self::MID ] = array(
+			'remote_id' => 4242,
+			'operation' => 'create',
+			'record_uuid' => '99999999-9999-4999-8999-999999999999',
+			'status' => 'done',
+			'response_status' => 201,
+		);
+		$result = $this->push( $store );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+		$this->assertSame( array(), $store->reserved );
+	}
+
+	public function test_replay_rejects_mutation_id_reused_for_another_operation(): void {
+		$store = new Fake_Mutation_Store();
+		$store->lookups[ self::MID ] = array(
+			'remote_id' => 4242,
+			'operation' => 'delete',
+			'record_uuid' => self::REC,
+			'status' => 'done',
+			'response_status' => 200,
+		);
+		// The default push() envelope is a create — same record, different operation.
+		$result = $this->push( $store );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'woo_rxdb_sync_bad_mutation_id', $result->get_error_code() );
+		$this->assertSame( 422, $result->get_error_data()['status'] );
+	}
+
 	public static function recordedCreateReplayStatuses(): array {
 		return array(
 			'applied create' => array( 201 ),
