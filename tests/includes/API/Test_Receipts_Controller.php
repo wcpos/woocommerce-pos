@@ -8,7 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\API\Receipts_Controller;
+use WCPOS\WooCommercePOS\API\V1\Receipts_Controller;
 use WCPOS\WooCommercePOS\Services\Receipt_Snapshot_Store;
 
 /**

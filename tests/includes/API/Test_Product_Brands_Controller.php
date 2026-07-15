@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Product_Brands_Controller;
+use WCPOS\WooCommercePOS\API\V1\Product_Brands_Controller;
 
 /**
  * @internal

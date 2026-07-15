@@ -10,7 +10,7 @@
 
 namespace WCPOS\WooCommercePOS\Admin;
 
-use WCPOS\WooCommercePOS\API\Logs;
+use WCPOS\WooCommercePOS\API\V1\Logs;
 use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use const WCPOS\WooCommercePOS\PLUGIN_NAME;

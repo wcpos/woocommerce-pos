@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Settings;
+use WCPOS\WooCommercePOS\API\V1\Settings;
 use WCPOS\WooCommercePOS\Interfaces\Settings_Section_Interface;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
 use WCPOS\WooCommercePOS\Services\Settings\Section_Registry;

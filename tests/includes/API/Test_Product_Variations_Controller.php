@@ -5,7 +5,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\API\Product_Variations_Controller;
+use WCPOS\WooCommercePOS\API\V1\Product_Variations_Controller;
 use WCPOS\WooCommercePOS\Products;
 
 /**

@@ -4,7 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Product_Tags_Controller;
+use WCPOS\WooCommercePOS\API\V1\Product_Tags_Controller;
 
 /**
  * @internal

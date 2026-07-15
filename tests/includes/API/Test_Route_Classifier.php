@@ -117,9 +117,9 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The built v1 classifier contains exactly the current literal route groups.
+	 * The built classifier contains the core namespaces and current literal route groups.
 	 */
-	public function test_built_v1_classifications_match_current_permission_gate_routes_exactly(): void {
+	public function test_built_classifications_match_current_permission_gate_routes_exactly(): void {
 		$classifier      = $this->api->get_route_classifier();
 		$reflection      = new ReflectionClass( $classifier );
 		$namespaces      = $reflection->getProperty( 'namespaces' );
@@ -130,7 +130,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		$built_namespaces     = $namespaces->getValue( $classifier );
 		$built_classifications = $classifications->getValue( $classifier );
 
-		$this->assertSame( array( 'wcpos/v1' ), $built_namespaces );
+		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $built_namespaces );
 		$this->assertSame(
 			array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ),
 			$built_classifications['public']
@@ -155,5 +155,19 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			array( 'public', 'printer_token', 'admin_op', 'permission_error_passthrough', 'rewrite_exempt' ),
 			array_keys( $built_classifications )
 		);
+	}
+
+	/**
+	 * The core gate covers v2 before any v2 routes are registered.
+	 */
+	public function test_unregistered_v2_route_receives_anonymous_gate_401(): void {
+		wp_set_current_user( 0 );
+
+		$this->assertSame( array(), $this->server->get_routes( 'wcpos/v2' ) );
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/anything' ) );
+
+		$this->assertSame( 401, $response->get_status() );
+		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $response->get_data()['code'] );
 	}
 }

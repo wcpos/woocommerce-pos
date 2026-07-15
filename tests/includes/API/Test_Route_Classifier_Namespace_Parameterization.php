@@ -18,7 +18,7 @@ use WP_REST_Server;
  */
 class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_Test_Case {
 	/**
-	 * Add the future namespace before REST route registration.
+	 * Add a duplicate core namespace before REST route registration.
 	 */
 	public function setUp(): void {
 		add_filter( 'woocommerce_pos_rest_namespaces', array( $this, 'add_v2_namespace' ) );
@@ -34,7 +34,7 @@ class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_T
 	}
 
 	/**
-	 * Add wcpos/v2 to the registered WCPOS namespaces.
+	 * Add wcpos/v2 again to exercise namespace union and deduplication.
 	 *
 	 * @param string[] $namespaces REST namespaces.
 	 *

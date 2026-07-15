@@ -118,6 +118,7 @@ function wcpos_load_autoloaders(): void { // phpcs:ignore WordPress.NamingConven
 }
 
 wcpos_load_autoloaders();
+require_once __DIR__ . '/includes/API/class-aliases.php';
 
 if ( \defined( 'WP_CLI' ) && WP_CLI ) {
 	if ( ! class_exists( \WCPOS\WooCommercePOS\Services\Anon_ID::class ) ) {

@@ -672,9 +672,9 @@ class Settings_CloudPrint_Test extends WCPOS_REST_Unit_Test_Case {
 	 * Sanitize_cloud_assignment defaults store_id to 0 and casts a provided id to int.
 	 */
 	public function test_cloud_assignment_persists_store_id(): void {
-		$method = new \ReflectionMethod( \WCPOS\WooCommercePOS\API\Settings::class, 'sanitize_cloud_assignment' );
+		$method = new \ReflectionMethod( \WCPOS\WooCommercePOS\API\V1\Settings::class, 'sanitize_cloud_assignment' );
 		$method->setAccessible( true );
-		$settings = new \WCPOS\WooCommercePOS\API\Settings();
+		$settings = new \WCPOS\WooCommercePOS\API\V1\Settings();
 
 		$default = $method->invoke(
 			$settings,

@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CustomerHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Customers_Controller;
+use WCPOS\WooCommercePOS\API\V1\Customers_Controller;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
 

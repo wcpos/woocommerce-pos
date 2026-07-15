@@ -11,7 +11,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Cashier;
+use WCPOS\WooCommercePOS\API\V1\Cashier;
 
 /**
  * Test_Cashier_Controller class.

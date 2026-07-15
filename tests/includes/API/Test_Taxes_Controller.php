@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Taxes_Controller;
+use WCPOS\WooCommercePOS\API\V1\Taxes_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**
