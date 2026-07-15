@@ -1,0 +1,90 @@
+<?php
+/**
+ * WCPOS sync wire normalization.
+ *
+ * @package WCPOS\WooCommercePOS\Sync
+ */
+
+namespace WCPOS\WooCommercePOS\Sync;
+
+/**
+ * Normalizes structured meta values before sync documents are hashed or emitted.
+ */
+final class Meta_Normalizer {
+	/**
+	 * Register the shared pre-stamping normalization seams.
+	 */
+	public static function register_hooks(): void {
+		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
+		add_filter( 'woocommerce_pos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
+		add_filter( 'woocommerce_pos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
+	}
+
+	/**
+	 * Recursively normalize every meta_data array in a document or payload.
+	 *
+	 * @param mixed $payload Document or payload being prepared for the wire.
+	 *
+	 * @return mixed
+	 */
+	public static function normalize( $payload ) {
+		if ( ! is_array( $payload ) ) {
+			return $payload;
+		}
+
+		foreach ( $payload as $key => $value ) {
+			if ( 'meta_data' === $key && is_array( $value ) ) {
+				$value = self::normalize_meta_data( $value );
+			}
+
+			$payload[ $key ] = is_array( $value ) ? self::normalize( $value ) : $value;
+		}
+
+		return $payload;
+	}
+
+	/**
+	 * Decode object and array JSON strings carried as meta values.
+	 *
+	 * @param array $meta_data Serialized REST meta entries.
+	 *
+	 * @return array
+	 */
+	private static function normalize_meta_data( array $meta_data ): array {
+		foreach ( $meta_data as $index => $entry ) {
+			// Top-level entity meta reaches the filters as live WC_Meta_Data objects
+			// (they only become arrays at JSON-encode time); convert a copy to the
+			// exact shape it would serialize to, and only swap it in when a decode
+			// actually happens — untouched entries keep their original form so
+			// revision hashes of scalar-only records are unchanged.
+			$is_meta_object = $entry instanceof \WC_Meta_Data;
+			if ( $is_meta_object ) {
+				$entry = json_decode( wp_json_encode( $entry ), true );
+			}
+
+			if ( ! is_array( $entry ) || ! isset( $entry['value'] ) || ! is_string( $entry['value'] ) ) {
+				continue;
+			}
+
+			$raw     = $entry['value'];
+			$trimmed = trim( $raw );
+			$opening = substr( $trimmed, 0, 1 );
+			if ( '{' !== $opening && '[' !== $opening ) {
+				continue;
+			}
+
+			$decoded = json_decode( $raw, true );
+			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $decoded ) ) {
+				continue;
+			}
+
+			$entry['value'] = array() === $decoded && '{' === $opening
+				? new \stdClass()
+				: $decoded;
+
+			$meta_data[ $index ] = $entry;
+		}
+
+		return $meta_data;
+	}
+}
