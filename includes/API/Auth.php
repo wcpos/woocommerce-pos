@@ -42,6 +42,20 @@ class Auth extends WP_REST_Controller {
 	}
 
 	/**
+	 * Declare routes with special permission-gate handling.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'public' => array(
+				"/{$this->namespace}/{$this->rest_base}/test",
+				"/{$this->namespace}/{$this->rest_base}/refresh",
+			),
+		);
+	}
+
+	/**
 	 * Register the routes for the auth controller.
 	 */
 	public function register_routes(): void {

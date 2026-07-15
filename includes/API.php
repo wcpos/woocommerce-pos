@@ -1,6 +1,6 @@
 <?php
 /**
- * WCPOS REST API Class, ie: /wcpos/v1/ endpoints.
+ * WCPOS REST API class.
  *
  * @author   Paul Kilmurray <paul@kilbot.com>
  *
@@ -22,6 +22,11 @@ use WP_REST_Server;
  */
 class API {
 	/**
+	 * WCPOS REST API namespaces.
+	 */
+	public const ROUTE_NAMESPACES = array( 'wcpos/v1' );
+
+	/**
 	 * WCPOS REST API namespaces and endpoints.
 	 *
 	 * @var array
@@ -35,6 +40,13 @@ class API {
 	 * @var array<string, string>
 	 */
 	protected $route_map = array();
+
+	/**
+	 * Route permission-gate classifier.
+	 *
+	 * @var API\Route_Classifier
+	 */
+	protected $route_classifier;
 
 	/**
 	 * Flag to check if authentication has been checked.
@@ -79,9 +91,32 @@ class API {
 	}
 
 	/**
+	 * Get the WCPOS REST API namespaces.
+	 *
+	 * @return string[] REST API namespaces.
+	 */
+	public function get_route_namespaces(): array {
+		/**
+		 * Filter the list of namespaces used in the WCPOS REST API.
+		 *
+		 * This filter allows plugins to register additional WCPOS REST API namespaces.
+		 * Controllers remain responsible for declaring any special route classifications
+		 * within those namespaces.
+		 *
+		 * @since 1.10.0
+		 *
+		 * @param string[] $namespaces REST API namespaces.
+		 */
+		return apply_filters( 'woocommerce_pos_rest_namespaces', self::ROUTE_NAMESPACES );
+	}
+
+	/**
 	 * Register routes for all controllers.
 	 */
 	public function register_routes(): void {
+		$route_namespaces       = $this->get_route_namespaces();
+		$this->route_classifier = new API\Route_Classifier( $route_namespaces );
+
 		/**
 		 * Filter the list of controller classes used in the WCPOS REST API.
 		 *
@@ -145,37 +180,47 @@ class API {
 			if ( class_exists( $class ) ) {
 				$this->controllers[ $key ] = new $class();
 				$this->controllers[ $key ]->register_routes();
+
+				if ( method_exists( $this->controllers[ $key ], 'wcpos_route_classifications' ) ) {
+					$this->route_classifier->merge( $this->controllers[ $key ]->wcpos_route_classifications() );
+				}
 			}
 		}
 
+		// Sync classifications are independent of feature-gated route registration.
+		$this->route_classifier->merge( Sync\Api::route_classifications() );
+
 		// Build route map for use in rest_dispatch_request().
 		$rest_server = rest_get_server();
-		$all_routes  = $rest_server->get_routes( 'wcpos/v1' );
 
-		foreach ( $all_routes as $route_pattern => $route_handlers ) {
-			foreach ( $route_handlers as $route_handler ) {
-				$callback = $route_handler['callback'] ?? null;
+		foreach ( $route_namespaces as $route_namespace ) {
+			$all_routes = $rest_server->get_routes( $route_namespace );
 
-				// Extract the controller object from the callback.
-				$controller_obj = null;
-				if ( \is_array( $callback ) && isset( $callback[0] ) && \is_object( $callback[0] ) ) {
-					$controller_obj = $callback[0];
-				} elseif ( $callback instanceof \Closure ) {
-					// WC 10.5+ RestApiCache wraps callbacks in closures.
-					// Use reflection to extract the bound $this.
-					$ref            = new \ReflectionFunction( $callback );
-					$controller_obj = $ref->getClosureThis();
-				}
+			foreach ( $all_routes as $route_pattern => $route_handlers ) {
+				foreach ( $route_handlers as $route_handler ) {
+					$callback = $route_handler['callback'] ?? null;
 
-				if ( ! $controller_obj ) {
-					continue;
-				}
+					// Extract the controller object from the callback.
+					$controller_obj = null;
+					if ( \is_array( $callback ) && isset( $callback[0] ) && \is_object( $callback[0] ) ) {
+						$controller_obj = $callback[0];
+					} elseif ( $callback instanceof \Closure ) {
+						// WC 10.5+ RestApiCache wraps callbacks in closures.
+						// Use reflection to extract the bound $this.
+						$ref            = new \ReflectionFunction( $callback );
+						$controller_obj = $ref->getClosureThis();
+					}
 
-				// Find which controller key this object belongs to.
-				foreach ( $this->controllers as $key => $registered_controller ) {
-					if ( $controller_obj === $registered_controller ) {
-						$this->route_map[ $route_pattern ] = $key;
-						break;
+					if ( ! $controller_obj ) {
+						continue;
+					}
+
+					// Find which controller key this object belongs to.
+					foreach ( $this->controllers as $key => $registered_controller ) {
+						if ( $controller_obj === $registered_controller ) {
+							$this->route_map[ $route_pattern ] = $key;
+							break;
+						}
 					}
 				}
 			}
@@ -396,7 +441,7 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_pre_dispatch( $result, $server, $request ) {
-		if ( strpos( $request->get_route(), '/wcpos/v1/' ) !== 0 ) {
+		if ( ! $this->route_classifier->in_wcpos_namespace( $request->get_route() ) ) {
 			return $result;
 		}
 
@@ -405,10 +450,10 @@ class API {
 		// Exempt public auth, printer-token polling, and authenticated receipt denials that need
 		// the receipt-specific error code.
 		$route                               = $request->get_route();
-		$has_route_specific_permission_error = is_user_logged_in() && 0 === strpos( $route, '/wcpos/v1/receipts/' );
-		$is_public_auth_route                = \in_array( $route, array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ), true );
-		$is_printer_token_route             = \in_array( $route, array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ), true );
-		$is_sync_admin_route                = is_user_logged_in() && current_user_can( 'manage_woocommerce' ) && \in_array( $route, array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ), true );
+		$has_route_specific_permission_error = is_user_logged_in() && $this->route_classifier->is_permission_error_passthrough( $route );
+		$is_public_auth_route                = $this->route_classifier->is_public( $route );
+		$is_printer_token_route             = $this->route_classifier->is_printer_token( $route );
+		$is_sync_admin_route                = is_user_logged_in() && current_user_can( 'manage_woocommerce' ) && $this->route_classifier->is_admin_op( $route );
 
 		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route && ! $is_sync_admin_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
@@ -434,7 +479,7 @@ class API {
 		// list validated by its controllers); the wcpos_include/exclude rewrite
 		// below is a legacy extended-WC-controller workaround and must not
 		// mangle sync routes.
-		if ( 0 === strpos( $route, '/wcpos/v1/' . \WCPOS\WooCommercePOS\Sync\Api::ROUTE_PREFIX ) ) {
+		if ( $this->route_classifier->is_rewrite_exempt( $route ) ) {
 			return $result;
 		}
 
@@ -468,7 +513,7 @@ class API {
 	 * @return mixed
 	 */
 	public function rest_dispatch_request( $dispatch_result, $request, $route, $handler ) {
-		// Only process wcpos/v1 routes.
+		// Only process mapped WCPOS routes.
 		if ( ! isset( $this->route_map[ $route ] ) ) {
 			return $dispatch_result;
 		}

@@ -39,6 +39,17 @@ class Receipts_Controller extends WP_REST_Controller {
 	protected $rest_base = 'receipts';
 
 	/**
+	 * Declare routes with special permission-gate handling.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'permission_error_passthrough' => array( "/{$this->namespace}/{$this->rest_base}/" ),
+		);
+	}
+
+	/**
 	 * Register routes.
 	 */
 	public function register_routes(): void {

@@ -64,6 +64,20 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Declare routes with special permission-gate handling.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array(
+			'printer_token' => array(
+				"/{$this->namespace}/{$this->rest_base}/cloudprnt",
+				"/{$this->namespace}/{$this->rest_base}/epson-sdp",
+			),
+		);
+	}
+
+	/**
 	 * Register routes.
 	 */
 	public function register_routes(): void {
