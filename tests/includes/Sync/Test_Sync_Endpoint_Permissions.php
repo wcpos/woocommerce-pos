@@ -17,18 +17,35 @@ use WP_REST_Request;
  */
 class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	/**
-	 * Enable the sync routes before REST initialization.
+	 * Coupon post type inherited from an earlier test, when present.
+	 *
+	 * @var \WP_Post_Type|null
+	 */
+	private $coupon_post_type;
+
+	/**
+	 * Enable the sync routes before REST initialization and pin the disabled-
+	 * coupons state that exposes WooCommerce's unregistered-post-type check.
 	 */
 	public function setUp(): void {
 		update_option( Api::OPTION_ENABLED, true );
 		parent::setUp();
+
+		update_option( 'woocommerce_enable_coupons', 'no' );
+		$this->coupon_post_type = get_post_type_object( 'shop_coupon' );
+		if ( null !== $this->coupon_post_type ) {
+			unregister_post_type( 'shop_coupon' );
+		}
 	}
 
 	/**
-	 * Remove the non-transactional feature flag.
+	 * Restore inherited coupon registration and remove the feature flag.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
+		if ( null !== $this->coupon_post_type ) {
+			register_post_type( 'shop_coupon', get_object_vars( $this->coupon_post_type ) );
+		}
 		delete_option( Api::OPTION_ENABLED );
 	}
 
@@ -39,7 +56,10 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 		$cashier_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 		$cashier    = get_user_by( 'id', $cashier_id );
 
+		$this->assertSame( 'no', get_option( 'woocommerce_enable_coupons' ) );
+		$this->assertFalse( post_type_exists( 'shop_coupon' ) );
 		$this->assertTrue( $cashier->has_cap( 'access_woocommerce_pos' ) );
+		$this->assertTrue( $cashier->has_cap( 'read_private_shop_coupons' ) );
 		$this->assertFalse( $cashier->has_cap( 'manage_woocommerce' ) );
 		wp_set_current_user( $cashier_id );
 
@@ -52,6 +72,9 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 				$request->get_route() . ': ' . wp_json_encode( $response->get_data() )
 			);
 		}
+
+		$response = $this->server->dispatch( new WP_REST_Request( 'GET', '/wc/v3/coupons' ) );
+		$this->assertSame( 403, $response->get_status(), 'The coupon permission relaxation must not bleed into wc/v3.' );
 	}
 
 	/**
