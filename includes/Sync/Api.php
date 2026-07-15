@@ -13,6 +13,7 @@ namespace WCPOS\WooCommercePOS\Sync;
 final class Api {
 	public const ROUTE_NAMESPACE = 'wcpos/v1';
 	public const ROUTE_PREFIX    = 'sync/';
+	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';
 	public const SCHEMA_VERSION  = '2';
@@ -25,6 +26,24 @@ final class Api {
 		$enabled = (bool) get_option( self::OPTION_ENABLED, false );
 
 		return (bool) apply_filters( 'woocommerce_pos_sync_api_enabled', $enabled );
+	}
+
+	/**
+	 * Declare routes with special permission-gate handling.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public static function route_classifications(): array {
+		$admin_routes = array();
+
+		foreach ( self::ADMIN_OP_PATHS as $path ) {
+			$admin_routes[] = '/' . self::ROUTE_NAMESPACE . '/' . self::ROUTE_PREFIX . $path;
+		}
+
+		return array(
+			'admin_op'       => $admin_routes,
+			'rewrite_exempt' => array( '/' . self::ROUTE_NAMESPACE . '/' . self::ROUTE_PREFIX ),
+		);
 	}
 
 	/**
