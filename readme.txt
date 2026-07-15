@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.6
+Stable tag: 1.9.7
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,14 @@ WCPOS keeps your data in your own WooCommerce database and only contacts outside
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.7 - 2026/07/15 =
+- **Receipts can now show savings** -- receipt templates can display regular prices, per-line savings and a Total Saved line, with correct right-to-left (RTL) previews and localized labels.
+- **Better black & white printing** -- gallery receipt templates now print safely on B&W receipt printers, while PDF receipts keep their colours.
+- **Resizable template editor panel** -- drag to resize the fields panel in the receipt template editor.
+- **Improved welcome-screen analytics** -- consented admin landing payloads now include hostname-only site and admin domains so WCPOS can understand where opted-in stores come from without sending full URLs or paths.
+- **Fixes** -- order version stamping now only happens when the POS creates an order; safer file-permission fallback when WCPOS writes files.
+- **Updated translations.**
 
 = 1.9.6 - 2026/06/17 =
 - **Cash drawer support** -- open a connected cash drawer automatically after payment or on demand with a new Open Drawer button. Choose a drawer connector per printer, with support for thermal/ESC-POS printers, Epson, PrintNode, and cloud/remote print jobs.
