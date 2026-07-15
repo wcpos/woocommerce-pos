@@ -79,11 +79,17 @@ export function useResizableWidth({
 }: UseResizableWidthOptions): UseResizableWidthResult {
 	const panelRef = useRef<HTMLDivElement>(null);
 	const isResizingRef = useRef(false);
+	const grabOffsetRef = useRef(0);
 	const [isResizing, setIsResizing] = useState(false);
 	const [width, setWidth] = useState(() =>
 		readStoredWidth(storageKey, defaultWidth, minWidth, maxWidth),
 	);
 	const widthRef = useRef(width);
+	// The width the user explicitly chose (restored from storage, updated on
+	// drag/keyboard commits). The displayed width may be temporarily smaller
+	// when the container can't fit it, but the preference itself is only
+	// changed — and persisted — by explicit user resizes.
+	const preferredWidthRef = useRef(width);
 
 	const clampWidth = useCallback(
 		(value: number) => {
@@ -108,37 +114,72 @@ export function useResizableWidth({
 		[clampWidth],
 	);
 
-	// A width persisted on a wide screen may not fit the current container;
-	// re-clamp once real layout information is available.
+	// A preferred width saved on a wide screen may not fit the current
+	// container. Re-derive the displayed width from the preference once real
+	// layout exists, and again whenever the container is resized — without
+	// touching the stored preference, so returning to a wide viewport
+	// restores the user's choice.
 	useLayoutEffect(() => {
-		const clamped = clampWidth(widthRef.current);
-		if (clamped !== widthRef.current) {
-			widthRef.current = clamped;
-			setWidth(clamped);
-			storeWidth(storageKey, clamped);
-		}
-	}, [clampWidth, storageKey]);
+		const fitPreferred = () => {
+			// Never fight an active drag; it clamps against the live
+			// container on every move anyway.
+			if (isResizingRef.current) return;
+			const clamped = clampWidth(preferredWidthRef.current);
+			if (clamped !== widthRef.current) {
+				widthRef.current = clamped;
+				setWidth(clamped);
+			}
+		};
+
+		fitPreferred();
+
+		const parent = panelRef.current?.parentElement;
+		if (!parent || typeof ResizeObserver === 'undefined') return undefined;
+		const observer = new ResizeObserver(fitPreferred);
+		observer.observe(parent);
+		return () => observer.disconnect();
+	}, [clampWidth]);
 
 	const endResize = useCallback(() => {
 		if (!isResizingRef.current) return;
 		isResizingRef.current = false;
 		setIsResizing(false);
+		preferredWidthRef.current = widthRef.current;
 		storeWidth(storageKey, widthRef.current);
 	}, [storageKey]);
 
-	const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-		// Primary button only: a right-click must not start a drag.
-		if (event.button !== 0) return;
-		// Prevent text selection while dragging; keyboard users focus via Tab.
-		event.preventDefault();
-		try {
-			event.currentTarget.setPointerCapture(event.pointerId);
-		} catch {
-			// Pointer capture is unavailable in some environments (e.g. jsdom).
-		}
-		isResizingRef.current = true;
-		setIsResizing(true);
+	// Pointer distance from the panel's inline-start edge — i.e. the width
+	// the panel would have if its inline-end edge sat exactly under the
+	// pointer. Direction-aware so the same math serves LTR and RTL.
+	const widthAtPointer = useCallback((clientX: number): number | null => {
+		const panel = panelRef.current;
+		if (!panel) return null;
+		const rect = panel.getBoundingClientRect();
+		const isRtl = window.getComputedStyle(panel).direction === 'rtl';
+		const value = isRtl ? rect.right - clientX : clientX - rect.left;
+		return Number.isFinite(value) ? value : null;
 	}, []);
+
+	const handlePointerDown = useCallback(
+		(event: ReactPointerEvent<HTMLElement>) => {
+			// Primary button only: a right-click must not start a drag.
+			if (event.button !== 0) return;
+			// Prevent text selection while dragging; keyboard users focus via Tab.
+			event.preventDefault();
+			try {
+				event.currentTarget.setPointerCapture(event.pointerId);
+			} catch {
+				// Pointer capture is unavailable in some environments (e.g. jsdom).
+			}
+			// Remember where inside the hit zone the drag started, so moves
+			// track the grab point instead of jumping the edge to the pointer.
+			const pointerWidth = widthAtPointer(event.clientX);
+			grabOffsetRef.current = pointerWidth === null ? 0 : pointerWidth - widthRef.current;
+			isResizingRef.current = true;
+			setIsResizing(true);
+		},
+		[widthAtPointer],
+	);
 
 	const handlePointerMove = useCallback(
 		(event: ReactPointerEvent<HTMLElement>) => {
@@ -149,16 +190,11 @@ export function useResizableWidth({
 				endResize();
 				return;
 			}
-			const panel = panelRef.current;
-			if (!panel) return;
-
-			const rect = panel.getBoundingClientRect();
-			const isRtl = window.getComputedStyle(panel).direction === 'rtl';
-			const next = isRtl ? rect.right - event.clientX : event.clientX - rect.left;
-			if (!Number.isFinite(next)) return;
-			applyWidth(next);
+			const pointerWidth = widthAtPointer(event.clientX);
+			if (pointerWidth === null) return;
+			applyWidth(pointerWidth - grabOffsetRef.current);
 		},
-		[applyWidth, endResize],
+		[applyWidth, endResize, widthAtPointer],
 	);
 
 	const handleKeyDown = useCallback(
@@ -185,6 +221,7 @@ export function useResizableWidth({
 				return;
 			}
 			event.preventDefault();
+			preferredWidthRef.current = committed;
 			storeWidth(storageKey, committed);
 		},
 		[applyWidth, keyboardStep, minWidth, maxWidth, storageKey],

@@ -279,6 +279,9 @@ describe('FieldPicker', () => {
 			});
 
 			expect(getPanel(container).style.width).toBe('520px');
+			// Mounting must never rewrite the stored preference — only
+			// explicit drag/keyboard resizes persist.
+			expect(window.localStorage.getItem('wcpos-template-editor-fields-width')).toBe('9999');
 		});
 
 		it('resizes with arrow keys and persists the new width', async () => {
@@ -349,6 +352,44 @@ describe('FieldPicker', () => {
 				);
 			});
 			expect(panel.style.width).toBe('340px');
+		});
+
+		it('tracks the grab point instead of jumping the edge to the pointer', async () => {
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			const panel = getPanel(container);
+			vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
+				left: 0,
+				right: 280,
+				top: 0,
+				bottom: 600,
+				width: 280,
+				height: 600,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			} as DOMRect);
+
+			const handle = getHandle(container);
+			// Grab 6px beyond the panel edge (inside the straddling hit zone).
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 286, buttons: 1 }),
+				);
+			});
+			// A 20px move must grow the panel by exactly 20px, not snap the
+			// edge to the pointer first (280 + 20, not 306).
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointermove', { bubbles: true, clientX: 306, buttons: 1 }),
+				);
+			});
+
+			expect(panel.style.width).toBe('300px');
 		});
 
 		it('ignores non-primary-button drags', async () => {
