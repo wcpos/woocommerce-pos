@@ -28,7 +28,9 @@ use WP_REST_Request;
  * learns the store is unhealthy (Health::unhealthy_error, 503).
  *
  * The write path layers more on top of this: /push/{collection} forwards via
- * rest_do_request, which re-runs wc/v3's own per-collection capability checks.
+ * rest_do_request. Write_Controller scopes the client-tier grant around raw
+ * product, variation, and coupon mutation checks; other collections keep their
+ * native wc/v3 capabilities.
  *
  * `health_gated()` lets /status report a broken install and is the reserved
  * opt-out seam for a future repair endpoint that can actually cure one. The

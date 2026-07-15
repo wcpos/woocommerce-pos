@@ -108,6 +108,9 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 
 			$this->assertSame( 200, $response->get_status(), $request->get_route() );
 		}
+
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/status' ) );
+		$this->assertSame( 403, $response->get_status() );
 	}
 
 	/**

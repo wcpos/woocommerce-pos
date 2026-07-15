@@ -34,7 +34,7 @@ use WP_REST_Server;
  * fake store + a stubbed `rest_do_request`.
  */
 class Write_Controller extends WP_REST_Controller {
-	// Our gate (capability + F13 health); rest_do_request re-runs wc/v3's own per-collection caps too.
+	// Our gate (capability + F13 health); forwarded writes scope the client-tier grant below.
 	use Endpoint_Permissions;
 
 
@@ -744,9 +744,7 @@ class Write_Controller extends WP_REST_Controller {
 		$request = new WP_REST_Request( 'DELETE', $route );
 		$request->set_param( 'id', $id );
 		$request->set_param( 'force', true );
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
-		$response = rest_do_request( $request );
-		remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		$response = $this->dispatch_write( $request );
 		if ( $response->get_status() >= 400 ) {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
@@ -840,11 +838,21 @@ class Write_Controller extends WP_REST_Controller {
 			unset( $payload['id'] );
 			$request->set_body_params( $payload );
 		}
-		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
-		$response = rest_do_request( $request );
-		remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		return $this->dispatch_write( $request );
+	}
 
-		return $response;
+	/**
+	 * Dispatch one raw WooCommerce mutation with the client-tier grant scoped to it.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private function dispatch_write( WP_REST_Request $request ) {
+		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		try {
+			return rest_do_request( $request );
+		} finally {
+			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		}
 	}
 
 	/**

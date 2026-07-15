@@ -190,13 +190,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		}
 		$GLOBALS['wcpos_sync_test_rest_do_request_calls'][] = $request;
 		if ( 'GET' !== $request->get_method() ) {
-			$GLOBALS['wcpos_sync_test_wc_permissions'] = array(
-				'product'           => apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ),
-				'product_variation' => apply_filters( 'woocommerce_rest_check_permissions', false, 'edit', 0, 'product_variation' ),
-				'shop_coupon'       => apply_filters( 'woocommerce_rest_check_permissions', false, 'delete', 0, 'shop_coupon' ),
-				'product_read'      => apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'product' ),
-				'shop_order'        => apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'shop_order' ),
-			);
+			foreach ( array( 'product', 'product_variation', 'shop_coupon' ) as $post_type ) {
+				foreach ( array( 'create', 'edit', 'delete' ) as $context ) {
+					$GLOBALS['wcpos_sync_test_wc_permissions'][ $post_type ][ $context ] = apply_filters( 'woocommerce_rest_check_permissions', false, $context, 0, $post_type );
+				}
+			}
+			$GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'product' );
+			$GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] = apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'shop_order' );
 		}
 		if ( ! empty( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] ) ) {
 			return array_shift( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
@@ -344,16 +344,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame(
-			array(
-				'product'           => true,
-				'product_variation' => true,
-				'shop_coupon'       => true,
-				'product_read'      => false,
-				'shop_order'        => false,
-			),
-			$GLOBALS['wcpos_sync_test_wc_permissions']
-		);
+		foreach ( array( 'product', 'product_variation', 'shop_coupon' ) as $post_type ) {
+			foreach ( array( 'create', 'edit', 'delete' ) as $context ) {
+				$this->assertTrue( $GLOBALS['wcpos_sync_test_wc_permissions'][ $post_type ][ $context ], $post_type . ':' . $context );
+			}
+		}
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['product']['read'] );
+		$this->assertFalse( $GLOBALS['wcpos_sync_test_wc_permissions']['shop_order']['create'] );
 		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
 	}
 
