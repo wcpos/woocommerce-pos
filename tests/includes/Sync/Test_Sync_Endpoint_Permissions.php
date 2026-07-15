@@ -92,6 +92,25 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Manage-only operators can use the documented out-of-band operations tier.
+	 */
+	public function test_manage_only_operator_can_access_sync_admin_operations(): void {
+		$operator_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$operator    = get_user_by( 'id', $operator_id );
+		$operator->add_cap( 'manage_woocommerce' );
+
+		$this->assertTrue( $operator->has_cap( 'manage_woocommerce' ) );
+		$this->assertFalse( $operator->has_cap( 'access_woocommerce_pos' ) );
+		wp_set_current_user( $operator_id );
+
+		foreach ( $this->admin_requests() as $request ) {
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 200, $response->get_status(), $request->get_route() );
+		}
+	}
+
+	/**
 	 * Administrators can use both the client and admin tiers.
 	 */
 	public function test_administrator_can_access_both_sync_permission_tiers(): void {
