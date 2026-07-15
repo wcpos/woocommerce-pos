@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FieldSchema } from '../types';
 import { t } from '../translations';
+import { useResizableWidth } from '../hooks/use-resizable-width';
 import { FieldTreeNode } from './field-tree-node';
 import { SearchField } from './search-field';
 import { ThermalElements, thermalMatchesSearch } from './thermal-elements';
@@ -10,6 +11,8 @@ interface FieldPickerProps {
 	engine: string;
 	onInsertField: (text: string) => void;
 }
+
+const PANEL_ID = 'wcpos-template-editor-fields-panel';
 
 export interface FieldTreeEntry {
 	sectionKey: string;
@@ -63,6 +66,12 @@ function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
 
 export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps) {
 	const [search, setSearch] = useState('');
+	const { width, isResizing, panelRef, separatorProps } = useResizableWidth({
+		storageKey: 'wcpos-template-editor-fields-width',
+		defaultWidth: 280,
+		minWidth: 200,
+		maxWidth: 520,
+	});
 	const entries = getFieldTreeEntries(schema);
 
 	const hasFieldMatches = entries.some((entry) => entryMatchesSearch(entry, search));
@@ -71,43 +80,69 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 
 	return (
 		<div
-			className="wcpos:w-60 wcpos:shrink-0 wcpos:self-stretch wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden"
+			ref={panelRef}
+			style={{ width: `${width}px` }}
+			className="wcpos:relative wcpos:shrink-0 wcpos:self-stretch"
 		>
-			<div className="wcpos:p-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:shrink-0">
-				<div className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:mb-2 wcpos:px-1">
-					{t('editor.fields')}
-				</div>
-				<SearchField value={search} onChange={setSearch} />
-			</div>
-			<div className="wcpos:flex-1 wcpos:overflow-y-auto wcpos:p-2">
-				{showEmptyState ? (
-					<div className="wcpos:flex wcpos:flex-col wcpos:items-start wcpos:gap-2 wcpos:px-2 wcpos:py-6 wcpos:text-sm wcpos:text-gray-500">
-						<span>{t('editor.no_field_matches', { query: search })}</span>
-						<button
-							type="button"
-							onClick={() => setSearch('')}
-							className="wcpos:text-wp-admin-theme-color hover:wcpos:underline wcpos:text-sm wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
-						>
-							{t('editor.clear_search')}
-						</button>
+			<div
+				id={PANEL_ID}
+				className="wcpos:h-full wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden"
+			>
+				<div className="wcpos:p-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:shrink-0">
+					<div className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:mb-2 wcpos:px-1">
+						{t('editor.fields')}
 					</div>
-				) : (
-					<>
-						{entries.map(({ sectionKey, section, children }) => (
-							<FieldTreeNode
-								key={sectionKey}
-								sectionKey={sectionKey}
-								section={section}
-								children={children}
-								searchFilter={search}
-								onInsertField={onInsertField}
-							/>
-						))}
-						{engine === 'thermal' && (
-							<ThermalElements searchFilter={search} onInsertField={onInsertField} />
-						)}
-					</>
-				)}
+					<SearchField value={search} onChange={setSearch} />
+				</div>
+				<div className="wcpos:flex-1 wcpos:overflow-y-auto wcpos:p-2">
+					{showEmptyState ? (
+						<div className="wcpos:flex wcpos:flex-col wcpos:items-start wcpos:gap-2 wcpos:px-2 wcpos:py-6 wcpos:text-sm wcpos:text-gray-500">
+							<span>{t('editor.no_field_matches', { query: search })}</span>
+							<button
+								type="button"
+								onClick={() => setSearch('')}
+								className="wcpos:text-wp-admin-theme-color wcpos:hover:underline wcpos:text-sm wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer"
+							>
+								{t('editor.clear_search')}
+							</button>
+						</div>
+					) : (
+						<>
+							{entries.map(({ sectionKey, section, children }) => (
+								<FieldTreeNode
+									key={sectionKey}
+									sectionKey={sectionKey}
+									section={section}
+									children={children}
+									searchFilter={search}
+									onInsertField={onInsertField}
+								/>
+							))}
+							{engine === 'thermal' && (
+								<ThermalElements searchFilter={search} onInsertField={onInsertField} />
+							)}
+						</>
+					)}
+				</div>
+			</div>
+			{/*
+			 * The hit zone straddles the panel border into the column gap
+			 * (4px inside, 8px outside) so it stays clear of the field
+			 * list's scrollbar while offering a 12px-wide drag target.
+			 */}
+			<div
+				{...separatorProps}
+				aria-label={t('editor.resize_fields')}
+				aria-controls={PANEL_ID}
+				className="wcpos:group wcpos:absolute wcpos:inset-y-0 wcpos:-end-2 wcpos:w-3 wcpos:cursor-col-resize wcpos:touch-none wcpos:focus-visible:outline-none"
+			>
+				<div
+					className={`wcpos:absolute wcpos:inset-y-0 wcpos:start-1 wcpos:w-[3px] wcpos:rounded-full ${
+						isResizing
+							? 'wcpos:bg-wp-admin-theme-color'
+							: 'wcpos:bg-transparent wcpos:group-hover:bg-gray-300 wcpos:group-focus-visible:bg-wp-admin-theme-color'
+					}`}
+				/>
 			</div>
 		</div>
 	);

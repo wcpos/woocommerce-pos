@@ -96,7 +96,7 @@ export function FilterTabs({ items, value, onChange, className, ...props }: Filt
 							item.disabled
 								? 'wcpos:cursor-not-allowed wcpos:opacity-50'
 								: 'wcpos:cursor-pointer',
-							isActive ? 'wcpos:text-white' : 'wcpos:text-gray-600 hover:wcpos:text-gray-900'
+							isActive ? 'wcpos:text-white' : 'wcpos:text-gray-600 wcpos:hover:text-gray-900'
 						)}
 					>
 						{item.label}

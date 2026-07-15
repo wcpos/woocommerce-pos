@@ -98,7 +98,7 @@ export function FieldTreeNode({
 					type="button"
 					onClick={() => setExpanded(!expanded)}
 					aria-expanded={isExpanded}
-					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:flex-1 wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:font-semibold wcpos:text-gray-700 hover:wcpos:bg-gray-100 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
+					className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:flex-1 wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:font-semibold wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
 				>
 					<Chevron open={isExpanded} />
 					<span className="wcpos:truncate">{section.label}</span>
@@ -114,7 +114,7 @@ export function FieldTreeNode({
 							type="button"
 							onClick={handleSectionClick}
 							aria-label={t('editor.insert_loop_block')}
-							className="wcpos:flex wcpos:items-center wcpos:cursor-pointer wcpos:border-0 wcpos:bg-transparent wcpos:p-0 wcpos:rounded-full hover:wcpos:opacity-80"
+							className="wcpos:flex wcpos:items-center wcpos:cursor-pointer wcpos:border-0 wcpos:bg-transparent wcpos:p-0 wcpos:rounded-full wcpos:hover:opacity-80"
 						>
 							<Chip variant="warning" size="xs">{t('editor.loop')}</Chip>
 						</button>
@@ -135,7 +135,7 @@ export function FieldTreeNode({
 								type="button"
 								onClick={() => handleFieldClick(fieldKey)}
 								title={`${t('editor.insert')} ${insertedTag}`}
-								className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:w-full wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:text-gray-600 hover:wcpos:bg-blue-50 hover:wcpos:text-blue-700 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
+								className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:w-full wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:text-gray-600 wcpos:hover:bg-blue-50 wcpos:hover:text-blue-700 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
 							>
 								<span className="wcpos:truncate wcpos:flex-1">{field.label}</span>
 								{chip && (

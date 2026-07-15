@@ -48,7 +48,7 @@ export function SearchField({ value, onChange }: SearchFieldProps) {
 					type="button"
 					onClick={() => onChange('')}
 					aria-label={t('editor.clear_search')}
-					className="wcpos:absolute wcpos:right-2 wcpos:top-1/2 wcpos:-translate-y-1/2 wcpos:p-0.5 wcpos:rounded wcpos:bg-transparent wcpos:border-0 wcpos:text-gray-400 hover:wcpos:text-gray-700 hover:wcpos:bg-gray-100 wcpos:cursor-pointer wcpos:inline-flex"
+					className="wcpos:absolute wcpos:right-2 wcpos:top-1/2 wcpos:-translate-y-1/2 wcpos:p-0.5 wcpos:rounded wcpos:bg-transparent wcpos:border-0 wcpos:text-gray-400 wcpos:hover:text-gray-700 wcpos:hover:bg-gray-100 wcpos:cursor-pointer wcpos:inline-flex"
 				>
 					<ClearIcon />
 				</button>
