@@ -172,7 +172,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 
 	protected function setUp(): void {
 		parent::setUp();
-		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
+		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'], $GLOBALS['wcpos_sync_test_wc_permissions'] );
 		wp_set_current_user( 0 );
 		add_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1, 3 );
 	}
@@ -180,7 +180,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 	protected function tearDown(): void {
 		remove_filter( 'rest_pre_dispatch', array( $this, 'intercept_wc_request' ), 1 );
 		delete_option( 'woocommerce_pos_sync_legacy_revision_grace' );
-		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
+		unset( $GLOBALS['wcpos_sync_test_rest_do_request_response'], $GLOBALS['wcpos_sync_test_rest_do_request_calls'], $GLOBALS['wcpos_sync_test_rest_do_request_queue'], $GLOBALS['wcpos_sync_test_wc_permissions'] );
 		parent::tearDown();
 	}
 
@@ -189,6 +189,13 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			return $result;
 		}
 		$GLOBALS['wcpos_sync_test_rest_do_request_calls'][] = $request;
+		if ( 'GET' !== $request->get_method() ) {
+			$GLOBALS['wcpos_sync_test_wc_permissions'] = array(
+				'product'           => apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ),
+				'product_variation' => apply_filters( 'woocommerce_rest_check_permissions', false, 'edit', 0, 'product_variation' ),
+				'shop_coupon'       => apply_filters( 'woocommerce_rest_check_permissions', false, 'delete', 0, 'shop_coupon' ),
+			);
+		}
 		if ( ! empty( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] ) ) {
 			return array_shift( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] );
 		}
@@ -317,6 +324,33 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 			$store->persisted
 		);
 		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ); // POST plus coherent GET ack
+	}
+
+	/**
+	 * Cashier write forwarding may relax only the catalog mutation checks.
+	 */
+	public function test_cashier_push_scoped_inner_permissions_allow_catalog_mutations(): void {
+		$cashier_id = self::factory()->user->create( array( 'role' => 'cashier' ) );
+		wp_set_current_user( $cashier_id );
+		$this->setRestResponse( array( 'id' => 4242 ), 201 );
+
+		$this->push(
+			new Fake_Mutation_Store(),
+			array(
+				'collection' => 'products',
+				'payload'    => array( 'name' => 'Cashier product' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'product'           => true,
+				'product_variation' => true,
+				'shop_coupon'       => true,
+			),
+			$GLOBALS['wcpos_sync_test_wc_permissions']
+		);
+		$this->assertFalse( apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ) );
 	}
 
 	public function test_create_order_persists_server_authoritative_pos_audit_meta_directly(): void {

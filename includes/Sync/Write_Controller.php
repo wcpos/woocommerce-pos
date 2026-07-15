@@ -744,7 +744,9 @@ class Write_Controller extends WP_REST_Controller {
 		$request = new WP_REST_Request( 'DELETE', $route );
 		$request->set_param( 'id', $id );
 		$request->set_param( 'force', true );
+		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
 		$response = rest_do_request( $request );
+		remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
 		if ( $response->get_status() >= 400 ) {
 			return new WP_REST_Response( $response->get_data(), $response->get_status() );
 		}
@@ -838,7 +840,32 @@ class Write_Controller extends WP_REST_Controller {
 			unset( $payload['id'] );
 			$request->set_body_params( $payload );
 		}
-		return rest_do_request( $request );
+		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		$response = rest_do_request( $request );
+		remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+
+		return $response;
+	}
+
+	/**
+	 * Authorize proxied catalog mutations for POS users.
+	 *
+	 * This filter is attached only while a sync push is forwarded to wc/v3, so
+	 * direct WooCommerce requests keep their normal permission checks.
+	 *
+	 * @param bool   $permission The current permission.
+	 * @param string $context    The request context.
+	 * @param int    $object_id  The object ID.
+	 * @param string $post_type  The object type passed by WooCommerce.
+	 *
+	 * @return bool
+	 */
+	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
+		if ( ! $permission && current_user_can( 'access_woocommerce_pos' ) && \in_array( $post_type, array( 'product', 'product_variation', 'shop_coupon' ), true ) && \in_array( $context, array( 'create', 'edit', 'delete' ), true ) ) {
+			$permission = true;
+		}
+
+		return $permission;
 	}
 
 	private function document_for( array $meta, int $id ) {
