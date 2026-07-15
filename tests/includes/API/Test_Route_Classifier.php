@@ -10,6 +10,27 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use ReflectionClass;
 use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Route_Classifier;
+use WP_REST_Server;
+
+/**
+ * Legacy filtered auth controller without route classification metadata.
+ */
+class Route_Classifier_Legacy_Auth_Controller {
+	/**
+	 * Register the historical public auth route.
+	 */
+	public function register_routes(): void {
+		register_rest_route(
+			'wcpos/v1',
+			'/auth/test',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => '__return_true',
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}
 
 /**
  * API subclass that exposes the built classifier to tests.
@@ -41,6 +62,24 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function rest_api_init(): void {
 		$this->api = new Route_Classifier_Test_API();
+	}
+
+	/**
+	 * Filtered legacy controllers retain the historical route exemptions.
+	 */
+	public function test_filtered_legacy_controller_without_classifications_keeps_public_exemption(): void {
+		$replace_auth = function ( array $controllers ): array {
+			$controllers['auth'] = Route_Classifier_Legacy_Auth_Controller::class;
+			return $controllers;
+		};
+		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		$api = new Route_Classifier_Test_API();
+		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		wp_set_current_user( 0 );
+
+		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
+
+		$this->assertNull( $result );
 	}
 
 	/**
