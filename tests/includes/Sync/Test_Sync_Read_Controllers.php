@@ -35,11 +35,43 @@ use WP_REST_Request;
  */
 class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	/**
+	 * Filter state before each test registers sync stampers.
+	 *
+	 * @var array
+	 */
+	private $sync_filter_snapshots = array();
+
+	/**
+	 * Preserve shared sync filter state before each test.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+
+		$hooks = array(
+			'woocommerce_pos_sync_proxy_response',
+			'woocommerce_pos_sync_serialized_product',
+			'woocommerce_pos_sync_serialized_order',
+		);
+		foreach ( $hooks as $hook ) {
+			$this->sync_filter_snapshots[ $hook ] = isset( $GLOBALS['wp_filter'][ $hook ] )
+				? clone $GLOBALS['wp_filter'][ $hook ]
+				: null;
+		}
+	}
+
+	/**
 	 * Remove read settings after each test.
 	 */
 	public function tearDown(): void {
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
+		foreach ( $this->sync_filter_snapshots as $hook => $snapshot ) {
+			if ( null === $snapshot ) {
+				unset( $GLOBALS['wp_filter'][ $hook ] );
+			} else {
+				$GLOBALS['wp_filter'][ $hook ] = $snapshot;
+			}
+		}
 		parent::tearDown();
 	}
 
