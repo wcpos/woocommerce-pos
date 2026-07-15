@@ -111,6 +111,23 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
+	 * Manage-only operators cannot use the POS client sync tier.
+	 */
+	public function test_manage_only_operator_cannot_access_sync_client_routes(): void {
+		$operator_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$operator    = get_user_by( 'id', $operator_id );
+		$operator->add_cap( 'manage_woocommerce' );
+		wp_set_current_user( $operator_id );
+
+		foreach ( $this->read_requests() as $request ) {
+			$response = $this->server->dispatch( $request );
+
+			$this->assertSame( 403, $response->get_status(), $request->get_route() );
+			$this->assertSame( 'woocommerce_pos_rest_forbidden', $response->get_data()['code'], $request->get_route() );
+		}
+	}
+
+	/**
 	 * Administrators can use both the client and admin tiers.
 	 */
 	public function test_administrator_can_access_both_sync_permission_tiers(): void {
