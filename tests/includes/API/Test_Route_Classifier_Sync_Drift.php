@@ -22,11 +22,10 @@ class Test_Route_Classifier_Sync_Drift extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Remove the sync feature option.
+	 * Restore the pre-test database state.
 	 */
 	public function tearDown(): void {
 		parent::tearDown();
-		delete_option( Sync_Api::OPTION_ENABLED );
 	}
 
 	/**
