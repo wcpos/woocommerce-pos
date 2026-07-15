@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Templates_Controller;
+use WCPOS\WooCommercePOS\API\V1\Templates_Controller;
 use WP_REST_Request;
 
 /**

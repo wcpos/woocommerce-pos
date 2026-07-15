@@ -4,7 +4,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Admin_Settings;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\Helpers\TaxHelper;
 
 /**

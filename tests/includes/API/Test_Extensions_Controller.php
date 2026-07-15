@@ -7,7 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Extensions;
+use WCPOS\WooCommercePOS\API\V1\Extensions;
 
 /**
  * Extensions Controller test case.

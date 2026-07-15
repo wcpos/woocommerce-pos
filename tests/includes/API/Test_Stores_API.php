@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Stores;
+use WCPOS\WooCommercePOS\API\V1\Stores;
 
 /**
  * @internal

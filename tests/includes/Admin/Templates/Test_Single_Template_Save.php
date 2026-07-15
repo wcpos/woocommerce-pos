@@ -639,7 +639,7 @@ class Test_Single_Template_Save extends WC_REST_Unit_Test_Case {
 		$request = new \WP_REST_Request( 'POST', '/wcpos/v1/templates/' . $post_id . '/copy' );
 		$request->set_url_params( array( 'id' => $post_id ) );
 
-		$controller = new \WCPOS\WooCommercePOS\API\Templates_Controller();
+		$controller = new \WCPOS\WooCommercePOS\API\V1\Templates_Controller();
 
 		// Register routes so the controller works.
 		$controller->register_routes();

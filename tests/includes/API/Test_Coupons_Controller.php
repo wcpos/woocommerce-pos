@@ -9,7 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\CouponHelper;
 use Ramsey\Uuid\Uuid;
-use WCPOS\WooCommercePOS\API\Coupons_Controller;
+use WCPOS\WooCommercePOS\API\V1\Coupons_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 
 /**

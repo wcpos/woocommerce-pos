@@ -10,7 +10,7 @@ use Ramsey\Uuid\Uuid;
 use WC_Order;
 use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
-use WCPOS\WooCommercePOS\API\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
 

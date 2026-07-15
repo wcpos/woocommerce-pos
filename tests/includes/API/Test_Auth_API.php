@@ -2,7 +2,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Auth;
+use WCPOS\WooCommercePOS\API\V1\Auth;
 use WCPOS\WooCommercePOS\Services\Auth as AuthService;
 use WP_REST_Request;
 use WP_UnitTestCase;

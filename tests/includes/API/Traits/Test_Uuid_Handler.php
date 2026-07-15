@@ -10,7 +10,7 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use Ramsey\Uuid\Uuid;
 use WC_Unit_Test_Case;
-use WCPOS\WooCommercePOS\API\Traits\Uuid_Handler;
+use WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_User;
@@ -118,7 +118,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Legacy record stamping delegates to the sync identity brain once.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_post_uuid_mints_through_pos_uuid_once(): void {
 		$product = ProductHelper::create_simple_product();
@@ -159,7 +159,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test create_uuid generates valid UUID v4.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
 	 */
 	public function test_create_uuid_generates_valid_uuid(): void {
 		$uuid = $this->handler->test_create_uuid();
@@ -171,7 +171,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test create_uuid generates unique UUIDs.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
 	 */
 	public function test_create_uuid_generates_unique_values(): void {
 		$uuid1 = $this->handler->test_create_uuid();
@@ -186,7 +186,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_post_uuid adds UUID to product.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_to_product(): void {
 		$product = ProductHelper::create_simple_product();
@@ -207,7 +207,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_post_uuid adds UUID to order.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_to_order(): void {
 		$order = OrderHelper::create_order();
@@ -228,7 +228,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_post_uuid does not overwrite existing valid UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_preserves_existing(): void {
 		$product       = ProductHelper::create_simple_product();
@@ -256,7 +256,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	 * Pos_Uuid keeps the first valid UUID, rather than the trait deleting it
 	 * because an invalid UUID row happened to be first.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_uses_pos_uuid_duplicate_resolution(): void {
 		$product    = ProductHelper::create_simple_product();
@@ -273,7 +273,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * A trashed post is not a live UUID owner under sync collision semantics.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_post_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_post_uuid
 	 */
 	public function test_maybe_add_post_uuid_ignores_trashed_uuid_owner(): void {
 		$trashed = ProductHelper::create_simple_product();
@@ -291,7 +291,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_user_uuid adds UUID to user.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
 	public function test_maybe_add_user_uuid(): void {
 		$user = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -312,7 +312,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test maybe_add_user_uuid preserves existing valid UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
 	public function test_maybe_add_user_uuid_preserves_existing(): void {
 		$user          = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -333,7 +333,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * User duplicate cleanup follows Pos_Uuid's first-valid rule.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_user_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_user_uuid
 	 */
 	public function test_maybe_add_user_uuid_uses_pos_uuid_duplicate_resolution(): void {
 		$user       = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -351,7 +351,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test get_term_uuid adds and returns UUID for term.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_term_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_term_uuid
 	 */
 	public function test_get_term_uuid(): void {
 		// Create a product category
@@ -372,7 +372,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Term duplicate cleanup follows Pos_Uuid's first-valid rule.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_term_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_term_uuid
 	 */
 	public function test_get_term_uuid_uses_pos_uuid_duplicate_resolution(): void {
 		$created    = wp_insert_term( 'Duplicate UUID Category', 'product_cat' );
@@ -392,7 +392,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test uuid_postmeta_exists returns false for unique UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_postmeta_exists
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_postmeta_exists
 	 */
 	public function test_uuid_postmeta_exists_unique(): void {
 		$product     = ProductHelper::create_simple_product();
@@ -406,7 +406,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test uuid_postmeta_exists returns true for duplicate UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_postmeta_exists
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_postmeta_exists
 	 */
 	public function test_uuid_postmeta_exists_duplicate(): void {
 		// Create two products with the same UUID
@@ -427,7 +427,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test uuid_usermeta_exists returns false for unique UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_usermeta_exists
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_usermeta_exists
 	 */
 	public function test_uuid_usermeta_exists_unique(): void {
 		$user        = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -443,7 +443,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test uuid_usermeta_exists returns true for duplicate UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::uuid_usermeta_exists
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::uuid_usermeta_exists
 	 */
 	public function test_uuid_usermeta_exists_duplicate(): void {
 		$user1 = $this->factory->user->create_and_get( array( 'role' => 'customer' ) );
@@ -465,7 +465,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test get_order_ids_by_uuid returns correct order IDs.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_order_ids_by_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_order_ids_by_uuid
 	 */
 	public function test_get_order_ids_by_uuid(): void {
 		$order = OrderHelper::create_order();
@@ -500,7 +500,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test get_order_ids_by_uuid returns empty for non-existent UUID.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::get_order_ids_by_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::get_order_ids_by_uuid
 	 */
 	public function test_get_order_ids_by_uuid_nonexistent(): void {
 		$order_ids = $this->handler->test_get_order_ids_by_uuid( 'nonexistent-uuid' );
@@ -512,7 +512,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Order-item UUIDs remain outside the sync identity brain (ADR 0021).
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::maybe_add_order_item_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::maybe_add_order_item_uuid
 	 */
 	public function test_order_item_uuid_path_remains_legacy(): void {
 		$order = OrderHelper::create_order();
@@ -529,7 +529,7 @@ class Test_Uuid_Handler extends WC_Unit_Test_Case {
 	/**
 	 * Test UUID format matches expected pattern.
 	 *
-	 * @covers \WCPOS\WooCommercePOS\API\Traits\Uuid_Handler::create_uuid
+	 * @covers \WCPOS\WooCommercePOS\API\V1\Traits\Uuid_Handler::create_uuid
 	 */
 	public function test_uuid_format(): void {
 		$uuid = $this->handler->test_create_uuid();

@@ -11,7 +11,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
-use WCPOS\WooCommercePOS\API\Data_Order_Statuses_Controller;
+use WCPOS\WooCommercePOS\API\V1\Data_Order_Statuses_Controller;
 
 /**
  * Test_Data_Order_Statuses_Controller class.

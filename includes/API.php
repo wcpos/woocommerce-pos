@@ -24,7 +24,7 @@ class API {
 	/**
 	 * WCPOS REST API namespaces.
 	 */
-	public const ROUTE_NAMESPACES = array( 'wcpos/v1' );
+	public const ROUTE_NAMESPACES = array( 'wcpos/v1', 'wcpos/v2' );
 
 	/**
 	 * WCPOS REST API namespaces and endpoints.
@@ -127,6 +127,7 @@ class API {
 		 * This filter allows customizing or extending the set of controller classes that handle
 		 * REST API routes for the WCPOS. By filtering these controllers, plugins can
 		 * modify existing endpoints or add new controllers for additional functionality.
+		 * Core legacy controllers use their versioned WCPOS\WooCommercePOS\API\V1 FQCNs.
 		 *
 		 * @since 1.5.0
 		 *
@@ -149,34 +150,34 @@ class API {
 			'woocommerce_pos_rest_api_controllers',
 			array(
 				// WCPOS rest api controllers.
-				'auth'                  => API\Auth::class,
-				'settings'              => API\Settings::class,
-				'cashier'               => API\Cashier::class,
-				'templates'             => API\Templates_Controller::class,
-				'receipts'              => API\Receipts_Controller::class,
-				'print_jobs'            => API\Print_Jobs_Controller::class,
+				'auth'                  => API\V1\Auth::class,
+				'settings'              => API\V1\Settings::class,
+				'cashier'               => API\V1\Cashier::class,
+				'templates'             => API\V1\Templates_Controller::class,
+				'receipts'              => API\V1\Receipts_Controller::class,
+				'print_jobs'            => API\V1\Print_Jobs_Controller::class,
 
 				// TODO: remove this?
-				'stores'                => API\Stores::class,
-				'extensions'            => API\Extensions::class,
-				'logs'                  => API\Logs::class,
-				'payment_gateways'      => API\Payment_Gateways::class,
-				'gateway_bootstrap'     => API\Gateway_Bootstrap_Controller::class,
-				'checkout'              => API\Checkout_Controller::class,
+				'stores'                => API\V1\Stores::class,
+				'extensions'            => API\V1\Extensions::class,
+				'logs'                  => API\V1\Logs::class,
+				'payment_gateways'      => API\V1\Payment_Gateways::class,
+				'gateway_bootstrap'     => API\V1\Gateway_Bootstrap_Controller::class,
+				'checkout'              => API\V1\Checkout_Controller::class,
 
 				// extend WC REST API controllers.
-				'products'              => API\Products_Controller::class,
-				'product_variations'    => API\Product_Variations_Controller::class,
-				'orders'                => API\Orders_Controller::class,
-				'customers'             => API\Customers_Controller::class,
-				'product_tags'          => API\Product_Tags_Controller::class,
-				'product_categories'    => API\Product_Categories_Controller::class,
-				'product_brands'        => API\Product_Brands_Controller::class,
-				'coupons'               => API\Coupons_Controller::class,
-				'taxes'                 => API\Taxes_Controller::class,
-				'shipping_methods'      => API\Shipping_Methods_Controller::class,
-				'tax_classes'           => API\Tax_Classes_Controller::class,
-				'order_statuses'        => API\Data_Order_Statuses_Controller::class,
+				'products'              => API\V1\Products_Controller::class,
+				'product_variations'    => API\V1\Product_Variations_Controller::class,
+				'orders'                => API\V1\Orders_Controller::class,
+				'customers'             => API\V1\Customers_Controller::class,
+				'product_tags'          => API\V1\Product_Tags_Controller::class,
+				'product_categories'    => API\V1\Product_Categories_Controller::class,
+				'product_brands'        => API\V1\Product_Brands_Controller::class,
+				'coupons'               => API\V1\Coupons_Controller::class,
+				'taxes'                 => API\V1\Taxes_Controller::class,
+				'shipping_methods'      => API\V1\Shipping_Methods_Controller::class,
+				'tax_classes'           => API\V1\Tax_Classes_Controller::class,
+				'order_statuses'        => API\V1\Data_Order_Statuses_Controller::class,
 			)
 		);
 		$legacy_classifications = array(
