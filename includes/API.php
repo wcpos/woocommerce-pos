@@ -121,15 +121,6 @@ class API {
 		$route_namespaces       = $this->get_route_namespaces();
 		$this->route_classifier = new API\Route_Classifier( $route_namespaces );
 
-		// Preserve v1 exemptions when filtered legacy controllers do not declare classifications.
-		$this->route_classifier->merge(
-			array(
-				'public'                       => array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ),
-				'printer_token'                => array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ),
-				'permission_error_passthrough' => array( '/wcpos/v1/receipts/' ),
-			)
-		);
-
 		/**
 		 * Filter the list of controller classes used in the WCPOS REST API.
 		 *
@@ -188,6 +179,11 @@ class API {
 				'order_statuses'        => API\Data_Order_Statuses_Controller::class,
 			)
 		);
+		$legacy_classifications = array(
+			'auth'       => array( 'public' => array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ) ),
+			'print_jobs' => array( 'printer_token' => array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ) ),
+			'receipts'   => array( 'permission_error_passthrough' => array( '/wcpos/v1/receipts/' ) ),
+		);
 
 		foreach ( $classes as $key => $class ) {
 			if ( class_exists( $class ) ) {
@@ -196,6 +192,8 @@ class API {
 
 				if ( method_exists( $this->controllers[ $key ], 'wcpos_route_classifications' ) ) {
 					$this->route_classifier->merge( $this->controllers[ $key ]->wcpos_route_classifications() );
+				} elseif ( isset( $legacy_classifications[ $key ] ) ) {
+					$this->route_classifier->merge( $legacy_classifications[ $key ] );
 				}
 			}
 		}
