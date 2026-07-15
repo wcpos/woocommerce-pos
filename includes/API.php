@@ -178,6 +178,22 @@ class API {
 				'shipping_methods'      => API\V1\Shipping_Methods_Controller::class,
 				'tax_classes'           => API\V1\Tax_Classes_Controller::class,
 				'order_statuses'        => API\V1\Data_Order_Statuses_Controller::class,
+
+				// wcpos/v2 service pass-through controllers (additive to the frozen v1 surface).
+				'v2-auth'               => API\V2\Auth::class,
+				'v2-settings'           => API\V2\Settings::class,
+				'v2-cashier'            => API\V2\Cashier::class,
+				'v2-templates'          => API\V2\Templates_Controller::class,
+				'v2-receipts'           => API\V2\Receipts_Controller::class,
+				'v2-print_jobs'         => API\V2\Print_Jobs_Controller::class,
+				'v2-stores'             => API\V2\Stores::class,
+				'v2-extensions'         => API\V2\Extensions::class,
+				'v2-logs'               => API\V2\Logs::class,
+				'v2-payment_gateways'   => API\V2\Payment_Gateways::class,
+				'v2-gateway_bootstrap'  => API\V2\Gateway_Bootstrap_Controller::class,
+				'v2-checkout'           => API\V2\Checkout_Controller::class,
+				'v2-shipping_methods'   => API\V2\Shipping_Methods_Controller::class,
+				'v2-order_statuses'     => API\V2\Data_Order_Statuses_Controller::class,
 			)
 		);
 		$legacy_classifications = array(

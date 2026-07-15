@@ -47,22 +47,20 @@ class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_T
 	}
 
 	/**
-	 * Register dummy v2 routes after the WCPOS gate has captured its namespaces.
+	 * Register a dummy private v2 route after the WCPOS gate captures its namespaces.
 	 */
 	public function rest_api_init(): void {
 		parent::rest_api_init();
 
-		foreach ( array( '/private', '/auth/test' ) as $route ) {
-			register_rest_route(
-				'wcpos/v2',
-				$route,
-				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'dummy_route_response' ),
-					'permission_callback' => '__return_true',
-				)
-			);
-		}
+		register_rest_route(
+			'wcpos/v2',
+			'/private',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'dummy_route_response' ),
+				'permission_callback' => '__return_true',
+			)
+		);
 	}
 
 	/**
@@ -98,16 +96,15 @@ class Test_Route_Classifier_Namespace_Parameterization extends WCPOS_REST_Unit_T
 	}
 
 	/**
-	 * Route exemptions declared by v1 controllers do not bleed into v2.
+	 * The promoted v2 auth controller declares its own public route classification.
 	 */
-	public function test_v1_public_route_classification_does_not_bleed_into_added_namespace(): void {
+	public function test_v2_auth_route_inherits_explicit_public_classification(): void {
 		wp_set_current_user( 0 );
 
 		$v1_response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
 		$v2_response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/auth/test' ) );
 
 		$this->assertNotSame( 'woocommerce_pos_rest_unauthorized', $v1_response->get_data()['code'] ?? '' );
-		$this->assertSame( 401, $v2_response->get_status() );
-		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $v2_response->get_data()['code'] );
+		$this->assertNotSame( 'woocommerce_pos_rest_unauthorized', $v2_response->get_data()['code'] ?? '' );
 	}
 }
