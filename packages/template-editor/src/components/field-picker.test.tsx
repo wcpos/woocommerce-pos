@@ -9,6 +9,7 @@ vi.mock('../translations', () => ({
 	t: (key: string, params?: Record<string, string | number>) => {
 		const strings: Record<string, string> = {
 			'editor.fields': 'Fields',
+			'editor.resize_fields': 'Resize fields panel',
 			'editor.search_fields': 'Search fields...',
 			'editor.search_fields_placeholder': 'Search fields...',
 			'editor.search_fields_label': 'Search fields',
@@ -36,6 +37,7 @@ afterEach(() => {
 	}
 	mountedRoots.length = 0;
 	document.body.innerHTML = '';
+	window.localStorage.clear();
 });
 
 function getButtons(container: HTMLElement): HTMLButtonElement[] {
@@ -228,6 +230,148 @@ describe('FieldPicker', () => {
 		});
 
 		expect(container.firstElementChild?.getAttribute('style') ?? '').not.toContain('max-height');
+	});
+
+	describe('resizable panel', () => {
+		const schema: FieldSchema = {
+			order: {
+				label: 'Order',
+				fields: { number: { type: 'number', label: 'Number' } },
+			},
+		};
+
+		function getPanel(container: HTMLElement): HTMLElement {
+			return container.firstElementChild as HTMLElement;
+		}
+
+		function getHandle(container: HTMLElement): HTMLElement {
+			const handle = container.querySelector('[role=separator]');
+			if (!handle) {
+				throw new Error('Resize handle not found');
+			}
+			return handle as HTMLElement;
+		}
+
+		it('defaults to a 280px wide panel with an accessible resize handle', async () => {
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			expect(getPanel(container).style.width).toBe('280px');
+
+			const handle = getHandle(container);
+			expect(handle.getAttribute('aria-orientation')).toBe('vertical');
+			expect(handle.getAttribute('aria-label')).toBe('Resize fields panel');
+			expect(handle.getAttribute('aria-valuenow')).toBe('280');
+			expect(handle.getAttribute('aria-controls')).toBe('wcpos-template-editor-fields-panel');
+			expect(handle.tabIndex).toBe(0);
+		});
+
+		it('restores a persisted width, clamped to the allowed range', async () => {
+			window.localStorage.setItem('wcpos-template-editor-fields-width', '9999');
+
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			expect(getPanel(container).style.width).toBe('520px');
+		});
+
+		it('resizes with arrow keys and persists the new width', async () => {
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			const handle = getHandle(container);
+			await act(async () => {
+				handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+			});
+
+			expect(getPanel(container).style.width).toBe('296px');
+			expect(window.localStorage.getItem('wcpos-template-editor-fields-width')).toBe('296');
+
+			await act(async () => {
+				handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+			});
+
+			expect(getPanel(container).style.width).toBe('200px');
+		});
+
+		it('follows pointer drag on the handle', async () => {
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			const panel = getPanel(container);
+			vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
+				left: 0,
+				right: 280,
+				top: 0,
+				bottom: 600,
+				width: 280,
+				height: 600,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			} as DOMRect);
+
+			const handle = getHandle(container);
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, buttons: 1 }),
+				);
+			});
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointermove', { bubbles: true, clientX: 340, buttons: 1 }),
+				);
+			});
+			await act(async () => {
+				handle.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 340 }));
+			});
+
+			expect(panel.style.width).toBe('340px');
+			// Width persists once the drag completes.
+			expect(window.localStorage.getItem('wcpos-template-editor-fields-width')).toBe('340');
+
+			// After the drag ends, further moves must not resize the panel.
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 1 }),
+				);
+			});
+			expect(panel.style.width).toBe('340px');
+		});
+
+		it('ignores non-primary-button drags', async () => {
+			const { container, root, onInsertField } = renderPicker(schema);
+
+			await act(async () => {
+				root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
+			});
+
+			const handle = getHandle(container);
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointerdown', { bubbles: true, clientX: 280, button: 2, buttons: 2 }),
+				);
+			});
+			await act(async () => {
+				handle.dispatchEvent(
+					new MouseEvent('pointermove', { bubbles: true, clientX: 400, buttons: 2 }),
+				);
+			});
+
+			expect(getPanel(container).style.width).toBe('280px');
+		});
 	});
 
 	it('shows a field count next to non-array sections', async () => {
