@@ -102,7 +102,11 @@ final class Meta_Normalizer {
 			return $value;
 		}
 
-		/** @var array<int|string, mixed> $properties */
+		/**
+		 * Decoded object properties.
+		 *
+		 * @var array<int|string, mixed> $properties
+		 */
 		$properties = array_map( array( __CLASS__, __FUNCTION__ ), get_object_vars( $value ) );
 
 		return array() === $properties || array_values( $properties ) === $properties
