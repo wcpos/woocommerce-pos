@@ -2,13 +2,17 @@
 /**
  * WCPOS sync read surface.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;

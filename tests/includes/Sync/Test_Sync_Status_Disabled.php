@@ -36,15 +36,15 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_sync_status_with_flag_disabled_returns_404(): void {
 		$paths = array(
-			'/wcpos/v1/sync/status',
-			'/wcpos/v1/sync/products',
-			'/wcpos/v1/sync/orders',
-			'/wcpos/v1/sync/orders/pull',
-			'/wcpos/v1/sync/changes/sequence-log',
-			'/wcpos/v1/sync/digests',
-			'/wcpos/v1/sync/integrity/scan',
-			'/wcpos/v1/sync/variations',
-			'/wcpos/v1/sync/resolve/barcode',
+			'/wcpos/v2/status',
+			'/wcpos/v2/products',
+			'/wcpos/v2/orders',
+			'/wcpos/v2/orders/pull',
+			'/wcpos/v2/changes/sequence-log',
+			'/wcpos/v2/digests',
+			'/wcpos/v2/integrity/scan',
+			'/wcpos/v2/variations',
+			'/wcpos/v2/resolve/barcode',
 		);
 
 		foreach ( $paths as $path ) {
@@ -53,7 +53,7 @@ class Test_Sync_Status_Disabled extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
-			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$path     = '/wcpos/v2/push/' . $collection;
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 			$this->assertEquals( 404, $response->get_status(), $path . ' was registered while sync was disabled.' );
 		}

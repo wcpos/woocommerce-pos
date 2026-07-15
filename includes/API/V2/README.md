@@ -1,3 +1,4 @@
 # WCPOS REST API v2
-This directory is the `wcpos/v2` surface: the successor client/server contract.
-Controllers land here as the sync surface moves.
+
+This directory contains the controllers for the `wcpos/v2` sync REST surface.
+The sync engine and shared domain services remain under `includes/Sync`.

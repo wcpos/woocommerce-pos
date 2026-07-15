@@ -10,6 +10,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 use ReflectionClass;
 use WCPOS\WooCommercePOS\API;
 use WCPOS\WooCommercePOS\API\Route_Classifier;
+use WCPOS\WooCommercePOS\Sync\Api as Sync_Api;
 use WP_REST_Server;
 
 /**
@@ -140,7 +141,11 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$built_classifications['printer_token']
 		);
 		$this->assertSame(
-			array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ),
+			array(
+				'/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX . 'uuid/backfill',
+				'/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX . 'orders/index/backfill',
+				'/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX . 'integrity/rebuild',
+			),
 			$built_classifications['admin_op']
 		);
 		$this->assertSame(
@@ -148,7 +153,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$built_classifications['permission_error_passthrough']
 		);
 		$this->assertSame(
-			array( '/wcpos/v1/sync/' ),
+			array( '/' . Sync_Api::ROUTE_NAMESPACE . '/' . Sync_Api::ROUTE_PREFIX ),
 			$built_classifications['rewrite_exempt']
 		);
 		$this->assertSame(

@@ -2,13 +2,17 @@
 /**
  * WCPOS sync read surface.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
-use WP_REST_Request;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_REST_Controller;
+use WP_REST_Request;
 use WP_REST_Server;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.

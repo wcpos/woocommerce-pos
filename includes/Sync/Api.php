@@ -7,12 +7,23 @@
 
 namespace WCPOS\WooCommercePOS\Sync;
 
+use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\API\V2\Changes_Controller;
+use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
+use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
+use WCPOS\WooCommercePOS\API\V2\Orders_Controller;
+use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
+use WCPOS\WooCommercePOS\API\V2\Status_Controller;
+use WCPOS\WooCommercePOS\API\V2\Uuid_Backfill_Controller;
+use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
+use WCPOS\WooCommercePOS\API\V2\Write_Controller;
+
 /**
  * Sync REST API configuration and controller registration.
  */
 final class Api {
-	public const ROUTE_NAMESPACE = 'wcpos/v1';
-	public const ROUTE_PREFIX    = 'sync/';
+	public const ROUTE_NAMESPACE = 'wcpos/v2';
+	public const ROUTE_PREFIX    = '';
 	public const ADMIN_OP_PATHS  = array( 'uuid/backfill', 'orders/index/backfill', 'integrity/rebuild' );
 	public const OPTION_ENABLED  = 'woocommerce_pos_sync_api_enabled';
 	public const UUID_META_KEY   = '_woocommerce_pos_uuid';

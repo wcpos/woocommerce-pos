@@ -2,14 +2,24 @@
 /**
  * WCPOS sync write surface.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
 use WC_Product;
 use WC_Product_Variation;
 use WC_REST_Products_Controller;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Header_Mirror;
+use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Mutation_Store;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
