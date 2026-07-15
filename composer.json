@@ -60,7 +60,10 @@
   "autoload": {
     "psr-4": {
       "WCPOS\\WooCommercePOS\\": "includes/"
-    }
+    },
+    "files": [
+      "includes/API/class-aliases.php"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
