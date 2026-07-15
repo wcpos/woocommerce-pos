@@ -74,7 +74,13 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		// targeted `include=` pulls, and no other product query on the request is affected. The client
 		// then never holds them, and Leg-3 prunes any that were toggled `online_only` after being pulled.
 		$this->add_pos_visibility_filter( $resource );
+		if ( 'taxes' === $resource ) {
+			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		}
 		$response = rest_do_request( $inner );
+		if ( 'taxes' === $resource ) {
+			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		}
 		$this->remove_pos_visibility_filter();
 		if ( $response->is_error() ) {
 			return $response;
@@ -83,6 +89,28 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$response->set_data( $data );
 
 		return $response;
+	}
+
+	/**
+	 * Authorize the proxied tax read for POS users.
+	 *
+	 * WooCommerce's tax controller checks manager permissions for the `settings`
+	 * object. This filter is attached only while the `/wc/v3/taxes` request is in
+	 * flight, so other settings-class permission checks remain unchanged.
+	 *
+	 * @param bool   $permission The current permission.
+	 * @param string $context    The request context.
+	 * @param int    $object_id  The object ID.
+	 * @param string $post_type  The object type passed by WooCommerce.
+	 *
+	 * @return bool
+	 */
+	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
+		if ( ! $permission && 'settings' === $post_type && 'read' === $context ) {
+			$permission = current_user_can( 'access_woocommerce_pos' );
+		}
+
+		return $permission;
 	}
 
 

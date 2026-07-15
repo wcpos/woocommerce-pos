@@ -37,7 +37,7 @@ final class Uuid_Backfill_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'backfill' ),
-				'permission_callback' => array( $this, 'permissions_check' ),
+				'permission_callback' => array( $this, 'admin_permissions_check' ),
 				'args'                => array(
 					'collection' => array(
 						'default'           => 'products',

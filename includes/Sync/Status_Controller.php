@@ -16,6 +16,8 @@ use WP_REST_Server;
  * Reports sync store health.
  */
 final class Status_Controller extends WP_REST_Controller {
+	use Endpoint_Permissions;
+
 	/**
 	 * Register the sync status route.
 	 */
@@ -26,7 +28,7 @@ final class Status_Controller extends WP_REST_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_status' ),
-				'permission_callback' => array( $this, 'check_permissions' ),
+				'permission_callback' => array( $this, 'permissions_check' ),
 			)
 		);
 	}
@@ -50,11 +52,9 @@ final class Status_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Check whether the current user can inspect sync store health.
-	 *
-	 * @param WP_REST_Request $request Request object.
+	 * Allow the status endpoint to report an unhealthy sync store.
 	 */
-	public function check_permissions( WP_REST_Request $request ): bool {
-		return current_user_can( 'manage_woocommerce' );
+	protected function health_gated(): bool {
+		return false;
 	}
 }

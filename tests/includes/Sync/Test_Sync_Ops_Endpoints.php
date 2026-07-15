@@ -200,13 +200,13 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 	}
 
 	/**
-	 * Both operations require WooCommerce management access.
+	 * All operations require WooCommerce management access.
 	 */
 	public function test_ops_endpoints_without_manage_woocommerce_return_403(): void {
-		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$user_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 		wp_set_current_user( $user_id );
 
-		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
+		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 			$this->assertSame( 403, $response->get_status(), $path );
 			$this->assertNotSame( 503, $response->get_status(), $path );
