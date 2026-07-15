@@ -99,15 +99,19 @@ class API {
 		/**
 		 * Filter the list of namespaces used in the WCPOS REST API.
 		 *
-		 * This filter allows plugins to register additional WCPOS REST API namespaces.
-		 * Controllers remain responsible for declaring any special route classifications
-		 * within those namespaces.
+		 * This filter is strictly additive: plugins can register additional WCPOS REST
+		 * API namespaces, but the core namespaces cannot be removed — the central
+		 * permission gate must keep covering every registered core route. Controllers
+		 * remain responsible for declaring any special route classifications within
+		 * added namespaces.
 		 *
 		 * @since 1.10.0
 		 *
 		 * @param string[] $namespaces REST API namespaces.
 		 */
-		return apply_filters( 'woocommerce_pos_rest_namespaces', self::ROUTE_NAMESPACES );
+		$namespaces = apply_filters( 'woocommerce_pos_rest_namespaces', self::ROUTE_NAMESPACES );
+
+		return array_values( array_unique( array_merge( self::ROUTE_NAMESPACES, (array) $namespaces ) ) );
 	}
 
 	/**
