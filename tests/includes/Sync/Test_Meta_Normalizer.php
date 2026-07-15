@@ -14,7 +14,7 @@ use WP_UnitTestCase;
  * @covers \WCPOS\WooCommercePOS\Sync\Meta_Normalizer
  */
 class Test_Meta_Normalizer extends WP_UnitTestCase {
-	public function test_object_json_string_is_normalized_to_an_array(): void {
+	public function test_object_json_string_is_normalized_to_a_typed_value(): void {
 		$document = array(
 			'meta_data' => array(
 				array( 'key' => 'settings', 'value' => '{"enabled":true,"mode":"pos"}' ),
@@ -23,7 +23,11 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 
 		$normalized = Meta_Normalizer::normalize( $document );
 
-		$this->assertSame( array( 'enabled' => true, 'mode' => 'pos' ), $normalized['meta_data'][0]['value'] );
+		$value = $normalized['meta_data'][0]['value'];
+		// Assoc-keyed objects decode to arrays (wire-neutral); shape-critical
+		// objects ({} / numeric-keyed) stay stdClass — see preserve_json_object_shape.
+		$this->assertSame( array( 'enabled' => true, 'mode' => 'pos' ), $value );
+		$this->assertSame( '{"enabled":true,"mode":"pos"}', wp_json_encode( $value ) );
 	}
 
 	public function test_array_json_string_is_normalized_to_an_array(): void {
@@ -96,7 +100,9 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 
 		$normalized = Meta_Normalizer::normalize( $document );
 
-		$this->assertSame( array( 'note' => 'typed' ), $normalized['line_items'][0]['meta_data'][0]['value'] );
+		$value = $normalized['line_items'][0]['meta_data'][0]['value'];
+		$this->assertSame( array( 'note' => 'typed' ), $value );
+		$this->assertSame( '{"note":"typed"}', wp_json_encode( $value ) );
 	}
 
 	public function test_hydrated_php_serialized_array_passes_through_unchanged(): void {
@@ -110,6 +116,31 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$normalized = Meta_Normalizer::normalize( $document );
 
 		$this->assertSame( $typed, $normalized['meta_data'][0]['value'] );
+	}
+
+	public function test_nested_object_shapes_survive_reserialization_exactly(): void {
+		$document = array(
+			'meta_data' => array(
+				array( 'key' => 'config', 'value' => '{"config":{},"list":[],"map":{"0":"a"}}' ),
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( $document );
+
+		$this->assertSame(
+			'{"config":{},"list":[],"map":{"0":"a"}}',
+			wp_json_encode( $normalized['meta_data'][0]['value'] )
+		);
+	}
+
+	public function test_decode_to_array_reads_string_array_and_object_forms(): void {
+		$this->assertSame( array( 'price' => '10' ), Meta_Normalizer::decode_to_array( '{"price":"10"}' ) );
+		$this->assertSame( array( 'price' => '10' ), Meta_Normalizer::decode_to_array( array( 'price' => '10' ) ) );
+		$this->assertSame( array( 'price' => '10' ), Meta_Normalizer::decode_to_array( (object) array( 'price' => '10' ) ) );
+		$this->assertNull( Meta_Normalizer::decode_to_array( '' ) );
+		$this->assertNull( Meta_Normalizer::decode_to_array( 'not json' ) );
+		$this->assertNull( Meta_Normalizer::decode_to_array( 123 ) );
+		$this->assertNull( Meta_Normalizer::decode_to_array( null ) );
 	}
 
 	public function test_normalization_is_idempotent(): void {

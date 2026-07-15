@@ -44,6 +44,37 @@ final class Meta_Normalizer {
 	}
 
 	/**
+	 * Shape-tolerant reader for structured meta that may be stored in either
+	 * form: the historical JSON-encoded string, or (after a typed client push
+	 * lands through wc/v3) a native PHP array. Server-side consumers of
+	 * `_woocommerce_pos_data`-style meta must read through this — a bare
+	 * `json_decode( $raw )` fatals on PHP 8 the moment the storage holds an
+	 * array.
+	 *
+	 * @param mixed $raw Meta value as returned by get_meta().
+	 *
+	 * @return array|null Decoded associative array, or null when the value is
+	 *                    neither a JSON object/array string nor an array.
+	 */
+	public static function decode_to_array( $raw ): ?array {
+		if ( is_array( $raw ) ) {
+			return $raw;
+		}
+		if ( is_object( $raw ) ) {
+			$raw = wp_json_encode( $raw );
+		}
+		if ( ! is_string( $raw ) || '' === $raw ) {
+			return null;
+		}
+		$decoded = json_decode( $raw, true );
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $decoded ) ) {
+			return null;
+		}
+
+		return $decoded;
+	}
+
+	/**
 	 * Decode object and array JSON strings carried as meta values.
 	 *
 	 * @param array $meta_data Serialized REST meta entries.

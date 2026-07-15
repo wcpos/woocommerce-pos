@@ -413,15 +413,10 @@ class Receipt_Data_Builder {
 	 * @return array{price:float,regular_price:float,tax_status:string}|null
 	 */
 	private function get_pos_price_data( \WC_Order_Item_Product $item ): ?array {
-		$raw = $item->get_meta( '_woocommerce_pos_data', true );
-		if ( ! \is_string( $raw ) || '' === $raw ) {
-			return null;
-		}
-
-		$data = json_decode( $raw, true );
+		$raw  = $item->get_meta( '_woocommerce_pos_data', true );
+		$data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $raw );
 		if (
-			JSON_ERROR_NONE !== json_last_error()
-			|| ! \is_array( $data )
+			! \is_array( $data )
 			|| ! isset( $data['price'], $data['regular_price'], $data['tax_status'] )
 			|| ! is_numeric( $data['price'] )
 			|| ! is_numeric( $data['regular_price'] )

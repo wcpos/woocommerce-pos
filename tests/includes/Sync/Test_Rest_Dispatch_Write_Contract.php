@@ -221,7 +221,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 		$meta     = array_column( $data['document']['meta_data'], 'value', 'key' );
 
 		$this->assertSame( 201, $response->get_status() );
-		$this->assertSame( array( 'source' => 'create' ), $meta['typed_meta_fixture'] );
+		$this->assertSame( '{"source":"create"}', wp_json_encode( $meta['typed_meta_fixture'] ) );
 		$this->assertSame( array( 'already' => 'typed' ), $meta['php_array_fixture'] );
 		$this->assertSame( $fixture['envelope']['recordId'], $meta[ Pos_Uuid::META_KEY ] );
 		$this->assertIsString( $meta[ Pos_Uuid::META_KEY ] );

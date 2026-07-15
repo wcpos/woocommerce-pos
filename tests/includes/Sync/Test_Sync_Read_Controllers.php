@@ -372,7 +372,7 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$served = $response->get_data()[0];
 		$meta   = array_column( $served['meta_data'], 'value', 'key' );
 
-		$this->assertSame( array( 'source' => 'catalog' ), $meta['typed_meta_fixture'] );
+		$this->assertSame( '{"source":"catalog"}', wp_json_encode( $meta['typed_meta_fixture'] ) );
 		$this->assertSame( array( 'already' => 'typed' ), $meta['php_array_fixture'] );
 		$this->assertSame( $uuid, $meta[ Pos_Uuid::META_KEY ] );
 		$this->assertIsString( $meta[ Pos_Uuid::META_KEY ] );

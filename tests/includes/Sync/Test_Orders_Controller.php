@@ -154,7 +154,8 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$order_meta = array_column( $payload['meta_data'], 'value', 'key' );
 		$line_meta  = array_column( $payload['line_items'][0]['meta_data'], 'value', 'key' );
 
-		$this->assertSame( array( 'register' => 'front', 'flags' => array( 'sale' ) ), $line_meta['_woocommerce_pos_data'] );
+		// Decoded JSON-object strings arrive as stdClass (shape-preserving decode); assert the wire JSON.
+		$this->assertSame( '{"register":"front","flags":["sale"]}', wp_json_encode( $line_meta['_woocommerce_pos_data'] ) );
 		$this->assertSame( array( 'ES123', 'EU456' ), $order_meta['_wcpos_tax_ids'] );
 		$this->assertSame( array( 'already' => 'typed' ), $order_meta['php_array_fixture'] );
 		$this->assertIsString( $order_meta[ Pos_Uuid::META_KEY ] );
