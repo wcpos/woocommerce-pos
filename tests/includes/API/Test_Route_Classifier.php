@@ -33,6 +33,20 @@ class Route_Classifier_Legacy_Auth_Controller {
 }
 
 /**
+ * Filtered auth controller with explicit route classification metadata.
+ */
+class Route_Classifier_Metadata_Auth_Controller extends Route_Classifier_Legacy_Auth_Controller {
+	/**
+	 * Explicitly opt out of the historical public auth classification.
+	 *
+	 * @return array<string, string[]> Route classifications.
+	 */
+	public function wcpos_route_classifications(): array {
+		return array( 'public' => array() );
+	}
+}
+
+/**
  * API subclass that exposes the built classifier to tests.
  */
 class Route_Classifier_Test_API extends API {
@@ -80,6 +94,26 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
 
 		$this->assertNull( $result );
+	}
+
+	/**
+	 * Filtered controllers with classification metadata remain authoritative.
+	 */
+	public function test_filtered_controller_with_classifications_does_not_receive_legacy_fallback(): void {
+		$replace_auth = function ( array $controllers ): array {
+			$controllers['auth'] = Route_Classifier_Metadata_Auth_Controller::class;
+			return $controllers;
+		};
+		add_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		$api = new Route_Classifier_Test_API();
+		remove_filter( 'woocommerce_pos_rest_api_controllers', $replace_auth );
+		wp_set_current_user( 0 );
+
+		$result = $api->rest_pre_dispatch( null, $this->server, $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'woocommerce_pos_rest_unauthorized', $result->get_error_code() );
+		$this->assertSame( 401, $result->get_error_data()['status'] );
 	}
 
 	/**
