@@ -51,6 +51,20 @@ class Test_Meta_Normalizer extends WP_UnitTestCase {
 		$this->assertSame( '{}', wp_json_encode( $normalized['meta_data'][0]['value'] ) );
 	}
 
+	public function test_json_object_shapes_are_preserved_when_serialized(): void {
+		$document = array(
+			'meta_data' => array(
+				array( 'key' => 'numeric_keys', 'value' => '{"0":"first","1":"second"}' ),
+				array( 'key' => 'nested', 'value' => '{"nested":{}}' ),
+			),
+		);
+
+		$normalized = Meta_Normalizer::normalize( $document );
+
+		$this->assertSame( '{"0":"first","1":"second"}', wp_json_encode( $normalized['meta_data'][0]['value'] ) );
+		$this->assertSame( '{"nested":{}}', wp_json_encode( $normalized['meta_data'][1]['value'] ) );
+	}
+
 	public function test_scalar_strings_numbers_and_invalid_json_are_untouched(): void {
 		$values = array( '123', 'true', 'null', 'ordinary string', 123, '{"partial":', '[1,2' );
 		$document = array(

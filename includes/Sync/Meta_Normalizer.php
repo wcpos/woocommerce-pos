@@ -73,18 +73,39 @@ final class Meta_Normalizer {
 				continue;
 			}
 
-			$decoded = json_decode( $raw, true );
-			if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $decoded ) ) {
+			$decoded = json_decode( $raw );
+			if ( JSON_ERROR_NONE !== json_last_error() || ( ! is_array( $decoded ) && ! $decoded instanceof \stdClass ) ) {
 				continue;
 			}
 
-			$entry['value'] = array() === $decoded && '{' === $opening
-				? new \stdClass()
-				: $decoded;
+			$entry['value'] = self::preserve_json_object_shape( $decoded );
 
 			$meta_data[ $index ] = $entry;
 		}
 
 		return $meta_data;
+	}
+
+	/**
+	 * Convert JSON objects to arrays unless doing so would change their wire shape.
+	 *
+	 * @param mixed $value Decoded JSON value.
+	 *
+	 * @return mixed
+	 */
+	private static function preserve_json_object_shape( $value ) {
+		if ( is_array( $value ) ) {
+			return array_map( array( __CLASS__, __FUNCTION__ ), $value );
+		}
+
+		if ( ! $value instanceof \stdClass ) {
+			return $value;
+		}
+
+		$properties = array_map( array( __CLASS__, __FUNCTION__ ), get_object_vars( $value ) );
+
+		return array() === $properties || $properties === array_values( $properties )
+			? (object) $properties
+			: $properties;
 	}
 }
