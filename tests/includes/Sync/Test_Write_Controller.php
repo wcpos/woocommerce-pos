@@ -194,6 +194,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'product'           => apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'product' ),
 				'product_variation' => apply_filters( 'woocommerce_rest_check_permissions', false, 'edit', 0, 'product_variation' ),
 				'shop_coupon'       => apply_filters( 'woocommerce_rest_check_permissions', false, 'delete', 0, 'shop_coupon' ),
+				'product_read'      => apply_filters( 'woocommerce_rest_check_permissions', false, 'read', 0, 'product' ),
+				'shop_order'        => apply_filters( 'woocommerce_rest_check_permissions', false, 'create', 0, 'shop_order' ),
 			);
 		}
 		if ( ! empty( $GLOBALS['wcpos_sync_test_rest_do_request_queue'] ) ) {
@@ -347,6 +349,8 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 				'product'           => true,
 				'product_variation' => true,
 				'shop_coupon'       => true,
+				'product_read'      => false,
+				'shop_order'        => false,
 			),
 			$GLOBALS['wcpos_sync_test_wc_permissions']
 		);
