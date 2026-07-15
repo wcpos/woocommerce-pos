@@ -904,7 +904,12 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_REST_Response( $document, 200 );
 		}
 
-		return rest_do_request( new WP_REST_Request( 'GET', $meta['route'] . '/' . $id ) );
+		$response = rest_do_request( new WP_REST_Request( 'GET', $meta['route'] . '/' . $id ) );
+		$data     = $response->get_data();
+		if ( is_array( $data ) ) {
+			$response->set_data( Meta_Normalizer::normalize( $data ) );
+		}
+		return $response;
 	}
 
 	/**

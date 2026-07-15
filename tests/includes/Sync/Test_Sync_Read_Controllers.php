@@ -15,8 +15,12 @@ use WCPOS\WooCommercePOS\Sync\Changes_Controller;
 use WCPOS\WooCommercePOS\Sync\Digests_Controller;
 use WCPOS\WooCommercePOS\Sync\Integrity_Controller;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
+use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Sync\Resolve_Controller;
+use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Sync\Variations_Controller;
 use WP_REST_Request;
 
@@ -36,6 +40,9 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	public function tearDown(): void {
 		delete_option( Pos_Visibility::OPTION );
 		delete_option( 'woocommerce_pos_settings_general' );
+		Meta_Normalizer::unregister_hooks();
+		Revision::unregister_proxy_stamps();
+		Proxy_Uuid_Stamper::unregister_proxy_stampers();
 		parent::tearDown();
 	}
 
@@ -319,6 +326,68 @@ class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 		$ids = array_column( (array) $mixed->get_data(), 'id' );
 		$this->assertContains( $visible->get_id(), $ids );
 		$this->assertNotContains( $hidden->get_id(), $ids );
+	}
+
+	/**
+	 * The catalog wire normalizes structured meta before revision and identity stamps.
+	 */
+	public function test_catalog_proxy_emits_typed_meta_with_a_revision_of_the_normalized_record(): void {
+		Meta_Normalizer::register_hooks();
+		Revision::register_proxy_stamps();
+		Proxy_Uuid_Stamper::register_proxy_stampers();
+
+		$product = ProductHelper::create_simple_product();
+		$uuid    = Pos_Uuid::ensure_uuid( $product );
+		$product->update_meta_data( 'typed_meta_fixture', '{"source":"catalog"}' );
+		$product->update_meta_data( 'php_array_fixture', array( 'already' => 'typed' ) );
+		$product->save_meta_data();
+
+		$response = ( new Catalog_Proxy_Controller() )->proxy(
+			$this->request( array( 'include' => (string) $product->get_id() ) ),
+			'/wc/v3/products',
+			'products'
+		);
+		$served = $response->get_data()[0];
+		$meta   = array_column( $served['meta_data'], 'value', 'key' );
+
+		$this->assertSame( '{"source":"catalog"}', wp_json_encode( $meta['typed_meta_fixture'] ) );
+		$this->assertSame( array( 'already' => 'typed' ), $meta['php_array_fixture'] );
+		$this->assertSame( $uuid, $meta[ Pos_Uuid::META_KEY ] );
+		$this->assertIsString( $meta[ Pos_Uuid::META_KEY ] );
+
+		// The revision is stamped at priority 9 over the BARE normalized payload —
+		// before the uuid stamper rebuilds presentation meta at 10. The write path's
+		// CAS recompute (document_for: bare wc/v3 read + normalize) must therefore
+		// reproduce it byte-for-byte; assert exactly that parity.
+		$revision = $served['_rxdb_revision'];
+		$request  = new WP_REST_Request( 'GET', '/' );
+		$bare     = rest_get_server()->response_to_data(
+			rest_ensure_response(
+				( new \WC_REST_Products_Controller() )->prepare_object_for_response(
+					wc_get_product( $product->get_id() ),
+					$request
+				)
+			),
+			false
+		);
+		$bare = Meta_Normalizer::normalize( $bare );
+
+		$this->assertSame( Revision::compute( $bare ), $revision );
+
+		// And the revision genuinely covers the normalized bytes: the historical
+		// stringified form hashes differently.
+		$historical = $bare;
+		foreach ( $historical['meta_data'] as $index => $entry ) {
+			$key = $entry instanceof \WC_Meta_Data ? $entry->key : $entry['key'];
+			if ( 'typed_meta_fixture' === $key ) {
+				$historical['meta_data'][ $index ] = array(
+					'id'    => $entry instanceof \WC_Meta_Data ? $entry->id : $entry['id'],
+					'key'   => $key,
+					'value' => '{"source":"catalog"}',
+				);
+			}
+		}
+		$this->assertNotSame( Revision::compute( $historical ), $revision );
 	}
 
 	/**

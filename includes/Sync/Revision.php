@@ -44,6 +44,13 @@ class Revision {
 		add_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9, 3 );
 	}
 
+	/**
+	 * Remove the canonical revision stamper.
+	 */
+	public static function unregister_proxy_stamps(): void {
+		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'stamp_proxy_revisions' ), 9 );
+	}
+
 	public static function stamp_proxy_revisions( $data, $resource = '', $request = null ) {
 		if ( ! is_array( $data ) ) {
 			return $data;

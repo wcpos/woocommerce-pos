@@ -19,6 +19,13 @@ use WC_Customer;
  */
 final class Proxy_Uuid_Stamper {
 	/**
+	 * Registered proxy callbacks.
+	 *
+	 * @var array<int, callable>
+	 */
+	private static $proxy_stampers = array();
+
+	/**
 	 * Registry-driven stamper config (#421 increment 3): build the
 	 * stamp_proxy_generic config for one collection FROM ITS REGISTRY ROW —
 	 * the per-collection mapping (which resources, which bulk reader, which
@@ -55,18 +62,30 @@ final class Proxy_Uuid_Stamper {
 			if ( null === $config ) {
 				continue;
 			}
+			$callback = static function ( $data, $resource = '', $request = null ) use ( $config ) {
+				return self::stamp_proxy_generic( $data, $resource, $config );
+			};
 			add_filter(
 				'woocommerce_pos_sync_proxy_response',
-				static function ( $data, $resource = '', $request = null ) use ( $config ) {
-					return self::stamp_proxy_generic( $data, $resource, $config );
-				},
+				$callback,
 				10,
 				3
 			);
+			self::$proxy_stampers[] = $callback;
 			$registered[] = $collection;
 		}
 
 		return $registered;
+	}
+
+	/**
+	 * Remove every registered UUID proxy stamper.
+	 */
+	public static function unregister_proxy_stampers(): void {
+		foreach ( self::$proxy_stampers as $callback ) {
+			remove_filter( 'woocommerce_pos_sync_proxy_response', $callback, 10 );
+		}
+		self::$proxy_stampers = array();
 	}
 
 	/**

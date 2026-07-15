@@ -9,6 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\Sync\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
 use WCPOS\WooCommercePOS\Sync\Orders_Controller;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
@@ -45,6 +47,9 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 
 	public function tearDown(): void {
 		remove_filter( 'woocommerce_pos_sync_serialized_order', array( $this, 'stamp_test_uuid' ), 10 );
+		remove_filter( 'woocommerce_pos_sync_proxy_response', array( Meta_Normalizer::class, 'normalize' ), 5 );
+		remove_filter( 'woocommerce_pos_sync_serialized_product', array( Meta_Normalizer::class, 'normalize' ), 5 );
+		remove_filter( 'woocommerce_pos_sync_serialized_order', array( Meta_Normalizer::class, 'normalize' ), 5 );
 		delete_option( Sync_Index::BACKFILL_OPTION );
 		parent::tearDown();
 	}
@@ -115,6 +120,61 @@ class Test_Orders_Controller extends Sync_REST_Store_Test_Case {
 		$this->assertNotSame( '', $data['epoch'] );
 		$this->assertGreaterThanOrEqual( 1, $data['head'] );
 		$this->assertSame( $order->get_id(), $data['checkpoint']['orderId'] );
+	}
+
+	/**
+	 * Structured order and line-item meta is typed before the pull revision is computed.
+	 */
+	public function test_pull_emits_typed_meta_and_revision_of_the_normalized_payload(): void {
+		Meta_Normalizer::register_hooks();
+
+		$order = OrderHelper::create_order();
+		$items = $order->get_items();
+		$item  = reset( $items );
+		$item->update_meta_data( '_woocommerce_pos_data', '{"register":"front","flags":["sale"]}' );
+		$item->save_meta_data();
+		$order->update_meta_data( '_wcpos_tax_ids', '["ES123","EU456"]' );
+		$order->update_meta_data( 'php_array_fixture', array( 'already' => 'typed' ) );
+		$order->save_meta_data();
+
+		( new Sync_Index() )->record_order_change( $order->get_id(), 'hook:update', false );
+
+		$response = ( new Orders_Controller() )->pull_orders(
+			$this->request(
+				array(
+					'limit' => 100,
+					'updated_at_gmt' => '1970-01-01T00:00:00.000Z',
+					'order_id' => 0,
+					'sequence' => 0,
+				)
+			)
+		);
+		$document   = $response->get_data()['documents'][0];
+		$payload    = $document['payload'];
+		$order_meta = array_column( $payload['meta_data'], 'value', 'key' );
+		$line_meta  = array_column( $payload['line_items'][0]['meta_data'], 'value', 'key' );
+
+		// Decoded JSON-object strings arrive as stdClass (shape-preserving decode); assert the wire JSON.
+		$this->assertSame( '{"register":"front","flags":["sale"]}', wp_json_encode( $line_meta['_woocommerce_pos_data'] ) );
+		$this->assertSame( array( 'ES123', 'EU456' ), $order_meta['_wcpos_tax_ids'] );
+		$this->assertSame( array( 'already' => 'typed' ), $order_meta['php_array_fixture'] );
+		$this->assertIsString( $order_meta[ Pos_Uuid::META_KEY ] );
+		$this->assertSame( Order_Serializer::canonical_revision( $payload ), $document['sync']['revision'] );
+
+		$historical = $payload;
+		foreach ( $historical['meta_data'] as $index => $entry ) {
+			// Untouched entries are still live WC_Meta_Data objects — read the key shape-tolerantly.
+			$key = $entry instanceof \WC_Meta_Data ? $entry->key : $entry['key'];
+			if ( '_wcpos_tax_ids' === $key ) {
+				$historical['meta_data'][ $index ]['value'] = '["ES123","EU456"]';
+			}
+		}
+		foreach ( $historical['line_items'][0]['meta_data'] as $index => $entry ) {
+			if ( '_woocommerce_pos_data' === $entry['key'] ) {
+				$historical['line_items'][0]['meta_data'][ $index ]['value'] = '{"register":"front","flags":["sale"]}';
+			}
+		}
+		$this->assertNotSame( Order_Serializer::canonical_revision( $historical ), $document['sync']['revision'] );
 	}
 
 	/**

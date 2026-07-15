@@ -12,6 +12,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
 use WCPOS\WooCommercePOS\Sync\Write_Controller;
@@ -197,6 +198,73 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( 41, $response->get_data()['document']['id'] );
+	}
+
+	public function test_create_response_document_emits_typed_meta_and_plain_uuid(): void {
+		$fixture = $this->fixture( 'product-create' );
+		$bare    = array(
+			'id' => 501,
+			'name' => 'Typed product',
+			'meta_data' => array(
+				array( 'key' => 'typed_meta_fixture', 'value' => '{"source":"create"}' ),
+				array( 'key' => 'php_array_fixture', 'value' => array( 'already' => 'typed' ) ),
+			),
+		);
+		$this->store->resolve_results             = array( 0, 501 );
+		$GLOBALS['wcpos_sync_contract_responses'] = array(
+			new WP_REST_Response( array( 'id' => 501 ), 201 ),
+			new WP_REST_Response( $bare, 200 ),
+		);
+
+		$response = $this->server->dispatch( $this->request( 'products', $fixture['envelope'], $fixture['headers'] ) );
+		$data     = $response->get_data();
+		$meta     = array_column( $data['document']['meta_data'], 'value', 'key' );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( '{"source":"create"}', wp_json_encode( $meta['typed_meta_fixture'] ) );
+		$this->assertSame( array( 'already' => 'typed' ), $meta['php_array_fixture'] );
+		$this->assertSame( $fixture['envelope']['recordId'], $meta[ Pos_Uuid::META_KEY ] );
+		$this->assertIsString( $meta[ Pos_Uuid::META_KEY ] );
+		$this->assertSame( Revision::compute( Meta_Normalizer::normalize( $bare ) ), $data['currentRevision'] );
+	}
+
+	public function test_update_response_document_emits_typed_meta_and_plain_uuid(): void {
+		$current = array(
+			'id' => 601,
+			'code' => 'save10',
+			'amount' => '10.00',
+			'meta_data' => array(
+				array( 'key' => 'typed_meta_fixture', 'value' => '{"source":"before"}' ),
+			),
+		);
+		$updated = array(
+			'id' => 601,
+			'code' => 'save10',
+			'amount' => '12.00',
+			'meta_data' => array(
+				array( 'key' => 'typed_meta_fixture', 'value' => '["after"]' ),
+			),
+		);
+		$revision            = Revision::compute( Meta_Normalizer::normalize( $current ) );
+		$this->store->resolve = 601;
+		$GLOBALS['wcpos_sync_contract_responses'] = array(
+			new WP_REST_Response( $current, 200 ),
+			new WP_REST_Response( array( 'id' => 601 ), 200 ),
+			new WP_REST_Response( $updated, 200 ),
+		);
+		$fixture                             = $this->fixture( 'coupon-update' );
+		$fixture['envelope']['baseRevision'] = $revision;
+		$fixture['headers']['If-Match']      = '"' . $revision . '"';
+
+		$response = $this->server->dispatch( $this->request( 'coupons', $fixture['envelope'], $fixture['headers'] ) );
+		$data     = $response->get_data();
+		$meta     = array_column( $data['document']['meta_data'], 'value', 'key' );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'after' ), $meta['typed_meta_fixture'] );
+		$this->assertSame( $fixture['envelope']['recordId'], $meta[ Pos_Uuid::META_KEY ] );
+		$this->assertIsString( $meta[ Pos_Uuid::META_KEY ] );
+		$this->assertSame( Revision::compute( Meta_Normalizer::normalize( $updated ) ), $data['currentRevision'] );
 	}
 
 	public function test_push_rejects_a_body_collection_that_disagrees_with_the_route(): void {

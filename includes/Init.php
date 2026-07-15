@@ -47,9 +47,9 @@ class Init {
 		$sync_schema_latched = \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_VERSION === get_option( \WCPOS\WooCommercePOS\Sync\Api::SCHEMA_OPTION, null );
 		if ( \WCPOS\WooCommercePOS\Sync\Api::is_enabled() ) {
 			if ( $sync_schema_latched ) {
-				// Stamp canonical revisions first, while the proxied payload is still bare.
-				// UUID and digest stamps run at priority 10 and must not change the bytes
-				// used by the write-side revision recomputation.
+				// Normalize structured meta at priority 5, before revision stamps at 9
+				// and UUID, digest, and variable-price stamps at priority 10.
+				\WCPOS\WooCommercePOS\Sync\Meta_Normalizer::register_hooks();
 				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );
 				add_filter( 'woocommerce_pos_sync_serialized_product', array( \WCPOS\WooCommercePOS\Sync\Variable_Prices::class, 'stamp_serialized_variable_prices' ), 10, 3 );
 				add_filter( 'woocommerce_pos_sync_serialized_order', array( \WCPOS\WooCommercePOS\Sync\Pos_Uuid::class, 'stamp_serialized_record' ), 10, 3 );

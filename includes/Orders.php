@@ -282,9 +282,11 @@ class Orders {
 			}
 
 			// Misc products are synthetic and never persisted to DB, so we can
-			// safely apply POS price context directly.
-			$pos_data = json_decode( $pos_data_json, true );
-			if ( JSON_ERROR_NONE === json_last_error() && \is_array( $pos_data ) ) {
+			// safely apply POS price context directly. Shape-tolerant read: the
+			// storage may hold the historical JSON string or a native array
+			// (after a typed sync push lands through wc/v3).
+			$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
+			if ( \is_array( $pos_data ) ) {
 				if ( isset( $pos_data['price'] ) ) {
 					$product->set_price( $pos_data['price'] );
 				}
@@ -317,8 +319,8 @@ class Orders {
 			return $product;
 		}
 
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
+		$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
+		if ( ! \is_array( $pos_data ) ) {
 			return $product;
 		}
 
@@ -569,12 +571,7 @@ class Orders {
 			return null;
 		}
 
-		$pos_data = json_decode( $pos_data_json, true );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! \is_array( $pos_data ) ) {
-			return null;
-		}
-
-		return $pos_data;
+		return \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $pos_data_json );
 	}
 
 	/**
@@ -626,14 +623,14 @@ class Orders {
 
 		foreach ( $meta_data as $meta ) {
 			if ( '_woocommerce_pos_data' === $meta->key ) {
-				$pos_data = json_decode( $meta->value, true );
+				$pos_data = \WCPOS\WooCommercePOS\Sync\Meta_Normalizer::decode_to_array( $meta->value );
 
-				if ( JSON_ERROR_NONE === json_last_error() ) {
+				if ( null !== $pos_data ) {
 					if ( isset( $pos_data['tax_status'] ) && 'none' == $pos_data['tax_status'] ) {
 						$item->set_taxes( false );
 					}
 				} else {
-					Logger::log( 'JSON parse error: ' . json_last_error_msg() );
+					Logger::log( 'Unreadable _woocommerce_pos_data meta value on order item.' );
 				}
 
 				break;
