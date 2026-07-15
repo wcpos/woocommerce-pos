@@ -844,7 +844,7 @@ class Write_Controller extends WP_REST_Controller {
 	/**
 	 * Dispatch one raw WooCommerce mutation with the client-tier grant scoped to it.
 	 *
-	 * @return WP_REST_Response|WP_Error
+	 * @return WP_REST_Response
 	 */
 	private function dispatch_write( WP_REST_Request $request ) {
 		add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
