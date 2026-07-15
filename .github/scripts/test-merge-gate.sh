@@ -62,9 +62,6 @@ if [[ "$args" == pr\ checks* ]]; then
     printf 'skipping\tSKIPPED\n'
     exit 0
   fi
-  if [[ "$check_name" == "CodeRabbit" && "${MOCK_CODERABBIT:-missing}" == "missing" ]]; then
-    exit 0
-  fi
   printf 'pass\tSUCCESS\n'
   exit 0
 fi
@@ -125,119 +122,60 @@ pot_patch="diff --git a/${TEST_POT_FILE} b/${TEST_POT_FILE}
  msgid \"Old string\"
 +msgid \"New string\""
 
-test_matrix_patch="diff --git a/.github/test-matrix.json b/.github/test-matrix.json
---- a/.github/test-matrix.json
-+++ b/.github/test-matrix.json
-@@ -1,11 +1,11 @@
--  \"lastUpdated\": \"2026-04-29\",
-+  \"lastUpdated\": \"2026-05-21\",
--    \"minimum\": \"6.8\",
--    \"stable\": \"6.9.4\"
-+    \"minimum\": \"6.9.4\",
-+    \"stable\": \"7.0\""
-
-test_matrix_extra_code_patch="diff --git a/.github/test-matrix.json b/.github/test-matrix.json
---- a/.github/test-matrix.json
-+++ b/.github/test-matrix.json
-@@ -20,3 +20,4 @@
-     \"matrix\": [
-+      { \"php\": \"8.5\", \"wp\": \"stable\", \"wc\": \"stable\" },"
-
-composer_dev_dependency_patch="diff --git a/composer.json b/composer.json
---- a/composer.json
-+++ b/composer.json
-@@ -11,7 +11,7 @@
--    \"friendsofphp/php-cs-fixer\": \"v3.95.1\",
-+    \"friendsofphp/php-cs-fixer\": \"v3.95.4\","
-
-run_case "test-matrix bot bypasses CodeRabbit but waits for smoke test" pass \
-  PR_AUTHOR="wcpos-bot[bot]" \
-  PR_TITLE="chore: update test matrix versions" \
-  MOCK_CHANGED_FILES=".github/test-matrix.json" \
-  MOCK_PATCH="$test_matrix_patch" \
-  MOCK_CODERABBIT="missing"
-
-run_case "test-matrix bot rejects skipped smoke test" fail \
-  PR_AUTHOR="wcpos-bot[bot]" \
-  PR_TITLE="chore: update test matrix versions" \
-  MOCK_CHANGED_FILES=".github/test-matrix.json" \
-  MOCK_PATCH="$test_matrix_patch" \
-  MOCK_CODERABBIT="missing" \
-  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
-
-run_case "test-matrix bot with extra file still requires CodeRabbit" fail \
-  PR_AUTHOR="wcpos-bot[bot]" \
-  PR_TITLE="chore: update test matrix versions" \
-  MOCK_CHANGED_FILES=".github/test-matrix.json
-README.md" \
-  MOCK_PATCH="$test_matrix_patch" \
-  MOCK_CODERABBIT="missing"
-
-run_case "test-matrix bot with matrix structure change still requires CodeRabbit" fail \
-  PR_AUTHOR="wcpos-bot[bot]" \
-  PR_TITLE="chore: update test matrix versions" \
-  MOCK_CHANGED_FILES=".github/test-matrix.json" \
-  MOCK_PATCH="$test_matrix_extra_code_patch" \
-  MOCK_CODERABBIT="missing"
-
-run_case "dependabot dev-dependency bypasses CodeRabbit but waits for smoke test" pass \
-  PR_AUTHOR="dependabot[bot]" \
-  PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
-  MOCK_CHANGED_FILES="composer.json" \
-  MOCK_PATCH="$composer_dev_dependency_patch" \
-  MOCK_CODERABBIT="missing"
-
-run_case "dependabot single composer dev-dependency update bypasses CodeRabbit but waits for smoke test" pass \
-  PR_AUTHOR="dependabot[bot]" \
-  PR_TITLE="build(deps-dev): update php-stubs/woocommerce-stubs requirement from v10.9.1 to v10.9.2 in the dev-dependencies group" \
-  MOCK_CHANGED_FILES="composer.json" \
-  MOCK_PATCH="$composer_dev_dependency_patch" \
-  MOCK_CODERABBIT="missing"
-
-run_case "dependabot dev-dependency with extra file still requires CodeRabbit" fail \
-  PR_AUTHOR="dependabot[bot]" \
-  PR_TITLE="build(deps-dev): bump the dev-dependencies group across 1 directory with 3 updates" \
-  MOCK_CHANGED_FILES="composer.json
-README.md" \
-  MOCK_PATCH="$composer_dev_dependency_patch" \
-  MOCK_CODERABBIT="missing"
+# Fast-path bypasses (short-circuit before any CI is queried).
 
 run_case "translation-version bypass" pass \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_patch" \
-  MOCK_CODERABBIT="missing" \
   MOCK_NO_CHECKS_EXPECTED="true"
 
-run_case "human PR requires CodeRabbit" fail \
-  PR_AUTHOR="kilbot" \
-  PR_TITLE="feat: normal change" \
-  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
-  MOCK_PATCH="$translation_patch" \
-  MOCK_CODERABBIT="missing"
+run_case "POT-only bypass" pass \
+  PR_AUTHOR="wcpos-bot[bot]" \
+  PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
+  MOCK_CHANGED_FILES="$TEST_POT_FILE" \
+  MOCK_PATCH="$pot_patch" \
+  MOCK_NO_CHECKS_EXPECTED="true"
 
-run_case "invalid translation PR does not bypass CodeRabbit" fail \
+# Invalid bypass candidates must fall through to the normal path and satisfy the
+# required checks — proven here by failing the Smoke Test and expecting a block.
+
+run_case "invalid translation PR does not bypass required checks" fail \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE
 README.md" \
   MOCK_PATCH="$translation_patch" \
-  MOCK_CODERABBIT="missing"
+  MOCK_FAIL_CHECK="Smoke Test (Latest Stable)"
 
-run_case "translation version plus extra code does not bypass" fail \
+run_case "translation version plus extra code does not bypass required checks" fail \
   PR_AUTHOR="translations-ci[bot]" \
   PR_TITLE="chore: update translation version to 2026.5.6" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_extra_code_patch" \
-  MOCK_CODERABBIT="missing"
+  MOCK_FAIL_CHECK="Smoke Test (Latest Stable)"
 
-run_case "human PR rejects skipped required check" fail \
+# Normal path: required checks are the only gate.
+
+run_case "human PR passes when required checks pass" pass \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch"
+
+run_case "human PR fails when smoke test fails" fail \
   PR_AUTHOR="kilbot" \
   PR_TITLE="feat: normal change" \
   MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
   MOCK_PATCH="$translation_patch" \
-  MOCK_CODERABBIT="present" \
+  MOCK_FAIL_CHECK="Smoke Test (Latest Stable)"
+
+run_case "human PR rejects skipped required check for PHP changes" fail \
+  PR_AUTHOR="kilbot" \
+  PR_TITLE="feat: normal change" \
+  MOCK_CHANGED_FILES="$TEST_TRANSLATION_FILE" \
+  MOCK_PATCH="$translation_patch" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
 run_case "human PR allows skipped smoke test for non-PHP changes" pass \
@@ -245,7 +183,6 @@ run_case "human PR allows skipped smoke test for non-PHP changes" pass \
   PR_TITLE="feat: redesign gift receipt" \
   MOCK_CHANGED_FILES="templates/gallery/gift-receipt.html" \
   MOCK_PATCH="" \
-  MOCK_CODERABBIT="present" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
 
 run_case "human PR rejects skipped smoke test for composer lock changes" fail \
@@ -253,23 +190,6 @@ run_case "human PR rejects skipped smoke test for composer lock changes" fail \
   PR_TITLE="chore: update dependencies" \
   MOCK_CHANGED_FILES="composer.lock" \
   MOCK_PATCH="" \
-  MOCK_CODERABBIT="present" \
   MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
-
-run_case "human PR still requires CodeRabbit for non-PHP changes" fail \
-  PR_AUTHOR="kilbot" \
-  PR_TITLE="feat: redesign gift receipt" \
-  MOCK_CHANGED_FILES="templates/gallery/gift-receipt.html" \
-  MOCK_PATCH="" \
-  MOCK_CODERABBIT="missing" \
-  MOCK_SKIP_CHECK="Smoke Test (Latest Stable)"
-
-run_case "POT-only bypass" pass \
-  PR_AUTHOR="wcpos-bot[bot]" \
-  PR_TITLE="chore(i18n): update ${TEST_POT_FILE}" \
-  MOCK_CHANGED_FILES="$TEST_POT_FILE" \
-  MOCK_PATCH="$pot_patch" \
-  MOCK_CODERABBIT="missing" \
-  MOCK_NO_CHECKS_EXPECTED="true"
 
 echo "merge-gate tests passed"
