@@ -2,11 +2,14 @@
 /**
  * Sync status REST API controller.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Health;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Response;

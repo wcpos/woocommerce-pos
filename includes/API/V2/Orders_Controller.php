@@ -2,11 +2,18 @@
 /**
  * WCPOS sync read surface.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Order_Document;
+use WCPOS\WooCommercePOS\Sync\Order_Pull_Planner;
+use WCPOS\WooCommercePOS\Sync\Order_Query;
+use WCPOS\WooCommercePOS\Sync\Order_Serializer;
+use WCPOS\WooCommercePOS\Sync\Sync_Index;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;

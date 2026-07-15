@@ -9,8 +9,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Customer;
+use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Integrity_Controller;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WP_REST_Request;
@@ -18,8 +18,8 @@ use WP_REST_Request;
 /**
  * UUID backfill and integrity rebuild behavior on a healthy sync store.
  *
- * @covers \WCPOS\WooCommercePOS\Sync\Uuid_Backfill_Controller
- * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Uuid_Backfill_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Integrity_Controller
  */
 class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 	/**
@@ -48,7 +48,7 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 	 * @return array<string, mixed>
 	 */
 	private function backfill( string $collection, int $since_id = 0, string $mode = 'missing' ): array {
-		$request = $this->wp_rest_post_request( '/wcpos/v1/sync/uuid/backfill' );
+		$request = $this->wp_rest_post_request( '/wcpos/v2/uuid/backfill' );
 		$request->set_query_params(
 			array(
 				'collection' => $collection,
@@ -206,7 +206,7 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 		$user_id = $this->factory->user->create( array( 'role' => 'cashier' ) );
 		wp_set_current_user( $user_id );
 
-		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
+		foreach ( array( '/wcpos/v2/uuid/backfill', '/wcpos/v2/orders/index/backfill', '/wcpos/v2/integrity/rebuild' ) as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 			$this->assertSame( 403, $response->get_status(), $path );
 			$this->assertNotSame( 503, $response->get_status(), $path );
@@ -236,7 +236,7 @@ class Test_Sync_Ops_Endpoints extends Sync_REST_Store_Test_Case {
 		$before = ( new Integrity_Controller( $digest ) )->scan( $scan )->get_data();
 		$this->assertContains( $product->get_id(), array_column( $before['changes'], 'id' ) );
 
-		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v1/sync/integrity/rebuild' ) );
+		$response = $this->server->dispatch( $this->wp_rest_post_request( '/wcpos/v2/integrity/rebuild' ) );
 
 		$this->assertSame( 200, $response->get_status(), wp_json_encode( $response->get_data() ) );
 		$this->assertSame( 'hash-checksum', $response->get_data()['candidate'] );

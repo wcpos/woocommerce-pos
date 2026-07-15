@@ -24,7 +24,7 @@ use WP_REST_Request;
  * @internal
  *
  * @covers \WCPOS\WooCommercePOS\Sync\Api
- * @covers \WCPOS\WooCommercePOS\Sync\Status_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Status_Controller
  */
 class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -77,21 +77,21 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayNotHasKey( 'healthy', $data );
 		$this->assertArrayNotHasKey( 'missing_tables', $data );
 		$this->assertArrayNotHasKey( 'schema_version', $data );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/status', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/products', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/changes/sequence-log', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/changes/revision-hash', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/changes/range-checksum', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/changes/config-fingerprint', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/digests', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/scan', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/bucket', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/integrity/rebuild', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/uuid/backfill', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/variations', $routes );
-		$this->assertArrayHasKey( '/wcpos/v1/sync/resolve/barcode', $routes );
-		$this->assertArrayNotHasKey( '/wcpos/v1/sync/changes/date-modified', $routes );
-		$this->assertArrayNotHasKey( '/wcpos/v1/sync/changes/audit-list', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/status', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/products', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/changes/sequence-log', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/changes/revision-hash', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/changes/range-checksum', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/changes/config-fingerprint', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/digests', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/integrity/scan', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/integrity/bucket', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/integrity/rebuild', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/uuid/backfill', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/variations', $routes );
+		$this->assertArrayHasKey( '/wcpos/v2/resolve/barcode', $routes );
+		$this->assertArrayNotHasKey( '/wcpos/v2/changes/date-modified', $routes );
+		$this->assertArrayNotHasKey( '/wcpos/v2/changes/audit-list', $routes );
 		$this->assertArrayNotHasKey( '/wc/v3/sync', $routes );
 		$this->assertArrayNotHasKey( '/wc/v3/sync/status', $routes );
 	}
@@ -101,7 +101,7 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_sync_product_proxy_stamps_uuid_and_revision(): void {
 		$product = ProductHelper::create_simple_product();
-		$request = $this->wp_rest_get_request( '/wcpos/v1/sync/products' );
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
 		$request->set_param( 'include', array( $product->get_id() ) );
 
 		$response = $this->server->dispatch( $request );

@@ -9,9 +9,10 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 // phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab tests retain compact contract-focused documentation.
 
-use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WCPOS\WooCommercePOS\API as WCPOS_API;
 use WCPOS\WooCommercePOS\Init;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Header_Mirror;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -62,7 +63,7 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 				$this->sent_headers[ $key ] = $value;
 			}
 		};
-		$request = new WP_REST_Request( 'OPTIONS', '/wcpos/v1/sync/push/products' );
+		$request = new WP_REST_Request( 'OPTIONS', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/products' );
 
 		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 

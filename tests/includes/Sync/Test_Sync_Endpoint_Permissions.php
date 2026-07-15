@@ -109,7 +109,7 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 			$this->assertSame( 200, $response->get_status(), $request->get_route() );
 		}
 
-		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/status' ) );
+		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
 		$this->assertSame( 403, $response->get_status() );
 	}
 
@@ -150,32 +150,32 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 	private function read_requests(): array {
 		$requests = array();
 		$paths    = array(
-			'/wcpos/v1/sync/status',
-			'/wcpos/v1/sync/products',
-			'/wcpos/v1/sync/variations',
-			'/wcpos/v1/sync/customers',
-			'/wcpos/v1/sync/orders',
-			'/wcpos/v1/sync/orders/pull',
-			'/wcpos/v1/sync/coupons',
-			'/wcpos/v1/sync/taxes',
-			'/wcpos/v1/sync/products/categories',
-			'/wcpos/v1/sync/products/brands',
-			'/wcpos/v1/sync/products/tags',
-			'/wcpos/v1/sync/changes/sequence-log',
-			'/wcpos/v1/sync/changes/revision-hash',
-			'/wcpos/v1/sync/changes/range-checksum',
-			'/wcpos/v1/sync/changes/config-fingerprint',
-			'/wcpos/v1/sync/digests',
-			'/wcpos/v1/sync/integrity/scan',
-			'/wcpos/v1/sync/integrity/bucket',
-			'/wcpos/v1/sync/resolve/barcode',
+			'/wcpos/v2/status',
+			'/wcpos/v2/products',
+			'/wcpos/v2/variations',
+			'/wcpos/v2/customers',
+			'/wcpos/v2/orders',
+			'/wcpos/v2/orders/pull',
+			'/wcpos/v2/coupons',
+			'/wcpos/v2/taxes',
+			'/wcpos/v2/products/categories',
+			'/wcpos/v2/products/brands',
+			'/wcpos/v2/products/tags',
+			'/wcpos/v2/changes/sequence-log',
+			'/wcpos/v2/changes/revision-hash',
+			'/wcpos/v2/changes/range-checksum',
+			'/wcpos/v2/changes/config-fingerprint',
+			'/wcpos/v2/digests',
+			'/wcpos/v2/integrity/scan',
+			'/wcpos/v2/integrity/bucket',
+			'/wcpos/v2/resolve/barcode',
 		);
 
 		foreach ( $paths as $path ) {
 			$request = $this->wp_rest_get_request( $path );
-			if ( '/wcpos/v1/sync/variations' === $path || '/wcpos/v1/sync/digests' === $path ) {
+			if ( '/wcpos/v2/variations' === $path || '/wcpos/v2/digests' === $path ) {
 				$request->set_query_params( array( 'include' => '1' ) );
-			} elseif ( '/wcpos/v1/sync/resolve/barcode' === $path ) {
+			} elseif ( '/wcpos/v2/resolve/barcode' === $path ) {
 				$request->set_query_params( array( 'code' => 'missing' ) );
 			}
 			$requests[] = $request;
@@ -193,9 +193,9 @@ class Test_Sync_Endpoint_Permissions extends Sync_REST_Store_Test_Case {
 		$requests = array();
 		foreach (
 			array(
-				'/wcpos/v1/sync/uuid/backfill',
-				'/wcpos/v1/sync/orders/index/backfill',
-				'/wcpos/v1/sync/integrity/rebuild',
+				'/wcpos/v2/uuid/backfill',
+				'/wcpos/v2/orders/index/backfill',
+				'/wcpos/v2/integrity/rebuild',
 			) as $path
 		) {
 			$requests[] = $this->wp_rest_post_request( $path );

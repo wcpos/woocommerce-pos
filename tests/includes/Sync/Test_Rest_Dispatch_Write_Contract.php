@@ -11,11 +11,11 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
+use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Revision;
-use WCPOS\WooCommercePOS\Sync\Write_Controller;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -97,7 +97,7 @@ final class Dispatch_Write_Controller extends Write_Controller {
 }
 
 /**
- * @covers \WCPOS\WooCommercePOS\Sync\Write_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Write_Controller
  */
 class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	/** @var Dispatch_Fake_Mutation_Store */
@@ -152,7 +152,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 	}
 
 	private function request( string $collection, array $envelope, array $headers = array() ): WP_REST_Request {
-		$request = $this->wp_rest_post_request( '/wcpos/v1/sync/push/' . $collection );
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/' . $collection );
 		$request->set_header( 'Content-Type', 'application/json' );
 		foreach ( $headers as $name => $value ) {
 			$request->set_header( $name, $value );
@@ -287,7 +287,7 @@ class Test_Rest_Dispatch_Write_Contract extends Sync_REST_Store_Test_Case {
 
 	public function test_push_requires_application_json(): void {
 		$fixture = $this->fixture( 'product-create' );
-		$request = $this->wp_rest_post_request( '/wcpos/v1/sync/push/products' );
+		$request = $this->wp_rest_post_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'push/products' );
 		$request->set_header( 'Content-Type', 'application/x-www-form-urlencoded' );
 		$request->set_body_params( $fixture['envelope'] );
 

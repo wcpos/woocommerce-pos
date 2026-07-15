@@ -9,29 +9,29 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WC_Product_Variation;
-use WCPOS\WooCommercePOS\Sync\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\API\V2\Changes_Controller;
+use WCPOS\WooCommercePOS\API\V2\Digests_Controller;
+use WCPOS\WooCommercePOS\API\V2\Integrity_Controller;
+use WCPOS\WooCommercePOS\API\V2\Resolve_Controller;
+use WCPOS\WooCommercePOS\API\V2\Variations_Controller;
 use WCPOS\WooCommercePOS\Sync\Change_Log;
-use WCPOS\WooCommercePOS\Sync\Changes_Controller;
-use WCPOS\WooCommercePOS\Sync\Digests_Controller;
-use WCPOS\WooCommercePOS\Sync\Integrity_Controller;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
-use WCPOS\WooCommercePOS\Sync\Resolve_Controller;
 use WCPOS\WooCommercePOS\Sync\Revision;
-use WCPOS\WooCommercePOS\Sync\Variations_Controller;
 use WP_REST_Request;
 
 /**
  * Read controller behavior tests.
  *
- * @covers \WCPOS\WooCommercePOS\Sync\Changes_Controller
- * @covers \WCPOS\WooCommercePOS\Sync\Digests_Controller
- * @covers \WCPOS\WooCommercePOS\Sync\Integrity_Controller
- * @covers \WCPOS\WooCommercePOS\Sync\Resolve_Controller
- * @covers \WCPOS\WooCommercePOS\Sync\Variations_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Changes_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Digests_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Integrity_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Resolve_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Variations_Controller
  */
 class Test_Sync_Read_Controllers extends Sync_REST_Store_Test_Case {
 	/**

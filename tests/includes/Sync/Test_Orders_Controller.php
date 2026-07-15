@@ -7,22 +7,22 @@
 
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
+// phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
+
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
-use WCPOS\WooCommercePOS\Sync\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\API\V2\Catalog_Proxy_Controller;
+use WCPOS\WooCommercePOS\API\V2\Orders_Controller;
 use WCPOS\WooCommercePOS\Sync\Meta_Normalizer;
 use WCPOS\WooCommercePOS\Sync\Order_Serializer;
-use WCPOS\WooCommercePOS\Sync\Orders_Controller;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Sync\Sync_Index;
 use WP_REST_Request;
 
-// phpcs:disable Squiz.Commenting, Generic.Commenting -- Ported lab documentation is preserved verbatim.
-
 /**
  * Order read-lane behavior tests.
  *
- * @covers \WCPOS\WooCommercePOS\Sync\Orders_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Orders_Controller
  * @covers \WCPOS\WooCommercePOS\Sync\Order_Query
  * @covers \WCPOS\WooCommercePOS\Sync\Order_Document
  */

@@ -19,7 +19,7 @@ use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
  *
  * @covers \WCPOS\WooCommercePOS\Sync\Api
  * @covers \WCPOS\WooCommercePOS\Sync\Health
- * @covers \WCPOS\WooCommercePOS\Sync\Status_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Status_Controller
  */
 class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
@@ -59,13 +59,28 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The enabled sync surface lives only at wcpos/v2.
+	 */
+	public function test_enabled_sync_status_uses_v2_without_legacy_sync_alias(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$current  = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' ) );
+		$legacy   = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/sync/status' ) );
+		$old_data = $legacy->get_data();
+
+		$this->assertSame( 200, $current->get_status() );
+		$this->assertSame( 404, $legacy->get_status() );
+		$this->assertSame( 'rest_no_route', $old_data['code'] );
+	}
+
+	/**
 	 * Authorized POS users can inspect the missing sync tables.
 	 */
 	public function test_sync_status_with_flag_enabled_and_cashier_returns_unhealthy_status(): void {
 		global $wpdb;
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/status' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -91,7 +106,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		( new Activator() )->install_sync_schema();
 		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/status' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
@@ -111,7 +126,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 * registration and the shared install-health gate apply.
 	 */
 	public function test_sync_orders_lanes_are_registered_and_health_gated(): void {
-		foreach ( array( '/wcpos/v1/sync/orders', '/wcpos/v1/sync/orders/pull' ) as $path ) {
+		foreach ( array( '/wcpos/v2/orders', '/wcpos/v2/orders/pull' ) as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
 
 			$this->assertEquals( 503, $response->get_status(), $path . ' was not registered or not health-gated.' );
@@ -143,7 +158,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		);
 		wp_set_current_user( $user_id );
 
-		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
+		$request  = $this->wp_rest_get_request( '/wcpos/v2/status' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertContains( $response->get_status(), array( 401, 403 ) );
@@ -155,26 +170,26 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_sync_read_endpoints_with_missing_tables_return_503(): void {
 		$paths = array(
-			'/wcpos/v1/sync/products',
-			'/wcpos/v1/sync/orders',
-			'/wcpos/v1/sync/orders/pull',
-			'/wcpos/v1/sync/changes/sequence-log',
-			'/wcpos/v1/sync/changes/revision-hash',
-			'/wcpos/v1/sync/changes/range-checksum',
-			'/wcpos/v1/sync/changes/config-fingerprint',
-			'/wcpos/v1/sync/digests',
-			'/wcpos/v1/sync/integrity/scan',
-			'/wcpos/v1/sync/integrity/bucket',
-			'/wcpos/v1/sync/variations',
-			'/wcpos/v1/sync/resolve/barcode',
+			'/wcpos/v2/products',
+			'/wcpos/v2/orders',
+			'/wcpos/v2/orders/pull',
+			'/wcpos/v2/changes/sequence-log',
+			'/wcpos/v2/changes/revision-hash',
+			'/wcpos/v2/changes/range-checksum',
+			'/wcpos/v2/changes/config-fingerprint',
+			'/wcpos/v2/digests',
+			'/wcpos/v2/integrity/scan',
+			'/wcpos/v2/integrity/bucket',
+			'/wcpos/v2/variations',
+			'/wcpos/v2/resolve/barcode',
 		);
 
 		foreach ( $paths as $path ) {
 			$request = $this->wp_rest_get_request( $path );
-			if ( '/wcpos/v1/sync/digests' === $path || '/wcpos/v1/sync/variations' === $path ) {
+			if ( '/wcpos/v2/digests' === $path || '/wcpos/v2/variations' === $path ) {
 				$request->set_query_params( array( 'include' => '1' ) );
 			}
-			if ( '/wcpos/v1/sync/resolve/barcode' === $path ) {
+			if ( '/wcpos/v2/resolve/barcode' === $path ) {
 				$request->set_query_params( array( 'code' => 'missing' ) );
 			}
 			$response = $this->server->dispatch( $request );
@@ -188,7 +203,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_sync_push_endpoints_with_missing_tables_return_503(): void {
 		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
-			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$path     = '/wcpos/v2/push/' . $collection;
 			$request  = $this->wp_rest_post_request( $path );
 			$response = $this->server->dispatch( $request );
 
@@ -201,7 +216,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 * Operations endpoints cannot run against or cure an unhealthy sync store.
 	 */
 	public function test_sync_ops_endpoints_with_missing_tables_return_503(): void {
-		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
+		foreach ( array( '/wcpos/v2/uuid/backfill', '/wcpos/v2/orders/index/backfill', '/wcpos/v2/integrity/rebuild' ) as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 
 			$this->assertSame( 503, $response->get_status(), $path );
@@ -216,14 +231,14 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $user_id );
 		$paths = array(
-			'/wcpos/v1/sync/products',
-			'/wcpos/v1/sync/orders',
-			'/wcpos/v1/sync/orders/pull',
-			'/wcpos/v1/sync/changes/sequence-log',
-			'/wcpos/v1/sync/digests',
-			'/wcpos/v1/sync/integrity/scan',
-			'/wcpos/v1/sync/variations',
-			'/wcpos/v1/sync/resolve/barcode',
+			'/wcpos/v2/products',
+			'/wcpos/v2/orders',
+			'/wcpos/v2/orders/pull',
+			'/wcpos/v2/changes/sequence-log',
+			'/wcpos/v2/digests',
+			'/wcpos/v2/integrity/scan',
+			'/wcpos/v2/variations',
+			'/wcpos/v2/resolve/barcode',
 		);
 
 		foreach ( $paths as $path ) {
@@ -244,7 +259,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 		wp_set_current_user( $user_id );
 
 		foreach ( array( 'products', 'orders', 'customers', 'categories', 'brands', 'variations', 'coupons' ) as $collection ) {
-			$path     = '/wcpos/v1/sync/push/' . $collection;
+			$path     = '/wcpos/v2/push/' . $collection;
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 
 			$this->assertContains( $response->get_status(), array( 401, 403 ), $path . ' bypassed the capability gate.' );

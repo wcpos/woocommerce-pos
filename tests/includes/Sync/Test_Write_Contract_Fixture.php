@@ -11,8 +11,8 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use ReflectionMethod;
 use stdClass;
+use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
-use WCPOS\WooCommercePOS\Sync\Write_Controller;
 use WP_Error;
 use WP_REST_Request;
 use WP_UnitTestCase;
@@ -20,7 +20,7 @@ use WP_UnitTestCase;
 /**
  * Consumer checks for the vendored canonical contract.
  *
- * @covers \WCPOS\WooCommercePOS\Sync\Write_Controller
+ * @covers \WCPOS\WooCommercePOS\API\V2\Write_Controller
  * @covers \WCPOS\WooCommercePOS\Sync\Header_Mirror
  */
 class Test_Write_Contract_Fixture extends WP_UnitTestCase {

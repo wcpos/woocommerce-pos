@@ -2,15 +2,21 @@
 /**
  * UUID backfill and collision repair endpoint.
  *
- * @package WCPOS\WooCommercePOS\Sync
+ * @package WCPOS\WooCommercePOS\API\V2
  */
 
-namespace WCPOS\WooCommercePOS\Sync;
+namespace WCPOS\WooCommercePOS\API\V2;
 
 use Automattic\WooCommerce\Utilities\OrderUtil;
 use Exception;
 use WC_Coupon;
 use WC_Customer;
+use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Collections;
+use WCPOS\WooCommercePOS\Sync\Customer_Role;
+use WCPOS\WooCommercePOS\Sync\Endpoint_Permissions;
+use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
+use WCPOS\WooCommercePOS\Sync\Term_Meta_Adapter;
 use WP_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
