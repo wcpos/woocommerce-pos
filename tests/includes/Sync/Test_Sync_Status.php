@@ -59,10 +59,11 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Administrators can inspect the missing sync tables.
+	 * Authorized POS users can inspect the missing sync tables.
 	 */
-	public function test_sync_status_with_flag_enabled_and_admin_returns_unhealthy_status(): void {
+	public function test_sync_status_with_flag_enabled_and_cashier_returns_unhealthy_status(): void {
 		global $wpdb;
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
 		$response = $this->server->dispatch( $request );
@@ -88,6 +89,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_sync_status_after_install_returns_healthy_status(): void {
 		( new Activator() )->install_sync_schema();
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
 		$response = $this->server->dispatch( $request );
@@ -131,16 +133,14 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Users without WooCommerce management access cannot inspect sync status.
+	 * Users without POS access cannot inspect sync status.
 	 */
-	public function test_sync_status_without_manage_woocommerce_is_not_authorized(): void {
+	public function test_sync_status_without_access_woocommerce_pos_is_not_authorized(): void {
 		$user_id = $this->factory->user->create(
 			array(
 				'role' => 'subscriber',
 			)
 		);
-		$user = get_user_by( 'id', $user_id );
-		$user->add_cap( 'access_woocommerce_pos' );
 		wp_set_current_user( $user_id );
 
 		$request  = $this->wp_rest_get_request( '/wcpos/v1/sync/status' );
@@ -201,7 +201,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	 * Operations endpoints cannot run against or cure an unhealthy sync store.
 	 */
 	public function test_sync_ops_endpoints_with_missing_tables_return_503(): void {
-		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
+		foreach ( array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ) as $path ) {
 			$response = $this->server->dispatch( $this->wp_rest_post_request( $path ) );
 
 			$this->assertSame( 503, $response->get_status(), $path );
@@ -212,7 +212,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Capability checks run before the health gate on every read endpoint.
 	 */
-	public function test_sync_read_endpoints_without_manage_woocommerce_are_not_authorized(): void {
+	public function test_sync_read_endpoints_without_access_woocommerce_pos_are_not_authorized(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $user_id );
 		$paths = array(
@@ -239,7 +239,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	/**
 	 * Capability checks run before health disclosure on every push collection.
 	 */
-	public function test_sync_push_endpoints_without_manage_woocommerce_are_not_authorized(): void {
+	public function test_sync_push_endpoints_without_access_woocommerce_pos_are_not_authorized(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $user_id );
 

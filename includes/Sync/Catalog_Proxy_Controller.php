@@ -74,7 +74,14 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		// targeted `include=` pulls, and no other product query on the request is affected. The client
 		// then never holds them, and Leg-3 prunes any that were toggled `online_only` after being pulled.
 		$this->add_pos_visibility_filter( $resource );
+		$relax_wc_permissions = \in_array( $resource, array( 'coupons', 'taxes' ), true );
+		if ( $relax_wc_permissions ) {
+			add_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10, 4 );
+		}
 		$response = rest_do_request( $inner );
+		if ( $relax_wc_permissions ) {
+			remove_filter( 'woocommerce_rest_check_permissions', array( $this, 'wcpos_check_permissions' ), 10 );
+		}
 		$this->remove_pos_visibility_filter();
 		if ( $response->is_error() ) {
 			return $response;
@@ -83,6 +90,28 @@ class Catalog_Proxy_Controller extends WP_REST_Controller {
 		$response->set_data( $data );
 
 		return $response;
+	}
+
+	/**
+	 * Authorize proxied coupon and tax reads for POS users.
+	 *
+	 * WooCommerce checks the `shop_coupon` post type for coupons and the `settings`
+	 * object for taxes. This filter is attached only while those wc/v3 requests are
+	 * in flight, so other permission checks remain unchanged.
+	 *
+	 * @param bool   $permission The current permission.
+	 * @param string $context    The request context.
+	 * @param int    $object_id  The object ID.
+	 * @param string $post_type  The object type passed by WooCommerce.
+	 *
+	 * @return bool
+	 */
+	public function wcpos_check_permissions( $permission, $context, $object_id, $post_type ) {
+		if ( ! $permission && \in_array( $post_type, array( 'settings', 'shop_coupon' ), true ) && 'read' === $context ) {
+			$permission = current_user_can( 'access_woocommerce_pos' );
+		}
+
+		return $permission;
 	}
 
 

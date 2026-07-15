@@ -400,15 +400,17 @@ class API {
 			return $result;
 		}
 
-		// Baseline permission gate: all POS endpoints require access_woocommerce_pos.
+		// Baseline permission gate: POS endpoints require access_woocommerce_pos; the three
+		// sync admin operations instead use their route-level manage_woocommerce check.
 		// Exempt public auth, printer-token polling, and authenticated receipt denials that need
 		// the receipt-specific error code.
 		$route                               = $request->get_route();
 		$has_route_specific_permission_error = is_user_logged_in() && 0 === strpos( $route, '/wcpos/v1/receipts/' );
 		$is_public_auth_route                = \in_array( $route, array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ), true );
 		$is_printer_token_route             = \in_array( $route, array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ), true );
+		$is_sync_admin_route                = is_user_logged_in() && current_user_can( 'manage_woocommerce' ) && \in_array( $route, array( '/wcpos/v1/sync/uuid/backfill', '/wcpos/v1/sync/orders/index/backfill', '/wcpos/v1/sync/integrity/rebuild' ), true );
 
-		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route ) {
+		if ( ! $is_public_auth_route && ! $has_route_specific_permission_error && ! $is_printer_token_route && ! $is_sync_admin_route ) {
 			if ( ! current_user_can( 'access_woocommerce_pos' ) ) {
 				if ( ! is_user_logged_in() ) {
 					return new \WP_Error(
