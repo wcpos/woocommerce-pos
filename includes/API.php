@@ -400,7 +400,8 @@ class API {
 			return $result;
 		}
 
-		// Baseline permission gate: all POS endpoints require access_woocommerce_pos.
+		// Baseline permission gate: POS endpoints require access_woocommerce_pos; the three
+		// sync admin operations instead use their route-level manage_woocommerce check.
 		// Exempt public auth, printer-token polling, and authenticated receipt denials that need
 		// the receipt-specific error code.
 		$route                               = $request->get_route();
