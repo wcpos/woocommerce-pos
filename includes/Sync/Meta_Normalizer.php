@@ -21,6 +21,15 @@ final class Meta_Normalizer {
 	}
 
 	/**
+	 * Unregister the shared pre-stamping normalization seams.
+	 */
+	public static function unregister_hooks(): void {
+		remove_filter( 'woocommerce_pos_sync_proxy_response', array( __CLASS__, 'normalize' ), 5 );
+		remove_filter( 'woocommerce_pos_sync_serialized_product', array( __CLASS__, 'normalize' ), 5 );
+		remove_filter( 'woocommerce_pos_sync_serialized_order', array( __CLASS__, 'normalize' ), 5 );
+	}
+
+	/**
 	 * Recursively normalize every meta_data array in a document or payload.
 	 *
 	 * @param mixed $payload Document or payload being prepared for the wire.
