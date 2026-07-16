@@ -5,7 +5,9 @@ test.describe('Plugin Activation', () => {
 		await adminPage.goto('/wp-admin/plugins.php');
 		
 		// Check that WCPOS plugin is listed
-		const wcposPlugin = adminPage.locator('tr[data-slug="woocommerce-pos"]');
+		const wcposPlugin = adminPage.locator(
+			'tr[data-slug="woocommerce-pos"]:not(.plugin-update-tr)'
+		);
 		await expect(wcposPlugin).toBeVisible();
 	});
 
@@ -13,7 +15,9 @@ test.describe('Plugin Activation', () => {
 		await adminPage.goto('/wp-admin/plugins.php');
 		
 		// Check that the plugin row has the active class
-		const wcposPlugin = adminPage.locator('tr[data-slug="woocommerce-pos"]');
+		const wcposPlugin = adminPage.locator(
+			'tr[data-slug="woocommerce-pos"]:not(.plugin-update-tr)'
+		);
 		await expect(wcposPlugin).toHaveClass(/active/);
 	});
 

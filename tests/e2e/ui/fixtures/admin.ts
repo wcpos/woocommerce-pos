@@ -96,6 +96,8 @@ export const test = base.extend<{ adminPage: Page }>({
 		});
 
 		page.on('requestfailed', (req) => {
+			// Navigating away cancels outstanding WP Admin requests without a response.
+			if (req.failure()?.errorText === 'net::ERR_ABORTED') return;
 			if (isIgnoredFailure(req.url(), 0)) return;
 			failedResponses.push({
 				url: req.url(),
