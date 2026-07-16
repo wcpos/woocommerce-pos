@@ -32,6 +32,20 @@ function isIgnoredFailure(url: string, status: number): boolean {
 		return true;
 	}
 
+	// WP Admin dashboard requests that are unavailable in wp-env are cosmetic.
+	if (status === 0 || status === 404) {
+		const action = parsed.searchParams.get('action') || '';
+		const ignoredAdminAjaxActions = ['dashboard-widgets', 'wp-compression-test'];
+
+		if (
+			(parsed.pathname === '/wp-admin/admin-ajax.php' &&
+				ignoredAdminAjaxActions.some((prefix) => action.startsWith(prefix))) ||
+			parsed.pathname === '/wp-json/wc-admin/onboarding/free-extensions'
+		) {
+			return true;
+		}
+	}
+
 	// WP doesn't ship a favicon by default; ignore.
 	if (parsed.pathname === '/favicon.ico') {
 		return true;
