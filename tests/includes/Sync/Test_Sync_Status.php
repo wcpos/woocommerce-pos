@@ -74,6 +74,78 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Sync response telemetry is confined to v2 and server load is available on
+	 * responses that do not opt into timing metrics.
+	 */
+	public function test_sync_status_has_server_load_without_changing_v1_responses(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$v2_response         = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/status' ) );
+		$v1_response         = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v1/auth/test' ) );
+		$v2_service_response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/auth/test' ) );
+		$v2_headers          = $v2_response->get_headers();
+		$v1_headers          = $v1_response->get_headers();
+		$v2_service_headers = $v2_service_response->get_headers();
+		$server_load        = json_decode( $v2_headers['X-Server-Load'], true );
+
+		$this->assertSame( 200, $v2_response->get_status() );
+		$this->assertIsArray( $server_load );
+		$this->assertCount( 3, $server_load );
+		$this->assertArrayNotHasKey( 'Server-Timing', $v2_headers );
+		$this->assertArrayNotHasKey( 'meta', $v2_response->get_data() );
+
+		$this->assertSame(
+			array(
+				'status'  => 'error',
+				'message' => 'No authorization token detected',
+			),
+			$v1_response->get_data()
+		);
+		$this->assertArrayNotHasKey( 'X-Server-Load', $v1_headers );
+		$this->assertArrayNotHasKey( 'Server-Timing', $v1_headers );
+		$this->assertSame( $v1_response->get_data(), $v2_service_response->get_data() );
+		$this->assertArrayNotHasKey( 'X-Server-Load', $v2_service_headers );
+		$this->assertArrayNotHasKey( 'Server-Timing', $v2_service_headers );
+	}
+
+	/**
+	 * Orders pull and every change-candidate response expose cheap body metrics
+	 * and a Server-Timing mirror of the body duration.
+	 */
+	public function test_orders_pull_and_change_candidates_expose_response_metrics(): void {
+		( new Activator() )->install_sync_schema();
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'cashier' ) ) );
+
+		$paths = array(
+			// The client's pull protocol parses response.metrics at the TOP level.
+			'/wcpos/v2/orders/pull'                    => array( 'metrics' ),
+			'/wcpos/v2/changes/sequence-log'           => array( 'meta' ),
+			'/wcpos/v2/changes/revision-hash'          => array( 'meta' ),
+			'/wcpos/v2/changes/range-checksum'         => array( 'meta' ),
+			'/wcpos/v2/changes/config-fingerprint'     => array( 'meta' ),
+		);
+
+		foreach ( $paths as $path => $metrics_path ) {
+			$response = $this->server->dispatch( $this->wp_rest_get_request( $path ) );
+			$data     = $response->get_data();
+			$headers  = $response->get_headers();
+			$metrics  = $data;
+			foreach ( $metrics_path as $key ) {
+				$this->assertArrayHasKey( $key, $metrics, $path );
+				$metrics = $metrics[ $key ];
+			}
+
+			$this->assertSame( 200, $response->get_status(), $path );
+			$this->assertIsFloat( $metrics['duration_ms'], $path );
+			$this->assertGreaterThanOrEqual( 0, $metrics['duration_ms'], $path );
+			$this->assertIsInt( $metrics['memory_peak_bytes'], $path );
+			$this->assertGreaterThan( 0, $metrics['memory_peak_bytes'], $path );
+			$this->assertSame( 'wcpos;dur=' . $metrics['duration_ms'], $headers['Server-Timing'], $path );
+			$this->assertCount( 3, json_decode( $headers['X-Server-Load'], true ), $path );
+		}
+	}
+
+	/**
 	 * Authorized POS users can inspect the missing sync tables.
 	 */
 	public function test_sync_status_with_flag_enabled_and_cashier_returns_unhealthy_status(): void {
@@ -163,6 +235,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertContains( $response->get_status(), array( 401, 403 ) );
 		$this->assertNotEquals( 200, $response->get_status() );
+		$this->assertCount( 3, json_decode( $response->get_headers()['X-Server-Load'], true ) );
 	}
 
 	/**
@@ -171,8 +244,14 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 	public function test_sync_read_endpoints_with_missing_tables_return_503(): void {
 		$paths = array(
 			'/wcpos/v2/products',
+			'/wcpos/v2/products/categories',
+			'/wcpos/v2/products/brands',
+			'/wcpos/v2/products/tags',
 			'/wcpos/v2/orders',
 			'/wcpos/v2/orders/pull',
+			'/wcpos/v2/customers',
+			'/wcpos/v2/coupons',
+			'/wcpos/v2/taxes',
 			'/wcpos/v2/changes/sequence-log',
 			'/wcpos/v2/changes/revision-hash',
 			'/wcpos/v2/changes/range-checksum',
@@ -195,6 +274,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			$this->assertEquals( 503, $response->get_status(), $path . ' did not apply the sync health gate. Body: ' . wp_json_encode( $response->get_data() ) );
 			$this->assertEquals( 'wcpos_sync_unavailable', $response->get_data()['code'] );
+			$this->assertCount( 3, json_decode( $response->get_headers()['X-Server-Load'], true ), $path );
 		}
 	}
 
@@ -209,6 +289,10 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 			$this->assertEquals( 503, $response->get_status(), $path . ' did not apply the sync health gate.' );
 			$this->assertEquals( 'wcpos_sync_unavailable', $response->get_data()['code'] );
+			// Error bodies keep their golden shapes — contextual header only.
+			$this->assertArrayNotHasKey( 'meta', $response->get_data(), $path );
+			$this->assertCount( 3, json_decode( $response->get_headers()['X-Server-Load'], true ), $path );
+			$this->assertArrayNotHasKey( 'Server-Timing', $response->get_headers(), $path );
 		}
 	}
 
@@ -221,6 +305,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 
 			$this->assertSame( 503, $response->get_status(), $path );
 			$this->assertSame( 'wcpos_sync_unavailable', $response->get_data()['code'], $path );
+			$this->assertCount( 3, json_decode( $response->get_headers()['X-Server-Load'], true ), $path );
 		}
 	}
 
@@ -248,6 +333,7 @@ class Test_Sync_Status extends WCPOS_REST_Unit_Test_Case {
 			$response = $this->server->dispatch( $request );
 			$this->assertContains( $response->get_status(), array( 401, 403 ), $path . ' bypassed the capability gate.' );
 			$this->assertNotEquals( 503, $response->get_status(), $path . ' exposed health before authorization.' );
+			$this->assertCount( 3, json_decode( $response->get_headers()['X-Server-Load'], true ), $path );
 		}
 	}
 

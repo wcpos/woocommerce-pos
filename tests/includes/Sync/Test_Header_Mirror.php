@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\API as WCPOS_API;
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -53,6 +54,26 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertSame( count( $headers ), count( array_unique( $headers ) ) );
 	}
 
+	public function test_production_api_exposes_response_telemetry_headers(): void {
+		$reflection = new \ReflectionClass( WCPOS_API::class );
+		$api        = $reflection->newInstanceWithoutConstructor();
+		$server     = new class() extends WP_REST_Server {
+			public array $sent_headers = array();
+
+			public function send_header( $key, $value ) {
+				$this->sent_headers[ $key ] = $value;
+			}
+		};
+		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+
+		$api->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		$this->assertArrayHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
+		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+	}
+
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
 		$reflection = new \ReflectionClass( Init::class );
 		$init       = $reflection->newInstanceWithoutConstructor();
@@ -69,6 +90,27 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Idempotency-Key', $server->sent_headers['Access-Control-Allow-Headers'] );
 		$this->assertStringContainsString( 'If-Match', $server->sent_headers['Access-Control-Allow-Headers'] );
+		$this->assertArrayHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
+		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+	}
+
+	public function test_init_does_not_expose_telemetry_headers_on_non_preflight_requests(): void {
+		$reflection = new \ReflectionClass( Init::class );
+		$init       = $reflection->newInstanceWithoutConstructor();
+		$server     = new class() extends WP_REST_Server {
+			public array $sent_headers = array();
+
+			public function send_header( $key, $value ) {
+				$this->sent_headers[ $key ] = $value;
+			}
+		};
+		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+
+		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		$this->assertArrayNotHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
 	}
 
 	public function test_non_string_base_revision_is_treated_as_empty_not_cast(): void {

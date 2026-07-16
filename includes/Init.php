@@ -194,6 +194,9 @@ class Init {
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		if ( 'OPTIONS' == $request->get_method() ) {
+			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
+
 			$allow_headers = array(
 				'Authorization',            // For user-agent authentication with a server.
 				'X-WP-Nonce',               // WordPress-specific header, used for CSRF protection.
