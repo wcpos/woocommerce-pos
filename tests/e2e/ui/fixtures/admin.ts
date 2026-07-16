@@ -14,6 +14,12 @@ interface FailedResponse {
 	method: string;
 }
 
+const WP_ADMIN_AJAX_DENYLIST = [
+	'action=dashboard-widgets',
+	'/wp-json/wc-admin/onboarding/free-extensions',
+	'action=wp-compression-test',
+];
+
 /**
  * Returns true if a same-origin response/request failure should be ignored by
  * the assertion in afterEach. Off-origin failures (analytics, external CDN
@@ -33,17 +39,11 @@ function isIgnoredFailure(url: string, status: number): boolean {
 	}
 
 	// WP Admin dashboard requests that are unavailable in wp-env are cosmetic.
-	if (status === 0 || status === 404) {
-		const action = parsed.searchParams.get('action') || '';
-		const ignoredAdminAjaxActions = ['dashboard-widgets', 'wp-compression-test'];
-
-		if (
-			(parsed.pathname === '/wp-admin/admin-ajax.php' &&
-				ignoredAdminAjaxActions.some((prefix) => action.startsWith(prefix))) ||
-			parsed.pathname === '/wp-json/wc-admin/onboarding/free-extensions'
-		) {
-			return true;
-		}
+	if (
+		(status === 0 || status === 404) &&
+		WP_ADMIN_AJAX_DENYLIST.some((entry) => parsed.href.includes(entry))
+	) {
+		return true;
 	}
 
 	// WP doesn't ship a favicon by default; ignore.
