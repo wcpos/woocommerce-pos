@@ -9,7 +9,10 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Api;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
+use WP_REST_Request;
+use WP_REST_Response;
 
 /**
  * @group sync
@@ -59,5 +62,21 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 		$meta = $response->get_data()['meta'];
 		$this->assertArrayHasKey( 'duration_ms', $meta );
 		$this->assertArrayHasKey( 'memory_peak_bytes', $meta );
+	}
+
+	/**
+	 * Empty non-null short-circuits are responses and must be finalized.
+	 */
+	public function test_empty_non_null_precomputed_responses_are_decorated(): void {
+		foreach ( array( false, 0, array() ) as $result ) {
+			$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+
+			Response_Telemetry::start_request( null, $this->server, $request );
+			$response = Response_Telemetry::decorate_precomputed_response( $result, $this->server, $request );
+
+			$this->assertInstanceOf( WP_REST_Response::class, $response );
+			$this->assertSame( $result, $response->get_data() );
+			$this->assertArrayHasKey( 'X-Server-Load', $response->get_headers() );
+		}
 	}
 }

@@ -103,7 +103,7 @@ final class Response_Telemetry {
 	 * @return mixed
 	 */
 	public static function decorate_precomputed_response( $result, $server, WP_REST_Request $request ) {
-		if ( empty( $result ) ) {
+		if ( null === $result ) {
 			return $result;
 		}
 
