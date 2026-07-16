@@ -193,6 +193,8 @@ class Init {
 	 * @return bool $served
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
+		$server->send_header( 'Access-Control-Expose-Headers', 'X-Server-Load, Server-Timing' );
+
 		if ( 'OPTIONS' == $request->get_method() ) {
 			$allow_headers = array(
 				'Authorization',            // For user-agent authentication with a server.

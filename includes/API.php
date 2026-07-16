@@ -308,6 +308,7 @@ class API {
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
 		$server->send_header( 'Access-Control-Allow-Origin', '*' );
+		$server->send_header( 'Access-Control-Expose-Headers', 'X-Server-Load, Server-Timing' );
 
 		return $served;
 	}
