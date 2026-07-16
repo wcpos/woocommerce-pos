@@ -198,10 +198,10 @@ class Test_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 			static function ( string $ns ): string {
 				return '/' . $ns . '/';
 			},
-			\WCPOS\WooCommercePOS\API::ROUTE_NAMESPACES
+			$api->get_route_namespaces()
 		);
 
-		foreach ( $route_map as $route => $key ) {
+		foreach ( array_keys( $route_map ) as $route ) {
 			$in_wcpos_namespace = false;
 			foreach ( $prefixes as $prefix ) {
 				if ( 0 === strpos( $route, $prefix ) ) {
