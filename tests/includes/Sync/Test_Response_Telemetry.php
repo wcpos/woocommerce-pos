@@ -9,10 +9,7 @@
 namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use WCPOS\WooCommercePOS\Sync\Api;
-use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WCPOS\WooCommercePOS\Tests\API\WCPOS_REST_Unit_Test_Case;
-use WP_REST_Request;
-use WP_REST_Response;
 
 /**
  * @group sync
@@ -65,17 +62,21 @@ class Test_Response_Telemetry extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * Empty non-null short-circuits are responses and must be finalized.
+	 * Empty pre-dispatch values must continue through normal route dispatch.
 	 */
-	public function test_empty_non_null_precomputed_responses_are_decorated(): void {
-		foreach ( array( false, 0, array() ) as $result ) {
-			$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+	public function test_empty_pre_dispatch_values_continue_to_route_callback(): void {
+		wp_set_current_user( $this->factory->user->create( array( 'role' => 'administrator' ) ) );
 
-			Response_Telemetry::start_request( null, $this->server, $request );
-			$response = Response_Telemetry::decorate_precomputed_response( $result, $this->server, $request );
+		foreach ( array( false, 0, '0', array() ) as $result ) {
+			$pre_dispatch = static function () use ( $result ) {
+				return $result;
+			};
+			add_filter( 'rest_pre_dispatch', $pre_dispatch, 10 );
 
-			$this->assertInstanceOf( WP_REST_Response::class, $response );
-			$this->assertSame( $result, $response->get_data() );
+			$response = $this->server->dispatch( $this->wp_rest_get_request( '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' ) );
+
+			remove_filter( 'rest_pre_dispatch', $pre_dispatch, 10 );
+			$this->assertArrayHasKey( 'healthy', $response->get_data() );
 			$this->assertArrayHasKey( 'X-Server-Load', $response->get_headers() );
 		}
 	}
