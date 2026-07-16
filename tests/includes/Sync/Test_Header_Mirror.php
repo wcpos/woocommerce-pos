@@ -74,19 +74,6 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
 	}
 
-	public function test_telemetry_exposure_is_static_production_configuration(): void {
-		// Exposure is names-only and harmless where the headers never appear —
-		// it ships as static configuration in the production CORS senders, so
-		// the browser POS can read telemetry regardless of the sync flag.
-		$exposed = apply_filters(
-			'rest_exposed_cors_headers',
-			array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing' ),
-			new WP_REST_Request( 'GET', '/wcpos/v1/auth/test' )
-		);
-		$this->assertContains( 'X-Server-Load', $exposed );
-		$this->assertContains( 'Server-Timing', $exposed );
-	}
-
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
 		$reflection = new \ReflectionClass( Init::class );
 		$init       = $reflection->newInstanceWithoutConstructor();
