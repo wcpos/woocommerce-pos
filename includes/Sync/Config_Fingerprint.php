@@ -53,7 +53,7 @@ final class Config_Fingerprint {
 	/**
 	 * Default barcode meta key when the option is unset/blank.
 	 */
-	public const DEFAULT_BARCODE_FIELD = '_sku';
+	public const DEFAULT_BARCODE_FIELD = '_global_unique_id';
 
 	/**
 	 * Bump when a new one-time cleanup step is added to maybe_cleanup_legacy_options().

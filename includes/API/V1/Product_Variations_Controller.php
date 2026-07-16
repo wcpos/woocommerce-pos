@@ -217,7 +217,8 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			if ( '_sku' === $barcode_field ) {
 				$object->set_sku( $barcode );
 				$object->save();
-			} elseif ( '_global_unique_id' === $barcode_field ) {
+			} elseif ( '_global_unique_id' === $barcode_field && method_exists( $object, 'set_global_unique_id' ) ) {
+				// set_global_unique_id() requires WC 9.1+, fall back to raw meta on older versions.
 				$object->set_global_unique_id( $barcode );
 				$object->save();
 			} else {

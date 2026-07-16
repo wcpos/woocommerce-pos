@@ -111,7 +111,7 @@ function General() {
 							<BarcodeSelect
 								selected={isString(data?.barcode_field) ? data?.barcode_field || '' : ''}
 								onSelect={(value) => {
-									mutate({ barcode_field: value || '_sku' });
+									mutate({ barcode_field: value || '_global_unique_id' });
 								}}
 							/>
 						</React.Suspense>

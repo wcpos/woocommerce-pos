@@ -93,7 +93,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertTrue( $settings['generate_username'] );
 		$this->assertFalse( $settings['default_customer_is_cashier'] );
 		$this->assertEquals( 0, $settings['default_customer'] );
-		$this->assertEquals( '_sku', $settings['barcode_field'] );
+		$this->assertEquals( '_global_unique_id', $settings['barcode_field'] );
 		$this->assertEquals( 'undecided', $settings['tracking_consent'] );
 		$this->assertSame( array(), $settings['store_tax_ids'] );
 		$this->assertSame( '', $settings['store_name'] );
@@ -363,7 +363,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertIsArray( $settings );
 
 		$settings = $this->settings->get_settings( 'general', 'barcode_field' );
-		$this->assertEquals( '_sku', $settings );
+		$this->assertEquals( '_global_unique_id', $settings );
 	}
 
 	/**
@@ -424,7 +424,7 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertIsArray( $result );
 		// Result contains meta keys as strings.
 		// Should contain at least the default barcode field.
-		$this->assertContains( '_sku', $result );
+		$this->assertContains( '_global_unique_id', $result );
 	}
 
 	/**

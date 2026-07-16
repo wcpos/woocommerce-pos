@@ -323,6 +323,15 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function test_variation_response_contains_sku_barcode(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function () {
+				return array(
+					'barcode_field' => '_sku',
+				);
+			}
+		);
+
 		$product       = ProductHelper::create_variation_product();
 		$variation_ids = $product->get_children();
 
@@ -333,6 +342,25 @@ class Test_Product_Variations_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertStringStartsWith( 'DUMMY SKU VARIABLE SMALL', $data['barcode'] );
+	}
+
+	/**
+	 * The default barcode field (no settings saved) is the WooCommerce GTIN field.
+	 */
+	public function test_variation_response_default_barcode_field_is_global_unique_id(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$variation     = wc_get_product( $variation_ids[0] );
+		$variation->set_global_unique_id( '4006381333931' );
+		$variation->save();
+
+		$request       = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() . '/variations/' . $variation_ids[0] );
+		$response      = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '4006381333931', $data['barcode'] );
 	}
 
 	public function test_variation_response_contains_barcode(): void {
