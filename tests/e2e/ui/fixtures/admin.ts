@@ -20,12 +20,19 @@ const WP_ADMIN_AJAX_DENYLIST = [
 	'action=wp-compression-test',
 ];
 
+const WP_ADMIN_ABORTED_REST_PATHS = [
+	'/wp-json/wc-admin/onboarding/profile/progress',
+	'/wp-json/wc-analytics/data/countries',
+	'/wp-json/wc-analytics/settings/general/woocommerce_default_country',
+	'/wp-json/wp/v2/settings',
+];
+
 /**
  * Returns true if a same-origin response/request failure should be ignored by
  * the assertion in afterEach. Off-origin failures (analytics, external CDN
  * images, etc.) are always ignored — they aren't the plugin's responsibility.
  */
-function isIgnoredFailure(url: string, status: number): boolean {
+function isIgnoredFailure(url: string, status: number, errorText?: string): boolean {
 	let parsed: URL;
 	try {
 		parsed = new URL(url);
@@ -42,6 +49,14 @@ function isIgnoredFailure(url: string, status: number): boolean {
 	if (
 		(status === 0 || status === 404) &&
 		WP_ADMIN_AJAX_DENYLIST.some((entry) => parsed.href.includes(entry))
+	) {
+		return true;
+	}
+
+	if (
+		status === 0 &&
+		errorText === 'net::ERR_ABORTED' &&
+		WP_ADMIN_ABORTED_REST_PATHS.includes(parsed.pathname)
 	) {
 		return true;
 	}
@@ -96,9 +111,7 @@ export const test = base.extend<{ adminPage: Page }>({
 		});
 
 		page.on('requestfailed', (req) => {
-			// Navigating away cancels outstanding WP Admin requests without a response.
-			if (req.failure()?.errorText === 'net::ERR_ABORTED') return;
-			if (isIgnoredFailure(req.url(), 0)) return;
+			if (isIgnoredFailure(req.url(), 0, req.failure()?.errorText)) return;
 			failedResponses.push({
 				url: req.url(),
 				status: 0,
