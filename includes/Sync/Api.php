@@ -66,6 +66,7 @@ final class Api {
 	 */
 	public static function register_controllers( array $controllers ): array {
 		if ( self::is_enabled() ) {
+			Response_Telemetry::register_hooks();
 			$controllers['sync-status']     = Status_Controller::class;
 			$controllers['sync-catalog']    = Catalog_Proxy_Controller::class;
 			$controllers['sync-orders']     = Orders_Controller::class;
