@@ -13,6 +13,7 @@ use WCPOS\WooCommercePOS\API as WCPOS_API;
 use WCPOS\WooCommercePOS\Init;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Header_Mirror;
+use WCPOS\WooCommercePOS\Sync\Response_Telemetry;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -73,6 +74,17 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
 	}
 
+	public function test_telemetry_cors_headers_are_scoped_to_v2_sync_routes(): void {
+		$headers = array( 'Link' );
+		$sync    = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+		$v1      = new WP_REST_Request( 'GET', '/wcpos/v1/auth/test' );
+		$service = new WP_REST_Request( 'GET', '/wcpos/v2/auth/test' );
+
+		$this->assertSame( array( 'Link', 'X-Server-Load', 'Server-Timing' ), Response_Telemetry::expose_cors_headers( $headers, $sync ) );
+		$this->assertSame( $headers, Response_Telemetry::expose_cors_headers( $headers, $v1 ) );
+		$this->assertSame( $headers, Response_Telemetry::expose_cors_headers( $headers, $service ) );
+	}
+
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
 		$reflection = new \ReflectionClass( Init::class );
 		$init       = $reflection->newInstanceWithoutConstructor();
@@ -93,6 +105,23 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+	}
+
+	public function test_init_does_not_expose_telemetry_headers_on_non_preflight_requests(): void {
+		$reflection = new \ReflectionClass( Init::class );
+		$init       = $reflection->newInstanceWithoutConstructor();
+		$server     = new class() extends WP_REST_Server {
+			public array $sent_headers = array();
+
+			public function send_header( $key, $value ) {
+				$this->sent_headers[ $key ] = $value;
+			}
+		};
+		$request = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
+
+		$init->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
+
+		$this->assertArrayNotHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
 	}
 
 	public function test_non_string_base_revision_is_treated_as_empty_not_cast(): void {

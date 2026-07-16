@@ -193,12 +193,10 @@ class Init {
 	 * @return bool $served
 	 */
 	public function rest_pre_serve_request( $served, WP_HTTP_Response $result, WP_REST_Request $request, WP_REST_Server $server ) {
-		$expose_headers   = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
-		$expose_headers[] = 'X-Server-Load';
-		$expose_headers[] = 'Server-Timing';
-		$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
-
 		if ( 'OPTIONS' == $request->get_method() ) {
+			$expose_headers = apply_filters( 'rest_exposed_cors_headers', array( 'X-WP-Total', 'X-WP-TotalPages', 'Link' ), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WordPress core hook.
+			$server->send_header( 'Access-Control-Expose-Headers', implode( ', ', array_unique( $expose_headers ) ) );
+
 			$allow_headers = array(
 				'Authorization',            // For user-agent authentication with a server.
 				'X-WP-Nonce',               // WordPress-specific header, used for CSRF protection.

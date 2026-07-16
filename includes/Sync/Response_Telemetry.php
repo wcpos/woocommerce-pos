@@ -35,19 +35,24 @@ final class Response_Telemetry {
 			add_filter( 'rest_post_dispatch', array( self::class, 'ensure_contextual_headers' ), PHP_INT_MAX, 3 );
 			// Cross-origin clients (the web/Electron POS) can only read the
 			// telemetry headers if they are CORS-exposed.
-			add_filter( 'rest_exposed_cors_headers', array( self::class, 'expose_cors_headers' ) );
+			add_filter( 'rest_exposed_cors_headers', array( self::class, 'expose_cors_headers' ), 10, 2 );
 		}
 	}
 
 	/**
 	 * Expose the telemetry headers to cross-origin fetch callers.
 	 *
-	 * @param string[] $headers Exposed header names.
+	 * @param string[]             $headers Exposed header names.
+	 * @param WP_REST_Request|null $request REST request.
 	 *
 	 * @return string[]
 	 */
-	public static function expose_cors_headers( $headers ): array {
+	public static function expose_cors_headers( $headers, $request = null ): array {
 		$headers   = (array) $headers;
+		if ( ! $request instanceof WP_REST_Request || ! self::is_sync_route( $request->get_route() ) ) {
+			return $headers;
+		}
+
 		$headers[] = 'X-Server-Load';
 		$headers[] = 'Server-Timing';
 
