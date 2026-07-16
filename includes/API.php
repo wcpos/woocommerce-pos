@@ -180,6 +180,44 @@ class API {
 				'order_statuses'        => API\V1\Data_Order_Statuses_Controller::class,
 			)
 		);
+
+		/**
+		 * Filter the wcpos/v2 service pass-through controllers (additive to the
+		 * frozen v1 surface — the legacy data controllers stay v1-only).
+		 *
+		 * Extensions that replace a v1 service through
+		 * `woocommerce_pos_rest_api_controllers` must carry their service onto
+		 * the v2 surface here with their own pass-through subclass (override
+		 * `$namespace = 'wcpos/v2'`), exactly as core does — the v2 map is not
+		 * derived from the v1 map, so a v1 replacement alone leaves the v2
+		 * twin serving core behavior.
+		 *
+		 * @since 1.10.0
+		 *
+		 * @param array $controllers Associative array of v2 service controller class names.
+		 */
+		$v2_classes = apply_filters(
+			'woocommerce_pos_rest_api_v2_controllers',
+			array(
+				'auth'              => API\V2\Auth::class,
+				'settings'          => API\V2\Settings::class,
+				'cashier'           => API\V2\Cashier::class,
+				'templates'         => API\V2\Templates_Controller::class,
+				'receipts'          => API\V2\Receipts_Controller::class,
+				'print_jobs'        => API\V2\Print_Jobs_Controller::class,
+				'stores'            => API\V2\Stores::class,
+				'extensions'        => API\V2\Extensions::class,
+				'logs'              => API\V2\Logs::class,
+				'payment_gateways'  => API\V2\Payment_Gateways::class,
+				'gateway_bootstrap' => API\V2\Gateway_Bootstrap_Controller::class,
+				'checkout'          => API\V2\Checkout_Controller::class,
+				'shipping_methods'  => API\V2\Shipping_Methods_Controller::class,
+				'order_statuses'    => API\V2\Data_Order_Statuses_Controller::class,
+			)
+		);
+		foreach ( $v2_classes as $key => $class ) {
+			$classes[ 'v2-' . $key ] = $class;
+		}
 		$legacy_classifications = array(
 			'auth'       => array( 'public' => array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ) ),
 			'print_jobs' => array( 'printer_token' => array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ) ),

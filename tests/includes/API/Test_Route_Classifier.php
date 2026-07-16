@@ -133,11 +133,21 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertSame( array( 'wcpos/v1', 'wcpos/v2' ), $built_namespaces );
 		$this->assertSame(
-			array( '/wcpos/v1/auth/test', '/wcpos/v1/auth/refresh' ),
+			array(
+				'/wcpos/v1/auth/test',
+				'/wcpos/v1/auth/refresh',
+				'/wcpos/v2/auth/test',
+				'/wcpos/v2/auth/refresh',
+			),
 			$built_classifications['public']
 		);
 		$this->assertSame(
-			array( '/wcpos/v1/print-jobs/cloudprnt', '/wcpos/v1/print-jobs/epson-sdp' ),
+			array(
+				'/wcpos/v1/print-jobs/cloudprnt',
+				'/wcpos/v1/print-jobs/epson-sdp',
+				'/wcpos/v2/print-jobs/cloudprnt',
+				'/wcpos/v2/print-jobs/epson-sdp',
+			),
 			$built_classifications['printer_token']
 		);
 		$this->assertSame(
@@ -149,7 +159,7 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 			$built_classifications['admin_op']
 		);
 		$this->assertSame(
-			array( '/wcpos/v1/receipts/' ),
+			array( '/wcpos/v1/receipts/', '/wcpos/v2/receipts/' ),
 			$built_classifications['permission_error_passthrough']
 		);
 		$this->assertSame(
@@ -163,12 +173,10 @@ class Test_Route_Classifier extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
-	 * The core gate covers v2 before any v2 routes are registered.
+	 * The core gate covers unknown v2 routes.
 	 */
-	public function test_unregistered_v2_route_receives_anonymous_gate_401(): void {
+	public function test_unknown_v2_route_receives_anonymous_gate_401(): void {
 		wp_set_current_user( 0 );
-
-		$this->assertSame( array(), $this->server->get_routes( 'wcpos/v2' ) );
 
 		$response = $this->server->dispatch( $this->wp_rest_get_request( '/wcpos/v2/anything' ) );
 
