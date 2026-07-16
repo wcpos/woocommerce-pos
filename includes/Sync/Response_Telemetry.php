@@ -30,7 +30,50 @@ final class Response_Telemetry {
 			add_filter( 'rest_pre_dispatch', array( self::class, 'start_request' ), 1, 3 );
 			add_filter( 'rest_pre_dispatch', array( self::class, 'decorate_precomputed_response' ), PHP_INT_MAX, 3 );
 			add_filter( 'rest_request_after_callbacks', array( self::class, 'decorate_callback_response' ), 10, 3 );
+			// Auth rejections (rest_authentication_errors) skip dispatch entirely —
+			// rest_post_dispatch is the one filter every served response passes.
+			add_filter( 'rest_post_dispatch', array( self::class, 'ensure_contextual_headers' ), PHP_INT_MAX, 3 );
+			// Cross-origin clients (the web/Electron POS) can only read the
+			// telemetry headers if they are CORS-exposed.
+			add_filter( 'rest_exposed_cors_headers', array( self::class, 'expose_cors_headers' ) );
 		}
+	}
+
+	/**
+	 * Expose the telemetry headers to cross-origin fetch callers.
+	 *
+	 * @param string[] $headers Exposed header names.
+	 *
+	 * @return string[]
+	 */
+	public static function expose_cors_headers( $headers ): array {
+		$headers   = (array) $headers;
+		$headers[] = 'X-Server-Load';
+		$headers[] = 'Server-Timing';
+
+		return array_values( array_unique( $headers ) );
+	}
+
+	/**
+	 * Guarantee X-Server-Load on every served v2 sync response — including
+	 * authentication rejections that never reached dispatch.
+	 *
+	 * @param mixed           $response REST response.
+	 * @param mixed           $server   REST server.
+	 * @param WP_REST_Request $request  REST request.
+	 *
+	 * @return mixed
+	 */
+	public static function ensure_contextual_headers( $response, $server, WP_REST_Request $request ) {
+		if ( ! $response instanceof WP_REST_Response || ! self::is_sync_route( $request->get_route() ) ) {
+			return $response;
+		}
+		$headers = $response->get_headers();
+		if ( ! isset( $headers['X-Server-Load'] ) ) {
+			$response->header( 'X-Server-Load', (string) wp_json_encode( self::server_load() ) );
+		}
+
+		return $response;
 	}
 
 	/**
