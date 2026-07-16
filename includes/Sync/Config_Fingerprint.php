@@ -162,6 +162,12 @@ final class Config_Fingerprint {
 		$meta_key      = $this->active_barcode_meta_key();
 		$payload_field = self::BARCODE_META_TO_PAYLOAD[ $meta_key ] ?? null;
 
+		// wc/v3 only serves global_unique_id from WC 9.2 — advertising it on older
+		// versions would tell the client to index a field that never arrives.
+		if ( 'global_unique_id' === $payload_field && \function_exists( 'WC' ) && version_compare( WC()->version, '9.2', '<' ) ) {
+			$payload_field = null;
+		}
+
 		return null === $payload_field ? array() : array( $payload_field );
 	}
 

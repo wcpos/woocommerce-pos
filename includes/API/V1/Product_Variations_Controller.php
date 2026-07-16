@@ -217,9 +217,14 @@ class Product_Variations_Controller extends WC_REST_Product_Variations_Controlle
 			if ( '_sku' === $barcode_field ) {
 				$object->set_sku( $barcode );
 				$object->save();
-			} elseif ( '_global_unique_id' === $barcode_field && method_exists( $object, 'set_global_unique_id' ) ) {
-				// set_global_unique_id() requires WC 9.1+, fall back to raw meta on older versions.
-				$object->set_global_unique_id( $barcode );
+			} elseif ( '_global_unique_id' === $barcode_field ) {
+				if ( method_exists( $object, 'set_global_unique_id' ) ) {
+					$object->set_global_unique_id( $barcode );
+				} else {
+					// WC < 9.1 has no GTIN setter — write the same postmeta key it uses.
+					$object->update_meta_data( $barcode_field, $barcode );
+				}
+				// Full save (not save_meta_data) so product update hooks fire for sync.
 				$object->save();
 			} else {
 				$object->update_meta_data( $barcode_field, $barcode );
