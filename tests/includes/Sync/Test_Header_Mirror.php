@@ -67,7 +67,10 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 
 		$api->rest_pre_serve_request( false, new WP_REST_Response(), $request, $server );
 
-		$this->assertSame( 'X-Server-Load, Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertArrayHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
+		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
 	}
 
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
@@ -86,7 +89,10 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Idempotency-Key', $server->sent_headers['Access-Control-Allow-Headers'] );
 		$this->assertStringContainsString( 'If-Match', $server->sent_headers['Access-Control-Allow-Headers'] );
-		$this->assertSame( 'X-Server-Load, Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertArrayHasKey( 'Access-Control-Expose-Headers', $server->sent_headers );
+		$this->assertStringContainsString( 'Link', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'X-Server-Load', $server->sent_headers['Access-Control-Expose-Headers'] );
+		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
 	}
 
 	public function test_non_string_base_revision_is_treated_as_empty_not_cast(): void {
