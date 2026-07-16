@@ -33,31 +33,9 @@ final class Response_Telemetry {
 			// Auth rejections (rest_authentication_errors) skip dispatch entirely —
 			// rest_post_dispatch is the one filter every served response passes.
 			add_filter( 'rest_post_dispatch', array( self::class, 'ensure_contextual_headers' ), PHP_INT_MAX, 3 );
-			// Cross-origin clients (the web/Electron POS) can only read the
-			// telemetry headers if they are CORS-exposed.
-			add_filter( 'rest_exposed_cors_headers', array( self::class, 'expose_cors_headers' ), 10, 2 );
 		}
 	}
 
-	/**
-	 * Expose the telemetry headers to cross-origin fetch callers.
-	 *
-	 * @param string[]             $headers Exposed header names.
-	 * @param WP_REST_Request|null $request REST request.
-	 *
-	 * @return string[]
-	 */
-	public static function expose_cors_headers( $headers, $request = null ): array {
-		$headers   = (array) $headers;
-		if ( ! $request instanceof WP_REST_Request || ! self::is_sync_route( $request->get_route() ) ) {
-			return $headers;
-		}
-
-		$headers[] = 'X-Server-Load';
-		$headers[] = 'Server-Timing';
-
-		return array_values( array_unique( $headers ) );
-	}
 
 	/**
 	 * Guarantee X-Server-Load on every served v2 sync response — including

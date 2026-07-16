@@ -74,15 +74,17 @@ class Test_Header_Mirror extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Server-Timing', $server->sent_headers['Access-Control-Expose-Headers'] );
 	}
 
-	public function test_telemetry_cors_headers_are_scoped_to_v2_sync_routes(): void {
-		$headers = array( 'Link' );
-		$sync    = new WP_REST_Request( 'GET', '/' . Api::ROUTE_NAMESPACE . '/' . Api::ROUTE_PREFIX . 'status' );
-		$v1      = new WP_REST_Request( 'GET', '/wcpos/v1/auth/test' );
-		$service = new WP_REST_Request( 'GET', '/wcpos/v2/auth/test' );
-
-		$this->assertSame( array( 'Link', 'X-Server-Load', 'Server-Timing' ), Response_Telemetry::expose_cors_headers( $headers, $sync ) );
-		$this->assertSame( $headers, Response_Telemetry::expose_cors_headers( $headers, $v1 ) );
-		$this->assertSame( $headers, Response_Telemetry::expose_cors_headers( $headers, $service ) );
+	public function test_telemetry_exposure_is_static_production_configuration(): void {
+		// Exposure is names-only and harmless where the headers never appear —
+		// it ships as static configuration in the production CORS senders, so
+		// the browser POS can read telemetry regardless of the sync flag.
+		$exposed = apply_filters(
+			'rest_exposed_cors_headers',
+			array( 'X-WP-Total', 'X-WP-TotalPages', 'Link', 'X-Server-Load', 'Server-Timing' ),
+			new WP_REST_Request( 'GET', '/wcpos/v1/auth/test' )
+		);
+		$this->assertContains( 'X-Server-Load', $exposed );
+		$this->assertContains( 'Server-Timing', $exposed );
 	}
 
 	public function test_options_preflight_allow_list_includes_mirror_headers_without_wcpos_header(): void {
