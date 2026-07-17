@@ -354,6 +354,23 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '1234567890', $data['barcode'] );
 	}
 
+	/**
+	 * The default barcode field (no settings saved) is the WooCommerce GTIN field.
+	 */
+	public function test_product_response_default_barcode_field_is_global_unique_id(): void {
+		$product  = ProductHelper::create_simple_product();
+		$product->set_global_unique_id( '4006381333931' );
+		$product->save();
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/products/' . $product->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$this->assertEquals( '4006381333931', $data['barcode'] );
+	}
+
 	public function test_product_update_global_unique_id_as_barcode(): void {
 		add_filter(
 			'woocommerce_pos_general_settings',

@@ -53,7 +53,7 @@ final class Config_Fingerprint {
 	/**
 	 * Default barcode meta key when the option is unset/blank.
 	 */
-	public const DEFAULT_BARCODE_FIELD = '_sku';
+	public const DEFAULT_BARCODE_FIELD = '_global_unique_id';
 
 	/**
 	 * Bump when a new one-time cleanup step is added to maybe_cleanup_legacy_options().
@@ -161,6 +161,12 @@ final class Config_Fingerprint {
 		}
 		$meta_key      = $this->active_barcode_meta_key();
 		$payload_field = self::BARCODE_META_TO_PAYLOAD[ $meta_key ] ?? null;
+
+		// wc/v3 only serves global_unique_id from WC 9.2 — advertising it on older
+		// versions would tell the client to index a field that never arrives.
+		if ( 'global_unique_id' === $payload_field && \function_exists( 'WC' ) && version_compare( WC()->version, '9.2', '<' ) ) {
+			$payload_field = null;
+		}
 
 		return null === $payload_field ? array() : array( $payload_field );
 	}

@@ -51,7 +51,7 @@ class Single_Product {
 			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && ! \in_array( $this->barcode_field, $this->get_excluded_barcode_fields(), true ) ) {
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, self::get_excluded_barcode_fields(), true ) ) {
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );
 			add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'after_variable_attributes_barcode_field' ), 10, 3 );
@@ -326,7 +326,7 @@ class Single_Product {
 	 *
 	 * @return array Array of excluded barcode field keys.
 	 */
-	private function get_excluded_barcode_fields(): array {
+	public static function get_excluded_barcode_fields(): array {
 		$excluded_fields = array(
 			'_sku',                 // default WooCommerce SKU field.
 			'_global_unique_id',    // default WooCommerce GTIN, UPC, EAN, or ISBN.

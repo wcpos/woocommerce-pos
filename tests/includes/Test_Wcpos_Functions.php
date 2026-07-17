@@ -45,7 +45,7 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'generate_username', $general_settings );
 
 		$barcode_field = woocommerce_pos_get_settings( 'general', 'barcode_field' );
-		$this->assertEquals( '_sku', $barcode_field );
+		$this->assertEquals( '_global_unique_id', $barcode_field );
 	}
 
 	/**

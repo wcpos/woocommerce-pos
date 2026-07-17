@@ -433,7 +433,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 				$object->set_sku( $barcode );
 				$object->save();
 			} elseif ( '_global_unique_id' === $barcode_field ) {
-				$object->set_global_unique_id( $barcode );
+				if ( method_exists( $object, 'set_global_unique_id' ) ) {
+					$object->set_global_unique_id( $barcode );
+				} else {
+					// WC < 9.1 has no GTIN setter — write the same postmeta key it uses.
+					$object->update_meta_data( $barcode_field, $barcode );
+				}
+				// Full save (not save_meta_data) so product update hooks fire for sync.
 				$object->save();
 			} else {
 				$object->update_meta_data( $barcode_field, $barcode );

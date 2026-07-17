@@ -51,7 +51,7 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 	public function test_accessors_fall_back_to_defaults(): void {
 		$settings = Settings::instance();
 		$this->assertTrue( $settings->force_ssl_enabled() );
-		$this->assertEquals( '_sku', $settings->barcode_field() );
+		$this->assertEquals( '_global_unique_id', $settings->barcode_field() );
 		$this->assertFalse( $settings->pos_only_products_enabled() );
 		$this->assertEquals( 0, $settings->default_customer_id() );
 		$this->assertEquals( 'undecided', $settings->tracking_consent() );

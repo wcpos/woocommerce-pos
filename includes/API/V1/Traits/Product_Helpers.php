@@ -25,7 +25,8 @@ trait Product_Helpers {
 		if ( '_sku' === $barcode_field ) {
 			return $object->get_sku();
 		}
-		if ( '_global_unique_id' === $barcode_field ) {
+		// get_global_unique_id() requires WC 9.1+, fall back to raw meta on older versions.
+		if ( '_global_unique_id' === $barcode_field && method_exists( $object, 'get_global_unique_id' ) ) {
 			return $object->get_global_unique_id();
 		}
 

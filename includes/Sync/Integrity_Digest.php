@@ -51,7 +51,7 @@ final class Integrity_Digest {
 	 * class-fixtures-controller.php sql_bypass()) plus the keys a
 	 * hook-bypassing import/inventory tool plausibly touches.
 	 */
-	public const DIGESTED_META_KEYS = array( '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
+	public const DIGESTED_META_KEYS = array( '_global_unique_id', '_price', '_regular_price', '_sale_price', '_sku', '_stock', '_stock_status' );
 
 	/**
 	 * Customer usermeta folded into the digest (ADR 0015, Leg-3 phase 7). Kept small + stable —

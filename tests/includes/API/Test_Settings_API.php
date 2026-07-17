@@ -76,7 +76,7 @@ class Test_Settings_API extends WP_UnitTestCase {
 		$this->assertTrue( $settings['generate_username'] );
 		$this->assertFalse( $settings['default_customer_is_cashier'] );
 		$this->assertEquals( 0, $settings['default_customer'] );
-		$this->assertEquals( '_sku', $settings['barcode_field'] );
+		$this->assertEquals( '_global_unique_id', $settings['barcode_field'] );
 		$this->assertSame( array(), $settings['store_tax_ids'] );
 	}
 

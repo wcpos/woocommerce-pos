@@ -48,7 +48,7 @@ class List_Products {
 			'online_only' => /* translators: Product POS visibility or barcode label in WooCommerce admin. */ __( 'Online Only', 'woocommerce-pos' ),
 		);
 
-		if ( $this->barcode_field && '_sku' !== $this->barcode_field ) {
+		if ( $this->barcode_field && ! \in_array( $this->barcode_field, Single_Product::get_excluded_barcode_fields(), true ) ) {
 			// product.
 			add_action( 'woocommerce_product_options_sku', array( $this, 'woocommerce_product_options_sku' ) );
 			add_action( 'woocommerce_process_product_meta', array( $this, 'woocommerce_process_product_meta' ) );

@@ -31,7 +31,7 @@ class General_Section extends Abstract_Section {
 			'force_ssl'                   => true,
 			'default_customer'            => 0,
 			'default_customer_is_cashier' => false,
-			'barcode_field'               => '_sku',
+			'barcode_field'               => '_global_unique_id',
 			'generate_username'           => true,
 			'restore_stock_on_delete'     => true,
 			'tracking_consent'            => 'undecided',
