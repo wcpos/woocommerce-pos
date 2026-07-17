@@ -136,11 +136,13 @@ export function PreviewModal({
 		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
 	);
 
-	// Revert to sample if the order fetch fails — render-time adjustment
-	// instead of a state-syncing effect.
-	if (isError && source === 'order') {
-		setSource('sample');
-	}
+	// Let the errored order observer mount and retry before falling back.
+	React.useEffect(() => {
+		if (!isError || isFetching || source !== 'order') return;
+
+		const fallbackTimer = window.setTimeout(() => setSource('sample'), 0);
+		return () => window.clearTimeout(fallbackTimer);
+	}, [isError, isFetching, source]);
 
 	React.useEffect(() => {
 		previousFocusedElementRef.current =
