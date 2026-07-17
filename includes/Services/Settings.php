@@ -245,7 +245,7 @@ class Settings {
 	 * @return null|string 'https' when force_ssl is enabled, null for the home scheme.
 	 */
 	public function url_scheme(): ?string {
-		return $this->get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+		return wp_validate_boolean( $this->get_settings( 'general', 'force_ssl' ) ) ? 'https' : null;
 	}
 
 	/**

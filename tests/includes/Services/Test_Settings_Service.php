@@ -104,6 +104,20 @@ class Test_Settings_Service extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'policies_and_conditions', $settings['store_defaults'] );
 	}
 
+	/**
+	 * URL scheme should treat a persisted string false as disabled.
+	 */
+	public function test_url_scheme_persisted_string_false_returns_null(): void {
+		// Arrange.
+		update_option( 'woocommerce_pos_settings_general', array( 'force_ssl' => 'false' ) );
+
+		// Act.
+		$scheme = $this->settings->url_scheme();
+
+		// Assert.
+		$this->assertNull( $scheme );
+	}
+
 	public function test_save_general_settings_sanitizes_store_details_strings(): void {
 		$result = $this->settings->save_settings(
 			'general',

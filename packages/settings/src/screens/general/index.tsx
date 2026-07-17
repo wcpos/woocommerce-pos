@@ -183,11 +183,10 @@ function General() {
 				<FormRow>
 					<Label tip={t('settings.force_ssl_tip')}>
 						{/* force_ssl defaults to true server-side, so show the default and
-						    block clicks until settings load — the other toggles default false
-						    and never render a wrong state while fetching. */}
+						    block clicks until a boolean value loads, including after fetch errors. */}
 						<Toggle
-							checked={data ? !!data.force_ssl : true}
-							disabled={!data}
+							checked={typeof data?.force_ssl === 'boolean' ? data.force_ssl : true}
+							disabled={typeof data?.force_ssl !== 'boolean'}
 							onChange={(force_ssl: boolean) => {
 								mutate({ force_ssl });
 							}}
