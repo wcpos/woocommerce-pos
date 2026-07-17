@@ -170,6 +170,28 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		);
 	}
 
+	/**
+	 * Unmanaged out-of-stock products honor permitted backorder modes.
+	 *
+	 * @dataProvider backorder_provider
+	 * @param string $backorders Backorder mode.
+	 */
+	public function test_unmanaged_out_of_stock_backorders_do_not_block( string $backorders ): void {
+		$this->set_prevent_overselling( true );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock' => false,
+				'stock_status' => 'outofstock',
+				'backorders'   => $backorders,
+			)
+		);
+		$order = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+
+		$result = $this->validate( $order );
+
+		$this->assertSame( $order, $result );
+	}
+
 	/** Variation-level stock is used when the variation manages stock. */
 	public function test_variation_managed_stock_is_validated(): void {
 		$this->set_prevent_overselling( true );
@@ -222,6 +244,103 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$this->assertEquals( array( 3.0, 3.0 ), array_column( $items, 'available' ) );
 	}
 
+	/** Exact decimal quantities do not exceed exactly matching parent stock. */
+	public function test_parent_managed_stock_uses_fixed_decimal_precision(): void {
+		$this->set_prevent_overselling( true );
+		$parent = ProductHelper::create_variation_product();
+		$parent->set_manage_stock( true );
+		$parent->set_stock_quantity( 0.3 );
+		$parent->set_backorders( 'no' );
+		$parent->save();
+
+		$variation_a = wc_get_product( $parent->get_children()[0] );
+		$variation_b = wc_get_product( $parent->get_children()[1] );
+		$variation_a->set_manage_stock( false );
+		$variation_a->save();
+		$variation_b->set_manage_stock( false );
+		$variation_b->save();
+		$order = $this->create_order(
+			'processing',
+			array(
+				array( $variation_a, 0.1 ),
+				array( $variation_b, 0.2 ),
+			)
+		);
+
+		$result = $this->validate( $order );
+
+		$this->assertSame( $order, $result );
+	}
+
+	/** Active WooCommerce reservations reduce sellable stock. */
+	public function test_held_stock_is_subtracted_from_available_stock(): void {
+		$this->set_prevent_overselling( true );
+		$product    = $this->create_stock_product( 2 );
+		$held_order = $this->create_order( 'pending', array( array( $product, 1 ) ) );
+		$held_order->save();
+		wc_reserve_stock_for_order( $held_order );
+
+		try {
+			$order  = $this->create_order( 'processing', array( array( $product, 2 ) ) );
+			$result = $this->validate( $order );
+
+			$this->assertInstanceOf( WP_Error::class, $result );
+			$this->assertEquals( 1.0, $result->get_error_data()['items'][0]['available'] );
+		} finally {
+			wc_release_stock_for_order( $held_order );
+		}
+	}
+
+	/** A successful checkout validation reserves stock for the next request. */
+	public function test_checkout_validation_reserves_stock_for_other_orders(): void {
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order_a = $this->create_order( 'pos-open', array( array( $product, 1 ) ) );
+		$order_b = $this->create_order( 'pos-open', array( array( $product, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+
+		try {
+			$result_a = $this->validate( $order_a, 'processing' );
+			$result_b = $this->validate( $order_b, 'processing' );
+
+			$this->assertSame( $order_a, $result_a );
+			$this->assertInstanceOf( WP_Error::class, $result_b );
+			$this->assertEquals( 0.0, $result_b->get_error_data()['items'][0]['available'] );
+		} finally {
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
+	/** A failed multi-product validation rolls back earlier reservations. */
+	public function test_failed_validation_rolls_back_partial_reservations(): void {
+		$this->set_prevent_overselling( true );
+		$product_a = $this->create_stock_product( 1 );
+		$product_b = $this->create_stock_product( 0 );
+		$order_a   = $this->create_order(
+			'pos-open',
+			array(
+				array( $product_a, 1 ),
+				array( $product_b, 1 ),
+			)
+		);
+		$order_b   = $this->create_order( 'pos-open', array( array( $product_a, 1 ) ) );
+		$order_a->save();
+		$order_b->save();
+
+		try {
+			$result_a = $this->validate( $order_a, 'processing' );
+			$result_b = $this->validate( $order_b, 'processing' );
+
+			$this->assertInstanceOf( WP_Error::class, $result_a );
+			$this->assertSame( $order_b, $result_b );
+		} finally {
+			wc_release_stock_for_order( $order_a );
+			wc_release_stock_for_order( $order_b );
+		}
+	}
+
 	/** An unmanaged product with out-of-stock status blocks checkout. */
 	public function test_unmanaged_out_of_stock_product_blocks(): void {
 		$this->set_prevent_overselling( true );
@@ -250,6 +369,23 @@ class Test_Stock_Validator extends WC_Unit_Test_Case {
 		$result = $this->validate( $order );
 
 		$this->assertSame( $order, $result );
+	}
+
+	/** Non-misc lines whose product was deleted block checkout. */
+	public function test_deleted_product_line_blocks_checkout(): void {
+		$this->set_prevent_overselling( true );
+		$product = $this->create_stock_product( 1 );
+		$order   = $this->create_order( 'processing', array( array( $product, 1 ) ) );
+		$order->save();
+		$product->delete( true );
+
+		$result = $this->validate( $order );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$item = $result->get_error_data()['items'][0];
+		$this->assertEquals( 'product_not_found', $item['reason'] );
+		$this->assertEquals( $product->get_id(), $item['product_id'] );
+		$this->assertNull( $item['available'] );
 	}
 
 	/** Every failing line is included in the error response. */

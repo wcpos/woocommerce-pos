@@ -18,6 +18,7 @@ use Exception;
 use WC_Abstract_Order;
 use WC_Data;
 use WC_Email_Customer_Invoice;
+use WC_Order;
 use WC_Order_Item;
 use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
@@ -26,6 +27,7 @@ use WC_Tax;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Pos_Order_Audit;
 use WCPOS\WooCommercePOS\Services\Settings as SettingsService;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Reader;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Types;
 use WCPOS\WooCommercePOS\Services\Tax_Id_Writer;
@@ -104,6 +106,50 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 
 		if ( method_exists( parent::class, '__construct' ) ) {
 			parent::__construct();
+		}
+	}
+
+	/**
+	 * Persist new checkout orders as pending until stock is reserved atomically.
+	 *
+	 * @param WP_REST_Request $request  Full request details.
+	 * @param bool            $creating Whether a new order is being created.
+	 * @return WC_Data|WP_Error
+	 */
+	protected function save_object( $request, $creating = false ) {
+		$validator = Stock_Validator::instance();
+		if ( ! $creating || ! \wcpos_request() || ! SettingsService::instance()->prevent_overselling_enabled() || ! $validator->should_validate_create_request( $request ) ) {
+			return parent::save_object( $request, $creating );
+		}
+
+		$target_status = $request->get_param( 'status' );
+		$set_paid      = $request->get_param( 'set_paid' );
+		$request->set_param( 'status', 'pending' );
+		$request->set_param( 'set_paid', false );
+
+		try {
+			$order = parent::save_object( $request, $creating );
+			if ( is_wp_error( $order ) || ! $order instanceof WC_Order ) {
+				return $order;
+			}
+
+			$validation = $validator->validate_checkout( $order );
+			if ( is_wp_error( $validation ) ) {
+				return $validation;
+			}
+
+			if ( ! empty( $target_status ) ) {
+				$order->set_status( $target_status );
+				$order->save();
+			}
+			if ( rest_sanitize_boolean( $set_paid ) ) {
+				$order->payment_complete( $request->get_param( 'transaction_id' ) );
+			}
+
+			return wc_get_order( $order->get_id() );
+		} finally {
+			$request->set_param( 'status', $target_status );
+			$request->set_param( 'set_paid', $set_paid );
 		}
 	}
 
