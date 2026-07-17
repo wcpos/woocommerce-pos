@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0+.
 msgid ""
 msgstr ""
-"Project-Id-Version: WCPOS 1.9.6\n"
+"Project-Id-Version: WCPOS 1.9.8\n"
 "Report-Msgid-Bugs-To: https://github.com/wcpos/woocommerce-pos/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-15T16:03:00+00:00\n"
+"POT-Creation-Date: 2026-07-17T16:10:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: woocommerce-pos\n"
@@ -763,8 +763,8 @@ msgstr ""
 
 #. translators: Error message displayed when a template cannot be found.
 #: includes/API/Receipts_Controller.php:177
-#: includes/Template_Router.php:221
-#: includes/Template_Router.php:239
+#: includes/Template_Router.php:230
+#: includes/Template_Router.php:248
 msgid "Template not found."
 msgstr ""
 
@@ -3048,17 +3048,17 @@ msgid "Settings with id %s not found"
 msgstr ""
 
 #. translators: %s: Settings group id, ie: 'general' or 'checkout'.
-#: includes/Services/Settings.php:284
+#: includes/Services/Settings.php:297
 #, php-format
 msgid "Can not save settings with id %s"
 msgstr ""
 
 #. translators: Error message shown when invalid arguments are provided.
-#: includes/Services/Settings.php:778
+#: includes/Services/Settings.php:791
 msgid "Invalid arguments provided"
 msgstr ""
 
-#: includes/Services/Settings.php:790
+#: includes/Services/Settings.php:803
 msgid "Invalid visibility option provided"
 msgstr ""
 
