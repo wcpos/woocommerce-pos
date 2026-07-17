@@ -2,8 +2,9 @@ import * as React from 'react';
 
 import { Button, Modal } from '@wcpos/ui';
 
-import type { ConsentCopy } from './api';
 import { consentText, t } from './translations';
+
+import type { ConsentCopy } from './api';
 
 export interface PrivacyInfoModalProps {
 	open: boolean;
@@ -28,16 +29,13 @@ export function PrivacyInfoModal({ open, onClose, copy }: PrivacyInfoModalProps)
 			</p>
 			<ul className="wcpos:text-sm wcpos:text-gray-700 wcpos:mb-4 wcpos:pl-4 wcpos:list-disc wcpos:space-y-2">
 				<li>
-					<strong>{t('consent.modal_setup_label')}</strong> —{' '}
-					{t('consent.modal_setup_desc')}
+					<strong>{t('consent.modal_setup_label')}</strong> — {t('consent.modal_setup_desc')}
 				</li>
 				<li>
-					<strong>{t('consent.modal_store_label')}</strong> —{' '}
-					{t('consent.modal_store_desc')}
+					<strong>{t('consent.modal_store_label')}</strong> — {t('consent.modal_store_desc')}
 				</li>
 				<li>
-					<strong>{t('consent.modal_usage_label')}</strong> —{' '}
-					{t('consent.modal_usage_desc')}
+					<strong>{t('consent.modal_usage_label')}</strong> — {t('consent.modal_usage_desc')}
 				</li>
 			</ul>
 			<p className="wcpos:text-sm wcpos:text-gray-500 wcpos:mb-4">

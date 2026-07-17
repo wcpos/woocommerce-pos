@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+
 import { findEnclosingPair, readTagsFromText } from './mustache-section-matcher';
 
 describe('mustacheSectionMatcher helpers', () => {
 	it('reads opening, closing and inverted section tags', () => {
-		const text = '{{#order.items}}\n  {{name}}\n{{/order.items}}\n{{^customer.tax_id}}none{{/customer.tax_id}}';
+		const text =
+			'{{#order.items}}\n  {{name}}\n{{/order.items}}\n{{^customer.tax_id}}none{{/customer.tax_id}}';
 		const tags = readTagsFromText(text);
 
 		expect(tags).toHaveLength(4);

@@ -1,8 +1,10 @@
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FieldPicker } from './field-picker';
+
 import type { FieldSchema } from '../types';
 
 vi.mock('../translations', () => ({
@@ -23,7 +25,7 @@ vi.mock('../translations', () => ({
 		if (!params) return template;
 		return Object.entries(params).reduce(
 			(acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-			template,
+			template
 		);
 	},
 }));
@@ -164,8 +166,8 @@ describe('FieldPicker', () => {
 			root.render(<FieldPicker schema={schema} engine="logicless" onInsertField={onInsertField} />);
 		});
 
-		const loopButton = getButtons(container).find((b) =>
-			b.getAttribute('aria-label') === 'Insert loop block'
+		const loopButton = getButtons(container).find(
+			(b) => b.getAttribute('aria-label') === 'Insert loop block'
 		);
 
 		expect(loopButton).toBeDefined();
@@ -193,7 +195,7 @@ describe('FieldPicker', () => {
 		const search = container.querySelector('input[type=text]') as HTMLInputElement;
 		const nativeSetter = Object.getOwnPropertyDescriptor(
 			window.HTMLInputElement.prototype,
-			'value',
+			'value'
 		)!.set!;
 		await act(async () => {
 			nativeSetter.call(search, 'zzzznomatch');
@@ -211,7 +213,6 @@ describe('FieldPicker', () => {
 		expect(container.textContent).toContain('Order');
 		expect(container.textContent).not.toContain('No fields match');
 	});
-
 
 	it('does not cap its own height so it can match the editor column', async () => {
 		const schema: FieldSchema = {

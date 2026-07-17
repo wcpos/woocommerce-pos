@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TemplateTags } from '../components/template-tags';
+
 import type { GalleryTemplate } from '../types';
 
 vi.mock('../translations', () => ({

@@ -1,14 +1,11 @@
 import * as React from 'react';
 
+import { TemplatesTable } from '../components/active-templates-table';
 import { FilterSidebar, DEFAULT_FILTERS } from '../components/filter-sidebar';
 import { PreviewModal } from '../components/preview-modal';
-import { TemplateCard } from '../components/template-card';
-import { TemplatesTable } from '../components/active-templates-table';
 import { GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
-import {
-	useGalleryTemplates,
-	useInstallGalleryTemplate,
-} from '../hooks/use-gallery-templates';
+import { TemplateCard } from '../components/template-card';
+import { useGalleryTemplates, useInstallGalleryTemplate } from '../hooks/use-gallery-templates';
 import {
 	useTemplates,
 	useToggleTemplate,
@@ -16,8 +13,8 @@ import {
 	useReorderTemplates,
 	useDeleteTemplate,
 } from '../hooks/use-templates';
-
 import { t } from '../translations';
+
 import type { FilterState } from '../components/filter-sidebar';
 import type { AnyTemplate, GalleryTemplate, Template, VirtualTemplate } from '../types';
 
@@ -29,7 +26,7 @@ function matchesFilters(
 		output_type?: string;
 		direction?: 'ltr' | 'rtl';
 	},
-	filters: FilterState,
+	filters: FilterState
 ): boolean {
 	if (filters.search && !template.title.toLowerCase().includes(filters.search.toLowerCase())) {
 		return false;
@@ -71,25 +68,31 @@ export function GalleryGrid() {
 	const deleteTemplate = useDeleteTemplate();
 
 	const filteredGallery = galleryTemplates.filter((tmpl: GalleryTemplate) =>
-		matchesFilters(tmpl, filters),
+		matchesFilters(tmpl, filters)
 	);
 
-	const adminUrl = (window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
+	const adminUrl =
+		(window as any).wcpos?.templateGallery?.adminUrl ?? `${window.location.origin}/wp-admin`;
 
 	// Find the template being previewed
-	const previewTemplate = previewId !== null
-		? (templates.find((tmpl: AnyTemplate) => tmpl.id === previewId) ??
-			galleryTemplates.find((tmpl: GalleryTemplate) => tmpl.key === previewId))
-		: null;
+	const previewTemplate =
+		previewId !== null
+			? (templates.find((tmpl: AnyTemplate) => tmpl.id === previewId) ??
+				galleryTemplates.find((tmpl: GalleryTemplate) => tmpl.key === previewId))
+			: null;
 
 	const previewIsGallery = previewTemplate ? 'key' in previewTemplate : false;
 	const previewTemplateId = previewTemplate
-		? ('key' in previewTemplate ? previewTemplate.key : previewTemplate.id)
+		? 'key' in previewTemplate
+			? previewTemplate.key
+			: previewTemplate.id
 		: null;
 
 	const handleToggle = (id: number | string) => {
 		if (typeof id === 'string') {
-			const vt = templates.find((tmpl): tmpl is VirtualTemplate => tmpl.is_virtual && tmpl.id === id);
+			const vt = templates.find(
+				(tmpl): tmpl is VirtualTemplate => tmpl.is_virtual && tmpl.id === id
+			);
 			if (vt) {
 				const isCurrentlyDisabled = 'is_disabled' in vt && vt.is_disabled;
 				toggleVirtualTemplate.mutate({ id, disabled: !isCurrentlyDisabled });
@@ -137,7 +140,7 @@ export function GalleryGrid() {
 					onDelete={(id) => deleteTemplate.mutate(id)}
 					onReorder={(orderedIds) => reorderTemplates.mutate(orderedIds)}
 					togglingId={togglingId}
-					deletingId={deleteTemplate.isPending ? deleteTemplate.variables ?? null : null}
+					deletingId={deleteTemplate.isPending ? (deleteTemplate.variables ?? null) : null}
 				/>
 			</section>
 
@@ -155,11 +158,7 @@ export function GalleryGrid() {
 							filters={filters}
 							onChange={setFilters}
 							availableCategories={Array.from(
-								new Set(
-									galleryTemplates
-										.map((tmpl) => tmpl.category)
-										.filter((c) => c.length > 0),
-								),
+								new Set(galleryTemplates.map((tmpl) => tmpl.category).filter((c) => c.length > 0))
 							)}
 							collapsed={sidebarCollapsed}
 							onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}

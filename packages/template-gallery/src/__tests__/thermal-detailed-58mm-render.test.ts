@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { describe, expect, it } from 'vitest';
 
 import { renderThermalPreview } from '@wcpos/thermal-utils';
 
@@ -190,7 +191,6 @@ describe('thermal-detailed-58mm renders all detailed sections', () => {
 		expect(html).toContain('Opening Hours');
 		expect(html).toContain('Closed on public holidays');
 	});
-
 
 	it('uses included-tax wording when the receipt display mode is tax-inclusive', () => {
 		const xml = fs.readFileSync(path.join(galleryDir, 'thermal-detailed-58mm.xml'), 'utf8');

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { describe, expect, it } from 'vitest';
 
 import { renderThermalPreview } from '@wcpos/thermal-utils';
 
@@ -124,7 +125,9 @@ describe('thermal-simple-80mm-rtl renders with Arabic sample data', () => {
 		});
 		const inclusiveWrapper = document.createElement('div');
 		inclusiveWrapper.innerHTML = inclusiveHtml;
-		const inclusiveTaxLine = Array.from(inclusiveWrapper.querySelectorAll('div[style*="display: flex"]'))
+		const inclusiveTaxLine = Array.from(
+			inclusiveWrapper.querySelectorAll('div[style*="display: flex"]')
+		)
 			.map((element) => element.textContent?.trim() ?? '')
 			.find((text) => text.includes('شامل الضريبة') && text.includes('ضريبة القيمة المضافة'));
 		expect(inclusiveTaxLine).toBeTruthy();

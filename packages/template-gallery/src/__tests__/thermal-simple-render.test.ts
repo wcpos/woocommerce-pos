@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { describe, expect, it } from 'vitest';
 
 import { renderThermalPreview } from '@wcpos/thermal-utils';
 
@@ -120,11 +121,15 @@ describe('thermal simple templates render with sample data', () => {
 				const rendered = document.createElement('div');
 				rendered.innerHTML = html;
 				const subtotalAmount = [...rendered.querySelectorAll('span')].find(
-					(span) => span.textContent === '$49.97',
+					(span) => span.textContent === '$49.97'
 				);
 				expect((rendered.firstElementChild as HTMLElement).style.width).toBe('32ch');
-				expect((rendered.querySelector('img') as HTMLImageElement).getAttribute('style')).toContain('width: min(100%,');
-				expect(rendered.querySelector('svg')?.getAttribute('style')).toContain('width: min(100%,');
+				expect(
+					(rendered.querySelector('img') as HTMLImageElement).getAttribute('style')
+				).toContain('width: min(100%,');
+				expect(rendered.querySelector('svg')?.getAttribute('style')).toContain(
+					'width: min(100%,'
+				);
 				expect(subtotalAmount?.getAttribute('style')).toContain('flex: 0 0 12ch');
 			}
 		});
@@ -178,7 +183,13 @@ describe('thermal simple templates render with sample data', () => {
 			]) {
 				expect(renderedText).not.toContain(hidden);
 			}
-			for (const discountText of ['Discounted Item', 'DISC-001', '@ $20.00', '-$5.00', '$15.00']) {
+			for (const discountText of [
+				'Discounted Item',
+				'DISC-001',
+				'@ $20.00',
+				'-$5.00',
+				'$15.00',
+			]) {
 				expect(renderedText).toContain(discountText);
 			}
 		});

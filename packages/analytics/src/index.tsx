@@ -6,11 +6,13 @@ import { t, i18nPromise } from './translations';
 
 const globalHooks = window.wp && window.wp.hooks;
 
-const WrappedReport = ({ Component, ...props }) => {
-	const [isReady, setIsReady] = React.useState(false);
+function WrappedReport({ Component, ...props }) {
+	// The state value is intentionally unread — flipping it just re-renders the
+	// tree once translations have loaded so `t()` calls pick up real strings.
+	const [, setI18nReady] = React.useState(false);
 
 	React.useEffect(() => {
-		i18nPromise.then(() => setIsReady(true));
+		i18nPromise.then(() => setI18nReady(true));
 	}, []);
 
 	React.useEffect(() => {
@@ -41,7 +43,7 @@ const WrappedReport = ({ Component, ...props }) => {
 			<Component {...props} />
 		</>
 	);
-};
+}
 
 if (globalHooks) {
 	globalHooks.addFilter('woocommerce_admin_reports_list', 'woocommerce-pos', (pages) => {

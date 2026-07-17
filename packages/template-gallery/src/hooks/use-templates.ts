@@ -2,6 +2,7 @@ import { useSuspenseQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import apiFetch from '@wordpress/api-fetch';
 
 import { useSnackbar } from '@wcpos/ui';
+
 import { t } from '../translations';
 
 import type { AnyTemplate, Template } from '../types';
@@ -33,7 +34,10 @@ export function useToggleTemplate() {
 		onSuccess: (_data, { status }) => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			addSnackbar({
-				message: status === 'publish' ? t('snackbar.template_activated') : t('snackbar.template_deactivated'),
+				message:
+					status === 'publish'
+						? t('snackbar.template_activated')
+						: t('snackbar.template_deactivated'),
 				status: 'success',
 			});
 		},
@@ -52,14 +56,14 @@ export function useToggleVirtualTemplate(type = 'receipt') {
 			apiFetch({
 				path: 'wcpos/v1/templates/batch?wcpos=1',
 				method: 'POST',
-				data: disabled
-					? { type, disable_virtual: [id] }
-					: { type, enable_virtual: [id] },
+				data: disabled ? { type, disable_virtual: [id] } : { type, enable_virtual: [id] },
 			}),
 		onSuccess: (_data, { disabled }) => {
 			queryClient.invalidateQueries({ queryKey: ['templates'] });
 			addSnackbar({
-				message: disabled ? t('snackbar.template_deactivated') : t('snackbar.template_activated'),
+				message: disabled
+					? t('snackbar.template_deactivated')
+					: t('snackbar.template_activated'),
 				status: 'success',
 			});
 		},
@@ -94,7 +98,7 @@ export function useReorderTemplates(type = 'receipt') {
 	const { addSnackbar } = useSnackbar();
 
 	return useMutation({
-		mutationFn: async (order: Array<number | string>) =>
+		mutationFn: async (order: (number | string)[]) =>
 			apiFetch({
 				path: 'wcpos/v1/templates/batch?wcpos=1',
 				method: 'POST',

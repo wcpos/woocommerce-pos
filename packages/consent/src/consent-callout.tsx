@@ -2,9 +2,10 @@ import * as React from 'react';
 
 import { Button } from '@wcpos/ui';
 
-import type { ConsentCopy } from './api';
 import { PrivacyInfoModal } from './privacy-info-modal';
 import { consentText, t } from './translations';
+
+import type { ConsentCopy } from './api';
 
 export interface ConsentCalloutProps {
 	onDecide: (choice: 'allowed' | 'denied') => void;
@@ -44,15 +45,8 @@ export function ConsentCallout({
 
 	return (
 		<>
-			<button
-				type="button"
-				className="notice-dismiss"
-				disabled={busy}
-				onClick={onDismiss}
-			>
-				<span className="screen-reader-text">
-					{t('consent.dismiss_notice')}
-				</span>
+			<button type="button" className="notice-dismiss" disabled={busy} onClick={onDismiss}>
+				<span className="screen-reader-text">{t('consent.dismiss_notice')}</span>
 			</button>
 			<div className="wcpos:py-2 wcpos:max-w-3xl">
 				<p className="wcpos:text-base wcpos:font-semibold wcpos:mb-1 wcpos:mt-0">
@@ -74,27 +68,15 @@ export function ConsentCallout({
 					</p>
 				)}
 				<div className="wcpos:flex wcpos:gap-2 wcpos:items-center">
-					<Button
-						variant="primary"
-						disabled={busy}
-						onClick={() => onDecide('allowed')}
-					>
+					<Button variant="primary" disabled={busy} onClick={() => onDecide('allowed')}>
 						{consentText(copy, 'allow_label', 'consent.allow')}
 					</Button>
-					<Button
-						variant="secondary"
-						disabled={busy}
-						onClick={() => onDecide('denied')}
-					>
+					<Button variant="secondary" disabled={busy} onClick={() => onDecide('denied')}>
 						{consentText(copy, 'deny_label', 'consent.deny')}
 					</Button>
 				</div>
 			</div>
-			<PrivacyInfoModal
-				open={learnMoreOpen}
-				onClose={() => setLearnMoreOpen(false)}
-				copy={copy}
-			/>
+			<PrivacyInfoModal open={learnMoreOpen} onClose={() => setLearnMoreOpen(false)} copy={copy} />
 		</>
 	);
 }

@@ -1,7 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { ThermalPreview, buildThermalPreviewSrcDoc, getThermalPreviewBodyClassName, getThermalPreviewIframeStyle } from './thermal-preview';
+import {
+	ThermalPreview,
+	buildThermalPreviewSrcDoc,
+	getThermalPreviewBodyClassName,
+	getThermalPreviewIframeStyle,
+} from './thermal-preview';
 
 describe('buildThermalPreviewSrcDoc', () => {
 	it('uses the shared preview frame with physical paper width', () => {
@@ -56,7 +61,7 @@ describe('ThermalPreview rendering', () => {
 			<ThermalPreview
 				content='<receipt paper-width="32"><text>Test receipt</text></receipt>'
 				sampleData={{}}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain('data-testid="preview-viewport-canvas"');
@@ -69,7 +74,7 @@ describe('ThermalPreview rendering', () => {
 			<ThermalPreview
 				content='<receipt paper-width="80"><text>Test receipt</text></receipt>'
 				sampleData={{}}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain('width:302px');
@@ -78,10 +83,7 @@ describe('ThermalPreview rendering', () => {
 
 	it('uses A4 viewport dimensions when no thermal paper width can be resolved', () => {
 		const markup = renderToStaticMarkup(
-			<ThermalPreview
-				content='<receipt><text>Test receipt</text></receipt>'
-				sampleData={{}}
-			/>,
+			<ThermalPreview content="<receipt><text>Test receipt</text></receipt>" sampleData={{}} />
 		);
 
 		expect(markup).toContain('width:794px');

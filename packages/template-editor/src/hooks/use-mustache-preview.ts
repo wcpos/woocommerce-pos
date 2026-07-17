@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 
 import { renderLogiclessPreview } from '@wcpos/thermal-utils';
 
-export function useMustachePreview(template: string, data: Record<string, unknown>, debounceMs = 300) {
+export function useMustachePreview(
+	template: string,
+	data: Record<string, unknown>,
+	debounceMs = 300
+) {
 	const [html, setHtml] = useState('');
 	const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 

@@ -1,7 +1,8 @@
 import { act } from 'react';
+
+import apiFetch from '@wordpress/api-fetch';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import apiFetch from '@wordpress/api-fetch';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -20,7 +21,8 @@ vi.mock('../translations', () => ({
 	t: (key: string) => {
 		const strings: Record<string, string> = {
 			'editor.preview': 'Preview',
-			'editor.php_save_notice': 'This preview shows your last saved version with your latest POS order — save the template to refresh it.',
+			'editor.php_save_notice':
+				'This preview shows your last saved version with your latest POS order — save the template to refresh it.',
 			'editor.template_preview': 'Template preview',
 			'editor.zoom_in': 'Zoom in',
 			'editor.zoom_out': 'Zoom out',
@@ -49,20 +51,22 @@ afterEach(() => {
 
 describe('PhpPreview', () => {
 	it('requests the latest order and adds wcpos=1 when fetching the REST preview URL', () => {
-		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview')).toBe(
-			'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1',
-		);
-		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest')).toBe(
-			'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1',
-		);
-		expect(getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1')).toBe(
-			'https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1&order_id=latest',
-		);
+		expect(
+			getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview')
+		).toBe('https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1');
+		expect(
+			getPhpPreviewRequestUrl(
+				'https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest'
+			)
+		).toBe('https://example.test/wp-json/wcpos/v1/templates/123/preview?order_id=latest&wcpos=1');
+		expect(
+			getPhpPreviewRequestUrl('https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1')
+		).toBe('https://example.test/wp-json/wcpos/v1/templates/123/preview?wcpos=1&order_id=latest');
 	});
 
 	it('renders the preview header and save notice without a Save button', () => {
 		const markup = renderToStaticMarkup(
-			<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+			<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />
 		);
 
 		expect(markup).toContain('Preview');
@@ -117,7 +121,7 @@ describe('PhpPreview', () => {
 
 		await act(async () => {
 			root.render(
-				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />
 			);
 		});
 
@@ -127,9 +131,13 @@ describe('PhpPreview', () => {
 
 		expect(container.textContent).not.toContain('Open in tab');
 		expect(container.querySelector('a[href="https://example.test/preview-output"]')).toBeNull();
-		expect(container.querySelector('iframe')?.getAttribute('src')).toBe('https://example.test/preview-output');
+		expect(container.querySelector('iframe')?.getAttribute('src')).toBe(
+			'https://example.test/preview-output'
+		);
 
-		const canvas = container.querySelector('[data-testid="preview-viewport-canvas"]') as HTMLElement | null;
+		const canvas = container.querySelector(
+			'[data-testid="preview-viewport-canvas"]'
+		) as HTMLElement | null;
 		expect(canvas).toBeTruthy();
 		expect(canvas?.style.width).toBe('794px');
 		expect(canvas?.style.height).toBe('1123px');
@@ -144,7 +152,7 @@ describe('PhpPreview', () => {
 
 		await act(async () => {
 			root.render(
-				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />
 			);
 		});
 
@@ -168,7 +176,7 @@ describe('PhpPreview', () => {
 
 		await act(async () => {
 			root.render(
-				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />,
+				<PhpPreview previewUrl="https://example.test/wp-json/wcpos/v1/templates/123/preview" />
 			);
 		});
 
@@ -177,7 +185,7 @@ describe('PhpPreview', () => {
 		});
 
 		expect(container.textContent).toContain(
-			'No POS orders found. Create an order in the POS to preview templates.',
+			'No POS orders found. Create an order in the POS to preview templates.'
 		);
 		expect(container.querySelector('iframe')).toBeNull();
 	});

@@ -1,8 +1,9 @@
 import { act } from 'react';
+
+import { html } from '@codemirror/lang-html';
+import { codeFolding, foldedRanges } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { codeFolding, foldedRanges } from '@codemirror/language';
-import { html } from '@codemirror/lang-html';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,11 +46,7 @@ function renderToolbar(wrap: boolean, onToggleWrap = vi.fn()) {
 
 	act(() => {
 		root.render(
-			<EditorToolbar
-				viewRef={{ current: null }}
-				wrap={wrap}
-				onToggleWrap={onToggleWrap}
-			/>,
+			<EditorToolbar viewRef={{ current: null }} wrap={wrap} onToggleWrap={onToggleWrap} />
 		);
 	});
 
@@ -69,7 +66,9 @@ describe('EditorToolbar', () => {
 		const onToggleWrap = vi.fn();
 		const { container } = renderToolbar(true, onToggleWrap);
 
-		const wrapButton = container.querySelector('button[aria-label="Word wrap"]') as HTMLButtonElement;
+		const wrapButton = container.querySelector(
+			'button[aria-label="Word wrap"]'
+		) as HTMLButtonElement;
 
 		expect(wrapButton).toBeTruthy();
 		expect(wrapButton.getAttribute('aria-pressed')).toBe('true');

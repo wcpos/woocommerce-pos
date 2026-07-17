@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { FieldSchema } from '../types';
+
 import { t } from '../translations';
 import { FieldTreeNode } from './field-tree-node';
 import { SearchField } from './search-field';
 import { ThermalElements, thermalMatchesSearch } from './thermal-elements';
+
+import type { FieldSchema } from '../types';
 
 interface FieldPickerProps {
 	schema: FieldSchema;
@@ -53,9 +55,9 @@ function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
 	if (entry.sectionKey.toLowerCase().includes(lower)) return true;
 	if (entry.section.label.toLowerCase().includes(lower)) return true;
 
-	const fieldMatches = Object.entries(entry.section.fields).some(([key, field]) => (
-		key.toLowerCase().includes(lower) || field.label.toLowerCase().includes(lower)
-	));
+	const fieldMatches = Object.entries(entry.section.fields).some(
+		([key, field]) => key.toLowerCase().includes(lower) || field.label.toLowerCase().includes(lower)
+	);
 	if (fieldMatches) return true;
 
 	return entry.children.some((child) => entryMatchesSearch(child, search));
@@ -70,9 +72,7 @@ export function FieldPicker({ schema, engine, onInsertField }: FieldPickerProps)
 	const showEmptyState = Boolean(search) && !hasFieldMatches && !hasThermalMatches;
 
 	return (
-		<div
-			className="wcpos:w-60 wcpos:shrink-0 wcpos:self-stretch wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden"
-		>
+		<div className="wcpos:w-60 wcpos:shrink-0 wcpos:self-stretch wcpos:flex wcpos:flex-col wcpos:border wcpos:border-gray-200 wcpos:bg-white wcpos:rounded-lg wcpos:overflow-hidden">
 			<div className="wcpos:p-2 wcpos:border-b wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:shrink-0">
 				<div className="wcpos:text-xs wcpos:font-semibold wcpos:text-gray-500 wcpos:uppercase wcpos:tracking-wider wcpos:mb-2 wcpos:px-1">
 					{t('editor.fields')}

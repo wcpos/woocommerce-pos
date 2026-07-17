@@ -1,10 +1,11 @@
+import type { CSSProperties, ReactNode } from 'react';
+
 import { buildPreviewFrameHtml, renderThermalPreview } from '@wcpos/thermal-utils';
 import { PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { useThermalPreview } from '../hooks/use-thermal-preview';
 import { t } from '../translations';
 import { PreviewSkeleton } from './preview-skeleton';
-import type { CSSProperties, ReactNode } from 'react';
 
 interface ThermalPreviewProps {
 	content: string;
@@ -21,7 +22,12 @@ interface BuildThermalPreviewSrcDocOptions {
 	bodyHtml?: string;
 }
 
-export function buildThermalPreviewSrcDoc({ content, sampleData, paperWidth, bodyHtml }: BuildThermalPreviewSrcDocOptions): string {
+export function buildThermalPreviewSrcDoc({
+	content,
+	sampleData,
+	paperWidth,
+	bodyHtml,
+}: BuildThermalPreviewSrcDocOptions): string {
 	return buildPreviewFrameHtml({
 		bodyHtml: bodyHtml ?? renderThermalPreview(content, sampleData),
 		paperWidth: paperWidth ?? inferPaperWidthFromXml(content),
@@ -49,7 +55,13 @@ function resolveThermalPaperWidth(content: string, paperWidth?: string | null): 
 	return 'a4';
 }
 
-export function ThermalPreview({ content, sampleData, loading, sourcePicker, paperWidth }: ThermalPreviewProps) {
+export function ThermalPreview({
+	content,
+	sampleData,
+	loading,
+	sourcePicker,
+	paperWidth,
+}: ThermalPreviewProps) {
 	const renderedHtml = useThermalPreview(content, sampleData);
 	const srcdoc = buildThermalPreviewSrcDoc({
 		content,
@@ -89,7 +101,9 @@ export function ThermalPreview({ content, sampleData, loading, sourcePicker, pap
 }
 
 function inferPaperWidthFromXml(content: string): string | null {
-	const match = content.match(/<receipt\b[^>]*\bpaper-width\s*=\s*(["'])(32|42|48|58|80)(?:mm)?\1/i);
+	const match = content.match(
+		/<receipt\b[^>]*\bpaper-width\s*=\s*(["'])(32|42|48|58|80)(?:mm)?\1/i
+	);
 	const value = match?.[2]?.toLowerCase();
 	if (value === '32' || value === '58') return '58mm';
 	if (value === '42' || value === '48' || value === '80') return '80mm';

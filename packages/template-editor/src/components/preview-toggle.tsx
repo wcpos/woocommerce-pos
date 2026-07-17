@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+
 import { t } from '../translations';
 
 interface PreviewToggleProps {
@@ -9,7 +10,10 @@ interface PreviewToggleProps {
 
 const base = 'wcpos:px-2.5 wcpos:py-1 wcpos:text-xs wcpos:font-medium wcpos:transition-colors';
 
-function pillProps(isActive: boolean, isDisabled: boolean): { className: string; style?: CSSProperties } {
+function pillProps(
+	isActive: boolean,
+	isDisabled: boolean
+): { className: string; style?: CSSProperties } {
 	if (isActive) {
 		return {
 			className: `${base} wcpos:text-white`,

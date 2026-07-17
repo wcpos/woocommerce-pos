@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+
 import { t } from '../translations';
 
 interface PreviewSkeletonProps {
@@ -19,13 +20,7 @@ export function PreviewSkeleton({ style }: PreviewSkeletonProps) {
 				...style,
 			}}
 		>
-			<svg
-				className="wcpos:animate-spin"
-				width="24"
-				height="24"
-				viewBox="0 0 24 24"
-				fill="none"
-			>
+			<svg className="wcpos:animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<circle cx="12" cy="12" r="10" stroke="#e5e7eb" strokeWidth="3" />
 				<path
 					d="M12 2a10 10 0 0 1 10 10"
@@ -34,9 +29,7 @@ export function PreviewSkeleton({ style }: PreviewSkeletonProps) {
 					strokeLinecap="round"
 				/>
 			</svg>
-			<span className="wcpos:text-xs wcpos:text-gray-400">
-				{t('editor.loading_data')}
-			</span>
+			<span className="wcpos:text-xs wcpos:text-gray-400">{t('editor.loading_data')}</span>
 		</div>
 	);
 }

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+
 import apiFetch from '@wordpress/api-fetch';
 
 interface PreviewDataState {
@@ -10,7 +11,7 @@ interface PreviewDataState {
 export function usePreviewData(
 	sampleData: Record<string, unknown>,
 	templateId: number,
-	hasPosOrders: boolean,
+	hasPosOrders: boolean
 ) {
 	const defaultSource = hasPosOrders ? 'order' : 'sample';
 	const [state, setState] = useState<PreviewDataState>({
@@ -53,7 +54,7 @@ export function usePreviewData(
 					setState({ source: 'sample', data: sampleData, loading: false });
 				});
 		},
-		[sampleData, templateId],
+		[sampleData, templateId]
 	);
 
 	// Auto-fetch order data on mount when POS orders exist.

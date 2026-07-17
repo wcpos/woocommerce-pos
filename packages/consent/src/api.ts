@@ -28,10 +28,7 @@ export interface ConsentConfig {
  * where the @wordpress/api-fetch global may not be configured with the
  * REST nonce.
  */
-export async function saveConsent(
-	choice: ConsentChoice,
-	config: ConsentConfig
-): Promise<void> {
+export async function saveConsent(choice: ConsentChoice, config: ConsentConfig): Promise<void> {
 	const response = await fetch(config.restUrl, {
 		method: 'POST',
 		credentials: 'same-origin',
