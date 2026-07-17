@@ -75,6 +75,9 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 	/**
 	 * Construct the POS permalink.
 	 *
+	 * The trailing slash follows the site's permalink structure, via
+	 * user_trailingslashit().
+	 *
 	 * @param string $page Page slug.
 	 *
 	 * @return string POS URL.
@@ -82,7 +85,7 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 	function wcpos_url( $page = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
 		$slug = Permalink::get_slug();
 
-		return home_url( $slug . '/' . $page, wcpos_url_scheme() );
+		return home_url( user_trailingslashit( $slug . '/' . $page ), wcpos_url_scheme() );
 	}
 }
 
@@ -103,12 +106,21 @@ if ( ! \function_exists( 'wcpos_checkout_url' ) ) {
 	 * Like home_url(), this performs no encoding — pass trusted path segments
 	 * only and escape the result on output.
 	 *
+	 * The trailing slash follows the site's permalink structure, via
+	 * user_trailingslashit(). Slash-less URLs can trip origin rewrite rules
+	 * that force a trailing slash — some redirect to a hardcoded http://
+	 * target, which the browser then blocks as mixed content. The slash is
+	 * appended to the end of the string, so $path must not contain a query
+	 * string or fragment; append query args to the returned URL instead.
+	 *
 	 * @param string $path Path relative to the wcpos-checkout endpoint, eg: 'order-pay/123'.
 	 *
 	 * @return string POS checkout URL.
 	 */
 	function wcpos_checkout_url( $path = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
-		return home_url( '/' . Template_Router::CHECKOUT_PATH . '/' . ltrim( $path, '/' ), wcpos_url_scheme() );
+		$full_path = Template_Router::CHECKOUT_PATH . '/' . ltrim( $path, '/' );
+
+		return home_url( user_trailingslashit( $full_path ), wcpos_url_scheme() );
 	}
 }
 

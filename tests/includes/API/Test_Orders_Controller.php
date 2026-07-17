@@ -26,6 +26,10 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function tearDown(): void {
+		// The test framework only resets permalinks for core tests, so undo
+		// set_permalink_structure() here or it leaks into later test classes.
+		$this->set_permalink_structure( '' );
+
 		parent::tearDown();
 	}
 
@@ -1455,5 +1459,27 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$links = $response->get_links();
 		$this->assertStringStartsWith( 'http://', $links['payment'][0]['href'] );
 		$this->assertStringStartsWith( 'http://', $links['receipt'][0]['href'] );
+	}
+
+	/**
+	 * Payment and receipt links should carry a trailing slash before the query
+	 * string when the permalink structure uses trailing slashes, so they don't
+	 * trip origin rewrite rules that force a trailing slash (see
+	 * wcpos_checkout_url()).
+	 */
+	public function test_order_links_trailing_slash_permalinks_slash_before_query_string(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%/' );
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertStringContainsString( '/wcpos-checkout/order-pay/' . $order->get_id() . '/?', $links['payment'][0]['href'] );
+		$this->assertStringContainsString( '/wcpos-checkout/wcpos-receipt/' . $order->get_id() . '/?key=', $links['receipt'][0]['href'] );
 	}
 }

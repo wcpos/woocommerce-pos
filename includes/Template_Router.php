@@ -84,12 +84,14 @@ class Template_Router {
 	 * Get the full URL for the POS authorization endpoint.
 	 *
 	 * Respects the force_ssl setting, like wcpos_url(), so the login URL works
-	 * when the site home URL is http but the POS is served over https.
+	 * when the site home URL is http but the POS is served over https. The
+	 * trailing slash follows the site's permalink structure, via
+	 * user_trailingslashit().
 	 *
 	 * @return string
 	 */
 	public static function get_auth_url(): string {
-		return home_url( self::AUTH_PATH . '/', Settings::instance()->url_scheme() );
+		return home_url( user_trailingslashit( self::AUTH_PATH ), Settings::instance()->url_scheme() );
 	}
 
 	/**
