@@ -11,6 +11,7 @@
 use WCPOS\WooCommercePOS\Admin\Permalink;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Template_Router;
 use const WCPOS\WooCommercePOS\PLUGIN_PATH;
 use const WCPOS\WooCommercePOS\SHORT_NAME;
 use const WCPOS\WooCommercePOS\VERSION;
@@ -47,6 +48,24 @@ if ( ! \function_exists( 'getallheaders' ) ) {
 }
 
 /*
+ * Resolve the URL scheme for POS permalinks.
+ *
+ * @return string|null 'https' when force_ssl is enabled, null for the home scheme.
+ */
+if ( ! \function_exists( 'wcpos_url_scheme' ) ) {
+	/**
+	 * Resolve the URL scheme for POS permalinks.
+	 *
+	 * See Settings::url_scheme() for the policy.
+	 *
+	 * @return string|null 'https' when force_ssl is enabled, null for the home scheme.
+	 */
+	function wcpos_url_scheme(): ?string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		return Settings::instance()->url_scheme();
+	}
+}
+
+/*
  * Construct the POS permalink.
  *
  * @param string $page Page slug.
@@ -61,10 +80,35 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 	 * @return string POS URL.
 	 */
 	function wcpos_url( $page = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
-		$slug   = Permalink::get_slug();
-		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+		$slug = Permalink::get_slug();
 
-		return home_url( $slug . '/' . $page, $scheme );
+		return home_url( $slug . '/' . $page, wcpos_url_scheme() );
+	}
+}
+
+/*
+ * Construct a POS checkout permalink.
+ *
+ * @param string $path Path relative to the wcpos-checkout endpoint.
+ * @return string POS checkout URL.
+ */
+if ( ! \function_exists( 'wcpos_checkout_url' ) ) {
+	/**
+	 * Construct a POS checkout permalink.
+	 *
+	 * Respects the force_ssl setting, like wcpos_url(), so checkout and receipt
+	 * links work when the site home URL is http but the POS is served over https,
+	 * eg: behind an SSL-terminating proxy.
+	 *
+	 * Like home_url(), this performs no encoding — pass trusted path segments
+	 * only and escape the result on output.
+	 *
+	 * @param string $path Path relative to the wcpos-checkout endpoint, eg: 'order-pay/123'.
+	 *
+	 * @return string POS checkout URL.
+	 */
+	function wcpos_checkout_url( $path = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		return home_url( '/' . Template_Router::CHECKOUT_PATH . '/' . ltrim( $path, '/' ), wcpos_url_scheme() );
 	}
 }
 

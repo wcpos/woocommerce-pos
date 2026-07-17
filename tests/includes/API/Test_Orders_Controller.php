@@ -1405,4 +1405,55 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertIsInt( $data['line_items'][0]['image']['id'], 'Line item image ID should be an integer, got: ' . gettype( $data['line_items'][0]['image']['id'] ) );
 		$this->assertEquals( $attachment_id, $data['line_items'][0]['image']['id'] );
 	}
+
+	/**
+	 * Payment and receipt links should use https when the force_ssl setting is
+	 * enabled (the default), even when the site home URL is http. Sites behind
+	 * SSL-terminating proxies often have an http home URL while the POS is
+	 * served over https — an http link is blocked as mixed content.
+	 */
+	public function test_order_links_force_ssl_enabled_returns_https(): void {
+		// Arrange: force_ssl defaults to true; test site home URL is http.
+		$this->assertStringStartsWith( 'http://', get_home_url() );
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertArrayHasKey( 'payment', $links );
+		$this->assertArrayHasKey( 'receipt', $links );
+		$this->assertStringStartsWith( 'https://', $links['payment'][0]['href'] );
+		$this->assertStringStartsWith( 'https://', $links['receipt'][0]['href'] );
+	}
+
+	/**
+	 * Payment and receipt links should preserve the home URL scheme when the
+	 * force_ssl setting is disabled.
+	 */
+	public function test_order_links_force_ssl_disabled_preserves_home_scheme(): void {
+		// Arrange.
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['force_ssl'] = false;
+
+				return $settings;
+			}
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertStringStartsWith( 'http://', $links['payment'][0]['href'] );
+		$this->assertStringStartsWith( 'http://', $links['receipt'][0]['href'] );
+	}
 }

@@ -962,7 +962,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 				'pay_for_order' => true,
 				'key'           => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
 			),
-			get_home_url( null, '/wcpos-checkout/order-pay/' . $order->get_id() )
+			wcpos_checkout_url( 'order-pay/' . $order->get_id() )
 		);
 
 		$response->add_link( 'payment', $pos_payment_url, array( 'foo' => 'bar' ) );
@@ -972,7 +972,7 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 			array(
 				'key' => method_exists( $order, 'get_order_key' ) ? $order->get_order_key() : '',
 			),
-			get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order->get_id() )
+			wcpos_checkout_url( 'wcpos-receipt/' . $order->get_id() )
 		);
 		$response->add_link( 'receipt', $pos_receipt_url );
 
