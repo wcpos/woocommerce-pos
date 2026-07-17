@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
+use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 
 /**
  * Checkout controller tests.
@@ -17,6 +18,50 @@ use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
  * @coversNothing
  */
 class Test_Checkout_Controller extends WCPOS_REST_Unit_Test_Case {
+	/** Direct gateway checkout validates stock before dispatch. */
+	public function test_checkout_validates_stock_before_dispatching_gateway(): void {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'  => true,
+				'stock_quantity' => 1,
+				'backorders'    => 'no',
+			)
+		);
+		$order = wc_create_order();
+		$order->set_status( 'pos-open' );
+		$order->set_payment_method( 'pos_cash' );
+		$order->add_product( $product, 2 );
+		$order->calculate_totals();
+		$order->save();
+
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/orders/' . $order->get_id() . '/checkout' );
+			$request->set_header( 'X-WCPOS-Idempotency-Key', wp_generate_uuid4() );
+			$request->set_body_params(
+				array(
+					'gateway_id'   => 'pos_cash',
+					'action'       => 'start',
+					'payment_data' => array( 'amount_tendered' => $order->get_total() ),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertSame( 400, $response->get_status(), wp_json_encode( $data ) );
+			$this->assertSame( 'wcpos_insufficient_stock', $data['code'] );
+			$this->assertSame( 'pos-open', wc_get_order( $order->get_id() )->get_status() );
+		} finally {
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
 	/**
 	 * It releases the idempotency claim after a successful checkout.
 	 */

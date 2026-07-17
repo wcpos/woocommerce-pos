@@ -296,7 +296,7 @@ class Init {
 		new Orders();
 		new Emails();
 		new Templates();
-		new Services\Stock_Validator();
+		Services\Stock_Validator::instance();
 		new Services\Print_Job_Service();
 		new Services\Cloud_Print_Trigger_Service();
 		new Services\Cloud_Print_Submit_Service();

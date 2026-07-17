@@ -491,6 +491,48 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 0, $data['customer_id'] );
 	}
 
+	/** Creating a paid order reserves stock before payment completion. */
+	public function test_create_paid_order_blocks_before_reducing_insufficient_stock(): void {
+		$original_settings = get_option( 'woocommerce_pos_settings_checkout' );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+		$product = ProductHelper::create_simple_product(
+			array(
+				'manage_stock'  => true,
+				'stock_quantity' => 1,
+				'backorders'    => 'no',
+			)
+		);
+
+		try {
+			$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+			$request->set_body_params(
+				array(
+					'set_paid'      => true,
+					'payment_method' => 'pos_cash',
+					'line_items'     => array(
+						array(
+							'product_id' => $product->get_id(),
+							'quantity'   => 2,
+						),
+					),
+				)
+			);
+
+			$response = $this->server->dispatch( $request );
+			$data     = $response->get_data();
+
+			$this->assertEquals( 400, $response->get_status(), wp_json_encode( $data ) );
+			$this->assertEquals( 'wcpos_insufficient_stock', $data['code'] );
+			$this->assertEquals( 1.0, (float) wc_get_product( $product->get_id() )->get_stock_quantity() );
+		} finally {
+			if ( false === $original_settings ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original_settings );
+			}
+		}
+	}
+
 	/**
 	 * GOTCHA: if there is billing info, we need to allow no email for guest orders.
 	 */
