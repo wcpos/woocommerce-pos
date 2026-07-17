@@ -5,6 +5,7 @@ import { Button, Card } from '@wcpos/ui';
 import { TemplateTags } from './template-tags';
 import { getGalleryPreviewSrc } from '../preview-assets';
 import { t } from '../translations';
+
 import type { AnyTemplate, GalleryTemplate } from '../types';
 
 interface BaseProps {
@@ -78,16 +79,14 @@ export function TemplateCard(props: TemplateCardProps) {
 								'wcpos:w-3 wcpos:h-3 wcpos:rounded-full wcpos:border-2 wcpos:shrink-0 wcpos:mt-0.5 wcpos:cursor-pointer wcpos:p-0',
 								isActive
 									? 'wcpos:bg-green-500 wcpos:border-green-500'
-									: 'wcpos:bg-white wcpos:border-gray-300',
+									: 'wcpos:bg-white wcpos:border-gray-300'
 							)}
 						/>
 					)}
 				</div>
 
 				{description && (
-					<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:m-0">
-						{description}
-					</p>
+					<p className="wcpos:text-xs wcpos:text-gray-500 wcpos:m-0">{description}</p>
 				)}
 
 				{/* Tags */}
@@ -97,7 +96,7 @@ export function TemplateCard(props: TemplateCardProps) {
 			<Card.Footer
 				className={classnames(
 					'wcpos:flex wcpos:items-center wcpos:gap-3',
-					isGallery && 'wcpos:justify-between',
+					isGallery && 'wcpos:justify-between'
 				)}
 			>
 				<button
@@ -108,7 +107,11 @@ export function TemplateCard(props: TemplateCardProps) {
 					{t('common.preview')}
 				</button>
 				{isGallery ? (
-					<Button variant="primary" onClick={props.onCustomize} className="wcpos:max-w-full wcpos:min-w-0 wcpos:overflow-hidden wcpos:whitespace-nowrap">
+					<Button
+						variant="primary"
+						onClick={props.onCustomize}
+						className="wcpos:max-w-full wcpos:min-w-0 wcpos:overflow-hidden wcpos:whitespace-nowrap"
+					>
 						<span className="wcpos:block wcpos:max-w-full wcpos:truncate">
 							{t('common.use_template')}
 						</span>

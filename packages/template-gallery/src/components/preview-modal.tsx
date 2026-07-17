@@ -1,12 +1,17 @@
 import * as React from 'react';
 
-import { buildPreviewFrameHtml, renderLogiclessPreview, renderThermalPreview } from '@wcpos/thermal-utils';
+import {
+	buildPreviewFrameHtml,
+	renderLogiclessPreview,
+	renderThermalPreview,
+} from '@wcpos/thermal-utils';
 import { Button, PreviewViewport, type PreviewPaperWidth } from '@wcpos/ui';
 
 import { usePreview } from '../hooks/use-preview';
 import { t } from '../translations';
-import type { PreviewResponse } from '../types';
 import { PreviewToggle } from './preview-toggle';
+
+import type { PreviewResponse } from '../types';
 
 interface PreviewModalProps {
 	templateId: number | string;
@@ -39,7 +44,6 @@ function buildRenderedPreviewFrame(preview: PreviewResponse): string {
 	return '';
 }
 
-
 function getPreviewPaperWidth(preview: PreviewResponse): PreviewPaperWidth {
 	if (preview.paper_width === '58mm') return '58mm';
 	if (preview.paper_width === '80mm') return '80mm';
@@ -48,7 +52,13 @@ function getPreviewPaperWidth(preview: PreviewResponse): PreviewPaperWidth {
 
 const PREVIEW_IFRAME_CLASS = 'wcpos:block wcpos:h-full wcpos:w-full wcpos:border-0 wcpos:bg-white';
 
-function PreviewFrameContent({ preview, templateName }: { preview: PreviewResponse; templateName: string }) {
+function PreviewFrameContent({
+	preview,
+	templateName,
+}: {
+	preview: PreviewResponse;
+	templateName: string;
+}) {
 	const srcdoc = React.useMemo(() => {
 		try {
 			return buildPreviewModalSrcDoc(preview);
@@ -80,7 +90,6 @@ function PreviewFrameContent({ preview, templateName }: { preview: PreviewRespon
 	);
 }
 
-
 export function buildPreviewModalSrcDoc(preview: PreviewResponse): string {
 	const renderedFrame = buildRenderedPreviewFrame(preview);
 	if (renderedFrame) {
@@ -90,7 +99,10 @@ export function buildPreviewModalSrcDoc(preview: PreviewResponse): string {
 	if (preview.preview_html) {
 		return isFullHtmlDocument(preview.preview_html)
 			? preview.preview_html
-			: buildPreviewFrameHtml({ bodyHtml: preview.preview_html, paperWidth: preview.paper_width ?? 'a4' });
+			: buildPreviewFrameHtml({
+					bodyHtml: preview.preview_html,
+					paperWidth: preview.paper_width ?? 'a4',
+				});
 	}
 
 	return '';
@@ -113,7 +125,7 @@ export function PreviewModal({
 	const hasPosOrders = Boolean((window as any).wcpos?.templateGallery?.hasPosOrders);
 	const [source, setSource] = React.useState<'sample' | 'order'>(hasPosOrders ? 'order' : 'sample');
 	const orderId = source === 'order' ? 'latest' : undefined;
-	const { data: preview, isLoading, isFetching, isError } = usePreview(templateId, orderId);
+	const { data: preview, isFetching, isError } = usePreview(templateId, orderId);
 	const dialogRef = React.useRef<HTMLDivElement>(null);
 	const closeButtonRef = React.useRef<HTMLButtonElement>(null);
 	const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
@@ -124,17 +136,17 @@ export function PreviewModal({
 		((preview.template_content != null && preview.receipt_data) || preview.preview_html)
 	);
 
-	// Revert to sample if order fetch fails
+	// Let the errored order observer mount and retry before falling back.
 	React.useEffect(() => {
-		if (isError && source === 'order') {
-			setSource('sample');
-		}
-	}, [isError, source]);
+		if (!isError || isFetching || source !== 'order') return;
+
+		const fallbackTimer = window.setTimeout(() => setSource('sample'), 0);
+		return () => window.clearTimeout(fallbackTimer);
+	}, [isError, isFetching, source]);
 
 	React.useEffect(() => {
-		previousFocusedElementRef.current = document.activeElement instanceof HTMLElement
-			? document.activeElement
-			: null;
+		previousFocusedElementRef.current =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
 		const previousOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
@@ -151,7 +163,7 @@ export function PreviewModal({
 			if (!dialog) return;
 
 			const focusableElements = dialog.querySelectorAll<HTMLElement>(
-				'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+				'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
 			);
 			if (focusableElements.length === 0) {
 				e.preventDefault();
@@ -212,11 +224,7 @@ export function PreviewModal({
 						)}
 					</div>
 					<div className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:shrink-0">
-						<PreviewToggle
-							source={source}
-							disabled={!hasPosOrders}
-							onToggle={setSource}
-						/>
+						<PreviewToggle source={source} disabled={!hasPosOrders} onToggle={setSource} />
 						<button
 							ref={closeButtonRef}
 							type="button"
@@ -273,7 +281,9 @@ export function PreviewModal({
 				{/* Footer actions */}
 				<div className="wcpos:flex wcpos:items-center wcpos:justify-between wcpos:p-4 wcpos:border-t wcpos:border-gray-200">
 					<div className="wcpos:text-xs wcpos:text-gray-500">
-						{preview?.order_id ? <>{t('modal.preview_order', { orderId: preview.order_id })}</> : null}
+						{preview?.order_id ? (
+							<>{t('modal.preview_order', { orderId: preview.order_id })}</>
+						) : null}
 					</div>
 					<div className="wcpos:flex wcpos:gap-2">
 						{isGallery ? (

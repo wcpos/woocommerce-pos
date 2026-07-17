@@ -49,11 +49,9 @@ describe('groupByDay', () => {
 		// When "now" is 2026-04-24T01:00Z (11:00 Sydney on the 24th),
 		// the 14:00Z entry should bucket as "today" in Sydney.
 		const sydneyNow = new Date('2026-04-24T01:00:00Z').getTime();
-		const groups = groupByDay(
-			[entry('2026-04-23T14:00:00+00:00')],
-			sydneyNow,
-			{ timeZone: 'Australia/Sydney' }
-		);
+		const groups = groupByDay([entry('2026-04-23T14:00:00+00:00')], sydneyNow, {
+			timeZone: 'Australia/Sydney',
+		});
 		expect(groups[0].label).toBe('today');
 	});
 

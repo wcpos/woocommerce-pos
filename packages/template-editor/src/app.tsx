@@ -1,13 +1,15 @@
 import { useState, useRef, useCallback, useEffect, type CSSProperties } from 'react';
+
 import { CodeEditor } from './components/code-editor';
 import { FieldPicker } from './components/field-picker';
 import { LivePreview } from './components/live-preview';
 import { PhpPreview } from './components/php-preview';
-import { ThermalPreview } from './components/thermal-preview';
 import { PreviewToggle } from './components/preview-toggle';
+import { ThermalPreview } from './components/thermal-preview';
 import { useContentSync } from './hooks/use-content-sync';
 import { usePreviewData } from './hooks/use-preview-data';
 import { t } from './translations';
+
 import type { EditorConfig } from './types';
 
 const PAPER_WIDTH_CHARS: Record<string, number> = {
@@ -183,7 +185,13 @@ function getDefaultDoc(postContent: string, engine: EditorConfig['engine']): str
 	return postContent || STARTER_SHELLS[engine];
 }
 
-function TemplateInfoBar({ engine, paperWidth }: { engine: EditorConfig['engine']; paperWidth: string | null }) {
+function TemplateInfoBar({
+	engine,
+	paperWidth,
+}: {
+	engine: EditorConfig['engine'];
+	paperWidth: string | null;
+}) {
 	let icon: string;
 	let text: string;
 	let bgClass: string;
@@ -204,7 +212,9 @@ function TemplateInfoBar({ engine, paperWidth }: { engine: EditorConfig['engine'
 	}
 
 	return (
-		<div className={`wcpos:flex wcpos:items-start wcpos:gap-2 wcpos:px-3 wcpos:py-2 wcpos:rounded wcpos:border wcpos:text-sm wcpos:mb-4 ${bgClass}`}>
+		<div
+			className={`wcpos:flex wcpos:items-start wcpos:gap-2 wcpos:px-3 wcpos:py-2 wcpos:rounded wcpos:border wcpos:text-sm wcpos:mb-4 ${bgClass}`}
+		>
 			<span className="wcpos:shrink-0">{icon}</span>
 			<span>{text}</span>
 		</div>
@@ -311,7 +321,7 @@ export function App({ config }: AppProps) {
 				const newChars = PAPER_WIDTH_CHARS[newPaperWidth] ?? 48;
 				nextDoc = currentContent.replace(
 					/paper-width\s*=\s*(['"])\d+\1/g,
-					(_match, quote) => `paper-width=${quote}${newChars}${quote}`,
+					(_match, quote) => `paper-width=${quote}${newChars}${quote}`
 				);
 			}
 
@@ -327,11 +337,14 @@ export function App({ config }: AppProps) {
 		return () => window.removeEventListener('wcposPaperWidthChange', handler);
 	}, [syncContent]);
 
-	const handleChange = useCallback((newContent: string) => {
-		contentRef.current = newContent;
-		setContent(newContent);
-		syncContent(newContent);
-	}, [syncContent]);
+	const handleChange = useCallback(
+		(newContent: string) => {
+			contentRef.current = newContent;
+			setContent(newContent);
+			syncContent(newContent);
+		},
+		[syncContent]
+	);
 
 	const handleInsertField = useCallback((text: string) => {
 		if (insertRef.current) {

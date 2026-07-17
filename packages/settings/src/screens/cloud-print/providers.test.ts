@@ -15,7 +15,9 @@ describe('cloud-print providers metadata', () => {
 	it('PROVIDERS covers every CloudProvider exactly once', () => {
 		const ids = Object.keys(PROVIDERS) as CloudProvider[];
 		expect(new Set(ids).size).toBe(ids.length);
-		expect(ids).toEqual(expect.arrayContaining(['printnode', 'star-online', 'star-cloudprnt', 'epson-sdp']));
+		expect(ids).toEqual(
+			expect.arrayContaining(['printnode', 'star-online', 'star-cloudprnt', 'epson-sdp'])
+		);
 	});
 
 	it('describes Star CloudPRNT', () => {

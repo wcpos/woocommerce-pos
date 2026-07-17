@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(__dirname, '../../../../');
 const galleryDir = path.join(repoRoot, 'templates', 'gallery');
@@ -21,15 +22,10 @@ const PREVIEW_DEVICE_SCALE_FACTOR = 2;
 const A4_PREVIEW_CSS_WIDTH = 794;
 
 // Templates whose preview PNG dimensions must match the 58mm paper width.
-const THERMAL_58MM_KEYS = new Set([
-	'thermal-simple-58mm',
-	'thermal-detailed-58mm',
-]);
+const THERMAL_58MM_KEYS = new Set(['thermal-simple-58mm', 'thermal-detailed-58mm']);
 
 // All thermal templates (need a preview PNG sized to 58mm or 80mm).
-const THERMAL_KEYS = new Set(
-	getBundledGalleryKeys().filter((key) => key.startsWith('thermal-'))
-);
+const THERMAL_KEYS = new Set(getBundledGalleryKeys().filter((key) => key.startsWith('thermal-')));
 
 function findContentFile(key: string): string | null {
 	for (const ext of ['html', 'xml', 'php']) {
@@ -63,7 +59,8 @@ function removeComments(root: Document): void {
 beforeEach(() => {
 	(window as Window & { wcpos?: { templateGallery?: { previewBaseUrl?: string } } }).wcpos = {
 		templateGallery: {
-			previewBaseUrl: 'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
+			previewBaseUrl:
+				'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
 		},
 	};
 });
@@ -134,7 +131,6 @@ describe('gallery template assets', () => {
 		}
 	});
 
-
 	it('marks invoice bank-transfer details as fake editable placeholders', () => {
 		const content = fs.readFileSync(path.join(galleryDir, 'invoice.html'), 'utf8');
 
@@ -155,7 +151,6 @@ describe('gallery template assets', () => {
 		}
 	});
 
-
 	it('does not expose removed gallery templates or legacy PHP examples', async () => {
 		const { getGalleryPreviewSrc } = await import('../preview-assets');
 		const removedGalleryFiles = [
@@ -175,7 +170,9 @@ describe('gallery template assets', () => {
 		}
 
 		for (const removedKey of ['branded-receipt', 'return-receipt', 'tax-invoice']) {
-			expect(fs.existsSync(path.join(previewDir, `${removedKey}.png`)), removedKey).toBe(false);
+			expect(fs.existsSync(path.join(previewDir, `${removedKey}.png`)), removedKey).toBe(
+				false
+			);
 			expect(getGalleryPreviewSrc(removedKey), removedKey).toBeUndefined();
 		}
 	});
@@ -192,11 +189,10 @@ describe('gallery template assets', () => {
 		for (const key of getBundledGalleryKeys()) {
 			expect(fs.existsSync(path.join(previewDir, `${key}.png`)), key).toBe(true);
 			expect(getGalleryPreviewSrc(key), key).toBe(
-				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.png`,
+				`https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews/${key}.png`
 			);
 		}
 	});
-
 
 	it('ships high-resolution preview source images for clean browser downscaling', () => {
 		for (const key of getBundledGalleryKeys()) {
@@ -210,7 +206,8 @@ describe('gallery template assets', () => {
 
 	it('preserves natural thermal paper widths at the preview source scale', () => {
 		for (const key of THERMAL_KEYS) {
-			const expectedWidth = (THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR;
+			const expectedWidth =
+				(THERMAL_58MM_KEYS.has(key) ? 274 : 398) * PREVIEW_DEVICE_SCALE_FACTOR;
 			const dimensions = readPngDimensions(path.join(previewDir, `${key}.png`));
 			expect(dimensions.width, key).toBe(expectedWidth);
 		}
@@ -289,5 +286,4 @@ describe('gallery template assets', () => {
 		}
 		expect(mirroredRowCount).toBeGreaterThan(0);
 	});
-
 });

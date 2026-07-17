@@ -53,7 +53,7 @@ function EmailGroup({
 	settingsKey: 'admin_emails' | 'customer_emails' | 'cashier_emails';
 	label: string;
 	tip: string;
-	emailTypes: ReadonlyArray<{ key: string; label: string }>;
+	emailTypes: readonly { key: string; label: string }[];
 	data: Partial<CheckoutSettingsProps> | undefined;
 	mutate: (data: Record<string, any>) => void;
 }) {

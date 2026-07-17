@@ -19,14 +19,14 @@ export function FormSkeleton({ rows = 5 }: { rows?: number }) {
 						{/* Label area — some rows have labels, some don't */}
 						{i % 2 === 0 && (
 							<div className="wcpos:sm:w-[30%] wcpos:sm:max-w-[200px] wcpos:shrink-0">
-								<Skeleton className="wcpos:h-4" width={`${60 + (i * 17) % 40}%`} />
+								<Skeleton className="wcpos:h-4" width={`${60 + ((i * 17) % 40)}%`} />
 							</div>
 						)}
 						{/* Control area */}
 						<div className="wcpos:flex-1 wcpos:min-w-0">
 							<Skeleton
 								className="wcpos:h-5"
-								width={i % 2 === 0 ? '200px' : `${40 + (i * 23) % 30}%`}
+								width={i % 2 === 0 ? '200px' : `${40 + ((i * 23) % 30)}%`}
 							/>
 						</div>
 					</div>
@@ -96,7 +96,7 @@ export function ListSkeleton({ rows = 8 }: { rows?: number }) {
 					>
 						<Skeleton className="wcpos:h-5 wcpos:rounded wcpos:shrink-0" width="55px" />
 						<Skeleton className="wcpos:h-3 wcpos:shrink-0" width="130px" />
-						<Skeleton className="wcpos:h-3 wcpos:flex-1" width={`${50 + (i * 19) % 40}%`} />
+						<Skeleton className="wcpos:h-3 wcpos:flex-1" width={`${50 + ((i * 19) % 40)}%`} />
 					</div>
 				))}
 			</div>
@@ -129,7 +129,7 @@ export function AccessSkeleton() {
 						{Array.from({ length: 6 }).map((_, i) => (
 							<div key={i} className="wcpos:flex wcpos:items-center wcpos:gap-2">
 								<Skeleton className="wcpos:h-4 wcpos:w-4 wcpos:rounded wcpos:shrink-0" />
-								<Skeleton className="wcpos:h-3" width={`${60 + (i * 17) % 30}%`} />
+								<Skeleton className="wcpos:h-3" width={`${60 + ((i * 17) % 30)}%`} />
 							</div>
 						))}
 					</div>
@@ -197,7 +197,11 @@ export function SessionsSkeleton() {
  */
 export function LicenseSkeleton() {
 	return (
-		<div className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4" role="status" aria-label={t('common.loading')}>
+		<div
+			className="wcpos:px-4 wcpos:py-5 wcpos:sm:grid wcpos:sm:grid-cols-3 wcpos:sm:gap-4"
+			role="status"
+			aria-label={t('common.loading')}
+		>
 			<div className="wcpos:flex wcpos:sm:justify-end">
 				<Skeleton className="wcpos:h-4" width="90px" />
 			</div>

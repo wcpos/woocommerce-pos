@@ -61,24 +61,14 @@ export function NavSidebar({ isOpen, onNavItemClick }: NavSidebarProps) {
 						onClick={onNavItemClick}
 					/>
 					{toolsPages.map((page) => (
-						<NavItem
-							key={page.id}
-							to={`/${page.id}`}
-							label={page.label}
-							onClick={onNavItemClick}
-						/>
+						<NavItem key={page.id} to={`/${page.id}`} label={page.label} onClick={onNavItemClick} />
 					))}
 				</NavGroup>
 
 				<NavGroup heading={t('common.account', 'Account')}>
 					<NavItem to="/license" label={t('common.license')} onClick={onNavItemClick} />
 					{accountPages.map((page) => (
-						<NavItem
-							key={page.id}
-							to={`/${page.id}`}
-							label={page.label}
-							onClick={onNavItemClick}
-						/>
+						<NavItem key={page.id} to={`/${page.id}`} label={page.label} onClick={onNavItemClick} />
 					))}
 				</NavGroup>
 			</div>

@@ -67,17 +67,17 @@ Expected: PASS.
 
 Each file becomes a local compatibility shim so existing settings imports do not move.
 
-- [ ] **Step 2: Run settings tests/build/changed-file lint**
+- [ ] **Step 2: Run settings tests/build/lint**
 
 Run:
 
 ```bash
 pnpm --filter=@wcpos/settings test
 pnpm --filter=@wcpos/settings build
-cd packages/settings && ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint src/components/ui/__tests__/*.test.tsx src/components/ui/*.tsx --ext .ts,.tsx
+pnpm --filter=@wcpos/settings lint
 ```
 
-Expected: targeted changed-file lint may only include existing ESLintRCWarning; tests/build pass.
+Expected: tests, build, and lint pass.
 
 ## Task 4: Convert Pro wrappers and expand preview
 

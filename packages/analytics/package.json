@@ -2,7 +2,7 @@
   "name": "@wcpos/analytics",
   "scripts": {
     "build": "NODE_ENV=production node_modules/.bin/webpack",
-    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx,.js,.jsx",
+    "lint": "eslint src",
     "start": "node_modules/.bin/webpack --watch"
   },
   "dependencies": {
@@ -33,7 +33,6 @@
     "@types/lodash": "^4.17.24",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
-    "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
     "@wordpress/env": "^11.5.0",
     "babel-loader": "^10.1.1",
     "css-loader": "^7.1.4",

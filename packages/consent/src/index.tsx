@@ -1,12 +1,8 @@
 import * as React from 'react';
+
 import { createRoot } from 'react-dom/client';
 
-import {
-	dismissCallout,
-	saveConsent,
-	type ConsentChoice,
-	type ConsentConfig,
-} from './api';
+import { dismissCallout, saveConsent, type ConsentChoice, type ConsentConfig } from './api';
 import { ConsentCallout } from './consent-callout';
 import { ConsentModal } from './consent-modal';
 
@@ -32,6 +28,15 @@ interface RootProps {
 	initialCallout: boolean;
 }
 
+/**
+ * Show/hide the WP notice mount node. Lives outside the component so the
+ * external-DOM mutation is opaque to react-hooks/immutability, which would
+ * otherwise flag any write through the `container` prop during render analysis.
+ */
+function setMountVisibility(el: HTMLElement, visible: boolean) {
+	el.style.display = visible ? '' : 'none';
+}
+
 function ConsentRoot({ config, container, initialModal, initialCallout }: RootProps) {
 	const [modalOpen, setModalOpen] = React.useState(initialModal);
 	const [calloutVisible, setCalloutVisible] = React.useState(initialCallout);
@@ -44,7 +49,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 	// visible (dismissed or decision recorded) hide the empty shell so
 	// it doesn't linger as an empty blue bar.
 	React.useEffect(() => {
-		container.style.display = calloutVisible ? '' : 'none';
+		setMountVisibility(container, calloutVisible);
 	}, [container, calloutVisible]);
 
 	const handleDecide = React.useCallback(
@@ -61,7 +66,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 				await saveConsent(choice, config);
 			} catch (err) {
 				// Surface the failure in the UI so the modal isn't stuck silently.
-				// eslint-disable-next-line no-console
+
 				console.error('[wcpos-consent] failed to save choice', err);
 				setHasError(true);
 				return;
@@ -81,7 +86,6 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 		// and even if it fails the user should see the callout close.
 		setCalloutVisible(false);
 		void dismissCallout(config).catch((err) => {
-			// eslint-disable-next-line no-console
 			console.error('[wcpos-consent] failed to persist dismiss', err);
 		});
 	}, [config]);

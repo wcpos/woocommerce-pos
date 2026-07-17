@@ -1,7 +1,10 @@
 import { useState } from 'react';
+
 import { Chip, Tooltip } from '@wcpos/ui';
-import type { FieldInfo, SectionInfo } from '../types';
+
 import { t } from '../translations';
+
+import type { FieldInfo, SectionInfo } from '../types';
 import type { FieldTreeEntry } from './field-picker';
 
 interface FieldTreeNodeProps {
@@ -41,6 +44,18 @@ function Chevron({ open }: { open: boolean }) {
 	);
 }
 
+function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
+	return (
+		entry.sectionKey.toLowerCase().includes(search) ||
+		entry.section.label.toLowerCase().includes(search) ||
+		Object.entries(entry.section.fields).some(
+			([key, field]) =>
+				key.toLowerCase().includes(search) || field.label.toLowerCase().includes(search)
+		) ||
+		entry.children.some((child) => entryMatchesSearch(child, search))
+	);
+}
+
 export function FieldTreeNode({
 	sectionKey,
 	section,
@@ -52,27 +67,30 @@ export function FieldTreeNode({
 	const [expanded, setExpanded] = useState(false);
 
 	const lowerSearch = searchFilter.toLowerCase();
-	const sectionMatches = Boolean(searchFilter) && (
-		sectionKey.toLowerCase().includes(lowerSearch) || section.label.toLowerCase().includes(lowerSearch)
-	);
+	const sectionMatches =
+		Boolean(searchFilter) &&
+		(sectionKey.toLowerCase().includes(lowerSearch) ||
+			section.label.toLowerCase().includes(lowerSearch));
 	const filteredFields = Object.entries(section.fields).filter(([key, field]) => {
 		if (!searchFilter) return true;
-		return sectionMatches || key.toLowerCase().includes(lowerSearch) || field.label.toLowerCase().includes(lowerSearch);
+		return (
+			sectionMatches ||
+			key.toLowerCase().includes(lowerSearch) ||
+			field.label.toLowerCase().includes(lowerSearch)
+		);
 	});
 	const visibleChildren = children.filter((child) => {
 		if (!searchFilter) return true;
-
-		const childLower = searchFilter.toLowerCase();
-		const childSectionMatches = child.sectionKey.toLowerCase().includes(childLower)
-			|| child.section.label.toLowerCase().includes(childLower);
-		const childFieldMatches = Object.entries(child.section.fields).some(([key, field]) => (
-			key.toLowerCase().includes(childLower) || field.label.toLowerCase().includes(childLower)
-		));
-
-		return childSectionMatches || childFieldMatches;
+		return entryMatchesSearch(child, lowerSearch);
 	});
 
-	if (searchFilter && filteredFields.length === 0 && visibleChildren.length === 0 && !sectionMatches) return null;
+	if (
+		searchFilter &&
+		filteredFields.length === 0 &&
+		visibleChildren.length === 0 &&
+		!sectionMatches
+	)
+		return null;
 
 	const isExpanded = searchFilter ? true : expanded;
 	const fieldCount = Object.keys(section.fields).length;
@@ -116,7 +134,9 @@ export function FieldTreeNode({
 							aria-label={t('editor.insert_loop_block')}
 							className="wcpos:flex wcpos:items-center wcpos:cursor-pointer wcpos:border-0 wcpos:bg-transparent wcpos:p-0 wcpos:rounded-full hover:wcpos:opacity-80"
 						>
-							<Chip variant="warning" size="xs">{t('editor.loop')}</Chip>
+							<Chip variant="warning" size="xs">
+								{t('editor.loop')}
+							</Chip>
 						</button>
 					</Tooltip>
 				)}

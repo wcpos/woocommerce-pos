@@ -1,15 +1,23 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
+
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { html } from '@codemirror/lang-html';
 import { php } from '@codemirror/lang-php';
-import { wordpressTheme } from '../codemirror/theme';
+import { bracketMatching, foldGutter, foldKeymap } from '@codemirror/language';
+import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { Compartment, EditorState } from '@codemirror/state';
+import {
+	EditorView,
+	keymap,
+	lineNumbers,
+	highlightActiveLine,
+	highlightActiveLineGutter,
+} from '@codemirror/view';
+
 import { mustacheOverlay } from '../codemirror/mustache-language';
 import { mustacheSectionMatcher } from '../codemirror/mustache-section-matcher';
+import { wordpressTheme } from '../codemirror/theme';
 
 export interface CursorInfo {
 	line: number;
@@ -46,17 +54,20 @@ export function useCodemirror({
 	const viewRef = useRef<EditorView | null>(null);
 	const wrapCompartment = useRef(new Compartment());
 
+	// Latest-ref pattern: updated in an effect (not during render) so the
+	// CodeMirror listeners always see the newest callbacks.
 	const onChangeRef = useRef(onChange);
-	onChangeRef.current = onChange;
 	const onCursorChangeRef = useRef(onCursorChange);
-	onCursorChangeRef.current = onCursorChange;
+	useEffect(() => {
+		onChangeRef.current = onChange;
+		onCursorChangeRef.current = onCursorChange;
+	});
 
 	useEffect(() => {
 		if (!containerRef.current) return;
 
-		const languageExtension = engine === 'legacy-php'
-			? [php()]
-			: [html(), mustacheOverlay, mustacheSectionMatcher];
+		const languageExtension =
+			engine === 'legacy-php' ? [php()] : [html(), mustacheOverlay, mustacheSectionMatcher];
 
 		const state = EditorState.create({
 			doc: initialDoc,
@@ -106,7 +117,6 @@ export function useCodemirror({
 			viewRef.current = null;
 		};
 		// initialDoc/engine drive a full reinit (matches previous behavior).
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [initialDoc, engine]);
 
 	useEffect(() => {

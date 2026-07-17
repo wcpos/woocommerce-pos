@@ -20,8 +20,7 @@ const indexRoute = createRoute({
 	loader: () => {
 		queryClient.prefetchQuery({
 			queryKey: ['templates', 'receipt'],
-			queryFn: () =>
-				apiFetch({ path: 'wcpos/v1/templates?wcpos=1&type=receipt', method: 'GET' }),
+			queryFn: () => apiFetch({ path: 'wcpos/v1/templates?wcpos=1&type=receipt', method: 'GET' }),
 			retry: 1,
 		});
 		queryClient.prefetchQuery({

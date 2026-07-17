@@ -65,11 +65,17 @@ function General() {
 		...(data?.store_defaults ?? {}),
 	};
 
-	const StoreDetailsBlockOverride = getStoreDetailsBlockOverride();
-	const ResolvedStoreDetailsBlock = StoreDetailsBlockOverride ?? StoreDetailsBlock;
+	// The pro override can't be resolved at module scope (it registers on
+	// `window.wcpos` after this module loads), so look it up once and memoize —
+	// the identity is stable, no component is created per render.
+	const ResolvedStoreDetailsBlock = React.useMemo(
+		() => getStoreDetailsBlockOverride() ?? StoreDetailsBlock,
+		[]
+	);
 
 	return (
 		<>
+			{/* eslint-disable-next-line react-hooks/static-components -- resolved from the pro registry; identity is stable (memoized above) */}
 			<ResolvedStoreDetailsBlock data={data} mutate={mutate} storeDefaults={storeDefaults} />
 			<FormSection title={t('settings.products_section_title')} divider>
 				<FormRow>
@@ -107,7 +113,9 @@ function General() {
 				</FormRow>
 				<FormRow label={t('settings.barcode_field')}>
 					<Label tip={t('settings.barcode_field_tip')}>
-						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
+						<React.Suspense
+							fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}
+						>
 							<BarcodeSelect
 								selected={isString(data?.barcode_field) ? data?.barcode_field || '' : ''}
 								onSelect={(value) => {
@@ -130,7 +138,9 @@ function General() {
 				</FormRow>
 				<FormRow label={t('settings.default_customer')}>
 					<Label tip={t('settings.default_customer_tip')}>
-						<React.Suspense fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}>
+						<React.Suspense
+							fallback={<Skeleton className="wcpos:h-9 wcpos:w-full wcpos:rounded-md" />}
+						>
 							<UserSelect
 								disabled={!!data?.default_customer_is_cashier}
 								selected={isNumber(data?.default_customer) ? data?.default_customer || 0 : 0}

@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GalleryGridSkeleton, GALLERY_GRID_CLASS, GALLERY_GRID_WRAPPER_CLASS } from '../components/skeleton';
-import { GalleryGrid } from '../screens/gallery-grid';
+import {
+	GalleryGridSkeleton,
+	GALLERY_GRID_CLASS,
+	GALLERY_GRID_WRAPPER_CLASS,
+} from '../components/skeleton';
 import { TemplateCard } from '../components/template-card';
+import { GalleryGrid } from '../screens/gallery-grid';
+
 import type { GalleryTemplate } from '../types';
 
 vi.mock('../components/filter-sidebar', () => ({
@@ -77,10 +82,15 @@ const galleryTemplate: GalleryTemplate = {
 };
 
 beforeEach(() => {
-	(window as Window & { wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } } }).wcpos = {
+	(
+		window as Window & {
+			wcpos?: { templateGallery?: { adminUrl?: string; previewBaseUrl?: string } };
+		}
+	).wcpos = {
 		templateGallery: {
 			adminUrl: 'https://example.test/wp-admin',
-			previewBaseUrl: 'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
+			previewBaseUrl:
+				'https://example.test/wp-content/plugins/woocommerce-pos/assets/img/template-gallery/previews',
 		},
 	};
 });
@@ -97,7 +107,7 @@ describe('TemplateCard gallery layout', () => {
 				isGallery
 				onPreview={() => {}}
 				onCustomize={() => {}}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain(galleryTemplate.description);
@@ -127,7 +137,7 @@ describe('TemplateCard gallery layout', () => {
 				isGallery
 				onPreview={() => {}}
 				onCustomize={() => {}}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain('<img');

@@ -1,10 +1,6 @@
 import * as React from 'react';
 
-import {
-	Combobox as SharedCombobox,
-	type ComboboxOption,
-	type ComboboxProps,
-} from '@wcpos/ui';
+import { Combobox as SharedCombobox, type ComboboxOption, type ComboboxProps } from '@wcpos/ui';
 
 import { t } from '../../translations';
 

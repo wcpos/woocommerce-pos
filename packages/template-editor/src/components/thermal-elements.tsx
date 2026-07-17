@@ -1,5 +1,7 @@
 import { useState } from 'react';
+
 import { Chip } from '@wcpos/ui';
+
 import { t } from '../translations';
 
 interface ThermalElementsProps {
@@ -61,8 +63,8 @@ function getElements(): ThermalElement[] {
 function filterElements(elements: ThermalElement[], searchFilter: string): ThermalElement[] {
 	if (!searchFilter) return elements;
 	const lower = searchFilter.toLowerCase();
-	return elements.filter(({ key, label }) =>
-		key.toLowerCase().includes(lower) || label.toLowerCase().includes(lower)
+	return elements.filter(
+		({ key, label }) => key.toLowerCase().includes(lower) || label.toLowerCase().includes(lower)
 	);
 }
 

@@ -41,10 +41,14 @@
   },
   "homepage": "https://wcpos.com",
   "devDependencies": {
+    "@eslint/compat": "^2.1.0",
     "@playwright/test": "^1.59.1",
     "@wordpress/env": "^11.5.0",
+    "eslint": "^10.7.0",
+    "eslint-config-universe": "^16.0.0",
     "jsdoc": "^4.0.5",
     "newman": "^6.2.2",
+    "prettier": "^3.9.5",
     "taffydb": "^2.7.3",
     "turbo": "^2.9.9",
     "wp-hookdoc": "0.2.0"

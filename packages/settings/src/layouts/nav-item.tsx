@@ -1,6 +1,7 @@
 import { Link, useMatchRoute } from '@tanstack/react-router';
-import { Chip } from '@wcpos/ui';
 import classNames from 'classnames';
+
+import { Chip } from '@wcpos/ui';
 
 interface SeverityBadge {
 	error?: number;

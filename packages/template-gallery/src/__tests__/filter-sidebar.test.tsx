@@ -1,9 +1,11 @@
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FILTERS, FilterSidebar } from '../components/filter-sidebar';
+
 import type { FilterState } from '../components/filter-sidebar';
 
 vi.mock('../translations', () => ({
@@ -33,7 +35,7 @@ function mount(filters: FilterState, onChange: (next: FilterState) => void): HTM
 				availableCategories={['receipt']}
 				collapsed={false}
 				onToggleCollapse={() => {}}
-			/>,
+			/>
 		);
 	});
 	return container;
@@ -52,7 +54,7 @@ describe('FilterSidebar direction filter', () => {
 				availableCategories={['receipt']}
 				collapsed={false}
 				onToggleCollapse={() => {}}
-			/>,
+			/>
 		);
 
 		expect(markup).toContain('filter.direction');
@@ -66,7 +68,7 @@ describe('FilterSidebar direction filter', () => {
 		const container = mount({ ...DEFAULT_FILTERS }, onChange);
 
 		const rtlRadio = container.querySelector(
-			'input[name="filter-direction"][value="rtl"]',
+			'input[name="filter-direction"][value="rtl"]'
 		) as HTMLInputElement | null;
 		expect(rtlRadio).not.toBeNull();
 

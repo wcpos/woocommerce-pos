@@ -2,9 +2,10 @@ import * as React from 'react';
 
 import { Button, Modal } from '@wcpos/ui';
 
-import type { ConsentCopy } from './api';
 import { PrivacyInfoModal } from './privacy-info-modal';
 import { consentText, t } from './translations';
+
+import type { ConsentCopy } from './api';
 
 export interface ConsentModalProps {
 	open: boolean;
@@ -44,10 +45,7 @@ export function ConsentModal({
 					{consentText(copy, 'body', 'consent.modal_intro')}
 				</p>
 				{error && (
-					<p
-						role="alert"
-						className="wcpos:text-sm wcpos:text-red-700 wcpos:mb-3"
-					>
+					<p role="alert" className="wcpos:text-sm wcpos:text-red-700 wcpos:mb-3">
 						{t('consent.save_error')}
 					</p>
 				)}
@@ -60,28 +58,16 @@ export function ConsentModal({
 						{t('consent.learn_more')}
 					</button>
 					<div className="wcpos:flex wcpos:gap-2">
-						<Button
-							variant="secondary"
-							disabled={busy}
-							onClick={() => onDecide('denied')}
-						>
+						<Button variant="secondary" disabled={busy} onClick={() => onDecide('denied')}>
 							{consentText(copy, 'deny_label', 'consent.deny')}
 						</Button>
-						<Button
-							variant="primary"
-							disabled={busy}
-							onClick={() => onDecide('allowed')}
-						>
+						<Button variant="primary" disabled={busy} onClick={() => onDecide('allowed')}>
 							{consentText(copy, 'allow_label', 'consent.allow')}
 						</Button>
 					</div>
 				</div>
 			</Modal>
-			<PrivacyInfoModal
-				open={learnMoreOpen}
-				onClose={() => setLearnMoreOpen(false)}
-				copy={copy}
-			/>
+			<PrivacyInfoModal open={learnMoreOpen} onClose={() => setLearnMoreOpen(false)} copy={copy} />
 		</>
 	);
 }

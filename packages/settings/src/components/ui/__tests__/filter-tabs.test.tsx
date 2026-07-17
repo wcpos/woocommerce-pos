@@ -40,9 +40,7 @@ describe('FilterTabs', () => {
 	});
 
 	it('renders a sliding indicator inside the tab container', () => {
-		const { container } = render(
-			<FilterTabs items={items} value="error" onChange={() => {}} />
-		);
+		const { container } = render(<FilterTabs items={items} value="error" onChange={() => {}} />);
 
 		const indicator = container.querySelector('[data-testid="filter-tabs-indicator"]');
 		expect(indicator).not.toBeNull();

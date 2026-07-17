@@ -3,7 +3,8 @@ import { Skeleton } from '@wcpos/ui';
 export { Skeleton };
 
 export const GALLERY_GRID_WRAPPER_CLASS = 'wcpos:@container wcpos:flex-1 wcpos:min-w-0';
-export const GALLERY_GRID_CLASS = 'wcpos:grid wcpos:grid-cols-1 wcpos:@min-[400px]:grid-cols-2 wcpos:@min-[680px]:grid-cols-3 wcpos:@min-[920px]:grid-cols-4 wcpos:gap-4';
+export const GALLERY_GRID_CLASS =
+	'wcpos:grid wcpos:grid-cols-1 wcpos:@min-[400px]:grid-cols-2 wcpos:@min-[680px]:grid-cols-3 wcpos:@min-[920px]:grid-cols-4 wcpos:gap-4';
 
 /**
  * Skeleton for the gallery grid page: templates table + card grid.
@@ -37,7 +38,7 @@ export function GalleryGridSkeleton() {
 							className="wcpos:flex wcpos:items-center wcpos:gap-4 wcpos:px-4 wcpos:py-3 wcpos:border-b wcpos:border-gray-100 last:wcpos:border-b-0"
 						>
 							<Skeleton className="wcpos:h-4 wcpos:w-6" />
-							<Skeleton className="wcpos:h-4 wcpos:flex-1" width={`${40 + (i * 15) % 30}%`} />
+							<Skeleton className="wcpos:h-4 wcpos:flex-1" width={`${40 + ((i * 15) % 30)}%`} />
 							<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="70px" />
 							<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="60px" />
 							<Skeleton className="wcpos:h-5 wcpos:rounded-full" width="70px" />
@@ -62,7 +63,7 @@ export function GalleryGridSkeleton() {
 							{Array.from({ length: 4 }).map((_, i) => (
 								<div key={i} className="wcpos:flex wcpos:items-center wcpos:gap-2">
 									<Skeleton className="wcpos:h-4 wcpos:w-4 wcpos:rounded wcpos:shrink-0" />
-									<Skeleton className="wcpos:h-3" width={`${60 + (i * 20) % 40}%`} />
+									<Skeleton className="wcpos:h-3" width={`${60 + ((i * 20) % 40)}%`} />
 								</div>
 							))}
 						</div>

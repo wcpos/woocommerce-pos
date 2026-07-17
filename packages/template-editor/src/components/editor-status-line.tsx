@@ -1,4 +1,5 @@
 import { t } from '../translations';
+
 import type { EditorConfig } from '../types';
 
 interface EditorStatusLineProps {
@@ -16,13 +17,15 @@ function getEngineLabel(engine: EditorConfig['engine']): string {
 
 export function EditorStatusLine({ engine, line, col, lineCount }: EditorStatusLineProps) {
 	return (
-		<div
-			className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:px-3 wcpos:py-1.5 wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:tabular-nums"
-		>
+		<div className="wcpos:flex wcpos:items-center wcpos:gap-3 wcpos:px-3 wcpos:py-1.5 wcpos:border-t wcpos:border-gray-200 wcpos:bg-gray-50 wcpos:text-xs wcpos:text-gray-600 wcpos:font-mono wcpos:tabular-nums">
 			<span>{getEngineLabel(engine)}</span>
-			<span className="wcpos:text-gray-300" aria-hidden="true">·</span>
+			<span className="wcpos:text-gray-300" aria-hidden="true">
+				·
+			</span>
 			<span>{t('editor.status.line_col', { line, col })}</span>
-			<span className="wcpos:text-gray-300" aria-hidden="true">·</span>
+			<span className="wcpos:text-gray-300" aria-hidden="true">
+				·
+			</span>
 			<span>{t('editor.status.lines', { count: lineCount })}</span>
 		</div>
 	);

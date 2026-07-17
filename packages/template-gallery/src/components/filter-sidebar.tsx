@@ -32,9 +32,7 @@ interface RadioGroupProps {
 
 function formatLabel(slug: string): string {
 	if (slug === 'all') return t('filter.all');
-	return slug
-		.replace(/-/g, ' ')
-		.replace(/\b\w/g, (c) => c.toUpperCase());
+	return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function RadioGroup({ label, name, value, options, onChange }: RadioGroupProps) {
@@ -112,7 +110,10 @@ export function FilterSidebar({
 	};
 
 	return (
-		<div id="template-filters-sidebar" className="wcpos:shrink-0 wcpos:w-56 wcpos:flex wcpos:flex-col wcpos:gap-6">
+		<div
+			id="template-filters-sidebar"
+			className="wcpos:shrink-0 wcpos:w-56 wcpos:flex wcpos:flex-col wcpos:gap-6"
+		>
 			{/* Header */}
 			<div className="wcpos:flex wcpos:items-center wcpos:justify-between">
 				<span className="wcpos:text-sm wcpos:font-semibold wcpos:text-gray-900">
@@ -122,7 +123,7 @@ export function FilterSidebar({
 					type="button"
 					onClick={onToggleCollapse}
 					aria-label={t('filter.collapse')}
-					aria-expanded={true}
+					aria-expanded
 					aria-controls="template-filters-sidebar"
 					className="wcpos:bg-transparent wcpos:border-0 wcpos:p-0 wcpos:cursor-pointer wcpos:text-gray-400 hover:wcpos:text-gray-600 wcpos:text-lg wcpos:leading-none"
 				>

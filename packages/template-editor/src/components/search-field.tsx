@@ -1,4 +1,5 @@
 import { TextInput } from '@wcpos/ui';
+
 import { t } from '../translations';
 
 interface SearchFieldProps {

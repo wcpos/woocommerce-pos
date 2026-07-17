@@ -27,17 +27,20 @@ function GatewayModal({ gateway, mutate, closeModal }: GatewayModalProps) {
 		closeModal();
 	};
 
-	const handleChange = React.useCallback((event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-		const value = event.target.value;
-		const field = event.target.id;
+	const handleChange = React.useCallback(
+		(event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+			const value = event.target.value;
+			const field = event.target.id;
 
-		if (field === 'title') {
-			setTitle(value);
-		}
-		if (field === 'description') {
-			setDescription(value);
-		}
-	}, []);
+			if (field === 'title') {
+				setTitle(value);
+			}
+			if (field === 'description') {
+				setDescription(value);
+			}
+		},
+		[]
+	);
 
 	return (
 		<Modal open onClose={() => closeModal()} title={gateway.title} className="wcpos:max-w-md">

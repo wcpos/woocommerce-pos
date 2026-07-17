@@ -1,8 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
+
 import apiFetch from '@wordpress/api-fetch';
+
 import { buildPreviewFrameHtml } from '@wcpos/thermal-utils';
 import { PreviewViewport } from '@wcpos/ui';
-import type { CSSProperties } from 'react';
 
 import { t } from '../translations';
 
@@ -53,7 +55,9 @@ export function getPhpPreviewIframeStyle(): CSSProperties {
 	};
 }
 
-export function getPhpPreviewFrame(response: PhpPreviewResponse): Pick<PreviewState, 'src' | 'srcDoc'> {
+export function getPhpPreviewFrame(
+	response: PhpPreviewResponse
+): Pick<PreviewState, 'src' | 'srcDoc'> {
 	if (response.preview_html) {
 		return {
 			src: null,
@@ -83,12 +87,21 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 		requiresOrder: false,
 	});
 
-	const loadPreview = useCallback(() => {
-		if (!previewUrl) return;
-		const requestId = requestIdRef.current + 1;
-		requestIdRef.current = requestId;
+	// Flip the loading flag when the preview URL changes — a render-time
+	// adjustment so the fetch effect below never sets state synchronously.
+	const [prevPreviewUrl, setPrevPreviewUrl] = useState(previewUrl);
+	if (previewUrl !== prevPreviewUrl) {
+		setPrevPreviewUrl(previewUrl);
+		setPreviewState((prev) => ({ ...prev, loading: Boolean(previewUrl) }));
+	}
 
-		setPreviewState((prev) => ({ ...prev, loading: true }));
+	useLayoutEffect(() => {
+		requestIdRef.current += 1;
+	}, [previewUrl]);
+
+	useEffect(() => {
+		if (!previewUrl) return;
+		const requestId = requestIdRef.current;
 
 		apiFetch<PhpPreviewResponse>({
 			url: getPhpPreviewRequestUrl(previewUrl),
@@ -127,10 +140,6 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 				setIframeKey((k) => k + 1);
 			});
 	}, [previewUrl]);
-
-	useEffect(() => {
-		loadPreview();
-	}, [loadPreview]);
 
 	if (!previewUrl) {
 		return (

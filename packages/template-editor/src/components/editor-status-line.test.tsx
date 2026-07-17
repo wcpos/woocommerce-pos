@@ -1,4 +1,5 @@
 import { act } from 'react';
+
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +18,7 @@ vi.mock('../translations', () => ({
 		if (!params) return template;
 		return Object.entries(params).reduce(
 			(acc, [k, v]) => acc.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-			template,
+			template
 		);
 	},
 }));
@@ -39,14 +40,7 @@ function renderStatus() {
 	document.body.appendChild(container);
 
 	act(() => {
-		root.render(
-			<EditorStatusLine
-				engine="logicless"
-				line={12}
-				col={8}
-				lineCount={34}
-			/>,
-		);
+		root.render(<EditorStatusLine engine="logicless" line={12} col={8} lineCount={34} />);
 	});
 
 	return container;
@@ -66,6 +60,6 @@ describe('EditorStatusLine', () => {
 		expect(container.textContent).not.toContain('Synced to form');
 		expect(container.textContent).not.toContain('Auto-saved');
 		expect(container.textContent).not.toContain('Unsaved changes');
-		expect(container.querySelector('[role=\"status\"]')).toBeNull();
+		expect(container.querySelector('[role="status"]')).toBeNull();
 	});
 });

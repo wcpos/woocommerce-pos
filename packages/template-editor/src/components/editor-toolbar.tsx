@@ -1,10 +1,21 @@
 import { useCallback } from 'react';
+
 import { undo, redo } from '@codemirror/commands';
+import {
+	foldAll,
+	unfoldAll,
+	foldable,
+	foldEffect,
+	foldedRanges,
+	forceParsing,
+} from '@codemirror/language';
 import { openSearchPanel } from '@codemirror/search';
-import { foldAll, unfoldAll, foldable, foldEffect, foldedRanges, forceParsing } from '@codemirror/language';
-import type { EditorView } from '@codemirror/view';
+
 import { Tooltip } from '@wcpos/ui';
+
 import { t } from '../translations';
+
+import type { EditorView } from '@codemirror/view';
 
 interface EditorToolbarProps {
 	viewRef: React.RefObject<EditorView | null>;
@@ -86,7 +97,10 @@ const Icons = {
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
 			<path
 				d="M5 4 L2 7 L5 10 M2 7 H9 a3 3 0 0 1 0 6 H6"
-				stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+				stroke="currentColor"
+				strokeWidth="1.4"
+				strokeLinecap="round"
+				strokeLinejoin="round"
 			/>
 		</svg>
 	),
@@ -94,7 +108,10 @@ const Icons = {
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
 			<path
 				d="M9 4 L12 7 L9 10 M12 7 H5 a3 3 0 0 0 0 6 H8"
-				stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"
+				stroke="currentColor"
+				strokeWidth="1.4"
+				strokeLinecap="round"
+				strokeLinejoin="round"
 			/>
 		</svg>
 	),
@@ -106,20 +123,47 @@ const Icons = {
 	),
 	wrap: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-			<path d="M1.5 3 H12.5 M1.5 7 H10.5 a2 2 0 1 1 0 4 H7 L8.5 9.5 M8.5 12.5 L7 11 M1.5 11 H4"
-				stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+			<path
+				d="M1.5 3 H12.5 M1.5 7 H10.5 a2 2 0 1 1 0 4 H7 L8.5 9.5 M8.5 12.5 L7 11 M1.5 11 H4"
+				stroke="currentColor"
+				strokeWidth="1.4"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
 		</svg>
 	),
 	fold: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-			<path d="M3 3.5 H11 M3 7 H11 M3 10.5 H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-			<path d="M5 5 L7 7 L9 5 M5 8.5 L7 10.5 L9 8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+			<path
+				d="M3 3.5 H11 M3 7 H11 M3 10.5 H11"
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinecap="round"
+			/>
+			<path
+				d="M5 5 L7 7 L9 5 M5 8.5 L7 10.5 L9 8.5"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
 		</svg>
 	),
 	unfold: (
 		<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-			<path d="M3 3.5 H11 M3 7 H11 M3 10.5 H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-			<path d="M5 9 L7 7 L9 9 M5 5 L7 3 L9 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+			<path
+				d="M3 3.5 H11 M3 7 H11 M3 10.5 H11"
+				stroke="currentColor"
+				strokeWidth="1.2"
+				strokeLinecap="round"
+			/>
+			<path
+				d="M5 9 L7 7 L9 9 M5 5 L7 3 L9 5"
+				stroke="currentColor"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+				strokeLinejoin="round"
+			/>
 		</svg>
 	),
 };

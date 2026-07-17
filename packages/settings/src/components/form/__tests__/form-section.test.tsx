@@ -55,10 +55,7 @@ describe('FormSection', () => {
 
 	it('renders headerRight content alongside the title', () => {
 		render(
-			<FormSection
-				title="Authorized Users"
-				headerRight={<button type="button">Reset</button>}
-			>
+			<FormSection title="Authorized Users" headerRight={<button type="button">Reset</button>}>
 				<p>Content</p>
 			</FormSection>
 		);
