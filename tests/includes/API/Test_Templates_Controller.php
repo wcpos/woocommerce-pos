@@ -23,6 +23,7 @@ namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\OrderHelper;
 use WCPOS\WooCommercePOS\API\Templates_Controller;
+use WCPOS\WooCommercePOS\Templates;
 
 /**
  * Test_Templates_Controller class.
@@ -331,6 +332,62 @@ class Test_Templates_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Baseline gate returns 401 for unauthenticated users.
 		$this->assertEquals( 401, $response->get_status() );
+	}
+
+	/**
+	 * Test get_item rejects path traversal in the template type.
+	 */
+	public function test_get_item_with_path_traversal_type_returns_bad_request(): void {
+		$request = $this->wp_rest_get_request( '/wcpos/v1/templates/plugin-core' );
+		$request->set_param( 'type', '../../../../wp-config' );
+		$request->set_param( 'context', 'edit' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 400, $response->get_status() );
+		$this->assertEquals( 'rest_invalid_param', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Test direct virtual template lookups reject unsupported types.
+	 */
+	public function test_get_virtual_template_path_with_unsupported_type_returns_null(): void {
+		$path = Templates::get_virtual_template_path( Templates::TEMPLATE_PLUGIN_CORE, 'auth' );
+
+		$this->assertNull( $path );
+	}
+
+	/**
+	 * Test virtual template paths cannot escape through a symlink.
+	 */
+	public function test_get_virtual_template_path_with_symlink_outside_templates_returns_null(): void {
+		$symlink_path = \WCPOS\WooCommercePOS\PLUGIN_PATH . 'templates/report.php';
+
+		if ( file_exists( $symlink_path ) || is_link( $symlink_path ) ) {
+			$this->markTestSkipped( 'Unable to create an isolated symlink fixture.' );
+		}
+
+		$outside_path = tempnam( sys_get_temp_dir(), 'wcpos-template-' );
+		if ( false === $outside_path ) {
+			$this->markTestSkipped( 'Unable to create an external template fixture.' );
+		}
+
+		try {
+			file_put_contents( $outside_path, '<?php return "outside";' );
+			if ( ! symlink( $outside_path, $symlink_path ) ) {
+				$this->markTestSkipped( 'Symlinks are not available in this test environment.' );
+			}
+
+			$path = Templates::get_virtual_template_path( Templates::TEMPLATE_PLUGIN_CORE, 'report' );
+
+			$this->assertNull( $path );
+		} finally {
+			if ( is_link( $symlink_path ) ) {
+				unlink( $symlink_path );
+			}
+			if ( file_exists( $outside_path ) ) {
+				unlink( $outside_path );
+			}
+		}
 	}
 
 	/**
