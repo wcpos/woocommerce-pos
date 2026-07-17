@@ -198,10 +198,18 @@ class Templates_Controller extends WP_REST_Controller {
 				'callback'            => array( $this, 'get_item' ),
 				'permission_callback' => array( $this, 'get_item_permissions_check' ),
 				'args'                => array(
-					'id' => array(
+					'id'   => array(
 						'description' => /* translators: REST API schema field label or error message. */ __( 'Unique identifier for the template (numeric for database, string for virtual).', 'woocommerce-pos' ),
 						'type'        => 'string',
 						'required'    => true,
+					),
+					'type' => array(
+						'description'       => /* translators: REST API schema field label or error message. */ __( 'Template type.', 'woocommerce-pos' ),
+						'type'              => 'string',
+						'default'           => 'receipt',
+						'enum'              => array( 'receipt', 'report' ),
+						'sanitize_callback' => 'sanitize_key',
+						'validate_callback' => 'rest_validate_request_arg',
 					),
 				),
 			)
