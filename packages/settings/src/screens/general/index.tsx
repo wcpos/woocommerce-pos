@@ -42,6 +42,22 @@ export interface GeneralSettingsProps {
 }
 
 /**
+ * Mirror the server's wp_validate_boolean() so a successfully loaded but
+ * legacy-persisted force_ssl value (e.g. the string "false") normalizes to
+ * the same boolean the POS uses server-side.
+ */
+function validateBoolean(value: unknown): boolean {
+	if (typeof value === 'boolean') {
+		return value;
+	}
+	if (typeof value === 'string') {
+		const normalized = value.trim().toLowerCase();
+		return normalized !== '' && normalized !== 'false' && normalized !== '0';
+	}
+	return Boolean(value);
+}
+
+/**
  * Pro registers `general.store_details_block` to replace the default block
  * (e.g. swap in a stores list when one or more stores have been created).
  */
@@ -56,6 +72,12 @@ function getStoreDetailsBlockOverride(): React.ComponentType<StoreDetailsBlockPr
 function General() {
 	const { data, mutate } = useSettingsApi('general');
 	const [privacyInfoOpen, setPrivacyInfoOpen] = React.useState(false);
+
+	// The settings query resolves to an error object (code + message) instead
+	// of throwing, so a failed request never carries force_ssl. Treat that as
+	// "not loaded" and fall back to the server default; any other successful
+	// response (including a legacy string force_ssl) counts as loaded.
+	const settingsLoaded = Boolean(data) && !(data?.code && data?.message);
 
 	const storeDefaults: StoreDefaults = {
 		store_name: '',
@@ -182,11 +204,13 @@ function General() {
 			<FormSection title={t('settings.advanced_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.force_ssl_tip')}>
-						{/* force_ssl defaults to true server-side, so show the default and
-						    block clicks until a boolean value loads, including after fetch errors. */}
+						{/* force_ssl defaults to true server-side. Show that default and block
+						    clicks until settings load (a fetch error resolves to an object with
+						    no force_ssl), then normalize the loaded value the way the server does
+						    so a legacy string "false" stays editable rather than looking unset. */}
 						<Toggle
-							checked={typeof data?.force_ssl === 'boolean' ? data.force_ssl : true}
-							disabled={typeof data?.force_ssl !== 'boolean'}
+							checked={settingsLoaded ? validateBoolean(data?.force_ssl) : true}
+							disabled={!settingsLoaded}
 							onChange={(force_ssl: boolean) => {
 								mutate({ force_ssl });
 							}}
