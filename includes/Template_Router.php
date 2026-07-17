@@ -77,10 +77,15 @@ class Template_Router {
 	/**
 	 * Get the full URL for the POS authorization endpoint.
 	 *
+	 * Respects the force_ssl setting, like wcpos_url(), so the login URL works
+	 * when the site home URL is http but the POS is served over https.
+	 *
 	 * @return string
 	 */
 	public static function get_auth_url(): string {
-		return home_url( self::AUTH_PATH . '/' );
+		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+
+		return home_url( self::AUTH_PATH . '/', $scheme );
 	}
 
 	/**
@@ -171,7 +176,7 @@ class Template_Router {
 			array(
 				'key' => $order->get_order_key(),
 			),
-			get_home_url( null, '/wcpos-checkout/order-received/' . $order->get_id() )
+			wcpos_checkout_url( 'order-received/' . $order->get_id() )
 		);
 
 		return $redirect;

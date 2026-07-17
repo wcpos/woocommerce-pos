@@ -980,7 +980,7 @@ class Templates_Controller extends WP_REST_Controller {
 			}
 			$preview_url = add_query_arg(
 				$preview_params,
-				get_home_url( null, '/wcpos-checkout/wcpos-receipt/' . $order_id )
+				wcpos_checkout_url( 'wcpos-receipt/' . $order_id )
 			);
 
 			return rest_ensure_response(

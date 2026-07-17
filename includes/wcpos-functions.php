@@ -69,6 +69,31 @@ if ( ! \function_exists( 'wcpos_url' ) ) {
 }
 
 /*
+ * Construct a POS checkout permalink.
+ *
+ * @param string $path Path relative to the wcpos-checkout endpoint.
+ * @return string POS checkout URL.
+ */
+if ( ! \function_exists( 'wcpos_checkout_url' ) ) {
+	/**
+	 * Construct a POS checkout permalink.
+	 *
+	 * Respects the force_ssl setting, like wcpos_url(), so checkout and receipt
+	 * links work when the site home URL is http but the POS is served over https,
+	 * eg: behind an SSL-terminating proxy.
+	 *
+	 * @param string $path Path relative to the wcpos-checkout endpoint, eg: 'order-pay/123'.
+	 *
+	 * @return string POS checkout URL.
+	 */
+	function wcpos_checkout_url( $path = '' ): string { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- uses wcpos_ prefix.
+		$scheme = wcpos_get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+
+		return home_url( '/wcpos-checkout/' . ltrim( $path, '/' ), $scheme );
+	}
+}
+
+/*
  * Test for POS requests to the server.
  *
  * @param string $type Request type: 'query_var', 'header', or 'all'.

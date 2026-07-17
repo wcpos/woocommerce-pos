@@ -105,6 +105,43 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test checkout URL uses https when force_ssl is enabled (the default).
+	 */
+	public function test_wcpos_checkout_url_force_ssl_enabled_returns_https(): void {
+		// Arrange: force_ssl defaults to true; test site home URL is http.
+		$this->assertStringStartsWith( 'http://', get_home_url() );
+
+		// Act.
+		$url = wcpos_checkout_url( 'order-pay/123' );
+
+		// Assert.
+		$this->assertStringStartsWith( 'https://', $url );
+		$this->assertStringEndsWith( '/wcpos-checkout/order-pay/123', $url );
+	}
+
+	/**
+	 * Test checkout URL preserves the home URL scheme when force_ssl is disabled.
+	 */
+	public function test_wcpos_checkout_url_force_ssl_disabled_preserves_home_scheme(): void {
+		// Arrange.
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['force_ssl'] = false;
+
+				return $settings;
+			}
+		);
+
+		// Act.
+		$url = wcpos_checkout_url( 'order-pay/123' );
+
+		// Assert.
+		$this->assertStringStartsWith( 'http://', $url );
+		$this->assertStringEndsWith( '/wcpos-checkout/order-pay/123', $url );
+	}
+
+	/**
 	 * Test getting license settings.
 	 */
 	public function test_woocommerce_pos_get_license_settings(): void {
