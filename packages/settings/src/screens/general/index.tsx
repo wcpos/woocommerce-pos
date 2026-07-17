@@ -179,6 +179,19 @@ function General() {
 					</button>
 				</p>
 			</FormSection>
+			<FormSection title={t('settings.advanced_section_title')} divider>
+				<FormRow>
+					<Label tip={t('settings.force_ssl_tip')}>
+						<Toggle
+							checked={!!data?.force_ssl}
+							onChange={(force_ssl: boolean) => {
+								mutate({ force_ssl });
+							}}
+							label={t('settings.force_ssl')}
+						/>
+					</Label>
+				</FormRow>
+			</FormSection>
 			<PrivacyInfoModal open={privacyInfoOpen} onClose={() => setPrivacyInfoOpen(false)} />
 		</>
 	);
