@@ -157,7 +157,7 @@ class Stock_Validator {
 	 */
 	private function should_validate_status( WC_Order $order, WP_REST_Request $request, bool $creating ): bool {
 		$exempt_statuses = apply_filters(
-			'wcpos_stock_validation_exempt_statuses',
+			'woocommerce_pos_stock_validation_exempt_statuses',
 			array( 'pos-open', 'pos-partial', 'pending', 'auto-draft', 'checkout-draft', 'draft', 'cancelled', 'refunded', 'failed', 'trash' )
 		);
 		$target_status = $request->has_param( 'status' ) ? (string) $request->get_param( 'status' ) : $order->get_status();
