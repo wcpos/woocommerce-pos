@@ -15,6 +15,7 @@ use WC_REST_Controller;
 use WCPOS\WooCommercePOS\Payments\Checkout_State_Repository;
 use WCPOS\WooCommercePOS\Payments\Gateway_Contract;
 use WCPOS\WooCommercePOS\Payments\Idempotency_Repository;
+use WCPOS\WooCommercePOS\Services\Stock_Validator;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -184,6 +185,12 @@ class Checkout_Controller extends WC_REST_Controller {
 		try {
 			$action       = isset( $params['action'] ) ? (string) $params['action'] : 'start';
 			$payment_data = isset( $params['payment_data'] ) && is_array( $params['payment_data'] ) ? $params['payment_data'] : array();
+			if ( 'start' === $action ) {
+				$validation = Stock_Validator::instance()->validate_checkout( $order );
+				if ( is_wp_error( $validation ) ) {
+					return $validation;
+				}
+			}
 			$state        = $this->dispatch_checkout_action( $gateway, $order->get_id(), $action, $payment_data, $order, $request );
 
 			if ( is_wp_error( $state ) ) {
@@ -191,6 +198,9 @@ class Checkout_Controller extends WC_REST_Controller {
 			}
 
 			$state = $this->normalize_state( $order->get_id(), $gateway_id, $state );
+			if ( \in_array( $state['status'], array( 'cancelled', 'failed' ), true ) ) {
+				Stock_Validator::instance()->release_checkout_stock( $order );
+			}
 			$this->state_repository->upsert( $order->get_id(), $state );
 
 			if ( 'completed' === $state['status'] ) {
