@@ -107,6 +107,30 @@ class Test_Checkout_Section extends WP_UnitTestCase {
 
 		$this->assertEquals( 'fiscal', $settings['receipt_default_mode'] );
 		$this->assertContains( 'admin-bar', $settings['dequeue_script_handles'] );
+		$this->assertFalse( $settings['prevent_overselling'] );
 		$this->assertFalse( $settings['disable_wp_head'] );
+	}
+
+	/**
+	 * Boolean checkout settings are normalized before persistence.
+	 */
+	public function test_prevent_overselling_is_sanitized_as_boolean(): void {
+		$section = new Checkout_Section();
+		$section->write( array( 'prevent_overselling' => 'false' ) );
+
+		$stored = get_option( 'woocommerce_pos_settings_checkout' );
+		$this->assertFalse( $stored['prevent_overselling'] );
+	}
+
+	/**
+	 * The REST argument accepts booleans only.
+	 */
+	public function test_prevent_overselling_rest_validation_requires_boolean(): void {
+		$args     = ( new Checkout_Section() )->endpoint_args();
+		$validate = $args['prevent_overselling']['validate_callback'];
+
+		$this->assertTrue( $validate( true, null, 'prevent_overselling' ) );
+		$this->assertTrue( $validate( false, null, 'prevent_overselling' ) );
+		$this->assertFalse( $validate( 'false', null, 'prevent_overselling' ) );
 	}
 }

@@ -18,6 +18,7 @@ interface EmailSettings {
 
 export interface CheckoutSettingsProps {
 	auto_print_receipt: boolean;
+	prevent_overselling: boolean;
 	admin_emails: EmailSettings;
 	customer_emails: EmailSettings;
 	cashier_emails: EmailSettings;
@@ -94,6 +95,17 @@ function Checkout() {
 	return (
 		<>
 			<FormSection>
+				<FormRow>
+					<Label tip={t('checkout.prevent_overselling_tip')}>
+						<Toggle
+							checked={!!data?.prevent_overselling}
+							onChange={(prevent_overselling: boolean) => {
+								mutate({ prevent_overselling });
+							}}
+							label={t('checkout.prevent_overselling')}
+						/>
+					</Label>
+				</FormRow>
 				<EmailGroup
 					settingsKey="admin_emails"
 					label={t('checkout.admin_emails')}

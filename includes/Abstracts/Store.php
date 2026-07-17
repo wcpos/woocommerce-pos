@@ -55,6 +55,7 @@ class Store extends \WC_Data implements StoreInterface {
 		'price_thousand_sep'          => '',
 		'price_decimal_sep'           => '',
 		'price_num_decimals'          => '',
+		'prevent_overselling'         => false,
 		'prices_include_tax'          => '',
 		'tax_based_on'                => '',
 		'tax_address'                 => array(
@@ -161,6 +162,7 @@ class Store extends \WC_Data implements StoreInterface {
 	public function set_woocommerce_pos_settings() {
 		$this->set_prop( 'default_customer', Settings::instance()->default_customer_id() );
 		$this->set_prop( 'default_customer_is_cashier', Settings::instance()->default_customer_is_cashier() );
+		$this->set_prop( 'prevent_overselling', Settings::instance()->prevent_overselling_enabled() );
 	}
 
 	/**

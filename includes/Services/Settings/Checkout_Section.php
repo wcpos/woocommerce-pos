@@ -25,6 +25,7 @@ class Checkout_Section extends Abstract_Section {
 	public function defaults(): array {
 		return array(
 			'receipt_default_mode' => 'fiscal',
+			'prevent_overselling'   => false,
 			'admin_emails'    => array(
 				'enabled'         => true,
 				'new_order'       => true,
@@ -95,6 +96,9 @@ class Checkout_Section extends Abstract_Section {
 	 */
 	protected function sanitize( array $settings ): array {
 		unset( $settings['auto_print_receipt'], $settings['default_gateway'], $settings['gateways'] );
+		if ( \array_key_exists( 'prevent_overselling', $settings ) ) {
+			$settings['prevent_overselling'] = rest_sanitize_boolean( $settings['prevent_overselling'] );
+		}
 
 		if ( \array_key_exists( 'order_status', $settings ) ) {
 			$gateways_option = get_option( self::DB_PREFIX . 'payment_gateways', array() );
@@ -121,6 +125,11 @@ class Checkout_Section extends Abstract_Section {
 	 */
 	public function endpoint_args(): array {
 		return array(
+			'prevent_overselling' => array(
+				'validate_callback' => function ( $param, $request, $key ) {
+					return \is_bool( $param );
+				},
+			),
 			'receipt_default_mode' => array(
 				'validate_callback' => function ( $param, $request, $key ) {
 					return \is_string( $param ) && \in_array( $param, array( 'fiscal', 'live' ), true );

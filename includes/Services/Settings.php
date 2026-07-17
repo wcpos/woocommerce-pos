@@ -878,6 +878,13 @@ class Settings {
 	}
 
 	/**
+	 * Whether paid POS orders should be rejected when stock is unavailable.
+	 */
+	public function prevent_overselling_enabled(): bool {
+		return (bool) $this->section_value( 'checkout', 'prevent_overselling' );
+	}
+
+	/**
 	 * The user-override tax-ID write map (type => meta key).
 	 */
 	public function tax_id_write_map(): array {
