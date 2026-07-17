@@ -71,8 +71,7 @@ function SessionList({
 						)}
 					</div>
 					<p className="wcpos:truncate wcpos:text-xs wcpos:text-gray-600">
-						@{user.username} &middot;{' '}
-						{t('sessions.session_count', { count: user.session_count })}
+						@{user.username} &middot; {t('sessions.session_count', { count: user.session_count })}
 					</p>
 				</div>
 				<div className="wcpos:flex wcpos:shrink-0 wcpos:gap-2">

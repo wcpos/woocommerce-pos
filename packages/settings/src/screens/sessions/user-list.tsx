@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import SearchIcon from '../../../assets/search.svg';
 import UserListItem, { UserSessionData } from './user-list-item';
+import SearchIcon from '../../../assets/search.svg';
 import { TextInput } from '../../components/ui';
 import { t } from '../../translations';
 
@@ -9,6 +9,7 @@ interface UserListProps {
 	users: UserSessionData[];
 	selectedUserId: number | null;
 	currentUserId: number | null;
+	nowSeconds: number;
 	activeNowThresholdSeconds: number;
 	onSelect: (userId: number) => void;
 }
@@ -17,20 +18,18 @@ function UserList({
 	users,
 	selectedUserId,
 	currentUserId,
+	nowSeconds,
 	activeNowThresholdSeconds,
 	onSelect,
 }: UserListProps) {
 	const [filter, setFilter] = React.useState('');
-
-	const nowSeconds = Math.floor(Date.now() / 1000);
 
 	const filtered = React.useMemo(() => {
 		const needle = filter.trim().toLowerCase();
 		if (!needle) return users;
 		return users.filter(
 			(u) =>
-				u.display_name.toLowerCase().includes(needle) ||
-				u.username.toLowerCase().includes(needle)
+				u.display_name.toLowerCase().includes(needle) || u.username.toLowerCase().includes(needle)
 		);
 	}, [users, filter]);
 
@@ -53,9 +52,7 @@ function UserList({
 			<div className="wcpos:flex-1 wcpos:overflow-y-auto wcpos:space-y-1 wcpos:pr-1">
 				{filtered.length === 0 ? (
 					<div className="wcpos:py-6 wcpos:text-center wcpos:text-xs wcpos:text-gray-500">
-						{filter.trim()
-							? t('sessions.no_users_match')
-							: t('sessions.no_other_users')}
+						{filter.trim() ? t('sessions.no_users_match') : t('sessions.no_other_users')}
 					</div>
 				) : (
 					filtered.map((user) => {

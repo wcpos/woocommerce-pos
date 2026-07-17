@@ -109,9 +109,7 @@ describe('TaxIdsField addRow defaults', () => {
 		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
 		commitDraftValue('B12345674');
 
-		expect(onChange).toHaveBeenCalledWith([
-			{ type: 'es_nif', value: 'B12345674', country: 'ES' },
-		]);
+		expect(onChange).toHaveBeenCalledWith([{ type: 'es_nif', value: 'B12345674', country: 'ES' }]);
 	});
 
 	it('uses it_piva for IT stores', () => {
@@ -137,9 +135,7 @@ describe('TaxIdsField addRow defaults', () => {
 		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
 		commitDraftValue('12345678');
 
-		expect(onChange).toHaveBeenCalledWith([
-			{ type: 'nl_kvk', value: '12345678', country: 'NL' },
-		]);
+		expect(onChange).toHaveBeenCalledWith([{ type: 'nl_kvk', value: '12345678', country: 'NL' }]);
 	});
 
 	it('falls through to eu_vat for EU countries without a country-specific entry (AT)', () => {
@@ -165,9 +161,7 @@ describe('TaxIdsField addRow defaults', () => {
 		fireEvent.click(screen.getByRole('button', { name: baseLabels.add }));
 		commitDraftValue('12-3456789');
 
-		expect(onChange).toHaveBeenCalledWith([
-			{ type: 'us_ein', value: '12-3456789', country: 'US' },
-		]);
+		expect(onChange).toHaveBeenCalledWith([{ type: 'us_ein', value: '12-3456789', country: 'US' }]);
 	});
 
 	it('uses gb_vat for GB stores', () => {

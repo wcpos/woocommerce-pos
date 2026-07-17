@@ -1,12 +1,13 @@
 import * as React from 'react';
 
 import { useSuspenseQuery } from '@tanstack/react-query';
-import { FilterTabs } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
+import { FilterTabs } from '@wcpos/ui';
+
 import ExtensionCard from './extension-card';
-import { CardGrid } from '../../components/card-grid';
 import { setUpdateExtensionsCount } from './use-update-extensions-count';
+import { CardGrid } from '../../components/card-grid';
 import Notice from '../../components/notice';
 import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import { t } from '../../translations';

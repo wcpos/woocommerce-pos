@@ -19,10 +19,7 @@ interface User {
 }
 
 function UserSelect({ disabled = false, selected, onSelect }: UserSelectProps) {
-	const guestUser: User = React.useMemo(
-		() => ({ id: 0, name: t('common.guest') }),
-		[]
-	);
+	const guestUser: User = React.useMemo(() => ({ id: 0, name: t('common.guest') }), []);
 	const { setNotice } = useNotices();
 	const [query, setQuery] = React.useState('');
 

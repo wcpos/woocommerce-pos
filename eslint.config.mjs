@@ -30,6 +30,9 @@ export default defineConfig([
 			},
 		},
 		rules: {
+			// `void somePromise()` statements are our idiom for intentionally
+			// un-awaited promises.
+			'no-void': ['warn', { allowAsStatement: true }],
 			// Prefer function declarations for named components
 			'react/function-component-definition': [
 				'error',

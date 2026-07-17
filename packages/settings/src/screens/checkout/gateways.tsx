@@ -31,8 +31,8 @@ import DragIcon from '../../../assets/drag-icon.svg';
 import MoreVerticalIcon from '../../../assets/more-vertical-icon.svg';
 import Notice from '../../components/notice';
 import { Toggle } from '../../components/ui';
-import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import useSettingsApi from '../../hooks/use-settings-api';
+import { captureUpgradeCtaClicked, captureUpgradeCtaViewed } from '../../lib/analytics';
 import { t } from '../../translations';
 
 import type { Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
@@ -198,9 +198,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 						{t('common.pos_settings')}
 					</DropdownMenuItem>
 					{!['pos_cash', 'pos_card'].includes(item.id) && (
-						<DropdownMenuItem
-							href={`admin.php?page=wc-settings&tab=checkout&section=${item.id}`}
-						>
+						<DropdownMenuItem href={`admin.php?page=wc-settings&tab=checkout&section=${item.id}`}>
 							{t('common.woocommerce_settings')}
 						</DropdownMenuItem>
 					)}
@@ -216,7 +214,7 @@ function GatewayRow({ item, index, data, mutate, proEnabled, onEditGateway }: Ga
 function Gateways() {
 	const { data, mutate } = useSettingsApi('payment-gateways');
 	const [isOpen, setOpen] = React.useState(false);
-	const modalGateway = React.useRef<GatewayProps>(null);
+	const [modalGateway, setModalGateway] = React.useState<GatewayProps | null>(null);
 	const proEnabled = data?.pro_enabled;
 
 	/**
@@ -257,7 +255,7 @@ function Gateways() {
 
 	const handleEditGateway = React.useCallback((item: GatewayItem) => {
 		// @ts-ignore
-		modalGateway.current = item;
+		setModalGateway(item);
 		setOpen(true);
 	}, []);
 
@@ -311,12 +309,8 @@ function Gateways() {
 					))}
 				</TableBody>
 			</Table>
-			{isOpen && modalGateway.current && (
-				<GatewayModal
-					gateway={modalGateway.current}
-					mutate={mutate}
-					closeModal={() => setOpen(false)}
-				/>
+			{isOpen && modalGateway && (
+				<GatewayModal gateway={modalGateway} mutate={mutate} closeModal={() => setOpen(false)} />
 			)}
 		</>
 	);

@@ -88,9 +88,19 @@ describe('AutoPrintRules', () => {
 		fireEvent.change(scope, { target: { value: 'online' } });
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const next = onChange.mock.calls[0][0] as CloudAssignment[];
-		expect(next[0]).toEqual({ printer_id: 'kitchen', store_id: 0, scope: 'online', template_id: '11' });
+		expect(next[0]).toEqual({
+			printer_id: 'kitchen',
+			store_id: 0,
+			scope: 'online',
+			template_id: '11',
+		});
 		// Other rows untouched.
-		expect(next[1]).toEqual({ printer_id: 'front', store_id: 0, scope: 'online', template_id: '22' });
+		expect(next[1]).toEqual({
+			printer_id: 'front',
+			store_id: 0,
+			scope: 'online',
+			template_id: '22',
+		});
 	});
 
 	it('changing template select calls onChange with template_id set to String(value)', () => {
@@ -137,7 +147,12 @@ describe('AutoPrintRules', () => {
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const next = onChange.mock.calls[0][0] as CloudAssignment[];
 		expect(next).toHaveLength(1);
-		expect(next[0]).toEqual({ printer_id: 'front', store_id: 0, scope: 'online', template_id: '22' });
+		expect(next[0]).toEqual({
+			printer_id: 'front',
+			store_id: 0,
+			scope: 'online',
+			template_id: '22',
+		});
 	});
 
 	it('renders the empty state and a working add button when there are no rules', () => {
@@ -147,7 +162,7 @@ describe('AutoPrintRules', () => {
 		expect(add).toBeInTheDocument();
 		fireEvent.click(add);
 		expect(onChange).toHaveBeenCalledTimes(1);
-		expect((onChange.mock.calls[0][0] as CloudAssignment[])).toHaveLength(1);
+		expect(onChange.mock.calls[0][0] as CloudAssignment[]).toHaveLength(1);
 	});
 
 	it('disables the add button when there are no printers', () => {

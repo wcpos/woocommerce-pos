@@ -1,18 +1,19 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SnackbarProvider } from '@wcpos/ui';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { SnackbarProvider } from '@wcpos/ui';
+
+import { PrinterCard } from './printer-card';
+
+import type { CloudPrinter } from '../../hooks/use-cloud-print-settings';
 
 const apiFetchMock = vi.fn();
 vi.mock('@wordpress/api-fetch', () => ({
 	default: (...args: unknown[]) => apiFetchMock(...args),
 }));
-
-import { PrinterCard } from './printer-card';
-
-import type { CloudPrinter } from '../../hooks/use-cloud-print-settings';
 
 function makePrinter(overrides: Partial<CloudPrinter> = {}): CloudPrinter {
 	return {
@@ -126,18 +127,14 @@ describe('PrinterCard', () => {
 		const name = screen.getByTestId(`printer-card-name-${printer.id}`) as HTMLInputElement;
 
 		fireEvent.change(name, { target: { value: 'Typing a new name' } });
-		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent(
-			'Unknown'
-		);
+		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent('Unknown');
 
 		await act(async () => {
 			await vi.advanceTimersByTimeAsync(30001);
 			await Promise.resolve();
 		});
 
-		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent(
-			'Online'
-		);
+		expect(screen.getByTestId(`printer-card-status-${printer.id}`)).toHaveTextContent('Online');
 		expect(name.value).toBe('Typing a new name');
 	});
 
@@ -162,9 +159,7 @@ describe('PrinterCard', () => {
 		});
 
 		expect(apiFetchMock).toHaveBeenCalledTimes(1);
-		expect(screen.getByTestId(`printer-card-status-${kitchen.id}`)).toHaveTextContent(
-			'Online'
-		);
+		expect(screen.getByTestId(`printer-card-status-${kitchen.id}`)).toHaveTextContent('Online');
 		expect(screen.getByTestId(`printer-card-status-${bar.id}`)).toHaveTextContent('Offline');
 	});
 
@@ -258,9 +253,7 @@ describe('PrinterCard', () => {
 		renderCard({ printer });
 		const info = screen.getByTestId(`printer-card-id-info-${printer.id}`);
 		fireEvent.mouseEnter(info);
-		expect(
-			screen.getByText(/Created automatically and can't be changed/i)
-		).toBeInTheDocument();
+		expect(screen.getByText(/Created automatically and can't be changed/i)).toBeInTheDocument();
 	});
 
 	it('calls the test-print endpoint with the right path and data', async () => {

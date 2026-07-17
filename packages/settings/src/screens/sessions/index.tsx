@@ -42,9 +42,9 @@ function sortUsers(users: UserSessionData[], currentUserId: number | null): User
 function Sessions() {
 	const queryClient = useQueryClient();
 	const { setNotice } = useNotices();
-	const currentUserId = React.useMemo(getCurrentUserId, []);
+	const currentUserId = React.useMemo(() => getCurrentUserId(), []);
 
-	const { data } = useSuspenseQuery<AllUsersSessionsResponse>({
+	const { data, dataUpdatedAt } = useSuspenseQuery<AllUsersSessionsResponse>({
 		queryKey: ['sessions', 'all'],
 		queryFn: async () => {
 			const response = await apiFetch({
@@ -63,26 +63,23 @@ function Sessions() {
 	const [selectedUserId, setSelectedUserId] = React.useState<number | null>(null);
 	const [pendingConfirm, setPendingConfirm] = React.useState<PendingConfirm>(null);
 
-	// Ensure a valid selection: prefer current user, else first user.
-	React.useEffect(() => {
-		if (users.length === 0) {
-			if (selectedUserId !== null) setSelectedUserId(null);
-			return;
+	// Ensure a valid selection: prefer the user's explicit choice, else the
+	// current user, else the first user. Derived during render so the selection
+	// self-heals when the users list changes (no state-syncing effect needed).
+	let effectiveSelectedUserId: number | null = null;
+	if (users.length > 0) {
+		if (selectedUserId !== null && users.some((u) => u.user_id === selectedUserId)) {
+			effectiveSelectedUserId = selectedUserId;
+		} else if (currentUserId !== null && users.some((u) => u.user_id === currentUserId)) {
+			effectiveSelectedUserId = currentUserId;
+		} else {
+			effectiveSelectedUserId = users[0].user_id;
 		}
-		const stillExists =
-			selectedUserId !== null && users.some((u) => u.user_id === selectedUserId);
-		if (!stillExists) {
-			const defaultId =
-				currentUserId !== null && users.some((u) => u.user_id === currentUserId)
-					? currentUserId
-					: users[0].user_id;
-			setSelectedUserId(defaultId);
-		}
-	}, [users, selectedUserId, currentUserId]);
+	}
 
 	const selectedUser = React.useMemo(
-		() => users.find((u) => u.user_id === selectedUserId) || null,
-		[users, selectedUserId]
+		() => users.find((u) => u.user_id === effectiveSelectedUserId) || null,
+		[users, effectiveSelectedUserId]
 	);
 
 	const deleteSessionMutation = useMutation({
@@ -104,13 +101,7 @@ function Sessions() {
 	});
 
 	const deleteAllSessionsMutation = useMutation({
-		mutationFn: async ({
-			userId,
-			exceptCurrent,
-		}: {
-			userId: number;
-			exceptCurrent: boolean;
-		}) => {
+		mutationFn: async ({ userId, exceptCurrent }: { userId: number; exceptCurrent: boolean }) => {
 			const params = new URLSearchParams({
 				user_id: userId.toString(),
 				wcpos: '1',
@@ -133,8 +124,7 @@ function Sessions() {
 		},
 	});
 
-	const isDeleting =
-		deleteSessionMutation.isPending || deleteAllSessionsMutation.isPending;
+	const isDeleting = deleteSessionMutation.isPending || deleteAllSessionsMutation.isPending;
 
 	const handleConfirm = () => {
 		if (!pendingConfirm) return;
@@ -154,10 +144,11 @@ function Sessions() {
 		}
 	};
 
-	const nowSeconds = Math.floor(Date.now() / 1000);
+	// Anchor "now" to when the sessions data was fetched — `last_active` values
+	// come from the same response, and it keeps render pure.
+	const nowSeconds = Math.floor(dataUpdatedAt / 1000);
 	const selectedIsActiveNow =
-		selectedUser !== null &&
-		nowSeconds - selectedUser.last_active <= ACTIVE_NOW_THRESHOLD_SECONDS;
+		selectedUser !== null && nowSeconds - selectedUser.last_active <= ACTIVE_NOW_THRESHOLD_SECONDS;
 
 	const confirmCopy = React.useMemo(() => {
 		if (!pendingConfirm) return null;
@@ -198,8 +189,9 @@ function Sessions() {
 					<aside className="wcpos:border-r wcpos:border-gray-200 wcpos:pr-4">
 						<UserList
 							users={users}
-							selectedUserId={selectedUserId}
+							selectedUserId={effectiveSelectedUserId}
 							currentUserId={currentUserId}
+							nowSeconds={nowSeconds}
 							activeNowThresholdSeconds={ACTIVE_NOW_THRESHOLD_SECONDS}
 							onSelect={setSelectedUserId}
 						/>

@@ -106,15 +106,24 @@ export function PrinterStatusChip({ printer }: { printer: CloudPrinter }) {
 	const provider = PROVIDERS[printer.provider];
 	const [status, setStatus] = React.useState<CloudStatus | undefined>(printer.status);
 
-	React.useEffect(() => {
+	// Re-adopt the prop value when it changes (render-time adjustment instead of
+	// a state-syncing effect); the subscription below then layers live updates
+	// on top.
+	const [prevPropStatus, setPrevPropStatus] = React.useState<CloudStatus | undefined>(
+		printer.status
+	);
+	if (printer.status !== prevPropStatus) {
+		setPrevPropStatus(printer.status);
 		setStatus(printer.status);
+	}
 
-		return subscribeToPrinterStatusUpdates((settings) => {
-			setStatus(
-				settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status
-			);
-		});
-	}, [printer.id, printer.status]);
+	React.useEffect(
+		() =>
+			subscribeToPrinterStatusUpdates((settings) => {
+				setStatus(settings.printers.find((nextPrinter) => nextPrinter.id === printer.id)?.status);
+			}),
+		[printer.id]
+	);
 
 	const meta = getStatusMeta(status, provider.isPolling);
 

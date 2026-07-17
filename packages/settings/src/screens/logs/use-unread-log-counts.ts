@@ -51,7 +51,7 @@ export async function markLogsRead() {
 			path: 'wcpos/v1/logs/mark-read?wcpos=1',
 			method: 'POST',
 		});
-	} catch (err) {
+	} catch {
 		counts = prev;
 		emitChange();
 	}
