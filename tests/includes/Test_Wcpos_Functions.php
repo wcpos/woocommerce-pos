@@ -28,6 +28,10 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		// The test framework only resets permalinks for core tests, so undo
+		// set_permalink_structure() here or it leaks into later test classes.
+		$this->set_permalink_structure( '' );
+
 		parent::tearDown();
 	}
 
@@ -139,6 +143,64 @@ class Test_Wcpos_Functions extends WP_UnitTestCase {
 		// Assert.
 		$this->assertStringStartsWith( 'http://', $url );
 		$this->assertStringEndsWith( '/wcpos-checkout/order-pay/123', $url );
+	}
+
+	/**
+	 * Test checkout URL ends with a trailing slash when the permalink structure
+	 * uses trailing slashes, so it doesn't trip origin rewrite rules that
+	 * force a trailing slash (see wcpos_checkout_url()).
+	 */
+	public function test_wcpos_checkout_url_trailing_slash_permalinks_ends_with_slash(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%/' );
+
+		// Act.
+		$url = wcpos_checkout_url( 'order-pay/123' );
+
+		// Assert.
+		$this->assertStringEndsWith( '/wcpos-checkout/order-pay/123/', $url );
+	}
+
+	/**
+	 * Test checkout URL keeps no trailing slash when the permalink structure
+	 * has no trailing slash.
+	 */
+	public function test_wcpos_checkout_url_no_slash_permalinks_ends_without_slash(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%' );
+
+		// Act.
+		$url = wcpos_checkout_url( 'order-pay/123' );
+
+		// Assert.
+		$this->assertStringEndsWith( '/wcpos-checkout/order-pay/123', $url );
+		$this->assertStringEndsNotWith( '/', $url );
+	}
+
+	/**
+	 * Test POS URL ends with a trailing slash when the permalink structure
+	 * uses trailing slashes.
+	 */
+	public function test_wcpos_url_trailing_slash_permalinks_ends_with_slash(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%/' );
+
+		// Act & Assert.
+		$this->assertStringEndsWith( '/pos/', wcpos_url() );
+		$this->assertStringEndsWith( '/pos/cashiers/', wcpos_url( 'cashiers' ) );
+	}
+
+	/**
+	 * Test POS URL keeps no trailing slash when the permalink structure has no
+	 * trailing slash.
+	 */
+	public function test_wcpos_url_no_slash_permalinks_ends_without_slash(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%' );
+
+		// Act & Assert.
+		$this->assertStringEndsWith( '/pos', wcpos_url() );
+		$this->assertStringEndsWith( '/pos/cashiers', wcpos_url( 'cashiers' ) );
 	}
 
 	/**
