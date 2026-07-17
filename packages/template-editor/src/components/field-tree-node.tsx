@@ -44,6 +44,20 @@ function Chevron({ open }: { open: boolean }) {
 	);
 }
 
+function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
+	if (entry.sectionKey.toLowerCase().includes(search)) return true;
+	if (entry.section.label.toLowerCase().includes(search)) return true;
+	if (
+		Object.entries(entry.section.fields).some(
+			([key, field]) =>
+				key.toLowerCase().includes(search) || field.label.toLowerCase().includes(search)
+		)
+	)
+		return true;
+
+	return entry.children.some((child) => entryMatchesSearch(child, search));
+}
+
 export function FieldTreeNode({
 	sectionKey,
 	section,
@@ -69,17 +83,7 @@ export function FieldTreeNode({
 	});
 	const visibleChildren = children.filter((child) => {
 		if (!searchFilter) return true;
-
-		const childLower = searchFilter.toLowerCase();
-		const childSectionMatches =
-			child.sectionKey.toLowerCase().includes(childLower) ||
-			child.section.label.toLowerCase().includes(childLower);
-		const childFieldMatches = Object.entries(child.section.fields).some(
-			([key, field]) =>
-				key.toLowerCase().includes(childLower) || field.label.toLowerCase().includes(childLower)
-		);
-
-		return childSectionMatches || childFieldMatches;
+		return entryMatchesSearch(child, lowerSearch);
 	});
 
 	if (
