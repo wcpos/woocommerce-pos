@@ -10,6 +10,7 @@ import { groupByDay } from './group-by-day';
 import { markLogsRead } from './use-unread-log-counts';
 import Notice from '../../components/notice';
 import { Select } from '../../components/ui';
+import { useNowMs } from '../../hooks/use-now';
 import { t } from '../../translations';
 
 const ALL_SOURCES = 'all';
@@ -277,9 +278,11 @@ function Logs() {
 		setExpandedKey(null);
 	}
 
-	// "Now" is pinned to the fetch time — day boundaries only matter when a new
-	// fetch arrives, and it keeps the memo (and render) pure.
-	const groups = React.useMemo(() => groupByDay(entries, dataUpdatedAt), [entries, dataUpdatedAt]);
+	// Purity-safe clock for day grouping: seeded from the fetch timestamp, then
+	// ticking, so "Today"/"Yesterday" labels stay correct across midnight even
+	// while react-query serves cached data.
+	const nowMs = useNowMs(dataUpdatedAt, 60_000);
+	const groups = React.useMemo(() => groupByDay(entries, nowMs), [entries, nowMs]);
 
 	const filters = [
 		{ key: 'all', label: t('common.all', 'All') },

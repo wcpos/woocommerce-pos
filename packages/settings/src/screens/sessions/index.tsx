@@ -9,6 +9,7 @@ import UserList from './user-list';
 import Notice from '../../components/notice';
 import { SessionsSkeleton } from '../../components/skeleton';
 import useNotices from '../../hooks/use-notices';
+import { useNowMs } from '../../hooks/use-now';
 import { t } from '../../translations';
 
 interface AllUsersSessionsResponse {
@@ -144,9 +145,10 @@ function Sessions() {
 		}
 	};
 
-	// Anchor "now" to when the sessions data was fetched — `last_active` values
-	// come from the same response, and it keeps render pure.
-	const nowSeconds = Math.floor(dataUpdatedAt / 1000);
+	// Purity-safe clock: seeded from the fetch timestamp, snaps to the real
+	// clock after mount and ticks so "active now" states stay honest while
+	// react-query serves cached data.
+	const nowSeconds = Math.floor(useNowMs(dataUpdatedAt, 30_000) / 1000);
 	const selectedIsActiveNow =
 		selectedUser !== null && nowSeconds - selectedUser.last_active <= ACTIVE_NOW_THRESHOLD_SECONDS;
 
