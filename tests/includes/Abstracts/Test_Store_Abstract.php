@@ -108,6 +108,7 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 			'price_thousand_sep',
 			'price_decimal_sep',
 			'price_num_decimals',
+			'prevent_overselling',
 			'prices_include_tax',
 			'tax_based_on',
 			'shipping_tax_class',
@@ -136,6 +137,25 @@ class Test_Store_Abstract extends WP_UnitTestCase {
 		$props               = array_keys( $data );
 		$this->assertEmpty( array_diff( $expected_data_props, $props ), 'These fields were expected but not present in Store: ' . print_r( array_diff( $expected_data_props, $props ), true ) );
 		$this->assertEmpty( array_diff( $props, $expected_data_props ), 'These fields were not expected in Store: ' . print_r( array_diff( $props, $expected_data_props ), true ) );
+	}
+
+	/**
+	 * Store payloads expose the checkout stock validation setting.
+	 */
+	public function test_store_payload_includes_prevent_overselling_setting(): void {
+		$original = get_option( 'woocommerce_pos_settings_checkout', null );
+		update_option( 'woocommerce_pos_settings_checkout', array( 'prevent_overselling' => true ) );
+
+		try {
+			$store = new Store();
+			$this->assertTrue( $store->get_data()['prevent_overselling'] );
+		} finally {
+			if ( null === $original ) {
+				delete_option( 'woocommerce_pos_settings_checkout' );
+			} else {
+				update_option( 'woocommerce_pos_settings_checkout', $original );
+			}
+		}
 	}
 
 	public function test_get_store_id(): void {

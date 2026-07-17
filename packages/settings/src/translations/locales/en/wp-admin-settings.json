@@ -97,6 +97,8 @@
 	"settings.privacy_modal_exclusions": "We never look at customer details, order contents, prices, your site address, or anything that could identify you or your customers. You can change your mind any time.",
 	"settings.privacy_modal_close": "Got it",
 	"checkout.order_status": "Order Status",
+	"checkout.prevent_overselling": "Prevent overselling",
+	"checkout.prevent_overselling_tip": "Reject orders at checkout when quantities exceed available stock.",
 	"checkout.admin_emails": "Admin emails",
 	"checkout.admin_emails_tip": "WooCommerce admin notification emails for POS orders",
 	"checkout.customer_emails": "Customer emails",
