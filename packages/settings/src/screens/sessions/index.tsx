@@ -77,6 +77,9 @@ function Sessions() {
 			effectiveSelectedUserId = users[0].user_id;
 		}
 	}
+	if (selectedUserId !== null && selectedUserId !== effectiveSelectedUserId) {
+		setSelectedUserId(effectiveSelectedUserId);
+	}
 
 	const selectedUser = React.useMemo(
 		() => users.find((u) => u.user_id === effectiveSelectedUserId) || null,
