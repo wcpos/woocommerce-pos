@@ -22,6 +22,8 @@ export default defineConfig([
 	},
 	// fixupConfigRules restores plugin APIs removed in ESLint 10 (eslint-plugin-import
 	// and eslint-plugin-react still target v9) until universe ships v10-ready deps.
+	// TODO(#1257): drop the wrapper (and @eslint/compat) once eslint-config-universe
+	// supports ESLint 10 natively — removal recipe is in the issue.
 	...fixupConfigRules(universeWeb),
 	{
 		settings: {

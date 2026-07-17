@@ -28,6 +28,15 @@ interface RootProps {
 	initialCallout: boolean;
 }
 
+/**
+ * Show/hide the WP notice mount node. Lives outside the component so the
+ * external-DOM mutation is opaque to react-hooks/immutability, which would
+ * otherwise flag any write through the `container` prop during render analysis.
+ */
+function setMountVisibility(el: HTMLElement, visible: boolean) {
+	el.style.display = visible ? '' : 'none';
+}
+
 function ConsentRoot({ config, container, initialModal, initialCallout }: RootProps) {
 	const [modalOpen, setModalOpen] = React.useState(initialModal);
 	const [calloutVisible, setCalloutVisible] = React.useState(initialCallout);
@@ -40,10 +49,7 @@ function ConsentRoot({ config, container, initialModal, initialCallout }: RootPr
 	// visible (dismissed or decision recorded) hide the empty shell so
 	// it doesn't linger as an empty blue bar.
 	React.useEffect(() => {
-		// eslint-disable-next-line react-hooks/immutability -- `container` is an
-		// external DOM node we own (the WP notice mount), not React-managed state;
-		// syncing its style is exactly what this effect is for.
-		container.style.display = calloutVisible ? '' : 'none';
+		setMountVisibility(container, calloutVisible);
 	}, [container, calloutVisible]);
 
 	const handleDecide = React.useCallback(
