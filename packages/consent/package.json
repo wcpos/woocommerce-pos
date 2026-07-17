@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch --mode development",
-    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },
@@ -20,7 +20,6 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

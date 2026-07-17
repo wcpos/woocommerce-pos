@@ -4,7 +4,7 @@
     "build": "vite build",
     "dev": "vite build --watch --mode development",
     "preview": "vite preview",
-    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -26,7 +26,6 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query-devtools": "^5.100.9",
     "@testing-library/jest-dom": "^6.9.1",
