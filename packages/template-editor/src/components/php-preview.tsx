@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 
 import apiFetch from '@wordpress/api-fetch';
@@ -95,10 +95,13 @@ export function PhpPreview({ previewUrl }: PhpPreviewProps) {
 		setPreviewState((prev) => ({ ...prev, loading: Boolean(previewUrl) }));
 	}
 
+	useLayoutEffect(() => {
+		requestIdRef.current += 1;
+	}, [previewUrl]);
+
 	useEffect(() => {
 		if (!previewUrl) return;
-		const requestId = requestIdRef.current + 1;
-		requestIdRef.current = requestId;
+		const requestId = requestIdRef.current;
 
 		apiFetch<PhpPreviewResponse>({
 			url: getPhpPreviewRequestUrl(previewUrl),

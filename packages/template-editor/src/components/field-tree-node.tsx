@@ -45,17 +45,15 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 function entryMatchesSearch(entry: FieldTreeEntry, search: string): boolean {
-	if (entry.sectionKey.toLowerCase().includes(search)) return true;
-	if (entry.section.label.toLowerCase().includes(search)) return true;
-	if (
+	return (
+		entry.sectionKey.toLowerCase().includes(search) ||
+		entry.section.label.toLowerCase().includes(search) ||
 		Object.entries(entry.section.fields).some(
 			([key, field]) =>
 				key.toLowerCase().includes(search) || field.label.toLowerCase().includes(search)
-		)
-	)
-		return true;
-
-	return entry.children.some((child) => entryMatchesSearch(child, search));
+		) ||
+		entry.children.some((child) => entryMatchesSearch(child, search))
+	);
 }
 
 export function FieldTreeNode({

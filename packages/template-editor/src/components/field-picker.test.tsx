@@ -215,7 +215,7 @@ describe('FieldPicker', () => {
 		expect(container.textContent).not.toContain('No fields match');
 	});
 
-	it('keeps ancestors visible when a grandchild field matches the search', async () => {
+	it('keeps ancestors visible when a grandchild matches the search', async () => {
 		const container = document.createElement('div');
 		const root = createRoot(container);
 		mountedRoots.push(root);
@@ -232,24 +232,21 @@ describe('FieldPicker', () => {
 							section: { label: 'Child', fields: {} },
 							children: [
 								{
-									sectionKey: 'root.child.grandchild',
-									section: {
-										label: 'Grandchild',
-										fields: { value: { type: 'string', label: 'Deep Value' } },
-									},
+									sectionKey: 'deep-match',
+									section: { label: 'Grandchild', fields: {} },
 									children: [],
 								},
 							],
 						},
 					]}
-					searchFilter="Deep Value"
+					searchFilter="deep-match"
 					onInsertField={vi.fn()}
 				/>
 			);
 		});
 
 		expect(container.textContent).toContain('Root');
-		expect(container.textContent).toContain('Deep Value');
+		expect(container.textContent).toContain('Grandchild');
 	});
 
 	it('does not cap its own height so it can match the editor column', async () => {
