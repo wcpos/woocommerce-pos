@@ -236,6 +236,19 @@ class Settings {
 	}
 
 	/**
+	 * Resolve the URL scheme for POS permalinks.
+	 *
+	 * Central policy for when POS URLs force https: the force_ssl general
+	 * setting (default true) so links work when the site home URL is http
+	 * but the POS is served over https, eg: behind an SSL-terminating proxy.
+	 *
+	 * @return null|string 'https' when force_ssl is enabled, null for the home scheme.
+	 */
+	public function url_scheme(): ?string {
+		return $this->get_settings( 'general', 'force_ssl' ) ? 'https' : null;
+	}
+
+	/**
 	 * Saves settings for a specific section.
 	 *
 	 * @param string $id       The ID of the settings section being saved.

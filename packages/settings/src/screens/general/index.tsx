@@ -182,8 +182,12 @@ function General() {
 			<FormSection title={t('settings.advanced_section_title')} divider>
 				<FormRow>
 					<Label tip={t('settings.force_ssl_tip')}>
+						{/* force_ssl defaults to true server-side, so show the default and
+						    block clicks until settings load — the other toggles default false
+						    and never render a wrong state while fetching. */}
 						<Toggle
-							checked={!!data?.force_ssl}
+							checked={data ? !!data.force_ssl : true}
+							disabled={!data}
 							onChange={(force_ssl: boolean) => {
 								mutate({ force_ssl });
 							}}
