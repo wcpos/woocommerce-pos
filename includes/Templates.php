@@ -483,6 +483,8 @@ class Templates {
 		}
 
 		$file_name = $type . '.php';
+		$directory = null;
+		$path      = null;
 
 		switch ( $template_id ) {
 			case self::TEMPLATE_THEME:
@@ -522,6 +524,10 @@ class Templates {
 
 			default:
 				return null;
+		}
+
+		if ( null === $directory || null === $path ) {
+			return null;
 		}
 
 		$real_directory = realpath( $directory );
