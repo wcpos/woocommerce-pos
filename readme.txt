@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.7
+Stable tag: 1.9.8
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,10 @@ WCPOS keeps your data in your own WooCommerce database and only contacts outside
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.8 - 2026/07/17 =
+- **Fixed blocked payment and receipt links on https stores** -- checkout payment, receipt and login links now respect the Force SSL setting, so the order-pay popup is no longer blocked as mixed content on stores served over https while the WordPress home URL is still http (eg: behind Cloudflare Flexible SSL or other SSL-terminating proxies).
+- **Force SSL toggle restored** -- the Force SSL setting is back in the WCPOS settings under a new Advanced section, so stores that intentionally run over http can turn it off.
 
 = 1.9.7 - 2026/07/15 =
 - **Receipts can now show savings** -- receipt templates can display regular prices, per-line savings and a Total Saved line, with correct right-to-left (RTL) previews and localized labels.
