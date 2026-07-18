@@ -245,7 +245,7 @@ class Products_Controller extends WC_REST_Products_Controller {
 			// sale minima from different variations into a false parent-level sale.
 			if ( array_key_exists( 'price', $data ) ) {
 				$decimals      = null !== $request->get_param( 'dp' ) ? absint( $request->get_param( 'dp' ) ) : wc_get_price_decimals();
-				$data['price'] = wc_format_decimal( $minimum_price, $decimals );
+				$data['price'] = '' === $minimum_price ? '' : wc_format_decimal( $minimum_price, $decimals );
 			}
 			foreach ( array( 'regular_price', 'sale_price' ) as $price_key ) {
 				if ( array_key_exists( $price_key, $data ) ) {
