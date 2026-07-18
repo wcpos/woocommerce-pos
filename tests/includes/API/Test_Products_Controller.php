@@ -1502,7 +1502,7 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$variation->set_props(
 			array(
 				'parent_id'     => $variable_product->get_id(),
-				'regular_price' => '114',
+				'regular_price' => '114.234',
 			)
 		);
 		$variation->set_attributes( array( 'pa_size' => 'large' ) );
@@ -1525,8 +1525,8 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		}
 
 		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
-		$this->assertEquals( '114.00', $variable_prices['price']['min'] );
-		$this->assertEquals( '114.000', $data['price'] );
+		$this->assertEquals( '114.23', $variable_prices['price']['min'] );
+		$this->assertEquals( '114.234', $data['price'] );
 		$this->assertSame( '', $data['regular_price'] );
 		$this->assertSame( '', $data['sale_price'] );
 	}
