@@ -1,5 +1,24 @@
 <?php
 
+namespace WCPOS\WooCommercePOS\API\V1;
+
+/**
+ * Simulate the legacy WooCommerce empty-decimal coercion for one compatibility test.
+ *
+ * @param mixed $number     Value to format.
+ * @param mixed $dp         Decimal precision.
+ * @param bool  $trim_zeros Whether to trim trailing zeros.
+ *
+ * @return string
+ */
+function wc_format_decimal( $number, $dp = false, $trim_zeros = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- test shim must shadow the WC function in the controller namespace.
+	if ( ! empty( $GLOBALS['wcpos_test_legacy_empty_decimal'] ) && '' === $number && false !== $dp ) {
+		return number_format( 0, (int) $dp, '.', '' );
+	}
+
+	return \wc_format_decimal( $number, $dp, $trim_zeros );
+}
+
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -1557,6 +1576,33 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '10.00', $data['price'] );
 		$this->assertSame( '', $data['regular_price'] );
 		$this->assertSame( '', $data['sale_price'] );
+	}
+
+	/**
+	 * Unpriced variable products stay empty on WooCommerce versions that coerce empty decimals to zero.
+	 */
+	public function test_variable_product_without_prices_does_not_expose_zero_parent_price(): void {
+		$product = ProductHelper::create_variation_product();
+		foreach ( $product->get_children() as $variation_id ) {
+			$variation = new \WC_Product_Variation( $variation_id );
+			$variation->set_regular_price( '' );
+			$variation->set_sale_price( '' );
+			$variation->set_price( '' );
+			$variation->save();
+		}
+
+		$GLOBALS['wcpos_test_legacy_empty_decimal'] = true;
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+			$request->set_param( 'include', array( $product->get_id() ) );
+			$response = $this->server->dispatch( $request );
+		} finally {
+			unset( $GLOBALS['wcpos_test_legacy_empty_decimal'] );
+		}
+		$data = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( '', $data['price'] );
 	}
 
 	/**
