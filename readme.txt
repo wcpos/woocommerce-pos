@@ -3,7 +3,7 @@ Contributors: kilbot
 Tags: ecommerce, point-of-sale, pos, inventory, woocommerce
 Requires at least: 5.6
 Tested up to: 7.0
-Stable tag: 1.9.8
+Stable tag: 1.9.9
 License: GPL-3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -120,6 +120,11 @@ WCPOS keeps your data in your own WooCommerce database and only contacts outside
 1. WCPOS main screen
 
 == Changelog ==
+
+= 1.9.9 - 2026/07/18 =
+- **Security: hardened receipt/report template file resolution** -- the templates REST endpoint now strictly validates the requested template type and confirms that resolved template files stay inside the plugin's trusted template directories, closing a path-traversal issue. All stores should update.
+- **Fixed payment links blocked by trailing-slash rewrite rules** -- POS checkout, receipt and login URLs now follow your site's permalink trailing-slash style, so rewrite rules that force a trailing slash no longer redirect these links to an http target and get blocked as mixed content.
+- **Updated translations.**
 
 = 1.9.8 - 2026/07/17 =
 - **Fixed blocked payment and receipt links on https stores** -- checkout payment, receipt and login links now respect the Force SSL setting, so the order-pay popup is no longer blocked as mixed content on stores served over https while the WordPress home URL is still http (eg: behind Cloudflare Flexible SSL or other SSL-terminating proxies).
