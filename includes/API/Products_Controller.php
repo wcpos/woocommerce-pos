@@ -239,6 +239,19 @@ class Products_Controller extends WC_REST_Products_Controller {
 		if ( $product->is_type( 'variable' ) && $product instanceof WC_Product_Variable ) {
 			$price_array = $this->wcpos_get_variable_product_price_ranges( $product );
 
+			// A simple-to-variable conversion can leave old simple price fields on the
+			// parent. Serve the current minimum, but do not pair independent regular and
+			// sale minima from different variations into a false parent-level sale.
+			if ( array_key_exists( 'price', $data ) ) {
+				$decimals      = null !== $request->get_param( 'dp' ) ? absint( $request->get_param( 'dp' ) ) : wc_get_price_decimals();
+				$data['price'] = wc_format_decimal( $price_array['price']['min'], $decimals );
+			}
+			foreach ( array( 'regular_price', 'sale_price' ) as $price_key ) {
+				if ( array_key_exists( $price_key, $data ) ) {
+					$data[ $price_key ] = '';
+				}
+			}
+
 			// Try encoding the array into JSON.
 			$encoded_price = wp_json_encode( $price_array );
 
