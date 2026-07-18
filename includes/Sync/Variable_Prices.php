@@ -92,7 +92,7 @@ final class Variable_Prices {
 			}
 		}
 		if ( null === $ranges ) {
-			return $product;
+			return self::inject_meta_entry( $product, self::META_KEY, null );
 		}
 		if ( array_key_exists( 'price', $product ) ) {
 			$decimals = \function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
@@ -200,6 +200,7 @@ final class Variable_Prices {
 
 	/**
 	 * Replace (or add) a single meta_data entry by key, preserving the others (order-stable).
+	 * A null value removes the matching entry without adding a replacement.
 	 */
 	private static function inject_meta_entry( array $payload, string $key, $value ): array {
 		$others = array();
@@ -210,10 +211,12 @@ final class Variable_Prices {
 				$others[] = $entry;
 			}
 		}
-		$others[]             = array(
-			'key' => $key,
-			'value' => $value,
-		);
+		if ( null !== $value ) {
+			$others[] = array(
+				'key' => $key,
+				'value' => $value,
+			);
+		}
 		$payload['meta_data'] = array_values( $others );
 
 		return $payload;

@@ -217,6 +217,13 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 					'price'         => '102.00',
 					'regular_price' => '102.00',
 					'sale_price'    => '90.00',
+					'meta_data'     => array(
+						array(
+							'key'   => Variable_Prices::META_KEY,
+							'value' => array( 'price' => array( 'min' => '102', 'max' => '102' ) ),
+						),
+						array( 'key' => 'keep_me', 'value' => 'yes' ),
+					),
 				),
 			),
 			'products'
@@ -225,6 +232,7 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 		$this->assertSame( '', $data[0]['price'] );
 		$this->assertSame( '', $data[0]['regular_price'] );
 		$this->assertSame( '', $data[0]['sale_price'] );
+		$this->assertSame( array( array( 'key' => 'keep_me', 'value' => 'yes' ) ), $data[0]['meta_data'] );
 	}
 
 	/**
