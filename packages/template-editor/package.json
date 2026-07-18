@@ -24,19 +24,19 @@
     "@wordpress/api-fetch": "^7.45.0",
     "codemirror": "^6.0.1",
     "mustache": "^4.2.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
     "@types/mustache": "^4.2.6",
-    "@types/react": "^18.3.28",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
     "@wcpos/eslint-config-wordpress": "github:wcpos/eslint-config-wordpress",
     "eslint": "^10.3.0",
     "tailwindcss": "^4.2.4",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.0.11",
     "vitest": "^4.1.5"
   },
