@@ -16,6 +16,7 @@ use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WCPOS\WooCommercePOS\Sync\Proxy_Uuid_Stamper;
 use WCPOS\WooCommercePOS\Sync\Term_Meta_Adapter;
 use WCPOS\WooCommercePOS\Sync\Variable_Prices;
+use WP_REST_Request;
 use WP_UnitTestCase;
 
 /**
@@ -158,6 +159,72 @@ class Test_Sync_Read_Helpers extends WP_UnitTestCase {
 			),
 			$range
 		);
+	}
+
+	/**
+	 * Variable-price stamping replaces stale parent fields left by a simple product.
+	 */
+	public function test_variable_prices_replace_stale_simple_product_price_fields(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+
+		foreach ( $variation_ids as $variation_id ) {
+			$variation = new WC_Product_Variation( $variation_id );
+			$variation->set_regular_price( '114' );
+			$variation->set_sale_price( '' );
+			$variation->set_price( '114' );
+			$variation->save();
+		}
+
+		$data = Variable_Prices::stamp_proxy_variable_prices(
+			array(
+				array(
+					'id'            => $product->get_id(),
+					'type'          => 'variable',
+					'price'         => '102',
+					'regular_price' => '102',
+					'sale_price'    => '90',
+				),
+			),
+			'products',
+			new WP_REST_Request( 'GET', '/wcpos/v2/products' )
+		);
+
+		$this->assertSame( '114.00', $data[0]['price'] );
+		$this->assertSame( '', $data[0]['regular_price'] );
+		$this->assertSame( '', $data[0]['sale_price'] );
+	}
+
+	/**
+	 * A variable product with no visible prices must not retain old simple fields.
+	 */
+	public function test_variable_prices_clear_stale_parent_fields_when_no_child_has_a_price(): void {
+		$product = ProductHelper::create_variation_product();
+
+		foreach ( $product->get_children() as $variation_id ) {
+			$variation = new WC_Product_Variation( $variation_id );
+			$variation->set_regular_price( '' );
+			$variation->set_sale_price( '' );
+			$variation->set_price( '' );
+			$variation->save();
+		}
+
+		$data = Variable_Prices::stamp_proxy_variable_prices(
+			array(
+				array(
+					'id'            => $product->get_id(),
+					'type'          => 'variable',
+					'price'         => '102.00',
+					'regular_price' => '102.00',
+					'sale_price'    => '90.00',
+				),
+			),
+			'products'
+		);
+
+		$this->assertSame( '', $data[0]['price'] );
+		$this->assertSame( '', $data[0]['regular_price'] );
+		$this->assertSame( '', $data[0]['sale_price'] );
 	}
 
 	/**

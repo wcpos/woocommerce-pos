@@ -9,6 +9,7 @@ namespace WCPOS\WooCommercePOS\Tests\Sync;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
 use WCPOS\WooCommercePOS\Activator;
+use WCPOS\WooCommercePOS\API\V2\Write_Controller;
 use WCPOS\WooCommercePOS\Sync\Api;
 use WCPOS\WooCommercePOS\Sync\Integrity_Digest;
 use WCPOS\WooCommercePOS\Sync\Pos_Uuid;
@@ -112,6 +113,110 @@ class Test_Sync_Hook_Isolation extends WCPOS_REST_Unit_Test_Case {
 		$this->assertArrayHasKey( '_rxdb_revision', $data[0] );
 		$this->assertStringStartsWith( 'sha256:', $data[0]['_rxdb_revision'] );
 		$this->assertTrue( Pos_Uuid::is_uuid( Pos_Uuid::read_valid_uuid_from_meta( $data[0]['meta_data'] ) ) );
+	}
+
+	/**
+	 * The v2 list proxy replaces a simple product's stale parent price after conversion.
+	 */
+	public function test_sync_product_proxy_uses_current_variation_price_after_conversion(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => '102',
+				'price'         => '102',
+			)
+		);
+		$attribute_data = ProductHelper::create_attribute( 'size', array( 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+
+		$variable_product = new \WC_Product_Variable( $product->get_id() );
+		$variable_product->set_attributes( array( $attribute ) );
+		$variable_product->save();
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $variable_product->get_id() );
+		$variation->set_regular_price( '114' );
+		$variation->set_attributes( array( 'pa_size' => 'large' ) );
+		$variation->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_param( 'include', array( $variable_product->get_id() ) );
+		$request->set_param( 'dp', 2 );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '114.00', $data['price'] );
+		$this->assertSame( '', $data['regular_price'] );
+		$this->assertSame( '', $data['sale_price'] );
+	}
+
+	/**
+	 * Product mutation acknowledgements use the same variable-price serializer as reads.
+	 */
+	public function test_product_mutation_reread_uses_current_variation_price(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => '102',
+				'price'         => '102',
+			)
+		);
+		$attribute_data = ProductHelper::create_attribute( 'format', array( 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+
+		$variable_product = new \WC_Product_Variable( $product->get_id() );
+		$variable_product->set_attributes( array( $attribute ) );
+		$variable_product->save();
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_parent_id( $variable_product->get_id() );
+		$variation->set_regular_price( '114' );
+		$variation->set_attributes( array( 'pa_format' => 'large' ) );
+		$variation->save();
+
+		$controller = new Write_Controller();
+		$document   = new \ReflectionMethod( $controller, 'document_for' );
+		$document->setAccessible( true );
+		$meta = array(
+			'route'     => '/wc/v3/products',
+			'id_type'   => 'post',
+			'post_type' => 'product',
+		);
+		$raw_document = $document->invoke(
+			$controller,
+			$meta,
+			$variable_product->get_id()
+		);
+		$envelope = new \ReflectionMethod( $controller, 'envelope_document' );
+		$envelope->setAccessible( true );
+		$response = $envelope->invoke(
+			$controller,
+			$raw_document,
+			'20000000-0000-4000-8000-000000000099',
+			$meta,
+			$variable_product->get_id()
+		);
+		$data = $response->get_data();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v2/products' );
+		$request->set_param( 'include', array( $variable_product->get_id() ) );
+		$catalog_response = $this->server->dispatch( $request );
+		$catalog_product  = $catalog_response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '114.00', $data['document']['price'] );
+		$this->assertSame( '', $data['document']['regular_price'] );
+		$this->assertSame( '', $data['document']['sale_price'] );
+		$this->assertSame( $catalog_product['_rxdb_revision'], $data['currentRevision'] );
 	}
 
 	/**
