@@ -20,6 +20,7 @@ use WC_Product_Variable;
 use WC_REST_Products_Controller;
 use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Settings;
+use WCPOS\WooCommercePOS\Sync\Pos_Visibility;
 use WP_Error;
 use WP_Query;
 use WP_REST_Request;
@@ -302,7 +303,13 @@ class Products_Controller extends WC_REST_Products_Controller {
 
 		$price_decimals = wc_get_price_decimals();
 
-		foreach ( $product->get_visible_children() as $variation_id ) {
+		$variation_ids = $product->get_visible_children();
+		$hidden_ids    = ( new Pos_Visibility() )->online_only_variation_ids();
+		if ( array() !== $hidden_ids ) {
+			$variation_ids = array_values( array_diff( array_map( 'intval', $variation_ids ), $hidden_ids ) );
+		}
+
+		foreach ( $variation_ids as $variation_id ) {
 			$variation = wc_get_product( $variation_id );
 
 			if ( ! $variation ) {

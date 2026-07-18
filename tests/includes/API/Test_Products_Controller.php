@@ -1560,6 +1560,46 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Online-only variations must not contribute to the parent price served to the POS.
+	 */
+	public function test_variable_product_parent_price_excludes_online_only_variations(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			static function () {
+				return array( 'pos_only_products' => true );
+			}
+		);
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$hidden        = new \WC_Product_Variation( $variation_ids[0] );
+		$visible       = new \WC_Product_Variation( $variation_ids[1] );
+		$hidden->set_regular_price( '9.50' );
+		$hidden->save();
+		$visible->set_regular_price( '25.00' );
+		$visible->save();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'include', array( $product->get_id() ) );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '25.00', $data['price'] );
+	}
+
+	/**
 	 * When no variations have sale prices, the sale_price min/max should be empty strings, not 0.
 	 */
 	public function test_variable_product_no_sale_prices(): void {
