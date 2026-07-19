@@ -914,7 +914,8 @@ class Write_Controller extends WP_REST_Controller {
 			return new WP_REST_Response( $document, 200 );
 		}
 
-		$response = rest_do_request( new WP_REST_Request( 'GET', $meta['route'] . '/' . $id ) );
+		$request  = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+		$response = rest_do_request( $request );
 		$data     = $response->get_data();
 		if ( is_array( $data ) ) {
 			$response->set_data( Meta_Normalizer::normalize( $data ) );
@@ -930,6 +931,14 @@ class Write_Controller extends WP_REST_Controller {
 	 * baseRevision for its next update.
 	 */
 	private function respond( array $bare, string $record_id, int $status, array $meta = array(), int $id = 0 ) {
+		$current_revision = $this->revision_for( $meta, $id, $bare );
+		if ( 'product' === ( $meta['post_type'] ?? '' ) ) {
+			$product = wc_get_product( $id );
+			if ( $product ) {
+				$request = new WP_REST_Request( 'GET', $meta['route'] . '/' . $id );
+				$bare    = apply_filters( 'woocommerce_pos_sync_serialized_product', $bare, $product, $request );
+			}
+		}
 		if ( 'product_variation' === ( $meta['post_type'] ?? '' ) ) {
 			// Variation documents are wrappers; identity belongs to the same inner
 			// REST payload the targeted read serves, never as wrapper-level meta.
@@ -942,7 +951,7 @@ class Write_Controller extends WP_REST_Controller {
 		return new WP_REST_Response(
 			array(
 				'document'        => $document,
-				'currentRevision' => $this->revision_for( $meta, $id, $bare ),
+				'currentRevision' => $current_revision,
 			),
 			$status
 		);

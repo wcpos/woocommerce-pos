@@ -1,5 +1,24 @@
 <?php
 
+namespace WCPOS\WooCommercePOS\API\V1;
+
+/**
+ * Simulate the legacy WooCommerce empty-decimal coercion for one compatibility test.
+ *
+ * @param mixed $number     Value to format.
+ * @param mixed $dp         Decimal precision.
+ * @param bool  $trim_zeros Whether to trim trailing zeros.
+ *
+ * @return string
+ */
+function wc_format_decimal( $number, $dp = false, $trim_zeros = false ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- test shim must shadow the WC function in the controller namespace.
+	if ( ! empty( $GLOBALS['wcpos_test_legacy_empty_decimal'] ) && '' === $number && false !== $dp ) {
+		return number_format( 0, (int) $dp, '.', '' );
+	}
+
+	return \wc_format_decimal( $number, $dp, $trim_zeros );
+}
+
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use Automattic\WooCommerce\RestApi\UnitTests\Helpers\ProductHelper;
@@ -1473,6 +1492,157 @@ class Test_Products_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( '69.95', $variable_prices['regular_price']['max'] );
 		$this->assertEquals( '65.00', $variable_prices['sale_price']['min'] );
 		$this->assertEquals( '65.00', $variable_prices['sale_price']['max'] );
+	}
+
+	/**
+	 * A variable product converted from a simple product must not expose its old simple price.
+	 */
+	public function test_variable_product_converted_from_simple_uses_current_variation_price(): void {
+		$product = ProductHelper::create_simple_product(
+			array(
+				'regular_price' => '102',
+				'price'         => '102',
+			)
+		);
+
+		$attribute_data = ProductHelper::create_attribute( 'size', array( 'large' ) );
+		$attribute      = new \WC_Product_Attribute();
+		$attribute->set_id( $attribute_data['attribute_id'] );
+		$attribute->set_name( $attribute_data['attribute_taxonomy'] );
+		$attribute->set_options( $attribute_data['term_ids'] );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+
+		$variable_product = new \WC_Product_Variable( $product->get_id() );
+		$variable_product->set_attributes( array( $attribute ) );
+		$variable_product->save();
+
+		$variation = new \WC_Product_Variation();
+		$variation->set_props(
+			array(
+				'parent_id'     => $variable_product->get_id(),
+				'regular_price' => '114.234',
+			)
+		);
+		$variation->set_attributes( array( 'pa_size' => 'large' ) );
+		$variation->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'include', array( $variable_product->get_id() ) );
+		$request->set_param( 'dp', 3 );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+
+		$variable_prices = null;
+		foreach ( $data['meta_data'] as $meta ) {
+			if ( '_woocommerce_pos_variable_prices' === $meta['key'] ) {
+				$variable_prices = json_decode( $meta['value'], true );
+				break;
+			}
+		}
+
+		$this->assertNotNull( $variable_prices, 'Variable prices metadata should be present.' );
+		$this->assertEquals( '114.23', $variable_prices['price']['min'] );
+		$this->assertEquals( '114.234', $data['price'] );
+		$this->assertSame( '', $data['regular_price'] );
+		$this->assertSame( '', $data['sale_price'] );
+	}
+
+	/**
+	 * Parent fields must not combine prices from different variations into a false sale.
+	 */
+	public function test_variable_product_parent_fields_do_not_pair_independent_price_minima(): void {
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+
+		$regular_variation = new \WC_Product_Variation( $variation_ids[0] );
+		$regular_variation->set_regular_price( '10' );
+		$regular_variation->set_sale_price( '' );
+		$regular_variation->save();
+
+		$sale_variation = new \WC_Product_Variation( $variation_ids[1] );
+		$sale_variation->set_regular_price( '20' );
+		$sale_variation->set_sale_price( '15' );
+		$sale_variation->save();
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'include', array( $product->get_id() ) );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '10.00', $data['price'] );
+		$this->assertSame( '', $data['regular_price'] );
+		$this->assertSame( '', $data['sale_price'] );
+	}
+
+	/**
+	 * Unpriced variable products stay empty on WooCommerce versions that coerce empty decimals to zero.
+	 */
+	public function test_variable_product_without_prices_does_not_expose_zero_parent_price(): void {
+		$product = ProductHelper::create_variation_product();
+		foreach ( $product->get_children() as $variation_id ) {
+			$variation = new \WC_Product_Variation( $variation_id );
+			$variation->set_regular_price( '' );
+			$variation->set_sale_price( '' );
+			$variation->set_price( '' );
+			$variation->save();
+		}
+
+		$GLOBALS['wcpos_test_legacy_empty_decimal'] = true;
+		try {
+			$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+			$request->set_param( 'include', array( $product->get_id() ) );
+			$response = $this->server->dispatch( $request );
+		} finally {
+			unset( $GLOBALS['wcpos_test_legacy_empty_decimal'] );
+		}
+		$data = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertSame( '', $data['price'] );
+	}
+
+	/**
+	 * Online-only variations must not contribute to the parent price served to the POS.
+	 */
+	public function test_variable_product_parent_price_excludes_online_only_variations(): void {
+		add_filter(
+			'woocommerce_pos_general_settings',
+			static function () {
+				return array( 'pos_only_products' => true );
+			}
+		);
+
+		$product       = ProductHelper::create_variation_product();
+		$variation_ids = $product->get_children();
+		$hidden        = new \WC_Product_Variation( $variation_ids[0] );
+		$visible       = new \WC_Product_Variation( $variation_ids[1] );
+		$hidden->set_regular_price( '9.50' );
+		$hidden->save();
+		$visible->set_regular_price( '25.00' );
+		$visible->save();
+
+		update_option(
+			'woocommerce_pos_settings_visibility',
+			array(
+				'variations' => array(
+					'default' => array(
+						'online_only' => array( 'ids' => array( $hidden->get_id() ) ),
+					),
+				),
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/products' );
+		$request->set_param( 'include', array( $product->get_id() ) );
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data()[0];
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( '25.00', $data['price'] );
 	}
 
 	/**

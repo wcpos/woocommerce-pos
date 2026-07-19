@@ -38,7 +38,7 @@ final class Variable_Prices {
 			// Gate on the response `type` BEFORE loading the object — a search/targeted page can be
 			// entirely simple products, and loading each just to no-op would defeat the bulk fast path.
 			if ( \is_array( $product ) && isset( $product['id'] ) && 'variable' === ( $product['type'] ?? '' ) ) {
-				$data[ $index ] = self::inject_variable_price_range( $product, wc_get_product( (int) $product['id'] ) );
+				$data[ $index ] = self::inject_variable_price_range( $product, wc_get_product( (int) $product['id'] ), $request );
 			}
 		}
 
@@ -65,7 +65,7 @@ final class Variable_Prices {
 			$object = wc_get_product( (int) $payload['id'] );
 		}
 
-		return self::inject_variable_price_range( $payload, $object );
+		return self::inject_variable_price_range( $payload, $object, $request );
 	}
 
 	/**
@@ -73,15 +73,36 @@ final class Variable_Prices {
 	 * enumerate visible children, inject the freshly-recomputed `_woocommerce_pos_variable_prices`
 	 * range. Otherwise pass through untouched. The single source both variable-price filters use.
 	 *
-	 * @param mixed $object
+	 * @param mixed      $object
+	 * @param null|mixed $request
 	 */
-	private static function inject_variable_price_range( array $product, $object ): array {
+	private static function inject_variable_price_range( array $product, $object, $request = null ): array {
 		if ( 'variable' !== ( $product['type'] ?? '' ) || ! \is_object( $object ) || ! \is_callable( array( $object, 'get_children' ) ) ) {
 			return $product;
 		}
 		$ranges = self::visible_variation_price_ranges( $object );
 
-		return null === $ranges ? $product : self::inject_meta_entry( $product, self::META_KEY, $ranges );
+		// A simple-to-variable conversion can leave old simple price fields on the
+		// parent. Clear them even when no visible child has a price. When prices do
+		// exist, serve the formatted current minimum without pairing independent
+		// regular and sale minima from different variations into a false sale.
+		foreach ( array( 'price', 'regular_price', 'sale_price' ) as $price_key ) {
+			if ( array_key_exists( $price_key, $product ) ) {
+				$product[ $price_key ] = '';
+			}
+		}
+		if ( null === $ranges ) {
+			return self::inject_meta_entry( $product, self::META_KEY, null );
+		}
+		if ( array_key_exists( 'price', $product ) ) {
+			$decimals = \function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
+			if ( $request instanceof \WP_REST_Request && null !== $request->get_param( 'dp' ) ) {
+				$decimals = absint( $request->get_param( 'dp' ) );
+			}
+			$product['price'] = wc_format_decimal( $ranges['price']['min'] ?? '', $decimals );
+		}
+
+		return self::inject_meta_entry( $product, self::META_KEY, $ranges );
 	}
 
 	/**
@@ -179,6 +200,7 @@ final class Variable_Prices {
 
 	/**
 	 * Replace (or add) a single meta_data entry by key, preserving the others (order-stable).
+	 * A null value removes the matching entry without adding a replacement.
 	 */
 	private static function inject_meta_entry( array $payload, string $key, $value ): array {
 		$others = array();
@@ -189,10 +211,12 @@ final class Variable_Prices {
 				$others[] = $entry;
 			}
 		}
-		$others[]             = array(
-			'key' => $key,
-			'value' => $value,
-		);
+		if ( null !== $value ) {
+			$others[] = array(
+				'key' => $key,
+				'value' => $value,
+			);
+		}
 		$payload['meta_data'] = array_values( $others );
 
 		return $payload;
