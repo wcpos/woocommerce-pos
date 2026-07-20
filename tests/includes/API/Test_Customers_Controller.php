@@ -649,6 +649,25 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * The search hook is a no-op on a query it did not prepare.
+	 *
+	 * WordPress fires pre_user_query for every WP_User_Query, and this callback can outlive our
+	 * own query if that query is short-circuited before running. Firing on an unrelated query
+	 * (no _wcpos_search marker) must not touch its WHERE clause.
+	 */
+	public function test_search_hook_leaves_unrelated_query_untouched(): void {
+		$controller = new Customers_Controller();
+		$query      = new \WP_User_Query();
+
+		$query->query_vars  = array();
+		$query->query_where = 'WHERE 1=1';
+
+		$controller->wcpos_search_user_table( $query );
+
+		$this->assertEquals( 'WHERE 1=1', $query->query_where );
+	}
+
+	/**
 	 * Customer search excludes customers when any term does not match.
 	 */
 	public function test_customer_search_returns_empty_when_any_term_does_not_match(): void {

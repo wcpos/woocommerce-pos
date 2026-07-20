@@ -610,7 +610,18 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		remove_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
 
 		$query_params = $query->query_vars;
-		$terms        = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
+
+		/*
+		 * Only act on the customer query we prepared. WordPress fires pre_user_query for every
+		 * WP_User_Query, and this callback can survive onto an unrelated one if our own query is
+		 * short-circuited (eg. via the users_pre_query filter) before it runs. Without our search
+		 * marker there is nothing to do, and appending a condition would corrupt that other query.
+		 */
+		if ( empty( $query_params['_wcpos_search'] ) ) {
+			return;
+		}
+
+		$terms = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
 
 		/*
 		 * Whitespace-only searches are filtered out before the hook is added, so reaching this
