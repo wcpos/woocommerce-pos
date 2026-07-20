@@ -72,6 +72,33 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Translated discount labels may include a literal percent sign with locale-specific spacing.
+	 *
+	 * @covers ::build
+	 */
+	public function test_build_handles_translated_discount_label_with_literal_percent(): void {
+		$filter = static function ( $translation, $text, $domain ) {
+			if ( 'woocommerce-pos' === $domain && 'Summer Sale (%s%%)' === $text ) {
+				return 'Letní akce (%s %)';
+			}
+
+			return $translation;
+		};
+
+		add_filter( 'gettext', $filter, 10, 3 );
+
+		try {
+			$data = $this->builder->build();
+		} catch ( \Throwable $error ) {
+			$this->fail( 'Building translated preview data threw ' . get_class( $error ) . ': ' . $error->getMessage() );
+		} finally {
+			remove_filter( 'gettext', $filter, 10 );
+		}
+
+		$this->assertSame( 'Letní akce (10 %)', $data['discounts'][0]['label'] );
+	}
+
+	/**
 	 * Test that store info uses WooCommerce settings.
 	 *
 	 * @covers ::build

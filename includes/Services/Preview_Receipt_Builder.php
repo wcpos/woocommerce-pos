@@ -647,8 +647,14 @@ class Preview_Receipt_Builder {
 		$discount_excl  = round( $lines_total_excl * $discount_rate / 100, $dp );
 		$discount_tax   = round( $discount_excl * $tax_rate / 100, $dp );
 		$discount_incl  = $discount_excl + $discount_tax;
-		/* translators: %s: discount percentage */
-		$discount_label = sprintf( __( 'Summer Sale (%s%%)', 'woocommerce-pos' ), (int) $discount_rate );
+		$discount_label = strtr(
+			/* translators: %s: discount percentage */
+			__( 'Summer Sale (%s%%)', 'woocommerce-pos' ),
+			array(
+				'%s' => (string) (int) $discount_rate,
+				'%%' => '%',
+			)
+		);
 
 		// Distribute discount proportionally across line items with remainder correction.
 		$sum_discount_excl = 0.0;
