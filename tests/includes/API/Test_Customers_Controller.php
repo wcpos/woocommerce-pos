@@ -547,6 +547,169 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Customer search requires every whitespace-separated term to match a searchable field.
+	 *
+	 * @dataProvider customer_search_matching_terms_provider
+	 *
+	 * @param string $search Search string.
+	 */
+	public function test_customer_search_matches_every_term( string $search ): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Jane',
+				'last_name'       => 'Smith',
+				'email'           => 'multiword.customer@example.com',
+				'billing_company' => 'Acme Consulting',
+			)
+		);
+		wp_update_user(
+			array(
+				'ID'           => $customer->get_id(),
+				'display_name' => 'WCPOS Customer',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => $search,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+	}
+
+	/**
+	 * A customer matching the same term in several fields is returned once.
+	 *
+	 * The previous implementation matched meta via a JOIN, which could return the same user
+	 * once per matching meta row and inflate the reported total.
+	 */
+	public function test_customer_search_does_not_duplicate_multi_field_matches(): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Acme',
+				'last_name'       => 'Acme',
+				'email'           => 'acme@example.com',
+				'billing_company' => 'Acme Industries',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Acme',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$headers  = $response->get_headers();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+		$this->assertEquals( 1, (int) $headers['X-WP-Total'] );
+	}
+
+	/**
+	 * A whitespace-only search has no terms and behaves like no search at all.
+	 */
+	public function test_customer_search_ignores_whitespace_only_search(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$no_search_request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$no_search_request->set_query_params( array( 'role' => 'all' ) );
+		$no_search_response = $this->server->dispatch( $no_search_request );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => "\u{00A0}",
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals(
+			wp_list_pluck( $no_search_response->get_data(), 'id' ),
+			wp_list_pluck( $response->get_data(), 'id' )
+		);
+	}
+
+	/**
+	 * The search hook is a no-op on a query it did not prepare.
+	 *
+	 * WordPress fires pre_user_query for every WP_User_Query, and this callback can outlive our
+	 * own query if that query is short-circuited before running. Firing on an unrelated query
+	 * (no _wcpos_search marker) must not touch its WHERE clause.
+	 */
+	public function test_search_hook_leaves_unrelated_query_untouched(): void {
+		$controller = new Customers_Controller();
+		$query      = new \WP_User_Query();
+
+		$query->query_vars  = array();
+		$query->query_where = 'WHERE 1=1';
+
+		$controller->wcpos_search_user_table( $query );
+
+		$this->assertEquals( 'WHERE 1=1', $query->query_where );
+	}
+
+	/**
+	 * Customer search excludes customers when any term does not match.
+	 */
+	public function test_customer_search_returns_empty_when_any_term_does_not_match(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Jane Nonexistent',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEmpty( $response->get_data() );
+	}
+
+	/**
+	 * Customer search terms that should match.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function customer_search_matching_terms_provider(): array {
+		return array(
+			'full name'                 => array( 'Jane Smith' ),
+			'reversed name'             => array( 'Smith Jane' ),
+			'single term'               => array( 'Jane' ),
+			'email'                     => array( 'multiword.customer@example.com' ),
+			'billing company'           => array( 'Acme Consulting' ),
+			'display name'              => array( 'WCPOS Customer' ),
+			'extra internal whitespace' => array( "Jane \t  Smith" ),
+			'term limit'                => array( 'Jane Jane Jane Jane Jane Jane Jane Jane Jane Jane Nonexistent' ),
+		);
+	}
+
+	/**
 	 * Test customer creation.
 	 */
 	public function test_create_customer(): void {

@@ -566,8 +566,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		}
 
-		// Handle search.
-		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
+		// Handle search. A whitespace-only search has no terms, so treat it as no search at all.
+		if ( isset( $query_params['search'] ) && 0 !== preg_match( '/\S/u', (string) $query_params['search'] ) ) {
 			$search_keyword = $query_params['search'];
 
 			/*
@@ -578,57 +578,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			unset( $prepared_args['search'] );
 			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use.
 			add_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
-
-			$search_meta_query = array(
-				'relation' => 'OR',
-				array(
-					'key'     => 'first_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'last_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				// WooCommerce billing fields.
-				array(
-					'key'     => 'billing_first_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_last_name',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_email',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_company',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'billing_phone',
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				),
-			);
-
-			foreach ( Tax_Id_Reader::fallback_user_meta_keys() as $meta_key ) {
-				$search_meta_query[] = array(
-					'key'     => $meta_key,
-					'value'   => $search_keyword,
-					'compare' => 'LIKE',
-				);
-			}
-
-			// Combine the search meta_query with the existing meta_query.
-			$prepared_args['meta_query'] = $this->wcpos_combine_meta_queries( $search_meta_query, $prepared_args['meta_query'] );
+		} elseif ( isset( $query_params['search'] ) ) {
+			unset( $prepared_args['search'] );
 		}
 
 		// Handle include/exclude.
@@ -648,7 +599,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 	}
 
 	/**
-	 * Add user_email and user_login to the user query.
+	 * Add the customer search conditions to the user query.
 	 *
 	 * @param WP_User_Query $query The WP_User_Query instance (passed by reference).
 	 */
@@ -658,29 +609,72 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		// Remove the hook.
 		remove_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
 
-		// Get the search keyword.
-		$query_params   = $query->query_vars;
-		$search_keyword = $query_params['_wcpos_search'];
+		$query_params = $query->query_vars;
 
-		// Prepare the LIKE statement.
-		$like_email = '%' . $wpdb->esc_like( $search_keyword ) . '%';
-		$like_login = '%' . $wpdb->esc_like( $search_keyword ) . '%';
+		/*
+		 * Only act on the customer query we prepared. WordPress fires pre_user_query for every
+		 * WP_User_Query, and this callback can survive onto an unrelated one if our own query is
+		 * short-circuited (eg. via the users_pre_query filter) before it runs. Without our search
+		 * marker there is nothing to do, and appending a condition would corrupt that other query.
+		 */
+		if ( empty( $query_params['_wcpos_search'] ) ) {
+			return;
+		}
 
-		$insertion = $wpdb->prepare(
-			"({$wpdb->users}.user_email LIKE %s) OR ({$wpdb->users}.user_login LIKE %s) OR ",
-			$like_email,
-			$like_login
+		$terms = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
+
+		/*
+		 * Whitespace-only searches are filtered out before the hook is added, so reaching this
+		 * point means the string could not be split (eg. malformed UTF-8). We can't honour the
+		 * search, and falling through would hand back the entire customer list, so match nothing.
+		 */
+		if ( false === $terms || empty( $terms ) ) {
+			$query->query_where .= ' AND 1 = 0';
+
+			return;
+		}
+
+		$terms = array_slice( $terms, 0, 10 );
+
+		$meta_keys = array_merge(
+			array(
+				'first_name',
+				'last_name',
+				'billing_first_name',
+				'billing_last_name',
+				'billing_email',
+				'billing_company',
+				'billing_phone',
+			),
+			Tax_Id_Reader::fallback_user_meta_keys()
 		);
 
-		$pattern   = "/\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\)(\s*OR\s*\(\s*\w+\.meta_key\s*=\s*'[^']+'\s*AND\s*\w+\.meta_value\s*LIKE\s*'[^']+'\s*\))*\s*/";
+		$meta_key_placeholders = implode( ', ', array_fill( 0, \count( $meta_keys ), '%s' ) );
+		$term_groups           = array();
 
-		// Add the search keyword to the query.
-		$modified_where = preg_replace( $pattern, "$insertion$0", $query->query_where );
+		foreach ( $terms as $term ) {
+			$like         = '%' . $wpdb->esc_like( $term ) . '%';
+			$prepare_args = array_merge( array( $like, $like, $like ), $meta_keys, array( $like ) );
 
-		// Check if the replacement was successful and assign it back to query_where.
-		if ( $modified_where !== $query->query_where ) {
-			$query->query_where = $modified_where;
+			// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table names come from $wpdb; $meta_key_placeholders is a generated list of %s placeholders, and the keys themselves are passed to prepare() as arguments.
+			$term_groups[] = $wpdb->prepare(
+				"( {$wpdb->users}.user_email LIKE %s
+					OR {$wpdb->users}.user_login LIKE %s
+					OR {$wpdb->users}.display_name LIKE %s
+					OR EXISTS (
+						SELECT 1
+						FROM {$wpdb->usermeta} AS wcpos_search_meta
+						WHERE wcpos_search_meta.user_id = {$wpdb->users}.ID
+							AND wcpos_search_meta.meta_key IN ($meta_key_placeholders)
+							AND wcpos_search_meta.meta_value LIKE %s
+					)
+				)",
+				$prepare_args
+			);
+			// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
+
+		$query->query_where .= ' AND ( ' . implode( ' AND ', $term_groups ) . ' )';
 	}
 
 	/**
