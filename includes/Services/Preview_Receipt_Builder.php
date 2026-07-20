@@ -651,8 +651,9 @@ class Preview_Receipt_Builder {
 			/* translators: %s: discount percentage */
 			__( 'Summer Sale (%s%%)', 'woocommerce-pos' ),
 			array(
-				'%s' => (string) (int) $discount_rate,
-				'%%' => '%',
+				'%1$s' => (string) (int) $discount_rate,
+				'%s'   => (string) (int) $discount_rate,
+				'%%'   => '%',
 			)
 		);
 

@@ -72,14 +72,15 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Translated discount labels may include a literal percent sign with locale-specific spacing.
+	 * Translated discount labels may use positional placeholders and locale-specific percent spacing.
 	 *
 	 * @covers ::build
 	 */
 	public function test_build_handles_translated_discount_label_with_literal_percent(): void {
-		$filter = static function ( $translation, $text, $domain ) {
+		$translated_label = 'Summer Sale (%s%%)';
+		$filter           = static function ( $translation, $text, $domain ) use ( &$translated_label ) {
 			if ( 'woocommerce-pos' === $domain && 'Summer Sale (%s%%)' === $text ) {
-				return 'Letní akce (%s %)';
+				return $translated_label;
 			}
 
 			return $translation;
@@ -88,14 +89,17 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 		add_filter( 'gettext', $filter, 10, 3 );
 
 		try {
-			$data = $this->builder->build();
+			$source_data      = $this->builder->build();
+			$translated_label = 'Letní akce (%1$s %)';
+			$translated_data  = $this->builder->build();
 		} catch ( \Throwable $error ) {
 			$this->fail( 'Building translated preview data threw ' . get_class( $error ) . ': ' . $error->getMessage() );
 		} finally {
 			remove_filter( 'gettext', $filter, 10 );
 		}
 
-		$this->assertSame( 'Letní akce (10 %)', $data['discounts'][0]['label'] );
+		$this->assertSame( 'Summer Sale (10%)', $source_data['discounts'][0]['label'] );
+		$this->assertSame( 'Letní akce (10 %)', $translated_data['discounts'][0]['label'] );
 	}
 
 	/**
