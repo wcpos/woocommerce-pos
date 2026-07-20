@@ -72,6 +72,37 @@ class Test_Preview_Receipt_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Translated discount labels may use positional placeholders and locale-specific percent spacing.
+	 *
+	 * @covers ::build
+	 */
+	public function test_build_handles_translated_discount_label_with_literal_percent(): void {
+		$translated_label = 'Summer Sale (%s%%)';
+		$filter           = static function ( $translation, $text, $domain ) use ( &$translated_label ) {
+			if ( 'woocommerce-pos' === $domain && 'Summer Sale (%s%%)' === $text ) {
+				return $translated_label;
+			}
+
+			return $translation;
+		};
+
+		add_filter( 'gettext', $filter, 10, 3 );
+
+		try {
+			$source_data      = $this->builder->build();
+			$translated_label = 'Letní akce (%1$s %)';
+			$translated_data  = $this->builder->build();
+		} catch ( \Throwable $error ) {
+			$this->fail( 'Building translated preview data threw ' . get_class( $error ) . ': ' . $error->getMessage() );
+		} finally {
+			remove_filter( 'gettext', $filter, 10 );
+		}
+
+		$this->assertSame( 'Summer Sale (10%)', $source_data['discounts'][0]['label'] );
+		$this->assertSame( 'Letní akce (10 %)', $translated_data['discounts'][0]['label'] );
+	}
+
+	/**
 	 * Test that store info uses WooCommerce settings.
 	 *
 	 * @covers ::build
