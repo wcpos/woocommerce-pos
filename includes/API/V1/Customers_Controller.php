@@ -567,7 +567,7 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		}
 
 		// Handle search. A whitespace-only search has no terms, so treat it as no search at all.
-		if ( isset( $query_params['search'] ) && '' !== trim( (string) $query_params['search'] ) ) {
+		if ( isset( $query_params['search'] ) && 0 !== preg_match( '/\S/u', (string) $query_params['search'] ) ) {
 			$search_keyword = $query_params['search'];
 
 			/*

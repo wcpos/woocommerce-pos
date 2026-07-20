@@ -628,17 +628,24 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 			)
 		);
 
+		$no_search_request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$no_search_request->set_query_params( array( 'role' => 'all' ) );
+		$no_search_response = $this->server->dispatch( $no_search_request );
+
 		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
 		$request->set_query_params(
 			array(
 				'role'   => 'all',
-				'search' => '   ',
+				'search' => "\u{00A0}",
 			)
 		);
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 200, $response->get_status() );
-		$this->assertNotEmpty( $response->get_data() );
+		$this->assertEquals(
+			wp_list_pluck( $no_search_response->get_data(), 'id' ),
+			wp_list_pluck( $response->get_data(), 'id' )
+		);
 	}
 
 	/**
