@@ -578,6 +578,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			unset( $prepared_args['search'] );
 			$prepared_args['_wcpos_search'] = $search_keyword; // store the search keyword for later use.
 			add_action( 'pre_user_query', array( $this, 'wcpos_search_user_table' ) );
+		} elseif ( isset( $query_params['search'] ) ) {
+			unset( $prepared_args['search'] );
 		}
 
 		// Handle include/exclude.
