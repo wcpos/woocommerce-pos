@@ -566,8 +566,8 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 			}
 		}
 
-		// Handle search.
-		if ( isset( $query_params['search'] ) && ! empty( $query_params['search'] ) ) {
+		// Handle search. A whitespace-only search has no terms, so treat it as no search at all.
+		if ( isset( $query_params['search'] ) && '' !== trim( (string) $query_params['search'] ) ) {
 			$search_keyword = $query_params['search'];
 
 			/*
@@ -610,14 +610,18 @@ class Customers_Controller extends WC_REST_Customers_Controller {
 		$query_params = $query->query_vars;
 		$terms        = preg_split( '/\s+/u', (string) $query_params['_wcpos_search'], -1, PREG_SPLIT_NO_EMPTY );
 
-		if ( false === $terms ) {
+		/*
+		 * Whitespace-only searches are filtered out before the hook is added, so reaching this
+		 * point means the string could not be split (eg. malformed UTF-8). We can't honour the
+		 * search, and falling through would hand back the entire customer list, so match nothing.
+		 */
+		if ( false === $terms || empty( $terms ) ) {
+			$query->query_where .= ' AND 1 = 0';
+
 			return;
 		}
 
 		$terms = array_slice( $terms, 0, 10 );
-		if ( empty( $terms ) ) {
-			return;
-		}
 
 		$meta_keys = array_merge(
 			array(

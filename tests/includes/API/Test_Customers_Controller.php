@@ -585,6 +585,63 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * A customer matching the same term in several fields is returned once.
+	 *
+	 * The previous implementation matched meta via a JOIN, which could return the same user
+	 * once per matching meta row and inflate the reported total.
+	 */
+	public function test_customer_search_does_not_duplicate_multi_field_matches(): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Acme',
+				'last_name'       => 'Acme',
+				'email'           => 'acme@example.com',
+				'billing_company' => 'Acme Industries',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Acme',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$headers  = $response->get_headers();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+		$this->assertEquals( 1, (int) $headers['X-WP-Total'] );
+	}
+
+	/**
+	 * A whitespace-only search has no terms and behaves like no search at all.
+	 */
+	public function test_customer_search_ignores_whitespace_only_search(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => '   ',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertNotEmpty( $response->get_data() );
+	}
+
+	/**
 	 * Customer search excludes customers when any term does not match.
 	 */
 	public function test_customer_search_returns_empty_when_any_term_does_not_match(): void {
