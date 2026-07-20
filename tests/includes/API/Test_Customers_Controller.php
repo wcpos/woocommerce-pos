@@ -547,6 +547,86 @@ class Test_Customers_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Customer search requires every whitespace-separated term to match a searchable field.
+	 *
+	 * @dataProvider customer_search_matching_terms_provider
+	 *
+	 * @param string $search Search string.
+	 */
+	public function test_customer_search_matches_every_term( string $search ): void {
+		$customer = CustomerHelper::create_customer(
+			array(
+				'first_name'      => 'Jane',
+				'last_name'       => 'Smith',
+				'email'           => 'multiword.customer@example.com',
+				'billing_company' => 'Acme Consulting',
+			)
+		);
+		wp_update_user(
+			array(
+				'ID'           => $customer->get_id(),
+				'display_name' => 'WCPOS Customer',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => $search,
+			)
+		);
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 1, \count( $data ) );
+		$this->assertEquals( $customer->get_id(), $data[0]['id'] );
+	}
+
+	/**
+	 * Customer search excludes customers when any term does not match.
+	 */
+	public function test_customer_search_returns_empty_when_any_term_does_not_match(): void {
+		CustomerHelper::create_customer(
+			array(
+				'first_name' => 'Jane',
+				'last_name'  => 'Smith',
+			)
+		);
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/customers' );
+		$request->set_query_params(
+			array(
+				'role'   => 'all',
+				'search' => 'Jane Nonexistent',
+			)
+		);
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEmpty( $response->get_data() );
+	}
+
+	/**
+	 * Customer search terms that should match.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function customer_search_matching_terms_provider(): array {
+		return array(
+			'full name'                 => array( 'Jane Smith' ),
+			'reversed name'             => array( 'Smith Jane' ),
+			'single term'               => array( 'Jane' ),
+			'email'                     => array( 'multiword.customer@example.com' ),
+			'billing company'           => array( 'Acme Consulting' ),
+			'display name'              => array( 'WCPOS Customer' ),
+			'extra internal whitespace' => array( "Jane \t  Smith" ),
+			'term limit'                => array( 'Jane Jane Jane Jane Jane Jane Jane Jane Jane Jane Nonexistent' ),
+		);
+	}
+
+	/**
 	 * Test customer creation.
 	 */
 	public function test_create_customer(): void {
