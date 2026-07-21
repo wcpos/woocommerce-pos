@@ -107,6 +107,25 @@ describe('AddPrinterWizard', () => {
 		expect(onClose).toHaveBeenCalled();
 	});
 
+	it('preserves query-style REST roots in polling URLs', () => {
+		(window as unknown as { wpApiSettings: { root: string } }).wpApiSettings.root =
+			'https://mystore.com/?rest_route=/';
+
+		render(
+			<AddPrinterWizard
+				open
+				mode="setup"
+				setupPrinter={makePrinter()}
+				onClose={vi.fn()}
+				onCreate={vi.fn()}
+			/>
+		);
+
+		expect(screen.getByTestId('wizard-poll-url')).toHaveTextContent(
+			'https://mystore.com/?rest_route=/wcpos/v1/print-jobs/cloudprnt&wcpos=1&printer_id=kitchen'
+		);
+	});
+
 	it('add mode: printnode flow collects api key + printer id and shows linked confirmation', async () => {
 		const onCreate = vi.fn().mockResolvedValue({
 			printer: makePrinter({ id: 'pn-1', provider: 'printnode' }),

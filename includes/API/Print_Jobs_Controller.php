@@ -434,19 +434,11 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		if ( 'DELETE' === $request->get_method() ) {
 			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
-			$status = in_array( $code, array( '', '000', '200 OK' ), true ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
+			$status = in_array( $code, array( '', '000', '200', '200 OK' ), true ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
 			$this->jobs->set_status( (int) $job['id'], $status );
 
 			if ( Print_Job_Service::STATUS_FAILED === $status ) {
-				Logger::error(
-					sprintf(
-						'%s: printer "%s" reported failure code "%s" for print job %d.',
-						$request->get_route(),
-						$printer_id,
-						$code,
-						(int) $job['id']
-					)
-				);
+				$this->log_printer_failure( $request, $printer_id, $code, (int) $job['id'] );
 			}
 
 			return rest_ensure_response( array( 'ok' => true ) );
@@ -533,6 +525,26 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Log a printer-reported failure without request credentials or payloads.
+	 *
+	 * @param WP_REST_Request $request    Request.
+	 * @param string          $printer_id Printer ID.
+	 * @param string          $code       Failure code.
+	 * @param int             $job_id     Print job ID.
+	 */
+	private function log_printer_failure( WP_REST_Request $request, string $printer_id, string $code, int $job_id ): void {
+		Logger::error(
+			sprintf(
+				'%s: printer "%s" reported failure code "%s" for print job %d.',
+				$request->get_route(),
+				$printer_id,
+				$code,
+				$job_id
+			)
+		);
+	}
+
+	/**
 	 * Serve raw bytes from a REST callback.
 	 *
 	 * @param string $body         Response body.
@@ -573,15 +585,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 						$code = sanitize_text_field( $matches[1] );
 					}
 
-					Logger::error(
-						sprintf(
-							'%s: printer "%s" reported failure code "%s" for print job %d.',
-							$request->get_route(),
-							$printer_id,
-							$code,
-							(int) $claim['id']
-						)
-					);
+					$this->log_printer_failure( $request, $printer_id, $code, (int) $claim['id'] );
 				}
 			}
 
