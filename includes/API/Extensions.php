@@ -49,6 +49,13 @@ class Extensions extends WP_REST_Controller {
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_items' ),
 				'permission_callback' => array( $this, 'check_permissions' ),
+				'args'                => array(
+					'force' => array(
+						'type'              => 'boolean',
+						'default'           => false,
+						'sanitize_callback' => 'rest_sanitize_boolean',
+					),
+				),
 			)
 		);
 	}
@@ -61,7 +68,11 @@ class Extensions extends WP_REST_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_items( $request ): WP_REST_Response {
-		$service    = ExtensionsService::instance();
+		$service = ExtensionsService::instance();
+		if ( $request->get_param( 'force' ) ) {
+			$service->clear_cache();
+		}
+
 		$extensions = $service->get_extensions();
 
 		$response = new WP_REST_Response( $extensions );

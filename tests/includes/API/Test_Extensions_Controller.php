@@ -13,6 +13,12 @@ use WCPOS\WooCommercePOS\API\Extensions;
  * Extensions Controller test case.
  */
 class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
+	/**
+	 * Number of catalog HTTP requests.
+	 *
+	 * @var int
+	 */
+	private $catalog_requests = 0;
 
 	/**
 	 * Set up test fixtures.
@@ -82,6 +88,33 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Test force refresh bypasses the cached catalog while the default request uses it.
+	 */
+	public function test_get_extensions_force_refresh_bypasses_cache(): void {
+		set_transient(
+			'wcpos_extensions_catalog',
+			array( array( 'slug' => 'cached-extension' ) ),
+			HOUR_IN_SECONDS
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ), 10, 3 );
+
+		$default_request  = $this->wp_rest_get_request( '/wcpos/v1/extensions' );
+		$default_response = $this->server->dispatch( $default_request );
+
+		$this->assertEquals( 'cached-extension', $default_response->get_data()[0]['slug'] );
+		$this->assertEquals( 0, $this->catalog_requests );
+
+		$force_request    = $this->wp_rest_get_request( '/wcpos/v1/extensions' );
+		$force_request->set_query_params( array( 'force' => 1 ) );
+		$force_response = $this->server->dispatch( $force_request );
+
+		$this->assertEquals( 'wcpos-stripe-terminal', $force_response->get_data()[0]['slug'] );
+		$this->assertEquals( 1, $this->catalog_requests );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ) );
+	}
+
+	/**
 	 * Test GET extensions returns empty array on fetch failure.
 	 */
 	public function test_get_extensions_returns_empty_on_failure(): void {
@@ -124,6 +157,7 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 		if ( false === strpos( $url, 'catalog.json' ) ) {
 			return $response;
 		}
+		++$this->catalog_requests;
 
 		return array(
 			'response' => array( 'code' => 200 ),
