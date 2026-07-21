@@ -1080,8 +1080,8 @@ class Orders_Controller extends WC_REST_Orders_Controller {
 	public function wcpos_before_order_object_save( WC_Abstract_Order $order ): void {
 		if ( $this->is_creating && method_exists( $order, 'set_created_via' ) ) {
 			$order->set_created_via( PLUGIN_NAME );
-			// This is the server plugin version that accepted the new order. The
-			// line-item storage shape remains authoritative for offline-synced orders.
+			// Record provenance only; receipt calculations continue to infer historical
+			// pricing from the persisted line-item data of offline-synced orders.
 			$order->update_meta_data( '_woocommerce_pos_version', VERSION );
 		}
 

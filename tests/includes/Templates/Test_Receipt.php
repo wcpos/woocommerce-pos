@@ -113,6 +113,32 @@ class Test_Receipt extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Thermal templates use their XML-to-HTML pipeline on the browser print surface.
+	 */
+	public function test_render_custom_template_thermal_uses_html_thermal_pipeline(): void {
+		$order   = OrderHelper::create_order();
+		$receipt = new Receipt( $order->get_id() );
+
+		$template = array(
+			'engine'  => 'thermal',
+			'content' => '<receipt paper-width="48"><text>Order {{order.number}}</text></receipt>',
+		);
+
+		$receipt_data = array(
+			'order' => array(
+				'currency' => 'USD',
+				'number'   => 'BROWSER-123',
+			),
+		);
+
+		$output = $this->invoke_render_custom_template( $receipt, $template, $order, $receipt_data );
+
+		$this->assertStringContainsString( 'font-family: \'Courier New\'', $output );
+		$this->assertStringContainsString( 'Order BROWSER-123', $output );
+		$this->assertStringNotContainsString( '<receipt', $output );
+	}
+
+	/**
 	 * Helper to invoke the private get_custom_template method.
 	 *
 	 * @param Receipt $receipt Receipt instance.

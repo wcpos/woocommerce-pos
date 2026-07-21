@@ -14,6 +14,8 @@ use Exception;
 use WCPOS\WooCommercePOS\Services\Receipt_Data_Builder;
 use WCPOS\WooCommercePOS\Services\Receipt_Renderer_Factory;
 use WCPOS\WooCommercePOS\Templates as TemplatesManager;
+use WCPOS\WooCommercePOS\Templates\Thermal\Html_Thermal_Emitter;
+use WCPOS\WooCommercePOS\Templates\Thermal\Thermal_Renderer;
 
 /**
  * Receipt class.
@@ -159,13 +161,22 @@ class Receipt {
 	 * print-safe (dark accent ink, near-white fills). Legacy PHP templates emit a
 	 * full HTML document and own their print styling, so they render untouched.
 	 *
-	 * @param array                   $custom_template Template metadata/content.
-	 * @param \WC_Abstract_Order|null $order           Order object.
-	 * @param array                   $receipt_data    Canonical receipt payload.
+	 * @param array              $custom_template Template metadata/content.
+	 * @param \WC_Abstract_Order $order           Order object.
+	 * @param array              $receipt_data    Canonical receipt payload.
 	 */
-	private function render_custom_template( array $custom_template, ?\WC_Abstract_Order $order, array $receipt_data ): void {
+	private function render_custom_template( array $custom_template, \WC_Abstract_Order $order, array $receipt_data ): void {
 		$template_engine = $this->get_template_engine( $custom_template );
-		$renderer        = ( new Receipt_Renderer_Factory() )->create( $template_engine );
+		if ( 'thermal' === $template_engine ) {
+			$ast          = ( new Thermal_Renderer() )->build_ast( $custom_template, $order, $receipt_data );
+			$thermal_html = ( new Html_Thermal_Emitter() )->emit( $ast );
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- The emitter escapes every dynamic value.
+			echo $thermal_html;
+
+			return;
+		}
+
+		$renderer = ( new Receipt_Renderer_Factory() )->create( $template_engine );
 
 		if ( 'logicless' !== $template_engine ) {
 			$renderer->render( $custom_template, $order, $receipt_data );
