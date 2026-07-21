@@ -51,6 +51,16 @@ class Extensions extends WP_REST_Controller {
 				'permission_callback' => array( $this, 'check_permissions' ),
 			)
 		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'refresh_items' ),
+				'permission_callback' => array( $this, 'check_permissions' ),
+			)
+		);
 	}
 
 	/**
@@ -65,6 +75,28 @@ class Extensions extends WP_REST_Controller {
 		$extensions = $service->get_extensions();
 
 		$response = new WP_REST_Response( $extensions );
+		$response->header( 'X-WP-Total', (string) \count( $extensions ) );
+
+		return $response;
+	}
+
+	/**
+	 * Fetch, validate, and return fresh extensions without discarding good cache data.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return WP_REST_Response|\WP_Error
+	 */
+	public function refresh_items( $request ) {
+		$service = ExtensionsService::instance();
+		$result  = $service->refresh_catalog();
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$extensions = $service->get_extensions();
+		$response   = new WP_REST_Response( $extensions );
 		$response->header( 'X-WP-Total', (string) \count( $extensions ) );
 
 		return $response;

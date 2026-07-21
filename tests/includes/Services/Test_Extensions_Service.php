@@ -30,6 +30,20 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $mock_catalog_data = array();
 
 	/**
+	 * Result returned by a nested refresh attempted while another refresh owns the lock.
+	 *
+	 * @var array|\WP_Error|null
+	 */
+	private $concurrent_refresh_result;
+
+	/**
+	 * Number of remote catalog requests observed by the concurrency mock.
+	 *
+	 * @var int
+	 */
+	private $catalog_http_requests = 0;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -42,9 +56,117 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
+		$this->concurrent_refresh_result = null;
+		$this->catalog_http_requests     = 0;
+		delete_option( Extensions::REFRESH_LOCK_KEY );
 		delete_transient( 'wcpos_extensions_catalog' );
 		delete_site_option( 'auto_update_plugins' );
 		parent::tearDown();
+	}
+
+	/**
+	 * Build a complete valid catalog entry with optional overrides.
+	 *
+	 * @param array $overrides Entry fields to replace.
+	 */
+	private function valid_catalog_entry( array $overrides = array() ): array {
+		return array_merge(
+			array(
+				'slug'           => 'wcpos-example',
+				'name'           => 'Example',
+				'description'    => 'Example extension.',
+				'version'        => '1.0.0',
+				'author'         => 'WCPOS',
+				'category'       => 'payments',
+				'tags'           => array( 'example' ),
+				'requires_wp'    => '6.0',
+				'requires_wc'    => '8.0',
+				'requires_wcpos' => '1.9',
+				'requires_pro'   => true,
+				'icon'           => '',
+				'homepage'       => '',
+				'download_url'   => '',
+				'latest_version' => '1.0.0',
+				'released_at'    => '2026-01-01T00:00:00Z',
+			),
+			$overrides
+		);
+	}
+
+	public function test_refresh_catalog_failure_preserves_cached_catalog(): void {
+		$cached = array( $this->valid_catalog_entry() );
+		set_transient( Extensions::TRANSIENT_KEY, $cached, HOUR_IN_SECONDS );
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ), 10, 3 );
+
+		$result = $this->service->refresh_catalog();
+
+		$this->assertWPError( $result );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_failed', $result->get_error_code() );
+		$this->assertEquals( $cached, get_transient( Extensions::TRANSIENT_KEY ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ) );
+	}
+
+	public function test_refresh_catalog_wrong_typed_consumed_fields_preserve_cached_catalog(): void {
+		$cached = array( $this->valid_catalog_entry() );
+		$invalid_overrides = array(
+			array( 'tags' => 'payments' ),
+			array( 'category' => array( 'payments' ) ),
+			array( 'description' => 42 ),
+			array( 'download_url' => array() ),
+			array( 'homepage' => array() ),
+			array( 'icon' => array() ),
+			array( 'requires_pro' => 'yes' ),
+			array( 'latest_version' => array( '2.0.0' ) ),
+			array( 'settings_url' => array() ),
+			array( 'log_source' => false ),
+		);
+
+		foreach ( $invalid_overrides as $overrides ) {
+			set_transient( Extensions::TRANSIENT_KEY, $cached, HOUR_IN_SECONDS );
+			$this->mock_catalog_data = array( $this->valid_catalog_entry( $overrides ) );
+			add_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ), 10, 3 );
+
+			$result = $this->service->refresh_catalog();
+
+			$this->assertWPError( $result );
+			$this->assertEquals( 'woocommerce_pos_extensions_refresh_failed', $result->get_error_code() );
+			$this->assertEquals( $cached, get_transient( Extensions::TRANSIENT_KEY ) );
+			remove_filter( 'pre_http_request', array( $this, 'mock_dynamic_response' ) );
+		}
+	}
+
+	public function test_refresh_catalog_concurrent_request_is_rejected_without_fetching(): void {
+		$this->concurrent_refresh_result = null;
+		$this->catalog_http_requests     = 0;
+		add_filter( 'pre_http_request', array( $this, 'mock_refresh_with_concurrent_attempt' ), 10, 3 );
+
+		$owner_result = $this->service->refresh_catalog();
+		$cached       = get_transient( Extensions::TRANSIENT_KEY );
+
+		$this->assertIsArray( $owner_result );
+		$this->assertWPError( $this->concurrent_refresh_result );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_in_progress', $this->concurrent_refresh_result->get_error_code() );
+		$this->assertEquals( 1, $this->catalog_http_requests );
+		$this->assertEquals( '1.0.0', $cached[0]['latest_version'] );
+		$this->assertFalse( get_option( Extensions::REFRESH_LOCK_KEY, false ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_refresh_with_concurrent_attempt' ) );
+	}
+
+	/**
+	 * Attempt a nested refresh while the owner is inside its only HTTP request.
+	 */
+	public function mock_refresh_with_concurrent_attempt( $response, $parsed_args, $url ) {
+		if ( false === strpos( $url, 'catalog.json' ) ) {
+			return $response;
+		}
+
+		++$this->catalog_http_requests;
+		$this->concurrent_refresh_result = $this->service->refresh_catalog();
+
+		return array(
+			'response' => array( 'code' => 200 ),
+			'body'     => wp_json_encode( array( $this->valid_catalog_entry() ) ),
+		);
 	}
 
 	/**

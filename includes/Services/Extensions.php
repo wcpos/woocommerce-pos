@@ -43,6 +43,20 @@ class Extensions {
 	const CACHE_TTL = HOUR_IN_SECONDS;
 
 	/**
+	 * Option key used as an atomic forced-refresh lock.
+	 *
+	 * @var string
+	 */
+	const REFRESH_LOCK_KEY = 'wcpos_extensions_catalog_refresh_lock';
+
+	/**
+	 * Maximum lock lifetime before an interrupted request may be reclaimed.
+	 *
+	 * @var int
+	 */
+	const REFRESH_LOCK_TTL = 2 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Constructor is private to prevent direct instantiation.
 	 */
 	private function __construct() {
@@ -75,6 +89,96 @@ class Extensions {
 			return $cached;
 		}
 
+		$catalog = $this->fetch_catalog();
+
+		if ( is_wp_error( $catalog ) ) {
+			return array();
+		}
+
+		set_transient( self::TRANSIENT_KEY, $catalog, self::CACHE_TTL );
+
+		return $catalog;
+	}
+
+	/**
+	 * Fetch and validate a candidate, swapping it into cache only while holding the lock.
+	 *
+	 * @return array|\WP_Error
+	 */
+	public function refresh_catalog() {
+		$lock = $this->acquire_refresh_lock();
+
+		if ( is_wp_error( $lock ) ) {
+			return $lock;
+		}
+
+		try {
+			$catalog = $this->fetch_catalog( true );
+
+			if ( is_wp_error( $catalog ) ) {
+				return $catalog;
+			}
+
+			set_transient( self::TRANSIENT_KEY, $catalog, self::CACHE_TTL );
+
+			return $catalog;
+		} finally {
+			$this->release_refresh_lock( $lock );
+		}
+	}
+
+	/**
+	 * Atomically acquire the refresh lock, reclaiming only an expired owner.
+	 *
+	 * @return string|\WP_Error
+	 */
+	private function acquire_refresh_lock() {
+		$token = wp_generate_uuid4();
+		$value = array(
+			'token'      => $token,
+			'expires_at' => time() + self::REFRESH_LOCK_TTL,
+		);
+
+		if ( add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
+			return $token;
+		}
+
+		$current = get_option( self::REFRESH_LOCK_KEY, array() );
+		if ( ! is_array( $current ) || (int) ( $current['expires_at'] ?? 0 ) < time() ) {
+			delete_option( self::REFRESH_LOCK_KEY );
+			if ( add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
+				return $token;
+			}
+		}
+
+		return new \WP_Error(
+			'woocommerce_pos_extensions_refresh_in_progress',
+			__( 'Extension versions are already being refreshed. Please try again shortly.', 'woocommerce-pos' ),
+			array( 'status' => 409 )
+		);
+	}
+
+	/**
+	 * Release the lock only when this request still owns it.
+	 *
+	 * @param string $token Lock ownership token.
+	 */
+	private function release_refresh_lock( string $token ): void {
+		$current = get_option( self::REFRESH_LOCK_KEY, array() );
+
+		if ( is_array( $current ) && ( $current['token'] ?? '' ) === $token ) {
+			delete_option( self::REFRESH_LOCK_KEY );
+		}
+	}
+
+	/**
+	 * Fetch and validate catalog data without changing the cached catalog.
+	 *
+	 * @param bool $validate_for_refresh Whether to enforce the complete refresh schema.
+	 *
+	 * @return array|\WP_Error
+	 */
+	private function fetch_catalog( bool $validate_for_refresh = false ) {
 		/**
 		 * Filters the URL used to fetch the extensions catalog.
 		 *
@@ -83,26 +187,97 @@ class Extensions {
 		 * @param string $url The catalog URL.
 		 */
 		$url = apply_filters( 'woocommerce_pos_extensions_catalog_url', self::CATALOG_URL );
-
-		$response = wp_remote_get(
-			$url,
-			array( 'timeout' => 15 )
-		);
+		$response = wp_remote_get( $url, array( 'timeout' => 15 ) );
 
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			return array();
+			return $this->refresh_error();
 		}
 
-		$body    = wp_remote_retrieve_body( $response );
-		$catalog = json_decode( $body, true );
+		$catalog = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		if ( ! \is_array( $catalog ) ) {
-			return array();
+		if ( ! is_array( $catalog ) || ( $validate_for_refresh && ! $this->is_valid_catalog( $catalog ) ) ) {
+			return $this->refresh_error();
 		}
-
-		set_transient( self::TRANSIENT_KEY, $catalog, self::CACHE_TTL );
 
 		return $catalog;
+	}
+
+	/**
+	 * Validate every catalog field consumed by enrichment, settings, or Pro actions.
+	 *
+	 * @param mixed $catalog Decoded response.
+	 */
+	private function is_valid_catalog( $catalog ): bool {
+		if ( ! is_array( $catalog ) || empty( $catalog ) || array_keys( $catalog ) !== range( 0, count( $catalog ) - 1 ) ) {
+			return false;
+		}
+
+		$string_fields = array(
+			'slug',
+			'name',
+			'description',
+			'version',
+			'author',
+			'category',
+			'requires_wp',
+			'requires_wc',
+			'requires_wcpos',
+			'icon',
+			'homepage',
+			'download_url',
+			'latest_version',
+			'released_at',
+		);
+
+		foreach ( $catalog as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				return false;
+			}
+
+			foreach ( $string_fields as $field ) {
+				if ( ! array_key_exists( $field, $entry ) || ! is_string( $entry[ $field ] ) ) {
+					return false;
+				}
+			}
+
+			if ( '' === $entry['slug'] || '' === $entry['name'] || '' === $entry['latest_version'] ) {
+				return false;
+			}
+
+			if ( ! isset( $entry['tags'] ) || ! is_array( $entry['tags'] ) ) {
+				return false;
+			}
+			foreach ( $entry['tags'] as $tag ) {
+				if ( ! is_string( $tag ) ) {
+					return false;
+				}
+			}
+
+			if ( ! array_key_exists( 'requires_pro', $entry ) || ! is_bool( $entry['requires_pro'] ) ) {
+				return false;
+			}
+
+			foreach ( array( 'settings_url', 'log_source' ) as $optional_string ) {
+				if ( array_key_exists( $optional_string, $entry ) && ! is_string( $entry[ $optional_string ] ) ) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Build the error returned when a refreshed candidate cannot be used.
+	 *
+	 * @return \WP_Error
+	 */
+	private function refresh_error(): \WP_Error {
+		return new \WP_Error(
+			'woocommerce_pos_extensions_refresh_failed',
+			__( 'Unable to refresh extension versions. Please try again.', 'woocommerce-pos' ),
+			array( 'status' => 502 )
+		);
 	}
 
 	/**

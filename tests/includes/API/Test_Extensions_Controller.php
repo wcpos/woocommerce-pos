@@ -37,6 +37,7 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function test_register_routes(): void {
 		$routes = $this->server->get_routes();
 		$this->assertArrayHasKey( '/wcpos/v1/extensions', $routes );
+		$this->assertArrayHasKey( '/wcpos/v1/extensions/refresh', $routes );
 	}
 
 	/**
@@ -109,6 +110,54 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 
 		// Baseline gate returns 401 for unauthenticated users.
 		$this->assertEquals( 401, $response->get_status() );
+	}
+
+	public function test_refresh_extensions_capability_holder_replaces_cache(): void {
+		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		$user->add_cap( 'manage_woocommerce_pos' );
+		wp_set_current_user( $user->ID );
+		set_transient( 'wcpos_extensions_catalog', array( array( 'slug' => 'stale' ) ), HOUR_IN_SECONDS );
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ), 10, 3 );
+
+		$response = $this->server->dispatch(
+			$this->wp_rest_post_request( '/wcpos/v1/extensions/refresh' )
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'wcpos-stripe-terminal', $response->get_data()[0]['slug'] );
+		$this->assertEquals( 'wcpos-stripe-terminal', get_transient( 'wcpos_extensions_catalog' )[0]['slug'] );
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ) );
+	}
+
+	public function test_refresh_extensions_authenticated_user_without_capability_is_denied(): void {
+		$cached = array( array( 'slug' => 'cached', 'name' => 'Cached', 'latest_version' => '1.0.0' ) );
+		set_transient( 'wcpos_extensions_catalog', $cached, HOUR_IN_SECONDS );
+		$user = $this->factory->user->create_and_get( array( 'role' => 'subscriber' ) );
+		$user->add_cap( 'access_woocommerce_pos' );
+		wp_set_current_user( $user->ID );
+
+		$response = $this->server->dispatch(
+			$this->wp_rest_post_request( '/wcpos/v1/extensions/refresh' )
+		);
+
+		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( $cached, get_transient( 'wcpos_extensions_catalog' ) );
+	}
+
+	public function test_refresh_extensions_failure_preserves_cached_catalog(): void {
+		$cached = array( array( 'slug' => 'cached', 'name' => 'Cached', 'latest_version' => '1.0.0' ) );
+		set_transient( 'wcpos_extensions_catalog', $cached, HOUR_IN_SECONDS );
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ), 10, 3 );
+
+		$response = $this->server->dispatch(
+			$this->wp_rest_post_request( '/wcpos/v1/extensions/refresh' )
+		);
+
+		$this->assertEquals( 502, $response->get_status() );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_failed', $response->get_data()['code'] );
+		$this->assertEquals( $cached, get_transient( 'wcpos_extensions_catalog' ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ) );
 	}
 
 	/**
