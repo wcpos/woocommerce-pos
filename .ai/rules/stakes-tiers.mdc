@@ -17,7 +17,7 @@ risk, not fixed. If you believe an area is mis-tiered, say so and ask — do not
 silently build to a higher tier.
 
 Classify settings by the operation they control, not the screen or route that
-exposes them. Read-only or trivially reversible settings are Low. POS-facing
+exposes them. Read-only or trivially reversible settings are Low. WCPOS-facing
 settings endpoints are Medium unless they control a High operation. Writes that
 affect capabilities, payment gateways, stock, or another High area are High.
 
@@ -39,7 +39,7 @@ risks. Disabling a control while its request is in flight is sufficient.
 ## Medium — a failure confuses or blocks a cashier mid-shift
 
 Product and customer search and sync, receipt rendering and templates,
-reporting, and the settings REST endpoints that feed the POS client.
+reporting, and the settings REST endpoints that feed the WCPOS client.
 
 A failure degrades the shift but does not lose money or data. Handle the error
 path and surface it to the user. Retries and caching are justified where the
