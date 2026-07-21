@@ -56,7 +56,11 @@ function Extensions() {
 				path: 'wcpos/v1/extensions/refresh?wcpos=1',
 				method: 'POST',
 			});
+			await queryClient.cancelQueries({ queryKey: ['extensions'] });
 			queryClient.setQueryData<Extension[]>(['extensions'], refreshed);
+			setUpdateExtensionsCount(
+				refreshed.filter((ext) => ext.status === 'update_available').length
+			);
 		} catch (error: unknown) {
 			const message =
 				typeof error === 'object' &&
@@ -126,9 +130,11 @@ function Extensions() {
 			)}
 
 			{refreshError && (
-				<Notice status="error" isDismissible={false} className="wcpos:mb-4">
-					{refreshError}
-				</Notice>
+				<div role="alert">
+					<Notice status="error" isDismissible={false} className="wcpos:mb-4">
+						{refreshError}
+					</Notice>
+				</div>
 			)}
 
 			{/* Search */}
