@@ -16,10 +16,16 @@ real problem whose cost is negligible at its tier is recorded as an accepted
 risk, not fixed. If you believe an area is mis-tiered, say so and ask — do not
 silently build to a higher tier.
 
+Classify settings by the operation they control, not the screen or route that
+exposes them. Read-only or trivially reversible settings are Low. POS-facing
+settings endpoints are Medium unless they control a High operation. Writes that
+affect capabilities, payment gateways, stock, or another High area are High.
+
 ## Low — a failure wastes work, and the user retries
 
-Admin settings screens, the extensions catalog, log viewers, the setup wizard,
-version and status displays, and anything read-only rendered in WP admin.
+Read-only or trivially reversible admin settings, the extensions catalog, log
+viewers, the setup wizard, version and status displays, and anything read-only
+rendered in WP admin.
 
 A failure here costs a wasted HTTP request, a stale read, or an error message.
 The operator is a single logged-in administrator who can click the button

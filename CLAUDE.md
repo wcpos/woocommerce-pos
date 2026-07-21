@@ -40,7 +40,7 @@ Relevant pages:
 - Preserve backward compatibility when changing public methods; add optional parameters with defaults.
 - Minimize admin hook footprint. Register admin handlers only where needed. Remember `admin_post_{action}` runs on `admin-post.php`, not the originating screen.
 - Sanitize and validate all request data. Check request origin/context before reading `$_REQUEST`.
-- **Scale defensive engineering to the area's risk tier — see `.ai/rules/stakes-tiers.mdc`.** Settings screens and read-only admin displays are Low: locking, retries, and fallback layers do not belong there, and concurrency findings are accepted risks. Orders, payments, tax, stock, and auth are High: correctness beats brevity. Do not escalate past an area's declared tier without asking.
+- **Scale defensive engineering to the area's risk tier — see `.ai/rules/stakes-tiers.mdc`.** Read-only or trivially reversible admin settings are Low. Settings endpoints that feed the POS client are Medium unless they control a High operation. Settings screens and endpoints inherit the tier of the operation they control, so writes affecting capabilities, payments, stock, auth, or other non-trivially reversible data are High. Do not escalate past an area's declared tier without asking.
 
 ## REST API Notes
 
