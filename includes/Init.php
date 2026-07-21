@@ -121,11 +121,41 @@ class Init {
 	 * Loads the POS API and duck punches the WC REST API.
 	 */
 	public function init_rest_api(): void {
-		if ( woocommerce_pos_request() ) {
+		$is_wcpos_request = woocommerce_pos_request();
+
+		if ( $is_wcpos_request ) {
 			new API();
 		} else {
+			$this->log_unmarked_wcpos_rest_request();
 			new WC_API();
 		}
+	}
+
+	/**
+	 * Log requests for a WCPOS namespace that omitted the required request marker.
+	 *
+	 * This runs before WCPOS routes are registered, so it captures the otherwise
+	 * silent rest_no_route response. Warnings are limited by API version to avoid
+	 * allowing repeated unauthenticated requests to flood WooCommerce logs.
+	 */
+	private function log_unmarked_wcpos_rest_request(): void {
+		global $wp;
+
+		$route = isset( $wp->query_vars['rest_route'] )
+			? '/' . ltrim( sanitize_text_field( wp_unslash( (string) $wp->query_vars['rest_route'] ) ), '/' )
+			: '';
+
+		if ( 1 !== preg_match( '#^/wcpos/v([12])(?:/|$)#', $route, $matches ) ) {
+			return;
+		}
+
+		$transient = 'wcpos_missing_request_marker_v' . $matches[1];
+		if ( false !== get_transient( $transient ) ) {
+			return;
+		}
+
+		set_transient( $transient, 1, 5 * MINUTE_IN_SECONDS );
+		Logger::warning( $route . ': missing WCPOS request marker.' );
 	}
 
 	/**

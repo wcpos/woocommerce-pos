@@ -7,6 +7,7 @@
 
 namespace WCPOS\WooCommercePOS\Tests\API;
 
+use WCPOS\WooCommercePOS\Logger;
 use WCPOS\WooCommercePOS\Services\Cloud_Print_Registry;
 use WCPOS\WooCommercePOS\Services\Print_Job_Service;
 
@@ -22,12 +23,31 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 	private $jobs;
 
 	/**
+	 * Captured log messages.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $logged_messages = array();
+
+	/**
 	 * Set up a registered Epson SDP printer.
 	 */
 	public function setUp(): void {
 		parent::setUp();
-		$this->jobs = new Print_Job_Service();
+		$this->jobs            = new Print_Job_Service();
+		$this->logged_messages = array();
 		$this->jobs->register_post_type();
+		Logger::reset_dedup_state();
+		add_filter(
+			'woocommerce_pos_logging',
+			function ( $should_log, $message ) {
+				$this->logged_messages[] = $message;
+
+				return false;
+			},
+			10,
+			2
+		);
 		update_option(
 			'woocommerce_pos_settings_cloud_print',
 			array(
@@ -40,6 +60,15 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 				),
 			)
 		);
+	}
+
+	/**
+	 * Tear down test fixtures.
+	 */
+	public function tearDown(): void {
+		remove_all_filters( 'woocommerce_pos_logging' );
+		Logger::reset_dedup_state();
+		parent::tearDown();
 	}
 
 	/**
@@ -96,5 +125,28 @@ class Print_Jobs_EpsonSDP_Test extends WCPOS_REST_Unit_Test_Case {
 
 		$this->assertEquals( 200, $response->get_status() );
 		$this->assertEquals( 'printed', $this->jobs->get( $id )['status'] );
+	}
+
+	/**
+	 * It logs a failed result reported by the printer.
+	 */
+	public function test_failed_result_logs_printer_failure(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/xml',
+				'payload'      => base64_encode( '<epos-print/>' ),
+			)
+		);
+		$this->jobs->claim( $id );
+
+		$response = $this->sdp( '<response success="false" code="EPOS2_ERR_PRINT" status="251658262"/>' );
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'failed', $this->jobs->get( $id )['status'] );
+		$this->assertEquals(
+			array( sprintf( '/wcpos/v1/print-jobs/epson-sdp: printer "p1" reported failure code "EPOS2_ERR_PRINT" for print job %d.', $id ) ),
+			$this->logged_messages
+		);
 	}
 }
