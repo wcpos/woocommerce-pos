@@ -13,6 +13,7 @@ use WC_Order_Item_Product;
 use WCPOS\WooCommercePOS\API\V1\Orders_Controller;
 use WCPOS\WooCommercePOS\Tests\API\Traits\Order_Address_Scrub_Helpers;
 use WCPOS\WooCommercePOS\Tests\Helpers\POSLineItemHelper;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /**
  * @internal
@@ -28,6 +29,10 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	public function tearDown(): void {
+		// The test framework only resets permalinks for core tests, so undo
+		// set_permalink_structure() here or it leaks into later test classes.
+		$this->set_permalink_structure( '' );
+
 		parent::tearDown();
 	}
 
@@ -489,6 +494,58 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 'pending', $data['status'] );
 		$this->assertEquals( 'woocommerce-pos', $data['created_via'] );
 		$this->assertEquals( 0, $data['customer_id'] );
+	}
+
+	/**
+	 * Newly created POS orders record the accepting WCPOS plugin version.
+	 */
+	public function test_create_order_records_wcpos_version_meta(): void {
+		$request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$response = $this->server->dispatch( $request );
+		$data     = $response->get_data();
+		$order    = wc_get_order( $data['id'] );
+
+		$this->assertEquals( 201, $response->get_status() );
+		$this->assertSame( VERSION, $order->get_meta( '_woocommerce_pos_version' ) );
+	}
+
+	/**
+	 * Updating an existing order after a create must not backfill the WCPOS version.
+	 */
+	public function test_update_after_create_does_not_record_wcpos_version_meta(): void {
+		$existing_order = OrderHelper::create_order();
+		$create_request = $this->wp_rest_post_request( '/wcpos/v1/orders' );
+		$create_request->set_body_params(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$create_response = $this->server->dispatch( $create_request );
+		$update_request  = $this->wp_rest_patch_request( '/wcpos/v1/orders/' . $existing_order->get_id() );
+		$update_request->set_body_params( array( 'customer_note' => 'Updated after create' ) );
+		$update_response = $this->server->dispatch( $update_request );
+		$updated_order   = wc_get_order( $existing_order->get_id() );
+
+		$this->assertEquals( 201, $create_response->get_status() );
+		$this->assertEquals( 200, $update_response->get_status() );
+		$this->assertSame( '', $updated_order->get_meta( '_woocommerce_pos_version' ) );
 	}
 
 	/**
@@ -1388,5 +1445,78 @@ class Test_Orders_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 201, $response->get_status(), 'Response: ' . wp_json_encode( $data ) );
 		$this->assertIsInt( $data['line_items'][0]['image']['id'], 'Line item image ID should be an integer, got: ' . gettype( $data['line_items'][0]['image']['id'] ) );
 		$this->assertEquals( $attachment_id, $data['line_items'][0]['image']['id'] );
+	}
+
+	/**
+	 * Payment and receipt links should use https when the force_ssl setting is
+	 * enabled (the default), even when the site home URL is http. Sites behind
+	 * SSL-terminating proxies often have an http home URL while the POS is
+	 * served over https — an http link is blocked as mixed content.
+	 */
+	public function test_order_links_force_ssl_enabled_returns_https(): void {
+		// Arrange: force_ssl defaults to true; test site home URL is http.
+		$this->assertStringStartsWith( 'http://', get_home_url() );
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertArrayHasKey( 'payment', $links );
+		$this->assertArrayHasKey( 'receipt', $links );
+		$this->assertStringStartsWith( 'https://', $links['payment'][0]['href'] );
+		$this->assertStringStartsWith( 'https://', $links['receipt'][0]['href'] );
+	}
+
+	/**
+	 * Payment and receipt links should preserve the home URL scheme when the
+	 * force_ssl setting is disabled.
+	 */
+	public function test_order_links_force_ssl_disabled_preserves_home_scheme(): void {
+		// Arrange.
+		add_filter(
+			'woocommerce_pos_general_settings',
+			function ( $settings ) {
+				$settings['force_ssl'] = false;
+
+				return $settings;
+			}
+		);
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertStringStartsWith( 'http://', $links['payment'][0]['href'] );
+		$this->assertStringStartsWith( 'http://', $links['receipt'][0]['href'] );
+	}
+
+	/**
+	 * Payment and receipt links should carry a trailing slash before the query
+	 * string when the permalink structure uses trailing slashes, so they don't
+	 * trip origin rewrite rules that force a trailing slash (see
+	 * wcpos_checkout_url()).
+	 */
+	public function test_order_links_trailing_slash_permalinks_slash_before_query_string(): void {
+		// Arrange.
+		$this->set_permalink_structure( '/%postname%/' );
+		$order = OrderHelper::create_order();
+
+		// Act.
+		$request  = $this->wp_rest_get_request( '/wcpos/v1/orders/' . $order->get_id() );
+		$response = $this->server->dispatch( $request );
+
+		// Assert.
+		$this->assertEquals( 200, $response->get_status() );
+		$links = $response->get_links();
+		$this->assertStringContainsString( '/wcpos-checkout/order-pay/' . $order->get_id() . '/?', $links['payment'][0]['href'] );
+		$this->assertStringContainsString( '/wcpos-checkout/wcpos-receipt/' . $order->get_id() . '/?key=', $links['receipt'][0]['href'] );
 	}
 }

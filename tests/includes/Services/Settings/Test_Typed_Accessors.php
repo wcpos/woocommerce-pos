@@ -46,6 +46,18 @@ class Test_Typed_Accessors extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Boolean accessors normalize string values persisted by the settings API.
+	 */
+	public function test_force_ssl_accessor_normalizes_persisted_string_false(): void {
+		update_option(
+			'woocommerce_pos_settings_general',
+			array( 'force_ssl' => 'false' )
+		);
+
+		$this->assertFalse( Settings::instance()->force_ssl_enabled() );
+	}
+
+	/**
 	 * Accessors fall back to the section default — never WP_Error, never null.
 	 */
 	public function test_accessors_fall_back_to_defaults(): void {

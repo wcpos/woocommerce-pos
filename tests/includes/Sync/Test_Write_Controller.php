@@ -17,6 +17,7 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_UnitTestCase;
+use const WCPOS\WooCommercePOS\VERSION;
 
 /** In-memory mutation store — lets the controller's apply logic be tested without a DB. */
 final class Fake_Mutation_Store {
@@ -384,6 +385,10 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 							'value' => '999',
 						),                   // client-forged → ignored
 						array(
+							'key' => '_woocommerce_pos_version',
+							'value' => '0.0.0',
+						),                   // client-forged → replaced by the accepting server version
+						array(
 							'key' => '_pos_store',
 							'value' => '3',
 						),                    // till → preserved
@@ -401,6 +406,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 900, $call['id'] );
 		$this->assertSame( 'woocommerce-pos', $call['created_via'] );          // channel enforced
 		$this->assertSame( (string) $cashier_id, $call['meta']['_pos_user'] );                 // server-derived cashier, not client's 999
+		$this->assertSame( VERSION, $call['meta']['_woocommerce_pos_version'] ); // accepting server version
 		$this->assertSame( '3', $call['meta']['_pos_store'] );                 // till store preserved
 		$this->assertSame( '20.00', $call['meta']['_pos_cash_amount_tendered'] ); // cash meta preserved
 
@@ -411,6 +417,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$fwdKeys  = array_map( static fn ( $e ) => $e['key'], $body['meta_data'] );
 		$this->assertSame( 'woocommerce-pos', $body['created_via'] );
 		$this->assertNotContains( '_pos_user', $fwdKeys );
+		$this->assertNotContains( '_woocommerce_pos_version', $fwdKeys );
 		$this->assertNotContains( '_pos_store', $fwdKeys );
 		$this->assertNotContains( '_pos_cash_amount_tendered', $fwdKeys );
 		$this->assertContains( Pos_Uuid::META_KEY, $fwdKeys ); // uuid not stripped
@@ -611,6 +618,7 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 900, $store->auditMeta[0]['id'] );
 		$this->assertSame( 'woocommerce-pos', $store->auditMeta[0]['created_via'] );
 		$this->assertSame( (string) $cashier_id, $store->auditMeta[0]['meta']['_pos_user'] );
+		$this->assertArrayNotHasKey( '_woocommerce_pos_version', $store->auditMeta[0]['meta'] );
 		$this->assertSame( '3', $store->auditMeta[0]['meta']['_pos_store'] );
 	}
 
@@ -1030,6 +1038,23 @@ final class Test_Write_Controller extends WP_UnitTestCase {
 		$this->assertSame( 201, $retry->get_status() );
 		$this->assertCount( 2, $GLOBALS['wcpos_sync_test_rest_do_request_calls'] );
 		$this->assertSame( array( 'POST', 'GET' ), array_map( static fn( $r ) => $r->get_method(), $GLOBALS['wcpos_sync_test_rest_do_request_calls'] ) );
+	}
+
+	public function test_order_poison_retry_does_not_guess_accepting_version(): void {
+		$store = new Fake_Mutation_Store();
+		$store->persistUuidOk = false;
+		$this->setRestResponse( array( 'id' => 4242 ), 201 );
+
+		$result = $this->push( $store, array( 'collection' => 'orders' ) );
+		$this->assertSame( 'woo_rxdb_sync_identity_persistence_failed', $result->get_error_code() );
+
+		$store->persistUuidOk = true;
+		$this->setRestResponse( array( 'id' => 4242 ), 200 );
+		$retry = $this->push( $store, array( 'collection' => 'orders' ) );
+
+		$this->assertSame( 201, $retry->get_status() );
+		$this->assertCount( 1, $store->auditMeta );
+		$this->assertArrayNotHasKey( '_woocommerce_pos_version', $store->auditMeta[0]['meta'] );
 	}
 
 	public function test_poison_with_uuid_resolving_to_different_remote_id_errors_without_forwarding(): void {

@@ -121,6 +121,14 @@ that would smear or waste ink on thermal/B&W printers.
 			<td style="text-align: left; padding-top: 4px;">{{i18n.total}}</td>
 			<td style="text-align: right; padding-top: 4px;">{{totals.total_incl_display}}</td>
 		</tr>
+		{{#totals.total_saved_complete}}
+		{{#totals.total_saved_incl}}
+		<tr style="font-weight: 400; font-size: 11px;">
+			<td style="text-align: left;">{{i18n.total_saved}}</td>
+			<td style="text-align: right;">{{totals.total_saved_incl_display}}</td>
+		</tr>
+		{{/totals.total_saved_incl}}
+		{{/totals.total_saved_complete}}
 	</table>
 
 	<hr style="border: 0; border-top: 1px dashed #000; margin: 6px 0;" />

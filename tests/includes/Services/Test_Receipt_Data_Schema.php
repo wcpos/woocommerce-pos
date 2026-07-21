@@ -81,6 +81,38 @@ class Test_Receipt_Data_Schema extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Aggregate savings fields extend the unreleased nullable v1.1 contract.
+	 */
+	public function test_total_saved_fields_are_published_as_nullable_money_contract(): void {
+		$money_fields = array(
+			'sale_savings_total',
+			'sale_savings_total_incl',
+			'sale_savings_total_excl',
+			'total_saved',
+			'total_saved_incl',
+			'total_saved_excl',
+		);
+		$tree          = Receipt_Data_Schema::get_field_tree();
+		$total_fields  = $tree['totals']['fields'];
+
+		$this->assertSame( '1.1.0', Receipt_Data_Schema::SCHEMA_VERSION );
+		foreach ( $money_fields as $field ) {
+			$this->assertContains( $field, Receipt_Data_Schema::MONEY_FIELDS );
+			$this->assertContains( $field, Receipt_Data_Schema::TOTAL_MONEY_KEYS );
+			$this->assertArrayHasKey( $field, $total_fields );
+			$this->assertSame( 'money', $total_fields[ $field ]['type'] );
+			$this->assertTrue( $total_fields[ $field ]['nullable'] );
+		}
+
+		$this->assertArrayHasKey( 'total_saved_complete', $total_fields );
+		$this->assertSame( 'boolean', $total_fields['total_saved_complete']['type'] );
+
+		$json_fields = Receipt_Data_Schema::get_json_schema()['properties']['totals']['properties'];
+		$this->assertEquals( array( 'number', 'string', 'null' ), $json_fields['total_saved']['type'] );
+		$this->assertSame( 'boolean', $json_fields['total_saved_complete']['type'] );
+	}
+
+	/**
 	 * Test MONEY_FIELDS constant contains totals fields.
 	 */
 	public function test_money_fields_contains_totals_fields(): void {

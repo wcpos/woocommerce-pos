@@ -3,6 +3,7 @@
 	"editor.info_legacy_php": "Browser template (Legacy PHP) — Prints using your browser's print dialog. Requires a server connection to generate the receipt.",
 	"editor.info_browser": "Browser template — Prints using your browser's print dialog. Renders on the device without needing a server connection.",
 	"editor.fields": "Fields",
+	"editor.resize_fields": "Resize fields panel",
 	"editor.preview": "Preview",
 	"editor.thermal_preview": "Thermal Preview",
 	"editor.template_preview": "Template preview",

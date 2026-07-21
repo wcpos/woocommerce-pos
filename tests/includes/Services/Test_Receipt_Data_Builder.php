@@ -309,10 +309,22 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	public function test_build_totals_include_inclusive_and_exclusive_fields(): void {
 		$order   = OrderHelper::create_order();
 		$payload = $this->builder->build( $order, 'live' );
+		$nullable_totals = array(
+			'sale_savings_total',
+			'sale_savings_total_incl',
+			'sale_savings_total_excl',
+			'total_saved',
+			'total_saved_incl',
+			'total_saved_excl',
+		);
 
 		foreach ( Receipt_Data_Schema::TOTAL_MONEY_KEYS as $key ) {
 			$this->assertArrayHasKey( $key, $payload['totals'] );
-			$this->assertIsNumeric( $payload['totals'][ $key ] );
+			if ( in_array( $key, $nullable_totals, true ) ) {
+				$this->assertTrue( null === $payload['totals'][ $key ] || is_numeric( $payload['totals'][ $key ] ) );
+			} else {
+				$this->assertIsNumeric( $payload['totals'][ $key ] );
+			}
 		}
 	}
 
@@ -370,6 +382,23 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$this->assertEquals( 10.0, $line['line_savings'] );
 		$this->assertEquals( 3.0, $line['discounts'] );
 		$this->assertFalse( $line['savings_in_discounts'] );
+	}
+
+	/**
+	 * Order totals combine current-shape POS savings with WooCommerce discounts.
+	 */
+	public function test_build_total_saved_combines_current_savings_and_discounts(): void {
+		$order   = $this->create_pos_price_order( '15.00', '20.00', 2.0, '27.00' );
+		$payload = $this->builder->build( $order, 'live' );
+		$totals  = $payload['totals'];
+
+		$this->assertTrue( $totals['total_saved_complete'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total_incl'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total_excl'] );
+		$this->assertEquals( 13.0, $totals['total_saved'] );
+		$this->assertEquals( 13.0, $totals['total_saved_incl'] );
+		$this->assertEquals( 13.0, $totals['total_saved_excl'] );
 	}
 
 	/**
@@ -445,6 +474,41 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * Legacy POS savings are already part of WooCommerce's discount total.
+	 */
+	public function test_build_total_saved_does_not_double_count_pre_1_9_savings(): void {
+		$order = $this->create_pos_price_order( '15.00', '20.00', 2.0, '27.00' );
+		$item  = array_values( $order->get_items( 'line_item' ) )[0];
+		$item->set_subtotal( 40.00 );
+		$item->save();
+		$order->calculate_totals( false );
+		$order->save();
+
+		$totals = $this->builder->build( $order, 'live' )['totals'];
+
+		$this->assertTrue( $totals['total_saved_complete'] );
+		$this->assertEquals( 10.0, $totals['sale_savings_total'] );
+		$this->assertEquals( 13.0, $totals['discount_total'] );
+		$this->assertEquals( 13.0, $totals['total_saved'] );
+	}
+
+	/**
+	 * A precise aggregate is unavailable when historical line price data is missing.
+	 */
+	public function test_build_total_saved_is_null_when_line_savings_are_unknown(): void {
+		$order   = $this->create_pos_price_order( '15.00', '20.00', 1.0, '12.00', '{invalid-json' );
+		$totals  = $this->builder->build( $order, 'live' )['totals'];
+
+		$this->assertFalse( $totals['total_saved_complete'] );
+		$this->assertNull( $totals['sale_savings_total'] );
+		$this->assertNull( $totals['sale_savings_total_incl'] );
+		$this->assertNull( $totals['sale_savings_total_excl'] );
+		$this->assertNull( $totals['total_saved'] );
+		$this->assertNull( $totals['total_saved_incl'] );
+		$this->assertNull( $totals['total_saved_excl'] );
+	}
+
+	/**
 	 * Pre-1.9 tax-inclusive lines detect legacy overlap despite WooCommerce tax rounding.
 	 */
 	public function test_build_pre_1_9_tax_inclusive_line_marks_savings_already_in_discounts(): void {
@@ -472,12 +536,15 @@ class Test_Receipt_Data_Builder extends WC_REST_Unit_Test_Case {
 		$order->calculate_totals( false );
 		$order->save();
 
-		$line = $this->builder->build( $order, 'live' )['lines'][0];
+		$payload = $this->builder->build( $order, 'live' );
+		$line    = $payload['lines'][0];
 
 		$this->assertArrayHasKey( 'line_savings', $line );
 		$this->assertEquals( 0.0, $line['discounts'] );
 		$this->assertEquals( 5.0, $line['line_savings'] );
 		$this->assertFalse( $line['savings_in_discounts'] );
+		$this->assertFalse( $payload['totals']['total_saved_complete'] );
+		$this->assertNull( $payload['totals']['total_saved'] );
 	}
 
 	/**

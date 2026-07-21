@@ -316,6 +316,60 @@ class Receipt_Data_Builder {
 		$discount_total_tax  = (float) $order->get_discount_tax();
 		$discount_total_incl = $discount_total_excl + $discount_total_tax;
 
+		// Legacy POS lines already include regular-to-selling savings in WooCommerce's
+		// discount total. Add only current-shape savings to total_saved to avoid overlap.
+		$sale_savings_totals = array(
+			'incl' => 0.0,
+			'excl' => 0.0,
+		);
+		$additional_savings  = array(
+			'incl' => 0.0,
+			'excl' => 0.0,
+		);
+		$savings_complete    = array(
+			'incl' => true,
+			'excl' => true,
+		);
+		$price_precision = wc_get_price_decimals();
+		foreach ( $lines as $line ) {
+			foreach ( array( 'incl', 'excl' ) as $basis ) {
+				$key = 'line_savings_' . $basis;
+				if ( ! isset( $line[ $key ] ) || ! is_numeric( $line[ $key ] ) ) {
+					$savings_complete[ $basis ] = false;
+					continue;
+				}
+
+				$line_savings = (float) $line[ $key ];
+				$sale_savings_totals[ $basis ] += $line_savings;
+				if ( empty( $line['savings_in_discounts'] ) ) {
+					$subtotal_key = 'line_subtotal_' . $basis;
+					$selling_key  = 'line_selling_total_' . $basis;
+					if (
+						$line_savings > 0.0
+						&& (
+							! isset( $line[ $subtotal_key ], $line[ $selling_key ] )
+							|| round( abs( (float) $line[ $subtotal_key ] - (float) $line[ $selling_key ] ), $price_precision ) > 0.0
+						)
+					) {
+						$savings_complete[ $basis ] = false;
+						continue;
+					}
+					$additional_savings[ $basis ] += $line_savings;
+				}
+			}
+		}
+
+		$total_saved = array(
+			'incl' => $savings_complete['incl'] ? $discount_total_incl + $additional_savings['incl'] : null,
+			'excl' => $savings_complete['excl'] ? $discount_total_excl + $additional_savings['excl'] : null,
+		);
+		foreach ( array( 'incl', 'excl' ) as $basis ) {
+			if ( ! $savings_complete[ $basis ] ) {
+				$sale_savings_totals[ $basis ] = null;
+			}
+		}
+		$display_basis = $display_incl ? 'incl' : 'excl';
+
 		$subtotal_excl = array_sum( array_column( $lines, 'line_subtotal_excl' ) );
 		$subtotal_incl = array_sum( array_column( $lines, 'line_subtotal_incl' ) );
 
@@ -337,22 +391,29 @@ class Receipt_Data_Builder {
 		$net_total = $refund_total > 0 ? max( 0.0, $total - $refund_total ) : 0.0;
 
 		$totals = array(
-			'subtotal'             => $display_incl ? $subtotal_incl : $subtotal_excl,
-			'subtotal_incl'        => $subtotal_incl,
-			'subtotal_excl'        => $subtotal_excl,
-			'discount_total'       => $display_incl ? $discount_total_incl : $discount_total_excl,
-			'discount_total_incl'  => $discount_total_incl,
-			'discount_total_excl'  => $discount_total_excl,
-			'tax_total'            => $tax_total,
-			'total'          => $display_incl ? $total : $total_excl,
-			'total_incl'     => $total,
-			'total_excl'     => $total_excl,
-			'paid_total'           => $total,
-			'change_total'         => (float) $order->get_meta( '_pos_cash_change' ),
-			'refund_total'         => $refund_total,
-			'net_total'            => $net_total,
-			'total_qty'            => $total_qty,
-			'line_count'           => $line_count,
+			'subtotal'                => $display_incl ? $subtotal_incl : $subtotal_excl,
+			'subtotal_incl'           => $subtotal_incl,
+			'subtotal_excl'           => $subtotal_excl,
+			'discount_total'          => $display_incl ? $discount_total_incl : $discount_total_excl,
+			'discount_total_incl'     => $discount_total_incl,
+			'discount_total_excl'     => $discount_total_excl,
+			'sale_savings_total'      => $sale_savings_totals[ $display_basis ],
+			'sale_savings_total_incl' => $sale_savings_totals['incl'],
+			'sale_savings_total_excl' => $sale_savings_totals['excl'],
+			'total_saved'             => $total_saved[ $display_basis ],
+			'total_saved_incl'        => $total_saved['incl'],
+			'total_saved_excl'        => $total_saved['excl'],
+			'total_saved_complete'    => $savings_complete[ $display_basis ],
+			'tax_total'               => $tax_total,
+			'total'                   => $display_incl ? $total : $total_excl,
+			'total_incl'              => $total,
+			'total_excl'              => $total_excl,
+			'paid_total'              => $total,
+			'change_total'            => (float) $order->get_meta( '_pos_cash_change' ),
+			'refund_total'            => $refund_total,
+			'net_total'               => $net_total,
+			'total_qty'               => $total_qty,
+			'line_count'              => $line_count,
 		);
 
 		$payments = array(

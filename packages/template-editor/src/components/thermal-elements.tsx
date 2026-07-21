@@ -104,7 +104,7 @@ export function ThermalElements({ searchFilter, onInsertField }: ThermalElements
 				type="button"
 				onClick={() => setExpanded(!expanded)}
 				aria-expanded={isExpanded}
-				className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:w-full wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:font-semibold wcpos:text-gray-700 hover:wcpos:bg-gray-100 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
+				className="wcpos:flex wcpos:items-center wcpos:gap-1.5 wcpos:w-full wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:font-semibold wcpos:text-gray-700 wcpos:hover:bg-gray-100 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
 			>
 				<Chevron open={isExpanded} />
 				<span className="wcpos:truncate">{t('editor.elements')}</span>
@@ -121,7 +121,7 @@ export function ThermalElements({ searchFilter, onInsertField }: ThermalElements
 							type="button"
 							onClick={() => onInsertField(snippet)}
 							title={snippet}
-							className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:w-full wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:text-gray-600 hover:wcpos:bg-blue-50 hover:wcpos:text-blue-700 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
+							className="wcpos:flex wcpos:items-center wcpos:gap-2 wcpos:w-full wcpos:min-w-0 wcpos:px-1.5 wcpos:py-1 wcpos:text-left wcpos:text-sm wcpos:text-gray-600 wcpos:hover:bg-blue-50 wcpos:hover:text-blue-700 wcpos:rounded wcpos:border-0 wcpos:bg-transparent wcpos:cursor-pointer"
 						>
 							<span className="wcpos:truncate wcpos:flex-1">{label}</span>
 							<Chip variant="info" size="xs" className="wcpos:shrink-0 wcpos:font-mono">
