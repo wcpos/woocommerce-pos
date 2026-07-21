@@ -171,6 +171,32 @@ class Print_Jobs_CloudPRNT_Test extends WCPOS_REST_Unit_Test_Case {
 	}
 
 	/**
+	 * It accepts successful printer status codes when completing a job.
+	 */
+	public function test_delete_with_success_status_code_marks_printed_without_logging(): void {
+		$id = $this->jobs->create(
+			array(
+				'printer_id'   => 'p1',
+				'content_type' => 'application/vnd.star.starprnt',
+				'payload'      => base64_encode( 'X' ),
+			)
+		);
+		$this->poll( 'GET', array( 'token' => $id ) );
+
+		$response = $this->poll(
+			'DELETE',
+			array(
+				'token' => $id,
+				'code'  => '211 Paper Low',
+			)
+		);
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertEquals( 'printed', $this->jobs->get( $id )['status'] );
+		$this->assertCount( 0, $this->logged_messages );
+	}
+
+	/**
 	 * It serializes one in-flight job per printer.
 	 */
 	public function test_poll_serializes_one_job_per_printer(): void {

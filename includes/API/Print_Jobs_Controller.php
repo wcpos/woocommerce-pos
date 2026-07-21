@@ -434,7 +434,7 @@ class Print_Jobs_Controller extends WP_REST_Controller {
 
 		if ( 'DELETE' === $request->get_method() ) {
 			$code   = sanitize_text_field( (string) $request->get_param( 'code' ) );
-			$status = in_array( $code, array( '', '000', '200', '200 OK' ), true ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
+			$status = '' === $code || '000' === $code || 1 === preg_match( '/^2\d{2,3}(?:\s|$)/', $code ) ? Print_Job_Service::STATUS_PRINTED : Print_Job_Service::STATUS_FAILED;
 			$this->jobs->set_status( (int) $job['id'], $status );
 
 			if ( Print_Job_Service::STATUS_FAILED === $status ) {
