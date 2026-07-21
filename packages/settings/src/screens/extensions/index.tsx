@@ -60,6 +60,9 @@ function Extensions() {
 				path: 'wcpos/v1/extensions?wcpos=1&force=1',
 				method: 'GET',
 			});
+			if (data.length === 0) {
+				throw new Error('Extension refresh returned no data');
+			}
 			queryClient.setQueryData(['extensions'], data);
 			setRefreshFailed(false);
 		} catch {

@@ -60,7 +60,28 @@ describe('Extensions screen refresh', () => {
 	});
 
 	it('keeps the displayed extensions and shows an error when refresh fails', async () => {
-		apiFetchMock.mockResolvedValueOnce([oldExtension]).mockRejectedValueOnce(new Error('failed'));
+		apiFetchMock
+			.mockResolvedValueOnce([oldExtension])
+			.mockRejectedValueOnce(new Error('failed'))
+			.mockResolvedValueOnce([newExtension]);
+		renderScreen();
+
+		fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));
+
+		await waitFor(() =>
+			expect(screen.getByText('Could not refresh extensions. Please try again.')).toBeTruthy()
+		);
+		expect(screen.getByText('Old Extension')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+		await screen.findByText('New Extension');
+		expect(screen.queryByText('Could not refresh extensions. Please try again.')).toBeNull();
+		expect(screen.getByText('New Extension')).toBeTruthy();
+	});
+
+	it('keeps the displayed extensions and shows an error when refresh returns empty', async () => {
+		apiFetchMock.mockResolvedValueOnce([oldExtension]).mockResolvedValueOnce([]);
 		renderScreen();
 
 		fireEvent.click(await screen.findByRole('button', { name: 'Refresh' }));

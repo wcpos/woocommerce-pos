@@ -69,11 +69,27 @@ class Extensions extends WP_REST_Controller {
 	 */
 	public function get_items( $request ): WP_REST_Response {
 		$service = ExtensionsService::instance();
-		if ( $request->get_param( 'force' ) ) {
-			$service->clear_cache();
+		$force   = $request->get_param( 'force' );
+		if ( $force && ! $service->clear_cache() ) {
+			return new WP_REST_Response(
+				array(
+					'code'    => 'wcpos_extensions_cache_clear_failed',
+					'message' => __( 'Could not clear the extensions cache.', 'woocommerce-pos' ),
+				),
+				500
+			);
 		}
 
 		$extensions = $service->get_extensions();
+		if ( $force && empty( $extensions ) ) {
+			return new WP_REST_Response(
+				array(
+					'code'    => 'wcpos_extensions_refresh_failed',
+					'message' => __( 'Could not refresh extensions. Please try again.', 'woocommerce-pos' ),
+				),
+				502
+			);
+		}
 
 		$response = new WP_REST_Response( $extensions );
 		$response->header( 'X-WP-Total', (string) \count( $extensions ) );

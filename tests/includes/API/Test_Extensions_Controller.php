@@ -8,6 +8,7 @@
 namespace WCPOS\WooCommercePOS\Tests\API;
 
 use WCPOS\WooCommercePOS\API\Extensions;
+use WCPOS\WooCommercePOS\Services\Extensions as ExtensionsService;
 
 /**
  * Extensions Controller test case.
@@ -26,14 +27,14 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 	public function setUp(): void {
 		parent::setUp();
 		$this->endpoint = new Extensions();
-		delete_transient( 'wcpos_extensions_catalog' );
+		delete_transient( ExtensionsService::TRANSIENT_KEY );
 	}
 
 	/**
 	 * Tear down test fixtures.
 	 */
 	public function tearDown(): void {
-		delete_transient( 'wcpos_extensions_catalog' );
+		delete_transient( ExtensionsService::TRANSIENT_KEY );
 		parent::tearDown();
 	}
 
@@ -92,7 +93,7 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 	 */
 	public function test_get_extensions_force_refresh_bypasses_cache(): void {
 		set_transient(
-			'wcpos_extensions_catalog',
+			ExtensionsService::TRANSIENT_KEY,
 			array( array( 'slug' => 'cached-extension' ) ),
 			HOUR_IN_SECONDS
 		);
@@ -112,6 +113,44 @@ class Test_Extensions_Controller extends WCPOS_REST_Unit_Test_Case {
 		$this->assertEquals( 1, $this->catalog_requests );
 
 		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response' ) );
+	}
+
+	/**
+	 * Test force refresh reports a cache deletion failure.
+	 */
+	public function test_get_extensions_force_refresh_reports_cache_deletion_failure(): void {
+		$transient_filter = 'pre_transient_' . ExtensionsService::TRANSIENT_KEY;
+		add_filter( $transient_filter, '__return_empty_array' );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/extensions' );
+		$request->set_query_params( array( 'force' => 1 ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 500, $response->get_status() );
+		$this->assertEquals( 'wcpos_extensions_cache_clear_failed', $response->get_data()['code'] );
+
+		remove_filter( $transient_filter, '__return_empty_array' );
+	}
+
+	/**
+	 * Test force refresh reports an upstream catalog failure.
+	 */
+	public function test_get_extensions_force_refresh_reports_catalog_failure(): void {
+		set_transient(
+			ExtensionsService::TRANSIENT_KEY,
+			array( array( 'slug' => 'cached-extension' ) ),
+			HOUR_IN_SECONDS
+		);
+		add_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ), 10, 3 );
+
+		$request = $this->wp_rest_get_request( '/wcpos/v1/extensions' );
+		$request->set_query_params( array( 'force' => 1 ) );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertEquals( 502, $response->get_status() );
+		$this->assertEquals( 'wcpos_extensions_refresh_failed', $response->get_data()['code'] );
+
+		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_failure' ) );
 	}
 
 	/**
