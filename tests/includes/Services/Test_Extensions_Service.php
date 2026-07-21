@@ -51,6 +51,13 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	private $replacement_refresh_lock = array();
 
 	/**
+	 * Result returned by a nested refresh inserted before the outer acquisition query.
+	 *
+	 * @var array|\WP_Error|null
+	 */
+	private $initial_acquisition_result;
+
+	/**
 	 * Set up test fixtures.
 	 */
 	public function setUp(): void {
@@ -66,6 +73,7 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 		$this->concurrent_refresh_result = null;
 		$this->catalog_http_requests     = 0;
 		$this->replacement_refresh_lock  = array();
+		$this->initial_acquisition_result = null;
 		delete_option( Extensions::REFRESH_LOCK_KEY );
 		delete_transient( 'wcpos_extensions_catalog' );
 		delete_site_option( 'auto_update_plugins' );
@@ -183,12 +191,12 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 			'expires_at' => time() + Extensions::REFRESH_LOCK_TTL,
 		);
 		add_option( Extensions::REFRESH_LOCK_KEY, $stale, '', false );
-		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_write' ) );
 		add_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ), 10, 3 );
 
 		$result = $this->service->refresh_catalog();
 
-		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_write' ) );
 		remove_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ) );
 		$this->assertWPError( $result );
 		$this->assertEquals( 'woocommerce_pos_extensions_refresh_in_progress', $result->get_error_code() );
@@ -208,10 +216,30 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 
 		$result = $this->service->refresh_catalog();
 
-		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_write' ) );
 		remove_filter( 'pre_http_request', array( $this, 'mock_catalog_response_with_release_takeover' ) );
 		$this->assertIsArray( $result );
 		$this->assertEquals( $this->replacement_refresh_lock, get_option( Extensions::REFRESH_LOCK_KEY ) );
+	}
+
+	/**
+	 * Test overlapping initial acquisition queries produce only one owner.
+	 */
+	public function test_refresh_catalog_initial_acquisition_allows_one_owner_and_one_fetch(): void {
+		$this->initial_acquisition_result = null;
+		$this->catalog_http_requests       = 0;
+		add_filter( 'query', array( $this, 'mock_initial_acquisition_interleaving' ) );
+		add_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ), 10, 3 );
+
+		$outer_result = $this->service->refresh_catalog();
+
+		remove_filter( 'query', array( $this, 'mock_initial_acquisition_interleaving' ) );
+		remove_filter( 'query', array( $this, 'mock_hold_refresh_lock_on_release' ) );
+		remove_filter( 'pre_http_request', array( $this, 'mock_counting_catalog_response' ) );
+		$this->assertIsArray( $this->initial_acquisition_result );
+		$this->assertWPError( $outer_result );
+		$this->assertEquals( 'woocommerce_pos_extensions_refresh_in_progress', $outer_result->get_error_code() );
+		$this->assertEquals( 1, $this->catalog_http_requests );
 	}
 
 	/**
@@ -256,18 +284,19 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Replace the observed lock immediately before its pending database delete executes.
+	 * Replace the observed lock immediately before its pending database write executes.
 	 *
 	 * @param string $query Database query.
 	 */
-	public function mock_replace_refresh_lock_before_delete( $query ) {
+	public function mock_replace_refresh_lock_before_write( $query ) {
 		global $wpdb;
 
-		if ( false === strpos( $query, 'DELETE FROM' ) || false === strpos( $query, $wpdb->options ) || false === strpos( $query, Extensions::REFRESH_LOCK_KEY ) ) {
+		$is_conditional_write = false !== strpos( $query, 'DELETE FROM' ) || false !== strpos( $query, 'UPDATE' );
+		if ( ! $is_conditional_write || false === strpos( $query, $wpdb->options ) || false === strpos( $query, Extensions::REFRESH_LOCK_KEY ) ) {
 			return $query;
 		}
 
-		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		remove_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_write' ) );
 		delete_option( Extensions::REFRESH_LOCK_KEY );
 		add_option( Extensions::REFRESH_LOCK_KEY, $this->replacement_refresh_lock, '', false );
 
@@ -306,12 +335,49 @@ class Test_Extensions_Service extends WP_UnitTestCase {
 			return $response;
 		}
 
-		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_delete' ) );
+		add_filter( 'query', array( $this, 'mock_replace_refresh_lock_before_write' ) );
 
 		return array(
 			'response' => array( 'code' => 200 ),
 			'body'     => wp_json_encode( array( $this->valid_catalog_entry() ) ),
 		);
+	}
+
+	/**
+	 * Run a nested refresh immediately before the outer acquisition query executes.
+	 *
+	 * The nested owner's release is held so the paused outer acquisition observes its row.
+	 *
+	 * @param string $query Database query.
+	 */
+	public function mock_initial_acquisition_interleaving( $query ) {
+		global $wpdb;
+
+		if ( false === strpos( $query, 'INSERT' ) || false === strpos( $query, $wpdb->options ) || false === strpos( $query, Extensions::REFRESH_LOCK_KEY ) ) {
+			return $query;
+		}
+
+		remove_filter( 'query', array( $this, 'mock_initial_acquisition_interleaving' ) );
+		add_filter( 'query', array( $this, 'mock_hold_refresh_lock_on_release' ) );
+		$this->initial_acquisition_result = $this->service->refresh_catalog();
+		remove_filter( 'query', array( $this, 'mock_hold_refresh_lock_on_release' ) );
+
+		return $query;
+	}
+
+	/**
+	 * Hold the nested owner's lock row after its successful refresh.
+	 *
+	 * @param string $query Database query.
+	 */
+	public function mock_hold_refresh_lock_on_release( $query ) {
+		global $wpdb;
+
+		if ( false === strpos( $query, 'DELETE FROM' ) || false === strpos( $query, $wpdb->options ) || false === strpos( $query, Extensions::REFRESH_LOCK_KEY ) ) {
+			return $query;
+		}
+
+		return 'SELECT 0';
 	}
 
 	/**

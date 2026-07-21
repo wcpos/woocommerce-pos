@@ -133,19 +133,45 @@ class Extensions {
 	 * @return string|\WP_Error
 	 */
 	private function acquire_refresh_lock() {
+		global $wpdb;
+
 		$token = wp_generate_uuid4();
 		$value = array(
 			'token'      => $token,
 			'expires_at' => time() + self::REFRESH_LOCK_TTL,
 		);
+		$serialized = maybe_serialize( $value );
 
-		if ( add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
+		$inserted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic lock insert; caches are invalidated after success.
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)",
+				self::REFRESH_LOCK_KEY,
+				$serialized,
+				'no'
+			)
+		);
+
+		if ( 1 === $inserted ) {
+			$this->invalidate_refresh_lock_cache();
 			return $token;
 		}
 
-		$current = get_option( self::REFRESH_LOCK_KEY, array() );
+		$current_serialized = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads the exact stored lock value for compare-and-swap.
+			$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::REFRESH_LOCK_KEY )
+		);
+		$current = maybe_unserialize( $current_serialized );
 		if ( ! is_array( $current ) || (int) ( $current['expires_at'] ?? 0 ) < time() ) {
-			if ( $this->delete_refresh_lock_if_value( $current ) && add_option( self::REFRESH_LOCK_KEY, $value, '', false ) ) {
+			$reclaimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic exact-value lock reclamation; caches are invalidated after success.
+				$wpdb->prepare(
+					"UPDATE {$wpdb->options} SET option_value = %s, autoload = %s WHERE option_name = %s AND BINARY option_value = %s",
+					$serialized,
+					'no',
+					self::REFRESH_LOCK_KEY,
+					$current_serialized
+				)
+			);
+			if ( 1 === $reclaimed ) {
+				$this->invalidate_refresh_lock_cache();
 				return $token;
 			}
 		}
@@ -163,38 +189,34 @@ class Extensions {
 	 * @param string $token Lock ownership token.
 	 */
 	private function release_refresh_lock( string $token ): void {
-		$current = get_option( self::REFRESH_LOCK_KEY, array() );
+		global $wpdb;
+
+		$current_serialized = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Reads the exact stored lock value for compare-and-delete.
+			$wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::REFRESH_LOCK_KEY )
+		);
+		$current = maybe_unserialize( $current_serialized );
 
 		if ( is_array( $current ) && ( $current['token'] ?? '' ) === $token ) {
-			$this->delete_refresh_lock_if_value( $current );
+			$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic exact-value lock release; caches are invalidated after success.
+				$wpdb->prepare(
+					"DELETE FROM {$wpdb->options} WHERE option_name = %s AND BINARY option_value = %s",
+					self::REFRESH_LOCK_KEY,
+					$current_serialized
+				)
+			);
+			if ( 1 === $deleted ) {
+				$this->invalidate_refresh_lock_cache();
+			}
 		}
 	}
 
 	/**
-	 * Atomically delete the refresh lock only if its stored value is unchanged.
-	 *
-	 * @param mixed $expected_value Exact option value observed by this request.
+	 * Invalidate every core cache location that can retain the refresh lock.
 	 */
-	private function delete_refresh_lock_if_value( $expected_value ): bool {
-		global $wpdb;
-
-		$deleted = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic compare-and-delete; caches are invalidated below.
-			$wpdb->prepare(
-				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND BINARY option_value = %s",
-				self::REFRESH_LOCK_KEY,
-				maybe_serialize( $expected_value )
-			)
-		);
-
-		if ( 1 !== $deleted ) {
-			return false;
-		}
-
+	private function invalidate_refresh_lock_cache(): void {
 		wp_cache_delete( self::REFRESH_LOCK_KEY, 'options' );
 		wp_cache_delete( 'alloptions', 'options' );
 		wp_cache_delete( 'notoptions', 'options' );
-
-		return true;
 	}
 
 	/**
