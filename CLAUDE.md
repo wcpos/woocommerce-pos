@@ -40,6 +40,7 @@ Relevant pages:
 - Preserve backward compatibility when changing public methods; add optional parameters with defaults.
 - Minimize admin hook footprint. Register admin handlers only where needed. Remember `admin_post_{action}` runs on `admin-post.php`, not the originating screen.
 - Sanitize and validate all request data. Check request origin/context before reading `$_REQUEST`.
+- **Scale defensive engineering to the area's risk tier — see `.ai/rules/stakes-tiers.mdc`.** Settings screens and read-only admin displays are Low: locking, retries, and fallback layers do not belong there, and concurrency findings are accepted risks. Orders, payments, tax, stock, and auth are High: correctness beats brevity. Do not escalate past an area's declared tier without asking.
 
 ## REST API Notes
 

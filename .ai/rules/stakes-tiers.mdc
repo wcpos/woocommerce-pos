@@ -1,0 +1,55 @@
+---
+description: Risk tier per area — how hard to defend against failure
+globs:
+alwaysApply: true
+---
+
+# Stakes Tiers
+
+How much defensive engineering an area justifies. This is the declared stakes
+level for this repository: when a review finding or a design instinct calls for
+hardening, weigh it against the tier of the code being touched rather than
+against what is theoretically possible.
+
+**Do not escalate past the declared tier on your own judgement.** A technically
+real problem whose cost is negligible at its tier is recorded as an accepted
+risk, not fixed. If you believe an area is mis-tiered, say so and ask — do not
+silently build to a higher tier.
+
+## Low — a failure wastes work, and the user retries
+
+Admin settings screens, the extensions catalog, log viewers, the setup wizard,
+version and status displays, and anything read-only rendered in WP admin.
+
+A failure here costs a wasted HTTP request, a stale read, or an error message.
+The operator is a single logged-in administrator who can click the button
+again.
+
+Do **not** add locking, leases, fencing, retries with backoff, idempotency
+keys, last-known-good fallback layers, or schema validation of trusted internal
+responses. Concurrency and partial-failure findings in this tier are accepted
+risks. Disabling a control while its request is in flight is sufficient.
+
+## Medium — a failure confuses or blocks a cashier mid-shift
+
+Product and customer search and sync, receipt rendering and templates,
+reporting, and the settings REST endpoints that feed the POS client.
+
+A failure degrades the shift but does not lose money or data. Handle the error
+path and surface it to the user. Retries and caching are justified where the
+volume warrants them; distributed coordination is not.
+
+## High — a failure loses money, data, or trust
+
+Orders and order line items, payments and payment gateways, tax and coupon
+calculation, stock and inventory adjustment, authentication (JWT issue and
+refresh, capability checks), and any database write that is not trivially
+reversible.
+
+Correctness beats brevity here. Idempotency, guards against double-submission,
+transactional integrity, capability checks on every path, and explicit failure
+handling are all warranted, and a race condition is a real defect rather than
+an accepted risk. Bug fixes in this tier require a failing test first.
+
+Never weaken or delete a guard clause in this tier without first reading the
+commit that introduced it.
