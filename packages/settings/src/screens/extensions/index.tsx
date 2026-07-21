@@ -1,7 +1,7 @@
 import * as React from 'react';
 
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { FilterTabs } from '@wcpos/ui';
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
+import { Button, FilterTabs } from '@wcpos/ui';
 import apiFetch from '@wordpress/api-fetch';
 
 import ExtensionCard from './extension-card';
@@ -43,6 +43,36 @@ export interface Extension {
 function Extensions() {
 	const [search, setSearch] = React.useState('');
 	const [category, setCategory] = React.useState('all');
+	const queryClient = useQueryClient();
+	const [isRefreshing, setIsRefreshing] = React.useState(false);
+	const [refreshError, setRefreshError] = React.useState<string | null>(null);
+
+	const handleRefresh = async () => {
+		setIsRefreshing(true);
+		setRefreshError(null);
+
+		try {
+			const refreshed = await apiFetch<Extension[]>({
+				path: 'wcpos/v1/extensions/refresh?wcpos=1',
+				method: 'POST',
+			});
+			queryClient.setQueryData<Extension[]>(['extensions'], refreshed);
+		} catch (error: unknown) {
+			const message =
+				typeof error === 'object' &&
+				error !== null &&
+				'message' in error &&
+				typeof error.message === 'string'
+					? error.message
+					: t(
+							'extensions.refresh_failed',
+							'Unable to refresh extension versions. Please try again.'
+						);
+			setRefreshError(message);
+		} finally {
+			setIsRefreshing(false);
+		}
+	};
 
 	const { data: extensions = [] } = useSuspenseQuery<Extension[]>({
 		queryKey: ['extensions'],
@@ -95,15 +125,30 @@ function Extensions() {
 				</Notice>
 			)}
 
+			{refreshError && (
+				<Notice status="error" isDismissible={false} className="wcpos:mb-4">
+					{refreshError}
+				</Notice>
+			)}
+
 			{/* Search */}
-			<div className="wcpos:mb-4">
+			<div className="wcpos:mb-4 wcpos:flex wcpos:flex-col wcpos:gap-2 wcpos:sm:flex-row">
 				<input
 					type="text"
 					placeholder={t('extensions.search_placeholder', 'Search extensions...')}
 					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					className="wcpos:block wcpos:w-full wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:px-3 wcpos:py-2 wcpos:text-sm focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color"
+					onChange={(event) => setSearch(event.target.value)}
+					className="wcpos:block wcpos:min-w-0 wcpos:flex-1 wcpos:rounded-md wcpos:border wcpos:border-gray-300 wcpos:px-3 wcpos:py-2 wcpos:text-sm focus:wcpos:outline-none focus:wcpos:ring-2 focus:wcpos:ring-wp-admin-theme-color"
 				/>
+				<Button
+					variant="secondary"
+					loading={isRefreshing}
+					disabled={isRefreshing}
+					onClick={handleRefresh}
+					className="wcpos:shrink-0"
+				>
+					{t('extensions.refresh_versions', 'Refresh versions')}
+				</Button>
 			</div>
 
 			{/* Category tabs */}

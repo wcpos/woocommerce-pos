@@ -13,6 +13,8 @@
 	"common.enabled": "Enabled",
 	"common.expires": "Expires",
 	"common.extensions": "Extensions",
+	"extensions.refresh_versions": "Refresh versions",
+	"extensions.refresh_failed": "Unable to refresh extension versions. Please try again.",
 	"common.faq": "Frequently Asked Questions",
 	"common.gateway": "Gateway",
 	"common.general": "General",
